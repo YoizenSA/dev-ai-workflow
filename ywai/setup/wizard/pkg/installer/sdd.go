@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type YWAIConfig struct {
@@ -110,6 +111,10 @@ func (i *Installer) findSkillsSource(repoRoot string) string {
 	// Search in all known YWAI locations
 	locations := i.ywaiCandidates(false, "skills")
 	for _, location := range locations {
+		// Exclude test directories
+		if strings.Contains(location, "tests") {
+			continue
+		}
 		if i.dirExists(location) {
 			return location
 		}
@@ -120,6 +125,10 @@ func (i *Installer) findSkillsSource(repoRoot string) string {
 		filepath.Join(repoRoot, "ywai", "skills"),
 		filepath.Join(repoRoot, "skills"),
 	} {
+		// Exclude test directories
+		if strings.Contains(location, "tests") {
+			continue
+		}
 		if i.dirExists(location) {
 			return location
 		}
