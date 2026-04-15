@@ -251,6 +251,10 @@ func (i *Installer) UpdateEngram() error {
 		return fmt.Errorf("engram-setup extension not found in any YWAI location")
 	}
 
+	// In GlobalOnly mode, pass empty target dir to prevent repo writes
+	if i.flags.GlobalOnly {
+		return i.executeExtensionScriptWithArgs(extDir, "/tmp")
+	}
 	return i.executeExtensionScriptWithArgs(extDir, "")
 }
 
@@ -258,6 +262,10 @@ func (i *Installer) UpdateContext7() error {
 	extDir := i.firstExistingDir(
 		i.ywaiCandidates(false, "extensions/mcps/context7-mcp")...,
 	)
+	// In GlobalOnly mode, pass empty target dir to prevent repo writes
+	if i.flags.GlobalOnly {
+		return i.executeExtensionScriptWithArgs(extDir, "/tmp")
+	}
 	if extDir == "" {
 		return fmt.Errorf("context7-mcp extension not found in any YWAI location")
 	}

@@ -117,10 +117,11 @@ func (m setupModel) updateGlobalToolsRunning(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// routed into a live stream below instead of writing directly to the
 			// terminal and corrupting the TUI.
 			flags := &installer.Flags{
-				Force:   true,
-				Silent:  true,
-				DryRun:  false,
-				Channel: installer.DEFAULT_CHANNEL,
+				Force:      true,
+				Silent:     true,
+				DryRun:     false,
+				Channel:    installer.DEFAULT_CHANNEL,
+				GlobalOnly: true, // Don't write to repo during global tools update
 			}
 
 			if m.globalToolStream != nil {

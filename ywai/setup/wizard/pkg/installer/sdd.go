@@ -59,6 +59,24 @@ func (i *Installer) installSDD() error {
 
 	i.logger.LogStep("Installing SDD Orchestrator...")
 
+	// In GlobalOnly mode, only update global skills, don't write to repo
+	if i.flags.GlobalOnly {
+		repoRoot := i.getRepoRoot()
+		if repoRoot == "" {
+			repoRoot = i.getGADir()
+		}
+		sourceDir := i.findSkillsSource(repoRoot)
+		if sourceDir == "" {
+			i.logger.LogWarning("No skills directory found, skipping global skills update")
+			return nil
+		}
+		if err := i.installGlobalSkills(sourceDir); err != nil {
+			i.logger.LogWarning("Failed to install global skills")
+		}
+		i.logger.LogSuccess("Global skills updated")
+		return nil
+	}
+
 	skillsTarget := i.getSkillsDir()
 	if err := i.ensureDir(skillsTarget); err != nil {
 		return err

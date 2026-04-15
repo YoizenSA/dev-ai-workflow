@@ -30,6 +30,7 @@ type Flags struct {
 	SDDProfiles           bool
 	UpdateGlobalAgents    bool
 	SkipGlobalAgentsUpdate bool
+	GlobalOnly            bool // When true, only update global tools, don't write to repo
 	Force                 bool
 	Silent                bool
 	DryRun                bool
