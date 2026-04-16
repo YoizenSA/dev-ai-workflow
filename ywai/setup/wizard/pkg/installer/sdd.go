@@ -15,6 +15,11 @@ type YWAIConfig struct {
 }
 
 func (i *Installer) saveYWAIConfig() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would save YWAI config")
+		return nil
+	}
+
 	ywaiDir := filepath.Join(i.targetDir, ".ywai")
 	if err := i.ensureDir(ywaiDir); err != nil {
 		return err
@@ -54,6 +59,11 @@ func (i *Installer) saveYWAIConfig() error {
 
 func (i *Installer) installSDD() error {
 	if i.flags.SkipSDD {
+		return nil
+	}
+
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would install SDD Orchestrator")
 		return nil
 	}
 

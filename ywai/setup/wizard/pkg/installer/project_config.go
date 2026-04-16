@@ -8,6 +8,11 @@ import (
 )
 
 func (i *Installer) updateGitignore() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would update .gitignore")
+		return nil
+	}
+
 	gitignorePath := filepath.Join(i.targetDir, ".gitignore")
 
 	if !i.fileExists(gitignorePath) {
@@ -42,11 +47,21 @@ func (i *Installer) updateGitignore() error {
 		return err
 	}
 
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would create VS Code settings")
+		return nil
+	}
+
 	i.logger.LogSuccess("Updated .gitignore")
 	return nil
 }
 
 func (i *Installer) setupVSCodeSettings() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would create VS Code settings")
+		return nil
+	}
+
 	vscodeDir := filepath.Join(i.targetDir, ".vscode")
 	settingsPath := filepath.Join(vscodeDir, "settings.json")
 
@@ -191,6 +206,11 @@ func (i *Installer) applyGAProvider(gaConfigPath string) error {
 	}
 
 	i.logger.LogSuccess("Provider set in .ga")
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would apply lefthook.yml")
+		return nil
+	}
+
 	return nil
 }
 
@@ -217,6 +237,11 @@ func (i *Installer) applyLefthookConfig(relPath string) error {
 			i.logger.LogSuccess("Lefthook hooks installed")
 		}
 	} else {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would append agent templates")
+		return nil
+	}
+
 		i.logger.LogInfo("Lefthook not installed, skipping hooks")
 	}
 

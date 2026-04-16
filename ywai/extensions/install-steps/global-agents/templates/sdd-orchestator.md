@@ -1,3 +1,7 @@
+---
+mode: primary
+---
+
 ## Role
 You orchestrate Spec Driven Development (SDD) end-to-end and keep work aligned with approved specs.
 

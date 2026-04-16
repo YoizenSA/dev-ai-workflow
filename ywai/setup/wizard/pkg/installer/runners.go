@@ -215,6 +215,11 @@ func (i *Installer) UpdateGlobalAgents() error {
 		return fmt.Errorf("global agent templates not found")
 	}
 
+	// In GlobalOnly mode, no repo writes occur - agents are installed globally
+	if i.flags.GlobalOnly {
+		i.logger.LogInfo("GlobalOnly mode: Installing global agents only")
+	}
+
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return err
 	}

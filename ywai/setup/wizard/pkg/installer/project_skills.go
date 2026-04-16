@@ -10,6 +10,11 @@ import (
 )
 
 func (i *Installer) installTypeSkills() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would install type skills")
+		return nil
+	}
+
 	types := i.loadTypesConfig()
 	pt := i.projectType
 	if pt == "" {
@@ -66,11 +71,21 @@ func (i *Installer) installTypeSkills() error {
 	}
 	if len(missing) > 0 {
 		i.logger.LogWarning(fmt.Sprintf("Missing skill directories in source (%s): %s", skillsSrc, strings.Join(missing, ", ")))
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would copy shared skills")
+		return nil
+	}
+
 	}
 	return nil
 }
 
 func (i *Installer) copySharedSkills() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would copy shared skills")
+		return nil
+	}
+
 	types := i.loadTypesConfig()
 	repoRoot := i.getRepoRoot()
 	skillsSrc := i.findSkillsSource(repoRoot)
@@ -209,6 +224,11 @@ func (i *Installer) runLocalSkillsSetup() error {
 }
 
 func (i *Installer) copyCommands() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would copy commands")
+		return nil
+	}
+
 	types := i.loadTypesConfig()
 	if !types.BaseConfig.CopyCommands {
 		return nil

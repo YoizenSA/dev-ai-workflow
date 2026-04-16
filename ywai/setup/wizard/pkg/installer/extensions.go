@@ -11,6 +11,11 @@ import (
 )
 
 func (i *Installer) installExtensions() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would install extensions")
+		return nil
+	}
+
 	i.logger.LogStep("Installing extensions...")
 
 	selected, hasConfig := i.selectedExtensionsByType()

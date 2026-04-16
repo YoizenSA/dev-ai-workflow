@@ -55,6 +55,11 @@ func (i *Installer) configureProject() error {
 }
 
 func (i *Installer) applyProjectType() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would apply project type")
+		return nil
+	}
+
 	types := i.loadTypesConfig()
 
 	pt := i.projectType
@@ -148,6 +153,7 @@ func (i *Installer) inferFromPackageJson(packageJsonPath string) string {
 	}
 
 	content := string(data)
+	// Check for NestJS
 	if strings.Contains(content, "@nestjs/core") || strings.Contains(content, "nestjs") {
 		if strings.Contains(content, "@angular") || strings.Contains(content, "angular") {
 			return "nest-angular"
@@ -156,6 +162,24 @@ func (i *Installer) inferFromPackageJson(packageJsonPath string) string {
 			return "nest-react"
 		}
 		return "nest"
+	}
+	// Check for React
+	if strings.Contains(content, "react") || strings.Contains(content, "@react") {
+		return "react"
+	}
+	// Check for Angular (standalone)
+	if strings.Contains(content, "@angular") || strings.Contains(content, "angular") {
+		return "angular"
+	}
+	// Check for Node.js generic
+	if strings.Contains(content, "node") || strings.Contains(content, "npm") {
+		return "nest"
+	}
+	if strings.Contains(content, "python") || strings.Contains(content, "pip") {
+		return "python"
+	}
+	if strings.Contains(content, "dotnet") || strings.Contains(content, "nuget") {
+		return "dotnet"
 	}
 
 	return "generic"

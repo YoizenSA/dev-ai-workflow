@@ -103,6 +103,16 @@ func (i *Installer) Run() error {
 		return fmt.Errorf("installation in test directories is not supported: %s", i.targetDir)
 	}
 
+	// Sanitize target directory to prevent path traversal
+	i.targetDir = filepath.Clean(i.targetDir)
+	if !filepath.IsAbs(i.targetDir) {
+		absPath, err := filepath.Abs(i.targetDir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve absolute path for target directory: %w", err)
+		}
+		i.targetDir = absPath
+	}
+
 	if i.flags.DryRun {
 		i.logger.LogWarning("⚠ DRY RUN MODE - no changes will be made")
 		i.logger.Log("")
@@ -247,7 +257,10 @@ func (i *Installer) runCommandWithCmd(cmd *exec.Cmd, name string, args ...string
 func (i *Installer) commandOutput(name string, args ...string) string {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = i.targetDir
-	output, _ := cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
 	return string(output)
 }
 
@@ -462,11 +475,21 @@ func (i *Installer) installTemplates() error {
 }
 
 func (i *Installer) runSync() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would sync project configuration")
+		return nil
+	}
+
 	syncFlags := &syncpkg.SyncFlags{
 		ProjectType: i.flags.ProjectType,
 		Force:       i.flags.Force,
 		DryRun:      i.flags.DryRun,
 	}
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would install skill: " + i.flags.InstallSkill)
+		return nil
+	}
+
 	s := syncpkg.New(syncFlags, i.logger, i.targetDir)
 	return s.Run()
 }
@@ -477,6 +500,16 @@ func (i *Installer) runInstallSkill() error {
 		Force:       i.flags.Force,
 		DryRun:      i.flags.DryRun,
 	}
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would install skills: " + strings.Join(i.flags.InstallSkills, ", "))
+		return nil
+	}
+
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would list installable skills")
+		return nil
+	}
+
 	s := syncpkg.New(syncFlags, i.logger, i.targetDir)
 	return s.InstallSingleSkill(i.flags.InstallSkill)
 }
