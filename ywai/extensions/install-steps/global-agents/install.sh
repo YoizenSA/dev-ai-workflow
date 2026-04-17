@@ -61,9 +61,11 @@ declare -A AGENT_LOCATIONS=(
     ["Copilot"]="$HOME_DIR/.copilot/agents"
     ["Claude"]="$HOME_DIR/.claude/agents"
     ["Agents"]="$HOME_DIR/.agents/agents"
-    ["Gemini"]="$HOME_DIR/.gemini/agents"
-    ["Cursor"]="$HOME_DIR/.cursor/agents"
 )
+# Gemini and Cursor are intentionally excluded from the managed agent set:
+# the current policy is to only support OpenCode, Claude, and Copilot at the
+# global level. Users wanting Gemini/Cursor can still keep their own files
+# in those directories — this script leaves them untouched.
 
 # Managed basenames: only these are removed/overwritten. User-owned .md files
 # survive re-runs.

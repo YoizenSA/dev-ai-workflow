@@ -996,7 +996,12 @@ copy_agents_md() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --all)
-            SETUP_CLAUDE=true; SETUP_CURSOR=true; SETUP_OPENCODE=true; SETUP_GEMINI=true; SETUP_CODEX=true; SETUP_COPILOT=true; shift ;;
+            # --all intentionally targets only the officially supported AI
+            # assistants: OpenCode, Claude, and GitHub Copilot. Cursor, Gemini
+            # and Codex are opt-in via their own --cursor / --gemini / --codex
+            # flags (they are not wired into the happy path and will not be
+            # written to the repo by default).
+            SETUP_CLAUDE=true; SETUP_OPENCODE=true; SETUP_COPILOT=true; shift ;;
         --claude) SETUP_CLAUDE=true; shift ;;
         --cursor) SETUP_CURSOR=true; shift ;;
         --opencode) SETUP_OPENCODE=true; shift ;;

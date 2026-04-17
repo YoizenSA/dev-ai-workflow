@@ -150,6 +150,11 @@ func (g Generator) installPlans() []installPlan {
 
 	vscodeUserDir := vscodeUserProfileDir(home, xdgConfig)
 
+	// Only the officially supported AI assistants are written: OpenCode,
+	// Copilot (both the agent and the VS Code prompt directory) and Claude.
+	// Cursor, Gemini and Codex are intentionally not part of the managed
+	// pipeline; writing to ~/.cursor or ~/.gemini is no longer attempted
+	// here to honor the "don't touch Cursor / Gemini" policy.
 	return []installPlan{
 		{
 			dir:         filepath.Join(xdgConfig, "opencode", "agent"),
@@ -168,18 +173,6 @@ func (g Generator) installPlans() []installPlan {
 			target:      TargetCopilotPrompt,
 			fileFor:     func(a string) string { return a + ".instructions.md" },
 			displayName: "copilot-prompt",
-		},
-		{
-			dir:         filepath.Join(home, ".gemini", "agents"),
-			target:      TargetGemini,
-			fileFor:     func(a string) string { return a + ".md" },
-			displayName: "gemini",
-		},
-		{
-			dir:         filepath.Join(home, ".cursor", "agents"),
-			target:      TargetCursor,
-			fileFor:     func(a string) string { return a + ".md" },
-			displayName: "cursor",
 		},
 		{
 			dir:         filepath.Join(home, ".claude", "agents"),

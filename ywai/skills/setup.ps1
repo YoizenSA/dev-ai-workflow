@@ -86,17 +86,19 @@ try {
 $SkillsSource = Join-Path $RepoRoot "skills"
 
 if ($All) {
+    # -All targets only the officially supported AI assistants:
+    # OpenCode, Claude, GitHub Copilot. Cursor / Gemini / Codex remain
+    # available via their own explicit switches but are never wired in by
+    # -All or by the automation default below.
     $Claude = $true
-    $Cursor = $true
     $Opencode = $true
-    $Gemini = $true
-    $Codex = $true
     $Copilot = $true
 }
 
 if (-not ($Claude -or $Cursor -or $Opencode -or $Gemini -or $Codex -or $Copilot)) {
-    # Non-interactive default for automation usage
+    # Non-interactive default for automation usage.
     $Claude = $true
+    $Opencode = $true
     $Copilot = $true
 }
 

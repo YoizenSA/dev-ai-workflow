@@ -68,9 +68,10 @@ $agentLocations = @{
     "Copilot"  = Join-Path $homeDir ".copilot\agents"
     "Claude"   = Join-Path $homeDir ".claude\agents"
     "Agents"   = Join-Path $homeDir ".agents\agents"
-    "Gemini"   = Join-Path $homeDir ".gemini\agents"
-    "Cursor"   = Join-Path $homeDir ".cursor\agents"
 }
+# Gemini and Cursor are intentionally excluded from the managed agent set;
+# the current policy is to only support OpenCode, Claude, and Copilot
+# globally. User-owned files under ~/.gemini or ~/.cursor are not touched.
 
 # Managed basenames: only these are removed/overwritten. Any other .md file in
 # the destination is preserved across runs.

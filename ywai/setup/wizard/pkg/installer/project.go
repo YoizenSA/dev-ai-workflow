@@ -111,9 +111,14 @@ func (i *Installer) applyProjectType() error {
 		}
 	}
 
-	if err := i.applyLefthookConfig(typeConfig.LefthookYML); err != nil {
-		i.logger.LogWarning("Failed to apply lefthook.yml")
-	}
+	// lefthook.yml is intentionally not written anymore. GA already installs
+	// a native Git pre-commit hook via `ga install`, and stacking lefthook on
+	// top of it was a) confusing and b) fragile on machines without the
+	// lefthook binary. Skip entirely and log the decision so it surfaces in
+	// the install tail if users ever wonder where lefthook.yml went.
+	_ = typeConfig.LefthookYML
+	i.logger.LogInfo("Skipping lefthook.yml (Git hooks handled by GA)")
+
 	if err := i.appendAgentsTemplates(types.BaseConfig.AppendAgentsTemplates); err != nil {
 		i.logger.LogWarning("Failed to append AGENTS templates")
 	}
