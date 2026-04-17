@@ -3,18 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-type editorFinishedMsg struct {
-	content string
-	err     error
-}
 
 func (m setupModel) updateAgentType(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -190,48 +184,34 @@ mode: %s%s---
 %s
 `, description, agentType, toolsConfig, prompt)
 
-	// Determine agents directory
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
+	// Write the new agent to every managed destination at once so it's
+	// immediately visible to OpenCode, Claude and Copilot.
+	destDirs := []string{
+		agentOpenCodeDir(),
+		agentClaudeDir(),
+		agentCopilotDir(),
 	}
-
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(agentsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create agents directory: %w", err)
-	}
-
-	// Write file for OpenCode
-	filePath := filepath.Join(agentsDir, filename+".md")
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write agent file: %w", err)
-	}
-
-	// Also create for Copilot
-	copilotDir := filepath.Join(os.Getenv("HOME"), ".github", "copilot", "agents")
-	if err := os.MkdirAll(copilotDir, 0755); err != nil {
-		return fmt.Errorf("failed to create copilot agents directory: %w", err)
-	}
-
-	copilotFilePath := filepath.Join(copilotDir, filename+".md")
-	if err := os.WriteFile(copilotFilePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write copilot agent file: %w", err)
+	for _, dir := range destDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create agents directory %s: %w", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, filename+".md"), []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write agent file under %s: %w", dir, err)
+		}
 	}
 
 	return nil
 }
 
-// loadAgentList loads all agents from the agents directory
+// loadAgentList loads all agents from the agents directory.
 func (m setupModel) loadAgentList() []AgentInfo {
 	var agents []AgentInfo
 
-	// Determine agents directory
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
-	}
+	// Single source of truth: OpenCode singular "agent" directory. The
+	// create/save/edit/delete pipeline keeps every managed destination in
+	// sync so listing from OpenCode is sufficient.
+	agentsDir := agentOpenCodeDir()
 
-	// Read directory
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
 		return agents
@@ -355,129 +335,116 @@ func (m setupModel) updateAgentView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func openEditorSync(initialContent string) editorFinishedMsg {
-	// Create temp file
-	tmpFile, err := os.CreateTemp("", "agent-edit-*.md")
-	if err != nil {
-		return editorFinishedMsg{err: err}
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// Write initial content
-	if _, err := tmpFile.WriteString(initialContent); err != nil {
-		return editorFinishedMsg{err: err}
-	}
-	tmpFile.Close()
-
-	// Determine editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano" // fallback
-	}
-
-	// Open editor
-	cmd := exec.Command(editor, tmpFile.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return editorFinishedMsg{err: err}
-	}
-
-	// Read back the content
-	content, err := os.ReadFile(tmpFile.Name())
-	if err != nil {
-		return editorFinishedMsg{err: err}
-	}
-
-	return editorFinishedMsg{content: string(content)}
-}
-
-// formatForEditor adds line breaks to make content more readable in the editor
-func formatForEditor(content string) string {
-	// Add line breaks after markdown headers
-	content = strings.ReplaceAll(content, "# ", "\n# ")
-	content = strings.ReplaceAll(content, "## ", "\n## ")
-	content = strings.ReplaceAll(content, "### ", "\n### ")
-
-	// Add line breaks before list items
-	content = strings.ReplaceAll(content, "- ", "\n- ")
-	content = strings.ReplaceAll(content, "* ", "\n* ")
-
-	// Add line breaks after periods followed by uppercase (likely new sentences)
-	content = strings.ReplaceAll(content, ". ", ".\n")
-
-	// Clean up multiple consecutive newlines
-	for strings.Contains(content, "\n\n\n") {
-		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
-	}
-
-	// Trim leading/trailing whitespace
-	content = strings.TrimSpace(content)
-
-	return content
-}
-
 func (m setupModel) updateAgentEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "up", "k":
-			if m.agentEditField > 0 {
-				m.agentEditField--
+	keyMsg, isKey := msg.(tea.KeyMsg)
+	if isKey {
+		// Global keys (active on any field).
+		switch keyMsg.String() {
+		case "ctrl+s":
+			if err := m.saveAgentEdit(m.agentSelected); err == nil {
+				m.agentList = m.loadAgentList()
+				m.step = stepAgentMenu
 			}
-		case "down", "j":
-			if m.agentEditField < 1 {
-				m.agentEditField++
-			}
-		case "enter":
-			// Open external editor for selected field
-			var initialContent string
-			if m.agentEditField == 0 {
-				initialContent = m.agentDescInput.Value()
-			} else {
-				initialContent = m.agentPromptInput.Value()
-			}
-			// Format content for better readability in editor
-			initialContent = formatForEditor(initialContent)
-			// Execute editor synchronously
-			result := openEditorSync(initialContent)
-			if result.err == nil && result.content != "" {
-				if m.agentEditField == 0 {
-					m.agentDescInput.SetValue(strings.TrimSpace(result.content))
-				} else {
-					m.agentPromptInput.SetValue(strings.TrimSpace(result.content))
-				}
-			}
-		case "s":
-			// Save changes
-			m.saveAgentEdit(m.agentSelected)
-			m.agentList = m.loadAgentList()
+			return m, tea.ClearScreen
+		case "esc":
 			m.step = stepAgentMenu
-		case "q", "esc":
-			m.step = stepAgentMenu
+			return m, tea.ClearScreen
+		case "tab":
+			m.agentEditField = (m.agentEditField + 1) % 3
+			m.refocusAgentEditField()
+			return m, nil
+		case "shift+tab":
+			m.agentEditField = (m.agentEditField + 2) % 3
+			m.refocusAgentEditField()
+			return m, nil
 		}
-	case editorFinishedMsg:
-		if msg.err == nil && msg.content != "" {
-			// Update the appropriate field
-			if m.agentEditField == 0 {
-				m.agentDescInput.SetValue(strings.TrimSpace(msg.content))
-			} else {
-				m.agentPromptInput.SetValue(strings.TrimSpace(msg.content))
+
+		// Tools field has its own keyboard (left/right to pick, space to toggle).
+		// While on Description or Prompt we still let ↑↓ switch fields if the
+		// user prefers them over Tab.
+		if m.agentEditField == 2 {
+			switch keyMsg.String() {
+			case "left", "h":
+				if m.agentToolCursor > 0 {
+					m.agentToolCursor--
+				}
+				return m, nil
+			case "right", "l":
+				if m.agentToolCursor < len(m.agentToolNames)-1 {
+					m.agentToolCursor++
+				}
+				return m, nil
+			case "up", "k":
+				m.agentEditField = 1
+				m.refocusAgentEditField()
+				return m, nil
+			case "down", "j":
+				// Already last field; wrap or ignore.
+				return m, nil
+			case " ":
+				if m.agentToolCursor >= 0 && m.agentToolCursor < len(m.agentToolValues) {
+					m.agentToolValues[m.agentToolCursor] = !m.agentToolValues[m.agentToolCursor]
+				}
+				return m, nil
 			}
+			// Any other key on tools field does nothing.
+			return m, nil
 		}
 	}
-	return m, nil
+
+	// Description or Prompt: forward keystrokes to the focused text input so
+	// typing/editing actually works. (Previously this path was not wired, so
+	// keystrokes were swallowed and the user could not change anything.)
+	var cmd tea.Cmd
+	if m.agentEditField == 0 {
+		m.agentDescInput, cmd = m.agentDescInput.Update(msg)
+	} else if m.agentEditField == 1 {
+		m.agentPromptInput, cmd = m.agentPromptInput.Update(msg)
+	}
+	return m, cmd
+}
+
+// refocusAgentEditField blurs every editable input except the one matching
+// the current field. Keeps the Charm cursor on the right text box.
+func (m *setupModel) refocusAgentEditField() {
+	m.agentDescInput.Blur()
+	m.agentPromptInput.Blur()
+	switch m.agentEditField {
+	case 0:
+		m.agentDescInput.Focus()
+	case 1:
+		m.agentPromptInput.Focus()
+	}
+}
+
+// agentOpenCodeDir returns the directory where OpenCode stores global agents.
+// Path note: OpenCode uses the singular "agent" directory. Earlier versions
+// of this wizard wrote to "agents" (plural) which made Load/Save silently
+// no-op because the file didn't exist. This helper centralizes the path so
+// every call site stays aligned with the rest of the codebase
+// (pkg/installer/globalagents/generator.go).
+func agentOpenCodeDir() string {
+	home, _ := os.UserHomeDir()
+	xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+	if xdgConfig == "" {
+		xdgConfig = filepath.Join(home, ".config")
+	}
+	return filepath.Join(xdgConfig, "opencode", "agent")
+}
+
+// agentClaudeDir and agentCopilotDir are the other two managed destinations.
+func agentClaudeDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude", "agents")
+}
+
+func agentCopilotDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".copilot", "agents")
 }
 
 func (m *setupModel) loadAgentForEdit(name string) {
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
-	}
-
-	filePath := filepath.Join(agentsDir, name+".md")
+	filePath := filepath.Join(agentOpenCodeDir(), name+".md")
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return
@@ -485,65 +452,102 @@ func (m *setupModel) loadAgentForEdit(name string) {
 
 	contentStr := string(content)
 
-	// Parse frontmatter to get description
-	if strings.HasPrefix(contentStr, "---") {
-		endIdx := strings.Index(contentStr[3:], "---")
-		if endIdx > 0 {
-			frontmatter := contentStr[3 : endIdx+3]
-			// Extract description
-			if descIdx := strings.Index(frontmatter, "description:"); descIdx >= 0 {
-				lines := strings.Split(frontmatter[descIdx:], "\n")
-				if len(lines) > 0 {
-					desc := strings.TrimPrefix(lines[0], "description:")
-					m.agentDescInput.SetValue(strings.TrimSpace(desc))
-				}
-			}
-			// Get prompt (content after frontmatter)
-			promptStart := endIdx + 6 // After "---\n"
-			if promptStart < len(contentStr) {
-				prompt := strings.TrimSpace(contentStr[promptStart:])
-				m.agentPromptInput.SetValue(prompt)
-			}
+	description, tools, prompt := parseAgentMarkdown(contentStr)
+	m.agentDescInput.SetValue(description)
+	m.agentPromptInput.SetValue(prompt)
+	if len(tools) > 0 {
+		for idx, toolName := range m.agentToolNames {
+			m.agentToolValues[idx] = tools[toolName]
 		}
 	}
 
 	m.agentEditField = 0
-	m.agentDescInput.Focus()
+	m.refocusAgentEditField()
+}
+
+// parseAgentMarkdown extracts (description, tools-map, prompt) from an agent
+// markdown file with YAML frontmatter.
+func parseAgentMarkdown(contentStr string) (string, map[string]bool, string) {
+	tools := map[string]bool{}
+
+	if !strings.HasPrefix(contentStr, "---") {
+		return "", tools, strings.TrimSpace(contentStr)
+	}
+
+	endIdx := strings.Index(contentStr[3:], "---")
+	if endIdx <= 0 {
+		return "", tools, strings.TrimSpace(contentStr)
+	}
+
+	frontmatter := contentStr[3 : endIdx+3]
+	promptStart := endIdx + 6 // past the closing "---\n"
+	prompt := ""
+	if promptStart < len(contentStr) {
+		prompt = strings.TrimSpace(contentStr[promptStart:])
+	}
+
+	description := ""
+	if descIdx := strings.Index(frontmatter, "description:"); descIdx >= 0 {
+		rest := frontmatter[descIdx+len("description:"):]
+		if nl := strings.Index(rest, "\n"); nl >= 0 {
+			description = strings.TrimSpace(rest[:nl])
+		} else {
+			description = strings.TrimSpace(rest)
+		}
+	}
+
+	// Very small YAML parser just for "tools:" section. Accepts both inline
+	// list ("tools: [read, write]") and block list ("tools:\n  read: true\n
+	// write: true"). Anything we don't recognize is ignored.
+	if toolsIdx := strings.Index(frontmatter, "tools:"); toolsIdx >= 0 {
+		rest := frontmatter[toolsIdx+len("tools:"):]
+		if inlineEnd := strings.Index(rest, "\n"); inlineEnd >= 0 {
+			inline := strings.TrimSpace(rest[:inlineEnd])
+			if strings.HasPrefix(inline, "[") && strings.HasSuffix(inline, "]") {
+				body := strings.TrimSpace(inline[1 : len(inline)-1])
+				for _, t := range strings.Split(body, ",") {
+					name := strings.TrimSpace(strings.Trim(t, `"'`))
+					if name != "" {
+						tools[name] = true
+					}
+				}
+			} else if inline == "" {
+				// Block form — walk subsequent indented lines.
+				for _, line := range strings.Split(rest[inlineEnd+1:], "\n") {
+					trimmed := strings.TrimSpace(line)
+					if trimmed == "" || !strings.HasPrefix(line, "  ") {
+						break
+					}
+					colon := strings.Index(trimmed, ":")
+					if colon <= 0 {
+						continue
+					}
+					name := strings.TrimSpace(trimmed[:colon])
+					val := strings.TrimSpace(trimmed[colon+1:])
+					tools[name] = strings.EqualFold(val, "true")
+				}
+			}
+		}
+	}
+
+	return description, tools, prompt
 }
 
 func (m *setupModel) saveAgentEdit(name string) error {
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
-	}
+	openCodePath := filepath.Join(agentOpenCodeDir(), name+".md")
 
-	// Read existing file to get mode and tools
-	filePath := filepath.Join(agentsDir, name+".md")
-	existingContent, err := os.ReadFile(filePath)
+	// Keep the existing "mode:" value (subagent / primary) across edits.
 	mode := "subagent"
-	toolsConfig := ""
-
-	if err == nil {
+	if existingContent, err := os.ReadFile(openCodePath); err == nil {
 		contentStr := string(existingContent)
 		if strings.HasPrefix(contentStr, "---") {
-			endIdx := strings.Index(contentStr[3:], "---")
-			if endIdx > 0 {
+			if endIdx := strings.Index(contentStr[3:], "---"); endIdx > 0 {
 				frontmatter := contentStr[3 : endIdx+3]
-				// Extract mode
 				if modeIdx := strings.Index(frontmatter, "mode:"); modeIdx >= 0 {
-					lines := strings.Split(frontmatter[modeIdx:], "\n")
-					if len(lines) > 0 {
-						mode = strings.TrimSpace(strings.TrimPrefix(lines[0], "mode:"))
+					rest := frontmatter[modeIdx+len("mode:"):]
+					if nl := strings.Index(rest, "\n"); nl >= 0 {
+						mode = strings.TrimSpace(rest[:nl])
 					}
-				}
-				// Extract tools
-				if toolsIdx := strings.Index(frontmatter, "tools:"); toolsIdx >= 0 {
-					// Find end of tools section
-					toolsEnd := strings.Index(frontmatter[toolsIdx:], "\n\n")
-					if toolsEnd < 0 {
-						toolsEnd = len(frontmatter) - toolsIdx
-					}
-					toolsConfig = frontmatter[toolsIdx:toolsIdx+toolsEnd] + "\n"
 				}
 			}
 		}
@@ -559,34 +563,70 @@ func (m *setupModel) saveAgentEdit(name string) error {
 		prompt = fmt.Sprintf("You are %s, a helpful assistant.", name)
 	}
 
+	toolsBlock := renderAgentToolsBlock(m.agentToolNames, m.agentToolValues)
+
 	content := fmt.Sprintf(`---
 description: %s
 mode: %s
 %s---
 %s
-`, description, mode, toolsConfig, prompt)
+`, description, mode, toolsBlock, prompt)
 
-	// Save to OpenCode
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return err
+	// Write to every managed destination so the edit stays consistent across
+	// the three supported AI assistants (OpenCode, Claude, Copilot). Cursor
+	// and Gemini are intentionally excluded per the supported-providers
+	// scoping in v6.0.3-beta.5+.
+	destDirs := []string{
+		agentOpenCodeDir(),
+		agentClaudeDir(),
+		agentCopilotDir(),
 	}
 
-	// Save to Copilot
-	copilotDir := filepath.Join(os.Getenv("HOME"), ".github", "copilot", "agents")
-	copilotPath := filepath.Join(copilotDir, name+".md")
-	os.MkdirAll(copilotDir, 0755)
-	os.WriteFile(copilotPath, []byte(content), 0644)
+	var firstErr error
+	for _, dir := range destDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		destPath := filepath.Join(dir, name+".md")
+		if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
 
-	return nil
+// renderAgentToolsBlock renders the tool selection as YAML block form. Returns
+// "" when no tool is selected so the frontmatter stays minimal.
+func renderAgentToolsBlock(names []string, values []bool) string {
+	if len(names) == 0 {
+		return ""
+	}
+	var anyTrue bool
+	var b strings.Builder
+	b.WriteString("tools:\n")
+	for idx, n := range names {
+		v := false
+		if idx < len(values) {
+			v = values[idx]
+		}
+		if v {
+			anyTrue = true
+		}
+		b.WriteString(fmt.Sprintf("  %s: %t\n", n, v))
+	}
+	if !anyTrue {
+		return ""
+	}
+	return b.String()
 }
 
 func (m setupModel) loadAgentContent(name string) (string, error) {
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
-	}
-
-	filePath := filepath.Join(agentsDir, name+".md")
+	filePath := filepath.Join(agentOpenCodeDir(), name+".md")
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
@@ -620,19 +660,12 @@ func (m setupModel) updateAgentDeleteConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m setupModel) deleteAgentFile(name string) error {
-	// Delete from OpenCode
-	agentsDir := filepath.Join(os.Getenv("HOME"), ".config", "opencode", "agents")
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		agentsDir = filepath.Join(xdgConfig, "opencode", "agents")
+	// Remove the agent from every managed destination so it disappears from
+	// OpenCode, Claude and Copilot atomically. os.Remove failures are
+	// silently ignored (agent may not have existed in every target).
+	for _, dir := range []string{agentOpenCodeDir(), agentClaudeDir(), agentCopilotDir()} {
+		_ = os.Remove(filepath.Join(dir, name+".md"))
 	}
-	opencodePath := filepath.Join(agentsDir, name+".md")
-	os.Remove(opencodePath)
-
-	// Delete from Copilot
-	copilotDir := filepath.Join(os.Getenv("HOME"), ".github", "copilot", "agents")
-	copilotPath := filepath.Join(copilotDir, name+".md")
-	os.Remove(copilotPath)
-
 	return nil
 }
 
@@ -969,13 +1002,30 @@ func (m setupModel) renderAgentViewStep() string {
 func (m setupModel) renderAgentEditStep() string {
 	box := activeBoxStyle.Render("Edit Agent")
 
+	// Build the Tools line as interactive checkboxes so the user can toggle
+	// them. The cursor sits on the currently highlighted tool.
+	var toolParts []string
+	for idx, name := range m.agentToolNames {
+		marker := "[ ]"
+		if idx < len(m.agentToolValues) && m.agentToolValues[idx] {
+			marker = "[✓]"
+		}
+		text := fmt.Sprintf("%s %s", marker, name)
+		if m.agentEditField == 2 && idx == m.agentToolCursor {
+			toolParts = append(toolParts, selectedItemStyle.Render(text))
+		} else {
+			toolParts = append(toolParts, itemStyle.Render(text))
+		}
+	}
+	toolsLine := strings.Join(toolParts, "  ")
+
 	fields := []struct {
 		label string
 		input string
 	}{
 		{"Description:", m.agentDescInput.View()},
 		{"Prompt:", m.agentPromptInput.View()},
-		{"Tools:", "[read] [write] [edit] [bash] (use create new to change)"},
+		{"Tools:", toolsLine},
 	}
 
 	var items []string
@@ -994,6 +1044,11 @@ func (m setupModel) renderAgentEditStep() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, items...)
 
+	hint := helpStyle.Render(
+		"Tab next field  •  Type to edit description/prompt  •  ←→ pick tool  •  Space toggle tool\n" +
+			"Ctrl+S save  •  Esc cancel",
+	)
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		box,
@@ -1002,6 +1057,6 @@ func (m setupModel) renderAgentEditStep() string {
 		"",
 		content,
 		"",
-		helpStyle.Render("↑↓ select • Enter open editor • s save • q cancel"),
+		hint,
 	)
 }

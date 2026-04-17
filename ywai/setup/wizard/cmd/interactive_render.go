@@ -225,7 +225,7 @@ func (m setupModel) renderFooter() string {
 	case stepAgentView:
 		keys = []string{"Enter/q", "back"}
 	case stepAgentEdit:
-		keys = []string{"↑↓", "field", "Enter", "save", "q", "cancel"}
+		keys = []string{"Tab", "field", "type", "edit", "←→/Space", "tools", "Ctrl+S", "save", "Esc", "cancel"}
 	case stepAgentDeleteConfirm:
 		keys = []string{"y", "confirm", "n", "cancel"}
 	case stepFileBrowser:
