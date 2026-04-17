@@ -84,21 +84,36 @@ func downloadAndInstall(version string, githubAPI *api.GitHubAPI, flags *install
 		return fmt.Errorf("unsupported architecture: %s", arch)
 	}
 
-	// Construct download URL
-	// Format: https://github.com/Yoizen/dev-ai-workflow/releases/download/vX.Y.Z/setup-wizard-{os}-{arch}
+	// Construct download URL.
+	// Format: https://github.com/Yoizen/dev-ai-workflow/releases/download/vX.Y.Z/setup-wizard-{os}-{arch}[.exe]
+	//
+	// The release workflow (`.github/workflows/release.yml`) uses the
+	// Makefile `build-all` target which appends ".exe" for Windows builds
+	// (see ywai/setup/Makefile). The asset uploaded to the GitHub Release is
+	// therefore "setup-wizard-windows-amd64.exe" — without the extension
+	// the download URL returns a 404.
 	binaryName := fmt.Sprintf("setup-wizard-%s-%s", osName, archName)
+	if osName == "windows" {
+		binaryName += ".exe"
+	}
 	downloadURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, version, binaryName)
 
 	fmt.Printf("Downloading from: %s\n", downloadURL)
 
-	// Download to temp file
+	// Download to temp file. Keep the ".exe" suffix on Windows so SmartScreen
+	// and Defender treat the downloaded file as an executable, not an
+	// unknown-type blob (which some AV setups quarantine).
 	tmpDir, err := os.MkdirTemp("", "ywai-update-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	tmpFile := filepath.Join(tmpDir, "setup-wizard")
+	tmpFileName := "setup-wizard"
+	if osName == "windows" {
+		tmpFileName += ".exe"
+	}
+	tmpFile := filepath.Join(tmpDir, tmpFileName)
 	if err := downloadFile(downloadURL, tmpFile); err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
@@ -156,12 +171,45 @@ func downloadFile(url, dest string) error {
 }
 
 func replaceExecutable(src, dest string) error {
-	// On Unix systems, we can't replace the running executable directly
-	// We need to use a shell script to do the replacement after the process exits
-	
+	// On Unix systems we can't overwrite the running executable directly, so
+	// we hand off the move to a shell script that runs after this process
+	// exits. On Windows we can rename the running .exe but we can't
+	// overwrite it — so we first move the current exe out of the way, then
+	// rename the freshly downloaded binary into place.
+
 	if runtime.GOOS == "windows" {
-		// On Windows, we can move the file after a delay
-		return os.Rename(src, dest)
+		// Best-effort cleanup of a stale backup from a previous update.
+		oldPath := dest + ".old"
+		_ = os.Remove(oldPath)
+
+		// Rename the running exe out of the way. Windows allows renaming a
+		// locked/running .exe even though it blocks overwrite and delete.
+		if err := os.Rename(dest, oldPath); err != nil {
+			return fmt.Errorf("failed to rename current executable (%s -> %s): %w", dest, oldPath, err)
+		}
+
+		// Move the new binary into place. If this fails, try to roll back
+		// the rename above so the user is not left without an executable.
+		if err := os.Rename(src, dest); err != nil {
+			if rollbackErr := os.Rename(oldPath, dest); rollbackErr != nil {
+				return fmt.Errorf("failed to install new executable (%w); rollback also failed (%v)", err, rollbackErr)
+			}
+			return fmt.Errorf("failed to install new executable: %w", err)
+		}
+
+		// The .old file is still locked by the running process; we can't
+		// delete it here. Schedule a best-effort cleanup by writing a
+		// one-shot .cmd that retries the delete a moment after we exit.
+		cleanupCmd := dest + ".cleanup.cmd"
+		script := fmt.Sprintf("@echo off\r\nping -n 2 127.0.0.1 >nul\r\ndel /f /q \"%s\" >nul 2>&1\r\ndel /f /q \"%%~f0\" >nul 2>&1\r\n", oldPath)
+		if err := os.WriteFile(cleanupCmd, []byte(script), 0644); err == nil {
+			// Fire-and-forget; `start /B` already detaches the child from
+			// this console. If this fails we simply leave an .old file
+			// which the next update will remove via os.Remove above.
+			cmd := exec.Command("cmd.exe", "/C", "start", "/B", "", cleanupCmd)
+			_ = cmd.Start()
+		}
+		return nil
 	}
 
 	// On Unix, create a shell script to do the replacement
