@@ -35,7 +35,14 @@ func (m setupModel) renderBody() string {
 		return m.renderWelcomeStep()
 	}
 
-	stepIndicator := m.renderStepIndicator()
+	// Only the install / skill-install wizard has a linear step sequence;
+	// global tools and agent-management flows are standalone and should not
+	// display the Path/Type/... indicator (which caused confusion).
+	showStepIndicator := !m.isStandaloneFlow()
+	stepIndicator := ""
+	if showStepIndicator {
+		stepIndicator = m.renderStepIndicator()
+	}
 
 	content := ""
 	switch m.step {
@@ -85,12 +92,39 @@ func (m setupModel) renderBody() string {
 		content = m.renderGlobalToolsRunningStep()
 	}
 
+	if !showStepIndicator {
+		return content
+	}
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		stepIndicator,
 		lipgloss.NewStyle().Height(1).Render(""),
 		content,
 	)
+}
+
+// isStandaloneFlow reports whether the current step belongs to a flow that
+// does not share the Path/Type/... wizard sequence.
+func (m setupModel) isStandaloneFlow() bool {
+	switch m.step {
+	case stepGlobalTools,
+		stepGlobalToolsRunning,
+		stepAgentType,
+		stepAgentName,
+		stepAgentDescription,
+		stepAgentPrompt,
+		stepAgentTools,
+		stepAgentConfirm,
+		stepAgentList,
+		stepAgentMenu,
+		stepAgentView,
+		stepAgentEdit,
+		stepAgentDeleteConfirm,
+		stepFileBrowser:
+		return true
+	}
+	return false
 }
 
 func (m setupModel) renderStepIndicator() string {

@@ -34,12 +34,18 @@ func (m setupModel) buildProjectInstallFlags() installer.Flags {
 	flags.Provider = m.providerValues[m.providerIdx]
 	flags.UpdateAll = m.updateMode
 
+	// componentValues indices MUST stay in sync with componentNames in
+	// newSetupModel:
+	//   0 GA, 1 SDD, 2 VSCode, 3 Extensions, 4 Global, 5 Hooks, 6 DryRun
 	flags.InstallGA = m.componentValues[0]
 	flags.InstallSDD = m.componentValues[1]
 	flags.InstallVSCode = m.componentValues[2]
 	flags.InstallExt = m.componentValues[3]
 	flags.InstallGlobal = m.componentValues[4]
-	flags.DryRun = m.componentValues[5]
+	flags.SkipHooks = !m.componentValues[5]
+	if len(m.componentValues) > 6 {
+		flags.DryRun = m.componentValues[6]
+	}
 	flags.Silent = true
 
 	if strings.EqualFold(flags.Provider, "opencode") && !flags.SkipVSCode && !flags.InstallVSCode {

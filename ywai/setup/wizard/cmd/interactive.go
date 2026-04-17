@@ -290,9 +290,22 @@ func newSetupModel(defaultPath string, baseFlags *installer.Flags) setupModel {
 type animationTickMsg time.Time
 
 func animationTick() tea.Cmd {
-	return tea.Tick(140*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(280*time.Millisecond, func(t time.Time) tea.Msg {
 		return animationTickMsg(t)
 	})
+}
+
+// shouldAnimateHeader reports whether the header gradient tick is safe to
+// schedule. During heavy I/O steps we stop re-ticking to avoid terminal
+// ghosting on renderers that do not fully clear AltScreen between frames
+// (seen on some Windows and Warp-like terminals). Motion in those steps is
+// already provided by the spinner and the progress-bar easing.
+func (m setupModel) shouldAnimateHeader() bool {
+	switch m.step {
+	case stepInstalling, stepGlobalToolsRunning, stepDone:
+		return false
+	}
+	return true
 }
 
 func (m setupModel) Init() tea.Cmd {
@@ -338,7 +351,7 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case animationTickMsg:
-		if m.step == stepDone {
+		if !m.shouldAnimateHeader() {
 			return m, nil
 		}
 		m.animationFrame++
