@@ -23,7 +23,6 @@ type Flags struct {
 	SkipMCPs              bool // Skip MCP install-steps (context7-mcp, etc.)
 	SkipEngram            bool // Skip engram-setup install-step
 	SkipBiome             bool // Skip biome-baseline install-step (opt-in)
-	InstallPlannotator    bool // Install plannotator CLI + configure agents (global, opt-in)
 	InstallMetronous     bool // Install metronous CLI + configure OpenCode telemetry (global, opt-in)
 	SkipSddEngramPlugin   bool // Skip sdd-engram-plugin install-step (opt-in)
 	SkipDocs              bool // Skip AGENTS.md and REVIEW.md copy

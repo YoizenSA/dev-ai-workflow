@@ -58,15 +58,15 @@ func TestBuildProjectInstallFlags_AllRecommended(t *testing.T) {
 	}
 }
 
-// TestBuildProjectInstallFlags_CustomMode exercises the 13-item index
+// TestBuildProjectInstallFlags_CustomMode exercises the 12-item index
 // mapping in Custom mode and prevents index-drift regressions like the
 // previous DryRun-at-index-5 bug.
 func TestBuildProjectInstallFlags_CustomMode(t *testing.T) {
 	m := newSetupModel(".", nil)
 	m.installModeIdx = 1 // Custom
 
-	// Defaults of the 13-item checklist: Docs, Skills, Commands, MCPs, GA,
-	// Engram, Global, Hooks = ON; Biome, Plannotator, Metronous, SDD Engram Plugin, DryRun = OFF.
+	// Defaults of the 12-item checklist: Docs, Skills, Commands, MCPs, GA,
+	// Engram, Global, Hooks = ON; Biome, Metronous, SDD Engram Plugin, DryRun = OFF.
 	got := m.buildProjectInstallFlags()
 
 	if got.SkipDocs {
@@ -96,22 +96,18 @@ func TestBuildProjectInstallFlags_CustomMode(t *testing.T) {
 	if !got.SkipBiome {
 		t.Errorf("SkipBiome must be true when componentValues[8]=false (default)")
 	}
-	if got.InstallPlannotator {
-		t.Errorf("InstallPlannotator must be false when componentValues[9]=false (default)")
-	}
 	if got.InstallMetronous {
-		t.Errorf("InstallMetronous must be false when componentValues[10]=false (default)")
+		t.Errorf("InstallMetronous must be false when componentValues[9]=false (default)")
 	}
 	if got.DryRun {
-		t.Errorf("DryRun must be false when componentValues[12]=false (default)")
+		t.Errorf("DryRun must be false when componentValues[11]=false (default)")
 	}
 
-	// Flip Biome ON, Plannotator ON, Metronous ON, DryRun ON, Docs OFF and verify propagation.
+	// Flip Biome ON, Metronous ON, DryRun ON, Docs OFF and verify propagation.
 	m.componentValues[0] = false  // Docs off
 	m.componentValues[8] = true   // Biome on
-	m.componentValues[9] = true   // Plannotator on
-	m.componentValues[10] = true  // Metronous on
-	m.componentValues[12] = true  // DryRun on
+	m.componentValues[9] = true   // Metronous on
+	m.componentValues[11] = true  // DryRun on
 	got = m.buildProjectInstallFlags()
 	if !got.SkipDocs {
 		t.Errorf("SkipDocs must follow componentValues[0]=false")
@@ -119,13 +115,10 @@ func TestBuildProjectInstallFlags_CustomMode(t *testing.T) {
 	if got.SkipBiome {
 		t.Errorf("SkipBiome must follow componentValues[8]=true (enabled)")
 	}
-	if !got.InstallPlannotator {
-		t.Errorf("InstallPlannotator must follow componentValues[9]=true")
-	}
 	if !got.InstallMetronous {
-		t.Errorf("InstallMetronous must follow componentValues[10]=true")
+		t.Errorf("InstallMetronous must follow componentValues[9]=true")
 	}
 	if !got.DryRun {
-		t.Errorf("DryRun must follow componentValues[12]=true")
+		t.Errorf("DryRun must follow componentValues[11]=true")
 	}
 }

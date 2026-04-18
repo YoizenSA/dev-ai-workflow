@@ -483,11 +483,6 @@ func (i *Installer) selectedExtensionsByType() (map[string]map[string]bool, bool
 		hasConfig = true
 	}
 
-	if i.flags.InstallPlannotator {
-		selected["install-steps"]["plannotator-setup"] = true
-		hasConfig = true
-	}
-
 	if i.flags.InstallMetronous {
 		selected["install-steps"]["metronous-setup"] = true
 		hasConfig = true
