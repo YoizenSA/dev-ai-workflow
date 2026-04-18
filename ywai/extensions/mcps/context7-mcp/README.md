@@ -1,11 +1,11 @@
 # Context7 MCP - Enhanced Installer
 
-Instala Context7 MCP correctamente para todos los providers de AI coding agents usando el método oficial `npx ctx7 setup`.
+Instala Context7 MCP correctamente para OpenCode y Claude por defecto, con soporte opcional para otros providers, usando el método oficial `npx ctx7 setup`.
 
 ## ¿Qué hace?
 
 - ✅ **Instalación Real MCP**: Usa `npx ctx7 setup` en lugar de solo crear archivos de ejemplo
-- ✅ **Multi-Provider**: Instala para opencode, claude, cursor, gemini-cli
+- ✅ **Multi-Provider**: Instala para opencode y claude por defecto; cursor y gemini-cli son opcionales
 - ✅ **OAuth Authentication**: Maneja generación de API keys automáticamente  
 - ✅ **Rules & Skills**: Instala reglas y skills de documentación automáticamente
 - ✅ **Error Handling**: Maneja gracefulmente providers que no están instalados
@@ -17,7 +17,7 @@ El installer es llamado automáticamente durante el setup de YWAI para proyectos
 ### Uso Manual
 
 ```bash
-# Instalar para todos los providers (default)
+# Instalar para providers por defecto (OpenCode + Claude)
 ./ywai/extensions/mcps/context7-mcp/install.sh
 
 # Instalar para providers específicos

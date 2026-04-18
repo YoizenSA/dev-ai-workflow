@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Context7 MCP Installer - Enhanced YWAI Extension
-# Uses npx ctx7 setup for proper MCP installation across all providers
+# Uses npx ctx7 setup for proper MCP installation across configured providers
 
 # Removed set -e to handle errors gracefully for missing providers
 
 TARGET_DIR="${1:-.}"
-PROVIDERS="${2:-opencode,claude,cursor,gemini-cli}"
+PROVIDERS="${2:-opencode,claude}"
 
 echo "Installing Context7 MCP for providers: $PROVIDERS"
 

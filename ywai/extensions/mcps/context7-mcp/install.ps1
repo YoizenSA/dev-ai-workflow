@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Continue'
 
 $providers = $env:YWAI_PROVIDERS
-if (-not $providers) { $providers = 'opencode,claude,cursor,gemini-cli' }
+if (-not $providers) { $providers = 'opencode,claude' }
 
 Write-Host "Installing Context7 MCP for providers: $providers"
 
