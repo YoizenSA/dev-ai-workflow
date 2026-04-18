@@ -1,5 +1,5 @@
 #requires -version 5.1
-# SDD Engram Plugin Setup — Windows
+# SDD Engram Plugin Setup - Windows
 # Registers opencode-sdd-engram-manage plugin in ~/.config/opencode/tui.json
 param(
     [string]$TargetDir = "."
@@ -31,7 +31,7 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
     }
   }
 } else {
-  Write-Warn "npm not available — cannot install opencode-sdd-engram-manage"
+  Write-Warn "npm not available - cannot install opencode-sdd-engram-manage"
   Write-Warn "Install npm and run: npm install -g opencode-sdd-engram-manage"
 }
 

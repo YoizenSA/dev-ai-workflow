@@ -1,5 +1,5 @@
 #requires -version 5.1
-# Metronous Setup Extension — Windows (Experimental)
+# Metronous Setup Extension - Windows (Experimental)
 # Installs metronous CLI and configures OpenCode telemetry.
 param(
     [string]$TargetDir = "."
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $ExtDir = $PSScriptRoot
 
-# In GlobalOnly mode the caller passes /tmp (Linux convention) — remap to TEMP on Windows.
+# In GlobalOnly mode the caller passes /tmp (Linux convention) - remap to TEMP on Windows.
 if ($TargetDir -eq '/tmp' -or $TargetDir -eq '\tmp') { $TargetDir = $env:TEMP }
 
 $StateDir = Join-Path $TargetDir '.ywai\metronous'
@@ -78,13 +78,13 @@ if (Has-Cmd 'metronous') {
     if (-not $version) { $version = "present" }
     Write-Log "metronous CLI already installed: $version"
 } elseif (Test-Path $MetronousExe) {
-    Write-Log "metronous found at $MetronousExe — adding to PATH for this session"
+    Write-Log "metronous found at $MetronousExe - adding to PATH for this session"
     $env:PATH = "$InstallDir;$env:PATH"
     $version = & $MetronousExe --version 2>$null
     if (-not $version) { $version = "present" }
     Write-Log "metronous version: $version"
 } else {
-    Write-Log "metronous not found — downloading from GitHub Releases"
+    Write-Log "metronous not found - downloading from GitHub Releases"
 
     try {
         # Resolve latest version tag
@@ -113,7 +113,7 @@ if (Has-Cmd 'metronous') {
             }
             Write-Log "Checksum OK"
         } else {
-            Write-Warn "No checksum entry found for $archive — skipping verification"
+            Write-Warn "No checksum entry found for $archive - skipping verification"
         }
 
         # Extract and install
@@ -143,7 +143,7 @@ note: $($_.Exception.Message)
 }
 
 # ---------------------------------------------------------------------------
-# 2. Run metronous install (registers Windows service — requires Administrator)
+# 2. Run metronous install (registers Windows service - requires Administrator)
 # ---------------------------------------------------------------------------
 $metronousCmd = if (Has-Cmd 'metronous') { 'metronous' } else { $MetronousExe }
 
