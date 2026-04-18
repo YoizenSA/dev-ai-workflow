@@ -236,7 +236,6 @@
     "copy_sdd_models": true
   },
   "presets": {
-    "description": "Declarative install scope, orthogonal to --type. Filters what the type bundle installs.",
     "minimal": {
       "description": "SDD skills + git-commit only. No GA, no global agents, no MCPs, no hooks.",
       "skills_only": ["git-commit", "skill-creator", "skill-sync"],
