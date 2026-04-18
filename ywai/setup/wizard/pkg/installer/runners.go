@@ -305,3 +305,33 @@ func (i *Installer) UpdateContext7() error {
 
 	return i.executeExtensionScriptWithArgs(extDir, "")
 }
+
+func (i *Installer) UpdateMetronous() error {
+	extDir := i.firstExistingDir(
+		i.ywaiCandidates(false, "extensions/install-steps/metronous-setup")...,
+	)
+	if extDir == "" {
+		return fmt.Errorf("metronous-setup extension not found in any YWAI location")
+	}
+
+	// In GlobalOnly mode, pass /tmp to prevent repo writes
+	if i.flags.GlobalOnly {
+		return i.executeExtensionScriptWithArgs(extDir, "/tmp")
+	}
+	return i.executeExtensionScriptWithArgs(extDir, "")
+}
+
+func (i *Installer) UpdateSDDEngramPlugin() error {
+	extDir := i.firstExistingDir(
+		i.ywaiCandidates(false, "extensions/install-steps/sdd-engram-plugin")...,
+	)
+	if extDir == "" {
+		return fmt.Errorf("sdd-engram-plugin extension not found in any YWAI location")
+	}
+
+	// In GlobalOnly mode, pass /tmp to prevent repo writes
+	if i.flags.GlobalOnly {
+		return i.executeExtensionScriptWithArgs(extDir, "/tmp")
+	}
+	return i.executeExtensionScriptWithArgs(extDir, "")
+}
