@@ -17,6 +17,25 @@ $ScriptDir = $PSScriptRoot
 $ExampleProfilesDir = Join-Path $ScriptDir 'profiles'
 
 # ---------------------------------------------------------------------------
+# Install the plugin from external repo
+# ---------------------------------------------------------------------------
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+  Write-Log "Installing opencode-sdd-engram-manage from https://github.com/j0k3r-dev-rgl/sdd-engram-plugin"
+  npm install -g opencode-sdd-engram-manage
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn "Failed to install opencode-sdd-engram-manage globally, trying user-local install"
+    $localPath = Join-Path $HOME '.local'
+    npm install -g opencode-sdd-engram-manage --prefix $localPath
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warn "Could not install opencode-sdd-engram-manage"
+    }
+  }
+} else {
+  Write-Warn "npm not available — cannot install opencode-sdd-engram-manage"
+  Write-Warn "Install npm and run: npm install -g opencode-sdd-engram-manage"
+}
+
+# ---------------------------------------------------------------------------
 # Copy example profiles if they don't exist
 # ---------------------------------------------------------------------------
 if (Test-Path $ExampleProfilesDir) {
@@ -24,11 +43,11 @@ if (Test-Path $ExampleProfilesDir) {
   if (-not (Test-Path $ProfilesDir)) {
     New-Item -ItemType Directory -Path $ProfilesDir -Force | Out-Null
   }
-  
+
   $profileFiles = Get-ChildItem -Path $ExampleProfilesDir -Filter "*.json"
   foreach ($profileFile in $profileFiles) {
     $target = Join-Path $ProfilesDir $profileFile.Name
-    
+
     if (-not (Test-Path $target)) {
       Copy-Item -Path $profileFile.FullName -Destination $target
       Write-Log "Created example profile: $($profileFile.Name)"
