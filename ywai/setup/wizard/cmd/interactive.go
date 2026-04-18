@@ -289,11 +289,12 @@ func newSetupModel(defaultPath string, baseFlags *installer.Flags) setupModel {
 			"Hooks (opencode-command-hooks)",         // 7 -> SkipHooks=!v
 			"Biome formatter/linter (opt-in)",        // 8 -> SkipBiome=!v
 			"Plannotator (plan/diff review, opt-in)", // 9 -> InstallPlannotator=v
-			"SDD Engram Plugin (opt-in)",             // 10 -> SkipSddEngramPlugin=!v
-			"Dry run (preview only)",                 // 11 -> DryRun=v
+			"Metronous (agent telemetry, opt-in)",    // 10 -> InstallMetronous=v
+			"SDD Engram Plugin (opt-in)",             // 11 -> SkipSddEngramPlugin=!v
+			"Dry run (preview only)",                 // 12 -> DryRun=v
 		},
-		// Defaults: everything on except Biome (opt-in), Plannotator (opt-in), SDD Engram Plugin (opt-in) and DryRun.
-		componentValues:    []bool{true, true, true, true, true, true, true, true, false, false, false, false},
+		// Defaults: everything on except Biome (opt-in), Plannotator (opt-in), Metronous (opt-in), SDD Engram Plugin (opt-in) and DryRun.
+		componentValues:    []bool{true, true, true, true, true, true, true, true, false, false, false, false, false},
 		installModeIdx:     0,
 		installModeOptions: []string{
 			"All recommended (install everything)",
@@ -639,9 +640,10 @@ func runInteractive(flags *installer.Flags) (bool, error) {
 	flags.SkipHooks = !m.componentValues[7]           // Hooks
 	flags.SkipBiome = !m.componentValues[8]           // Biome
 	flags.InstallPlannotator = m.componentValues[9]   // Plannotator (opt-in)
-	flags.SkipSddEngramPlugin = !m.componentValues[10] // SDD Engram Plugin (opt-in)
-	if len(m.componentValues) > 11 {
-		flags.DryRun = m.componentValues[11]          // Dry run
+	flags.InstallMetronous = m.componentValues[10]   // Metronous (opt-in)
+	flags.SkipSddEngramPlugin = !m.componentValues[11] // SDD Engram Plugin (opt-in)
+	if len(m.componentValues) > 12 {
+		flags.DryRun = m.componentValues[12]          // Dry run
 	}
 
 	if strings.EqualFold(flags.Provider, "opencode") && !flags.SkipVSCode && !flags.InstallVSCode {

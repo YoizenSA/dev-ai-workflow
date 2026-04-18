@@ -1,0 +1,24 @@
+{
+  "models": {
+    "sdd-init": "github-copilot/gpt-5.4",
+    "sdd-explore": "github-copilot/gpt-5.4",
+    "sdd-propose": "github-copilot/gpt-5.4",
+    "sdd-spec": "github-copilot/gpt-5.4",
+    "sdd-design": "github-copilot/gpt-5.4",
+    "sdd-tasks": "github-copilot/gpt-5.4",
+    "sdd-apply": "github-copilot/gpt-5.4",
+    "sdd-verify": "github-copilot/gpt-5.4",
+    "sdd-archive": "github-copilot/claude-haiku-4.5"
+  },
+  "fallback": {
+    "sdd-init": "github-copilot/claude-opus-4.7",
+    "sdd-explore": "github-copilot/claude-opus-4.7",
+    "sdd-propose": "github-copilot/claude-opus-4.7",
+    "sdd-spec": "github-copilot/claude-sonnet-4.6",
+    "sdd-design": "github-copilot/claude-opus-4.7",
+    "sdd-tasks": "github-copilot/claude-sonnet-4.6",
+    "sdd-apply": "github-copilot/claude-sonnet-4.6",
+    "sdd-verify": "github-copilot/claude-sonnet-4.6",
+    "sdd-archive": "github-copilot/gpt-5-mini"
+  }
+}

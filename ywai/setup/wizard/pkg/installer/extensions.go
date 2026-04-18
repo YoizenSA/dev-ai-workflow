@@ -361,6 +361,14 @@ func (i *Installer) executeInstallStep(stepName, srcPath string) error {
 			return i.executeExtensionScriptWithArgs(srcPath, "/tmp")
 		}
 		return i.executeExtensionScript(srcPath)
+	case "metronous-setup":
+		// Global-scope install-step: installs metronous CLI and configures
+		// OpenCode telemetry (opt-in). Skips if InstallMetronous flag is false.
+		if !i.flags.InstallMetronous {
+			i.logger.LogInfo("Skipping metronous-setup (opt-in, not enabled)")
+			return nil
+		}
+		return i.executeExtensionScript(srcPath)
 	case "engram-setup":
 		if i.flags.SkipEngram {
 			i.logger.LogInfo("Skipping engram-setup (--skip-engram)")
@@ -477,6 +485,11 @@ func (i *Installer) selectedExtensionsByType() (map[string]map[string]bool, bool
 
 	if i.flags.InstallPlannotator {
 		selected["install-steps"]["plannotator-setup"] = true
+		hasConfig = true
+	}
+
+	if i.flags.InstallMetronous {
+		selected["install-steps"]["metronous-setup"] = true
 		hasConfig = true
 	}
 

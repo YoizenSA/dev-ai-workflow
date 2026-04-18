@@ -12,6 +12,31 @@ function Write-Warn($msg) { Write-Host "[sdd-engram-plugin] WARN: $msg" -Foregro
 
 $TuiJson = Join-Path $HOME '.config' 'opencode' 'tui.json'
 $PluginEntry = 'opencode-sdd-engram-manage'
+$ProfilesDir = Join-Path $HOME '.config' 'opencode' 'profiles'
+$ScriptDir = $PSScriptRoot
+$ExampleProfilesDir = Join-Path $ScriptDir 'profiles'
+
+# ---------------------------------------------------------------------------
+# Copy example profiles if they don't exist
+# ---------------------------------------------------------------------------
+if (Test-Path $ExampleProfilesDir) {
+  Write-Log "Copying example profiles to $ProfilesDir"
+  if (-not (Test-Path $ProfilesDir)) {
+    New-Item -ItemType Directory -Path $ProfilesDir -Force | Out-Null
+  }
+  
+  $profileFiles = Get-ChildItem -Path $ExampleProfilesDir -Filter "*.json"
+  foreach ($profileFile in $profileFiles) {
+    $target = Join-Path $ProfilesDir $profileFile.Name
+    
+    if (-not (Test-Path $target)) {
+      Copy-Item -Path $profileFile.FullName -Destination $target
+      Write-Log "Created example profile: $($profileFile.Name)"
+    } else {
+      Write-Log "Profile already exists, skipping: $($profileFile.Name)"
+    }
+  }
+}
 
 # ---------------------------------------------------------------------------
 # Ensure tui.json exists

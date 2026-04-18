@@ -8,6 +8,31 @@ warn() { printf "[sdd-engram-plugin] WARN: %s\n" "$*" >&2; }
 
 TUI_JSON="$HOME/.config/opencode/tui.json"
 PLUGIN_ENTRY="opencode-sdd-engram-manage"
+PROFILES_DIR="$HOME/.config/opencode/profiles"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXAMPLE_PROFILES_DIR="$SCRIPT_DIR/profiles"
+
+# ---------------------------------------------------------------------------
+# Copy example profiles if they don't exist
+# ---------------------------------------------------------------------------
+if [[ -d "$EXAMPLE_PROFILES_DIR" ]]; then
+  log "Copying example profiles to $PROFILES_DIR"
+  mkdir -p "$PROFILES_DIR"
+  
+  for profile_file in "$EXAMPLE_PROFILES_DIR"/*.json; do
+    if [[ -f "$profile_file" ]]; then
+      profile_name=$(basename "$profile_file")
+      target="$PROFILES_DIR/$profile_name"
+      
+      if [[ ! -f "$target" ]]; then
+        cp "$profile_file" "$target"
+        log "Created example profile: $profile_name"
+      else
+        log "Profile already exists, skipping: $profile_name"
+      fi
+    fi
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # Ensure tui.json exists

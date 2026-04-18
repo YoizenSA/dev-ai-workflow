@@ -45,7 +45,10 @@ func (m setupModel) buildProjectInstallFlags() installer.Flags {
 	//   6 Global agents
 	//   7 Hooks
 	//   8 Biome
-	//   9 Dry run
+	//   9 Plannotator
+	//   10 Metronous
+	//   11 SDD Engram Plugin
+	//   12 Dry run
 	if m.installModeIdx == 0 {
 		// "All recommended" short-circuit: apply the happy-path defaults
 		// regardless of whatever the user might have toggled in Custom
@@ -72,7 +75,13 @@ func (m setupModel) buildProjectInstallFlags() installer.Flags {
 			flags.InstallPlannotator = m.componentValues[9]
 		}
 		if len(m.componentValues) > 10 {
-			flags.DryRun = m.componentValues[10]
+			flags.InstallMetronous = m.componentValues[10]
+		}
+		if len(m.componentValues) > 11 {
+			flags.SkipSddEngramPlugin = !m.componentValues[11]
+		}
+		if len(m.componentValues) > 12 {
+			flags.DryRun = m.componentValues[12]
 		}
 
 		// Project integrations umbrella stays on in Custom mode too so the

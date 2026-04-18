@@ -258,7 +258,7 @@
       "install_global_agents": true,
       "install_global_skills": true,
       "optional_hooks": true,
-      "extra_install-steps": ["engram-setup"]
+      "extra_install-steps": ["engram-setup", "metronous-setup"]
     }
   },
   "default": "nest",
