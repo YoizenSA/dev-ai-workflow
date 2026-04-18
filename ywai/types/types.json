@@ -24,7 +24,7 @@
         "mcps": [],
         "install-steps": [
           "biome-baseline",
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -55,7 +55,7 @@
         "mcps": [],
         "install-steps": [
           "biome-baseline",
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -86,7 +86,7 @@
         "mcps": [],
         "install-steps": [
           "biome-baseline",
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -108,7 +108,7 @@
         "hooks": [],
         "mcps": [],
         "install-steps": [
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -131,7 +131,7 @@
         "hooks": [],
         "mcps": [],
         "install-steps": [
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -160,7 +160,7 @@
         "mcps": [],
         "install-steps": [
           "biome-baseline",
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -182,7 +182,7 @@
         "hooks": [],
         "mcps": [],
         "install-steps": [
-          "sdd-commands"
+          "slash-commands"
         ]
       }
     },
@@ -204,7 +204,7 @@
         "hooks": [],
         "mcps": [],
         "install-steps": [
-          "sdd-commands"
+          "slash-commands"
         ],
         "commands": []
       }
@@ -240,7 +240,7 @@
     "minimal": {
       "description": "SDD skills + git-commit only. No GA, no global agents, no MCPs, no hooks.",
       "skills_only": ["git-commit", "skill-creator", "skill-sync"],
-      "install-steps_only": ["sdd-commands"],
+      "install-steps_only": ["slash-commands"],
       "mcps_only": [],
       "hooks_only": [],
       "init_ga": false,
@@ -265,3 +265,4 @@
   "default": "nest",
   "default_preset": "standard"
 }
+

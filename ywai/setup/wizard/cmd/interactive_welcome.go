@@ -69,13 +69,13 @@ func (m setupModel) updateWelcome(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m setupModel) renderWelcomeStep() string {
 	subtitle := bodyStyle.Render("Set up AI workflows for a project in a guided way")
 	options := []menuOption{
-		{Title: "🚀 " + m.welcomeOptions[0], Description: "Best for first-time setup in a repository"},
-		{Title: "🔄 " + m.welcomeOptions[1], Description: "Refresh an existing setup and re-apply managed files"},
-		{Title: "📦 " + m.welcomeOptions[2], Description: "Install only the YWAI skills that are still missing in this repo"},
-		{Title: "🌍 " + m.welcomeOptions[3], Description: "Update GA, SDD, Engram, Context7, global agents — no repo needed"},
-		{Title: "🤖 " + m.welcomeOptions[4], Description: "Create a reusable agent for OpenCode / Copilot"},
-		{Title: "📋 " + m.welcomeOptions[5], Description: "View, edit, or delete existing global agents"},
-		{Title: "❌ " + m.welcomeOptions[6], Description: "Exit without making changes"},
+		{Title: m.welcomeOptions[0], Description: "Best for first-time setup in a repository"},
+		{Title: m.welcomeOptions[1], Description: "Refresh an existing setup and re-apply managed files"},
+		{Title: m.welcomeOptions[2], Description: "Install only the YWAI skills that are still missing in this repo"},
+		{Title: m.welcomeOptions[3], Description: "Update GA, SDD, Engram, Context7, global agents — no repo needed"},
+		{Title: m.welcomeOptions[4], Description: "Create a reusable agent for OpenCode / Copilot"},
+		{Title: m.welcomeOptions[5], Description: "View, edit, or delete existing global agents"},
+		{Title: m.welcomeOptions[6], Description: "Exit without making changes"},
 	}
 
 	var items []string

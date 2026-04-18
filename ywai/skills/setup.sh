@@ -733,9 +733,9 @@ setup_opencode() {
         echo -e "${GREEN}  ✓ Copied ywai/config/opencode.json to $opencode_dir${NC}"
     fi
 
-    if [ -d "$REPO_ROOT/ywai/extensions/install-steps/sdd-commands" ]; then
-        cp -R "$REPO_ROOT/ywai/extensions/install-steps/sdd-commands/"*.md "$opencode_dir/commands/"
-        echo -e "${GREEN}  ✓ Copied commands from ywai/extensions/install-steps/sdd-commands to $opencode_dir/commands${NC}"
+    if [ -d "$REPO_ROOT/ywai/extensions/install-steps/slash-commands" ]; then
+        cp -R "$REPO_ROOT/ywai/extensions/install-steps/slash-commands/"*.md "$opencode_dir/commands/"
+        echo -e "${GREEN}  ✓ Copied commands from ywai/extensions/install-steps/slash-commands to $opencode_dir/commands${NC}"
     fi
 }
 

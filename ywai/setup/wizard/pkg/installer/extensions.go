@@ -359,7 +359,7 @@ func (i *Installer) executeInstallStep(stepName, srcPath string) error {
 			return nil
 		}
 		return i.executeExtensionScript(srcPath)
-	case "github-prompts", "sdd-commands":
+	case "github-prompts", "slash-commands":
 		if i.flags.SkipCommands {
 			i.logger.LogInfo(fmt.Sprintf("Skipping %s (--skip-commands)", stepName))
 			return nil

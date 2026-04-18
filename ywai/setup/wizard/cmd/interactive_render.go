@@ -139,18 +139,18 @@ func (m setupModel) renderStepIndicator() string {
 		for i, s := range stepNames {
 			idx := stepEnums[i]
 			var item string
-			number := "①②③"[i : i+3]
+			number := fmt.Sprintf("%d", i+1)
 			switch {
 			case idx < m.step:
-				item = successStyle.Render(number + " " + s)
+				item = successStyle.Render(number + ". " + s)
 			case idx == m.step:
-				item = titleStyle.Render(number + " " + s)
+				item = titleStyle.Render(number + ". " + s)
 			default:
-				item = infoStyle.Render(number + " " + s)
+				item = infoStyle.Render(number + ". " + s)
 			}
 			parts = append(parts, item)
 		}
-		return strings.Join(parts, captionStyle.Render("  →  "))
+		return strings.Join(parts, captionStyle.Render("  ->  "))
 	}
 
 	// stepWelcome is not part of the wizard steps — offset by 1.
@@ -165,19 +165,19 @@ func (m setupModel) renderStepIndicator() string {
 	for i, s := range stepNames {
 		idx := stepEnums[i]
 		var item string
-		number := "①②③④⑤⑥⑦"[i : i+3]
+		number := fmt.Sprintf("%d", i+1)
 		switch {
 		case idx < m.step:
-			item = successStyle.Render(number + " " + s)
+			item = successStyle.Render(number + ". " + s)
 		case idx == m.step:
-			item = titleStyle.Render(number + " " + s)
+			item = titleStyle.Render(number + ". " + s)
 		default:
-			item = infoStyle.Render(number + " " + s)
+			item = infoStyle.Render(number + ". " + s)
 		}
 		parts = append(parts, item)
 	}
 
-	return strings.Join(parts, captionStyle.Render("  →  "))
+	return strings.Join(parts, captionStyle.Render("  ->  "))
 }
 
 func (m setupModel) renderList(items []string, selected int) string {
@@ -187,7 +187,7 @@ func (m setupModel) renderList(items []string, selected int) string {
 		s := itemStyle
 
 		if idx == selected {
-			prefix = "▸ "
+			prefix = "> "
 			s = selectedItemStyle
 		}
 
@@ -201,39 +201,39 @@ func (m setupModel) renderFooter() string {
 
 	switch m.step {
 	case stepPath:
-		keys = []string{"⏎", "next", "ctrl+f", "browse", "ctrl+b", "back", "ctrl+q", "quit"}
+		keys = []string{"Enter", "next", "ctrl+f", "browse", "ctrl+b", "back", "ctrl+q", "quit"}
 	case stepProjectType, stepProvider:
-		keys = []string{"↑↓", "move", "⏎", "next", "b", "back", "q", "quit"}
+		keys = []string{"up/down", "move", "Enter", "next", "b", "back", "q", "quit"}
 	case stepInstallMode:
-		keys = []string{"↑↓", "move", "Y/N", "quick", "⏎", "next", "b", "back", "q", "quit"}
+		keys = []string{"up/down", "move", "Y/N", "quick", "Enter", "next", "b", "back", "q", "quit"}
 	case stepComponents:
-		keys = []string{"↑↓", "move", "Space", "toggle", "a", "all", "⏎", "next", "b", "back", "q", "quit"}
+		keys = []string{"up/down", "move", "Space", "toggle", "a", "all", "Enter", "next", "b", "back", "q", "quit"}
 	case stepConfirm:
-		keys = []string{"⏎", "confirm", "n/b", "back", "q", "quit"}
+		keys = []string{"Enter", "confirm", "n/b", "back", "q", "quit"}
 	case stepSkillSelect:
-		keys = []string{"↑↓", "move", "Space", "toggle", "a", "all", "n", "none", "⏎", "next", "b", "back"}
+		keys = []string{"up/down", "move", "Space", "toggle", "a", "all", "n", "none", "Enter", "next", "b", "back"}
 	case stepSkillConfirm:
-		keys = []string{"⏎", "confirm", "n/b", "back", "q", "quit"}
+		keys = []string{"Enter", "confirm", "n/b", "back", "q", "quit"}
 	case stepAgentType:
-		keys = []string{"↑↓", "move", "⏎", "select", "q/esc", "cancel"}
+		keys = []string{"up/down", "move", "Enter", "select", "q/esc", "cancel"}
 	case stepAgentName, stepAgentDescription, stepAgentPrompt:
-		keys = []string{"⏎", "next", "b", "back", "q/esc", "cancel"}
+		keys = []string{"Enter", "next", "b", "back", "q/esc", "cancel"}
 	case stepAgentTools:
-		keys = []string{"↑↓", "move", "Space", "toggle", "⏎", "next", "b", "back", "q/esc", "cancel"}
+		keys = []string{"up/down", "move", "Space", "toggle", "Enter", "next", "b", "back", "q/esc", "cancel"}
 	case stepAgentConfirm:
-		keys = []string{"⏎/y", "create", "n/b", "back", "q/esc", "cancel"}
+		keys = []string{"Enter/y", "create", "n/b", "back", "q/esc", "cancel"}
 	case stepAgentList:
-		keys = []string{"↑↓", "move", "⏎", "menu", "q", "back"}
+		keys = []string{"up/down", "move", "Enter", "menu", "q", "back"}
 	case stepAgentMenu:
-		keys = []string{"↑↓", "move", "⏎", "select", "q", "back"}
+		keys = []string{"up/down", "move", "Enter", "select", "q", "back"}
 	case stepAgentView:
-		keys = []string{"⏎/q", "back"}
+		keys = []string{"Enter/q", "back"}
 	case stepAgentEdit:
-		keys = []string{"Tab", "field", "type", "edit", "←→/Space", "tools", "Ctrl+S", "save", "Esc", "cancel"}
+		keys = []string{"Tab", "field", "type", "edit", "left/right/Space", "tools", "Ctrl+S", "save", "Esc", "cancel"}
 	case stepAgentDeleteConfirm:
 		keys = []string{"y", "confirm", "n", "cancel"}
 	case stepFileBrowser:
-		keys = []string{"↑↓", "move", "⏎", "select", "ctrl+l", "open", "ctrl+b", "up", "ctrl+q", "back"}
+		keys = []string{"up/down", "move", "Enter", "select", "ctrl+l", "open", "ctrl+b", "up", "ctrl+q", "back"}
 	}
 
 	var helpParts []string
@@ -317,7 +317,7 @@ func (m setupModel) renderDone() string {
 		icon := lipgloss.NewStyle().
 			Bold(true).
 			Foreground(errorColor).
-			Render("✗")
+			Render("[X]")
 
 		title := lipgloss.NewStyle().
 			Bold(true).
@@ -356,7 +356,7 @@ func (m setupModel) renderDone() string {
 	icon := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(successColor).
-		Render("✓")
+		Render("[x]")
 
 	title := lipgloss.NewStyle().
 		Bold(true).
@@ -464,7 +464,7 @@ func (m setupModel) renderQuitScreen() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Center,
 		"",
-		errorStyle.Render("✧ Setup cancelled"),
+		errorStyle.Render("Setup cancelled"),
 		"",
 		infoStyle.Render("No changes were made to your system."),
 	)

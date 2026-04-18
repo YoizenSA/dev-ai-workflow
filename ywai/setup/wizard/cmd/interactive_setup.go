@@ -355,13 +355,13 @@ func (m setupModel) renderPathStep() string {
 
 	inputView := m.pathInput.View()
 	if m.err != nil {
-		inputView = inputView + "\n" + errorStyle.Render("⚠ "+m.err.Error())
+		inputView = inputView + "\n" + errorStyle.Render("[!] "+m.err.Error())
 	}
 
 	path := strings.TrimSpace(m.pathInput.Value())
 	validationIndicator := ""
 	if path != "" && m.err == nil {
-		validationIndicator = successStyle.Render("✓ Valid path")
+		validationIndicator = successStyle.Render("[x] Valid path")
 	}
 
 	return lipgloss.JoinVertical(
@@ -379,7 +379,7 @@ func (m setupModel) renderPathStep() string {
 		"",
 		captionStyle.Render("Tip: press ctrl+f to browse folders"),
 		"",
-		itemStyle.Render("📁 " + inputView),
+		itemStyle.Render(inputView),
 		"",
 		validationIndicator,
 	)
@@ -394,32 +394,13 @@ func (m setupModel) renderProjectTypeStep() string {
 		hint = bodyStyle.Render("Detected from files: ") + titleStyle.Render(detected)
 	}
 
-	// Add icons to project type labels
-	iconLabels := make([]string, len(m.projectTypeLabels))
-	for i, label := range m.projectTypeLabels {
-		icon := "📁"
-		switch m.projectTypeValues[i] {
-		case "nest", "nest-angular", "nest-react":
-			icon = "🟢"
-		case "python":
-			icon = "🐍"
-		case "dotnet":
-			icon = "🔷"
-		case "devops":
-			icon = "⚙️"
-		default:
-			icon = "📁"
-		}
-		iconLabels[i] = icon + " " + label
-	}
-
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		box,
 		"",
 		hint,
 		"",
-		m.renderList(iconLabels, m.projectTypeIdx),
+		m.renderList(m.projectTypeLabels, m.projectTypeIdx),
 		"",
 		captionStyle.Render(m.projectTypeHints[m.projectTypeIdx]),
 	)
@@ -442,30 +423,13 @@ func (m setupModel) renderPresetStep() string {
 func (m setupModel) renderProviderStep() string {
 	box := activeBoxStyle.Render(m.currentModeLabel() + " • AI Provider")
 
-	// Add icons to provider labels
-	iconLabels := make([]string, len(m.providerLabels))
-	for i, label := range m.providerLabels {
-		icon := "🤖"
-		switch m.providerValues[i] {
-		case "opencode":
-			icon = "⚡"
-		case "claude":
-			icon = "🧠"
-		case "gemini":
-			icon = "✨"
-		case "ollama":
-			icon = "🦙"
-		}
-		iconLabels[i] = icon + " " + label
-	}
-
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		box,
 		"",
 		bodyStyle.Render("Select the main AI client your team will use:"),
 		"",
-		m.renderList(iconLabels, m.providerIdx),
+		m.renderList(m.providerLabels, m.providerIdx),
 		"",
 		captionStyle.Render("OpenCode is the default and enables the most integrated workflow."),
 	)
@@ -481,7 +445,7 @@ func (m setupModel) renderModelStep() string {
 			"",
 			bodyStyle.Render("Enter custom model name:"),
 			"",
-			itemStyle.Render("🤖 " + m.modelInput.View()),
+			itemStyle.Render(m.modelInput.View()),
 		)
 	}
 
@@ -489,7 +453,7 @@ func (m setupModel) renderModelStep() string {
 	for idx, preset := range m.modelPresets {
 		line := preset
 		if idx == m.modelPresetIdx {
-			items = append(items, selectedItemStyle.Render("▸ "+line))
+			items = append(items, selectedItemStyle.Render("> "+line))
 		} else {
 			items = append(items, itemStyle.Render("  "+line))
 		}
@@ -515,7 +479,7 @@ func (m setupModel) renderInstallModeStep() string {
 		prefix := "  "
 		style := itemStyle
 		if idx == m.installModeIdx {
-			prefix = "▸ "
+			prefix = "> "
 			style = selectedItemStyle
 		}
 		items = append(items, style.Render(prefix+label))
@@ -567,7 +531,7 @@ func (m setupModel) renderComponentsStep() string {
 			}
 
 			if m.componentValues[idx] {
-				prefix = "[✓]"
+				prefix = "[x]"
 			}
 
 			line := fmt.Sprintf("%s %s", prefix, m.componentNames[idx])
@@ -619,12 +583,12 @@ func (m setupModel) renderConfirmStep() string {
 	summaryLines := []string{
 		h3Style.Render("Configuration Summary"),
 		"",
-		"  " + successStyle.Render("✓") + " Path: " + bodyStyle.Render(path),
-		"  " + successStyle.Render("✓") + " Type: " + bodyStyle.Render(projectType),
-		"  " + successStyle.Render("✓") + " Preset: " + bodyStyle.Render(preset),
-		"  " + successStyle.Render("✓") + " Provider: " + bodyStyle.Render(provider),
-		"  " + successStyle.Render("✓") + " Model: " + bodyStyle.Render(model),
-		"  " + successStyle.Render("✓") + " Mode: " + bodyStyle.Render(modeLabel),
+		"  " + successStyle.Render("[x]") + " Path: " + bodyStyle.Render(path),
+		"  " + successStyle.Render("[x]") + " Type: " + bodyStyle.Render(projectType),
+		"  " + successStyle.Render("[x]") + " Preset: " + bodyStyle.Render(preset),
+		"  " + successStyle.Render("[x]") + " Provider: " + bodyStyle.Render(provider),
+		"  " + successStyle.Render("[x]") + " Model: " + bodyStyle.Render(model),
+		"  " + successStyle.Render("[x]") + " Mode: " + bodyStyle.Render(modeLabel),
 	}
 	summaryCard := cardStyle.Render(lipgloss.JoinVertical(lipgloss.Left, summaryLines...))
 
@@ -648,9 +612,9 @@ func (m setupModel) renderConfirmStep() string {
 			enabled = m.componentValues[idx]
 		}
 		if enabled {
-			lines = append(lines, "    "+successStyle.Render("✓")+" "+bodyStyle.Render(name))
+			lines = append(lines, "    "+successStyle.Render("[x]")+" "+bodyStyle.Render(name))
 		} else {
-			lines = append(lines, "    "+captionStyle.Render("○ "+name))
+			lines = append(lines, "    "+captionStyle.Render("[ ] "+name))
 		}
 	}
 

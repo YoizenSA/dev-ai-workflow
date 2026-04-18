@@ -78,7 +78,7 @@ func (m setupModel) renderSkillSelectStep() string {
 			style = selectedItemStyle
 		}
 		if idx < len(m.skillValues) && m.skillValues[idx] {
-			prefix = "[✓]"
+			prefix = "[x]"
 		}
 		desc := strings.TrimSpace(skill.Description)
 		if desc == "" {
@@ -120,7 +120,7 @@ func (m setupModel) renderSkillConfirmStep() string {
 		lines = append(lines, "", captionStyle.Render("Press b to go back and choose at least one skill."))
 	} else {
 		for _, skill := range selected {
-			lines = append(lines, "  "+successStyle.Render("✓")+" "+bodyStyle.Render(skill))
+			lines = append(lines, "  "+successStyle.Render("[x]")+" "+bodyStyle.Render(skill))
 		}
 		lines = append(lines, "", captionStyle.Render("YWAI will copy the selected skills, run skills/setup.sh, and try to sync AGENTS.md metadata."))
 	}

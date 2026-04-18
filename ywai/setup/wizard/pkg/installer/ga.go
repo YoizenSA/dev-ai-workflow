@@ -19,6 +19,23 @@ func (i *Installer) installGA() error {
 	gaDir := i.getGADir()
 	version := i.resolveVersion()
 
+	// Check if we're running from the dev-ai-workflow repo with local GA source.
+	// If yes, use the local source instead of downloading/cloning to avoid redundant downloads.
+	if localGADir := i.findLocalGADir(); localGADir != "" && !i.flags.Force {
+		i.logger.LogInfo("Using local GA source from: " + localGADir)
+		if i.flags.DryRun {
+			i.logger.Log("DRY RUN: Would build/install GA from local source")
+			return nil
+		}
+		if err := i.installGAFromLocalSource(localGADir); err != nil {
+			i.logger.LogWarning("Failed to install from local source: " + err.Error())
+			i.logger.LogInfo("Falling back to download...")
+		} else {
+			i.logger.LogSuccess("GA installed successfully from local source")
+			return nil
+		}
+	}
+
 	if i.dirExists(gaDir) && !i.flags.Force {
 		currentVersion := i.detectInstalledGAVersion(gaDir)
 		if shouldPinVersion(version) && currentVersion != "" && currentVersion != version {
@@ -54,6 +71,65 @@ func (i *Installer) installGA() error {
 	}
 
 	i.logger.LogSuccess("GA installed successfully")
+	return nil
+}
+
+// findLocalGADir returns the local ywai/ga directory if the wizard is being run
+// from the dev-ai-workflow repository, otherwise returns empty string.
+func (i *Installer) findLocalGADir() string {
+	repoRoot := i.getRepoRoot()
+	if repoRoot == "" {
+		return ""
+	}
+	candidate := filepath.Join(repoRoot, "ywai", "ga")
+	if i.dirExists(candidate) && i.fileExists(filepath.Join(candidate, "go.mod")) {
+		return candidate
+	}
+	return ""
+}
+
+// installGAFromLocalSource builds GA from the local source directory and installs
+// the resulting binary to the system-wide location.
+func (i *Installer) installGAFromLocalSource(sourceDir string) error {
+	home, _ := os.UserHomeDir()
+	var binDir string
+	if runtime.GOOS == "windows" {
+		binDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "ywai")
+	} else {
+		binDir = filepath.Join(home, ".local", "bin")
+	}
+
+	if err := i.ensureDir(binDir); err != nil {
+		return err
+	}
+
+	// Check if Go compiler is available
+	if _, err := exec.LookPath("go"); err != nil {
+		return fmt.Errorf("Go compiler not found in PATH, cannot build from local source: %w", err)
+	}
+
+	destBin := filepath.Join(binDir, "ga")
+	if runtime.GOOS == "windows" {
+		destBin += ".exe"
+	}
+
+	i.logger.Log("Building GA from local source...")
+	ldflags := i.gaBuildLdflags(sourceDir)
+	buildCmd := exec.Command("go", "build", "-ldflags="+ldflags, "-o", destBin, "./cmd/ga")
+	buildCmd.Dir = sourceDir
+	if err := i.runCommandWithCmd(buildCmd, "go", "build", "-ldflags="+ldflags, "-o", destBin, "./cmd/ga"); err != nil {
+		return fmt.Errorf("failed to build GA from local source: %w", err)
+	}
+
+	if !i.fileExists(destBin) {
+		return fmt.Errorf("GA binary not found after build at %s", destBin)
+	}
+
+	if err := os.Chmod(destBin, 0755); err != nil {
+		return err
+	}
+
+	i.logger.LogSuccess("Installed GA (built locally) to " + destBin)
 	return nil
 }
 

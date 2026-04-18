@@ -107,9 +107,7 @@ func (m setupModel) renderFileBrowserStep() string {
 
 		name := entry.Name()
 		if entry.IsDir() {
-			name = "📁 " + name + "/"
-		} else {
-			name = "📄 " + name
+			name = name + "/"
 		}
 
 		items = append(items, s.Render(prefix+name))

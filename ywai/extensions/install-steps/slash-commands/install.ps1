@@ -1,5 +1,5 @@
 #requires -version 5.1
-# SDD Commands Extension — Windows
+# Slash Commands Extension — Windows
 param(
     [string]$TargetDir = "."
 )
@@ -14,10 +14,12 @@ $legacyPromptsDir = Join-Path $TargetDir 'prompts'
 $xdgConfig = $env:XDG_CONFIG_HOME
 if (-not $xdgConfig) { $xdgConfig = Join-Path $env:LOCALAPPDATA '' }
 $targetOpenCodeSkillsDir = Join-Path $xdgConfig 'opencode\skills'
+$targetOpenCodeCommandsDir = Join-Path $xdgConfig 'opencode\commands'
 $targetCopilotAgentsDir = Join-Path $env:USERPROFILE '.copilot\agents'
 
 New-Item -ItemType Directory -Force -Path $targetPromptsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $targetOpenCodeSkillsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $targetOpenCodeCommandsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $targetCopilotAgentsDir | Out-Null
 
 # Migrate legacy prompt location
@@ -50,6 +52,13 @@ Get-ChildItem -Path $sourceDir -Filter '*.md' | ForEach-Object {
         $copied++
     }
 
+    # Copy to OpenCode commands (global) — enables slash invocation like /sdd-init
+    $opencodeCmdDest = Join-Path $targetOpenCodeCommandsDir "$name.md"
+    if (-not (Test-Path $opencodeCmdDest)) {
+        Copy-Item -Force $_.FullName $opencodeCmdDest
+        $copied++
+    }
+
     # Copy to Copilot agents (global)
     $copilotAgentDest = Join-Path $targetCopilotAgentsDir "$name.md"
     if (-not (Test-Path $copilotAgentDest)) {
@@ -58,4 +67,4 @@ Get-ChildItem -Path $sourceDir -Filter '*.md' | ForEach-Object {
     }
 }
 
-Write-Host "Installed SDD commands to .github\prompts, OpenCode skills, and Copilot agents"
+Write-Host "Installed slash commands to .github\prompts, OpenCode skills, OpenCode commands, and Copilot agents"

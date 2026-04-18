@@ -296,7 +296,7 @@ func (m setupModel) renderGlobalToolsSummary() string {
 	icon := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(successColor).
-		Render("✓")
+		Render("[x]")
 
 	title := lipgloss.NewStyle().
 		Bold(true).

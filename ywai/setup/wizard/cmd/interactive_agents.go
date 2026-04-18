@@ -673,8 +673,8 @@ func (m setupModel) renderAgentTypeStep() string {
 	box := activeBoxStyle.Render("Agent Type")
 
 	options := []string{
-		"🎯 primary  - Main agent (switch with Tab)",
-		"🤖 subagent - Specialized agent (invoke with @)",
+		"primary  - Main agent (switch with Tab)",
+		"subagent - Specialized agent (invoke with @)",
 	}
 
 	return lipgloss.JoinVertical(
@@ -698,7 +698,7 @@ func (m setupModel) renderAgentNameStep() string {
 		"",
 		bodyStyle.Render("Enter agent name:"),
 		"",
-		itemStyle.Render("📝 " + inputView),
+		itemStyle.Render(inputView),
 	)
 }
 
@@ -713,7 +713,7 @@ func (m setupModel) renderAgentDescriptionStep() string {
 		"",
 		bodyStyle.Render("Brief description of what this agent does:"),
 		"",
-		itemStyle.Render("📝 " + inputView),
+		itemStyle.Render(inputView),
 	)
 }
 
@@ -728,7 +728,7 @@ func (m setupModel) renderAgentPromptStep() string {
 		"",
 		bodyStyle.Render("System prompt (role and behavior):"),
 		"",
-		itemStyle.Render("📝 " + inputView),
+		itemStyle.Render(inputView),
 	)
 }
 
@@ -745,7 +745,7 @@ func (m setupModel) renderAgentToolsStep() string {
 		}
 
 		if m.agentToolValues[idx] {
-			prefix = "[✓]"
+			prefix = "[x]"
 		}
 
 		line := fmt.Sprintf("%s %s", prefix, name)
@@ -782,16 +782,16 @@ func (m setupModel) renderAgentConfirmStep() string {
 	lines := []string{
 		h2Style.Render("Ready to create agent:"),
 		"",
-		"  " + successStyle.Render("✓") + " Name: " + bodyStyle.Render(name),
-		"  " + successStyle.Render("✓") + " Type: " + bodyStyle.Render(agentType),
-		"  " + successStyle.Render("✓") + " Description: " + bodyStyle.Render(description),
+		"  " + successStyle.Render("[x]") + " Name: " + bodyStyle.Render(name),
+		"  " + successStyle.Render("[x]") + " Type: " + bodyStyle.Render(agentType),
+		"  " + successStyle.Render("[x]") + " Description: " + bodyStyle.Render(description),
 		"",
 		h3Style.Render("Tools enabled:"),
 	}
 
 	for idx, tool := range m.agentToolNames {
 		if m.agentToolValues[idx] {
-			lines = append(lines, "    "+successStyle.Render("✓")+" "+bodyStyle.Render(tool))
+			lines = append(lines, "    "+successStyle.Render("[x]")+" "+bodyStyle.Render(tool))
 		}
 	}
 
@@ -813,7 +813,7 @@ func (m setupModel) renderAgentDone() string {
 		icon := lipgloss.NewStyle().
 			Bold(true).
 			Foreground(errorColor).
-			Render("✗")
+			Render("[X]")
 
 		title := lipgloss.NewStyle().
 			Bold(true).
@@ -836,7 +836,7 @@ func (m setupModel) renderAgentDone() string {
 	icon := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(successColor).
-		Render("✓")
+		Render("[x]")
 
 	title := lipgloss.NewStyle().
 		Bold(true).
@@ -847,8 +847,8 @@ func (m setupModel) renderAgentDone() string {
 	message := bodyStyle.Render(fmt.Sprintf("Agent '%s' has been created for:", name))
 
 	locations := []string{
-		successStyle.Render("✓") + " OpenCode",
-		successStyle.Render("✓") + " Copilot",
+		successStyle.Render("[x]") + " OpenCode",
+		successStyle.Render("[x]") + " Copilot",
 	}
 
 	return lipgloss.JoinVertical(
@@ -884,7 +884,7 @@ func (m setupModel) renderAgentListStep() string {
 		s := itemStyle
 
 		if idx == m.agentListCursor {
-			prefix = "▸ "
+			prefix = "> "
 			s = selectedItemStyle
 		}
 
@@ -924,7 +924,7 @@ func (m setupModel) renderAgentDeleteConfirmStep() string {
 	lines := []string{
 		infoStyle.Render("Are you sure you want to delete this agent?"),
 		"",
-		"  " + errorStyle.Render("⚠") + " " + titleStyle.Render(m.agentToDelete),
+		"  " + errorStyle.Render("[!]") + " " + titleStyle.Render(m.agentToDelete),
 		"",
 		infoStyle.Render("This will remove the agent from both OpenCode and Copilot."),
 		"",
@@ -950,7 +950,7 @@ func (m setupModel) renderAgentMenuStep() string {
 		s := itemStyle
 
 		if idx == m.agentMenuCursor {
-			prefix = "▸ "
+			prefix = "> "
 			s = selectedItemStyle
 		}
 
@@ -1008,7 +1008,7 @@ func (m setupModel) renderAgentEditStep() string {
 	for idx, name := range m.agentToolNames {
 		marker := "[ ]"
 		if idx < len(m.agentToolValues) && m.agentToolValues[idx] {
-			marker = "[✓]"
+			marker = "[x]"
 		}
 		text := fmt.Sprintf("%s %s", marker, name)
 		if m.agentEditField == 2 && idx == m.agentToolCursor {
@@ -1034,7 +1034,7 @@ func (m setupModel) renderAgentEditStep() string {
 		s := itemStyle
 
 		if idx == m.agentEditField {
-			prefix = "▸ "
+			prefix = "> "
 			s = selectedItemStyle
 		}
 
