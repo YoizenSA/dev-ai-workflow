@@ -147,6 +147,13 @@ note: $($_.Exception.Message)
 # ---------------------------------------------------------------------------
 $metronousCmd = if (Has-Cmd 'metronous') { 'metronous' } else { $MetronousExe }
 
+# Create .metronous directory if it doesn't exist
+$metronousDir = Join-Path $HOME '.metronous'
+if (-not (Test-Path $metronousDir)) {
+  New-Item -ItemType Directory -Force -Path $metronousDir | Out-Null
+  Write-Log "Created $metronousDir"
+}
+
 Write-Log "Running metronous install to configure OpenCode and register service"
 Write-Warn "This step requires an elevated (Administrator) terminal to register the Windows service."
 
