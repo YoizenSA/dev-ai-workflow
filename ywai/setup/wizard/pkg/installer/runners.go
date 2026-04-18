@@ -7,6 +7,8 @@ import (
 )
 
 func (i *Installer) runAll() error {
+	i.logActivePreset()
+
 	if err := i.installGA(); err != nil {
 		return err
 	}
@@ -35,10 +37,28 @@ func (i *Installer) runAll() error {
 		i.logger.LogWarning("Failed to save YWAI config: " + err.Error())
 	}
 
+	if err := i.copyCanonicalSDDModels(); err != nil {
+		i.logger.LogWarning("Failed to copy sdd-models.json: " + err.Error())
+	}
+
+	if err := i.generateSkillRegistry(); err != nil {
+		i.logger.LogWarning("Failed to generate skill-registry.md: " + err.Error())
+	}
+
 	return nil
 }
 
+// logActivePreset prints the active preset name when it is not the default.
+func (i *Installer) logActivePreset() {
+	name, _ := i.activePreset()
+	if name != "" && name != "standard" {
+		i.logger.LogInfo(fmt.Sprintf("Active install preset: %s", name))
+	}
+}
+
 func (i *Installer) runSelected() error {
+	i.logActivePreset()
+
 	if !i.flags.SkipGA {
 		if err := i.installGA(); err != nil {
 			return err
@@ -71,6 +91,14 @@ func (i *Installer) runSelected() error {
 
 	if err := i.saveYWAIConfig(); err != nil {
 		i.logger.LogWarning("Failed to save YWAI config: " + err.Error())
+	}
+
+	if err := i.copyCanonicalSDDModels(); err != nil {
+		i.logger.LogWarning("Failed to copy sdd-models.json: " + err.Error())
+	}
+
+	if err := i.generateSkillRegistry(); err != nil {
+		i.logger.LogWarning("Failed to generate skill-registry.md: " + err.Error())
 	}
 
 	return nil

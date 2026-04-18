@@ -50,6 +50,22 @@ Reemplazá `nest` por cualquiera de estos tipos:
 - `devops`
 - `generic`
 
+### Presets (alcance de instalación)
+
+`--preset` controla **cuánto** se instala, ortogonal a `--type` (que define **qué stack**).
+
+| Preset | Incluye |
+|--------|---------|
+| `minimal` | SDD skills + `git-commit` + `skill-creator` + `skill-sync`. Sin GA, sin global agents, sin MCPs, sin hooks. |
+| `standard` (default) | Comportamiento actual: bundle completo del `--type` + GA + `context7-mcp` + global agents. |
+| `full` | `standard` + `engram-setup` + hooks opcionales habilitados. |
+
+```bash
+ywai --type=nest --preset=minimal    # solo SDD, sin GA
+ywai --type=dotnet --preset=full     # todo
+ywai --preset=standard               # default (igual que omitir el flag)
+```
+
 ### Nota
 
 > El setup instala OpenCode automáticamente si no está disponible.
@@ -287,6 +303,21 @@ GA Review: PASS
 Cada tipo instala un `AGENTS.md` con reglas específicas del stack y un `REVIEW.md` con checklist de code review adaptado.
 
 ---
+
+## Artefactos generados en `.ywai/`
+
+El setup deja dos archivos en `.ywai/` del proyecto que los sub-agentes consumen para tener contexto de proyecto sin leer cada `SKILL.md` completo:
+
+| Archivo | Qué es |
+|---------|--------|
+| `.ywai/sdd-models.json` | Modelo de IA recomendado por fase SDD (copia de `ywai/config/sdd-models.json`). Consumido por el orquestador SDD y por `ga review --phase=<fase>`. |
+| `.ywai/skill-registry.md` | Registro compacto de las skills instaladas (5–15 bullets por skill extraídos de `## Critical Patterns` / `## Rules`). Reduce tokens en prompts de sub-agentes. |
+
+Regenerar el skill registry manualmente:
+
+```bash
+./skills/skill-sync/assets/sync.sh --registry
+```
 
 ## Sincronizar Skills con AGENTS.md
 

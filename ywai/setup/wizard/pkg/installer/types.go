@@ -29,6 +29,7 @@ type Flags struct {
 	DefaultModel          string
 	Target                string
 	ProjectType           string
+	Preset                string // minimal | standard | full (default: standard)
 	Version               string
 	Channel               string
 	UpdateAll             bool
@@ -69,9 +70,11 @@ type ProjectType struct {
 }
 
 type TypesConfig struct {
-	Types      map[string]ProjectType `json:"types"`
-	BaseConfig BaseConfig             `json:"base_config"`
-	Default    string                 `json:"default"`
+	Types         map[string]ProjectType  `json:"types"`
+	BaseConfig    BaseConfig              `json:"base_config"`
+	Presets       map[string]PresetConfig `json:"presets"`
+	Default       string                  `json:"default"`
+	DefaultPreset string                  `json:"default_preset"`
 }
 
 type BaseConfig struct {
@@ -82,6 +85,21 @@ type BaseConfig struct {
 	CopyCommands          bool                `json:"copy_commands"`
 	InitGA                bool                `json:"init_ga"`
 	OptionalHooks         bool                `json:"optional_hooks"`
+	CopySDDModels         bool                `json:"copy_sdd_models"`
+}
+
+// PresetConfig filters what a type bundle installs. Empty slices = no filter.
+type PresetConfig struct {
+	Description         string   `json:"description"`
+	SkillsOnly          []string `json:"skills_only"`
+	InstallStepsOnly    []string `json:"install-steps_only"`
+	MCPsOnly            []string `json:"mcps_only"`
+	HooksOnly           []string `json:"hooks_only"`
+	ExtraInstallSteps   []string `json:"extra_install-steps"`
+	InitGA              *bool    `json:"init_ga"`
+	InstallGlobalAgents *bool    `json:"install_global_agents"`
+	InstallGlobalSkills *bool    `json:"install_global_skills"`
+	OptionalHooks       *bool    `json:"optional_hooks"`
 }
 
 type Installer struct {

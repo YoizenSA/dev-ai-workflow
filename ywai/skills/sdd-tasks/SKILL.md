@@ -22,14 +22,14 @@ From the orchestrator:
 - The `proposal.md` content
 - The delta specs
 - The `design.md` content
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `tasks`. Retrieve `proposal`, `spec`, and `design` as dependencies.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create `tasks.md` in the change directory.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create `tasks.md` in the change directory.
 - If mode is `none`: Return the full task list content inline. Do NOT create any project files.
 
 ## What to Do
@@ -40,7 +40,7 @@ Before writing tasks, check whether TDD is active for this project using this 4-
 
 ```
 Level 1 — Config file:
-  openspec/config.yaml → rules.apply.tdd: true
+  sdd/config.yaml → rules.apply.tdd: true
   (or engram project context if mode is engram)
 
 Level 2 — Skills present:
@@ -189,7 +189,7 @@ Phase 5: Cleanup (if needed)
 ### Step 4: Persist the Tasks
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/tasks`
-- **openspec**: Write to `openspec/changes/{change-name}/tasks.md`
+- **sdd**: Write to `sdd/changes/{change-name}/tasks.md`
 - **none**: Return content inline only
 
 ### Step 5: Return Summary
@@ -198,7 +198,7 @@ Phase 5: Cleanup (if needed)
 ## Tasks Created
 
 **Change**: {change-name}
-**Persistence**: {engram (ID: #{id}) | openspec (path) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (path) | none (inline)}
 **TDD Mode**: {enabled / disabled}
 
 ### Breakdown
@@ -242,5 +242,5 @@ Ready for implementation (sdd-apply).
 - NEVER include vague tasks like "implement feature" or "add tests"
 - If TDD is enabled, use RED/GREEN/REFACTOR triplets — do not mix styles
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.tasks` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.tasks` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`

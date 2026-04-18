@@ -1,0 +1,43 @@
+{
+  "description": "Canonical model assignment per SDD phase. Copied to .ywai/sdd-models.json on install. Can be overridden per project.",
+  "default_provider": "opencode",
+  "phases": {
+    "sdd-explore": {
+      "model": "anthropic/claude-opus-4",
+      "reason": "broad reasoning over unknown territory"
+    },
+    "sdd-propose": {
+      "model": "anthropic/claude-opus-4",
+      "reason": "architectural decisions"
+    },
+    "sdd-spec": {
+      "model": "anthropic/claude-sonnet-4",
+      "reason": "structured writing, balanced cost"
+    },
+    "sdd-design": {
+      "model": "anthropic/claude-opus-4",
+      "reason": "architecture decisions"
+    },
+    "sdd-tasks": {
+      "model": "anthropic/claude-sonnet-4",
+      "reason": "breakdown, balanced cost"
+    },
+    "sdd-apply": {
+      "model": "openai/codex-5.3",
+      "reason": "code generation"
+    },
+    "sdd-verify": {
+      "model": "openai/codex-5.3",
+      "reason": "bug detection"
+    },
+    "sdd-archive": {
+      "model": "google/gemini-3-flash",
+      "reason": "cheap text"
+    },
+    "default": {
+      "model": "anthropic/claude-sonnet-4",
+      "reason": "fallback"
+    }
+  },
+  "overrides_env": "YWAI_MODEL_OVERRIDE"
+}

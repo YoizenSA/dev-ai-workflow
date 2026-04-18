@@ -452,9 +452,38 @@ func (i *Installer) selectedExtensionsByType() (map[string]map[string]bool, bool
 	}
 
 	if i.flags.InstallGlobal {
-		selected["install-steps"]["global-agents"] = true
-		selected["install-steps"]["global-skills"] = true
+		if i.presetAllowsGlobalAgents() {
+			selected["install-steps"]["global-agents"] = true
+		}
+		if i.presetAllowsGlobalSkills() {
+			selected["install-steps"]["global-skills"] = true
+		}
 		hasConfig = true
+	}
+
+	// Apply preset allow-lists (no-op for standard preset).
+	for _, bucket := range []string{"hooks", "mcps", "install-steps"} {
+		current := make([]string, 0, len(selected[bucket]))
+		for name := range selected[bucket] {
+			current = append(current, name)
+		}
+		filtered := i.filterByPreset(bucket, current)
+		if len(filtered) != len(current) {
+			newSet := map[string]bool{}
+			for _, name := range filtered {
+				newSet[name] = true
+			}
+			selected[bucket] = newSet
+		}
+	}
+
+	// Respect preset's global-agents/global-skills gates even if --install-global
+	// was not requested via flag (enforces minimal/full boundaries).
+	if !i.presetAllowsGlobalAgents() {
+		delete(selected["install-steps"], "global-agents")
+	}
+	if !i.presetAllowsGlobalSkills() {
+		delete(selected["install-steps"], "global-skills")
 	}
 
 	return selected, hasConfig

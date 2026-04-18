@@ -231,7 +231,36 @@
     "copy_shared_skills": false,
     "copy_commands": true,
     "init_ga": true,
-    "optional_hooks": false
+    "optional_hooks": false,
+    "copy_sdd_models": true
   },
-  "default": "nest"
+  "presets": {
+    "description": "Declarative install scope, orthogonal to --type. Filters what the type bundle installs.",
+    "minimal": {
+      "description": "SDD skills + git-commit only. No GA, no global agents, no MCPs, no hooks.",
+      "skills_only": ["git-commit", "skill-creator", "skill-sync"],
+      "install-steps_only": ["sdd-commands"],
+      "mcps_only": [],
+      "hooks_only": [],
+      "init_ga": false,
+      "install_global_agents": false,
+      "install_global_skills": false
+    },
+    "standard": {
+      "description": "Default. Current behavior: full type bundle + GA + context7-mcp.",
+      "init_ga": true,
+      "install_global_agents": true,
+      "install_global_skills": true
+    },
+    "full": {
+      "description": "Standard + engram + all optional install-steps + hooks enabled.",
+      "init_ga": true,
+      "install_global_agents": true,
+      "install_global_skills": true,
+      "optional_hooks": true,
+      "extra_install-steps": ["engram-setup"]
+    }
+  },
+  "default": "nest",
+  "default_preset": "standard"
 }

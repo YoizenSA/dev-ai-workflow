@@ -23,14 +23,14 @@ From the orchestrator:
 - The delta specs
 - The `design.md` content
 - The `tasks.md` content (with completion status)
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `verify-report`. Retrieve all prior artifacts (proposal, spec, design, tasks, apply-progress) via 2-step recovery.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create `verify-report.md` in the change directory.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create `verify-report.md` in the change directory.
 - If mode is `none`: Return the full verification report inline. Do NOT create any project files.
 
 ## What to Do
@@ -55,21 +55,21 @@ Read tasks.md
 
 ```
 Build command detection:
-  openspec/config.yaml → rules.verify.build_command
+  sdd/config.yaml → rules.verify.build_command
   package.json → "scripts.build"
   Makefile → "build" target
   Otherwise → skip build check
 
 Test command detection:
-  openspec/config.yaml → rules.verify.test_command
-  openspec/config.yaml → rules.apply.test_command
+  sdd/config.yaml → rules.verify.test_command
+  sdd/config.yaml → rules.apply.test_command
   package.json → "scripts.test"
   pytest.ini / pyproject.toml → pytest
   Makefile → "test" target
   Otherwise → skip test run
 
 Coverage threshold:
-  openspec/config.yaml → rules.verify.coverage_threshold (default: 0 = disabled)
+  sdd/config.yaml → rules.verify.coverage_threshold (default: 0 = disabled)
 ```
 
 #### Step 2b: Run Checks
@@ -139,7 +139,7 @@ REGRESSION CHECK:
 ### Step 6: Persist Verification Report
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/verify-report`
-- **openspec**: Write to `openspec/changes/{change-name}/verify-report.md`
+- **sdd**: Write to `sdd/changes/{change-name}/verify-report.md`
 - **none**: Return content inline only
 
 ### Step 7: Return Summary
@@ -148,7 +148,7 @@ REGRESSION CHECK:
 ## Verification Report
 
 **Change**: {change-name}
-**Persistence**: {engram (ID: #{id}) | openspec (path) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (path) | none (inline)}
 
 ### Completeness
 | Metric | Value |
@@ -238,5 +238,5 @@ REGRESSION CHECK:
 - Always run security and regression audit — do not skip even for small changes
 - DO NOT fix any issues — only report them. The orchestrator decides what to do.
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.verify` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.verify` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`

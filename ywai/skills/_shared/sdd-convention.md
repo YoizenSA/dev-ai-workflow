@@ -1,9 +1,9 @@
-# OpenSpec File Convention (shared across all SDD skills)
+# SDD File Convention (shared across all SDD skills)
 
 ## Directory Structure
 
 ```
-openspec/
+sdd/
 ├── config.yaml              <- Project-specific SDD config
 ├── specs/                   <- Source of truth (main specs)
 │   └── {domain}/
@@ -25,42 +25,42 @@ openspec/
 
 | Skill | Creates / Reads | Path |
 |-------|----------------|------|
-| sdd-init | Creates | `openspec/config.yaml`, `openspec/specs/`, `openspec/changes/`, `openspec/changes/archive/` |
-| sdd-explore | Creates (optional) | `openspec/changes/{change-name}/exploration.md` |
-| sdd-propose | Creates | `openspec/changes/{change-name}/proposal.md` |
-| sdd-spec | Creates | `openspec/changes/{change-name}/specs/{domain}/spec.md` |
-| sdd-design | Creates | `openspec/changes/{change-name}/design.md` |
-| sdd-tasks | Creates | `openspec/changes/{change-name}/tasks.md` |
-| sdd-apply | Updates | `openspec/changes/{change-name}/tasks.md` (marks `[x]`) |
-| sdd-verify | Creates | `openspec/changes/{change-name}/verify-report.md` |
-| sdd-archive | Moves | `openspec/changes/{change-name}/` → `openspec/changes/archive/YYYY-MM-DD-{change-name}/` |
-| sdd-archive | Updates | `openspec/specs/{domain}/spec.md` (merges deltas into main specs) |
+| sdd-init | Creates | `sdd/config.yaml`, `sdd/specs/`, `sdd/changes/`, `sdd/changes/archive/` |
+| sdd-explore | Creates (optional) | `sdd/changes/{change-name}/exploration.md` |
+| sdd-propose | Creates | `sdd/changes/{change-name}/proposal.md` |
+| sdd-spec | Creates | `sdd/changes/{change-name}/specs/{domain}/spec.md` |
+| sdd-design | Creates | `sdd/changes/{change-name}/design.md` |
+| sdd-tasks | Creates | `sdd/changes/{change-name}/tasks.md` |
+| sdd-apply | Updates | `sdd/changes/{change-name}/tasks.md` (marks `[x]`) |
+| sdd-verify | Creates | `sdd/changes/{change-name}/verify-report.md` |
+| sdd-archive | Moves | `sdd/changes/{change-name}/` → `sdd/changes/archive/YYYY-MM-DD-{change-name}/` |
+| sdd-archive | Updates | `sdd/specs/{domain}/spec.md` (merges deltas into main specs) |
 
 ## Reading Artifacts
 
 Each skill reads its dependencies from the filesystem:
 
 ```
-Proposal:  openspec/changes/{change-name}/proposal.md
-Specs:     openspec/changes/{change-name}/specs/  (all domain subdirectories)
-Design:    openspec/changes/{change-name}/design.md
-Tasks:     openspec/changes/{change-name}/tasks.md
-Verify:    openspec/changes/{change-name}/verify-report.md
-Config:    openspec/config.yaml
-Main specs: openspec/specs/{domain}/spec.md
+Proposal:  sdd/changes/{change-name}/proposal.md
+Specs:     sdd/changes/{change-name}/specs/  (all domain subdirectories)
+Design:    sdd/changes/{change-name}/design.md
+Tasks:     sdd/changes/{change-name}/tasks.md
+Verify:    sdd/changes/{change-name}/verify-report.md
+Config:    sdd/config.yaml
+Main specs: sdd/specs/{domain}/spec.md
 ```
 
 ## Writing Rules
 
-- ALWAYS create the change directory (`openspec/changes/{change-name}/`) before writing artifacts
+- ALWAYS create the change directory (`sdd/changes/{change-name}/`) before writing artifacts
 - If a file already exists, READ it first and UPDATE it (don't overwrite blindly)
 - If the change directory already exists with artifacts, the change is being CONTINUED
-- Use the `openspec/config.yaml` `rules` section to apply project-specific constraints per phase
+- Use the `sdd/config.yaml` `rules` section to apply project-specific constraints per phase
 
 ## Config File Reference
 
 ```yaml
-# openspec/config.yaml
+# sdd/config.yaml
 schema: spec-driven
 
 context: |
@@ -110,7 +110,7 @@ rules:
 
 When archiving, the change folder moves to:
 ```
-openspec/changes/archive/YYYY-MM-DD-{change-name}/
+sdd/changes/archive/YYYY-MM-DD-{change-name}/
 ```
 
 Use today's date in ISO format. The archive is an AUDIT TRAIL — never delete or modify archived changes.

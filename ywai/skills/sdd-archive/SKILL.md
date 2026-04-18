@@ -21,14 +21,14 @@ From the orchestrator:
 - Change name
 - The verification report (confirm the change is PASS or PASS WITH WARNINGS)
 - The full change folder contents
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Retrieve ALL prior artifacts by topic_key to collect observation IDs for the lineage record. Artifact type: `archive-report`. Do NOT move any project files.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Perform spec merge and move change folder. Create archive report as part of the move.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Perform spec merge and move change folder. Create archive report as part of the move.
 - If mode is `none`: Return the full archive summary inline. Do NOT create or move any project files.
 
 ## What to Do
@@ -37,16 +37,16 @@ Read and follow `skills/_shared/persistence-contract.md` for mode resolution rul
 
 Read the verification report:
 - **engram**: 2-step recovery — `mem_search(query: "sdd/{change-name}/verify-report")` + `mem_get_observation`
-- **openspec**: Read `openspec/changes/{change-name}/verify-report.md`
+- **sdd**: Read `sdd/changes/{change-name}/verify-report.md`
 - **none**: Use content passed by orchestrator
 
 If verdict is FAIL (CRITICAL issues present), REFUSE to archive. Return status `blocked` with the list of critical issues.
 
-### Step 2: Sync Delta Specs to Main Specs (openspec mode only)
+### Step 2: Sync Delta Specs to Main Specs (sdd mode only)
 
-For each delta spec in `openspec/changes/{change-name}/specs/`:
+For each delta spec in `sdd/changes/{change-name}/specs/`:
 
-#### If Main Spec Exists (`openspec/specs/{domain}/spec.md`)
+#### If Main Spec Exists (`sdd/specs/{domain}/spec.md`)
 
 Read the existing main spec and apply the delta:
 
@@ -66,8 +66,8 @@ Merge carefully:
 
 Copy the delta spec directly:
 ```
-openspec/changes/{change-name}/specs/{domain}/spec.md
-  → openspec/specs/{domain}/spec.md
+sdd/changes/{change-name}/specs/{domain}/spec.md
+  → sdd/specs/{domain}/spec.md
 ```
 
 > **engram mode**: The spec content is already in Engram as `sdd/{change-name}/spec`. Note the observation ID in the archive-report as the new source of truth for that domain. No file merge needed.
@@ -121,18 +121,18 @@ If no changelog exists, include the entry in the archive summary only.
 | Warnings found | {N} |
 | Effort estimate (proposal) | {XS/S/M/L/XL} |
 
-### Step 6: Move to Archive (openspec mode only)
+### Step 6: Move to Archive (sdd mode only)
 
 Move the change folder:
 
 ```
-openspec/changes/{change-name}/
-  → openspec/changes/archive/YYYY-MM-DD-{change-name}/
+sdd/changes/{change-name}/
+  → sdd/changes/archive/YYYY-MM-DD-{change-name}/
 ```
 
 Use today's date in ISO format (e.g., `2026-03-02`).
 
-If `openspec/changes/archive/` doesn't exist, create it first.
+If `sdd/changes/archive/` doesn't exist, create it first.
 
 ### Step 7: Collect Engram Artifact Lineage (engram mode)
 
@@ -154,7 +154,7 @@ Include all collected IDs in the `archive-report` content under a **Lineage** se
 ### Step 8: Persist Archive Report
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/archive-report` — include lineage section with all observation IDs
-- **openspec**: Write `lessons.md` to the change folder (before moving it), then move the folder to archive
+- **sdd**: Write `lessons.md` to the change folder (before moving it), then move the folder to archive
 - **none**: Return content inline only
 
 ### Step 9: Verify Archive
@@ -164,7 +164,7 @@ Confirm:
 - [ ] Delta specs synced (or noted in engram lineage)
 - [ ] Lessons learned captured
 - [ ] Changelog entry generated
-- [ ] Change folder archived (openspec) or archive-report saved (engram)
+- [ ] Change folder archived (sdd) or archive-report saved (engram)
 - [ ] All artifacts present
 
 ### Step 10: Return Summary
@@ -174,7 +174,7 @@ Confirm:
 
 **Change**: {change-name}
 **Date**: {YYYY-MM-DD}
-**Persistence**: {engram (archive-report ID: #{id}) | openspec (archive path) | none (inline)}
+**Persistence**: {engram (archive-report ID: #{id}) | sdd (archive path) | none (inline)}
 
 ### Specs Synced
 | Domain | Action | Details |
@@ -210,7 +210,7 @@ Confirm:
 | archive-report | #{id} |
 
 ### Source of Truth Updated
-{openspec: "The following specs now reflect the new behavior: openspec/specs/{domain}/spec.md"}
+{sdd: "The following specs now reflect the new behavior: sdd/specs/{domain}/spec.md"}
 {engram: "Spec content is in Engram observation #{spec-id}. Use topic_key sdd/{change-name}/spec to retrieve."}
 
 ### SDD Cycle Complete
@@ -233,7 +233,7 @@ Ready for the next change.
 ## Rules
 
 - NEVER archive a change that has CRITICAL issues in its verification report
-- ALWAYS sync delta specs BEFORE moving to archive (openspec) or record lineage (engram)
+- ALWAYS sync delta specs BEFORE moving to archive (sdd) or record lineage (engram)
 - ALWAYS capture lessons learned before archiving
 - ALWAYS generate a changelog entry
 - When merging into existing specs, PRESERVE requirements not mentioned in the delta
@@ -241,5 +241,5 @@ Ready for the next change.
 - If the merge would be destructive (removing large sections), WARN the orchestrator and ask for confirmation
 - The archive is an AUDIT TRAIL — never delete or modify archived changes
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.archive` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.archive` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`

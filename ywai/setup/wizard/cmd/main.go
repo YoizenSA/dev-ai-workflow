@@ -156,6 +156,7 @@ func parseFlags() *installer.Flags {
 	flag.StringVar(&flags.Provider, "provider", "opencode", "LLM provider")
 	flag.StringVar(&flags.Target, "target", "", "Target directory")
 	flag.StringVar(&flags.ProjectType, "type", "", "Project type")
+	flag.StringVar(&flags.Preset, "preset", "", "Install preset: minimal | standard | full (default: standard)")
 	flag.StringVar(&flags.Version, "install-version", "", "Specific version to install")
 	flag.StringVar(&flags.Channel, "channel", "stable", "Release channel")
 
@@ -217,6 +218,7 @@ OPTIONS:
     --list-installable-skills  List installable skills missing from this repo
     --provider PROVIDER Main AI provider (default: opencode)
     --type TYPE         Project type
+    --preset NAME       Install preset: minimal | standard | full (default: standard)
     --install-version VERSION   Specific version to install
     --channel CHANNEL   Release channel (stable/latest)
     --help, -h          Show this help

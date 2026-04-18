@@ -34,14 +34,14 @@ By default you only research and report back; only persist `exploration` when th
 The orchestrator will give you:
 - A topic or feature to explore
 - Optionally: a change name (if this is part of `/sdd:new`)
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `explore`. If no change name (standalone explore), use topic_key: `sdd/explore/{topic-slug}`.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create `exploration.md` only if a change name was provided.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create `exploration.md` only if a change name was provided.
 - If mode is `none`: Return result only. Do not write any files.
 
 ### Retrieving Context Before Exploring
@@ -49,7 +49,7 @@ Read and follow `skills/_shared/persistence-contract.md` for mode resolution rul
 Before starting, load any existing project context and relevant specs:
 
 - **engram**: Search for `sdd-init/{project}` (project context) and `sdd/` (existing artifacts for the change).
-- **openspec**: Read `openspec/config.yaml` and relevant `openspec/specs/` domains.
+- **sdd**: Read `sdd/config.yaml` and relevant `sdd/specs/` domains.
 - **none**: Use whatever context the orchestrator passed in the prompt.
 
 ## What to Do
@@ -108,7 +108,7 @@ Select one approach and justify it with:
 If the orchestrator provided a change name, persist the analysis:
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/explore`
-- **openspec**: Create `openspec/changes/{change-name}/exploration.md`
+- **sdd**: Create `sdd/changes/{change-name}/exploration.md`
 - **none** or no change name: skip persistence — return analysis only
 
 ### Step 6: Return Structured Analysis
@@ -126,7 +126,7 @@ Return the structure from `skills/sdd-explore/TEMPLATES.md` (and write the same 
 
 ## Rules
 
-- The ONLY file you MAY create is `exploration.md` inside the change folder (openspec mode, change name provided)
+- The ONLY file you MAY create is `exploration.md` inside the change folder (sdd mode, change name provided)
 - DO NOT modify any existing code or files
 - ALWAYS read real code, never guess about the codebase
 - Keep your analysis CONCISE — the orchestrator needs a summary, not a novel

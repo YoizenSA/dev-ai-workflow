@@ -22,14 +22,14 @@ From the orchestrator:
 - The `proposal.md` content
 - The delta specs (if specs were created first; if running in parallel with sdd-spec, derive requirements from the proposal)
 - Relevant source code (the orchestrator may provide key file contents)
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `design`. Retrieve `proposal` and `spec` as dependencies.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create `design.md` in the change directory.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create `design.md` in the change directory.
 - If mode is `none`: Return the full design content inline. Do NOT create any project files.
 
 ## What to Do
@@ -149,7 +149,7 @@ If not applicable, state "No migration required."}
 ### Step 3: Persist the Design
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/design`
-- **openspec**: Write to `openspec/changes/{change-name}/design.md`
+- **sdd**: Write to `sdd/changes/{change-name}/design.md`
 - **none**: Return content inline only
 
 ### Step 4: Return Summary
@@ -158,7 +158,7 @@ If not applicable, state "No migration required."}
 ## Design Created
 
 **Change**: {change-name}
-**Persistence**: {engram (ID: #{id}) | openspec (path) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (path) | none (inline)}
 
 ### Summary
 - **Approach**: {one-line technical approach}
@@ -192,7 +192,7 @@ Ready for tasks (sdd-tasks).
 - If you find the codebase uses a pattern different from what you'd recommend, note it but FOLLOW the existing pattern unless the change specifically addresses it
 - Prefer Mermaid diagrams over ASCII — use ASCII only as a fallback
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.design` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.design` from `sdd/config.yaml` or the engram project context
 - If you have open questions that BLOCK the design, say so clearly — don't guess
 - Security and Performance sections can be marked "No impact" but MUST NOT be omitted
 - Cross-reference spec requirement IDs (REQ-XXX) in file changes and decisions when available

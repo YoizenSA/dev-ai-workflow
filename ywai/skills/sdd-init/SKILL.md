@@ -20,8 +20,8 @@ You are a sub-agent responsible for bootstrapping Spec-Driven Development (SDD) 
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
-- If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Persist project context to Engram. Do NOT create `openspec/`.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Run full directory bootstrap.
+- If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Persist project context to Engram. Do NOT create `sdd/`.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Run full directory bootstrap.
 - If mode is `none`: Return detected context inline without writing project files.
 
 ## What to Do
@@ -69,19 +69,19 @@ Content to persist:
 {yes/no — if yes, list workspace packages}
 ```
 
-#### openspec mode
+#### sdd mode
 
 Create this directory structure:
 
 ```
-openspec/
+sdd/
 ├── config.yaml              ← Project-specific SDD config
 ├── specs/                   ← Source of truth (empty initially)
 └── changes/                 ← Active changes
     └── archive/             ← Completed changes
 ```
 
-Generate `openspec/config.yaml` based on what you detected. See `skills/_shared/openspec-convention.md` for the full config format.
+Generate `sdd/config.yaml` based on what you detected. See `skills/_shared/sdd-convention.md` for the full config format.
 
 Include the `models:` section for model assignment per phase.
 
@@ -101,7 +101,7 @@ Include the `models:` section for model assignment per phase.
 }
 ```
 
-Use these values to populate the `models:` section in `openspec/config.yaml`:
+Use these values to populate the `models:` section in `sdd/config.yaml`:
 
 ```yaml
 # Model assignment per SDD phase (from .ywai/config.json or defaults)
@@ -126,9 +126,9 @@ Return the detected context inline. Do not write any files.
 
 | Situation | Action |
 |-----------|--------|
-| `openspec/` already exists | Read existing config, report current state, ask orchestrator whether to upgrade or skip |
+| `sdd/` already exists | Read existing config, report current state, ask orchestrator whether to upgrade or skip |
 | Engram artifact `sdd-init/{project}` already exists | Read it, report current state, ask orchestrator whether to update |
-| Config is corrupted (openspec mode) | Back up to `openspec/config.yaml.bak`, generate fresh config |
+| Config is corrupted (sdd mode) | Back up to `sdd/config.yaml.bak`, generate fresh config |
 | Schema version mismatch (upgrading from v1) | Migrate config: add `schema_version: 2` and new rule keys, preserve custom rules |
 
 ### Step 4: Return Summary
@@ -152,19 +152,19 @@ No project files created.
 Ready for /sdd:explore <topic> or /sdd:new <change-name>.
 ```
 
-#### openspec mode
+#### sdd mode
 
 ```markdown
 ## SDD Initialized
 
 **Project**: {project name}
 **Stack**: {detected stack}
-**Persistence**: openspec
+**Persistence**: sdd
 
 ### Structure Created
-- openspec/config.yaml ← Project config with detected context
-- openspec/specs/      ← Ready for specifications
-- openspec/changes/    ← Ready for change proposals
+- sdd/config.yaml ← Project config with detected context
+- sdd/specs/      ← Ready for specifications
+- sdd/changes/    ← Ready for change proposals
 
 ### Next Steps
 Ready for /sdd:explore <topic> or /sdd:new <change-name>.
@@ -183,7 +183,7 @@ Ready for /sdd:explore <topic> or /sdd:new <change-name>.
 {summary of detected stack and conventions}
 
 ### Recommendation
-Enable engram or openspec for artifact persistence across sessions.
+Enable engram or sdd for artifact persistence across sessions.
 Without persistence, all SDD artifacts will be lost when the conversation ends.
 
 ### Next Steps
@@ -194,6 +194,6 @@ Ready for /sdd:explore <topic> or /sdd:new <change-name>.
 
 - NEVER create placeholder spec files — specs are created via sdd-spec during a change
 - ALWAYS detect the real tech stack, don't guess
-- NEVER force `openspec/` creation unless mode explicitly resolves to `openspec`
+- NEVER force `sdd/` creation unless mode explicitly resolves to `sdd`
 - Keep config.yaml context CONCISE — no more than 10 lines
 - Return a structured envelope with: `status`, `executive_summary`, `artifacts`, `next_recommended`, and `risks`

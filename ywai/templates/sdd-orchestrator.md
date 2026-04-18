@@ -44,7 +44,7 @@ Read model configuration in this order:
    - Load profile models from `profiles.{active_profile}.phases`
 
 2. **Default Config** (if no profiles):
-   - Read from `openspec/config.yaml` → `models`
+   - Read from `sdd/config.yaml` → `models`
    - Or from `.ywai/config.json` → `models`
    - Or from Engram project context
 

@@ -78,7 +78,7 @@ Read skills/{skill-name}/SKILL.md
 Assign different AI models to different SDD phases for cost/quality optimization:
 
 ```yaml
-# openspec/config.yaml
+# sdd/config.yaml
 models:
   default: ""                              # Use agent's default
   sdd-explore: "anthropic/claude-sonnet-4" # Powerful for analysis

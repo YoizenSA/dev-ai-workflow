@@ -1,29 +1,19 @@
+---
 name: skill-sync
 description: >
-  Sync skill metadata with the Auto-invoke sections in AGENTS.md.
-  Trigger: When you change a skill's metadata (metadata.scope/metadata.auto_invoke), regenerate the Auto-invoke tables, or run ./skills/skill-sync/assets/sync.sh.
+  Sync skill metadata with the Auto-invoke sections in AGENTS.md and
+  generate `.ywai/skill-registry.md` (compact rules) for sub-agent injection.
+  Trigger: When you change a skill's metadata (metadata.scope/metadata.auto_invoke),
+  regenerate the Auto-invoke tables, or run ./skills/skill-sync/assets/sync.sh.
 
 metadata:
   author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
+  version: "2.0"
   scope: [root]
   auto_invoke:
     - "After creating/modifying a skill"
     - "Regenerate AGENTS.md Auto-invoke tables (sync.sh)"
+    - "Generate .ywai/skill-registry.md compact rules (sync.sh --registry)"
     - "Troubleshoot why a skill is missing from AGENTS.md auto-invoke"
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
@@ -49,20 +39,6 @@ Every skill that should show up in an Auto-invoke section must define these `met
 
 ```yaml
 metadata:
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
   author: YourName
   version: "1.0"
   scope: [root, backend]                   # AGENTS.md files to update
@@ -121,4 +97,36 @@ Skills can define multiple scopes: `scope: [root, backend, api]`
 
 # Sync a specific scope
 ./skills/skill-sync/assets/sync.sh --scope backend
+
+# Generate .ywai/skill-registry.md (compact rules for sub-agent injection)
+./skills/skill-sync/assets/sync.sh --registry
+```
+
+## Compact Rules Registry
+
+The `--registry` mode generates `.ywai/skill-registry.md` at the project root with
+one compact block per installed skill. Each block has:
+
+- `name`, `triggers`, `scope`, `version`, `source`
+- A `rules:` list with 5–15 actionable bullets extracted from the skill's
+  `## Critical Patterns` / `## Rules` section (falls back to the first bullet list
+  found if neither heading exists).
+
+Sub-agents consume this single file instead of loading every full `SKILL.md`,
+reducing prompt tokens by ~40% on multi-skill project types.
+
+### Example block
+
+```markdown
+## skill: typescript
+triggers: ["*.ts", "*.tsx", "TypeScript refactor"]
+scope: [root]
+version: 1.0
+source: skills/typescript/SKILL.md
+rules:
+- NEVER use `any`; prefer `unknown` with narrowing or generics.
+- Explicit types on public signatures; inference in locals.
+- `readonly` by default on arrays/objects of domain.
+- Avoid `enum`; use union types `as const`.
+- Discriminated unions to model state (loading/ok/error).
 ```

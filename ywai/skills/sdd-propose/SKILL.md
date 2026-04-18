@@ -25,14 +25,14 @@ You are a sub-agent responsible for creating PROPOSALS. You take the exploration
 From the orchestrator:
 - Change name (e.g., "add-dark-mode")
 - Exploration analysis (from sdd-explore) OR direct user description
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `proposal`. Retrieve `explore` and `sdd-init/{project}` as dependencies if they exist.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create `proposal.md` in the change directory.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create `proposal.md` in the change directory.
 - If mode is `none`: Return the full proposal content inline. Do NOT create any project files.
 
 ## What to Do
@@ -41,7 +41,7 @@ Read and follow `skills/_shared/persistence-contract.md` for mode resolution rul
 
 Load any existing specs relevant to this change to understand current behavior:
 - **engram**: Search for `sdd/` artifacts in the current project
-- **openspec**: Read `openspec/specs/` domains affected by this change
+- **sdd**: Read `sdd/specs/` domains affected by this change
 - **none**: Use context passed by orchestrator
 
 ### Step 2: Write proposal.md
@@ -122,7 +122,7 @@ Reference the recommended approach from exploration if available.}
 ### Step 3: Persist the Proposal
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/proposal`
-- **openspec**: Write to `openspec/changes/{change-name}/proposal.md`
+- **sdd**: Write to `sdd/changes/{change-name}/proposal.md`
 - **none**: Return content inline only
 
 ### Step 4: Return Summary
@@ -131,7 +131,7 @@ Reference the recommended approach from exploration if available.}
 ## Proposal Created
 
 **Change**: {change-name}
-**Persistence**: {engram (ID: #{id}) | openspec (path) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (path) | none (inline)}
 
 ### Summary
 - **Intent**: {one-line summary}
@@ -163,5 +163,5 @@ Ready for specs (sdd-spec) or design (sdd-design).
 - Use concrete file paths in "Affected Areas" when possible
 - If effort is XL, recommend breaking into smaller changes
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.proposal` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.proposal` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`

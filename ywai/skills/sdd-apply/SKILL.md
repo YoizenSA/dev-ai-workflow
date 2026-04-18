@@ -24,17 +24,17 @@ From the orchestrator:
 - The delta specs (for behavioral requirements)
 - The `design.md` content (for technical approach)
 - The `tasks.md` content (for the full task list)
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 
 ## Execution and Persistence Contract
 
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `apply-progress`. Retrieve `proposal`, `spec`, `design`, and `tasks` as dependencies (2-step: search + get_observation).
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Read artifacts from `openspec/changes/{change-name}/`. Update `tasks.md` in-place to mark completed tasks.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Read artifacts from `sdd/changes/{change-name}/`. Update `tasks.md` in-place to mark completed tasks.
 - If mode is `none`: Read artifacts from orchestrator context. Do NOT persist progress separately — include it in the return summary.
 
-> **Note**: `sdd-apply` ALWAYS creates or modifies actual project source files on disk, regardless of mode. The mode only controls where SDD artifact progress is persisted (engram vs openspec vs inline), not whether code is written.
+> **Note**: `sdd-apply` ALWAYS creates or modifies actual project source files on disk, regardless of mode. The mode only controls where SDD artifact progress is persisted (engram vs sdd vs inline), not whether code is written.
 
 ## What to Do
 
@@ -44,7 +44,7 @@ Use the same 4-level detection as `sdd-tasks`:
 
 ```
 Level 1 — Config file:
-  openspec/config.yaml → rules.apply.tdd: true
+  sdd/config.yaml → rules.apply.tdd: true
   (or engram project context if mode is engram)
 
 Level 2 — Skills present:
@@ -67,7 +67,7 @@ Check package.json scripts → "test": "jest ...", "vitest ...", "mocha ..."
 Check config files → jest.config.*, vitest.config.*, .mocharc.*
 Check pyproject.toml / setup.cfg → pytest
 Check Makefile → test target
-Check openspec/config.yaml → rules.apply.test_command
+Check sdd/config.yaml → rules.apply.test_command
 ```
 
 Set `TEST_COMMAND` for use in Step 4.
@@ -156,7 +156,7 @@ Update `tasks.md` — change `- [ ]` to `- [x]` for completed tasks:
 ### Step 6: Persist Progress
 
 - **engram**: `mem_save` with `topic_key: sdd/{change-name}/apply-progress` (include task completion status and files changed)
-- **openspec**: Update `openspec/changes/{change-name}/tasks.md` in-place
+- **sdd**: Update `sdd/changes/{change-name}/tasks.md` in-place
 - **none**: Include progress in the return summary only
 
 ### Step 7: Return Summary
@@ -166,7 +166,7 @@ Update `tasks.md` — change `- [ ]` to `- [x]` for completed tasks:
 
 **Change**: {change-name}
 **TDD Mode**: {enabled / disabled}
-**Persistence**: {engram (ID: #{id}) | openspec (path) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (path) | none (inline)}
 
 ### Completed Tasks
 - [x] {task 1.1 description}
@@ -242,5 +242,5 @@ When specs, design, and reality disagree:
 - In TDD mode: [RED] task MUST produce a failing test — if the test passes, it's wrong
 - In TDD mode: [GREEN] task MUST produce a passing test — do not mark complete until it passes
 - Load and follow any relevant coding skills for the project stack if available
-- Apply any `rules.apply` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.apply` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`

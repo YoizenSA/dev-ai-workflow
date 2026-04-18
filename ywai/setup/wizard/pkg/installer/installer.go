@@ -382,6 +382,94 @@ func (i *Installer) loadTypesConfig() *TypesConfig {
 	return &config
 }
 
+// activePreset returns the resolved preset name and config.
+// Flag --preset wins; else types.json default_preset; else "standard" (no-op).
+func (i *Installer) activePreset() (string, PresetConfig) {
+	cfg := i.loadTypesConfig()
+	name := strings.TrimSpace(strings.ToLower(i.flags.Preset))
+	if name == "" {
+		name = strings.TrimSpace(strings.ToLower(cfg.DefaultPreset))
+	}
+	if name == "" {
+		name = "standard"
+	}
+	preset, ok := cfg.Presets[name]
+	if !ok {
+		return "standard", PresetConfig{}
+	}
+	return name, preset
+}
+
+// filterByPreset applies SkillsOnly / InstallStepsOnly / MCPsOnly / HooksOnly
+// filters to a bundle list. If the preset has no filter for the bucket,
+// the original list is returned unchanged. bucket is one of:
+// "skills", "install-steps", "mcps", "hooks".
+func (i *Installer) filterByPreset(bucket string, items []string) []string {
+	_, preset := i.activePreset()
+	var allow []string
+	switch bucket {
+	case "skills":
+		allow = preset.SkillsOnly
+	case "install-steps":
+		allow = preset.InstallStepsOnly
+		if len(preset.ExtraInstallSteps) > 0 {
+			if len(allow) == 0 {
+				items = uniqueStrings(append(append([]string{}, items...), preset.ExtraInstallSteps...))
+			} else {
+				allow = uniqueStrings(append(append([]string{}, allow...), preset.ExtraInstallSteps...))
+			}
+		}
+	case "mcps":
+		allow = preset.MCPsOnly
+	case "hooks":
+		allow = preset.HooksOnly
+	default:
+		return items
+	}
+	if len(allow) == 0 {
+		return items
+	}
+	keep := map[string]bool{}
+	for _, a := range allow {
+		keep[strings.TrimSpace(a)] = true
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		if keep[strings.TrimSpace(it)] {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// presetAllowsGlobalAgents returns whether global agents should be installed
+// under the active preset. Default true (standard preset leaves this enabled).
+func (i *Installer) presetAllowsGlobalAgents() bool {
+	_, preset := i.activePreset()
+	if preset.InstallGlobalAgents == nil {
+		return true
+	}
+	return *preset.InstallGlobalAgents
+}
+
+// presetAllowsGlobalSkills returns whether global skills should be installed.
+func (i *Installer) presetAllowsGlobalSkills() bool {
+	_, preset := i.activePreset()
+	if preset.InstallGlobalSkills == nil {
+		return true
+	}
+	return *preset.InstallGlobalSkills
+}
+
+// presetAllowsInitGA returns whether GA should be initialized under this preset.
+func (i *Installer) presetAllowsInitGA() bool {
+	_, preset := i.activePreset()
+	if preset.InitGA == nil {
+		return true
+	}
+	return *preset.InitGA
+}
+
 func (i *Installer) ProjectTypeOptions() []ProjectTypeOption {
 	cfg := i.loadTypesConfig()
 	if len(cfg.Types) == 0 {

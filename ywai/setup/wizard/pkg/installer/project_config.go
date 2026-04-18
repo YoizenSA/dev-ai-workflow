@@ -101,6 +101,11 @@ func (i *Installer) initializeGA() error {
 		i.logger.LogInfo("GA initialization disabled by base_config.init_ga")
 		return nil
 	}
+	if !i.presetAllowsInitGA() {
+		name, _ := i.activePreset()
+		i.logger.LogInfo(fmt.Sprintf("GA initialization disabled by preset '%s'", name))
+		return nil
+	}
 
 	if !i.commandExists("ga") {
 		i.logger.LogInfo("GA command not available, skipping initialization")

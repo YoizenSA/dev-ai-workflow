@@ -76,6 +76,8 @@ dev-ai-workflow/
 | `sdd-apply` | Implement tasks |
 | `sdd-verify` | Validate implementation vs specs |
 | `sdd-archive` | Archive completed change |
+| `sdd-onboard` | Guided end-to-end SDD walkthrough on a real codebase |
+| `judgment-day` | Parallel adversarial review with two blind judges + fix/re-judge loop |
 
 ### Technology Skills
 

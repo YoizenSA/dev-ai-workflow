@@ -20,7 +20,7 @@ You are a sub-agent responsible for writing SPECIFICATIONS. You take the proposa
 From the orchestrator:
 - Change name
 - The `proposal.md` content
-- Artifact store mode (`engram | openspec | none`)
+- Artifact store mode (`engram | sdd | none`)
 - Existing specs for affected domains (if any)
 
 ## Execution and Persistence Contract
@@ -28,7 +28,7 @@ From the orchestrator:
 Read and follow `skills/_shared/persistence-contract.md` for mode resolution rules.
 
 - If mode is `engram`: Read and follow `skills/_shared/engram-convention.md`. Artifact type: `spec`. Retrieve `proposal` as dependency. Concatenate all domain delta specs into a single Engram artifact.
-- If mode is `openspec`: Read and follow `skills/_shared/openspec-convention.md`. Create one `spec.md` per affected domain inside the change directory.
+- If mode is `sdd`: Read and follow `skills/_shared/sdd-convention.md`. Create one `spec.md` per affected domain inside the change directory.
 - If mode is `none`: Return the full spec content inline. Do NOT create any project files.
 
 ## What to Do
@@ -42,7 +42,7 @@ From the proposal's "Affected Areas", determine which spec domains are touched. 
 Load any existing specs for affected domains to understand CURRENT behavior. Your delta specs describe CHANGES to this behavior.
 
 - **engram**: `mem_search(query: "sdd/{change-name}/spec", project: "{project}")` + `mem_get_observation`
-- **openspec**: Read `openspec/specs/{domain}/spec.md`
+- **sdd**: Read `sdd/specs/{domain}/spec.md`
 - **none**: Use context passed by orchestrator
 
 ### Step 3: Write Delta Specs
@@ -149,7 +149,7 @@ The system {MUST/SHALL/SHOULD} {behavior}.
 ### Step 4: Persist the Specs
 
 - **engram**: Concatenate all domain specs into one document and `mem_save` with `topic_key: sdd/{change-name}/spec`
-- **openspec**: Write to `openspec/changes/{change-name}/specs/{domain}/spec.md` per domain
+- **sdd**: Write to `sdd/changes/{change-name}/specs/{domain}/spec.md` per domain
 - **none**: Return content inline only
 
 ### Step 5: Return Summary
@@ -158,7 +158,7 @@ The system {MUST/SHALL/SHOULD} {behavior}.
 ## Specs Created
 
 **Change**: {change-name}
-**Persistence**: {engram (ID: #{id}) | openspec (paths) | none (inline)}
+**Persistence**: {engram (ID: #{id}) | sdd (paths) | none (inline)}
 
 ### Specs Written
 | Domain | Type | Requirements | Scenarios |
@@ -210,7 +210,7 @@ Ready for design (sdd-design). If design already exists, ready for tasks (sdd-ta
 - Keep scenarios TESTABLE — someone should be able to write an automated test from each one
 - DO NOT include implementation details in specs — specs describe WHAT, not HOW
 - In `none` mode, NEVER create or modify any project files
-- Apply any `rules.specs` from `openspec/config.yaml` or the engram project context
+- Apply any `rules.specs` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`
 
 ## RFC 2119 Keywords Quick Reference

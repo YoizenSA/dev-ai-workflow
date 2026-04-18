@@ -426,7 +426,7 @@ func (m setupModel) renderModelStep() string {
 		"",
 		menu,
 		"",
-		helpStyle.Render("This model will be used for all SDD phases. You can customize per-phase in openspec/config.yaml later."),
+		helpStyle.Render("This model will be used for all SDD phases. You can customize per-phase in sdd/config.yaml later."),
 	)
 }
 

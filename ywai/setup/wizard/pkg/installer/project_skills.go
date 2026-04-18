@@ -27,6 +27,7 @@ func (i *Installer) installTypeSkills() error {
 	}
 	typeSkills := uniqueStrings(append([]string{}, typeConfig.Skills...))
 	typeSkills = uniqueStrings(append(baseSkillsForAllTypes, typeSkills...))
+	typeSkills = i.filterByPreset("skills", typeSkills)
 	if len(typeSkills) == 0 {
 		return nil
 	}
