@@ -11,8 +11,8 @@ $sourceDir = Join-Path $extDir '..\..\..\skills\_shared'
 $targetSharedDir = Join-Path $TargetDir 'skills\_shared'
 
 if (-not (Test-Path $sourceDir)) {
-    Write-Host "Shared skills source not found: $sourceDir"
-    exit 1
+    Write-Host "Shared skills source not found: $sourceDir (skipping)"
+    exit 0
 }
 
 New-Item -ItemType Directory -Force -Path $targetSharedDir | Out-Null

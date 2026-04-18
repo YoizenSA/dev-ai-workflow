@@ -7,8 +7,8 @@ SOURCE_DIR="$EXT_DIR/../../../skills/_shared"
 TARGET_SHARED_DIR="$TARGET_DIR/skills/_shared"
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
-  echo "Shared skills source not found: $SOURCE_DIR"
-  exit 1
+  echo "Shared skills source not found: $SOURCE_DIR (skipping)"
+  exit 0
 fi
 
 mkdir -p "$TARGET_SHARED_DIR"

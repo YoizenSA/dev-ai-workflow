@@ -387,6 +387,10 @@ func (i *Installer) executeInstallStep(stepName, srcPath string) error {
 			return nil
 		}
 		return i.executeExtensionScript(srcPath)
+	case "shared-skills":
+		// Delegate to the in-process copier: copySharedSkills searches multiple
+		// YWAI locations, so it works from both the dev repo and the global install.
+		return i.copySharedSkills()
 	case "global-agents":
 		// Delegate to the in-process generator instead of running install.sh
 		// to get consistent behavior across OS and preserve user-owned files.
