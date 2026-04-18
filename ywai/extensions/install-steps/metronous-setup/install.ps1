@@ -27,10 +27,10 @@ Metronous has been installed and configured for OpenCode.
 
 ## What was configured
 
-- Metronous CLI installed
+- Metronous CLI installed to %LOCALAPPDATA%\Programs\Metronous\
 - OpenCode configured with metronous MCP shim
 - Metronous plugin installed to ~/.config/opencode/plugins/
-- Daemon service configured (Windows service)
+- Windows service registered (requires Administrator)
 
 ## Next steps
 
@@ -42,6 +42,15 @@ metronous dashboard
 
 The dashboard has 5 tabs for tracking, benchmarks, costs, config, and reports.
 
+## Service control
+
+```powershell
+metronous service start
+metronous service stop
+metronous service status
+metronous service uninstall
+```
+
 ## References
 
 - Repo: https://github.com/kiosvantra/metronous
@@ -49,50 +58,105 @@ The dashboard has 5 tabs for tracking, benchmarks, costs, config, and reports.
 
 ## Note
 
-Windows support for metronous is experimental. If you encounter issues, please report them
-at https://github.com/kiosvantra/metronous/issues.
+Windows support for metronous is experimental. Run PowerShell as Administrator for
+`metronous install` to register the Windows service. Report issues at
+https://github.com/kiosvantra/metronous/issues.
 '@ | Out-File -FilePath $ReadmeFile -Encoding UTF8
 
 # ---------------------------------------------------------------------------
-# 1. Install metronous CLI (Windows experimental)
+# 1. Install metronous CLI
 # ---------------------------------------------------------------------------
+$InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\Metronous'
+$MetronousExe = Join-Path $InstallDir 'metronous.exe'
+
 if (Has-Cmd 'metronous') {
     $version = & metronous --version 2>$null
     if (-not $version) { $version = "present" }
     Write-Log "metronous CLI already installed: $version"
+} elseif (Test-Path $MetronousExe) {
+    Write-Log "metronous found at $MetronousExe — adding to PATH for this session"
+    $env:PATH = "$InstallDir;$env:PATH"
+    $version = & $MetronousExe --version 2>$null
+    if (-not $version) { $version = "present" }
+    Write-Log "metronous version: $version"
 } else {
-    Write-Warn "metronous CLI not found. Windows support is experimental."
-    Write-Warn "Please install manually from GitHub releases:"
-    Write-Warn "  https://github.com/kiosvantra/metronous/releases"
-    Write-Warn "Download the Windows archive and run:"
-    Write-Warn "  & `$env:LOCALAPPDATA\Programs\Metronous\metronous.exe install"
-    @"
+    Write-Log "metronous not found — downloading from GitHub Releases"
+
+    try {
+        # Resolve latest version tag
+        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/kiosvantra/metronous/releases/latest' -UseBasicParsing
+        $VERSION = $release.tag_name
+        Write-Log "Latest release: $VERSION"
+
+        $archive = "metronous_$($VERSION.TrimStart('v'))_windows_amd64.zip"
+        $baseUrl = "https://github.com/kiosvantra/metronous/releases/download/$VERSION"
+        $tmpDir  = Join-Path $env:TEMP "metronous-install-$PID"
+        New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+
+        $archivePath   = Join-Path $tmpDir $archive
+        $checksumPath  = Join-Path $tmpDir 'checksums.txt'
+
+        Write-Log "Downloading $archive ..."
+        Invoke-WebRequest -Uri "$baseUrl/$archive"   -OutFile $archivePath   -UseBasicParsing
+        Invoke-WebRequest -Uri "$baseUrl/checksums.txt" -OutFile $checksumPath -UseBasicParsing
+
+        # Verify checksum
+        $expected = (Get-Content $checksumPath | Where-Object { $_ -match [regex]::Escape($archive) }) -replace '\s+.*',''
+        if ($expected) {
+            $actual = (Get-FileHash $archivePath -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $expected.ToLower()) {
+                throw "Checksum mismatch for $archive (expected $expected, got $actual)"
+            }
+            Write-Log "Checksum OK"
+        } else {
+            Write-Warn "No checksum entry found for $archive — skipping verification"
+        }
+
+        # Extract and install
+        $extractDir = Join-Path $tmpDir 'extracted'
+        Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+        $exeFound = Get-ChildItem $extractDir -Recurse -Filter 'metronous.exe' | Select-Object -First 1
+        if (-not $exeFound) { throw "metronous.exe not found in archive" }
+
+        New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+        Move-Item $exeFound.FullName $MetronousExe -Force
+        Write-Log "Installed to $MetronousExe"
+
+        $env:PATH = "$InstallDir;$env:PATH"
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    } catch {
+        Write-Warn "Automatic install failed: $_"
+        Write-Warn "Download manually from: https://github.com/kiosvantra/metronous/releases"
+        Write-Warn "Extract the Windows zip and run: metronous.exe install  (as Administrator)"
+        @"
 metronous: install_failed
 auto_configured: no
-note: Windows install is manual - see README
+note: $($_.Exception.Message)
 "@ | Out-File -FilePath $StatusFile -Encoding UTF8
-    exit 0
+        exit 0
+    }
 }
 
 # ---------------------------------------------------------------------------
-# 2. Run metronous install (configures OpenCode automatically)
+# 2. Run metronous install (registers Windows service — requires Administrator)
 # ---------------------------------------------------------------------------
-if (Has-Cmd 'metronous') {
-    Write-Log "Running metronous install to configure OpenCode"
-    try {
-        & metronous install | Out-Null
-        Write-Log "OpenCode configured with metronous"
-        $configured = 1
-    } catch {
-        Write-Warn "metronous install failed - you may need to run it manually as Administrator"
-        $configured = 0
-    }
-} else {
-    Write-Warn "metronous CLI not available"
+$metronousCmd = if (Has-Cmd 'metronous') { 'metronous' } else { $MetronousExe }
+
+Write-Log "Running metronous install to configure OpenCode and register service"
+Write-Warn "This step requires an elevated (Administrator) terminal to register the Windows service."
+
+try {
+    & $metronousCmd install 2>&1 | ForEach-Object { Write-Log $_ }
+    Write-Log "OpenCode configured with metronous"
+    $configured = 1
+} catch {
+    Write-Warn "metronous install failed: $_"
+    Write-Warn "Run manually as Administrator: metronous install"
     $configured = 0
 }
 
-$version = & metronous --version 2>$null
+$version = & $metronousCmd --version 2>$null
 if (-not $version) { $version = "unknown" }
 
 @"

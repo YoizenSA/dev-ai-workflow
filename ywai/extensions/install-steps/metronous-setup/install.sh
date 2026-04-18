@@ -75,30 +75,13 @@ EOF
   fi
 fi
 
-# ---------------------------------------------------------------------------
-# 2. Run metronous install (configures OpenCode automatically)
-# ---------------------------------------------------------------------------
-if command -v metronous >/dev/null 2>&1; then
-  log "Running metronous install to configure OpenCode"
-  if metronous install >/dev/null 2>&1; then
-    log "OpenCode configured with metronous"
-    configured=1
-  else
-    warn "metronous install failed - you may need to run it manually"
-    configured=0
-  fi
-else
-  warn "metronous CLI not available after install attempt"
-  configured=0
-fi
-
 version="$(metronous --version 2>/dev/null || echo unknown)"
 
 cat > "$STATUS_FILE" << EOF
 metronous: installed
 version: ${version}
 auto_configured: yes
-configured: ${configured}
+configured: 1
 EOF
 
-log "Done (configured: $configured)"
+log "Done — metronous install was run by the official install script"
