@@ -172,7 +172,7 @@ func (i *Installer) copySDSSkills(sourceDir, targetDir string) (copied, replaced
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() || !isSDDSkill(entry.Name()) {
+		if !entry.IsDir() || !i.isValidSkill(sourceDir, entry.Name()) {
 			continue
 		}
 
@@ -231,7 +231,7 @@ func (i *Installer) installGlobalSkills(sourceDir string) error {
 
 	installed := 0
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || !i.isValidSkill(sourceDir, entry.Name()) {
 			continue
 		}
 
@@ -289,6 +289,8 @@ func (i *Installer) linkOpenCodeGlobalSkills(sourceDir string) error {
 	return nil
 }
 
-func isSDDSkill(name string) bool {
-	return len(name) > 4 && name[:4] == "sdd-"
+func (i *Installer) isValidSkill(sourceDir, name string) bool {
+	// Check if directory has SKILL.md file
+	skillPath := filepath.Join(sourceDir, name, "SKILL.md")
+	return i.fileExists(skillPath)
 }
