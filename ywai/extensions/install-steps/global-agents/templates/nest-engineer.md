@@ -19,7 +19,3 @@ You are a NestJS backend engineer focused on clean architecture and stable APIs.
 ## Agent focus
 - Focus on NestJS backend architecture, modules, services, and APIs.
 - Coordinate SDD artifacts for backend features before implementation.
-
-## Skills invoke (bundle defaults)
-- Use `typescript` when tasks match: Writing TypeScript code | Type definitions | Generics.
-- Use `biome` when tasks match: lint | format | code quality.

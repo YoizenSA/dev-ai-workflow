@@ -45,7 +45,8 @@
         "angular",
         "tailwind-4",
         "skill-creator",
-        "skill-sync"
+        "skill-sync",
+        "yz-ui"
       ],
       "extensions": {
         "hooks": [
@@ -75,7 +76,8 @@
         "react-19",
         "tailwind-4",
         "skill-creator",
-        "skill-sync"
+        "skill-sync",
+        "yz-ui"
       ],
       "extensions": {
         "hooks": [

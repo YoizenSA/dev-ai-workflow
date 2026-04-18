@@ -16,7 +16,8 @@
       "react-19",
       "tailwind-4",
       "typescript",
-      "biome"
+      "biome",
+      "yz-ui"
     ],
     "nest-engineer": [
       "typescript",
