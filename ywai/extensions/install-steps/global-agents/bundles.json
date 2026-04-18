@@ -1,7 +1,7 @@
 {
   "_comment": "Global agents to skills bundle map. 'defaults' applies to all project types. 'by_project_type' only contains real overrides.",
   "defaults": {
-    "sdd-orchestator": [
+    "sdd-orchestrator": [
       "sdd-init",
       "sdd-explore",
       "sdd-propose",

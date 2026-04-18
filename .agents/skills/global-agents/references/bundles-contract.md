@@ -55,5 +55,5 @@
 ## Example
 
 - `devops` agent bundle: `["devops"]`
-- `sdd-orchestator` bundle: full SDD chain (`sdd-init` ... `sdd-archive`)
+- `sdd-orchestrator` bundle: full SDD chain (`sdd-init` ... `sdd-archive`)
 - A real override example (hypothetical): `by_project_type.dotnet.devops = ["devops", "biome"]`

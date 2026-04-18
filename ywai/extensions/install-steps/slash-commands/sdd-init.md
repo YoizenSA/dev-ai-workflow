@@ -1,6 +1,6 @@
 ---
 description: Initialize SDD context — detects project stack and bootstraps persistence backend
-agent: sdd-orchestator
+agent: sdd-orchestrator
 subtask: true
 ---
 

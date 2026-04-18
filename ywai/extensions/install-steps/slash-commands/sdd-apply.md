@@ -1,6 +1,6 @@
 ---
 description: Implement SDD tasks — writes code following specs and design
-agent: sdd-orchestator
+agent: sdd-orchestrator
 subtask: true
 ---
 

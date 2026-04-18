@@ -50,7 +50,7 @@ Use this skill when:
 
 ### Pattern 4: Managed-file policy (preserve user files)
 
-- Only files whose basenames match a template (e.g. `devops.md`, `sdd-orchestator.md`) are owned by the generator.
+- Only files whose basenames match a template (e.g. `devops.md`, `sdd-orchestrator.md`) are owned by the generator.
 - Any other `.md` in the destination directory is considered user-owned and is never removed.
 - This is implemented in `globalagents.Generator.InstallAll` via `managedBasenames` + `removeManagedFiles`.
 

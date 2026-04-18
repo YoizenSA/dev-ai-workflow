@@ -23,7 +23,7 @@ func TestBundleResolution(t *testing.T) {
 	writeFile(t, bundlesPath, `{
   "defaults": {
     "devops": ["devops"],
-    "sdd-orchestator": ["sdd-init", "sdd-apply"]
+    "sdd-orchestrator": ["sdd-init", "sdd-apply"]
   },
   "by_project_type": {
     "nest": {
@@ -43,7 +43,7 @@ func TestBundleResolution(t *testing.T) {
 	if got := cfg.Bundle("dotnet", "devops"); !equal(got, []string{"devops"}) {
 		t.Errorf("dotnet fallback failed: %v", got)
 	}
-	if got := cfg.Bundle("nest", "sdd-orchestator"); !equal(got, []string{"sdd-init", "sdd-apply"}) {
+	if got := cfg.Bundle("nest", "sdd-orchestrator"); !equal(got, []string{"sdd-init", "sdd-apply"}) {
 		t.Errorf("sdd fallback to defaults failed: %v", got)
 	}
 	if got := cfg.Bundle("nest", "ghost"); got != nil {
@@ -138,7 +138,7 @@ func TestRenderIncludesSkillsSections(t *testing.T) {
 
 func TestRenderCopilotPromptFrontmatter(t *testing.T) {
 	content := string(Render(RenderInput{
-		AgentName:   "sdd-orchestator",
+		AgentName:   "sdd-orchestrator",
 		ProjectType: "generic",
 		Target:      TargetCopilotPrompt,
 		Template:    "",
@@ -148,7 +148,7 @@ func TestRenderCopilotPromptFrontmatter(t *testing.T) {
 		},
 	}))
 
-	if !strings.HasPrefix(content, "---\nname: sdd-orchestator\n") {
+	if !strings.HasPrefix(content, "---\nname: sdd-orchestrator\n") {
 		t.Errorf("Copilot prompt frontmatter missing name: %q", content[:80])
 	}
 	if !strings.Contains(content, "applyTo: \"**\"") {
@@ -167,9 +167,9 @@ func TestInstallAllPreservesUserFiles(t *testing.T) {
 
 	extDir := filepath.Join(repoRoot, "extensions", "install-steps", "global-agents")
 	tmplDir := filepath.Join(extDir, "templates")
-	writeFile(t, filepath.Join(tmplDir, "sdd-orchestator.md"), "## Role\nOrchestrator\n")
+	writeFile(t, filepath.Join(tmplDir, "sdd-orchestrator.md"), "## Role\nOrchestrator\n")
 	writeFile(t, filepath.Join(tmplDir, "devops.md"), "## Role\nDevOps\n")
-	writeFile(t, filepath.Join(extDir, "bundles.json"), `{"defaults":{"sdd-orchestator":["sdd-init"],"devops":["devops"]},"by_project_type":{}}`)
+	writeFile(t, filepath.Join(extDir, "bundles.json"), `{"defaults":{"sdd-orchestrator":["sdd-init"],"devops":["devops"]},"by_project_type":{}}`)
 
 	skillsDir := filepath.Join(repoRoot, "skills")
 	writeFile(t, filepath.Join(skillsDir, "sdd-init", "SKILL.md"), "---\nauto_invoke:\n  - bootstrap\n---\n")
@@ -198,7 +198,7 @@ func TestInstallAllPreservesUserFiles(t *testing.T) {
 	}
 
 	// Managed files should exist.
-	for _, name := range []string{"sdd-orchestator.md", "devops.md"} {
+	for _, name := range []string{"sdd-orchestrator.md", "devops.md"} {
 		if _, err := os.Stat(filepath.Join(opencodeDir, name)); err != nil {
 			t.Errorf("missing managed file %s: %v", name, err)
 		}

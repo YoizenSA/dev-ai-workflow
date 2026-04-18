@@ -137,7 +137,7 @@ global_agent_bundles_json() {
 default_bundle_for_agent() {
     local agent_name="$1"
     case "$agent_name" in
-        sdd-orchestator)
+        sdd-orchestrator)
             echo "sdd-init sdd-explore sdd-propose sdd-spec sdd-design sdd-tasks sdd-apply sdd-verify sdd-archive"
             ;;
         fe-engineer)
@@ -326,19 +326,19 @@ except: pass
 
     case "$project_type" in
         nest)
-            echo "sdd-orchestator nest-engineer devops"
+            echo "sdd-orchestrator nest-engineer devops"
             ;;
         nest-angular|nest-react)
-            echo "sdd-orchestator fe-engineer devops"
+            echo "sdd-orchestrator fe-engineer devops"
             ;;
         dotnet)
-            echo "sdd-orchestator dotnet-engineer devops"
+            echo "sdd-orchestrator dotnet-engineer devops"
             ;;
         qa-playwright)
-            echo "sdd-orchestator qa-playwright devops"
+            echo "sdd-orchestrator qa-playwright devops"
             ;;
         devops|python|generic|*)
-            echo "sdd-orchestator devops"
+            echo "sdd-orchestrator devops"
             ;;
     esac
 }
@@ -409,7 +409,7 @@ append_sdd_devops_guidance() {
 EOF
 
     case "$agent_name" in
-        sdd-orchestator)
+        sdd-orchestrator)
             cat >> "$file_path" << 'EOF'
 - Orchestrate SDD phases and keep implementation aligned with specs.
 - Prefer `/sdd:new` and `/sdd:ff` for multi-file features.
@@ -528,7 +528,7 @@ EOF
 
     append_sdd_devops_guidance "$target_file" "$agent_name"
 
-    if [[ "$agent_name" == "sdd-orchestator" ]]; then
+    if [[ "$agent_name" == "sdd-orchestrator" ]]; then
         local orchestrator_tpl
         orchestrator_tpl="$(resolve_template_file "sdd-orchestrator.md")"
         if [[ -f "$orchestrator_tpl" ]]; then

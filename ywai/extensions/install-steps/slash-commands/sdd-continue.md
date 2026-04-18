@@ -1,6 +1,6 @@
 ---
 description: Continue the next SDD phase in the dependency chain
-agent: sdd-orchestator
+agent: sdd-orchestrator
 ---
 
 Follow the SDD orchestrator workflow to continue the active change.

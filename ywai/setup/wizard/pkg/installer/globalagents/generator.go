@@ -271,14 +271,14 @@ func normalizeProjectType(pt string) string {
 func defaultAgentsFor(projectType string) []string {
 	switch projectType {
 	case "nest":
-		return []string{"sdd-orchestator", "nest-engineer", "devops"}
+		return []string{"sdd-orchestrator", "nest-engineer", "devops"}
 	case "nest-angular", "nest-react":
-		return []string{"sdd-orchestator", "fe-engineer", "devops"}
+		return []string{"sdd-orchestrator", "fe-engineer", "devops"}
 	case "dotnet":
-		return []string{"sdd-orchestator", "dotnet-engineer", "devops"}
+		return []string{"sdd-orchestrator", "dotnet-engineer", "devops"}
 	case "qa-playwright":
-		return []string{"sdd-orchestator", "qa-playwright", "devops"}
+		return []string{"sdd-orchestrator", "qa-playwright", "devops"}
 	default:
-		return []string{"sdd-orchestator", "devops"}
+		return []string{"sdd-orchestrator", "devops"}
 	}
 }

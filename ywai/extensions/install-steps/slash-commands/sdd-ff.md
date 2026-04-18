@@ -1,6 +1,6 @@
 ---
 description: Fast-forward all SDD planning phases — proposal through tasks
-agent: sdd-orchestator
+agent: sdd-orchestrator
 ---
 
 Follow the SDD orchestrator workflow to fast-forward all planning phases for change "{argument}".

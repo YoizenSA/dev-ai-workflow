@@ -6,7 +6,7 @@
       "review_md": "ywai/types/nest/REVIEW.md",
       "lefthook_yml": "ywai/types/nest/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "nest-engineer",
         "devops"
       ],
@@ -34,7 +34,7 @@
       "review_md": "ywai/types/nest-angular/REVIEW.md",
       "lefthook_yml": "ywai/types/nest-angular/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "fe-engineer",
         "devops"
       ],
@@ -65,7 +65,7 @@
       "review_md": "ywai/types/nest-react/REVIEW.md",
       "lefthook_yml": "ywai/types/nest-react/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "fe-engineer",
         "devops"
       ],
@@ -96,7 +96,7 @@
       "review_md": "ywai/types/python/REVIEW.md",
       "lefthook_yml": "ywai/types/python/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "devops"
       ],
       "skills": [
@@ -118,7 +118,7 @@
       "review_md": "ywai/types/dotnet/REVIEW.md",
       "lefthook_yml": "ywai/types/dotnet/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "dotnet-engineer",
         "devops"
       ],
@@ -141,7 +141,7 @@
       "review_md": "ywai/types/qa-playwright/REVIEW.md",
       "lefthook_yml": "ywai/types/qa-playwright/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "qa-playwright",
         "devops"
       ],
@@ -169,7 +169,7 @@
       "agents_md": "ywai/types/devops/AGENTS.md",
       "review_md": "ywai/types/devops/REVIEW.md",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "devops"
       ],
       "skills": [
@@ -192,7 +192,7 @@
       "review_md": "ywai/types/generic/REVIEW.md",
       "lefthook_yml": "ywai/types/generic/lefthook.yml",
       "global_agents": [
-        "sdd-orchestator",
+        "sdd-orchestrator",
         "devops"
       ],
       "skills": [

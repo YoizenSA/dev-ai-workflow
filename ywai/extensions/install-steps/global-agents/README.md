@@ -30,7 +30,7 @@ binary is not on PATH.
 `templates/<agent-name>.md`
 
 Supported names:
-- `sdd-orchestator`
+- `sdd-orchestrator`
 - `fe-engineer`
 - `nest-engineer`
 - `dotnet-engineer`
@@ -53,7 +53,7 @@ metadata.
 Example:
 
 - `devops` agent -> `devops` skill
-- `sdd-orchestator` agent -> full SDD skill set (`sdd-init` ... `sdd-archive`)
+- `sdd-orchestrator` agent -> full SDD skill set (`sdd-init` ... `sdd-archive`)
 
 During generation each file gets:
 
