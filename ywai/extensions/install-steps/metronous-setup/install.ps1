@@ -8,6 +8,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ExtDir = $PSScriptRoot
+
+# In GlobalOnly mode the caller passes /tmp (Linux convention) — remap to TEMP on Windows.
+if ($TargetDir -eq '/tmp' -or $TargetDir -eq '\tmp') { $TargetDir = $env:TEMP }
+
 $StateDir = Join-Path $TargetDir '.ywai\metronous'
 $StatusFile = Join-Path $StateDir 'status.txt'
 $ReadmeFile = Join-Path $StateDir 'README.md'
