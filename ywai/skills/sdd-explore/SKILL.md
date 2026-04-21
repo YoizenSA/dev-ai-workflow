@@ -12,7 +12,17 @@ description: >
 metadata:
   author: Yoizen
   version: "3.1"
-  scope: "root"
+  scope: [root]
+  auto_invoke:
+    - "explore"
+    - "investigar"
+    - "think through"
+    - "analizar"
+    - "research"
+    - "sdd explore"
+    - "evaluar opciones"
+    - "/sdd:explore"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

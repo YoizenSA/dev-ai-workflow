@@ -145,16 +145,10 @@ This project has the following AI agent skills installed in `skills/`. Each skil
 ## Auto-invoke Capabilities
 | Action | Required Skill | Trigger Pattern |
 | :--- | :--- | :--- |
-| biome | `biome` | biome |
-| code quality | `biome` | code quality |
-| Components | `react-19` | Components |
 | CSS utilities | `tailwind-4` | CSS utilities |
-| eslint | `biome` | eslint |
-| format | `biome` | format |
+| Components | `react-19` | Components |
 | Generics | `typescript` | Generics |
 | Hooks | `react-19` | Hooks |
-| lint | `biome` | lint |
-| prettier | `biome` | prettier |
 | Responsive design | `tailwind-4` | Responsive design |
 | State management | `react-19` | State management |
 | Styling with Tailwind | `tailwind-4` | Styling with Tailwind |

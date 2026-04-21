@@ -9,19 +9,12 @@ metadata:
   version: "1.0"
   scope: [root]
   auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  
-  version: "1.0"
-allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
+    - "create skill"
+    - "new skill"
+    - "agent skill"
+    - "document pattern"
+    - "skill-creator"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task]
 ---
 
 ## When to Create a Skill

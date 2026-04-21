@@ -9,6 +9,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "verify"
+    - "verificar"
+    - "validate"
+    - "check implementation"
+    - "quality gate"
+    - "sdd verify"
+    - "revisar cambio"
+    - "/sdd:verify"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

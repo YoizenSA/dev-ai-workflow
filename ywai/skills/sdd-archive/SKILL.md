@@ -9,6 +9,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "archive"
+    - "archivar"
+    - "close change"
+    - "cerrar cambio"
+    - "sdd archive"
+    - "finalizar"
+    - "merge specs"
+    - "/sdd:archive"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

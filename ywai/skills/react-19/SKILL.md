@@ -13,16 +13,7 @@ metadata:
     - "Components"
     - "Hooks"
     - "State management"
-  author: Yoizen
-  version: "1.0"
-  scope: [generic]
-  auto_invoke:
-    - "Writing React code"
-    - "Components"
-    - "Hooks"
-    - "State management"
-  
-  version: "1.0"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## No Manual Memoization (REQUIRED)

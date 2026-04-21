@@ -1,6 +1,9 @@
-pre-commit:
-  parallel: true
-  commands:
-    ga-review:
-      run: ga run
-      stage_fixed: false
+# Lefthook config (generic type).
+# Add your pre-commit commands here. `ga` review runs on-demand (not as a hook).
+#
+# pre-commit:
+#   parallel: true
+#   commands:
+#     example:
+#       run: echo "hello"
+#       stage_fixed: false

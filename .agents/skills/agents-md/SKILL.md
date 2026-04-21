@@ -1,6 +1,20 @@
 ---
 name: agents-md
-description: Create and maintain AGENTS.md documentation for simple projects and complex monorepos with deterministic discovery, scoped instruction files, and low-token navigation patterns; use when generating AGENTS.md, updating agent docs, or standardizing AI-facing project guidance.
+description: >
+  Create and maintain AGENTS.md documentation for simple projects and complex monorepos with
+  deterministic discovery, scoped instruction files, and low-token navigation patterns.
+  Trigger: When generating AGENTS.md, updating agent docs, or standardizing AI-facing project guidance.
+license: Apache-2.0
+metadata:
+  author: Yoizen
+  version: "1.0"
+  scope: [root]
+  auto_invoke:
+    - "AGENTS.md"
+    - "agent documentation"
+    - "agent instructions"
+    - "agents md"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 # AGENTS.md Management

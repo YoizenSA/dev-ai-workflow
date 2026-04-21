@@ -3,9 +3,17 @@ name: angular-architecture
 description: >
   Angular architecture: Scope Rule, project structure, file naming, style guide.
   Trigger: When structuring Angular projects or deciding where to place components.
+license: Apache-2.0
 metadata:
-  
+  author: Yoizen
   version: "1.0"
+  scope: [angular, web, frontend]
+  auto_invoke:
+    - "angular architecture"
+    - "project structure"
+    - "scope rule"
+    - "feature folder"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## The Scope Rule (REQUIRED)

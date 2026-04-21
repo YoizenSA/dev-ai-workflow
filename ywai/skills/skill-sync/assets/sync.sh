@@ -118,7 +118,7 @@ generate_registry() {
             echo "rules:"
             echo "$rules"
             echo ""
-        done < <(find "$SKILLS_DIR" -maxdepth 2 -name SKILL.md -print | sort)
+        done < <(find "$SKILLS_DIR" -maxdepth 3 -name SKILL.md -print | sort)
         echo "<!-- $count skills indexed -->"
     } > "$out"
 
@@ -223,7 +223,7 @@ while IFS= read -r skill_file; do
             [ -n "$a" ] && echo "$s|$a|$name" >> "$temp_map"
         done
     done
-done < <(find "$SKILLS_DIR" -maxdepth 2 -name SKILL.md -print)
+done < <(find "$SKILLS_DIR" -maxdepth 3 -name SKILL.md -print)
 
 # Now read the temp_map and update AGENTS.md
 # Get unique scopes from temp_map

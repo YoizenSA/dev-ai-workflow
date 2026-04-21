@@ -6,6 +6,20 @@ description: >
   and re-judges until both pass or escalates after 2 iterations.
   Trigger: When user says "judgment day", "judgment-day", "review adversarial", "dual review",
   "doble review", "juzgar", "que lo juzguen".
+license: Apache-2.0
+metadata:
+  author: Yoizen
+  version: "1.0"
+  scope: [root]
+  auto_invoke:
+    - "judgment day"
+    - "judgment-day"
+    - "review adversarial"
+    - "dual review"
+    - "doble review"
+    - "juzgar"
+    - "que lo juzguen"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash, Task]
 ---
 
 ## When to Use

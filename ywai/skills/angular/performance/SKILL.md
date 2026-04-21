@@ -3,9 +3,18 @@ name: angular-performance
 description: >
   Angular performance: NgOptimizedImage, @defer, lazy loading, SSR.
   Trigger: When optimizing Angular app performance, images, or lazy loading.
+license: Apache-2.0
 metadata:
-  
+  author: Yoizen
   version: "1.0"
+  scope: [angular, web, frontend]
+  auto_invoke:
+    - "angular performance"
+    - "NgOptimizedImage"
+    - "@defer"
+    - "lazy loading"
+    - "angular SSR"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## NgOptimizedImage (REQUIRED for images)

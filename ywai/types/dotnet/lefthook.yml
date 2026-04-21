@@ -1,9 +1,6 @@
 pre-commit:
   parallel: true
   commands:
-    ga-review:
-      run: ga run
-      stage_fixed: false
     dotnet-build:
       run: |
         if command -v dotnet >/dev/null 2>&1; then

@@ -1,9 +1,6 @@
 pre-commit:
   parallel: true
   commands:
-    ga-review:
-      run: ga run
-      stage_fixed: false
     biome:
       run: |
         if [ -f biome.json ]; then

@@ -9,6 +9,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "tasks"
+    - "breakdown"
+    - "task list"
+    - "desglosar"
+    - "tareas"
+    - "sdd tasks"
+    - "plan de implementación"
+    - "/sdd:tasks"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

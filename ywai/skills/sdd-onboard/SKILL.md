@@ -5,6 +5,16 @@ description: >
   Trigger: When the orchestrator launches you to onboard a user through the full SDD cycle.
 license: MIT
 metadata:
+  author: Yoizen
+  version: "1.0"
+  scope: [root]
+  auto_invoke:
+    - "sdd onboard"
+    - "sdd:onboard"
+    - "onboard sdd"
+    - "sdd walkthrough"
+    - "guided sdd"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

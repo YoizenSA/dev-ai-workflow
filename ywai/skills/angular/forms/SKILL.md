@@ -3,9 +3,17 @@ name: angular-forms
 description: >
   Angular forms: Signal Forms (experimental) and Reactive Forms.
   Trigger: When working with forms, validation, or form state in Angular.
+license: Apache-2.0
 metadata:
-  
+  author: Yoizen
   version: "1.0"
+  scope: [angular, web, frontend]
+  auto_invoke:
+    - "angular forms"
+    - "reactive forms"
+    - "signal forms"
+    - "form validation"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## When to Use What

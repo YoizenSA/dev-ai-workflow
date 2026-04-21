@@ -7,26 +7,12 @@ metadata:
   version: "1.0"
   scope: [root]
   auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "skill operations"
-    - "workflow"
-    - "sdd"
-  author: Yoizen
-  version: "1.0"
-  scope: [root]
-  auto_invoke:
     - "commit"
     - "git"
     - "versioning"
     - "changelog"
     - "release"
-allowed-tools: []
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## When to Use It

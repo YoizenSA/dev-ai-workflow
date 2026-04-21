@@ -9,6 +9,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "spec"
+    - "requerimientos"
+    - "requirements"
+    - "especificaciones"
+    - "write specs"
+    - "sdd spec"
+    - "acceptance criteria"
+    - "/sdd:spec"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

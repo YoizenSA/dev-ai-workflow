@@ -14,6 +14,19 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "propose"
+    - "propuesta"
+    - "proposal"
+    - "new change"
+    - "nuevo cambio"
+    - "sdd new"
+    - "sdd propose"
+    - "/sdd:new"
+    - "sdd:ff"
+    - "fast-forward"
+    - "fast forward"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

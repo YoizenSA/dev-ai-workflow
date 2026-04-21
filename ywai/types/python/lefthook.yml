@@ -1,9 +1,6 @@
 pre-commit:
   parallel: true
   commands:
-    ga-review:
-      run: ga run
-      stage_fixed: false
     python-lint:
       run: |
         if command -v ruff >/dev/null 2>&1; then

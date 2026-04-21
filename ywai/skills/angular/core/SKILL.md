@@ -3,9 +3,19 @@ name: angular-core
 description: >
   Angular core patterns: standalone components, signals, inject, control flow, zoneless.
   Trigger: When creating Angular components, using signals, or setting up zoneless.
+license: Apache-2.0
 metadata:
-  
+  author: Yoizen
   version: "1.0"
+  scope: [angular, web, frontend]
+  auto_invoke:
+    - "angular component"
+    - "standalone component"
+    - "signals"
+    - "inject"
+    - "zoneless"
+    - "control flow"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Standalone Components (REQUIRED)

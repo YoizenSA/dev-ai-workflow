@@ -5,20 +5,6 @@ description: Linting, formatting, and code quality using Biome
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [generic]
-  auto_invoke:
-    - "lint"
-    - "format"
-    - "code quality"
-  author: Yoizen
-  version: "1.0"
-  scope: [generic]
-  auto_invoke:
-    - "lint"
-    - "format"
-    - "code quality"
-  author: Yoizen
-  version: "1.0"
   scope: [root, webapi, web-executor]
   auto_invoke:
     - "lint"
@@ -27,7 +13,7 @@ metadata:
     - "code quality"
     - "eslint"
     - "prettier"
-allowed-tools: []
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## When to Use It

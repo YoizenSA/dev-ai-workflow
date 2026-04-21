@@ -9,6 +9,15 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "design"
+    - "diseño técnico"
+    - "technical design"
+    - "architecture"
+    - "diseñar"
+    - "sdd design"
+    - "/sdd:design"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

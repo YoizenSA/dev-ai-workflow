@@ -9,6 +9,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "apply"
+    - "implement"
+    - "implementar"
+    - "code it"
+    - "build it"
+    - "sdd apply"
+    - "ejecutar tareas"
+    - "/sdd:apply"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

@@ -10,6 +10,16 @@ metadata:
   author: Yoizen
   version: "3.0"
   scope: [root]
+  auto_invoke:
+    - "sdd init"
+    - "iniciar sdd"
+    - "initialize specs"
+    - "setup sdd"
+    - "bootstrap sdd"
+    - "configurar sdd"
+    - "preparar proyecto"
+    - "/sdd:init"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Purpose

@@ -12,13 +12,7 @@ metadata:
     - "Writing TypeScript code"
     - "Type definitions"
     - "Generics"
-  author: Yoizen
-  version: "1.0"
-  scope: [generic]
-  auto_invoke:
-    - "Writing TypeScript code"
-    - "Type definitions"
-    - "Generics"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Const Types Pattern (REQUIRED)

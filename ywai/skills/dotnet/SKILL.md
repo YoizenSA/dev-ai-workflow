@@ -13,16 +13,7 @@ metadata:
     - "Implement .NET patterns"
     - "Minimal APIs"
     - "Entity Framework"
-  author: Yoizen
-  version: "1.0"
-  scope: [dotnet]
-  auto_invoke:
-    - "Writing C# code"
-    - "Implement .NET patterns"
-    - "Minimal APIs"
-    - "Entity Framework"
-  
-  version: "1.0"
+allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
 ## Minimal APIs (REQUIRED for new endpoints)
