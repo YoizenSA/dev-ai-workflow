@@ -45,6 +45,64 @@ func (i *Installer) copyCanonicalSDDModels() error {
 	return nil
 }
 
+// copyUsageGuides copies ywai/templates/.ywai-docs/ into <target>/.ywai/
+// so the project gets human-readable guides (README + docs/) explaining the
+// SDD workflow, slash commands, skills, Engram protocol, and TDD modes.
+// Respects --force for overwrites and skips silently when the source is
+// missing (older installs without templates).
+func (i *Installer) copyUsageGuides() error {
+	if i.flags.DryRun {
+		i.logger.Log("DRY RUN: Would copy usage guides to .ywai/")
+		return nil
+	}
+
+	srcDir := i.firstExistingDir(i.ywaiCandidates(false,
+		"templates/.ywai-docs",
+		"ywai/templates/.ywai-docs",
+	)...)
+	if srcDir == "" {
+		return nil
+	}
+
+	destRoot := filepath.Join(i.targetDir, ".ywai")
+	if err := i.ensureDir(destRoot); err != nil {
+		return err
+	}
+
+	copied := 0
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		rel, rerr := filepath.Rel(srcDir, path)
+		if rerr != nil {
+			return rerr
+		}
+		if rel == "." {
+			return nil
+		}
+		dest := filepath.Join(destRoot, rel)
+		if info.IsDir() {
+			return i.ensureDir(dest)
+		}
+		if i.fileExists(dest) && !i.flags.Force {
+			return nil
+		}
+		if err := i.copyFile(path, dest); err != nil {
+			return err
+		}
+		copied++
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("copy usage guides: %w", err)
+	}
+	if copied > 0 {
+		i.logger.LogSuccess(fmt.Sprintf("Copied %d usage guide file(s) to .ywai/", copied))
+	}
+	return nil
+}
+
 // generateSkillRegistry runs skills/skill-sync/assets/sync.sh --registry in
 // the target project to emit .ywai/skill-registry.md. Silently no-ops on
 // Windows when bash is unavailable and outside dry-run.

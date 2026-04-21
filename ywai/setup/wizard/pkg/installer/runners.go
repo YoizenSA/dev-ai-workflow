@@ -41,6 +41,10 @@ func (i *Installer) runAll() error {
 		i.logger.LogWarning("Failed to copy sdd-models.json: " + err.Error())
 	}
 
+	if err := i.copyUsageGuides(); err != nil {
+		i.logger.LogWarning("Failed to copy usage guides: " + err.Error())
+	}
+
 	if err := i.generateSkillRegistry(); err != nil {
 		i.logger.LogWarning("Failed to generate skill-registry.md: " + err.Error())
 	}
@@ -95,6 +99,10 @@ func (i *Installer) runSelected() error {
 
 	if err := i.copyCanonicalSDDModels(); err != nil {
 		i.logger.LogWarning("Failed to copy sdd-models.json: " + err.Error())
+	}
+
+	if err := i.copyUsageGuides(); err != nil {
+		i.logger.LogWarning("Failed to copy usage guides: " + err.Error())
 	}
 
 	if err := i.generateSkillRegistry(); err != nil {
