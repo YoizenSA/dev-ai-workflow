@@ -43,10 +43,6 @@ func GetProjectCacheDir() (string, error) {
 		}
 	}
 
-	// Only lock for the final path construction
-	cacheMutex.RLock()
-	defer cacheMutex.RUnlock()
-	
 	return filepath.Join(home, ".cache", "ga", projectHash), nil
 }
 
