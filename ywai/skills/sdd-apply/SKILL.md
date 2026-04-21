@@ -7,7 +7,7 @@ description: >
 
 metadata:
   author: Yoizen
-  version: "3.0"
+  version: "3.1"
   scope: [root]
   auto_invoke:
     - "apply"
@@ -48,13 +48,13 @@ Read and follow `skills/_shared/persistence-contract.md` for mode resolution rul
 
 ## What to Do
 
-### Step 1: Detect TDD Mode
+### Step 1: Detect TDD Mode and Resolve Strict TDD
 
-Use the same 4-level detection as `sdd-tasks`:
+Use this 4-level detection to decide whether **Standard Mode** or **Strict TDD Mode** is active:
 
 ```
 Level 1 — Config file:
-  sdd/config.yaml → rules.apply.tdd: true
+  sdd/config.yaml → rules.apply.tdd: true  (optionally rules.apply.strict_tdd: true)
   (or engram project context if mode is engram)
 
 Level 2 — Skills present:
@@ -65,8 +65,39 @@ Level 3 — Code patterns:
   Check if test runner config exists: jest.config.*, pytest.ini, vitest.config.*
 
 Level 4 — Default:
-  TDD is OFF
+  TDD is OFF → Standard Mode
 ```
+
+Resolution rules:
+
+```
+├── IF strict_tdd: true AND a test runner is available
+│   └── STRICT TDD MODE → load and follow `skills/sdd-apply/strict-tdd.md`.
+│       The cycle, assertion rules, and TDD Cycle Evidence table defined in
+│       that module OVERRIDE Step 4 below.
+│
+├── IF TDD is ON but strict_tdd is false/unset
+│   └── LIGHT TDD MODE → use the RED/GREEN/REFACTOR workflow in Step 4.
+│
+└── IF TDD is OFF
+    └── STANDARD MODE → use the non-TDD workflow in Step 4. Do NOT load
+        `strict-tdd.md` — save the tokens.
+```
+
+> **Key principle**: when Strict TDD is inactive, `strict-tdd.md` is never
+> read, never processed, never consumes tokens. Only load it when the Hard
+> Gate below applies.
+
+#### Hard Gate (Strict TDD only)
+
+If Strict TDD Mode is active:
+- You MUST produce the **TDD Cycle Evidence** table in your return summary (see Step 7).
+- Each task row MUST contain RED → GREEN → (TRIANGULATE) → REFACTOR columns.
+- If you complete a task without writing tests first, mark it **FAILED** in the evidence table.
+- `sdd-verify` will reject the change if the Evidence table is missing or incomplete.
+
+There is no silent fallback. If you resolved Strict TDD as active, you follow
+it or you report failure — you do NOT quietly switch to Standard Mode.
 
 ### Step 2: Detect Test Runner
 
@@ -119,7 +150,12 @@ FOR EACH TASK:
 └── Note any issues or deviations
 ```
 
-#### If TDD_MODE = true (RED → GREEN → REFACTOR)
+#### If TDD_MODE = true (Light TDD — RED → GREEN → REFACTOR)
+
+> If **Strict TDD Mode** was resolved in Step 1, STOP reading this section and
+> follow `skills/sdd-apply/strict-tdd.md` instead. The strict module covers
+> Safety Net, Triangulation, Assertion Quality Rules, and Hard Gate
+> requirements that supersede the lighter cycle below.
 
 For each `[RED]` / `[GREEN]` / `[REFACTOR]` triplet in tasks.md:
 
@@ -194,6 +230,14 @@ Update `tasks.md` — change `- [ ]` to `- [x]` for completed tasks:
 | {test name} | ✅ Pass | |
 | {test name} | ❌ Fail | {error details} |
 
+### TDD Cycle Evidence (Strict TDD only — REQUIRED when Strict TDD is active)
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| {n.n} | `path/test.ext` | {Unit\|Integration\|E2E} | ✅ X/X | ✅ Written | ✅ Passed | ✅ {N} cases | ✅ Clean |
+
+> See `skills/sdd-apply/strict-tdd.md` for column definitions and assertion
+> quality rules. Omit this table ONLY if Strict TDD Mode was inactive.
+
 ### Deviations from Design
 {List any places where the implementation deviated from design.md and why.
 If none, say "None — implementation matches design."}
@@ -251,6 +295,9 @@ When specs, design, and reality disagree:
 - When specs and design conflict, follow the spec (behavioral correctness wins)
 - In TDD mode: [RED] task MUST produce a failing test — if the test passes, it's wrong
 - In TDD mode: [GREEN] task MUST produce a passing test — do not mark complete until it passes
+- In Strict TDD mode: load `skills/sdd-apply/strict-tdd.md` and follow its cycle + Assertion Quality Rules — these OVERRIDE the light Step 4 cycle
+- In Strict TDD mode: NEVER write trivial assertions, tautologies, or CSS class-name assertions (see strict-tdd.md banned patterns)
+- In Strict TDD mode: run the Safety Net before modifying existing files
 - Load and follow any relevant coding skills for the project stack if available
 - Apply any `rules.apply` from `sdd/config.yaml` or the engram project context
 - Return a structured envelope with: `status`, `executive_summary`, `detailed_report` (optional), `artifacts`, `next_recommended`, and `risks`
