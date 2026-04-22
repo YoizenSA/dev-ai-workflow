@@ -20,7 +20,7 @@ CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
 - Change name: {argument}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 ENGRAM PERSISTENCE (artifact store mode: engram):
 CRITICAL: `mem_search` returns 300-char PREVIEWS, not full content. You MUST call `mem_get_observation(id)` for EVERY artifact you intend to read.

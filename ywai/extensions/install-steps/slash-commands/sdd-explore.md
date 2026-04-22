@@ -16,7 +16,7 @@ CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
 - Topic to explore: {argument}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 TASK:
 Explore the topic "{argument}" in this codebase. Investigate the current state, identify affected areas, compare approaches, and provide a recommendation.

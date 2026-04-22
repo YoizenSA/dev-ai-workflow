@@ -20,7 +20,7 @@ The `sdd-apply` skill (v3.1) supports three modes:
 CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 TASK:
 Implement the remaining incomplete tasks for the active SDD change.

@@ -15,7 +15,7 @@ Otherwise, locate and read the `sdd-archive` skill file from the FIRST existing 
 CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 TASK:
 Archive the active SDD change. Read the verification report first to confirm the change is PASS or PASS WITH WARNINGS.

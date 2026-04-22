@@ -15,7 +15,7 @@ Otherwise, locate and read the `sdd-init` skill file from the FIRST existing pat
 CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 TASK:
 Initialize Spec-Driven Development in this project. Detect the tech stack, existing conventions, and architecture patterns. Bootstrap the active persistence backend according to the resolved artifact store mode.

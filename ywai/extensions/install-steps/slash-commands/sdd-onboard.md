@@ -15,7 +15,7 @@ Otherwise, locate and read the `sdd-onboard` skill file from the FIRST existing 
 CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 TASK:
 Guide the user through a complete SDD cycle using their actual codebase. This is a real change with real artifacts, not a toy example. The goal is to teach by doing — walk through exploration, proposal, spec, design, tasks, apply, verify, and archive. Pause between phases and explain what's happening and why.

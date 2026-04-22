@@ -23,7 +23,7 @@ CONTEXT:
 - Working directory: {workdir}
 - Current project: {project}
 - Change name: {argument}
-- Artifact store mode: engram
+- Artifact store mode: files / sdd 
 
 ENGRAM PERSISTENCE (artifact store mode: engram):
 Sub-agents handle persistence automatically. Each phase saves its artifact to engram with `topic_key "sdd/{argument}/{type}"` where type is: `proposal`, `spec`, `design`, `tasks`. `topic_key` ensures upserts — re-running updates the same observation.
