@@ -20,7 +20,10 @@ func BuildPrompt(rulesFile, commitMsg string, files []string, useStaged bool) st
 
 	var b strings.Builder
 
-	b.WriteString("You are a code reviewer. Analyze the files below and validate they comply with the coding standards provided.\n\n")
+	b.WriteString(
+		"You are a code reviewer. Analyze the files below and validate " +
+			"they comply with the coding standards provided.\n\n",
+	)
 	b.WriteString("=== CODING STANDARDS ===\n")
 	b.WriteString(rules)
 	b.WriteString("\n=== END CODING STANDARDS ===\n")
@@ -87,50 +90,66 @@ func BuildPrompt(rulesFile, commitMsg string, files []string, useStaged bool) st
 	return b.String()
 }
 
-func BuildPRPrompt(rulesFile, prDiff string, files []string, diffOnly bool, baseBranch string) string {
+// PRPromptConfig holds configuration for PR prompt building
+type PRPromptConfig struct {
+	RulesFile  string
+	PRDiff     string
+	Files      []string
+	DiffOnly   bool
+	BaseBranch string
+}
+
+func BuildPRPrompt(cfg PRPromptConfig) string {
 	rules := ""
-	if data, err := os.ReadFile(rulesFile); err == nil {
+	if data, err := os.ReadFile(cfg.RulesFile); err == nil {
 		rules = string(data)
 	}
 
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("You are a code reviewer analyzing a pull request against the %s branch.\n\n", baseBranch))
+	b.WriteString(fmt.Sprintf(
+		"You are a code reviewer analyzing a pull request against the %s branch.\n\n",
+		cfg.BaseBranch,
+	))
 	b.WriteString("=== CODING STANDARDS ===\n")
 	b.WriteString(rules)
 	b.WriteString("\n=== END CODING STANDARDS ===\n")
 
 	b.WriteString("\n=== PR CONTEXT ===\n")
-	b.WriteString(fmt.Sprintf("This is a pull request review. The following files were changed in this PR (compared to %s).\n", baseBranch))
+	b.WriteString(fmt.Sprintf(
+		"This is a pull request review. The following files were changed "+
+			"in this PR (compared to %s).\n",
+		cfg.BaseBranch,
+	))
 	b.WriteString("=== END PR CONTEXT ===\n")
 
-	if diffOnly && prDiff != "" {
+	if cfg.DiffOnly && cfg.PRDiff != "" {
 		b.WriteString("\n=== PR DIFF ===\n")
-		b.WriteString(prDiff)
+		b.WriteString(cfg.PRDiff)
 		b.WriteString("\n=== END PR DIFF ===\n")
 		b.WriteString("\n=== FILES (complete content for context) ===\n")
 	} else {
 		b.WriteString("\n=== FILES TO REVIEW ===\n")
 	}
 
-	for _, file := range files {
+	for _, file := range cfg.Files {
 		b.WriteString(fmt.Sprintf("\n--- FILE: %s ---\n", file))
-		
+
 		// Validate file path to prevent directory traversal
 		if filepath.IsAbs(file) || strings.Contains(file, "..") {
 			b.WriteString(fmt.Sprintf("(invalid file path: %s)\n", file))
 			continue
 		}
-		
+
 		// Check file size before reading to prevent memory exhaustion
 		if info, err := os.Stat(file); err == nil {
 			if info.Size() > MaxFileSizeBytes {
-				b.WriteString(fmt.Sprintf("(file too large: %.2fMB, exceeds limit of %.2fMB)\n", 
+				b.WriteString(fmt.Sprintf("(file too large: %.2fMB, exceeds limit of %.2fMB)\n",
 					float64(info.Size())/1024/1024, float64(MaxFileSizeBytes)/1024/1024))
 				continue
 			}
 		}
-		
+
 		if content, err := os.ReadFile(file); err == nil {
 			b.WriteString(string(content))
 		} else {
@@ -172,8 +191,8 @@ func ParseResult(output string) ReviewResult {
 		checkLines = len(lines)
 	}
 
-	for i := 0; i < checkLines; i++ {
-		line := strings.ToUpper(lines[i])
+	for _, line := range lines[:checkLines] {
+		line := strings.ToUpper(line)
 		if strings.Contains(line, "STATUS: PASSED") || strings.Contains(line, "**STATUS: PASSED**") {
 			return ResultPassed
 		}

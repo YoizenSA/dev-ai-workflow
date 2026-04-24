@@ -26,7 +26,7 @@ func GetStagedFiles(patterns, excludes string) ([]string, error) {
 	}
 
 	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var result []string
+	result := []string{}
 
 	for _, file := range files {
 		file = strings.TrimSpace(file)
@@ -69,7 +69,7 @@ func GetCIFiles(patterns, excludes string) ([]string, error) {
 	}
 
 	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var result []string
+	result := []string{}
 
 	for _, file := range files {
 		file = strings.TrimSpace(file)
@@ -113,7 +113,7 @@ func GetPRFiles(prRange, patterns, excludes string) ([]string, error) {
 	}
 
 	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var result []string
+	result := []string{}
 
 	for _, file := range files {
 		file = strings.TrimSpace(file)
@@ -176,7 +176,10 @@ func DetectBaseBranch() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no base branch found (checked: %s). Consider setting PR_BASE_BRANCH in config", strings.Join(candidates, ", "))
+	return "", fmt.Errorf(
+		"no base branch found (checked: %s). Consider setting PR_BASE_BRANCH in config",
+		strings.Join(candidates, ", "),
+	)
 }
 
 func GetHooksDir() (string, error) {

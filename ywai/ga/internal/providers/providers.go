@@ -520,7 +520,12 @@ func (p *GitHubProvider) Execute(prompt string) (string, error) {
 		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://models.inference.ai.azure.com/chat/completions", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		"https://models.inference.ai.azure.com/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}

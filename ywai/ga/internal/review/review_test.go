@@ -36,13 +36,15 @@ func TestParseResult(t *testing.T) {
 			expected: ResultUnknown,
 		},
 		{
-			name:     "PASSED in first 15 lines",
-			output:   "line1\nline2\nline3\nline4\nline5\nSTATUS: PASSED\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nline16",
+			name: "PASSED in first 15 lines",
+			output: "line1\nline2\nline3\nline4\nline5\nSTATUS: PASSED\n" +
+				"line7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nline16",
 			expected: ResultPassed,
 		},
 		{
-			name:     "Unknown after 15 lines",
-			output:   "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nSTATUS: PASSED",
+			name: "Unknown after 15 lines",
+			output: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\n" +
+				"line10\nline11\nline12\nline13\nline14\nline15\nSTATUS: PASSED",
 			expected: ResultUnknown,
 		},
 	}

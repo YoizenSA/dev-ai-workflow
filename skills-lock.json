@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "gentleman-bubbletea": {
+      "source": "gentleman-programming/engram",
+      "sourceType": "github",
+      "computedHash": "67f1727458f6d2e221d14e104e75bdd46cce88c4493f6548cdc4c7ab249fbbb2"
+    },
+    "golang-code-style": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "computedHash": "27c98c36eee1ac8efced6f08c8e88225106bbb2ab1ce8f8a3a4110b06c1c6a45"
+    }
+  }
+}

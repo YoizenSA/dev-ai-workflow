@@ -34,7 +34,14 @@ Supports multiple modes: staged (default), CI, and PR mode.`,
 		if len(args) > 0 && commitMsgFile == "" {
 			commitMsgFile = args[0]
 		}
-		return runReview(noCache, ciMode, prMode, diffOnly, commitMsgFile, phase)
+		return runReview(ReviewConfig{
+			NoCache:       noCache,
+			CIMode:        ciMode,
+			PRMode:        prMode,
+			DiffOnly:      diffOnly,
+			CommitMsgFile: commitMsgFile,
+			Phase:         phase,
+		})
 	},
 }
 
@@ -44,12 +51,28 @@ func init() {
 	runCmd.Flags().BoolVar(&prMode, "pr-mode", false, "PR mode: review all files changed in the full PR")
 	runCmd.Flags().BoolVar(&diffOnly, "diff-only", false, "With --pr-mode: send only diffs (faster, cheaper)")
 	runCmd.Flags().StringVar(&commitMsgFile, "commit-msg-file", "", "Path to commit message file (for commit-msg hook)")
-	runCmd.Flags().StringVar(&phase, "phase", "", "SDD phase for model resolution (e.g., sdd-apply, sdd-design). Reads from .ywai/sdd-models.json")
+	runCmd.Flags().StringVar(
+		&phase,
+		"phase",
+		"",
+		"SDD phase for model resolution (e.g., sdd-apply, sdd-design). "+
+			"Reads from .ywai/sdd-models.json",
+	)
 	_ = runCmd.Flags().MarkHidden("commit-msg-file")
 	rootCmd.AddCommand(runCmd)
 }
 
-func runReview(noCache, ciMode, prMode, diffOnly bool, commitMsgFile string, phase string) error {
+// ReviewConfig holds configuration for review execution
+type ReviewConfig struct {
+	NoCache       bool
+	CIMode        bool
+	PRMode        bool
+	DiffOnly      bool
+	CommitMsgFile string
+	Phase         string
+}
+
+func runReview(reviewCfg ReviewConfig) error {
 	ui.PrintBanner("dev")
 
 	cfg, err := config.Load()
@@ -83,12 +106,12 @@ func runReview(noCache, ciMode, prMode, diffOnly bool, commitMsgFile string, pha
 		ui.Info("Exclude patterns: %s", cfg.ExcludePatterns)
 	}
 
-	var files []string
+	files := []string{}
 	var prRange string
 	var baseBranch string
 
-	if prMode {
-		if diffOnly {
+	if reviewCfg.PRMode {
+		if reviewCfg.DiffOnly {
 			ui.Info("Mode: PR (diff-only review)")
 		} else {
 			ui.Info("Mode: PR (full file review)")
@@ -116,25 +139,27 @@ func runReview(noCache, ciMode, prMode, diffOnly bool, commitMsgFile string, pha
 			ui.Error("Failed to get PR files: %v", err)
 			return err
 		}
-	} else if ciMode {
+		return nil
+	}
+
+	if reviewCfg.CIMode {
 		ui.Info("Mode: CI (reviewing last commit)")
-		var err error
 		files, err = git.GetCIFiles(cfg.FilePatterns, cfg.ExcludePatterns)
 		if err != nil {
 			ui.Error("Failed to get CI files: %v", err)
 			return err
 		}
-	} else {
-		ui.Info("Mode: Staged files")
-		var err error
-		files, err = git.GetStagedFiles(cfg.FilePatterns, cfg.ExcludePatterns)
-		if err != nil {
-			ui.Error("Failed to get staged files: %v", err)
-			return err
-		}
+		return nil
 	}
 
-	useCache := !noCache && !ciMode && !prMode
+	ui.Info("Mode: Staged files")
+	files, err = git.GetStagedFiles(cfg.FilePatterns, cfg.ExcludePatterns)
+	if err != nil {
+		ui.Error("Failed to get staged files: %v", err)
+		return err
+	}
+
+	useCache := !reviewCfg.NoCache && !reviewCfg.CIMode && !reviewCfg.PRMode
 	if useCache {
 		ui.Info("Cache: enabled")
 	} else {
@@ -192,26 +217,32 @@ func runReview(noCache, ciMode, prMode, diffOnly bool, commitMsgFile string, pha
 	var prompt string
 	var commitMsg string
 
-	if commitMsgFile != "" {
-		if data, err := os.ReadFile(commitMsgFile); err == nil {
+	if reviewCfg.CommitMsgFile != "" {
+		if data, err := os.ReadFile(reviewCfg.CommitMsgFile); err == nil {
 			commitMsg = string(data)
 		}
 	}
 
-	if prMode {
+	if reviewCfg.PRMode {
 		var prDiff string
-		if diffOnly {
+		if reviewCfg.DiffOnly {
 			var err error
 			prDiff, err = git.GetPRDiff(prRange)
 			if err != nil {
 				ui.Warning("Failed to get PR diff: %v", err)
 				ui.Info("Falling back to full file review")
-				diffOnly = false
+				reviewCfg.DiffOnly = false
 			}
 		}
-		prompt = review.BuildPRPrompt(cfg.RulesFile, prDiff, filesToReview, diffOnly, baseBranch)
+		prompt = review.BuildPRPrompt(review.PRPromptConfig{
+			RulesFile:  cfg.RulesFile,
+			PRDiff:     prDiff,
+			Files:      filesToReview,
+			DiffOnly:   reviewCfg.DiffOnly,
+			BaseBranch: baseBranch,
+		})
 	} else {
-		useStaged := !ciMode
+		useStaged := !reviewCfg.CIMode
 		prompt = review.BuildPrompt(cfg.RulesFile, commitMsg, filesToReview, useStaged)
 	}
 
@@ -222,7 +253,7 @@ func runReview(noCache, ciMode, prMode, diffOnly bool, commitMsgFile string, pha
 		Provider: cfg.Provider,
 		Model:    "",
 		Timeout:  cfg.Timeout,
-		Phase:    phase,
+		Phase:    reviewCfg.Phase,
 	})
 	if err != nil {
 		ui.Error("Failed to create provider: %v", err)
