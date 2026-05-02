@@ -49,7 +49,7 @@ ywai init react
 
 | Flag | Description |
 |------|-------------|
-| `--type, -t` | Project type: generic, react, nest, dotnet, devops |
+| `--type, -t` | Project type (auto-discovered from project-types/) |
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
 
@@ -77,12 +77,16 @@ ywai/
 │   ├── tailwind-4/
 │   ├── typescript/
 │   └── yz-ui/
-├── project-types/        # Templates by project type
+├── project-types/        # Templates by project type (add folder = new type)
 │   ├── generic/
 │   ├── react/
 │   ├── nest/
+│   ├── nest-angular/
+│   ├── nest-react/
 │   ├── dotnet/
-│   └── devops/
+│   ├── python/
+│   ├── devops/
+│   └── qa-playwright/
 ├── go.mod
 ├── .goreleaser.yaml
 ├── AGENTS.md

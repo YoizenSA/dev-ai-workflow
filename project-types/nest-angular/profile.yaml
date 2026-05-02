@@ -1,0 +1,7 @@
+description: "NestJS backend + Angular frontend"
+skills:
+  - angular
+  - typescript
+  - biome
+  - playwright
+  - git-commit

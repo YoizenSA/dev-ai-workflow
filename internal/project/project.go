@@ -9,7 +9,7 @@ import (
 	"github.com/Yoizen/ywai/internal/config"
 )
 
-var KnownTypes = []string{"generic", "react", "nest", "dotnet", "devops"}
+var KnownTypes = AvailableTypes()
 
 func SkillsForType(projectType string) []string {
 	return config.ProfileSkills(projectType)
