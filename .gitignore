@@ -8,6 +8,10 @@ build/
 out/
 *.tsbuildinfo
 
+# Go build
+*.exe
+ywai
+
 # Environment variables
 .env
 .env.local

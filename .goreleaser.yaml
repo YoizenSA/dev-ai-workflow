@@ -1,0 +1,97 @@
+version: 2
+
+before:
+  hooks:
+    - bash scripts/prepare-embedded.sh
+
+builds:
+  - main: ./cmd/ywai
+    binary: ywai
+    tags:
+      - embedded
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: '{{ incpatch .Version }}-next'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: Yoizen
+    name: ywai
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## ywai {{ .Tag }}
+    
+    One command to install gentle-ai + extra skills + project config.
+  footer: |
+    **Install:**
+    ```bash
+    # macOS / Linux
+    curl -fsSL https://github.com/Yoizen/ywai/releases/latest/download/ywai_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
+    sudo mv ywai /usr/local/bin/
+    
+    # Windows (PowerShell)
+    irm https://github.com/Yoizen/ywai/releases/latest/download/ywai_{{ .Version }}_windows_amd64.zip -OutFile ywai.zip
+    Expand-Archive ywai.zip
+    ```
+    
+    Or via Go: `go install github.com/Yoizen/ywai@latest`
+
+brews:
+  - name: ywai
+    homepage: https://github.com/Yoizen/ywai
+    description: "One command to install gentle-ai + extra skills + project config"
+    repository:
+      owner: Yoizen
+      name: homebrew-tap
+    directory: Formula
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+
+scoops:
+  - name: ywai
+    homepage: https://github.com/Yoizen/ywai
+    description: "One command to install gentle-ai + extra skills + project config"
+    repository:
+      owner: Yoizen
+      name: scoop-bucket
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com

@@ -1,104 +1,97 @@
-# AI Development Workflow - Extension Pack
+# ywai — One command to set up your AI dev environment
 
 ## Overview
 
-This repository is a **skill extension layer** on top of [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai). It provides additional technology-specific and meta-skills that are not included in the Gentleman Stack.
+**ywai** is a CLI wrapper around [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) that adds:
 
-**Base layer** (install via gentle-ai):
-- SDD Orchestrator (9-phase workflow)
-- Engram (persistent memory MCP server)
-- Context7 (live framework docs MCP server)
-- Foundation skills (go-testing, branch-pr, issue-creation, judgment-day)
-- Persona, Permissions, GGA
+- Extra skills not in gentle-ai (React 19, Angular, Tailwind 4, TypeScript, etc.)
+- Project templates (AGENTS.md + REVIEW.md by project type)
+- One-command install + update workflow
 
-**This repo adds:**
-- Technology skills (React 19, Tailwind 4, Angular, .NET, DevOps, Playwright, Biome, TypeScript)
-- Meta-skills (skill-creator, golang-code-style, gentleman-bubbletea)
+**What ywai does NOT do**: reimplement gentle-ai. It **delegates** to `gentle-ai install`, `gentle-ai sync`, etc.
 
 ---
 
 ## Quick Start
 
-### 1. Install gentle-ai (base layer)
-
 ```bash
-# Requires Go
+# Install ywai
+go install github.com/Yoizen/ywai@latest
 
-go install github.com/Gentleman-Programming/gentle-ai@latest
+# Full install: gentle-ai + ecosystem + extra skills
+ywai install
 
-# Run installer for your agent
-gentle-ai install --agent opencode --preset ecosystem-only
+# With project type
+ywai install --type react
+
+# Specific agent
+ywai install --agent opencode --type nest
+
+# Update everything
+ywai update
+
+# Initialize a project (AGENTS.md + REVIEW.md)
+ywai init react
 ```
 
-Supported agents: `claude-code`, `opencode`, `gemini-cli`, `cursor`, `vscode-copilot`, `codex`, `windsurf`, `antigravity`.
+---
 
-### 2. Link extra skills from this repo
+## Commands
 
-```powershell
-# Windows
-.\setup.ps1
+| Command | Description |
+|---------|-------------|
+| `ywai install` | Install gentle-ai + ecosystem + extra skills + optional project init |
+| `ywai update` | Upgrade gentle-ai + sync + re-link skills |
+| `ywai init <type>` | Copy AGENTS.md/REVIEW.md for a project type |
+| `ywai skills` | List available extra skills |
 
-# macOS / Linux
-./setup.sh
-```
+### Install flags
 
-This auto-detects installed agents and symlinks `skills/*` into each agent's skills directory (e.g., `~/.config/opencode/skills/`, `~/.windsurf/skills/`, `~/.claude/skills/`).
-
-### 3. Initialize a project (AGENTS.md + REVIEW.md)
-
-```powershell
-# Windows
-.\setup.ps1 -Init nest
-
-# macOS / Linux
-./setup.sh --init react
-```
-
-Available types: `generic`, `nest`, `react`, `dotnet`, `devops`.
+| Flag | Description |
+|------|-------------|
+| `--type, -t` | Project type: generic, react, nest, dotnet, devops |
+| `--agent, -a` | Specific agent (auto-detects if omitted) |
+| `--dry-run` | Preview changes without applying |
 
 ---
 
 ## Project Structure
 
 ```
-dev-ai-workflow/
-├── skills/              # Extra skills not in gentle-ai
-│   ├── angular/         # Angular (core, forms, performance, architecture)
-│   ├── biome/           # Biome linter/formatter
-│   ├── devops/          # Azure Pipelines, Helm, K8s
-│   ├── dotnet/          # .NET / C#
-│   ├── git-commit/      # Conventional commits
-│   ├── playwright/      # E2E testing
-│   ├── react-19/        # React 19 patterns
-│   ├── tailwind-4/      # Tailwind CSS 4
-│   ├── typescript/      # TypeScript best practices
-│   ├── skill-creator/   # Create new agent skills
-│   └── yz-ui/           # UI component library
-│
-├── .agents/
-│   └── skills/          # Global meta-skills
-│       ├── agents-md/
-│       ├── gentleman-bubbletea/
-│       ├── golang-code-style/
-│       └── skill-creator/
-│
-├── project-types/       # Project-type templates (AGENTS.md + REVIEW.md)
+ywai/
+├── cmd/ywai/             # CLI entry point
+├── internal/
+│   ├── agent/            # Agent detection (opencode, claude-code, etc.)
+│   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade)
+│   ├── skills/           # Symlink extra skills to agent dirs
+│   ├── project/          # Project type initialization
+│   └── config/           # Paths, constants
+├── skills/               # Extra skills not in gentle-ai
+│   ├── angular/
+│   ├── biome/
+│   ├── devops/
+│   ├── dotnet/
+│   ├── git-commit/
+│   ├── playwright/
+│   ├── react-19/
+│   ├── tailwind-4/
+│   ├── typescript/
+│   └── yz-ui/
+├── project-types/        # Templates by project type
 │   ├── generic/
-│   ├── nest/
 │   ├── react/
+│   ├── nest/
 │   ├── dotnet/
 │   └── devops/
-├── setup.ps1            # Windows setup script
-├── setup.sh             # macOS/Linux setup script
-├── AGENTS.md            # This file
-└── README.md            # User documentation
+├── go.mod
+├── .goreleaser.yaml
+├── AGENTS.md
+└── README.md
 ```
 
 ---
 
 ## Available Skills
-
-### Technology Skills
 
 | Skill | Technology |
 |:---|:---|
@@ -112,32 +105,10 @@ dev-ai-workflow/
 | `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
 | `git-commit` | Conventional commits |
 
-### Meta Skills
-
-| Skill | Purpose |
-|:---|:---|
-| `skill-creator` | Create new AI agent skills |
-| `golang-code-style` | Go code style, formatting, and conventions |
-| `gentleman-bubbletea` | Bubbletea TUI patterns for Gentleman.Dots installer |
-
----
-
-## SDD Usage (delegated to gentle-ai)
-
-Complex features use the Spec-Driven Development workflow provided by gentle-ai:
-
-```bash
-sdd:new feature-name     # Create proposal
-sdd:ff feature-name      # Fast-forward: spec + design + tasks
-/sdd-apply               # Implement tasks
-/sdd-verify              # Validate implementation
-/sdd:archive             # Archive when done
-```
-
 ---
 
 ## GitHub
 
-- Issues: https://github.com/Yoizen/dev-ai-workflow/issues
-- Repository: https://github.com/Yoizen/dev-ai-workflow
+- Issues: https://github.com/Yoizen/ywai/issues
+- Repository: https://github.com/Yoizen/ywai
 - Upstream: https://github.com/Gentleman-Programming/gentle-ai
