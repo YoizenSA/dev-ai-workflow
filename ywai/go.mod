@@ -1,4 +1,4 @@
-module github.com/Yoizen/ywai
+module github.com/Yoizen/dev-ai-workflow/ywai
 
 go 1.26.1
 

@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/Yoizen/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 func LinkTo(agentSkillsDir string) error {

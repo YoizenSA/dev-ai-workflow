@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Yoizen UI Theme Configuration",
-  "description": "Schema for validating Tailwind theme extensions matching YoizenClaw design system",
+  "description": "Schema for validating Tailwind theme extensions matching Yoizen design system",
   "type": "object",
   "properties": {
     "theme": {

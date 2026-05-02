@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/Yoizen/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 type Agent struct {

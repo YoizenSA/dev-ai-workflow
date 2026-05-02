@@ -63,19 +63,19 @@ release:
     **Install:**
     ```bash
     # macOS / Linux
-    curl -fsSL https://github.com/Yoizen/ywai/releases/latest/download/ywai_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
+    curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/ywai_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
     sudo mv ywai /usr/local/bin/
     
     # Windows (PowerShell)
-    irm https://github.com/Yoizen/ywai/releases/latest/download/ywai_{{ .Version }}_windows_amd64.zip -OutFile ywai.zip
+    irm https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/ywai_{{ .Version }}_windows_amd64.zip -OutFile ywai.zip
     Expand-Archive ywai.zip
     ```
     
-    Or via Go: `go install github.com/Yoizen/ywai@latest`
+    Or via Go: `go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest`
 
 brews:
   - name: ywai
-    homepage: https://github.com/Yoizen/ywai
+    homepage: https://github.com/Yoizen/dev-ai-workflow
     description: "One command to install gentle-ai + extra skills + project config"
     repository:
       owner: Yoizen
@@ -87,7 +87,7 @@ brews:
 
 scoops:
   - name: ywai
-    homepage: https://github.com/Yoizen/ywai
+    homepage: https://github.com/Yoizen/dev-ai-workflow
     description: "One command to install gentle-ai + extra skills + project config"
     repository:
       owner: Yoizen

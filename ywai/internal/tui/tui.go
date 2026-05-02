@@ -5,38 +5,61 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Yoizen/ywai/internal/agent"
-	"github.com/Yoizen/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	accent     = lipgloss.Color("12")
-	green      = lipgloss.Color("10")
-	yellow     = lipgloss.Color("11")
-	dimColor   = lipgloss.Color("8")
-	white      = lipgloss.Color("15")
+	primaryColor   = lipgloss.Color("99")
+	secondaryColor = lipgloss.Color("86")
+	tertiaryColor  = lipgloss.Color("208")
+	successColor   = lipgloss.Color("84")
+	errorColor     = lipgloss.Color("167")
+	textSecondary  = lipgloss.Color("245")
+	textMuted      = lipgloss.Color("241")
+	borderColor    = lipgloss.Color("236")
+	surfaceColor   = lipgloss.Color("235")
+	textPrimary    = lipgloss.Color("255")
 
-	bannerStyle  = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	titleStyle   = lipgloss.NewStyle().Foreground(white).Bold(true).MarginBottom(1)
-	selStyle     = lipgloss.NewStyle().Foreground(green).Bold(true)
-	descStyle    = lipgloss.NewStyle().Foreground(dimColor)
-	infoStyle    = lipgloss.NewStyle().Foreground(yellow)
-	dimStyle     = lipgloss.NewStyle().Foreground(dimColor)
-	skillStyle   = lipgloss.NewStyle().Foreground(yellow)
-	okStyle      = lipgloss.NewStyle().Foreground(green)
-	activeStyle  = lipgloss.NewStyle().Foreground(green).Bold(true)
-	pendingStyle = lipgloss.NewStyle().Foreground(dimColor)
-	itemStyle    = lipgloss.NewStyle().Foreground(white)
+	bannerStyle    = lipgloss.NewStyle().Foreground(primaryColor).Bold(true)
+	titleStyle     = lipgloss.NewStyle().Foreground(primaryColor).Bold(true).MarginBottom(1)
+	selStyle       = lipgloss.NewStyle().Foreground(secondaryColor).Bold(true).Background(surfaceColor).Padding(0, 1)
+	descStyle      = lipgloss.NewStyle().Foreground(textMuted)
+	infoStyle      = lipgloss.NewStyle().Foreground(tertiaryColor)
+	dimStyle       = lipgloss.NewStyle().Foreground(textMuted)
+	skillStyle     = lipgloss.NewStyle().Foreground(tertiaryColor)
+	okStyle        = lipgloss.NewStyle().Foreground(successColor)
+	activeStyle    = lipgloss.NewStyle().Foreground(secondaryColor).Bold(true)
+	pendingStyle   = lipgloss.NewStyle().Foreground(textMuted)
+	itemStyle      = lipgloss.NewStyle().Foreground(textPrimary)
+	subtitleStyle  = lipgloss.NewStyle().Foreground(textSecondary)
+	monoStyle      = lipgloss.NewStyle().Foreground(secondaryColor)
+	captionStyle   = lipgloss.NewStyle().Foreground(textMuted)
 )
 
-const banner = `
- __     __  ___  __  __
- \ \   / / / _ )/ / / /  — one command to rule them all
-  \ \ / / / _  / /_/ /
-   \_V_/ /____/\____/
-`
+var brandPalette = []string{
+	"99",
+	"105",
+	"111",
+	"117",
+	"86",
+	"120",
+	"150",
+	"179",
+	"183",
+	"177",
+}
+
+var logoLines = []string{
+	"██╗   ██╗██╗    ██╗ █████╗ ██╗",
+	"╚██╗ ██╔╝██║    ██║██╔══██╗██║",
+	" ╚████╔╝ ██║ █╗ ██║███████║██║",
+	"  ╚██╔╝  ██║███╗██║██╔══██║██║",
+	"   ██║   ╚███╔███╔╝██║  ██║██║",
+	"   ╚═╝    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝",
+}
 
 type step int
 
@@ -239,10 +262,29 @@ func (m Model) renderBreadcrumbs() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
+func renderLogo() string {
+	var out []string
+	for i, line := range logoLines {
+		if line == "" {
+			out = append(out, line)
+			continue
+		}
+		style := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(brandPalette[i%len(brandPalette)]))
+		out = append(out, style.Render(line))
+	}
+	return strings.Join(out, "\n")
+}
+
 func (m Model) viewWelcome() string {
 	var b strings.Builder
-	b.WriteString(bannerStyle.Render(banner))
+	b.WriteString(renderLogo())
 	b.WriteString("\n")
+	b.WriteString(subtitleStyle.Render("  Setup Wizard  •  AI Development Workflow"))
+	b.WriteString("\n")
+	b.WriteString(infoStyle.Render(strings.Repeat("─", 40)))
+	b.WriteString("\n\n")
 	b.WriteString("  This will:\n")
 	b.WriteString("    1. Install/update gentle-ai\n")
 	b.WriteString("    2. Configure your AI agent with the Gentleman ecosystem\n")

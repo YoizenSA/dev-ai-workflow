@@ -2,7 +2,7 @@
  * Template de Componente React con Estilo Yoizen
  * 
  * Copiar este archivo para crear nuevos componentes consistentes
- * con el design system de YoizenClaw.
+ * con el design system de Yoizen.
  */
 
 import React from 'react';

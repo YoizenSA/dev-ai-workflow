@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Yoizen/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 var KnownTypes = AvailableTypes()

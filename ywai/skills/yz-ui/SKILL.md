@@ -1,7 +1,7 @@
 ---
 name: yz-ui
 description: >
-  YoizenClaw UI design system guidelines and resources.
+  Yoizen UI design system guidelines and resources.
   Trigger: When working on Yoizen UI components, styling, colors, typography, or icons.
 license: Apache-2.0
 metadata:
@@ -18,7 +18,7 @@ metadata:
 ## When to Use
 
 Use this skill when:
-- Creating new UI components for YoizenClaw
+- Creating new UI components for Yoizen
 - Implementing consistent styling across the application
 - Choosing colors, fonts, or spacing
 - Working with icons and brand assets
@@ -231,7 +231,7 @@ Located in `Services/yoizen-ui/public/`:
 
 ## Tailwind Configuration
 
-The YoizenClaw UI extends Tailwind with custom theme values:
+The Yoizen UI extends Tailwind with custom theme values:
 
 ```javascript
 // tailwind.config.js
