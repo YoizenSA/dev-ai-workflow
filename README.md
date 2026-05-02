@@ -1,146 +1,418 @@
-﻿# dev-ai-workflow — Extension Pack for gentle-ai
+﻿# Workflow de desarrollo asistido por IA
 
-Additional technology and meta-skills layered on top of the [Gentleman Stack](https://github.com/Gentleman-Programming/gentle-ai).
-
----
-
-## What is this?
-
-- **gentle-ai** provides the base: SDD orchestrator, Engram, Context7, foundation skills, persona, and permissions.
-- **This repo** adds technology-specific skills (React 19, Tailwind 4, Angular, .NET, DevOps, Playwright, Biome, TypeScript) and meta-skills (skill-creator, golang-code-style, gentleman-bubbletea).
+Features:
+- **Agent / Plan mode** para tareas chicas y medianas
+- **SDD Orchestrator (SDD, Spec Driven Development)** para features grandes (spec + diseño + tasks + apply)
+- **GA Review (GA, Guardian Agent)** para review automático en cada commit
 
 ---
 
-## Quick Start
+## Pre-requisitos
 
-### 1. Install the base (gentle-ai)
+### Común
+- Un repo Git inicializado (o un proyecto donde vayas a instalarlo).
+- `git` instalado y disponible en PATH.
+- Acceso a GitHub (para descargar scripts desde `raw.githubusercontent.com`).
 
-Requires [Go](https://go.dev/dl/).
+### macOS / Linux
+- `bash`
+- `curl`
+
+### Windows
+- PowerShell (recomendado PowerShell 5.1+ o PowerShell 7+).
+- Permisos para ejecutar el comando de instalación (si tu política lo restringe, ajustá Execution Policy según tus prácticas internas).
+
+---
+
+## Instalación
+
+### macOS / Linux
 
 ```bash
-go install github.com/Gentleman-Programming/gentle-ai@latest
-
-# Install the Gentleman Stack into your agent
-gentle-ai install --agent opencode --preset ecosystem-only
+curl -sSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
 ```
 
-Supported agents: `claude-code`, `opencode`, `gemini-cli`, `cursor`, `vscode-copilot`, `codex`, `windsurf`, `antigravity`.
-
-### 2. Link extra skills from this repo
+### Windows
 
 ```powershell
-# Windows
-.\setup.ps1
-
-# macOS / Linux
-./setup.sh
+irm https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.ps1 | iex
 ```
 
-This auto-detects installed agents and symlinks `skills/*` into each agent's skills directory (e.g., `~/.config/opencode/skills/`, `~/.windsurf/skills/`, `~/.claude/skills/`).
+> El instalador descarga el binario, lo agrega al PATH y abre el wizard interactivo automáticamente.
 
-### 3. Initialize a project (AGENTS.md + REVIEW.md)
+### Otros tipos
 
-```powershell
-# Windows
-.\setup.ps1 -Init nest
+Reemplazá `nest` por cualquiera de estos tipos:
+- `nest-angular`
+- `nest-react`
+- `python`
+- `dotnet`
+- `devops`
+- `generic`
 
-# macOS / Linux
-./setup.sh --init react
+### Presets (alcance de instalación)
+
+`--preset` controla **cuánto** se instala, ortogonal a `--type` (que define **qué stack**).
+
+| Preset | Incluye |
+|--------|---------|
+| `minimal` | SDD skills + `git-commit` + `skill-creator` + `skill-sync`. Sin GA, sin global agents, sin MCPs, sin hooks. |
+| `standard` (default) | Comportamiento actual: bundle completo del `--type` + GA + `context7-mcp` + global agents. |
+| `full` | `standard` + `engram-setup` + hooks opcionales habilitados. |
+
+```bash
+ywai --type=nest --preset=minimal    # solo SDD, sin GA
+ywai --type=dotnet --preset=full     # todo
+ywai --preset=standard               # default (igual que omitir el flag)
 ```
 
-Available types: `generic`, `nest`, `react`, `dotnet`, `devops`.
+### Nota
 
----
+> El setup instala OpenCode automáticamente si no está disponible.
+> `--global-skills` configura perfiles globales de usuario para OpenCode/Copilot (no instala nada a nivel global del sistema y no crea agentes dentro del repo).
+> Los agentes globales se generan desde `ywai/extensions/install-steps/global-agents/templates/` y no desde `AGENTS.md`.
+> Además, cada agente global se genera con un bundle Agent-Skills definido en `ywai/extensions/install-steps/global-agents/bundles.json` (ej: `devops` -> skill `devops`).
+> Los agentes globales invocan habilidades (skills) según el bundle configurado, lo que permite una mayor flexibilidad en la configuración de habilidades para cada tipo de proyecto.
 
-## Project Structure
+### Sync inteligente para proyectos existentes (`--sync`)
 
-```
-dev-ai-workflow/
-├── skills/              # Extra technology skills
-│   ├── angular/         # Angular (core, forms, performance, architecture)
-│   ├── biome/           # Biome linter/formatter
-│   ├── devops/          # Azure Pipelines, Helm, K8s
-│   ├── dotnet/          # .NET / C#
-│   ├── git-commit/      # Conventional commits
-│   ├── playwright/      # E2E testing
-│   ├── react-19/        # React 19 patterns
-│   ├── tailwind-4/      # Tailwind CSS 4
-│   ├── typescript/      # TypeScript best practices
-│   ├── skill-creator/   # Create new agent skills
-│   └── yz-ui/           # UI component library
-│
-├── .agents/
-│   └── skills/          # Global meta-skills
-│       ├── agents-md/
-│       ├── gentleman-bubbletea/
-│       ├── golang-code-style/
-│       └── skill-creator/
-│
-├── project-types/       # Project-type templates (AGENTS.md + REVIEW.md)
-│   ├── generic/
-│   ├── nest/
-│   ├── react/
-│   ├── dotnet/
-│   └── devops/
-├── setup.ps1            # Windows setup script
-├── setup.sh             # macOS/Linux setup script
-├── AGENTS.md            # Project index
-└── README.md            # This file
+Para proyectos existentes, usá `--sync` para obtener un reporte de cambios sugeridos que el LLM puede leer y aplicar selectivamente:
+
+```bash
+# Auto-detectar tipo de proyecto
+ywai --sync
+
+# Tipo específico
+ywai --sync --type=nest-angular
 ```
 
----
+**Output**: Reporte markdown con:
+- Skills faltantes
+- Skills actualizables
+- Cambios sugeridos en AGENTS.md
+- Cambios sugeridos en REVIEW.md
+- Instrucciones paso a paso
 
-## Usage
+**El sync NO hace cambios**, solo genera instrucciones. El LLM decide qué aplicar.
 
-### Simple tasks
+### Instalar skill específica (`--install-skill`)
 
-Use your agent directly:
+Para instalar una skill individual con sus dependencias:
+
+```bash
+ywai --install-skill angular/signals
+ywai --install-skill react-19
+ywai --install-skill devops
+```
+
+El comando genera instrucciones de instalación incluyendo:
+- Archivos a copiar
+- Dependencias requeridas
+- Pasos para actualizar AGENTS.md
+
+### Uso con LLM
 
 ```text
+User: "Use ywai --sync to update this repo"
+
+LLM: [ejecuta ywai --sync]
+     [lee el reporte]
+     [aplica cambios selectivamente según preferencias del usuario]
+```
+
+Prompt sugerido para chats:
+
+```text
+Fetch the installation guide and follow it:
+curl -s https://raw.githubusercontent.com/Yoizen/dev-ai-workflow/main/docs/guide/installation.md
+```
+
+---
+
+## Versiones y Releases
+
+La instalación usa GitHub Releases.
+
+### Canal por defecto: `stable`
+
+Instala la última release estable publicada.
+
+### Opciones de versión
+
+```bash
+# Versión específica (incluye pre-releases)
+YWAI_VERSION=v6.0.0-beta.1 curl -sSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+
+# Canal latest
+YWAI_CHANNEL=latest curl -sSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+```
+
+---
+
+## Primer uso (SDD) en un repo
+
+Seleccioná **Agent mode** y usá SDD Orchestrator:
+
+```text
+/sdd-init                  # Inicializa SDD en el repo (una sola vez)
+sdd:new dark-mode          # Crea propuesta del change
+sdd:ff dark-mode           # Fast-forward: genera spec + diseño + tareas
+/sdd-apply                 # Implementa tareas pendientes
+git commit                 # GA hace review automático
+```
+
+---
+
+## Elegir el modo correcto
+
+No siempre necesitás SDD. Usá el modo según complejidad:
+
+### Tarea simple → Agent directo
+Fixes rápidos, refactors chicos o tareas claras:
+
+```text
+[Agent mode]
 > Agrega validación de email en el form de registro
 ```
 
-### Complex features (SDD)
+### Tarea compleja → Plan → Agent
+Cuando conviene pensar primero:
 
-Use the SDD workflow provided by gentle-ai:
+```text
+[Plan mode]
+> Necesito agregar autenticación con OAuth.
+> Soportar Google y GitHub. Guardar sesión en cookies httpOnly.
+> El usuario tiene que poder deslogearse desde cualquier página.
+```
 
-```bash
-sdd:new feature-name     # Create proposal
-sdd:ff feature-name      # Fast-forward: spec + design + tasks
-/sdd-apply               # Implement tasks
-/sdd-verify              # Validate implementation
-/sdd:archive             # Archive when done
+Luego:
+
+```text
+[Agent mode]
+> Implementa el plan
+```
+
+### Feature grande → SDD Orchestrator
+Cuando cruza múltiples archivos/sistemas o es multi-día:
+
+```text
+sdd:new sistema-de-pagos
+sdd:ff sistema-de-pagos
+/sdd-apply
+```
+
+SDD genera specs formales, diseño técnico, tareas, y trackea el progreso.
+
+### Resumen
+
+| Complejidad | Modo | Ejemplo |
+|-------------|------|---------|
+| Fix / tweak | Agent | "Arregla el typo en el header" |
+| Feature clara | Agent | "Agrega botón de logout" |
+| Feature que hay que pensar | Plan → Agent | "Sistema de notificaciones" |
+| Feature grande / multi-día | SDD Orchestrator | "Migrar auth a OAuth2" |
+
+---
+
+## Qué modelo usar
+
+| Tarea | Modelo recomendado | Por qué |
+|------|-------------------|---------|
+| Planning / diseño | **Opus 4.6** | Mejor razonamiento; piensa antes de actuar |
+| Implementación (Agent) | **Codex 5.3** / **Sonnet 4.6** | Optimizado para código; rápido y preciso |
+| Commits, PRs, docs | **Gemini 3 Flash** | Barato; suficiente para texto |
+| Ajustes de UI/CSS | **Gemini 3.1 Pro** | Buen balance costo/calidad para visual |
+| Code review básica | **Gemini 3 Flash** / **Haiku 4.5** | Económico para checks rutinarias |
+| Code review crítica | **Codex 5.3** | Detecta bugs sutiles; entiende contexto |
+
+Regla general:
+- Modelo caro → pensar, planificar, revisar código crítico
+- Modelo barato → ejecutar, commits, reviews rutinarias
+
+---
+
+## Comandos SDD Orchestrator (SDD)
+
+### Atajos (recomendado)
+
+| Comando | Qué hace |
+|---------|----------|
+| `sdd:new <nombre>` | Crea propuesta para un nuevo change (equivale a `/sdd-propose`) |
+| `sdd:ff <nombre>` | Fast-forward: propuesta + spec + diseño + tasks |
+
+### Slash commands individuales
+
+| Comando | Qué hace |
+|---------|----------|
+| `/sdd-init` | Inicializa el flujo SDD en el proyecto |
+| `/sdd-explore` | Explora una idea antes de crear el change |
+| `/sdd-propose` | Crea propuesta del change |
+| `/sdd-spec` | Genera specs y requerimientos |
+| `/sdd-design` | Genera diseño técnico y decisiones de arquitectura |
+| `/sdd-tasks` | Breakdown en tareas de implementación |
+| `/sdd-apply` | Implementa tareas del change activo |
+| `/sdd-verify` | Verifica implementación contra la spec |
+| `/sdd-archive` | Archiva un change terminado |
+
+---
+
+## Ejemplo completo
+
+```text
+> /sdd-init
+Copilot: SDD inicializado para este repositorio.
+
+> sdd:new login-con-google
+Copilot: Creando propuesta 'login-con-google'...
+         → sdd/changes/login-con-google/proposal.md
+
+> sdd:ff login-con-google
+Copilot: Fast-forward: generando spec, diseño y tareas...
+         → sdd/changes/login-con-google/specs/auth/spec.md
+         → sdd/changes/login-con-google/design.md
+         → sdd/changes/login-con-google/tasks.md
+
+> /sdd-apply
+Copilot: Implementando tarea 1.1: Agregar botón de login...
+         [edita archivos]
+         Implementando tarea 2.1: Configurar OAuth...
+         [edita archivos]
+         Implementando tarea 2.2: Manejar callback...
+         [edita archivos]
+         Todas las tareas completadas.
+
+> git commit -m "feat: login con google"
+GA Review: PASS
+[main abc1234] feat: login con google
 ```
 
 ---
 
-## Available Skills
+## Tipos de Proyecto (`--type`)
 
-### Technology Skills
+| Tipo | Descripción | Skills incluidas |
+|------|-------------|-----------------|
+| `nest` | NestJS backend (TypeScript, Clean Architecture) | git-commit, biome, typescript, skill-creator, skill-sync |
+| `nest-angular` | NestJS + Angular fullstack | git-commit, biome, typescript, angular, tailwind-4, skill-creator, skill-sync |
+| `nest-react` | NestJS + React fullstack | git-commit, biome, typescript, react-19, tailwind-4, skill-creator, skill-sync |
+| `python` | Python backend / scripts (FastAPI, Django, scripts) | git-commit, skill-creator, skill-sync |
+| `dotnet` | .NET / C# backend (ASP.NET Core, Clean Architecture) | git-commit, skill-creator, skill-sync |
+| `devops` | DevOps / Platform workflows (CI/CD, Docker, Helm, Kubernetes) | git-commit, devops, skill-creator, skill-sync |
+| `generic` | Genérico — language-agnostic | git-commit, skill-creator, skill-sync |
 
-| Skill | Technology |
-|:---|:---|
-| `typescript` | TypeScript |
-| `react-19` | React 19 |
-| `tailwind-4` | Tailwind CSS 4 |
-| `biome` | Biome (linter/formatter) |
-| `angular/*` | Angular (core, forms, performance, architecture) |
-| `dotnet` | .NET / C# |
-| `devops` | Azure Pipelines, Helm charts, Kubernetes |
-| `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
-| `git-commit` | Conventional commits |
-
-### Meta Skills
-
-| Skill | Purpose |
-|:---|:---|
-| `skill-creator` | Create new AI agent skills |
-| `golang-code-style` | Go code style, formatting, and conventions |
-| `gentleman-bubbletea` | Bubbletea TUI patterns for Gentleman.Dots installer |
+Cada tipo instala un `AGENTS.md` con reglas específicas del stack y un `REVIEW.md` con checklist de code review adaptado.
 
 ---
 
-## Contributing
+## Artefactos generados en `.ywai/`
+
+El setup deja dos archivos en `.ywai/` del proyecto que los sub-agentes consumen para tener contexto de proyecto sin leer cada `SKILL.md` completo:
+
+| Archivo | Qué es |
+|---------|--------|
+| `.ywai/sdd-models.json` | Modelo de IA recomendado por fase SDD (copia de `ywai/config/sdd-models.json`). Consumido por el orquestador SDD y por `ga review --phase=<fase>`. |
+| `.ywai/skill-registry.md` | Registro compacto de las skills instaladas (5–15 bullets por skill extraídos de `## Critical Patterns` / `## Rules`). Reduce tokens en prompts de sub-agentes. |
+
+Regenerar el skill registry manualmente:
+
+```bash
+./skills/skill-sync/assets/sync.sh --registry
+```
+
+## Sincronizar Skills con AGENTS.md
+
+Si agregaste o modificaste skills, podés pedirle al agente que regenere la sección de Auto-invoke en tus `AGENTS.md`.
+
+Prompt sugerido (Agent mode):
+
+```text
+Sincronizá las skills con los AGENTS.md del repo.
+Usá la skill `skill-sync` y regenerá las tablas de Auto-invoke según el metadata actual de `skills/*/SKILL.md`.
+```
+
+---
+
+## Review Automático (GA)
+
+Cada commit pasa por review automático. Si querés skippearlo:
+
+```bash
+git commit --no-verify -m "wip: trabajo en progreso"
+```
+
+### Configurar las reglas de review
+
+Editá `REVIEW.md` en la raíz de tu proyecto:
+
+```markdown
+# Reglas de Code Review
+
+## TypeScript
+- No usar `any`
+- Usar `const` en vez de `let`
+
+## React
+- Solo componentes funcionales
+- Todas las imágenes con alt
+
+## Testing
+- Toda feature nueva necesita tests
+```
+
+---
+
+## Estructura del Proyecto
+
+Después de instalar:
+
+```text
+mi-proyecto/
+├── .ga                     # Config de GA
+├── REVIEW.md               # Reglas de review
+├── skills/                 # Skills de IA + SDD skills
+│   ├── git-commit/
+│   ├── biome/
+│   ├── sdd-init/
+│   ├── sdd-explore/
+│   ├── sdd-propose/
+│   ├── sdd-spec/
+│   ├── sdd-design/
+│   ├── sdd-tasks/
+│   ├── sdd-apply/
+│   ├── sdd-verify/
+│   └── sdd-archive/
+└── .vscode/
+    └── settings.json
+```
+
+---
+
+## Providers de IA
+
+GA puede usar diferentes providers. Editá `.ga`:
+
+```bash
+PROVIDER="opencode"   # Default - OpenCode
+PROVIDER="claude"     # Anthropic Claude
+PROVIDER="gemini"     # Google Gemini
+PROVIDER="ollama"     # Modelos locales
+```
+
+---
+
+## Troubleshooting
+
+**"Provider not found"**
+```bash
+which opencode  # Verificá que esté en PATH
+```
+
+**"Review falla siempre"**
+- Simplificá tu `REVIEW.md`
+- Probá con `PROVIDER="claude"`
+
+---
+
+## Links
 
 - Issues: https://github.com/Yoizen/dev-ai-workflow/issues
-- Upstream: https://github.com/Gentleman-Programming/gentle-ai
