@@ -55,8 +55,22 @@ func InstallEcosystem(agentName string) error {
 		return fmt.Errorf("gentle-ai is not installed. Run install first.")
 	}
 
-	fmt.Printf("Running gentle-ai install --agent %s --preset ecosystem-only...\n", agentName)
-	cmd := exec.Command(config.GentleAIBin, "install", "--agent", agentName, "--preset", "ecosystem-only")
+	components := []string{
+		"engram", "sdd", "skills", "context7",
+		"persona", "permissions", "theme",
+	}
+
+	args := []string{
+		"install",
+		"--agent", agentName,
+		"--persona", "neutral",
+	}
+	for _, c := range components {
+		args = append(args, "--component", c)
+	}
+
+	fmt.Printf("Running gentle-ai install --agent %s...\n", agentName)
+	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
