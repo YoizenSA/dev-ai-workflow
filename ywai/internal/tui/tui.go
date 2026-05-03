@@ -3,7 +3,9 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -68,6 +70,7 @@ const (
 	stepType
 	stepAgent
 	stepConfirm
+	stepProgress
 )
 
 type typeOption struct {
@@ -94,6 +97,13 @@ type Model struct {
 	agentCursor int
 	selectedType  string
 	selectedAgent string
+
+	// Progress state
+	installOutput []string
+	installDone    bool
+	installError   error
+	installAgent   string
+	installType    string
 }
 
 func NewModel(detectedAgents []agent.Agent) Model {
@@ -143,6 +153,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	case installTickMsg:
+		// Just update spinner
+		return m, nil
+
+	case installDoneMsg:
+		m.installDone = true
+		m.installError = msg.err
+		if msg.err != nil {
+			m.installOutput = append(m.installOutput, "Installation failed!")
+		} else {
+			m.installOutput = append(m.installOutput, "Installation completed successfully!")
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -156,6 +180,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUp()
 		case "down", "j":
 			return m.handleDown()
+		default:
+			// Any key exits when installation is done
+			if m.step == stepProgress && (m.installDone || m.installError != nil) {
+				m.quitting = true
+				return m, tea.Quit
+			}
 		}
 	}
 	return m, nil
@@ -187,8 +217,18 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 		m.selectedAgent = m.agents[m.agentCursor].Name
 		m.step = stepConfirm
 	case stepConfirm:
-		m.quitting = true
-		return m, tea.Quit
+		// Start installation and move to progress
+		m.installAgent = m.selectedAgent
+		m.installType = m.selectedType
+		m.step = stepProgress
+		return m, m.startInstall()
+	case stepProgress:
+		// Wait for installation to complete
+		if m.installDone || m.installError != nil {
+			m.quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -240,14 +280,16 @@ func (m *Model) View() string {
 		b.WriteString(m.viewAgent())
 	case stepConfirm:
 		b.WriteString(m.viewConfirm())
+	case stepProgress:
+		b.WriteString(m.viewProgress())
 	}
 
 	return b.String()
 }
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Type", "Agent", "Confirm"}
-	steps := []step{stepWelcome, stepType, stepAgent, stepConfirm}
+	labels := []string{"Welcome", "Type", "Agent", "Confirm", "Install"}
+	steps := []step{stepWelcome, stepType, stepAgent, stepConfirm, stepProgress}
 
 	var parts []string
 	for i, label := range labels {
@@ -450,4 +492,95 @@ func shortPath(p string) string {
 		return "~" + p[len(home):]
 	}
 	return p
+}
+
+// installProgressMsg is sent when installation output is received
+type installProgressMsg string
+
+// installDoneMsg is sent when installation completes
+type installDoneMsg struct {
+	err error
+}
+
+// installTickMsg is sent periodically to update the spinner
+type installTickMsg time.Time
+
+func (m *Model) startInstall() tea.Cmd {
+	return tea.Batch(
+		tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+			return installTickMsg(t)
+		}),
+		func() tea.Msg {
+			// Run installation in background
+			m.installOutput = []string{"Starting installation..."}
+			output, err := m.runInstall()
+			if err != nil {
+				return installDoneMsg{err: err}
+			}
+			// Split output into lines
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				if strings.TrimSpace(line) != "" {
+					m.installOutput = append(m.installOutput, line)
+				}
+			}
+			return installDoneMsg{err: nil}
+		},
+	)
+}
+
+func (m *Model) runInstall() (string, error) {
+	// Build the ywai command with selected flags
+	args := []string{"install", "--agent", m.installAgent, "--type", m.installType}
+	
+	cmd := exec.Command("ywai", args...)
+	cmd.Env = os.Environ()
+	
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func (m *Model) viewProgress() string {
+	var b strings.Builder
+	
+	b.WriteString(titleStyle.Render("Installing..."))
+	b.WriteString("\n\n")
+	
+	// Show last 15 lines of output
+	startLine := len(m.installOutput) - 15
+	if startLine < 0 {
+		startLine = 0
+	}
+	
+	for i := startLine; i < len(m.installOutput); i++ {
+		line := m.installOutput[i]
+		if strings.Contains(line, "[") && strings.Contains(line, "]") {
+			// Highlight progress indicators
+			b.WriteString(infoStyle.Render("  " + line))
+		} else {
+			b.WriteString("  " + itemStyle.Render(line))
+		}
+		b.WriteString("\n")
+	}
+	
+	// Show spinner at bottom
+	if !m.installDone && m.installError == nil {
+		spinChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		spinIndex := int(time.Now().Unix()/100) % len(spinChars)
+		b.WriteString("\n")
+		b.WriteString(infoStyle.Render(fmt.Sprintf("  %s Installing...", spinChars[spinIndex])))
+	} else if m.installError != nil {
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(errorColor).Render(fmt.Sprintf("  ✗ Installation failed: %v", m.installError)))
+	} else {
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(successColor).Bold(true).Render("  ✓ Installation complete!"))
+	}
+	
+	b.WriteString("\n\n")
+	if m.installDone && m.installError == nil {
+		b.WriteString(dimStyle.Render("  Press any key to exit..."))
+	}
+	
+	return b.String()
 }
