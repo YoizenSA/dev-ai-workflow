@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -105,14 +104,12 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 	}
 }
 
-func runTUI(agents []agent.Agent) error {
-	m := tui.NewModel(agents)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	_, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("TUI error: %w", err)
-	}
-	return nil
+func runTUI(agents []agent.Agent) (string, string, error) {
+	// Convert internal agent.Agent to tui agent format
+	tuiAgents := make([]agent.Agent, len(agents))
+	copy(tuiAgents, agents)
+
+	return tui.Run(tuiAgents)
 }
 
 func executeInstall(agentFlag, projectType string, dryRun bool) {

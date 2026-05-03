@@ -136,7 +136,7 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -161,7 +161,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleEsc() (tea.Model, tea.Cmd) {
+func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepWelcome:
 		m.quitting = true
@@ -176,7 +176,7 @@ func (m Model) handleEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleEnter() (tea.Model, tea.Cmd) {
+func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepWelcome:
 		m.step = stepType
@@ -193,7 +193,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleUp() (tea.Model, tea.Cmd) {
+func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepType:
 		if m.typeCursor > 0 {
@@ -207,7 +207,7 @@ func (m Model) handleUp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleDown() (tea.Model, tea.Cmd) {
+func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepType:
 		if m.typeCursor < len(m.types)-1 {
@@ -221,7 +221,7 @@ func (m Model) handleDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.quitting && m.step != stepConfirm {
 		return ""
 	}
@@ -245,7 +245,7 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func (m Model) renderBreadcrumbs() string {
+func (m *Model) renderBreadcrumbs() string {
 	labels := []string{"Welcome", "Type", "Agent", "Confirm"}
 	steps := []step{stepWelcome, stepType, stepAgent, stepConfirm}
 
@@ -277,7 +277,7 @@ func renderLogo() string {
 	return strings.Join(out, "\n")
 }
 
-func (m Model) viewWelcome() string {
+func (m *Model) viewWelcome() string {
 	var b strings.Builder
 	b.WriteString(renderLogo())
 	b.WriteString("\n")
@@ -307,7 +307,7 @@ func (m Model) viewWelcome() string {
 	return b.String()
 }
 
-func (m Model) viewType() string {
+func (m *Model) viewType() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Select project type"))
 	b.WriteString("\n\n")
@@ -352,7 +352,7 @@ func (m Model) viewType() string {
 	return b.String()
 }
 
-func (m Model) viewAgent() string {
+func (m *Model) viewAgent() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Select agent"))
 	b.WriteString("\n\n")
@@ -386,7 +386,7 @@ func (m Model) viewAgent() string {
 	return b.String()
 }
 
-func (m Model) viewConfirm() string {
+func (m *Model) viewConfirm() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Confirm installation"))
 	b.WriteString("\n\n")
@@ -426,22 +426,22 @@ func (m Model) viewConfirm() string {
 	return b.String()
 }
 
-func (m Model) SelectedType() string {
+func (m *Model) SelectedType() string {
 	return m.selectedType
 }
 
-func (m Model) SelectedAgent() string {
+func (m *Model) SelectedAgent() string {
 	return m.selectedAgent
 }
 
 func Run(detectedAgents []agent.Agent) (string, string, error) {
 	m := NewModel(detectedAgents)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
 		return "", "", err
 	}
-	model := final.(Model)
+	model := final.(*Model)
 	return model.SelectedType(), model.SelectedAgent(), nil
 }
 

@@ -30,11 +30,17 @@ var installCmd = &cobra.Command{
 		}
 
 		if tuiFlag || (projectType == "" && agentFlag == "" && !dryRun) {
-			if err := runTUI(agents); err != nil {
+			selectedType, selectedAgent, err := runTUI(agents)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			return
+			if selectedType == "" || selectedAgent == "" {
+				fmt.Println("Installation cancelled.")
+				return
+			}
+			projectType = selectedType
+			agentFlag = selectedAgent
 		}
 
 		executeInstall(agentFlag, projectType, dryRun)
