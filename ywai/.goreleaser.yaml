@@ -1,5 +1,7 @@
 version: 2
 
+name: ywai
+
 before:
   hooks:
     - bash scripts/prepare-embedded.sh
@@ -28,7 +30,7 @@ archives:
       - goos: windows
         format: zip
     name_template: >-
-      {{ .ProjectName }}_
+      ywai_
       {{- .Version }}_
       {{- .Os }}_
       {{- .Arch }}
@@ -62,14 +64,9 @@ release:
   footer: |
     **Install:**
     ```bash
-    # macOS / Linux
-    curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/ywai_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
-    sudo mv ywai /usr/local/bin/
-    
-    # Windows (PowerShell)
-    irm https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/ywai_{{ .Version }}_windows_amd64.zip -OutFile ywai.zip
-    Expand-Archive ywai.zip
+    # Go (any OS)
+    go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
     ```
     
-    Or via Go: `go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest`
+    **Or download a binary from the assets below.**
 
