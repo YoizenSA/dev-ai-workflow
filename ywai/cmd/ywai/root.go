@@ -25,7 +25,9 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if config.ShouldSeedData() {
+		// Always ensure project-types are seeded (handles upgrades from broken versions)
+		ptDir := config.DataProjectTypesDir()
+		if !config.IsDirPopulated(ptDir) {
 			repo := config.RepoRoot()
 			isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
 

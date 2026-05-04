@@ -30,7 +30,7 @@ func EnsureDataDir() error {
 }
 
 func ShouldSeedData() bool {
-	return !isDirPopulated(DataSkillsDir()) || !isDirPopulated(DataProjectTypesDir())
+	return !IsDirPopulated(DataSkillsDir()) || !IsDirPopulated(DataProjectTypesDir())
 }
 
 func SeedDataFrom(repoRoot string) error {
@@ -74,18 +74,38 @@ func SeedFromEmbedded() error {
 
 	if fn := getEmbeddedSkillsFS; fn != nil {
 		if fsys := fn(); fsys != nil {
+			count := 0
+			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					count++
+				}
+				return nil
+			})
+			fmt.Printf("  Seeding skills from embedded (%d files)...\n", count)
 			if err := extractFS(fsys, ".", DataSkillsDir()); err != nil {
 				return fmt.Errorf("failed to extract embedded skills: %w", err)
 			}
 		}
+	} else {
+		fmt.Println("  Warning: no embedded skills data available")
 	}
 
 	if fn := getEmbeddedProjectTypesFS; fn != nil {
 		if fsys := fn(); fsys != nil {
+			count := 0
+			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					count++
+				}
+				return nil
+			})
+			fmt.Printf("  Seeding project-types from embedded (%d files)...\n", count)
 			if err := extractFS(fsys, ".", DataProjectTypesDir()); err != nil {
 				return fmt.Errorf("failed to extract embedded project-types: %w", err)
 			}
 		}
+	} else {
+		fmt.Println("  Warning: no embedded project-types data available")
 	}
 
 	return nil

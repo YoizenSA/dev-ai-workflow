@@ -89,19 +89,19 @@ func findSourceDir(name string) string {
 
 	// When running from source repo: ywai/{name}
 	candidate := filepath.Join(root, "ywai", name)
-	if isDirPopulated(candidate) {
+	if IsDirPopulated(candidate) {
 		return candidate
 	}
 
 	// Direct child of repo root
 	candidate = filepath.Join(root, name)
-	if isDirPopulated(candidate) {
+	if IsDirPopulated(candidate) {
 		return candidate
 	}
 
 	// Seeded data dir
 	candidate = filepath.Join(DataDir(), name)
-	if isDirPopulated(candidate) {
+	if IsDirPopulated(candidate) {
 		return candidate
 	}
 
@@ -143,7 +143,7 @@ func dataDirPopulated() (bool, error) {
 	return len(entries) > 0, nil
 }
 
-func isDirPopulated(dir string) bool {
+func IsDirPopulated(dir string) bool {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
