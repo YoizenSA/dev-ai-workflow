@@ -75,11 +75,37 @@ func RepoRoot() string {
 }
 
 func SkillsSourceDir() string {
-	return filepath.Join(RepoRoot(), SkillsDirName)
+	return findSourceDir(SkillsDirName)
 }
 
 func ProjectTypesSourceDir() string {
-	return filepath.Join(RepoRoot(), ProjectTypesDir)
+	return findSourceDir(ProjectTypesDir)
+}
+
+// findSourceDir locates a source directory (skills/ or project-types/).
+// It checks: repoRoot/ywai/{name}, repoRoot/{name}, DataDir()/{name}.
+func findSourceDir(name string) string {
+	root := RepoRoot()
+
+	// When running from source repo: ywai/{name}
+	candidate := filepath.Join(root, "ywai", name)
+	if isDirPopulated(candidate) {
+		return candidate
+	}
+
+	// Direct child of repo root
+	candidate = filepath.Join(root, name)
+	if isDirPopulated(candidate) {
+		return candidate
+	}
+
+	// Seeded data dir
+	candidate = filepath.Join(DataDir(), name)
+	if isDirPopulated(candidate) {
+		return candidate
+	}
+
+	return filepath.Join(root, name)
 }
 
 func findUp(start, target string) string {
@@ -115,4 +141,12 @@ func dataDirPopulated() (bool, error) {
 		return false, err
 	}
 	return len(entries) > 0, nil
+}
+
+func isDirPopulated(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	return len(entries) > 0
 }

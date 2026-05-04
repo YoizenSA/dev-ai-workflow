@@ -45,11 +45,11 @@ func SeedDataFrom(repoRoot string) error {
 		return err
 	}
 
-	for _, dir := range []string{SkillsDirName, ProjectTypesDir} {
-		src := filepath.Join(repoRoot, dir)
-		dst := filepath.Join(DataDir(), dir)
-
-		entries, err := os.ReadDir(src)
+	for _, pair := range []struct{ src, dst string }{
+		{SkillsSourceDir(), DataSkillsDir()},
+		{ProjectTypesSourceDir(), DataProjectTypesDir()},
+	} {
+		entries, err := os.ReadDir(pair.src)
 		if err != nil {
 			continue
 		}
@@ -58,8 +58,8 @@ func SeedDataFrom(repoRoot string) error {
 			if !entry.IsDir() {
 				continue
 			}
-			srcPath := filepath.Join(src, entry.Name())
-			dstPath := filepath.Join(dst, entry.Name())
+			srcPath := filepath.Join(pair.src, entry.Name())
+			dstPath := filepath.Join(pair.dst, entry.Name())
 
 			if err := copyDirRecursive(srcPath, dstPath); err != nil {
 				return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
