@@ -27,7 +27,9 @@ var rootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if config.ShouldSeedData() {
 			repo := config.RepoRoot()
-			if config.IsOurRepoByPath(repo) {
+			isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
+
+			if isRealRepo {
 				if err := config.SeedDataFrom(repo); err != nil {
 					fmt.Printf("Warning: failed to seed data from repo: %v\n", err)
 				}
