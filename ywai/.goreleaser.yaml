@@ -73,25 +73,3 @@ release:
     
     Or via Go: `go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest`
 
-brews:
-  - name: ywai
-    homepage: https://github.com/Yoizen/dev-ai-workflow
-    description: "One command to install gentle-ai + extra skills + project config"
-    repository:
-      owner: Yoizen
-      name: homebrew-tap
-    directory: Formula
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-
-scoops:
-  - name: ywai
-    homepage: https://github.com/Yoizen/dev-ai-workflow
-    description: "One command to install gentle-ai + extra skills + project config"
-    repository:
-      owner: Yoizen
-      name: scoop-bucket
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
