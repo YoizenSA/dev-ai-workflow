@@ -6,16 +6,16 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/project"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/project"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tui"
+	"github.com/spf13/cobra"
 )
 
 var version = "dev"
@@ -25,9 +25,13 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Always ensure project-types are seeded (handles upgrades from broken versions)
-		ptDir := config.DataProjectTypesDir()
-		if !config.IsDirPopulated(ptDir) {
+		// Seed data if project-types dir is empty OR no valid profiles found.
+		// The profile check handles cases where the dir has content but no valid profile.yaml files
+		// (e.g. stale state from a previous broken install).
+		needsSeed := !config.IsDirPopulated(config.DataProjectTypesDir()) ||
+			len(config.AvailableProfiles()) == 0
+
+		if needsSeed {
 			repo := config.RepoRoot()
 			isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
 

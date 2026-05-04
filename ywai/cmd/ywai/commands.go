@@ -5,13 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
+	"github.com/spf13/cobra"
 )
 
 var installCmd = &cobra.Command{
@@ -139,8 +139,10 @@ var skillsCmd = &cobra.Command{
 			}
 		} else {
 			fmt.Println("\nNo project profiles found.")
-			fmt.Println("If you installed via 'go install', rebuild with:")
-			fmt.Println("  go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
+			fmt.Println("Try running: ywai update")
+			fmt.Println("Or reinstall:")
+			fmt.Println("  macOS/Linux: curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
+			fmt.Println("  Go:          go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 		}
 
 		fmt.Printf("\nTotal: %d skills\n", len(available))

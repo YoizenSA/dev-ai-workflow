@@ -5,6 +5,7 @@ REPO="Yoizen/dev-ai-workflow"
 BINARY="ywai"
 VERSION="${1:-latest}"
 INSTALL_DIR="${2:-/usr/local/bin}"
+DATA_DIR="${HOME}/.ywai"
 
 if [ "$VERSION" = "latest" ]; then
     VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -42,6 +43,9 @@ curl -fsSL "$DOWNLOAD_URL" -o "${TMPDIR}/${FILENAME}"
 
 echo "  Extracting..."
 tar xzf "${TMPDIR}/${FILENAME}" -C "$TMPDIR"
+
+echo "  Cleaning old cached data..."
+rm -rf "${DATA_DIR}/skills" "${DATA_DIR}/project-types"
 
 echo "  Installing to ${INSTALL_DIR}..."
 sudo mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"

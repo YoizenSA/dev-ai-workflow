@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "Yoizen/dev-ai-workflow"
 $Binary = "ywai"
+$DataDir = Join-Path $env:USERPROFILE ".ywai"
 
 if (-not $InstallDir) {
     $InstallDir = Join-Path $env:USERPROFILE "bin"
@@ -35,6 +36,14 @@ Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
 
 Write-Host "  Extracting..."
 Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
+
+Write-Host "  Cleaning old cached data..."
+@("skills", "project-types") | ForEach-Object {
+    $dir = Join-Path $DataDir $_
+    if (Test-Path $dir) {
+        Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
