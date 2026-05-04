@@ -30,14 +30,7 @@ func EnsureDataDir() error {
 }
 
 func ShouldSeedData() bool {
-	if _, err := os.Stat(DataSkillsDir()); os.IsNotExist(err) {
-		return true
-	}
-	entries, err := os.ReadDir(DataSkillsDir())
-	if err != nil || len(entries) == 0 {
-		return true
-	}
-	return false
+	return !isDirPopulated(DataSkillsDir()) || !isDirPopulated(DataProjectTypesDir())
 }
 
 func SeedDataFrom(repoRoot string) error {
