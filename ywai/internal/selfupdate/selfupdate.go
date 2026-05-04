@@ -60,12 +60,14 @@ func assetName(version string) string {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
 
+	clean := strings.TrimPrefix(version, "v")
+
 	ext := "tar.gz"
 	if osName == "windows" {
 		ext = "zip"
 	}
 
-	return fmt.Sprintf("ywai_%s_%s_%s.%s", version, osName, arch, ext)
+	return fmt.Sprintf("ywai_%s_%s_%s.%s", clean, osName, arch, ext)
 }
 
 func Run(currentVersion string) (string, error) {
