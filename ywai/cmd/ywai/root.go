@@ -40,6 +40,8 @@ var rootCmd = &cobra.Command{
 					fmt.Printf("Warning: failed to seed data from embedded: %v\n", err)
 				}
 			}
+			// Invalidate config cache so TUI picks up freshly seeded profiles
+			config.ResetConfig()
 		}
 	},
 }

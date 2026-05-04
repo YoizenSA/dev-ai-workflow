@@ -9,8 +9,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-var KnownTypes = AvailableTypes()
-
 func SkillsForType(projectType string) []string {
 	return config.ProfileSkills(projectType)
 }
