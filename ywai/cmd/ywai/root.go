@@ -11,6 +11,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/project"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -160,7 +161,13 @@ func executeInstall(agentFlag, projectType string, dryRun bool) {
 
 	fmt.Println("\n[4/4] Initializing project...")
 	if projectType != "" && projectType != "generic" {
-		fmt.Printf("  %sinit project type %q in current directory.\n", ternary(dryRun, "Would ", ""), projectType)
+		if dryRun {
+			fmt.Printf("  Would init project type %q in current directory.\n", projectType)
+		} else {
+			if err := project.Init(projectType, "."); err != nil {
+				fmt.Printf("  Warning: project init failed: %v\n", err)
+			}
+		}
 	}
 
 	fmt.Println("\n=== Done! ===")
