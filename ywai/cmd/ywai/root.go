@@ -25,10 +25,16 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		repo := config.RepoRoot()
 		if config.ShouldSeedData() {
-			if err := config.SeedDataFrom(repo); err != nil {
-				fmt.Printf("Warning: failed to seed data: %v\n", err)
+			repo := config.RepoRoot()
+			if config.IsOurRepoByPath(repo) {
+				if err := config.SeedDataFrom(repo); err != nil {
+					fmt.Printf("Warning: failed to seed data from repo: %v\n", err)
+				}
+			} else {
+				if err := config.SeedFromEmbedded(); err != nil {
+					fmt.Printf("Warning: failed to seed data from embedded: %v\n", err)
+				}
 			}
 		}
 	},

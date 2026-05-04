@@ -139,6 +139,15 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		step:   stepWelcome,
 		types:  types,
 		agents: agentOpts,
+	}, nil
+}
+
+func (m *Model) advanceToNextValidStep() {
+	if m.step == stepType && len(m.types) == 0 {
+		m.step = stepAgent
+	}
+	if m.step == stepAgent && len(m.agents) == 0 {
+		m.quitting = true
 	}
 }
 
@@ -211,10 +220,21 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepWelcome:
 		m.step = stepType
+		m.advanceToNextValidStep()
 	case stepType:
+		if len(m.types) == 0 {
+			m.step = stepAgent
+			m.advanceToNextValidStep()
+			return m, nil
+		}
 		m.selectedType = m.types[m.typeCursor].Name
 		m.step = stepAgent
+		m.advanceToNextValidStep()
 	case stepAgent:
+		if len(m.agents) == 0 {
+			m.quitting = true
+			return m, tea.Quit
+		}
 		m.selectedAgent = m.agents[m.agentCursor].Name
 		m.step = stepConfirm
 	case stepConfirm:
@@ -355,6 +375,13 @@ func (m *Model) viewType() string {
 	b.WriteString(titleStyle.Render("Select project type"))
 	b.WriteString("\n\n")
 
+	if len(m.types) == 0 {
+		b.WriteString(infoStyle.Render("  No project types available. Press Enter to skip."))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("  Enter skip  •  Esc back"))
+		return b.String()
+	}
+
 	maxNameLen := 0
 	for _, t := range m.types {
 		if len(t.Name) > maxNameLen {
@@ -399,6 +426,13 @@ func (m *Model) viewAgent() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Select agent"))
 	b.WriteString("\n\n")
+
+	if len(m.agents) == 0 {
+		b.WriteString(infoStyle.Render("  No agents detected."))
+		b.WriteString("\n")
+		return b.String()
+	}
+
 	b.WriteString(fmt.Sprintf("  Project type: %s\n\n", selStyle.Render(m.selectedType)))
 
 	for i, a := range m.agents {
