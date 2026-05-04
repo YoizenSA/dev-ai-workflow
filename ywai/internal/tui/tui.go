@@ -39,6 +39,7 @@ var (
 	subtitleStyle  = lipgloss.NewStyle().Foreground(textSecondary)
 	monoStyle      = lipgloss.NewStyle().Foreground(secondaryColor)
 	captionStyle   = lipgloss.NewStyle().Foreground(textMuted)
+	warningStyle   = lipgloss.NewStyle().Foreground(tertiaryColor).Bold(true)
 )
 
 var brandPalette = []string{
@@ -376,8 +377,12 @@ func (m *Model) viewType() string {
 	b.WriteString("\n\n")
 
 	if len(m.types) == 0 {
-		b.WriteString(infoStyle.Render("  No project types available. Press Enter to skip."))
+		b.WriteString(warningStyle.Render("  No project types available."))
+		b.WriteString("\n\n")
+		b.WriteString(infoStyle.Render("  This usually means ywai was installed without embedded data."))
 		b.WriteString("\n")
+		b.WriteString(infoStyle.Render("  Reinstall with: go install -tags embedded ...@latest"))
+		b.WriteString("\n\n")
 		b.WriteString(dimStyle.Render("  Enter skip  •  Esc back"))
 		return b.String()
 	}

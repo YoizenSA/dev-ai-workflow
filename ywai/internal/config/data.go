@@ -88,6 +88,7 @@ func SeedFromEmbedded() error {
 		}
 	} else {
 		fmt.Println("  Warning: no embedded skills data available")
+		fmt.Println("  Hint: reinstall with: go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 	}
 
 	if fn := getEmbeddedProjectTypesFS; fn != nil {
@@ -106,6 +107,7 @@ func SeedFromEmbedded() error {
 		}
 	} else {
 		fmt.Println("  Warning: no embedded project-types data available")
+		fmt.Println("  Hint: reinstall with: go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 	}
 
 	return nil

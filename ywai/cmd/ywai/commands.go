@@ -137,6 +137,10 @@ var skillsCmd = &cobra.Command{
 					fmt.Printf("  %s: %s\n", p, strings.Join(pSkills, ", "))
 				}
 			}
+		} else {
+			fmt.Println("\nNo project profiles found.")
+			fmt.Println("If you installed via 'go install', rebuild with:")
+			fmt.Println("  go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 		}
 
 		fmt.Printf("\nTotal: %d skills\n", len(available))

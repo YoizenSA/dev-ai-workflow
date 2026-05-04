@@ -16,7 +16,7 @@
 
 ```bash
 # Install ywai
-go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
+go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
 
 # Full install: gentle-ai + ecosystem + extra skills
 ywai install

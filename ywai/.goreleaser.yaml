@@ -74,6 +74,6 @@ release:
     ```
     ```bash
     # Go (any OS)
-    go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
+    go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
     ```
 

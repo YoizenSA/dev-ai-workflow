@@ -9,7 +9,7 @@ Wrapper around [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) t
 ### Con Go
 
 ```bash
-go install github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
+go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest
 ```
 
 ### Con installer
