@@ -72,6 +72,9 @@ func SeedFromEmbedded() error {
 		return fmt.Errorf("failed to ensure data directories: %w", err)
 	}
 
+	skillsSeeded := false
+	ptSeeded := false
+
 	if fn := getEmbeddedSkillsFS; fn != nil {
 		if fsys := fn(); fsys != nil {
 			count := 0
@@ -81,16 +84,14 @@ func SeedFromEmbedded() error {
 				}
 				return nil
 			})
-			fmt.Printf("  Seeding skills from embedded (%d files)...\n", count)
-			if err := extractFS(fsys, ".", DataSkillsDir()); err != nil {
-				return fmt.Errorf("failed to extract embedded skills: %w", err)
+			if count > 0 {
+				fmt.Printf("  Seeding skills from embedded (%d files)...\n", count)
+				if err := extractFS(fsys, ".", DataSkillsDir()); err != nil {
+					return fmt.Errorf("failed to extract embedded skills: %w", err)
+				}
+				skillsSeeded = true
 			}
 		}
-	} else {
-		fmt.Println("  Warning: no embedded skills data available.")
-		fmt.Println("  Reinstall options:")
-		fmt.Println("    macOS/Linux: curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
-		fmt.Println("    Go:          go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 	}
 
 	if fn := getEmbeddedProjectTypesFS; fn != nil {
@@ -102,16 +103,21 @@ func SeedFromEmbedded() error {
 				}
 				return nil
 			})
-			fmt.Printf("  Seeding project-types from embedded (%d files)...\n", count)
-			if err := extractFS(fsys, ".", DataProjectTypesDir()); err != nil {
-				return fmt.Errorf("failed to extract embedded project-types: %w", err)
+			if count > 0 {
+				fmt.Printf("  Seeding project-types from embedded (%d files)...\n", count)
+				if err := extractFS(fsys, ".", DataProjectTypesDir()); err != nil {
+					return fmt.Errorf("failed to extract embedded project-types: %w", err)
+				}
+				ptSeeded = true
 			}
 		}
-	} else {
-		fmt.Println("  Warning: no embedded project-types data available.")
-		fmt.Println("  Reinstall options:")
-		fmt.Println("    macOS/Linux: curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
-		fmt.Println("    Go:          go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
+	}
+
+	if !skillsSeeded && !ptSeeded {
+		return fmt.Errorf("no embedded data available; binary was built without embedded resources.\n" +
+			"  Reinstall with:\n" +
+			"    macOS/Linux: curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash\n" +
+			"    Go:          go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
 	}
 
 	return nil

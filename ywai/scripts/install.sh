@@ -51,6 +51,9 @@ echo "  Installing to ${INSTALL_DIR}..."
 sudo mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
 sudo chmod +x "${INSTALL_DIR}/${BINARY}"
 
+echo "  Seeding data..."
+"${INSTALL_DIR}/${BINARY}" version >/dev/null 2>&1 || true
+
 echo ""
 echo "  ${BINARY} ${VERSION} installed!"
 echo "  Run: ywai install"

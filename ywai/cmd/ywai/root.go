@@ -41,11 +41,22 @@ var rootCmd = &cobra.Command{
 				}
 			} else {
 				if err := config.SeedFromEmbedded(); err != nil {
-					fmt.Printf("Warning: failed to seed data from embedded: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 				}
 			}
 			// Invalidate config cache so TUI picks up freshly seeded profiles
 			config.ResetConfig()
+
+			// Verify seeding actually worked
+			if len(config.AvailableProfiles()) == 0 {
+				fmt.Fprintln(os.Stderr, "")
+				fmt.Fprintln(os.Stderr, "Error: no project profiles available after seeding.")
+				fmt.Fprintln(os.Stderr, "This usually means the binary was not built with embedded data.")
+				fmt.Fprintln(os.Stderr, "")
+				fmt.Fprintln(os.Stderr, "Fix: reinstall ywai with one of:")
+				fmt.Fprintln(os.Stderr, "  curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
+				fmt.Fprintln(os.Stderr, "  go install -tags embedded github.com/Yoizen/dev-ai-workflow/ywai/cmd/ywai@latest")
+			}
 		}
 	},
 }
@@ -253,20 +264,23 @@ func reseedData() {
 	}
 
 	repo := config.RepoRoot()
-	if config.IsOurRepoByPath(repo) {
+	if config.IsOurRepoByPath(repo) && repo != config.DataDir() {
 		if err := config.SeedDataFrom(repo); err != nil {
 			fmt.Printf("  Warning: seed from repo failed: %v\n", err)
 		} else {
 			fmt.Println("  Data re-seeded from repo.")
+			config.ResetConfig()
 			return
 		}
 	}
 
 	if err := config.SeedFromEmbedded(); err != nil {
 		fmt.Printf("  Warning: seed from embedded failed: %v\n", err)
+		fmt.Println("  The updated binary will seed data on next run.")
 		return
 	}
 
+	config.ResetConfig()
 	fmt.Println("  Data re-seeded from embedded.")
 }
 
