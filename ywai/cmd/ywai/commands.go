@@ -23,14 +23,16 @@ var installCmd = &cobra.Command{
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		tuiFlag, _ := cmd.Flags().GetBool("tui")
+		mcpFlag, _ := cmd.Flags().GetBool("mcp")
 
 		agents := detectAgents(cmd)
 		if agents == nil {
 			os.Exit(1)
 		}
 
+		var installMCP bool
 		if tuiFlag || (projectType == "" && agentFlag == "" && !dryRun) {
-			selectedType, selectedAgent, err := runTUI(agents)
+			selectedType, selectedAgent, selectedMCP, err := runTUI(agents)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -41,9 +43,12 @@ var installCmd = &cobra.Command{
 			}
 			projectType = selectedType
 			agentFlag = selectedAgent
+			installMCP = selectedMCP
+		} else {
+			installMCP = mcpFlag
 		}
 
-		executeInstall(agentFlag, projectType, dryRun)
+		executeInstall(agentFlag, projectType, dryRun, installMCP)
 	},
 }
 
@@ -154,6 +159,7 @@ func init() {
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
+	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode/kilocode)")
 	skillsCmd.Flags().StringP("type", "t", "", "Filter skills by project type")
 
 	rootCmd.AddCommand(installCmd)

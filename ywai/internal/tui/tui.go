@@ -70,6 +70,7 @@ const (
 	stepWelcome step = iota
 	stepType
 	stepAgent
+	stepMCP
 	stepConfirm
 	stepProgress
 )
@@ -98,6 +99,9 @@ type Model struct {
 	agentCursor int
 	selectedType  string
 	selectedAgent string
+
+	// MCP selection
+	installMicrosoftLearnMCP bool
 
 	// Progress state
 	installOutput []string
@@ -150,6 +154,17 @@ func (m *Model) advanceToNextValidStep() {
 	if m.step == stepAgent && len(m.agents) == 0 {
 		m.quitting = true
 	}
+	// Skip MCP step if not opencode/kilocode
+	if m.step == stepAgent && !m.shouldShowMCPStep() {
+		m.step = stepConfirm
+	}
+}
+
+func (m *Model) shouldShowMCPStep() bool {
+	if m.selectedAgent == "" {
+		return false
+	}
+	return m.selectedAgent == "opencode" || m.selectedAgent == "kilocode"
 }
 
 func (m Model) Init() tea.Cmd {
@@ -211,8 +226,14 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 		m.step = stepWelcome
 	case stepAgent:
 		m.step = stepType
-	case stepConfirm:
+	case stepMCP:
 		m.step = stepAgent
+	case stepConfirm:
+		if m.shouldShowMCPStep() {
+			m.step = stepMCP
+		} else {
+			m.step = stepAgent
+		}
 	}
 	return m, nil
 }
@@ -237,6 +258,12 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.selectedAgent = m.agents[m.agentCursor].Name
+		if m.shouldShowMCPStep() {
+			m.step = stepMCP
+		} else {
+			m.step = stepConfirm
+		}
+	case stepMCP:
 		m.step = stepConfirm
 	case stepConfirm:
 		// Start installation and move to progress
@@ -265,6 +292,8 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 		if m.agentCursor > 0 {
 			m.agentCursor--
 		}
+	case stepMCP:
+		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
 	}
 	return m, nil
 }
@@ -279,6 +308,8 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 		if m.agentCursor < len(m.agents)-1 {
 			m.agentCursor++
 		}
+	case stepMCP:
+		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
 	}
 	return m, nil
 }
@@ -300,6 +331,8 @@ func (m *Model) View() string {
 		b.WriteString(m.viewType())
 	case stepAgent:
 		b.WriteString(m.viewAgent())
+	case stepMCP:
+		b.WriteString(m.viewMCP())
 	case stepConfirm:
 		b.WriteString(m.viewConfirm())
 	case stepProgress:
@@ -310,8 +343,8 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Type", "Agent", "Confirm", "Install"}
-	steps := []step{stepWelcome, stepType, stepAgent, stepConfirm, stepProgress}
+	labels := []string{"Welcome", "Type", "Agent", "MCP", "Confirm", "Install"}
+	steps := []step{stepWelcome, stepType, stepAgent, stepMCP, stepConfirm, stepProgress}
 
 	var parts []string
 	for i, label := range labels {
@@ -468,6 +501,35 @@ func (m *Model) viewAgent() string {
 	return b.String()
 }
 
+func (m *Model) viewMCP() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Optional MCP servers"))
+	b.WriteString("\n\n")
+
+	b.WriteString(fmt.Sprintf("  Agent: %s\n\n", selStyle.Render(m.selectedAgent)))
+
+	b.WriteString("  Select MCP servers to install:\n\n")
+
+	cursor := "  "
+	if m.installMicrosoftLearnMCP {
+		cursor = selStyle.Render("[x]")
+	} else {
+		cursor = "[ ]"
+	}
+
+	name := itemStyle.Render("Microsoft Learn MCP")
+	if m.installMicrosoftLearnMCP {
+		name = selStyle.Render("Microsoft Learn MCP")
+	}
+	desc := descStyle.Render("  Acceso a documentación oficial de Microsoft")
+	b.WriteString(fmt.Sprintf("  %s %s%s\n\n", cursor, name, desc))
+
+	b.WriteString(okStyle.Render("  Enter to continue"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  ↑/↓ toggle  •  Esc back"))
+	return b.String()
+}
+
 func (m *Model) viewConfirm() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Confirm installation"))
@@ -516,15 +578,19 @@ func (m *Model) SelectedAgent() string {
 	return m.selectedAgent
 }
 
-func Run(detectedAgents []agent.Agent) (string, string, error) {
+func (m *Model) InstallMicrosoftLearnMCP() bool {
+	return m.installMicrosoftLearnMCP
+}
+
+func Run(detectedAgents []agent.Agent) (string, string, bool, error) {
 	m := NewModel(detectedAgents)
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	model := final.(*Model)
-	return model.SelectedType(), model.SelectedAgent(), nil
+	return model.SelectedType(), model.SelectedAgent(), model.InstallMicrosoftLearnMCP(), nil
 }
 
 func shortPath(p string) string {

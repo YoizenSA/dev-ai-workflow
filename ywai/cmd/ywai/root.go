@@ -11,6 +11,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/project"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -132,7 +133,7 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 	}
 }
 
-func runTUI(agents []agent.Agent) (string, string, error) {
+func runTUI(agents []agent.Agent) (string, string, bool, error) {
 	// Convert internal agent.Agent to tui agent format
 	tuiAgents := make([]agent.Agent, len(agents))
 	copy(tuiAgents, agents)
@@ -140,7 +141,7 @@ func runTUI(agents []agent.Agent) (string, string, error) {
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(agentFlag, projectType string, dryRun bool) {
+func executeInstall(agentFlag, projectType string, dryRun bool, installMCP bool) {
 	var agents []agent.Agent
 	if agentFlag != "" {
 		a, err := agent.FindByName(agentFlag)
@@ -184,6 +185,9 @@ func executeInstall(agentFlag, projectType string, dryRun bool) {
 
 		fmt.Println("\n[3.5/4] Applying ywai overrides...")
 		applyOverrides(agents)
+
+		fmt.Println("\n[3.6/4] Installing opencode-quota plugin...")
+		installPluginsForAgents(agents, dryRun, installMCP)
 	}
 
 	fmt.Println("\n[4/4] Initializing project...")
@@ -292,5 +296,46 @@ func applyOverrides(agents []agent.Agent) {
 
 	if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
 		fmt.Printf("  Warning: failed to apply openspec→.sdd override: %v\n", err)
+	}
+}
+
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool) {
+	agentSettingsPaths := orchestrator.AgentSettingsPaths()
+
+	for _, a := range agents {
+		// Only install plugins for opencode/kilocode
+		if a.Name != "opencode" && a.Name != "kilocode" {
+			continue
+		}
+
+		configPath, ok := agentSettingsPaths[a.Name]
+		if !ok || configPath == "" {
+			fmt.Printf("  [%s] No config path found, skipping plugins\n", a.Name)
+			continue
+		}
+
+		if dryRun {
+			fmt.Printf("  [%s] Would install opencode-quota plugin\n", a.Name)
+			if installMCP {
+				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
+			}
+			continue
+		}
+
+		// Install opencode-quota (always for opencode/kilocode)
+		if err := plugins.InstallQuota(configPath); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install opencode-quota: %v\n", a.Name, err)
+		} else {
+			fmt.Printf("  [%s] Installed opencode-quota plugin\n", a.Name)
+		}
+
+		// Install Microsoft Learn MCP if requested
+		if installMCP {
+			if err := plugins.InstallMicrosoftLearnMCP(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Installed Microsoft Learn MCP\n", a.Name)
+			}
+		}
 	}
 }
