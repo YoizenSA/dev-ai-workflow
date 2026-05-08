@@ -17,6 +17,15 @@ function Trim-TrailingSlash {
     return $Value.Trim().TrimEnd([char[]]@('\', '/'))
 }
 
+function Normalize-PathForCompare {
+    param([string]$PathValue)
+    if (-not $PathValue) { return "" }
+    $p = $PathValue.Trim()
+    if ($p.StartsWith("\\?\")) { $p = $p.Substring(4) }
+    if ($p.StartsWith("\??\")) { $p = $p.Substring(4) }
+    return (Trim-TrailingSlash $p).ToLowerInvariant()
+}
+
 function Set-PathFirst {
     param([string]$Directory)
 
@@ -37,6 +46,7 @@ function Set-PathFirst {
 
 function Remove-OldYwaiBinaries {
     param([string]$FinalPath)
+    $finalNorm = Normalize-PathForCompare $FinalPath
 
     $candidates = New-Object System.Collections.Generic.List[string]
     @(
@@ -53,7 +63,7 @@ function Remove-OldYwaiBinaries {
 
     $unique = $candidates | Where-Object { $_ } | Select-Object -Unique
     foreach ($path in $unique) {
-        if ((Trim-TrailingSlash $path) -ieq (Trim-TrailingSlash $FinalPath)) { continue }
+        if ((Normalize-PathForCompare $path) -eq $finalNorm) { continue }
         if (-not (Test-Path $path)) { continue }
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
     }
@@ -106,6 +116,12 @@ $ExePath = Join-Path $InstallDir "$Binary.exe"
 
 Write-Host "  Removing old ywai binaries from common paths..."
 Remove-OldYwaiBinaries $ExePath
+
+if (-not (Test-Path $ExePath)) {
+    # Safety net: if cleanup removed the final executable for any unexpected reason,
+    # restore it immediately from the extracted source.
+    Copy-Item -Path $SourceExe -Destination $ExePath -Force
+}
 
 Write-Host "  Cleaning old cached data..."
 @("skills", "project-types") | ForEach-Object {
