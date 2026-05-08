@@ -40,6 +40,14 @@ var rootCmd = &cobra.Command{
 				if err := config.SeedDataFrom(repo); err != nil {
 					fmt.Printf("Warning: failed to seed data from repo: %v\n", err)
 				}
+				// Fallback: if repo seed ran but no valid profiles were loaded,
+				// force embedded seed to avoid stale/local repo issues.
+				config.ResetConfig()
+				if len(config.AvailableProfiles()) == 0 {
+					if err := config.SeedFromEmbedded(); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+					}
+				}
 			} else {
 				if err := config.SeedFromEmbedded(); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
@@ -279,9 +287,12 @@ func reseedData() {
 		if err := config.SeedDataFrom(repo); err != nil {
 			fmt.Printf("  Warning: seed from repo failed: %v\n", err)
 		} else {
-			fmt.Println("  Data re-seeded from repo.")
 			config.ResetConfig()
-			return
+			if len(config.AvailableProfiles()) > 0 {
+				fmt.Println("  Data re-seeded from repo.")
+				return
+			}
+			fmt.Println("  Repo seed had no valid profiles, falling back to embedded...")
 		}
 	}
 
