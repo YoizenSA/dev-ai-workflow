@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "Yoizen/dev-ai-workflow"
+$Repo = "YoizenSA/dev-ai-workflow"
 $Binary = "ywai"
 $DataDir = Join-Path $env:USERPROFILE ".ywai"
 
@@ -94,8 +94,15 @@ Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host "  Seeding data..."
 $ExePath = Join-Path $InstallDir "$Binary.exe"
-& $ExePath skills *> $null
-if ($LASTEXITCODE -ne 0) {
+$prevErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $ExePath skills *> $null
+    $seedExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevErrorAction
+}
+if ($seedExit -ne 0) {
     Write-Warning "Data seed check failed. Try running: $ExePath skills"
 }
 
