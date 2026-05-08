@@ -112,12 +112,20 @@ func isCurrentJunction(dst, src string) bool {
 	if err != nil {
 		return false
 	}
-	return filepath.Clean(target) == filepath.Clean(src)
+	return strings.EqualFold(cleanWindowsLinkTarget(target), cleanWindowsLinkTarget(src))
 }
 
 func pathExists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+func cleanWindowsLinkTarget(path string) string {
+	cleaned := filepath.Clean(path)
+	for _, prefix := range []string{`\\?\`, `\??\`} {
+		cleaned = strings.TrimPrefix(cleaned, prefix)
+	}
+	return cleaned
 }
 
 func removeExistingSkillPath(path string) error {

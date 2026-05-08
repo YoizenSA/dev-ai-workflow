@@ -63,14 +63,6 @@ Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
 Write-Host "  Extracting..."
 Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
 
-Write-Host "  Cleaning old cached data..."
-@("skills", "project-types") | ForEach-Object {
-    $dir = Join-Path $DataDir $_
-    if (Test-Path $dir) {
-        Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
@@ -86,6 +78,14 @@ if (-not (Test-Path $SourceExe)) {
 }
 
 Copy-Item -Path $SourceExe -Destination (Join-Path $InstallDir "$Binary.exe") -Force
+
+Write-Host "  Cleaning old cached data..."
+@("skills", "project-types") | ForEach-Object {
+    $dir = Join-Path $DataDir $_
+    if (Test-Path $dir) {
+        Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host "  Ensuring $InstallDir is first in user PATH..."
 Set-PathFirst $InstallDir

@@ -37,6 +37,7 @@ func LatestVersion() (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "ywai")
 
 	resp, err := client.Do(req)
 	if err != nil {
