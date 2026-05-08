@@ -50,7 +50,7 @@ changelog:
 
 release:
   github:
-    owner: Yoizen
+    owner: YoizenSA
     name: dev-ai-workflow
   draft: false
   prerelease: auto
@@ -66,11 +66,11 @@ release:
     **Install:**
     ```powershell
     # Windows (PowerShell)
-    irm https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.ps1 | iex
+    irm https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.ps1 | iex
     ```
     ```bash
     # macOS / Linux
-    curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+    curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash
     ```
     ```bash
     # Go from a source checkout
