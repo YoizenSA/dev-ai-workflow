@@ -1,11 +1,30 @@
 package e2e
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
+func withFakeAgent(t *testing.T) {
+	t.Helper()
+	tempDir := t.TempDir()
+	fakeBin := filepath.Join(tempDir, "claude")
+	if runtime.GOOS == "windows" {
+		fakeBin += ".exe"
+	}
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh"), 0o755); err != nil {
+		t.Fatalf("failed to create fake agent binary: %v", err)
+	}
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+}
+
 func TestInstallDryRunShowsSkillFilter(t *testing.T) {
+	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--type", "react", "--dry-run")
 
@@ -18,6 +37,7 @@ func TestInstallDryRunShowsSkillFilter(t *testing.T) {
 }
 
 func TestInstallDryRunNoTypeShowsAllSkills(t *testing.T) {
+	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
@@ -27,6 +47,7 @@ func TestInstallDryRunNoTypeShowsAllSkills(t *testing.T) {
 }
 
 func TestInstallDryRunGenericShowsAllMessage(t *testing.T) {
+	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--type", "generic", "--dry-run")
 
@@ -36,6 +57,7 @@ func TestInstallDryRunGenericShowsAllMessage(t *testing.T) {
 }
 
 func TestInstallHas4Steps(t *testing.T) {
+	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
@@ -47,6 +69,7 @@ func TestInstallHas4Steps(t *testing.T) {
 }
 
 func TestInstallNoGGA(t *testing.T) {
+	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
