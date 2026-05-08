@@ -14,6 +14,42 @@ path_contains() {
     esac
 }
 
+remove_old_ywai_binaries() {
+    local final_path="$1"
+    local -a candidates=(
+        "$HOME/.local/bin/${BINARY}"
+        "$HOME/bin/${BINARY}"
+        "/usr/local/bin/${BINARY}"
+        "/usr/bin/${BINARY}"
+    )
+
+    # Also include every resolved ywai in PATH (if available)
+    if command -v which >/dev/null 2>&1; then
+        while IFS= read -r p; do
+            [ -n "$p" ] && candidates+=("$p")
+        done < <(which -a "$BINARY" 2>/dev/null | awk '!seen[$0]++')
+    fi
+
+    local seen=""
+    for old in "${candidates[@]}"; do
+        [ -z "$old" ] && continue
+        case " $seen " in *" $old "*) continue ;; esac
+        seen="$seen $old"
+
+        [ "$old" = "$final_path" ] && continue
+        [ -e "$old" ] || continue
+
+        if [ -w "$old" ] || [ -w "$(dirname "$old")" ]; then
+            rm -f "$old" || true
+            continue
+        fi
+
+        if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            sudo rm -f "$old" || true
+        fi
+    done
+}
+
 install_binary() {
     local src="$1"
 
@@ -88,6 +124,9 @@ install_binary "${TMPDIR}/${BINARY}"
 
 INSTALL_DIR="$(cd "$INSTALL_DIR" && pwd -P)"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY}"
+
+echo "  Removing old ywai binaries from common paths..."
+remove_old_ywai_binaries "$INSTALL_PATH"
 
 echo "  Cleaning old cached data..."
 rm -rf "${DATA_DIR}/skills" "${DATA_DIR}/project-types"

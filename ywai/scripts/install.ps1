@@ -35,6 +35,30 @@ function Set-PathFirst {
     $env:Path = (($Directory) + $separator + ($processParts -join $separator)).TrimEnd($separator)
 }
 
+function Remove-OldYwaiBinaries {
+    param([string]$FinalPath)
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    @(
+        "$env:USERPROFILE\\bin\\ywai.exe",
+        "$env:USERPROFILE\\go\\bin\\ywai.exe",
+        "C:\\ProgramData\\chocolatey\\bin\\ywai.exe",
+        "C:\\Program Files\\ywai\\ywai.exe",
+        "C:\\Windows\\System32\\ywai.exe"
+    ) | ForEach-Object { [void]$candidates.Add($_) }
+
+    Get-Command ywai -All -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Source) { [void]$candidates.Add($_.Source) }
+    }
+
+    $unique = $candidates | Where-Object { $_ } | Select-Object -Unique
+    foreach ($path in $unique) {
+        if ((Trim-TrailingSlash $path) -ieq (Trim-TrailingSlash $FinalPath)) { continue }
+        if (-not (Test-Path $path)) { continue }
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if (-not $InstallDir) {
     $InstallDir = Join-Path $env:USERPROFILE "bin"
 }
@@ -78,6 +102,10 @@ if (-not (Test-Path $SourceExe)) {
 }
 
 Copy-Item -Path $SourceExe -Destination (Join-Path $InstallDir "$Binary.exe") -Force
+$ExePath = Join-Path $InstallDir "$Binary.exe"
+
+Write-Host "  Removing old ywai binaries from common paths..."
+Remove-OldYwaiBinaries $ExePath
 
 Write-Host "  Cleaning old cached data..."
 @("skills", "project-types") | ForEach-Object {
@@ -93,7 +121,6 @@ Set-PathFirst $InstallDir
 Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host "  Seeding data..."
-$ExePath = Join-Path $InstallDir "$Binary.exe"
 $prevErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {
