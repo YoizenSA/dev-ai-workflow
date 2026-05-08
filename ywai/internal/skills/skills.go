@@ -19,7 +19,7 @@ func LinkFiltered(agentSkillsDir string, filter []string) error {
 }
 
 func linkFiltered(agentSkillsDir string, filter []string) error {
-	srcDir := config.SkillsSourceDir()
+	srcDir := skillsSourceDir()
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 		return fmt.Errorf("skills source directory not found: %s", srcDir)
 	}
@@ -152,7 +152,7 @@ func removeExistingSkillPath(path string) error {
 }
 
 func ListAvailable() ([]string, error) {
-	srcDir := config.SkillsSourceDir()
+	srcDir := skillsSourceDir()
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return nil, err
@@ -165,4 +165,15 @@ func ListAvailable() ([]string, error) {
 		}
 	}
 	return names, nil
+}
+
+func skillsSourceDir() string {
+	// Prefer the seeded home cache for links/listing. When ywai is executed from
+	// a source checkout mounted outside $HOME, linking agent skills directly to
+	// the checkout can make upstream tools reject rollback manifests after
+	// EvalSymlinks resolves ~/.config/.../skills/* outside the home directory.
+	if config.IsDirPopulated(config.DataSkillsDir()) {
+		return config.DataSkillsDir()
+	}
+	return config.SkillsSourceDir()
 }

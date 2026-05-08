@@ -12,6 +12,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var installCmd = &cobra.Command{
@@ -34,6 +35,11 @@ var installCmd = &cobra.Command{
 		var installMCP bool
 		var globalOnly bool
 		if tuiFlag || (projectType == "" && agentFlag == "" && !dryRun && !globalFlag) {
+			if !isInteractiveTerminal() {
+				fmt.Fprintln(os.Stderr, "Error: install requires --type/--agent or --dry-run when running non-interactively.")
+				fmt.Fprintln(os.Stderr, "Run `ywai install --help` for flags, or run `ywai install` from an interactive terminal.")
+				os.Exit(1)
+			}
 			selectedType, selectedAgent, selectedMCP, selectedGlobal, err := runTUI(agents)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -58,39 +64,66 @@ var installCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Upgrade ywai + gentle-ai + sync + re-seed + re-link + rename orchestrator",
+	Short: "Upgrade ywai + gentle-ai + re-seed + sync + re-link + rename orchestrator",
 	Run: func(cmd *cobra.Command, args []string) {
+		var warnings []string
+		warn := func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			warnings = append(warnings, msg)
+			fmt.Printf("  Warning: %s\n", msg)
+		}
+
 		fmt.Println("=== ywai update ===")
 
-		fmt.Println("\n[1/6] Self-updating ywai...")
+		fmt.Println("\n[1/7] Self-updating ywai...")
 		selfUpdate()
 
-		fmt.Println("\n[2/6] Upgrading gentle-ai...")
-		gentlai.Upgrade()
+		fmt.Println("\n[2/7] Upgrading gentle-ai...")
+		if err := gentlai.Upgrade(); err != nil {
+			warn("gentle-ai upgrade failed: %v", err)
+		}
 
-		fmt.Println("\n[3/6] Syncing ecosystem...")
-		gentlai.Sync()
+		agents := agent.Detect()
 
-		fmt.Println("\n[4/6] Re-seeding data cache...")
+		fmt.Println("\n[3/7] Re-seeding data cache...")
 		reseedData()
 
-		fmt.Println("\n[5/6] Re-linking extra skills...")
-		agents := agent.Detect()
+		fmt.Println("\n[4/7] Normalizing extra skill links...")
+		if len(agents) > 0 {
+			for _, a := range agents {
+				if err := skills.LinkTo(a.SkillsDir); err != nil {
+					warn("[%s] pre-sync skill link normalization failed: %v", a.Name, err)
+				}
+			}
+		} else {
+			fmt.Println("  No supported agents detected; skipping pre-sync link normalization.")
+		}
+
+		fmt.Println("\n[5/7] Syncing ecosystem...")
+		if err := gentlai.Sync(); err != nil {
+			warn("gentle-ai sync failed: %v", err)
+			fmt.Println("  Continuing with ywai cache, skill links, and overrides.")
+		}
+
+		fmt.Println("\n[6/7] Re-linking extra skills...")
 		if len(agents) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
 			os.Exit(1)
 		}
 
 		for _, a := range agents {
-			skills.LinkTo(a.SkillsDir)
+			if err := skills.LinkTo(a.SkillsDir); err != nil {
+				warn("[%s] re-link skills failed: %v", a.Name, err)
+				continue
+			}
 			fmt.Printf("  [%s] Re-linked skills\n", a.Name)
 		}
 
-		fmt.Println("\n[6/6] Renaming orchestrator...")
+		fmt.Println("\n[7/7] Renaming orchestrator...")
 		results := orchestrator.RenameAll(orchestrator.AgentSettingsPaths())
 		orchestrator.PrintResults(results)
 
-		fmt.Println("\n[6.5/6] Re-applying ywai overrides...")
+		fmt.Println("\n[7.5/7] Re-applying ywai overrides...")
 		agentDirs := overrides.AgentSkillsDirs()
 		for name, dir := range agentDirs {
 			if _, err := os.Stat(dir); err == nil {
@@ -98,7 +131,15 @@ var updateCmd = &cobra.Command{
 			}
 		}
 		if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
-			fmt.Printf("  Warning: failed to apply overrides: %v\n", err)
+			warn("failed to apply overrides: %v", err)
+		}
+
+		if len(warnings) > 0 {
+			fmt.Println("\n=== Done with warnings ===")
+			for _, msg := range warnings {
+				fmt.Printf("  - %s\n", msg)
+			}
+			return
 		}
 
 		fmt.Println("\n=== Done! ===")
@@ -174,7 +215,7 @@ var skillsCmd = &cobra.Command{
 			fmt.Println("\nNo project profiles found.")
 			fmt.Println("Try running: ywai update")
 			fmt.Println("Or reinstall:")
-			fmt.Println("  macOS/Linux: curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
+			fmt.Println("  macOS/Linux: curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash")
 			fmt.Println("  Source:      cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
 		}
 
@@ -195,4 +236,8 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)
+}
+
+func isInteractiveTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }

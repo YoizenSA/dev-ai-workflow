@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	owner = "Yoizen"
+	owner = "YoizenSA"
 	repo  = "dev-ai-workflow"
 )
 

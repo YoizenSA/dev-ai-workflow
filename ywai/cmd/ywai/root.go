@@ -57,13 +57,13 @@ var rootCmd = &cobra.Command{
 			config.ResetConfig()
 
 			// Verify seeding actually worked
-			if len(config.AvailableProfiles()) == 0 {
+			if len(config.AvailableProfiles()) == 0 && cmd.Name() != "update" {
 				fmt.Fprintln(os.Stderr, "")
 				fmt.Fprintln(os.Stderr, "Error: no project profiles available after seeding.")
 				fmt.Fprintln(os.Stderr, "This usually means the binary was not built with embedded data.")
 				fmt.Fprintln(os.Stderr, "")
 				fmt.Fprintln(os.Stderr, "Fix: reinstall ywai from the release installer:")
-				fmt.Fprintln(os.Stderr, "  curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
+				fmt.Fprintln(os.Stderr, "  curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash")
 				fmt.Fprintln(os.Stderr, "Or, from a source checkout:")
 				fmt.Fprintln(os.Stderr, "  cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
 			}
@@ -266,7 +266,7 @@ func selfUpdateViaGo() {
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("  go install failed: %v\n", err)
 		fmt.Println("  Try the release installer instead:")
-		fmt.Println("    curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash")
+		fmt.Println("    curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash")
 	}
 }
 

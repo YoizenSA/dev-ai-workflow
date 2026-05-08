@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="Yoizen/dev-ai-workflow"
+REPO="YoizenSA/dev-ai-workflow"
 BINARY="ywai"
 VERSION="${1:-latest}"
 INSTALL_DIR="${2:-${YWAI_INSTALL_DIR:-$HOME/.local/bin}}"
@@ -14,6 +14,16 @@ path_contains() {
     esac
 }
 
+shell_quote() {
+    printf '%q' "$1"
+}
+
+binary_version() {
+    local bin="$1"
+    [ -x "$bin" ] || return 0
+    "$bin" --version 2>/dev/null | head -n 1 || true
+}
+
 remove_old_ywai_binaries() {
     local final_path="$1"
     local -a candidates=(
@@ -22,6 +32,7 @@ remove_old_ywai_binaries() {
         "/usr/local/bin/${BINARY}"
         "/usr/bin/${BINARY}"
     )
+    local -a leftovers=()
 
     # Also include every resolved ywai in PATH (if available)
     if command -v which >/dev/null 2>&1; then
@@ -40,14 +51,31 @@ remove_old_ywai_binaries() {
         [ -e "$old" ] || continue
 
         if [ -w "$old" ] || [ -w "$(dirname "$old")" ]; then
-            rm -f "$old" || true
+            if rm -f "$old" 2>/dev/null; then
+                continue
+            fi
+            leftovers+=("$old")
             continue
         fi
 
         if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-            sudo rm -f "$old" || true
+            if sudo rm -f "$old" 2>/dev/null; then
+                continue
+            fi
         fi
+
+        leftovers+=("$old")
     done
+
+    if [ "${#leftovers[@]}" -gt 0 ]; then
+        echo "  Warning: could not remove old ${BINARY} binaries:"
+        for old in "${leftovers[@]}"; do
+            echo "    ${old}"
+        done
+        echo "  If one of those appears before ${INSTALL_DIR} in PATH, it will shadow the new install."
+        echo "  Remove it manually, for example:"
+        echo "    sudo rm -f $(shell_quote "${leftovers[0]}")"
+    fi
 }
 
 install_binary() {
@@ -152,10 +180,16 @@ fi
 
 ACTIVE_PATH="$(command -v "$BINARY" 2>/dev/null || true)"
 if [ -n "$ACTIVE_PATH" ] && [ "$ACTIVE_PATH" != "$INSTALL_PATH" ]; then
+    ACTIVE_VERSION="$(binary_version "$ACTIVE_PATH")"
+    INSTALLED_VERSION="$(binary_version "$INSTALL_PATH")"
     echo ""
     echo "  Warning: your shell currently resolves '${BINARY}' to:"
     echo "    ${ACTIVE_PATH}"
+    [ -n "$ACTIVE_VERSION" ] && echo "    active version: ${ACTIVE_VERSION}"
+    [ -n "$INSTALLED_VERSION" ] && echo "    installed version: ${INSTALLED_VERSION}"
     echo "  Start a new terminal, run 'hash -r', or move ${INSTALL_DIR} earlier in PATH."
+    echo "  Immediate check:"
+    echo "    $(shell_quote "${INSTALL_PATH}") --version"
     RUN_CMD="${INSTALL_PATH} install"
 fi
 
