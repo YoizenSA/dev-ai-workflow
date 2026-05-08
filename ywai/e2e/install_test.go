@@ -68,7 +68,7 @@ func TestInstallHas4Steps(t *testing.T) {
 	}
 }
 
-func TestInstallNoGGA(t *testing.T) {
+func TestInstallOutputNoGentleAiAcronym(t *testing.T) {
 	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
