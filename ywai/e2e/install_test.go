@@ -23,16 +23,13 @@ func withFakeAgent(t *testing.T) {
 	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
 }
 
-func TestInstallDryRunShowsSkillFilter(t *testing.T) {
+func TestInstallDryRunShowsAllSkills(t *testing.T) {
 	withFakeAgent(t)
 	bin := buildBinary(t)
-	out := runYwai(t, bin, "install", "--type", "react", "--dry-run")
+	out := runYwai(t, bin, "install", "--dry-run")
 
-	if !strings.Contains(out, "Skills for react:") {
-		t.Errorf("expected skill filter line, got: %s", out)
-	}
-	if !strings.Contains(out, "react-19") {
-		t.Errorf("expected react-19 in filtered output, got: %s", out)
+	if !strings.Contains(out, "copying all ywai extra skills") {
+		t.Errorf("expected 'copying all ywai extra skills', got: %s", out)
 	}
 }
 
@@ -46,22 +43,13 @@ func TestInstallDryRunNoTypeShowsAllSkills(t *testing.T) {
 	}
 }
 
-func TestInstallDryRunGenericShowsAllMessage(t *testing.T) {
-	withFakeAgent(t)
-	bin := buildBinary(t)
-	out := runYwai(t, bin, "install", "--type", "generic", "--dry-run")
 
-	if !strings.Contains(out, "copying all ywai extra skills") {
-		t.Errorf("expected 'copying all ywai extra skills' for generic, got: %s", out)
-	}
-}
-
-func TestInstallHas4Steps(t *testing.T) {
+func TestInstallHas3Steps(t *testing.T) {
 	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
-	for _, step := range []string{"[1/4]", "[2/4]", "[3/4]", "[4/4]"} {
+	for _, step := range []string{"[1/3]", "[2/3]", "[3/3]"} {
 		if !strings.Contains(out, step) {
 			t.Errorf("expected %s in install output", step)
 		}
