@@ -99,6 +99,7 @@ func findSubAgentDirs() []string {
 		filepath.Join(home, ".cursor", "agents"),
 		filepath.Join(home, ".kimi", "agents"),
 		filepath.Join(home, ".kiro", "agents"),
+		filepath.Join(home, ".config", "opencode", "commands"),
 	}
 
 	var existing []string
