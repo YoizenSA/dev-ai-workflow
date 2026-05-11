@@ -21,5 +21,5 @@ func AvailableSkills() []string {
 }
 
 func ResetConfig() {
-	// No-op since we no longer have profile-based config
+	// No-op since config is now skills-only
 }

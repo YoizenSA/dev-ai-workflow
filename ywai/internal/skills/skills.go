@@ -145,8 +145,7 @@ func removeExistingSkillPath(path string) error {
 // point back into ywai's skill cache/source but are no longer ywai extra skills.
 // Older ywai versions linked upstream-managed skills from ~/.ywai/skills; those
 // links block gentle-ai's safe atomic writer. This is data-driven: ywai-owned
-// skills are detected from marker/profile data, not from an upstream
-// denylist.
+// skills are detected from marker data, not from an upstream denylist.
 func RemoveStaleYwaiSkillLinks(agentSkillsDir string) ([]string, error) {
 	entries, err := os.ReadDir(agentSkillsDir)
 	if os.IsNotExist(err) {

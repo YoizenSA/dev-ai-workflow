@@ -502,7 +502,7 @@ func runCommand(name string, args ...string) error {
 
 	if runtime.GOOS == "windows" && (strings.HasSuffix(bin, ".ps1") || strings.HasSuffix(bin, ".cmd")) {
 		if strings.HasSuffix(bin, ".ps1") {
-			fullArgs := append([]string{"-NoProfile", "-File", bin}, args...)
+			fullArgs := append([]string{"-ExecutionPolicy", "Bypass", "-File", bin}, args...)
 			cmd := exec.Command("powershell", fullArgs...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
