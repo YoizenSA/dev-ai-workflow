@@ -31,6 +31,7 @@ go install -tags embedded ./cmd/ywai
 ```bash
 ywai install                  # Install gentle-ai + ecosystem + all extra skills
 ywai install --dry-run        # Preview changes without applying
+ywai install --agent opencode  # Install for specific agent
 ywai update                   # Self-update + sync + re-link
 ywai skills                   # List extra skills
 ```
