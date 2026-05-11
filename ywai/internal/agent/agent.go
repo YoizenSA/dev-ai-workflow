@@ -143,6 +143,23 @@ func findBinary(name string) string {
 			}
 		}
 	}
+	// Check known install locations
+	home := homeDir()
+	knownPaths := map[string][]string{
+		"opencode": {
+			filepath.Join(home, ".opencode", "bin", "opencode"),
+		},
+	}
+	if paths, ok := knownPaths[name]; ok {
+		for _, p := range paths {
+			if runtime.GOOS == "windows" {
+				p += ".exe"
+			}
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
 	return ""
 }
 
