@@ -144,6 +144,21 @@ func findBinary(name string) string {
 			}
 		}
 	}
+	// Check well-known install directories
+	home := homeDir()
+	wellKnownDirs := []string{
+		filepath.Join(home, "."+name, "bin"),
+		filepath.Join(home, ".local", "bin"),
+	}
+	for _, dir := range wellKnownDirs {
+		candidate := filepath.Join(dir, name)
+		if runtime.GOOS == "windows" {
+			candidate += ".exe"
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
 	// Fallback: run which/where via shell to pick up user's profile PATH
 	if p := whichViaShell(name); p != "" {
 		return p
