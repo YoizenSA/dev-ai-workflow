@@ -41,23 +41,19 @@ func TestAgentErrorHandling(t *testing.T) {
 
 	out, err := runYwaiAllowFail(t, bin, "install", "--dry-run")
 
-	configDirAgents := []string{"antigravity"}
-	hasConfigDirAgent := false
-	for _, name := range configDirAgents {
-		if strings.Contains(out, name) {
-			hasConfigDirAgent = true
-		}
-	}
-
-	if hasConfigDirAgent {
-		if strings.Contains(out, "no supported agents detected") {
-			t.Error("should not show 'no agents detected' when config-dir agents are present")
+	// With the fallback to detect by config dir, agents may be detected
+	// even if their binary is not in PATH
+	if strings.Contains(out, "claude-code") || strings.Contains(out, "antigravity") {
+		// Agent detected by config dir - this is expected behavior now
+		if err != nil {
+			t.Errorf("expected no error when agent detected by config dir, got: %v", err)
 		}
 		return
 	}
 
+	// No agent detected by config dir either - should fail
 	if err == nil {
-		t.Error("expected error with empty PATH")
+		t.Error("expected error with empty PATH and no config dir")
 	}
 	if !strings.Contains(out, "no supported agents detected") {
 		t.Errorf("expected 'no supported agents detected', got: %s", out)
