@@ -27,7 +27,7 @@ func TestHelp(t *testing.T) {
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "--help")
 
-	expected := []string{"install", "update", "init", "skills"}
+	expected := []string{"install", "update", "skills"}
 	for _, cmd := range expected {
 		if !strings.Contains(out, cmd) {
 			t.Errorf("expected %q in help output, got: %s", cmd, out)
@@ -47,7 +47,7 @@ func TestInstallHelp(t *testing.T) {
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--help")
 
-	requiredFlags := []string{"--type", "--agent", "--dry-run"}
+	requiredFlags := []string{"--agent", "--dry-run"}
 	for _, flag := range requiredFlags {
 		if !strings.Contains(out, flag) {
 			t.Errorf("expected flag %q in install help, got: %s", flag, out)
@@ -58,30 +58,11 @@ func TestInstallHelp(t *testing.T) {
 func TestInstallHelpWithErrorHandling(t *testing.T) {
 	bin := buildBinary(t)
 	out, err := runYwaiAllowFail(t, bin, "install", "--help", "--unknown-flag")
-	if !strings.Contains(out, "--type") {
-		t.Errorf("help output should still contain --type, got: %s, err: %v", out, err)
+	if !strings.Contains(out, "--agent") {
+		t.Errorf("help output should still contain --agent, got: %s, err: %v", out, err)
 	}
 }
 
-func TestInitHelp(t *testing.T) {
-	bin := buildBinary(t)
-	out := runYwai(t, bin, "init", "--help")
-	if !strings.Contains(out, "type") {
-		t.Errorf("expected 'type' in init help, got: %s", out)
-	}
-}
-
-func TestInitWithInvalidType(t *testing.T) {
-	bin := buildBinary(t)
-	// This should show help or an error, but not crash
-	out, err := runYwaiWithError(bin, "init", "--type", "invalid-type")
-	if err == nil {
-		// If it doesn't error, it should at least show help
-		if !strings.Contains(out, "init") {
-			t.Error("command should either error or show help")
-		}
-	}
-}
 
 func TestCrossPlatformPathHandling(t *testing.T) {
 	bin := buildBinary(t)

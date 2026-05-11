@@ -28,8 +28,8 @@ func TestInstallDryRunShowsAllSkills(t *testing.T) {
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
-	if !strings.Contains(out, "copying all ywai extra skills") {
-		t.Errorf("expected 'copying all ywai extra skills', got: %s", out)
+	if !strings.Contains(out, "Copying all ywai extra skills") {
+		t.Errorf("expected 'Copying all ywai extra skills', got: %s", out)
 	}
 }
 
