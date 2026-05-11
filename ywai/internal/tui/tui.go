@@ -67,7 +67,6 @@ type step int
 
 const (
 	stepWelcome step = iota
-	stepGlobal
 	stepAgent
 	stepMCP
 	stepConfirm
@@ -92,9 +91,6 @@ type Model struct {
 
 	// MCP selection
 	installMicrosoftLearnMCP bool
-
-	// Global-only selection
-	globalOnly bool
 
 	// Progress state
 	installOutput []string
@@ -201,10 +197,8 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 	case stepWelcome:
 		m.quitting = true
 		return m, tea.Quit
-	case stepGlobal:
-		m.step = stepWelcome
 	case stepAgent:
-		m.step = stepGlobal
+		m.step = stepWelcome
 	case stepMCP:
 		m.step = stepAgent
 	case stepConfirm:
@@ -220,8 +214,6 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepWelcome:
-		m.step = stepGlobal
-	case stepGlobal:
 		m.step = stepAgent
 		m.advanceToNextValidStep()
 	case stepAgent:
@@ -262,8 +254,6 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-	case stepGlobal:
-		m.globalOnly = !m.globalOnly
 	}
 	return m, nil
 }
@@ -276,8 +266,6 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-	case stepGlobal:
-		m.globalOnly = !m.globalOnly
 	}
 	return m, nil
 }
@@ -299,8 +287,6 @@ func (m *Model) View() string {
 		b.WriteString(m.viewAgent())
 	case stepMCP:
 		b.WriteString(m.viewMCP())
-	case stepGlobal:
-		b.WriteString(m.viewGlobal())
 	case stepConfirm:
 		b.WriteString(m.viewConfirm())
 	case stepProgress:
@@ -311,8 +297,8 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Scope", "Agent", "MCP", "Confirm", "Install"}
-	steps := []step{stepWelcome, stepGlobal, stepAgent, stepMCP, stepConfirm, stepProgress}
+	labels := []string{"Welcome", "Agent", "MCP", "Confirm", "Install"}
+	steps := []step{stepWelcome, stepAgent, stepMCP, stepConfirm, stepProgress}
 
 	var parts []string
 	for i, label := range labels {
@@ -353,8 +339,7 @@ func (m *Model) viewWelcome() string {
 	b.WriteString("  This will:\n")
 	b.WriteString("    1. Install/update gentle-ai\n")
 	b.WriteString("    2. Configure your AI agent with the Gentleman ecosystem\n")
-	b.WriteString("    3. Copy extra skills (React, Angular, TypeScript, etc.)\n")
-	b.WriteString("    4. Initialize project config (AGENTS.md + REVIEW.md)\n")
+	b.WriteString("    3. Copy all extra skills (React, Angular, TypeScript, etc.)\n")
 	b.WriteString("\n")
 
 	if len(m.agents) > 0 {
@@ -447,46 +432,6 @@ func (m *Model) viewMCP() string {
 	return b.String()
 }
 
-func (m *Model) viewGlobal() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Installation scope"))
-	b.WriteString("\n\n")
-
-	b.WriteString("  Select installation scope:\n\n")
-
-	cursor := "  "
-	if m.globalOnly {
-		cursor = selStyle.Render("[x]")
-	} else {
-		cursor = "[ ]"
-	}
-
-	name := itemStyle.Render("Global only")
-	if m.globalOnly {
-		name = selStyle.Render("Global only")
-	}
-	desc := descStyle.Render("  Skip AGENTS.md/REVIEW.md in project (global skills only)")
-	b.WriteString(fmt.Sprintf("  %s %s%s\n\n", cursor, name, desc))
-
-	cursor = "  "
-	if !m.globalOnly {
-		cursor = selStyle.Render("[x]")
-	} else {
-		cursor = "[ ]"
-	}
-
-	name = itemStyle.Render("Project + global")
-	if !m.globalOnly {
-		name = selStyle.Render("Project + global")
-	}
-	desc = descStyle.Render("  Include AGENTS.md/REVIEW.md in project directory")
-	b.WriteString(fmt.Sprintf("  %s %s%s\n\n", cursor, name, desc))
-
-	b.WriteString(okStyle.Render("  Enter to continue"))
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("  ↑/↓ toggle  •  Esc back"))
-	return b.String()
-}
 
 func (m *Model) viewConfirm() string {
 	var b strings.Builder
@@ -501,11 +446,7 @@ func (m *Model) viewConfirm() string {
 	}
 	b.WriteString(fmt.Sprintf("  Agent:         %s\n", agentLabel))
 
-	scopeLabel := "Project + global"
-	if m.globalOnly {
-		scopeLabel = "Global only"
-	}
-	b.WriteString(fmt.Sprintf("  Scope:         %s\n", dimStyle.Render(scopeLabel)))
+	b.WriteString(fmt.Sprintf("  Scope:         %s\n", dimStyle.Render("Global")))
 
 	b.WriteString("\n  Skills to install: ")
 	b.WriteString(skillStyle.Render("all extra skills"))
@@ -527,7 +468,7 @@ func (m *Model) InstallMicrosoftLearnMCP() bool {
 }
 
 func (m *Model) GlobalOnly() bool {
-	return m.globalOnly
+	return true
 }
 
 func Run(detectedAgents []agent.Agent) (string, bool, bool, error) {
