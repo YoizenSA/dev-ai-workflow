@@ -1,171 +1,62 @@
-# Engineering Constitution & AI Agent Directives
+# Generic Project Agent Instructions
 
-## Part 1: Core Principles (NON-NEGOTIABLE)
+## Scope
 
-### I. Code Quality
-- Write clean, readable, and maintainable code.
-- Follow the language's idiomatic style and conventions.
-- Avoid over-engineering: solve the problem at hand, not hypothetical future ones.
+- This file is the default `ywai init generic` template for repositories without a more specific profile.
+- If a nested `AGENTS.md` exists, follow the nearest file for that path and keep this file as the global baseline.
+- Do not assume a stack. Discover it from `README`, lockfiles, manifests, CI files, and existing tests before changing code.
 
-### II. Architecture
-- **Single Responsibility**: Every module, class, and function does one thing well.
-- **Dependency Direction**: High-level modules must not depend on low-level details.
-- **No God Objects**: Split large classes or modules when they exceed their responsibility.
+## Operating Workflow
 
-### III. Security-First
-- **Zero Trust**: Never trust external input without validation.
-- **Secrets Management**: Credentials and tokens **MUST** come from environment variables.
-  - ❌ `const apiKey = "sk-1234"` → Immediate BLOCK.
-- **Sanitize All Input**: Validate and sanitize any data coming from users or external APIs.
-- **HTTPS Only**: All external communication must be encrypted.
+1. Discover: inspect the smallest useful set of files and existing conventions first.
+2. Plan: for multi-file work, state a short plan and identify verification commands before editing.
+3. Implement: make the smallest cohesive change; avoid unrelated rewrites and formatting churn.
+4. Verify: run the project commands that already exist. If a command is missing or too expensive, say so explicitly.
+5. Document: update `README`, `AGENTS.md`, `REVIEW.md`, or examples when behavior or workflows change.
 
-### IV. Observability
-- Use structured logging instead of raw print/console statements.
-- No debug logs left in production code.
-- Correlate logs with request/transaction IDs when applicable.
+## Non-Negotiables
 
-### V. Error Handling
-- Never silently swallow errors — always log or propagate.
-- Use the language's idiomatic error handling (exceptions, Result types, error returns).
-- Differentiate between operational errors (expected) and programming errors (bugs).
-- Return meaningful error messages at API boundaries — never expose internal details.
+- Never hardcode secrets, credentials, tokens, or shared test accounts.
+- Treat external input as untrusted; validate at boundaries and sanitize before persistence or shell/API use.
+- Ask before destructive actions such as deleting data, dropping databases, rewriting history, or force-pushing.
+- Keep code/comments in English. User-facing product text should match the product or user's language.
+- Prefer simple, boring solutions over speculative abstractions.
 
-### VI. Documentation
-- Public APIs and exported functions MUST have documentation comments.
-- Complex logic needs a comment explaining WHY, not WHAT.
-- Comments/code: **English**. User-facing text: adapt to user's language.
-- Keep README updated when project setup or usage changes.
+## Code Quality Baseline
 
----
-
-## Part 2: Coding Standards
-
-### Complexity Limits
-
-| Element | Max Limit | Recommended |
-|:---|:---:|:---:|
-| **File Length** | **400 lines** | 150-250 |
-| **Function Length** | **60 lines** | 15-30 |
-| **Parameters** | 4 | 1-3 |
-| **Cyclomatic Complexity** | 10 | < 5 |
-| **Nesting Depth** | 3 | 2 |
-
-### Universal Rules
-- Use early returns / guard clauses to reduce nesting.
-- Prefer immutable data where possible.
-- Name variables and functions to describe **what** they do, not **how**.
+- Keep modules focused and cohesive; split files that accumulate unrelated responsibilities.
+- Use clear names that describe domain intent, not implementation tricks.
+- Prefer early returns/guard clauses over deep nesting.
 - Delete dead code instead of commenting it out.
-- One class/component per file. File name reflects the primary export.
-- Group imports: standard library → third-party → local. Alphabetize within groups.
-- Prefer composition over inheritance.
+- Preserve public contracts unless the requested change explicitly includes a migration.
+- Follow the repository formatter/linter; do not introduce a second formatter without approval.
 
----
+Recommended complexity limits unless the project says otherwise:
 
-## Part 3: Testing
+| Item | Limit | Preferred |
+| --- | ---: | ---: |
+| File length | 400 lines | 150-250 |
+| Function/method length | 60 lines | 15-30 |
+| Parameters | 4 | 1-3 |
+| Nesting depth | 3 | 1-2 |
+| Cyclomatic complexity | 10 | < 5 |
 
-- All new features require tests.
-- Mock external dependencies in unit tests.
-- Tests must be deterministic — no time-dependent or random failures.
-- Aim for **80% minimum coverage** on business logic.
-- Use Arrange/Act/Assert (or Given/When/Then) structure.
-- Test names should describe the behavior being tested, not the implementation.
-- Prefer testing behavior over implementation details.
+## Testing Baseline
 
----
+- Add or update tests for changed behavior.
+- Prefer deterministic tests with isolated data and mocked external services.
+- Do not use arbitrary sleeps for synchronization; use observable state or test framework waits.
+- Cover success, validation failure, and important edge cases for business logic.
 
-## Part 4: AI Agent Directives
+## Verification Command Discovery
 
-### Implementation Workflow
+Use commands declared by the repo. Do not invent scripts.
 
-When asked to "Implement", "Refactor", or "Fix" something, follow this loop:
+- Node/TypeScript: detect `npm`, `pnpm`, `yarn`, or `bun` from the lockfile and use existing `package.json` scripts.
+- Python: prefer `uv` if `uv.lock` or `pyproject.toml` indicates it; otherwise use the existing virtualenv/tooling.
+- .NET: prefer `dotnet restore`, `dotnet build`, `dotnet test`, and `dotnet format` when a solution/project exists.
+- DevOps: prefer static rendering/linting (`helm lint`, `helm template`, dry-runs, pipeline validators) before deployment.
 
-1. **Analyze Context**: Read constraints, existing patterns, architecture.
-2. **Draft Code**: Generate the solution.
-3. **Audit**:
-   - Does this file exceed limits? → **Split it.**
-   - Are there hardcoded secrets? → **Replace with env vars.**
-   - Does it follow existing patterns? → **Align with codebase.**
-4. **Final Output**: Present only clean, idiomatic code.
+## Skills
 
-### Security & Safety Gates
-
-- **Secrets**: If you see a hardcoded password/key, **WARNING** the user immediately.
-- **Destructive Actions**: If asked to drop tables or delete data, ask for explicit confirmation.
-
----
-
-## Part 5: Available Skills
-
-This project has the following AI agent skills installed in `skills/`. Each skill is auto-invoked when you mention its trigger words, or you can call it explicitly.
-
-### SDD Orchestrator
-
-| Skill | Trigger words | Purpose |
-|:---|:---|:---|
-| `sdd-init` | "sdd init", "iniciar sdd" | Bootstrap `.sdd/` structure |
-| `sdd-explore` | "explore", "investigar", "think through" | Explore ideas before committing |
-| `sdd-propose` | "propose", "propuesta", "/sdd:new" | Create change proposal |
-| `sdd-spec` | "spec", "requerimientos", "/sdd:ff" | Write specifications |
-| `sdd-design` | "design", "diseño técnico" | Technical design document |
-| `sdd-tasks` | "tasks", "breakdown" | Break change into tasks |
-| `sdd-apply` | "apply", "implement", "/sdd:apply" | Implement tasks |
-| `sdd-verify` | "verify", "verificar" | Validate implementation vs specs |
-| `sdd-archive` | "archive", "archivar" | Archive completed change |
-
-### Code Quality
-
-| Skill | Trigger words | Purpose |
-|:---|:---|:---|
-| `git-commit` | "commit", "git", "versioning", "changelog" | Commit message standards (Conventional Commits) |
-
-### Meta Skills
-
-| Skill | Trigger words | Purpose |
-|:---|:---|:---|
-| `skill-creator` | "create a skill", "new skill", "document pattern" | Create new AI agent skills |
-| `skill-registry` | "skill registry", "update skills" | Sync skill metadata with AGENTS.md |
-
-### How to invoke
-
-```
-# SDD workflow
-/sdd:new feature-name    # Start a new feature
-/sdd:ff                  # Fast-forward (propose + spec + design + tasks)
-/sdd:apply               # Implement tasks
-/sdd:verify              # Verify implementation
-/sdd:archive             # Archive when done
-/sdd:status              # Show active changes
-
-# Commits
-> Write a conventional commit for these changes
-```
-
----
-
-## Auto-invoke Capabilities
-| Action | Required Skill | Trigger Pattern |
-| :--- | :--- | :--- |
-| Writing React code | `react-19` | Writing React code |
-| Components | `react-19` | Components |
-| Hooks | `react-19` | Hooks |
-| State management | `react-19` | State management |
-| Angular architecture | `angular` | Angular architecture |
-| Angular components | `angular` | Angular components |
-| Angular signals | `angular` | Angular signals |
-| Styling with Tailwind | `tailwind-4` | Styling with Tailwind |
-| CSS utilities | `tailwind-4` | CSS utilities |
-| Responsive design | `tailwind-4` | Responsive design |
-| Writing TypeScript code | `typescript` | Writing TypeScript code |
-| Type definitions | `typescript` | Type definitions |
-| Generics | `typescript` | Generics |
-| Writing C# code | `dotnet` | Writing C# code |
-| Entity Framework | `dotnet` | Entity Framework |
-| Minimal APIs | `dotnet` | Minimal APIs |
-| Azure Pipelines | `devops` | Azure Pipelines |
-| Helm charts | `devops` | Helm charts |
-| Kubernetes | `devops` | Kubernetes |
-| Playwright tests | `playwright` | Playwright tests |
-| E2E testing | `playwright` | E2E testing |
-| lint | `biome` | lint |
-| format | `biome` | format |
-| commit | `git-commit` | commit |
+Read `.atl/skill-registry.md` (or `skills/skill-registry.md` in older setups) for the authoritative skill list, trigger patterns, and compact rules. When work matches a skill trigger, invoke that skill first.

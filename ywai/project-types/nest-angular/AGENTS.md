@@ -1,208 +1,67 @@
-# Full-Stack NestJS + Angular Engineering Constitution
+# NestJS + Angular Project Agent Instructions
 
-## Stack
-- **Backend**: NestJS + TypeScript (strict) + Clean Architecture
-- **Frontend**: Angular (standalone components, signals, zoneless)
-- **Shared**: TypeScript, Biome, Playwright
+## Scope
 
----
+- This template applies to full-stack repositories with a NestJS backend and Angular frontend.
+- Keep backend and frontend boundaries explicit; avoid leaking persistence models directly into UI code.
+- Follow nested `AGENTS.md` files if individual apps/packages provide more specific rules.
 
-## Part 1: Backend — NestJS (NON-NEGOTIABLE)
+## Operating Workflow
 
-### Architecture (Clean Architecture)
-1. **Domain Layer (Pure)**: Entities and Business Rules.
-   - ❌ No infrastructure dependencies (TypeORM, Axios, external modules).
-   - ❌ No ORM decorators inside Domain Entities.
-2. **Application Layer**: Use Cases / Services. Repository Interfaces (Ports).
-   - ❌ No direct SQL/Redis queries.
-3. **Infrastructure Layer**: Repository Implementations, HTTP Controllers, Cron Jobs.
+1. Detect workspace/package manager from lockfiles and workspace config.
+2. Identify the owning app/package before editing (`apps/`, `packages/`, `libs/`, or repo-specific layout).
+3. For API changes, update DTOs/contracts, backend tests, frontend clients, and UI behavior together.
+4. Run existing lint/typecheck/test commands for the touched packages.
+5. Use Playwright for critical end-to-end flows when a user journey changes.
 
-### Security
-- All external communication over HTTPS/TLS.
-- Secrets in environment variables only — ❌ `const apiKey = "1234"`.
-- All public endpoints use DTOs with `class-validator` (`whitelist: true`).
+## Backend: NestJS Rules
 
-### Observability
-- Structured logging with `Pino` (JSON in Production). No `console.log`.
-- OpenTelemetry ready for distributed tracing.
-- Stateless services — no in-memory state across restarts.
+- Keep controllers thin; place behavior in application services/use cases.
+- Keep domain/business logic independent of Nest, ORM, Redis, and HTTP client details.
+- DTOs own external validation; use `class-validator`/pipes when configured.
+- Use `ConfigService` or typed config modules instead of scattered `process.env` reads.
+- Use structured logging and never log secrets, tokens, or PII.
 
-### NestJS Patterns
-- Controllers: thin, delegate to Services immediately.
-- Services: Dependency Injection via constructor.
-- DTOs: `class-validator` decorators on all properties.
-- Config: `ConfigService.get('VAR')` — never `process.env.VAR` directly.
+## Frontend: Angular Rules
 
-### File & Complexity Limits
+- Prefer standalone components; do not introduce NgModules unless the codebase still depends on them.
+- Use signals (`signal`, `computed`, `effect`) for local reactive state when compatible with existing patterns.
+- Prefer `inject()` over constructor injection for new code unless local style says otherwise.
+- Prefer built-in control flow (`@if`, `@for`, `@switch`) for new templates.
+- Zoneless change detection is preferred for new setup, but do not partially migrate an existing app without a plan.
+- Keep components focused; move shared UI into `shared/` only when it is truly reused.
 
-| Element | Max Limit | Recommended | Action if Exceeded |
-|:---|:---:|:---:|:---|
-| **File Length** | **500 lines** | 200-300 | Split into sub-services or utilities |
-| **Method/Function** | **80 lines** | 20-40 | Extract to private methods or helpers |
-| **Parameters** | 3 args | 1-2 | Use Options object or DTO |
-| **Injections** | 5 deps | 3-4 | Apply Facade or split responsibilities |
-| **Cyclomatic Complexity** | 10 | < 5 | Simplify / early returns |
-| **Nesting Depth** | 3 levels | 2 | Guard Clauses (`if (!ok) return;`) |
+## TypeScript and Contracts
 
-### Naming Conventions
+- `strict` stays enabled; avoid `any` and validate `unknown` at boundaries.
+- Keep API request/response contracts explicit and version/migrate breaking changes.
+- Do not expose database entities directly to the frontend; use DTOs/view models.
+- Keep generated clients or schema artifacts in sync when the repo uses them.
 
-| Type | Convention | Example |
-|:---|:---|:---|
-| **Files** | `kebab-case` | `user-profile.service.ts` |
-| **Classes** | `PascalCase` | `UserProfileService` |
-| **Interfaces** | `I` + `PascalCase` | `IUserProfile` |
-| **Methods/Variables** | `camelCase` | `findActiveProfile()` |
-| **Constants** | `SCREAMING_SNAKE` | `MAX_RETRY_COUNT` |
-| **Database Columns** | `snake_case` | `created_at` |
-| **DTOs** | `PascalCase` + `Dto` | `CreateUserDto` |
+## Styling and UI
 
-### Backend Folder Structure
-```text
-src/modules/users/
-├── controllers/
-├── services/
-├── domain/
-├── infrastructure/
-├── dto/
-├── guards/
-├── entities/
-├── users.module.ts
-└── users.constants.ts
+- Follow the project design system and component library first.
+- If Tailwind is configured, prefer utility classes and shared `cn`/class helpers where available.
+- Ensure form controls have labels, validation messages, and accessible error states.
+- Do not use inline styles unless values are dynamic and cannot be represented by the styling system.
+
+## Testing and Verification
+
+Detect package manager from lockfile and use existing scripts. Typical checks:
+
+```bash
+<pm> run lint
+<pm> run typecheck
+<pm> test
+<pm> exec playwright test
 ```
 
----
+Testing guidance:
 
-## Part 2: Frontend — Angular (NON-NEGOTIABLE)
+- Backend: unit test services/use cases and E2E test changed controllers.
+- Frontend: test components/services with Angular testing utilities or configured test runner.
+- E2E: cover critical success/error paths that cross frontend and backend.
 
-### Architecture (Scope Rule)
-- Each component/directive/pipe belongs to exactly ONE feature or shared lib.
-- `shared/` only for truly cross-cutting UI (buttons, inputs, modals).
-- Feature modules import from `shared/` — features NEVER import from other features.
+## Skills
 
-### Angular Patterns
-- **Standalone components** — no NgModules.
-- **Signals** for reactive state (`signal()`, `computed()`, `effect()`).
-- **`inject()`** over constructor injection.
-- **Zoneless** change detection preferred (`provideZonelessChangeDetection()`).
-- **Built-in control flow** (`@if`, `@for`, `@switch`) — no `*ngIf`, `*ngFor`.
-
-### Component Rules
-- One component per file. File name matches selector: `user-profile.component.ts`.
-- Components ≤ 80 lines. Files ≤ 400 lines.
-- Smart/dumb pattern: container components handle state, presentational components receive `input()` and emit `output()`.
-
-### Styling
-- Prefer Tailwind CSS or Angular Material — no inline styles.
-- Responsive design by default.
-
-### Naming Conventions (Angular)
-
-| Type | Convention | Example |
-|:---|:---|:---|
-| **Components** | `kebab-case.component.ts` | `user-profile.component.ts` |
-| **Services** | `kebab-case.service.ts` | `user-profile.service.ts` |
-| **Directives** | `kebab-case.directive.ts` | `highlight.directive.ts` |
-| **Pipes** | `kebab-case.pipe.ts` | `truncate.pipe.ts` |
-| **Selectors** | `app-kebab-case` | `<app-user-profile>` |
-
-### Frontend Folder Structure
-```text
-src/app/
-├── features/
-│   ├── users/
-│   │   ├── pages/
-│   │   ├── components/
-│   │   ├── services/
-│   │   └── user.routes.ts
-│   └── dashboard/
-├── shared/
-│   ├── components/
-│   ├── directives/
-│   ├── pipes/
-│   └── utils/
-└── app.routes.ts
-```
-
----
-
-## Part 3: Shared Standards
-
-### TypeScript (strict)
-- No `any` — use `unknown`, Generics, or DTO/Interface.
-- No unused variables — remove or prefix with `_`.
-- Strict null checks: use `?.` and `??`.
-- Double quotes, semicolons, max 100 char lines.
-
-### Testing
-- **Backend**: Unit tests 80% coverage on services. E2E at least 1 success + 1 error per controller.
-- **Frontend**: Component tests with harnesses. Signal-based state testing.
-- **E2E**: Playwright for critical user journeys across the full stack.
-- Mock all external dependencies — never depend on real DB or API in unit tests.
-
-### Error Handling
-- Backend: Standard NestJS Exceptions (`NotFoundException`, `BadRequestException`). Never swallow errors.
-- Frontend: Global error handler + component-level error boundaries. User-friendly messages.
-
-### Documentation
-- Public APIs: JSDoc with `@param` and `@returns`.
-- Complex logic: comment explaining WHY, not WHAT.
-- Comments/code: English. User-facing text: adapt to user's language.
-
----
-
-## Part 4: AI Agent Directives
-
-### Implementation Workflow
-1. **Analyze Context**: Read layer boundaries, naming conventions, existing patterns.
-2. **Draft Code**: Generate the solution.
-3. **Audit**:
-   - File exceeds limits? → Split it.
-   - Domain imports Infrastructure? → Move to Infrastructure.
-   - Hardcoded secrets? → Replace with `ConfigService` / environment variables.
-   - Using `*ngIf` / `*ngFor`? → Use `@if` / `@for`.
-   - Using constructor injection? → Use `inject()`.
-4. **Final Output**: Clean, idiomatic code only.
-
-### Safety Gates
-- Hardcoded password/key → **WARNING** immediately.
-- Destructive actions → Ask for explicit confirmation.
-
-### Virtual Linter
-Before outputting code, simulate `npm run lint` (Biome). Fix lint errors before showing code.
-
----
-
-## Part 5: Available Skills
-
-### Angular
-
-| Action | Skill |
-|--------|-------|
-| Component architecture / file placement | `angular` (architecture) |
-| Standalone components / signals / inject | `angular` (core) |
-| Signal Forms / Reactive Forms | `angular` (forms) |
-| Performance / lazy loading / SSR | `angular` (performance) |
-
-### Code Quality
-
-| Action | Skill |
-|--------|-------|
-| Lint / format | `biome` |
-| Git commit | `git-commit` |
-| Create a skill | `skill-creator` |
-
-### Auto-invoke
-
-| Action | Required Skill | Trigger Pattern |
-| :--- | :--- | :--- |
-| Angular architecture | `angular` | Angular architecture |
-| Angular components | `angular` | Angular components |
-| Angular signals | `angular` | Angular signals |
-| Angular forms | `angular` | Angular forms |
-| Angular performance | `angular` | Angular performance |
-| Standalone components | `angular` | Standalone components |
-| Writing TypeScript code | `typescript` | Writing TypeScript code |
-| Type definitions | `typescript` | Type definitions |
-| lint | `biome` | lint |
-| format | `biome` | format |
-| commit | `git-commit` | commit |
+Read `.atl/skill-registry.md` (or `skills/skill-registry.md` in older setups) for the authoritative skill list, trigger patterns, and compact rules. When work matches a skill trigger, invoke that skill first.

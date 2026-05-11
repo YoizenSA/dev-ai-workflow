@@ -1,201 +1,139 @@
-# NestJS Engineering Constitution & AI Agent Directives
+# NestJS — Project Engineering Directives
 
-## Part 1: Core Principles (NON-NEGOTIABLE)
+## Architecture
 
-### I. Technology & Version Lock
-Technology versions are fixed to ensure stability and reproducibility across environments.
-- **Runtime**: Node.js Active LTS (defined in `.nvmrc` or `package.json` engines).
-- **Framework**: NestJS (Current Stable Major Version).
-- **Language**: TypeScript (Latest Stable). **Strict Mode**: `true`.
-- **Legacy Code Policy**: Any code not adhering to Clean Architecture principles is considered "Legacy". It must be refactorized, not extended.
+**Stack**: NestJS · TypeScript (strict) · Node.js LTS · configured ORM/DB/cache
 
-### II. Architecture Strategy
-Every NestJS service must adhere to **Modular Monolith** or **Microservices** patterns under **Clean Architecture** principles:
+### Layer Boundaries (Clean Architecture)
 
-1.  **Domain Layer (Pure)**:
-    - Contains Entities and Business Rules.
-    - ❌ **FORBIDDEN**: Dependencies on infrastructure (TypeORM, Axios, external NestJS modules).
-    - ❌ **FORBIDDEN**: ORM decorators inside Domain Entities.
-2.  **Application Layer (Orchestration)**:
-    - Contains Use Cases / Services.
-    - ✅ **ALLOWED**: Repository Interfaces (Ports).
-    - ❌ **FORBIDDEN**: Direct SQL/Redis queries (must use Repositories).
-3.  **Infrastructure Layer (Adapters)**:
-    - Contains Repository Implementations, HTTP Controllers, Cron Jobs.
-    - ✅ **ALLOWED**: Third-party libraries, Database Drivers.
+| Layer | Contains | Allowed | Forbidden |
+|:---|:---|:---|:---|
+| **Domain** | Entities, value objects, business rules | Pure TS, interfaces | ORM decorators, Axios, NestJS modules, infrastructure imports |
+| **Application** | Use cases, services, orchestration | Repository interfaces (ports), DTO contracts | Direct SQL/Redis queries, framework glue |
+| **Infrastructure** | Repositories, controllers, cron jobs, adapters | Third-party libs, DB drivers, Nest providers | Business rules |
 
-### III. Security-First
-- **Zero Trust**: All external communication must be encrypted (HTTPS/TLS).
-- **Secrets Management**: Credentials, tokens, and keys **MUST** reside in environment variables.
-    - ❌ `const apiKey = "1234"` (Immediate BLOCK in Code Review).
-- **Sanitization**: All public endpoints must use DTOs with strict validation (`class-validator` with `whitelist: true`).
+- ORM decorators/configuration go in Infrastructure entities, never in Domain entities.
+- Controllers are delivery adapters; they validate, delegate, and map responses.
+- Legacy code that violates boundaries should be refactored toward these boundaries, not extended further.
 
-### IV. Observability & Reliability
-- **Structured Logging**: Mandatory use of `Pino` (JSON format in Production). No `console.log`.
-- **Tracing**: OpenTelemetry instrumentation ready for distributed tracing.
-- **Statelessness**: Services must not store state in local memory that needs to persist across restarts. Use Redis or SQL.
+## Date/Time Convention (CRITICAL)
 
----
+Unless the project has a stricter convention, use one strategy end-to-end:
 
-## Part 2: Coding Standards & Constraints
+1. **Transit**: UTC timestamps (`epoch ms` or ISO UTC). Carry client offset/timezone explicitly when needed.
+2. **Persistence**: UTC only. Never persist local time or mixed timezone suffixes.
+3. **Queries**: filter in UTC. Apply offsets only to projected/display fields.
+4. **Frontend/API display**: never apply offset twice; document whether a field is raw UTC or display-adjusted.
+5. **Reports**: decide one layer to apply timezone conversion and keep upstream data raw UTC.
+6. **Formats**: use `HH` for 24h persistence; use `hh` only with `A`/`a` for user-facing 12h.
 
-### File & Complexity Limits
-Code must be readable and maintainable. If it exceeds these limits, it **must** be refactored.
+## Coding Standards
 
-| Element | Max Limit | Recommended | Action if Exceeded |
-|:---|:---:|:---:|:---|
-| **File Length** | **500 lines** | 200-300 | Split into sub-services or utilities. |
-| **Method/Function** | **80 lines** | 20-40 | Extract logic to private methods or helpers. |
-| **Parameters** | 3 args | 1-2 | Use an `Options` object or DTO. |
-| **Injections (Constructor)** | 5 deps | 3-4 | Apply Facade Pattern or split responsibilities. |
-| **Cyclomatic Complexity** | 10 | < 5 | Simplify logic / Use early returns. |
-| **Nesting Depth** | 3 levels | 2 | Use Guard Clauses (`if (!ok) return;`). |
+### Limits
 
-### Naming Conventions
+| Element | Max | Ideal |
+|:---|:---:|:---:|
+| File | 500 lines | 200-300 |
+| Method | 80 lines | 20-40 |
+| Params | 3 | 1-2 (use Options/DTO) |
+| Constructor deps | 5 | 3-4 (Facade or split) |
+| Cyclomatic | 10 | <5 |
+| Nesting | 3 levels | 2 (guard clauses) |
+
+### Naming
 
 | Type | Convention | Example |
 |:---|:---|:---|
-| **Files** | `kebab-case` | `user-profile.service.ts` |
-| **Classes** | `PascalCase` | `UserProfileService` |
-| **Interfaces** | `I` + `PascalCase` | `IUserProfile` |
-| **Methods/Variables** | `camelCase` | `findActiveProfile()` |
-| **Constants** | `SCREAMING_SNAKE` | `MAX_RETRY_COUNT` |
-| **Database Columns** | `snake_case` | `created_at`, `user_id` |
-| **DTOs** | `PascalCase` + `Dto` | `CreateUserDto` |
+| Files | `kebab-case` | `user-profile.service.ts` |
+| Classes | `PascalCase` | `UserProfileService` |
+| Interfaces | `I` + `PascalCase` | `IUserProfile` |
+| Methods/Vars | `camelCase` | `findActiveProfile()` |
+| Constants | `SCREAMING_SNAKE` | `MAX_RETRY_COUNT` |
+| DB Columns | `snake_case` | `created_at` |
+| DTOs | `PascalCase` + `Dto` | `CreateUserDto` |
 
----
-
-## Part 3: Folder Structure & Organization
-
-### NestJS Feature Module (Standard)
-```text
-src/modules/users/
-├── controllers/       # HTTP Endpoints
-├── services/          # Application/Business Logic
-├── domain/            # (Optional) Pure Models if strict Clean Arch
-├── infrastructure/    # (Optional) Concrete Repositories
-├── dto/               # Data Transfer Objects (Validation)
-├── guards/            # Authorization Guards
-├── entities/          # DB Entities (TypeORM/Prisma/Mongoose)
-├── users.module.ts    # Module Definition
-└── users.constants.ts # Local constants
-
-```
-
-### Shared / Libs Structure
-
-Reusable code must reside in libraries or a `shared` module.
+### Structure
 
 ```text
-libs/ (or src/shared/)
-├── database/          # Connection configs
-├── logging/           # Pino configuration
-├── utils/             # Pure helpers (dates, strings)
-└── filters/           # Global Exception Filters
-
+src/modules/{feature}/
+├── controllers/          # Thin HTTP endpoints
+├── services/             # Application/business orchestration
+├── domain/               # Pure models and business rules
+├── infrastructure/       # Concrete repositories/adapters
+├── dto/                  # Validation DTOs
+├── guards/               # AuthZ guards
+├── entities/             # ORM entities
+├── {feature}.module.ts
+└── {feature}.constants.ts
 ```
 
----
+## NestJS Patterns
 
-## Part 4: Best Practices
+- Controllers delegate to services/use cases immediately.
+- Services use constructor dependency injection.
+- DTOs use `class-validator`; global validation should use `whitelist: true` when compatible.
+- Config via `ConfigService.get()` or typed config wrappers; avoid raw `process.env` outside config modules.
+- Keep providers focused. Split services that mix orchestration, persistence, and external API logic.
 
-### Error Handling
+## Implementation Workflow
 
-* Use **Standard NestJS Exceptions** (`NotFoundException`, `BadRequestException`).
-* Never silently swallow errors.
-* `try/catch` blocks should only be used in Infrastructure layers or when calling external APIs.
+For every "Implement", "Refactor", or "Fix" task:
 
-### Database Interaction
+1. **Analyze**: read constraints above, existing module conventions, tests, and package scripts.
+2. **Draft**: implement the smallest cohesive change in the owning layer/module.
+3. **Audit**: file > 500 lines? ORM in Domain? hardcoded secrets? `any`? missing tests? Fix before output.
+4. **Verify**: run the relevant existing lint/typecheck/test command or state why it could not run.
+5. **Output**: summarize only sanitized, compliant changes and verification results.
 
-* **Soft Deletes**: Mandatory for critical entities (`deletedAt`).
-* **Pagination**: Mandatory for endpoints returning lists (`limit`, `offset`/`cursor`).
-* **QueryBuilder**: Preferred over complex "magic" ORM methods for better performance and control.
+## Quality Gates
 
-### Testing
+- **Linter/formatter**: Biome when configured. Do not introduce a competing formatter.
+- **No `any`**: use `unknown`, generics, DTOs, or explicit interfaces.
+- **Strict nulls**: use optional chaining (`?.`) and nullish coalescing (`??`) where appropriate.
+- **No unused vars**: remove or prefix with `_` only when required by an interface/contract.
+- **Formatting**: double quotes, semicolons, and 80-100 char lines unless repo config differs.
+- **Destructive actions**: `DROP TABLE`, data deletion, `rm -rf`, or force-push -> STOP and ask explicit confirmation with risk explanation.
 
-* **Unit Tests**: Minimum 80% coverage in `services/` and business logic.
-* **E2E Tests**: At least 1 success case and 1 error case per critical Controller.
-* **Mocking**: Do not depend on a real DB for unit tests.
+## Security
 
----
+- Secrets in environment variables or secret managers only. Hardcoded keys = immediate BLOCK.
+- Public endpoints use DTO validation and sanitization.
+- External communication uses HTTPS/TLS.
+- Never log tokens, passwords, PII, or raw authorization headers.
 
-## Part 5: AI Agent & Linter Directives
+## Observability
 
-### ⚡ Prime Directive: The "Virtual Linter"
-Before outputting ANY code block, you must run a recursive internal simulation of `npm run lint` (Biome).
+- Use structured logging; prefer Pino JSON in production when configured.
+- Keep OpenTelemetry/correlation context intact when adding middleware or clients.
+- Do not keep persistent state in local memory. Use Redis/SQL/queues for state that must survive restarts.
 
-**If your generated code would fail the linter, you must FIX IT before showing it to the user.**
+## Error Handling
 
-### strict-mode rules you must simulate:
-1.  **No `any`**: Never use `any`. Use `unknown`, Generics `<T>`, or define a DTO/Interface.
-2.  **No Unused Variables**: If a variable is declared but not used, remove it or prefix with `_`.
-3.  **Strict Null Checks**: Do not assume values exist. Use optional chaining (`?.`) or Nullish Coalescing (`??`).
-4.  **Formatting**:
-    - Use double quotes `"` (unless configured otherwise).
-    - Always include semicolons `;`.
-    - Max line length: 80-100 characters (wrap long lines).
+- Use NestJS standard exceptions (`NotFoundException`, `BadRequestException`, etc.) at API boundaries.
+- Never swallow errors silently.
+- `try/catch` belongs around Infrastructure/external API calls or when adding context before rethrowing.
+- Return safe error messages; do not expose internals to clients.
 
-### Implementation Workflow
+## Database
 
-When asked to "Implement", "Refactor", or "Fix" something, follow this mental loop:
+- Soft deletes on critical entities when business recovery/audit matters.
+- Pagination is mandatory for list endpoints.
+- Prefer explicit QueryBuilder/repository methods over magic ORM calls when queries are non-trivial.
+- Keep read-only queries non-tracking/lightweight when the ORM supports it.
 
-1.  **Analyze Context**: Read these constraints (Layer boundaries, naming conventions).
-2.  **Draft Code**: Generate the solution mentally.
-3.  **Audit (The Agent Step)**:
-    - *Check:* Does this file exceed 500 lines? -> **Action:** Split it.
-    - *Check:* Am I importing TypeORM in the Domain layer? -> **Action:** Move to Infrastructure.
-    - *Check:* Are there hardcoded secrets? -> **Action:** Replace with `ConfigService`.
-4.  **Final Output**: Present only the sanitized, compliant code.
+## Testing
 
-### Security & Safety Gates
+- Unit: services/use cases and business logic, with mocked dependencies.
+- E2E: at least one success and one error path per critical controller change.
+- No real external services in unit tests; mock DB/API/cache boundaries.
+- Run the package manager scripts already defined by the repo (`lint`, `typecheck`, `test`, `test:e2e`).
 
-- **Secrets**: If you see a hardcoded password/key in the user's prompt or code, **WARNING** the user immediately and refactor it to use `process.env`.
-- **Destructive Actions**: If asked to `DROP` tables or `rm -rf`, ask for explicit confirmation and explain risks.
+## Documentation
 
-### Code Documentation Strategy
+- Public methods: JSDoc with `@param` and `@returns` when the method is part of a public/internal API surface.
+- Complex logic: comment WHY, not WHAT.
+- Code/comments in English. Respond to the user in their language.
 
-- **Public Methods**: Must have JSDoc explaining `@param` and `@returns`.
-- **Complex Logic**: Add a comment explaining *WHY*, not *WHAT*.
-- **Language**:
-    - Comments/Code: **English**.
-    - User Interaction/Explanation: **English** (unless user speaks Spanish, then adapt).
+## Skills
 
-### NestJS Specific Patterns
-
-1.  **Controllers**: Keep them thin. Delegate logic to Services immediately.
-2.  **Services**: Use Dependency Injection via constructor.
-3.  **DTOs**: Always decorate properties with `class-validator` (e.g., `@IsString()`, `@IsOptional()`).
-4.  **Configs**: Never use `process.env.VAR` directly in code. Use `ConfigService.get('VAR')`.
-
----
-
-## Part 6: Agent Skills
-
-Use these skills for detailed, project-specific patterns and workflows.
-
-### Available Skills
-
-| Skill | Description | URL |
-|-------|-------------|-----|
-| `biome` | Linting, formatting, and code quality using Biome | [SKILL.md](skills/biome/SKILL.md) |
-| `git-commit` | Git commit standards and commit message formatting | [SKILL.md](skills/git-commit/SKILL.md) |
-| `skill-creator` | Create new AI agent skills | [SKILL.md](skills/skill-creator/SKILL.md) |
-| `skill-registry` | Sync skill metadata with AGENTS.md auto-invoke tables | [SKILL.md](skills/skill-registry/SKILL.md) |
-
-### Auto-invoke Skills
-
-When performing these actions, ALWAYS invoke the corresponding skill FIRST:
-
-| Action | Skill |
-|--------|-------|
-| Run linting or formatting | `biome` |
-| Work on code quality tasks (Biome/ESLint/Prettier) | `biome` |
-| Create a git commit | `git-commit` |
-| Work on versioning or release notes | `git-commit` |
-| Create or document a new skill | `skill-creator` |
-| After creating/modifying a skill | `skill-registry` |
-| Regenerate AGENTS.md auto-invoke tables | `skill-registry` |
-| Troubleshoot why a skill is missing from AGENTS.md auto-invoke | `skill-registry` |
-
----
-
+Read `.atl/skill-registry.md` (or `skills/skill-registry.md` in older setups) for the authoritative skill list, trigger patterns, and compact rules. When work matches a skill trigger, invoke that skill first.
