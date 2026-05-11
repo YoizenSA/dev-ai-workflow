@@ -81,8 +81,8 @@
 #         with:
 #           go-version: '1.26'
 
-#       # ── Preparar datos embebidos (skills + project-types) ───────────────
-#       #    Copia skills/ y project-types/ a cmd/ywai/embedded_data/
+#       # ── Preparar datos embebidos (skills) ──────────────────────────────
+#       #    Copia skills/ a cmd/ywai/embedded_data/
 #       #    para que go:embed los incluya en el binary
 #       - name: Prepare embedded data
 #         run: bash scripts/prepare-embedded.sh
