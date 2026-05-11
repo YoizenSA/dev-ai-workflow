@@ -77,8 +77,15 @@ var updateCmd = &cobra.Command{
 		selfUpdate()
 
 		fmt.Println("\n[2/7] Upgrading gentle-ai...")
-		if err := gentlai.Upgrade(); err != nil {
-			warn("gentle-ai upgrade failed: %v", err)
+		if !gentlai.IsInstalled() {
+			fmt.Println("  gentle-ai not found, installing...")
+			if err := gentlai.Install(); err != nil {
+				warn("gentle-ai install failed: %v", err)
+			}
+		} else {
+			if err := gentlai.Upgrade(); err != nil {
+				warn("gentle-ai upgrade failed: %v", err)
+			}
 		}
 
 		agents := agent.Detect()
@@ -107,9 +114,13 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n[5/7] Syncing ecosystem...")
-		if err := gentlai.Sync(); err != nil {
-			warn("gentle-ai sync failed: %v", err)
-			fmt.Println("  Continuing with ywai cache, skill copies, and overrides.")
+		if gentlai.IsInstalled() {
+			if err := gentlai.Sync(); err != nil {
+				warn("gentle-ai sync failed: %v", err)
+				fmt.Println("  Continuing with ywai cache, skill copies, and overrides.")
+			}
+		} else {
+			fmt.Println("  Skipping sync (gentle-ai not installed).")
 		}
 
 		fmt.Println("\n[6/7] Copying extra skills...")
