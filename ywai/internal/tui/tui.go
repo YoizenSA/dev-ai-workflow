@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -69,18 +68,11 @@ type step int
 const (
 	stepWelcome step = iota
 	stepGlobal
-	stepType
 	stepAgent
 	stepMCP
 	stepConfirm
 	stepProgress
 )
-
-type typeOption struct {
-	Name        string
-	Description string
-	Skills      []string
-}
 
 type agentOption struct {
 	Name     string
@@ -94,11 +86,8 @@ type Model struct {
 	height   int
 	quitting bool
 
-	types         []typeOption
 	agents        []agentOption
-	typeCursor    int
 	agentCursor   int
-	selectedType  string
 	selectedAgent string
 
 	// MCP selection
@@ -112,21 +101,9 @@ type Model struct {
 	installDone   bool
 	installError  error
 	installAgent  string
-	installType   string
 }
 
 func NewModel(detectedAgents []agent.Agent) Model {
-	profiles := config.AvailableProfiles()
-
-	types := make([]typeOption, 0, len(profiles))
-	for _, name := range profiles {
-		types = append(types, typeOption{
-			Name:        name,
-			Description: config.ProfileDescription(name),
-			Skills:      config.ProfileSkills(name),
-		})
-	}
-
 	hasAll := len(detectedAgents) > 1
 	agentOpts := make([]agentOption, 0, len(detectedAgents))
 	for _, a := range detectedAgents {
@@ -146,15 +123,11 @@ func NewModel(detectedAgents []agent.Agent) Model {
 
 	return Model{
 		step:   stepWelcome,
-		types:  types,
 		agents: agentOpts,
 	}
 }
 
 func (m *Model) advanceToNextValidStep() {
-	if m.step == stepType && len(m.types) == 0 {
-		m.step = stepAgent
-	}
 	if m.step == stepAgent && len(m.agents) == 0 {
 		m.quitting = true
 		return
@@ -230,10 +203,8 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case stepGlobal:
 		m.step = stepWelcome
-	case stepType:
-		m.step = stepGlobal
 	case stepAgent:
-		m.step = stepType
+		m.step = stepGlobal
 	case stepMCP:
 		m.step = stepAgent
 	case stepConfirm:
@@ -251,15 +222,6 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	case stepWelcome:
 		m.step = stepGlobal
 	case stepGlobal:
-		m.step = stepType
-		m.advanceToNextValidStep()
-	case stepType:
-		if len(m.types) == 0 {
-			m.step = stepAgent
-			m.advanceToNextValidStep()
-			return m, nil
-		}
-		m.selectedType = m.types[m.typeCursor].Name
 		m.step = stepAgent
 		m.advanceToNextValidStep()
 	case stepAgent:
@@ -279,7 +241,6 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	case stepConfirm:
 		// Start installation and move to progress
 		m.installAgent = m.selectedAgent
-		m.installType = m.selectedType
 		m.step = stepProgress
 		return m, m.startInstall()
 	case stepProgress:
@@ -295,10 +256,6 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case stepType:
-		if m.typeCursor > 0 {
-			m.typeCursor--
-		}
 	case stepAgent:
 		if m.agentCursor > 0 {
 			m.agentCursor--
@@ -313,10 +270,6 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case stepType:
-		if m.typeCursor < len(m.types)-1 {
-			m.typeCursor++
-		}
 	case stepAgent:
 		if m.agentCursor < len(m.agents)-1 {
 			m.agentCursor++
@@ -342,8 +295,6 @@ func (m *Model) View() string {
 	switch m.step {
 	case stepWelcome:
 		b.WriteString(m.viewWelcome())
-	case stepType:
-		b.WriteString(m.viewType())
 	case stepAgent:
 		b.WriteString(m.viewAgent())
 	case stepMCP:
@@ -360,8 +311,8 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Scope", "Type", "Agent", "MCP", "Confirm", "Install"}
-	steps := []step{stepWelcome, stepGlobal, stepType, stepAgent, stepMCP, stepConfirm, stepProgress}
+	labels := []string{"Welcome", "Scope", "Agent", "MCP", "Confirm", "Install"}
+	steps := []step{stepWelcome, stepGlobal, stepAgent, stepMCP, stepConfirm, stepProgress}
 
 	var parts []string
 	for i, label := range labels {
@@ -402,7 +353,7 @@ func (m *Model) viewWelcome() string {
 	b.WriteString("  This will:\n")
 	b.WriteString("    1. Install/update gentle-ai\n")
 	b.WriteString("    2. Configure your AI agent with the Gentleman ecosystem\n")
-	b.WriteString("    3. Link extra skills (React, Angular, TypeScript, etc.)\n")
+	b.WriteString("    3. Copy extra skills (React, Angular, TypeScript, etc.)\n")
 	b.WriteString("    4. Initialize project config (AGENTS.md + REVIEW.md)\n")
 	b.WriteString("\n")
 
@@ -421,62 +372,6 @@ func (m *Model) viewWelcome() string {
 	return b.String()
 }
 
-func (m *Model) viewType() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Select project type"))
-	b.WriteString("\n\n")
-
-	if len(m.types) == 0 {
-		b.WriteString(warningStyle.Render("  No project types available."))
-		b.WriteString("\n\n")
-		b.WriteString(infoStyle.Render("  This usually means ywai was installed without embedded data."))
-		b.WriteString("\n")
-		b.WriteString(infoStyle.Render("  Reinstall with the release install.sh script."))
-		b.WriteString("\n\n")
-		b.WriteString(dimStyle.Render("  Enter skip  •  Esc back"))
-		return b.String()
-	}
-
-	maxNameLen := 0
-	for _, t := range m.types {
-		if len(t.Name) > maxNameLen {
-			maxNameLen = len(t.Name)
-		}
-	}
-
-	for i, t := range m.types {
-		pad := strings.Repeat(" ", maxNameLen-len(t.Name))
-		cursor := "  "
-		if i == m.typeCursor {
-			cursor = selStyle.Render(">")
-		} else {
-			cursor = " "
-		}
-
-		name := itemStyle.Render(t.Name)
-		if i == m.typeCursor {
-			name = selStyle.Render(t.Name)
-		}
-
-		desc := descStyle.Render(pad + "  " + t.Description)
-
-		skillLine := ""
-		if i == m.typeCursor {
-			if t.Skills != nil {
-				skillLine = "\n" + strings.Repeat(" ", maxNameLen+6) + skillStyle.Render("Skills: "+strings.Join(t.Skills, ", "))
-			} else {
-				skillLine = "\n" + strings.Repeat(" ", maxNameLen+6) + skillStyle.Render("Skills: all (generic profile)")
-			}
-		}
-
-		b.WriteString(fmt.Sprintf("  %s %s%s%s\n", cursor, name, desc, skillLine))
-	}
-
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  Enter select  •  Esc back"))
-	return b.String()
-}
-
 func (m *Model) viewAgent() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Select agent"))
@@ -487,10 +382,6 @@ func (m *Model) viewAgent() string {
 		b.WriteString("\n")
 		return b.String()
 	}
-
-	typeInfo := dimStyle.Render(fmt.Sprintf("  Project type: %s", m.selectedType))
-	b.WriteString(typeInfo)
-	b.WriteString("\n\n")
 
 	maxNameLen := 0
 	for _, a := range m.agents {
@@ -602,12 +493,6 @@ func (m *Model) viewConfirm() string {
 	b.WriteString(titleStyle.Render("Confirm installation"))
 	b.WriteString("\n\n")
 
-	typeDesc := config.ProfileDescription(m.selectedType)
-	if typeDesc != "" {
-		typeDesc = dimStyle.Render(fmt.Sprintf(" — %s", typeDesc))
-	}
-	b.WriteString(fmt.Sprintf("  Project type:  %s%s\n", selStyle.Render(m.selectedType), typeDesc))
-
 	agentLabel := m.selectedAgent
 	if agentLabel == "" {
 		agentLabel = warningStyle.Render("(none - BUG!)")
@@ -622,31 +507,15 @@ func (m *Model) viewConfirm() string {
 	}
 	b.WriteString(fmt.Sprintf("  Scope:         %s\n", dimStyle.Render(scopeLabel)))
 
-	skills := config.ProfileSkills(m.selectedType)
-	if skills != nil {
-		b.WriteString("\n  Skills to link:\n    ")
-		for i, s := range skills {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			b.WriteString(skillStyle.Render(s))
-		}
-		b.WriteString("\n")
-	} else {
-		b.WriteString("\n  Skills to link: ")
-		b.WriteString(skillStyle.Render("all (generic profile)"))
-		b.WriteString("\n")
-	}
+	b.WriteString("\n  Skills to install: ")
+	b.WriteString(skillStyle.Render("all extra skills"))
+	b.WriteString("\n")
 
 	b.WriteString("\n")
 	b.WriteString(okStyle.Render("  Enter to install"))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  Esc to go back"))
 	return b.String()
-}
-
-func (m *Model) SelectedType() string {
-	return m.selectedType
 }
 
 func (m *Model) SelectedAgent() string {
@@ -661,15 +530,15 @@ func (m *Model) GlobalOnly() bool {
 	return m.globalOnly
 }
 
-func Run(detectedAgents []agent.Agent) (string, string, bool, bool, error) {
+func Run(detectedAgents []agent.Agent) (string, bool, bool, error) {
 	m := NewModel(detectedAgents)
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
-		return "", "", false, false, err
+		return "", false, false, err
 	}
 	model := final.(*Model)
-	return model.SelectedType(), model.SelectedAgent(), model.InstallMicrosoftLearnMCP(), model.GlobalOnly(), nil
+	return model.SelectedAgent(), model.InstallMicrosoftLearnMCP(), model.GlobalOnly(), nil
 }
 
 func shortPath(p string) string {
@@ -722,7 +591,7 @@ func (m *Model) runInstall() (string, error) {
 	}
 
 	// Build the ywai command with selected flags
-	args := []string{"install", "--agent", m.installAgent, "--type", m.installType}
+	args := []string{"install", "--agent", m.installAgent}
 
 	cmd := exec.Command(ywaiBin, args...)
 	cmd.Env = os.Environ()

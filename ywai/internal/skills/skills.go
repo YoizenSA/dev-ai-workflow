@@ -13,15 +13,15 @@ import (
 
 const extraSkillMarkerFile = ".ywai-extra"
 
-func LinkTo(agentSkillsDir string) error {
-	return linkFiltered(agentSkillsDir, nil)
+func CopyTo(agentSkillsDir string) error {
+	return copyFiltered(agentSkillsDir, nil)
 }
 
-func LinkFiltered(agentSkillsDir string, filter []string) error {
-	return linkFiltered(agentSkillsDir, filter)
+func CopyFiltered(agentSkillsDir string, filter []string) error {
+	return copyFiltered(agentSkillsDir, filter)
 }
 
-func linkFiltered(agentSkillsDir string, filter []string) error {
+func copyFiltered(agentSkillsDir string, filter []string) error {
 	srcDir := skillsSourceDir()
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 		return fmt.Errorf("skills source directory not found: %s", srcDir)
@@ -38,7 +38,7 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 	}
 
 	extraSkills := ywaiExtraSkillNames(srcDir)
-	linked := 0
+	copied := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -68,10 +68,10 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 		}
 
 		fmt.Printf("  Copied skill: %s\n", name)
-		linked++
+		copied++
 	}
 
-	if linked == 0 {
+	if copied == 0 {
 		fmt.Println("  All skills already up to date.")
 	}
 	return nil
@@ -261,12 +261,6 @@ func ListAvailable() ([]string, error) {
 func ywaiExtraSkillNames(srcDir string) map[string]bool {
 	names := make(map[string]bool)
 
-	for _, profile := range config.AvailableProfiles() {
-		for _, skill := range config.ProfileSkills(profile) {
-			names[skill] = true
-		}
-	}
-
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return names
@@ -276,9 +270,6 @@ func ywaiExtraSkillNames(srcDir string) map[string]bool {
 			continue
 		}
 		name := entry.Name()
-		if names[name] {
-			continue
-		}
 		if hasYwaiExtraMarker(filepath.Join(srcDir, name)) {
 			names[name] = true
 		}

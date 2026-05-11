@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
@@ -21,7 +20,6 @@ var installCmd = &cobra.Command{
 	Short: "Install gentle-ai + ecosystem + extra skills",
 	Long:  "Full setup: gentle-ai, ecosystem, extra skills, and optional project init.",
 	Run: func(cmd *cobra.Command, args []string) {
-		projectType, _ := cmd.Flags().GetString("type")
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		tuiFlag, _ := cmd.Flags().GetBool("tui")
@@ -35,22 +33,21 @@ var installCmd = &cobra.Command{
 
 		var installMCP bool
 		var globalOnly bool
-		if tuiFlag || (projectType == "" && agentFlag == "" && !dryRun && !globalFlag) {
+		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
 			if !isInteractiveTerminal() {
-				fmt.Fprintln(os.Stderr, "Error: install requires --type/--agent or --dry-run when running non-interactively.")
+				fmt.Fprintln(os.Stderr, "Error: install requires --agent or --dry-run when running non-interactively.")
 				fmt.Fprintln(os.Stderr, "Run `ywai install --help` for flags, or run `ywai install` from an interactive terminal.")
 				os.Exit(1)
 			}
-			selectedType, selectedAgent, selectedMCP, selectedGlobal, err := runTUI(agents)
+			selectedAgent, selectedMCP, selectedGlobal, err := runTUI(agents)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			if selectedType == "" || selectedAgent == "" {
+			if selectedAgent == "" {
 				fmt.Println("Installation cancelled.")
 				return
 			}
-			projectType = selectedType
 			agentFlag = selectedAgent
 			installMCP = selectedMCP
 			globalOnly = selectedGlobal
@@ -59,7 +56,7 @@ var installCmd = &cobra.Command{
 			globalOnly = globalFlag
 		}
 
-		executeInstall(agentFlag, projectType, dryRun, installMCP, globalOnly)
+		executeInstall(agentFlag, dryRun, installMCP, globalOnly)
 	},
 }
 
@@ -86,33 +83,33 @@ var updateCmd = &cobra.Command{
 
 		agents := agent.Detect()
 
-		fmt.Println("\n[3/7] Re-seeding data cache...")
+		fmt.Println("\n[3/7] Re-seeding skills cache...")
 		reseedData()
 
-		fmt.Println("\n[4/7] Cleaning stale links + pre-copying extra skills...")
+		fmt.Println("\n[4/7] Cleaning stale legacy links + pre-copying extra skills...")
 		if len(agents) > 0 {
 			for _, a := range agents {
 				if configDir := filepath.Dir(a.SkillsDir); skills.IsLinkOrJunction(configDir) {
-					warn("[%s] skipped stale ywai skill-link cleanup because config dir is a symlink/junction: %s", a.Name, configDir)
+					warn("[%s] skipped stale legacy-link cleanup because config dir is a symlink/junction: %s", a.Name, configDir)
 				} else {
 					if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
-						warn("[%s] stale ywai skill-link cleanup failed: %v", a.Name, err)
+						warn("[%s] stale legacy-link cleanup failed: %v", a.Name, err)
 					} else if len(removed) > 0 {
-						fmt.Printf("  [%s] Removed stale ywai skill links: %s\n", a.Name, strings.Join(removed, ", "))
+						fmt.Printf("  [%s] Removed stale legacy skill links: %s\n", a.Name, strings.Join(removed, ", "))
 					}
 				}
-				if err := skills.LinkTo(a.SkillsDir); err != nil {
+				if err := skills.CopyTo(a.SkillsDir); err != nil {
 					warn("[%s] pre-sync skill copy failed: %v", a.Name, err)
 				}
 			}
 		} else {
-			fmt.Println("  No supported agents detected; skipping pre-sync link normalization.")
+			fmt.Println("  No supported agents detected; skipping pre-sync skill copy.")
 		}
 
 		fmt.Println("\n[5/7] Syncing ecosystem...")
 		if err := gentlai.Sync(); err != nil {
 			warn("gentle-ai sync failed: %v", err)
-			fmt.Println("  Continuing with ywai cache, skill links, and overrides.")
+			fmt.Println("  Continuing with ywai cache, skill copies, and overrides.")
 		}
 
 		fmt.Println("\n[6/7] Copying extra skills...")
@@ -122,8 +119,8 @@ var updateCmd = &cobra.Command{
 		}
 
 		for _, a := range agents {
-			if err := skills.LinkTo(a.SkillsDir); err != nil {
-				warn("[%s] re-link skills failed: %v", a.Name, err)
+			if err := skills.CopyTo(a.SkillsDir); err != nil {
+				warn("[%s] re-copy skills failed: %v", a.Name, err)
 				continue
 			}
 			fmt.Printf("  [%s] Copied skills\n", a.Name)
@@ -184,21 +181,6 @@ var skillsCmd = &cobra.Command{
 	Use:   "skills",
 	Short: "List available extra skills",
 	Run: func(cmd *cobra.Command, args []string) {
-		projectType, _ := cmd.Flags().GetString("type")
-
-		if projectType != "" {
-			filter := config.ProfileSkills(projectType)
-			if filter == nil {
-				fmt.Println("all skills (generic profile)")
-			} else {
-				fmt.Printf("Skills for %s:\n", projectType)
-				for _, s := range filter {
-					fmt.Printf("  - %s\n", s)
-				}
-			}
-			return
-		}
-
 		available, err := skills.ListAvailable()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -210,37 +192,16 @@ var skillsCmd = &cobra.Command{
 			fmt.Printf("  - %s\n", s)
 		}
 
-		profiles := config.AvailableProfiles()
-		if len(profiles) > 0 {
-			fmt.Println("\nSkills by profile:")
-			for _, p := range profiles {
-				pSkills := config.ProfileSkills(p)
-				if pSkills == nil {
-					fmt.Printf("  %s: all skills\n", p)
-				} else {
-					fmt.Printf("  %s: %s\n", p, strings.Join(pSkills, ", "))
-				}
-			}
-		} else {
-			fmt.Println("\nNo project profiles found.")
-			fmt.Println("Try running: ywai update")
-			fmt.Println("Or reinstall:")
-			fmt.Println("  macOS/Linux: curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash")
-			fmt.Println("  Source:      cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
-		}
-
 		fmt.Printf("\nTotal: %d skills\n", len(available))
 	},
 }
 
 func init() {
-	installCmd.Flags().StringP("type", "t", "", "Project type (e.g., react, nest, dotnet)")
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode/kilocode)")
 	installCmd.Flags().Bool("global", false, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
-	skillsCmd.Flags().StringP("type", "t", "", "Filter skills by project type")
 
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(updateCmd)

@@ -17,9 +17,5 @@ func init() {
 		sub, _ := fs.Sub(embeddedFS, "embedded_data/skills")
 		return sub
 	}
-	ptFS := func() fs.FS {
-		sub, _ := fs.Sub(embeddedFS, "embedded_data/project-types")
-		return sub
-	}
-	config.RegisterEmbeddedProviders(skillsFS, ptFS)
+	config.RegisterEmbeddedProviders(skillsFS)
 }

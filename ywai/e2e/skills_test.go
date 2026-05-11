@@ -1,9 +1,6 @@
 package e2e
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -75,40 +72,5 @@ func TestSkillsFilteredGeneric(t *testing.T) {
 	out := runYwai(t, bin, "skills", "--type", "generic")
 	if !strings.Contains(out, "all skills") {
 		t.Errorf("expected 'all skills' for generic, got: %s", out)
-	}
-}
-
-func TestLinkFilteredOnlyRelevant(t *testing.T) {
-	tmpDir := t.TempDir()
-	agentSkillsDir := filepath.Join(tmpDir, "skills")
-	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	repoRoot := repoRoot(t)
-	skillsSource := filepath.Join(repoRoot, "skills")
-
-	reactSkills := []string{"react-19", "tailwind-4", "typescript", "biome", "playwright", "git-commit"}
-	for _, name := range reactSkills {
-		src := filepath.Join(skillsSource, name)
-		dst := filepath.Join(agentSkillsDir, name)
-		if _, err := os.Stat(src); os.IsNotExist(err) {
-			t.Skipf("skill %s not found in source", name)
-		}
-		if err := os.Symlink(src, dst); err != nil {
-			if runtime.GOOS == "windows" {
-				t.Logf("symlink failed (Windows): %v", err)
-				continue
-			}
-			t.Fatalf("symlink failed: %v", err)
-		}
-	}
-
-	notExpected := []string{"angular", "dotnet", "devops"}
-	for _, name := range notExpected {
-		dst := filepath.Join(agentSkillsDir, name)
-		if _, err := os.Stat(dst); err == nil {
-			t.Errorf("did NOT expect skill %s to be linked for react", name)
-		}
 	}
 }

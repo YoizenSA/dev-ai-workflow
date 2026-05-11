@@ -10,7 +10,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-func TestSkillsSourceDirPrefersSeededHomeCache(t *testing.T) {
+func TestSkillsSourceDirPrefersRepoWhenAvailable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -29,8 +29,8 @@ func TestSkillsSourceDirPrefersSeededHomeCache(t *testing.T) {
 		t.Fatalf("create data skill dir: %v", err)
 	}
 
-	if got, want := skillsSourceDir(), config.DataSkillsDir(); got != want {
-		t.Fatalf("skillsSourceDir() = %q, want seeded data dir %q", got, want)
+	if got, want := skillsSourceDir(), filepath.Join(repo, "skills"); got != want {
+		t.Fatalf("skillsSourceDir() = %q, want repo skills dir %q", got, want)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestSkillsSourceDirFallsBackToRepoWhenCacheEmpty(t *testing.T) {
 	}
 }
 
-func TestLinkToSkipsNonYwaiExtraSkills(t *testing.T) {
+func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -77,8 +77,8 @@ func TestLinkToSkipsNonYwaiExtraSkills(t *testing.T) {
 		t.Fatalf("create agent skills dir: %v", err)
 	}
 
-	if err := LinkTo(agentSkillsDir); err != nil {
-		t.Fatalf("LinkTo() error = %v", err)
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatalf("CopyTo() error = %v", err)
 	}
 
 	if _, err := os.Lstat(filepath.Join(agentSkillsDir, "react-19")); err != nil {
@@ -89,7 +89,7 @@ func TestLinkToSkipsNonYwaiExtraSkills(t *testing.T) {
 	}
 	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
 		if _, err := os.Lstat(filepath.Join(agentSkillsDir, name)); !os.IsNotExist(err) {
-			t.Fatalf("%s should not be linked by ywai; err=%v", name, err)
+			t.Fatalf("%s should not be copied by ywai; err=%v", name, err)
 		}
 	}
 }

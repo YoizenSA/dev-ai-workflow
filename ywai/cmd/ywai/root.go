@@ -13,7 +13,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/project"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tui"
@@ -27,40 +26,34 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Seed data if project-types dir is empty OR no valid profiles found.
-		// The profile check handles cases where the dir has content but no valid profile.yaml files
-		// (e.g. stale state from a previous broken install).
-		needsSeed := !config.IsDirPopulated(config.DataProjectTypesDir()) ||
-			len(config.AvailableProfiles()) == 0
+		// Seed skills data if skills dir is empty
+		needsSeed := !config.IsDirPopulated(config.DataSkillsDir())
 
 		if needsSeed {
 			repo := config.RepoRoot()
 			isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
 
 			if isRealRepo {
-				if err := config.SeedDataFrom(repo); err != nil {
-					fmt.Printf("Warning: failed to seed data from repo: %v\n", err)
+				if err := config.SeedSkillsFrom(repo); err != nil {
+					fmt.Printf("Warning: failed to seed skills from repo: %v\n", err)
 				}
-				// Fallback: if repo seed ran but no valid profiles were loaded,
+				// Fallback: if repo seed ran but no skills were loaded,
 				// force embedded seed to avoid stale/local repo issues.
-				config.ResetConfig()
-				if len(config.AvailableProfiles()) == 0 {
-					if err := config.SeedFromEmbedded(); err != nil {
+				if len(config.AvailableSkills()) == 0 {
+					if err := config.SeedSkillsFromEmbedded(); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 					}
 				}
 			} else {
-				if err := config.SeedFromEmbedded(); err != nil {
+				if err := config.SeedSkillsFromEmbedded(); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 				}
 			}
-			// Invalidate config cache so TUI picks up freshly seeded profiles
-			config.ResetConfig()
 
 			// Verify seeding actually worked
-			if len(config.AvailableProfiles()) == 0 && cmd.Name() != "update" {
+			if len(config.AvailableSkills()) == 0 && cmd.Name() != "update" {
 				fmt.Fprintln(os.Stderr, "")
-				fmt.Fprintln(os.Stderr, "Error: no project profiles available after seeding.")
+				fmt.Fprintln(os.Stderr, "Error: no skills available after seeding.")
 				fmt.Fprintln(os.Stderr, "This usually means the binary was not built with embedded data.")
 				fmt.Fprintln(os.Stderr, "")
 				fmt.Fprintln(os.Stderr, "Fix: reinstall ywai from the release installer:")
@@ -113,14 +106,14 @@ func installEcosystem(agents []agent.Agent, dryRun bool) {
 			continue
 		}
 		if dryRun {
-			fmt.Printf("  [%s] Would remove stale ywai skill links that block gentle-ai...\n", a.Name)
+			fmt.Printf("  [%s] Would remove stale legacy skill links that block gentle-ai...\n", a.Name)
 			fmt.Printf("  [%s] Running gentle-ai install...\n", a.Name)
 			continue
 		}
 		if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
-			fmt.Printf("  Warning: [%s] failed to clean stale ywai skill links: %v\n", a.Name, err)
+			fmt.Printf("  Warning: [%s] failed to clean stale legacy skill links: %v\n", a.Name, err)
 		} else if len(removed) > 0 {
-			fmt.Printf("  [%s] Removed stale ywai skill links: %s\n", a.Name, strings.Join(removed, ", "))
+			fmt.Printf("  [%s] Removed stale legacy skill links: %s\n", a.Name, strings.Join(removed, ", "))
 		}
 		if err := gentlai.InstallEcosystem(a.Name); err != nil {
 			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
@@ -128,17 +121,8 @@ func installEcosystem(agents []agent.Agent, dryRun bool) {
 	}
 }
 
-func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) {
-	filter := config.ProfileSkills(projectType)
-
-	if filter == nil {
-		fmt.Println("  copying all ywai extra skills (generic profile).")
-	} else {
-		fmt.Printf("  Skills for %s:\n", projectType)
-		for _, s := range filter {
-			fmt.Printf("    - %s\n", s)
-		}
-	}
+func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
+	fmt.Println("  Copying all ywai extra skills.")
 
 	for _, a := range agents {
 		if dryRun {
@@ -146,16 +130,12 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 			continue
 		}
 
-		if filter == nil {
-			skills.LinkTo(a.SkillsDir)
-		} else {
-			skills.LinkFiltered(a.SkillsDir, filter)
-		}
+		skills.CopyTo(a.SkillsDir)
 		fmt.Printf("  [%s] Copied extra skills to %s\n", a.Name, a.SkillsDir)
 	}
 }
 
-func runTUI(agents []agent.Agent) (string, string, bool, bool, error) {
+func runTUI(agents []agent.Agent) (string, bool, bool, error) {
 	// Convert internal agent.Agent to tui agent format
 	tuiAgents := make([]agent.Agent, len(agents))
 	copy(tuiAgents, agents)
@@ -163,7 +143,7 @@ func runTUI(agents []agent.Agent) (string, string, bool, bool, error) {
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(agentFlag, projectType string, dryRun bool, installMCP bool, globalOnly bool) {
+func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly bool) {
 	var agents []agent.Agent
 	if agentFlag != "" {
 		a, err := agent.FindByName(agentFlag)
@@ -185,7 +165,7 @@ func executeInstall(agentFlag, projectType string, dryRun bool, installMCP bool,
 		fmt.Println("\n[DRY RUN] No changes will be made.")
 	}
 
-	fmt.Println("\n[1/4] Checking gentle-ai...")
+	fmt.Println("\n[1/3] Checking gentle-ai...")
 	if dryRun {
 		fmt.Println("  Would install or update gentle-ai if needed.")
 	} else {
@@ -195,39 +175,24 @@ func executeInstall(agentFlag, projectType string, dryRun bool, installMCP bool,
 		reseedData()
 	}
 
-	fmt.Println("\n[2/4] Detecting agents...")
+	fmt.Println("\n[2/3] Detecting agents...")
 	for _, a := range agents {
 		fmt.Printf("  Found: %s (%s)\n", a.Name, a.BinaryName)
 	}
 
-	fmt.Println("\n[3/4] Installing ecosystem + linking extra skills...")
+	fmt.Println("\n[3/3] Installing ecosystem + copying extra skills...")
 	installEcosystem(agents, dryRun)
-	linkSkillsForAgents(agents, projectType, dryRun)
+	copySkillsForAgents(agents, dryRun)
 
 	if !dryRun {
 		results := orchestrator.RenameAll(orchestrator.AgentSettingsPaths())
 		orchestrator.PrintResults(results)
 
-		fmt.Println("\n[3.5/4] Applying ywai overrides...")
+		fmt.Println("\n[3.5/3] Applying ywai overrides...")
 		applyOverrides(agents)
 
-		fmt.Println("\n[3.6/4] Installing opencode-quota plugin...")
+		fmt.Println("\n[3.6/3] Installing opencode-quota plugin...")
 		installPluginsForAgents(agents, dryRun, installMCP)
-	}
-
-	if !globalOnly {
-		fmt.Println("\n[4/4] Initializing project...")
-		if projectType != "" && projectType != "generic" {
-			if dryRun {
-				fmt.Printf("  Would init project type %q in current directory.\n", projectType)
-			} else {
-				if err := project.Init(projectType, "."); err != nil {
-					fmt.Printf("  Warning: project init failed: %v\n", err)
-				}
-			}
-		}
-	} else {
-		fmt.Println("\n[4/4] Skipped (global-only mode).")
 	}
 
 	fmt.Println("\n=== Done! ===")
@@ -288,38 +253,34 @@ func selfUpdateViaGo() {
 
 func reseedData() {
 	skillsDir := config.DataSkillsDir()
-	ptDir := config.DataProjectTypesDir()
 
 	os.RemoveAll(skillsDir)
-	os.RemoveAll(ptDir)
 
 	if err := config.EnsureDataDir(); err != nil {
-		fmt.Printf("  Warning: failed to create data directories: %v\n", err)
+		fmt.Printf("  Warning: failed to create data directory: %v\n", err)
 		return
 	}
 
 	repo := config.RepoRoot()
 	if config.IsOurRepoByPath(repo) && repo != config.DataDir() {
-		if err := config.SeedDataFrom(repo); err != nil {
+		if err := config.SeedSkillsFrom(repo); err != nil {
 			fmt.Printf("  Warning: seed from repo failed: %v\n", err)
 		} else {
-			config.ResetConfig()
-			if len(config.AvailableProfiles()) > 0 {
-				fmt.Println("  Data re-seeded from repo.")
+			if len(config.AvailableSkills()) > 0 {
+				fmt.Println("  Skills re-seeded from repo.")
 				return
 			}
-			fmt.Println("  Repo seed had no valid profiles, falling back to embedded...")
+			fmt.Println("  Repo seed had no skills, falling back to embedded...")
 		}
 	}
 
-	if err := config.SeedFromEmbedded(); err != nil {
+	if err := config.SeedSkillsFromEmbedded(); err != nil {
 		fmt.Printf("  Warning: seed from embedded failed: %v\n", err)
 		fmt.Println("  The updated binary will seed data on next run.")
 		return
 	}
 
-	config.ResetConfig()
-	fmt.Println("  Data re-seeded from embedded.")
+	fmt.Println("  Skills re-seeded from embedded.")
 }
 
 func applyOverrides(agents []agent.Agent) {

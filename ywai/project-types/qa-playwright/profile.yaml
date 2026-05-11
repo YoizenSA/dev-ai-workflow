@@ -1,6 +1,0 @@
-description: "QA / E2E testing with Playwright"
-skills:
-  - playwright
-  - typescript
-  - biome
-  - git-commit

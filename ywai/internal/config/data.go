@@ -11,16 +11,15 @@ import (
 )
 
 var (
-	getEmbeddedSkillsFS       func() fs.FS
-	getEmbeddedProjectTypesFS func() fs.FS
-	fsMutex                   sync.Mutex
+	getEmbeddedSkillsFS func() fs.FS
+	fsMutex             sync.Mutex
 )
 
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
 
-	dirs := []string{DataDir(), DataSkillsDir(), DataProjectTypesDir()}
+	dirs := []string{DataDir(), DataSkillsDir()}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("failed to create data directory: %w", err)
@@ -30,50 +29,44 @@ func EnsureDataDir() error {
 }
 
 func ShouldSeedData() bool {
-	return !IsDirPopulated(DataSkillsDir()) || !IsDirPopulated(DataProjectTypesDir())
+	return !IsDirPopulated(DataSkillsDir())
 }
 
-func SeedDataFrom(repoRoot string) error {
+func SeedSkillsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err
 	}
 
-	for _, pair := range []struct{ src, dst string }{
-		{SkillsSourceDir(), DataSkillsDir()},
-		{ProjectTypesSourceDir(), DataProjectTypesDir()},
-	} {
-		entries, err := os.ReadDir(pair.src)
-		if err != nil {
+	srcDir := SkillsSourceDir()
+	dstDir := DataSkillsDir()
+
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
+		srcPath := filepath.Join(srcDir, entry.Name())
+		dstPath := filepath.Join(dstDir, entry.Name())
 
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			srcPath := filepath.Join(pair.src, entry.Name())
-			dstPath := filepath.Join(pair.dst, entry.Name())
-
-			if err := copyDirRecursive(srcPath, dstPath); err != nil {
-				return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
-			}
+		if err := copyDirRecursive(srcPath, dstPath); err != nil {
+			return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
 		}
 	}
 	return nil
 }
 
-func RegisterEmbeddedProviders(skillsFS, ptFS func() fs.FS) {
+func RegisterEmbeddedProviders(skillsFS func() fs.FS) {
 	getEmbeddedSkillsFS = skillsFS
-	getEmbeddedProjectTypesFS = ptFS
 }
 
-func SeedFromEmbedded() error {
+func SeedSkillsFromEmbedded() error {
 	if err := EnsureDataDir(); err != nil {
-		return fmt.Errorf("failed to ensure data directories: %w", err)
+		return fmt.Errorf("failed to ensure data directory: %w", err)
 	}
-
-	skillsSeeded := false
-	ptSeeded := false
 
 	if fn := getEmbeddedSkillsFS; fn != nil {
 		if fsys := fn(); fsys != nil {
@@ -89,38 +82,15 @@ func SeedFromEmbedded() error {
 				if err := extractFS(fsys, ".", DataSkillsDir()); err != nil {
 					return fmt.Errorf("failed to extract embedded skills: %w", err)
 				}
-				skillsSeeded = true
-			}
-		}
-	}
-
-	if fn := getEmbeddedProjectTypesFS; fn != nil {
-		if fsys := fn(); fsys != nil {
-			count := 0
-			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
-				if err == nil && !d.IsDir() {
-					count++
-				}
 				return nil
-			})
-			if count > 0 {
-				fmt.Printf("  Seeding project-types from embedded (%d files)...\n", count)
-				if err := extractFS(fsys, ".", DataProjectTypesDir()); err != nil {
-					return fmt.Errorf("failed to extract embedded project-types: %w", err)
-				}
-				ptSeeded = true
 			}
 		}
 	}
 
-	if !skillsSeeded && !ptSeeded {
-		return fmt.Errorf("no embedded data available; binary was built without embedded resources.\n" +
-			"  Reinstall with:\n" +
-			"    macOS/Linux: curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash\n" +
-			"    Source:      cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
-	}
-
-	return nil
+	return fmt.Errorf("no embedded skills data available; binary was built without embedded resources.\n" +
+		"  Reinstall with:\n" +
+		"    macOS/Linux: curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash\n" +
+		"    Source:      cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

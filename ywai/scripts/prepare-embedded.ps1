@@ -14,8 +14,8 @@ $ptDir = "$embedDir\project-types"
 New-Item -ItemType Directory -Path $skillsDir -Force | Out-Null
 New-Item -ItemType Directory -Path $ptDir -Force | Out-Null
 
-Copy-Item -Recurse -Force "$repoRoot\skills\*" $skillsDir
-Copy-Item -Recurse -Force "$repoRoot\project-types\*" $ptDir
+Get-ChildItem -Force "$repoRoot\skills" | Copy-Item -Destination $skillsDir -Recurse -Force
+Get-ChildItem -Force "$repoRoot\project-types" | Copy-Item -Destination $ptDir -Recurse -Force
 
 $skillCount = (Get-ChildItem -Directory $skillsDir).Count
 $ptCount = (Get-ChildItem -Directory $ptDir).Count
