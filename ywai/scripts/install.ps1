@@ -124,7 +124,7 @@ if (-not (Test-Path $ExePath)) {
 }
 
 Write-Host "  Cleaning old cached data..."
-@("skills", "project-types") | ForEach-Object {
+@("skills") | ForEach-Object {
     $dir = Join-Path $DataDir $_
     if (Test-Path $dir) {
         Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue

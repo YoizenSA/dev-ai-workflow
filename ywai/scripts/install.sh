@@ -157,7 +157,7 @@ echo "  Removing old ywai binaries from common paths..."
 remove_old_ywai_binaries "$INSTALL_PATH"
 
 echo "  Cleaning old cached data..."
-rm -rf "${DATA_DIR}/skills" "${DATA_DIR}/project-types"
+rm -rf "${DATA_DIR}/skills"
 
 echo "  Seeding data..."
 if ! "${INSTALL_PATH}" skills >/dev/null 2>&1; then
