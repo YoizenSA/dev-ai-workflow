@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -105,9 +106,21 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 
 func installEcosystem(agents []agent.Agent, dryRun bool) {
 	for _, a := range agents {
+		configDir := filepath.Dir(a.SkillsDir)
+		if skills.IsLinkOrJunction(configDir) {
+			fmt.Printf("  Warning: [%s] gentle-ai install skipped because config dir is a symlink/junction: %s\n", a.Name, configDir)
+			fmt.Println("    gentle-ai currently refuses to atomically write through linked config directories; leaving existing upstream skills untouched.")
+			continue
+		}
 		if dryRun {
+			fmt.Printf("  [%s] Would remove stale ywai skill links that block gentle-ai...\n", a.Name)
 			fmt.Printf("  [%s] Running gentle-ai install...\n", a.Name)
 			continue
+		}
+		if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
+			fmt.Printf("  Warning: [%s] failed to clean stale ywai skill links: %v\n", a.Name, err)
+		} else if len(removed) > 0 {
+			fmt.Printf("  [%s] Removed stale ywai skill links: %s\n", a.Name, strings.Join(removed, ", "))
 		}
 		if err := gentlai.InstallEcosystem(a.Name); err != nil {
 			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
@@ -119,7 +132,7 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 	filter := config.ProfileSkills(projectType)
 
 	if filter == nil {
-		fmt.Println("  linking all skills (generic profile).")
+		fmt.Println("  copying all ywai extra skills (generic profile).")
 	} else {
 		fmt.Printf("  Skills for %s:\n", projectType)
 		for _, s := range filter {
@@ -129,7 +142,7 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 
 	for _, a := range agents {
 		if dryRun {
-			fmt.Printf("  [%s] Linking extra skills to %s...\n", a.Name, a.SkillsDir)
+			fmt.Printf("  [%s] Copying extra skills to %s...\n", a.Name, a.SkillsDir)
 			continue
 		}
 
@@ -138,7 +151,7 @@ func linkSkillsForAgents(agents []agent.Agent, projectType string, dryRun bool) 
 		} else {
 			skills.LinkFiltered(a.SkillsDir, filter)
 		}
-		fmt.Printf("  [%s] Linked extra skills to %s\n", a.Name, a.SkillsDir)
+		fmt.Printf("  [%s] Copied extra skills to %s\n", a.Name, a.SkillsDir)
 	}
 }
 
@@ -174,9 +187,12 @@ func executeInstall(agentFlag, projectType string, dryRun bool, installMCP bool,
 
 	fmt.Println("\n[1/4] Checking gentle-ai...")
 	if dryRun {
-		fmt.Println("  Would install gentle-ai if not present.")
+		fmt.Println("  Would install or update gentle-ai if needed.")
 	} else {
-		gentlai.Install()
+		if err := gentlai.Install(); err != nil {
+			fmt.Printf("  Warning: gentle-ai install/update failed: %v\n", err)
+		}
+		reseedData()
 	}
 
 	fmt.Println("\n[2/4] Detecting agents...")

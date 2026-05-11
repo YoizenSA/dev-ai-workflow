@@ -37,7 +37,15 @@ func IsInstalled() bool {
 
 func Install() error {
 	if IsInstalled() {
-		fmt.Println("gentle-ai already installed.")
+		if version := CurrentVersion(); version != "" {
+			fmt.Printf("gentle-ai already installed (%s).\n", version)
+		} else {
+			fmt.Println("gentle-ai already installed.")
+		}
+		fmt.Println("Checking gentle-ai for updates...")
+		if err := Upgrade(); err != nil {
+			return fmt.Errorf("gentle-ai upgrade failed: %w", err)
+		}
 		return nil
 	}
 

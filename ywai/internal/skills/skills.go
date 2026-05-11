@@ -5,10 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
+
+const extraSkillMarkerFile = ".ywai-extra"
 
 func LinkTo(agentSkillsDir string) error {
 	return linkFiltered(agentSkillsDir, nil)
@@ -34,6 +37,7 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 		filterSet[f] = true
 	}
 
+	extraSkills := ywaiExtraSkillNames(srcDir)
 	linked := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -41,7 +45,7 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 		}
 
 		name := entry.Name()
-		if name == "_shared" {
+		if !extraSkills[name] {
 			continue
 		}
 		if len(filterSet) > 0 && !filterSet[name] {
@@ -51,10 +55,6 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 		src := filepath.Join(srcDir, name)
 		dst := filepath.Join(agentSkillsDir, name)
 
-		if isCurrentLink(dst, src) {
-			continue
-		}
-
 		if pathExists(dst) {
 			if err := removeExistingSkillPath(dst); err != nil {
 				fmt.Printf("  Warning: failed to remove existing %s: %v\n", name, err)
@@ -62,70 +62,60 @@ func linkFiltered(agentSkillsDir string, filter []string) error {
 			}
 		}
 
-		if err := createLink(src, dst); err != nil {
-			fmt.Printf("  Warning: failed to link skill %s: %v\n", name, err)
+		if err := copyDir(src, dst); err != nil {
+			fmt.Printf("  Warning: failed to copy skill %s: %v\n", name, err)
 			continue
 		}
 
-		fmt.Printf("  Linked skill: %s\n", name)
+		fmt.Printf("  Copied skill: %s\n", name)
 		linked++
 	}
 
 	if linked == 0 {
-		fmt.Println("  All skills already linked.")
+		fmt.Println("  All skills already up to date.")
 	}
 	return nil
 }
 
-func createLink(src, dst string) error {
-	if config.IsWindows() {
-		return createJunction(src, dst)
-	}
-	return os.Symlink(src, dst)
-}
-
-func createJunction(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+func copyDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
 		return err
 	}
-	cmd := exec.Command("cmd", "/c", "mklink", "/J", dst, src)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("mklink /J failed: %w: %s", err, string(output))
+	if !info.IsDir() {
+		return fmt.Errorf("source is not a directory: %s", src)
 	}
-	return nil
-}
 
-func isCurrentLink(dst, src string) bool {
-	if config.IsWindows() {
-		return isCurrentJunction(dst, src)
-	}
-	target, err := os.Readlink(dst)
-	if err != nil {
-		return false
-	}
-	return filepath.Clean(target) == filepath.Clean(src)
-}
+	return filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
 
-func isCurrentJunction(dst, src string) bool {
-	target, err := os.Readlink(dst)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(cleanWindowsLinkTarget(target), cleanWindowsLinkTarget(src))
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
 }
 
 func pathExists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
-}
-
-func cleanWindowsLinkTarget(path string) string {
-	cleaned := filepath.Clean(path)
-	for _, prefix := range []string{`\\?\`, `\??\`} {
-		cleaned = strings.TrimPrefix(cleaned, prefix)
-	}
-	return cleaned
 }
 
 func removeExistingSkillPath(path string) error {
@@ -151,27 +141,171 @@ func removeExistingSkillPath(path string) error {
 	return os.RemoveAll(path)
 }
 
+// RemoveStaleYwaiSkillLinks removes only symlink/junction placeholders that
+// point back into ywai's skill cache/source but are no longer ywai extra skills.
+// Older ywai versions linked upstream-managed skills from ~/.ywai/skills; those
+// links block gentle-ai's safe atomic writer. This is data-driven: ywai-owned
+// skills are detected from marker/profile data, not from an upstream
+// denylist.
+func RemoveStaleYwaiSkillLinks(agentSkillsDir string) ([]string, error) {
+	entries, err := os.ReadDir(agentSkillsDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read agent skills directory %s: %w", agentSkillsDir, err)
+	}
+
+	srcDir := skillsSourceDir()
+	extraSkills := ywaiExtraSkillNames(srcDir)
+	var removed []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if extraSkills[name] {
+			continue
+		}
+
+		path := filepath.Join(agentSkillsDir, name)
+		if !IsLinkOrJunction(path) {
+			continue
+		}
+		if !linkTargetsYwaiSkills(path, srcDir) {
+			continue
+		}
+
+		if err := removeExistingSkillPath(path); err != nil {
+			return removed, fmt.Errorf("failed to remove stale ywai skill link %s: %w", path, err)
+		}
+		removed = append(removed, name)
+	}
+
+	sort.Strings(removed)
+	return removed, nil
+}
+
+func IsLinkOrJunction(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return true
+	}
+	if config.IsWindows() {
+		_, err := os.Readlink(path)
+		return err == nil
+	}
+	return false
+}
+
+func linkTargetsYwaiSkills(path, srcDir string) bool {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+
+	for _, root := range uniquePaths([]string{srcDir, config.DataSkillsDir(), config.SkillsSourceDir()}) {
+		if isPathWithin(target, root) {
+			return true
+		}
+	}
+	return false
+}
+
+func uniquePaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	unique := make([]string, 0, len(paths))
+	for _, path := range paths {
+		clean := filepath.Clean(path)
+		if clean == "." || clean == "" {
+			continue
+		}
+		key := strings.ToLower(clean)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, clean)
+	}
+	return unique
+}
+
+func isPathWithin(path, root string) bool {
+	path = filepath.Clean(path)
+	root = filepath.Clean(root)
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
 func ListAvailable() ([]string, error) {
 	srcDir := skillsSourceDir()
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
+	if _, err := os.ReadDir(srcDir); err != nil {
 		return nil, err
 	}
 
-	var names []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			names = append(names, entry.Name())
-		}
+	extraSkills := ywaiExtraSkillNames(srcDir)
+	names := make([]string, 0, len(extraSkills))
+	for name := range extraSkills {
+		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names, nil
 }
 
+func ywaiExtraSkillNames(srcDir string) map[string]bool {
+	names := make(map[string]bool)
+
+	for _, profile := range config.AvailableProfiles() {
+		for _, skill := range config.ProfileSkills(profile) {
+			names[skill] = true
+		}
+	}
+
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return names
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if names[name] {
+			continue
+		}
+		if hasYwaiExtraMarker(filepath.Join(srcDir, name)) {
+			names[name] = true
+		}
+	}
+
+	return names
+}
+
+func hasYwaiExtraMarker(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, extraSkillMarkerFile))
+	return err == nil
+}
+
 func skillsSourceDir() string {
-	// Prefer the seeded home cache for links/listing. When ywai is executed from
-	// a source checkout mounted outside $HOME, linking agent skills directly to
-	// the checkout can make upstream tools reject rollback manifests after
-	// EvalSymlinks resolves ~/.config/.../skills/* outside the home directory.
+	// Prefer the source checkout when available. Skills are copied, not linked,
+	// so using the repo source no longer creates rollback/symlink issues for
+	// upstream tools.
+	repo := config.RepoRoot()
+	for _, candidate := range []string{
+		filepath.Join(repo, "ywai", config.SkillsDirName),
+		filepath.Join(repo, config.SkillsDirName),
+	} {
+		if config.IsDirPopulated(candidate) {
+			return candidate
+		}
+	}
+
 	if config.IsDirPopulated(config.DataSkillsDir()) {
 		return config.DataSkillsDir()
 	}

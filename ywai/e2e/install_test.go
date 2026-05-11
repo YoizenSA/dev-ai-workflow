@@ -51,8 +51,8 @@ func TestInstallDryRunGenericShowsAllMessage(t *testing.T) {
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--type", "generic", "--dry-run")
 
-	if !strings.Contains(out, "linking all skills") {
-		t.Errorf("expected 'linking all skills' for generic, got: %s", out)
+	if !strings.Contains(out, "copying all ywai extra skills") {
+		t.Errorf("expected 'copying all ywai extra skills' for generic, got: %s", out)
 	}
 }
 

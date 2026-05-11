@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -64,7 +65,7 @@ var installCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Upgrade ywai + gentle-ai + re-seed + sync + re-link + rename orchestrator",
+	Short: "Upgrade ywai + gentle-ai + re-seed + sync + copy skills + rename orchestrator",
 	Run: func(cmd *cobra.Command, args []string) {
 		var warnings []string
 		warn := func(format string, args ...any) {
@@ -88,11 +89,20 @@ var updateCmd = &cobra.Command{
 		fmt.Println("\n[3/7] Re-seeding data cache...")
 		reseedData()
 
-		fmt.Println("\n[4/7] Normalizing extra skill links...")
+		fmt.Println("\n[4/7] Cleaning stale links + pre-copying extra skills...")
 		if len(agents) > 0 {
 			for _, a := range agents {
+				if configDir := filepath.Dir(a.SkillsDir); skills.IsLinkOrJunction(configDir) {
+					warn("[%s] skipped stale ywai skill-link cleanup because config dir is a symlink/junction: %s", a.Name, configDir)
+				} else {
+					if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
+						warn("[%s] stale ywai skill-link cleanup failed: %v", a.Name, err)
+					} else if len(removed) > 0 {
+						fmt.Printf("  [%s] Removed stale ywai skill links: %s\n", a.Name, strings.Join(removed, ", "))
+					}
+				}
 				if err := skills.LinkTo(a.SkillsDir); err != nil {
-					warn("[%s] pre-sync skill link normalization failed: %v", a.Name, err)
+					warn("[%s] pre-sync skill copy failed: %v", a.Name, err)
 				}
 			}
 		} else {
@@ -105,7 +115,7 @@ var updateCmd = &cobra.Command{
 			fmt.Println("  Continuing with ywai cache, skill links, and overrides.")
 		}
 
-		fmt.Println("\n[6/7] Re-linking extra skills...")
+		fmt.Println("\n[6/7] Copying extra skills...")
 		if len(agents) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
 			os.Exit(1)
@@ -116,7 +126,7 @@ var updateCmd = &cobra.Command{
 				warn("[%s] re-link skills failed: %v", a.Name, err)
 				continue
 			}
-			fmt.Printf("  [%s] Re-linked skills\n", a.Name)
+			fmt.Printf("  [%s] Copied skills\n", a.Name)
 		}
 
 		fmt.Println("\n[7/7] Renaming orchestrator...")
