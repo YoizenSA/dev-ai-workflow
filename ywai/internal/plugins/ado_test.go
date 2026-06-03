@@ -60,7 +60,7 @@ func TestInstallADOOpenCode_UpdatesExistingPlugin(t *testing.T) {
 		"plugin": []any{
 			[]any{"@nahuelcio/opencode-ado", map[string]any{
 				"defaultProfile": "old",
-				"profiles": map[string]any{},
+				"profiles":       map[string]any{},
 			}},
 		},
 	})
@@ -305,10 +305,10 @@ func TestReadExistingADOConfig_ParsesConfig(t *testing.T) {
 			"defaultProfile": "work",
 			"profiles": map[string]any{
 				"work": map[string]any{
-					"org":        "myorg",
-					"patEnvVar":  "MY_PAT",
-					"project":    "myproject",
-					"repos":      []any{"backend"},
+					"org":       "myorg",
+					"patEnvVar": "MY_PAT",
+					"project":   "myproject",
+					"repos":     []any{"backend"},
 				},
 			},
 		},
