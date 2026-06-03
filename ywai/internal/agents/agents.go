@@ -79,6 +79,7 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	if mode == "" {
 		mode = "primary"
 	}
+	prompt = stripFrontmatter(prompt)
 
 	// Read tools.json
 	toolsFile := filepath.Join(dir, "tools.json")
