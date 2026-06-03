@@ -18,6 +18,7 @@ type AgentProfile struct {
 	Prompt      string
 	Tools       map[string]bool
 	Skills      []string
+	Mode        string
 }
 
 // toolMapping maps our tool names to opencode-style tool names.
@@ -74,6 +75,10 @@ func loadProfile(dir string) (*AgentProfile, error) {
 
 	prompt := string(promptBytes)
 	description := extractDescription(prompt)
+	mode := extractMode(prompt)
+	if mode == "" {
+		mode = "primary"
+	}
 
 	// Read tools.json
 	toolsFile := filepath.Join(dir, "tools.json")
@@ -101,6 +106,7 @@ func loadProfile(dir string) (*AgentProfile, error) {
 		Prompt:      promptWithSkills(prompt, skills),
 		Tools:       tools,
 		Skills:      skills,
+		Mode:        mode,
 	}, nil
 }
 
@@ -203,6 +209,25 @@ func frontmatterDescription(prompt string) string {
 	return ""
 }
 
+// extractMode parses the `mode:` field from YAML frontmatter.
+func extractMode(prompt string) string {
+	if !strings.HasPrefix(prompt, "---") {
+		return ""
+	}
+	end := strings.Index(prompt[3:], "---")
+	if end == -1 {
+		return ""
+	}
+	frontmatter := prompt[3 : end+3]
+	for _, line := range strings.Split(frontmatter, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "mode:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "mode:"))
+		}
+	}
+	return ""
+}
+
 // parseOpenCodeTools reads tools.json and converts to opencode tool map.
 func parseOpenCodeTools(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
@@ -275,7 +300,7 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		}
 
 		agents[name] = map[string]any{
-			"mode":        "primary",
+			"mode":        profile.Mode,
 			"description": profile.Description,
 			"prompt":      profile.Prompt,
 			"tools":       profile.Tools,

@@ -5,7 +5,7 @@ description: >
   Trigger: When user asks to create a new skill, add agent instructions, or document patterns for AI.
 license: Apache-2.0
 metadata:
-  author: Yoizen
+  
   version: "1.0"
   scope: [root]
   auto_invoke:
@@ -56,14 +56,14 @@ description: >
   Trigger: {When the AI should load this skill}.
 license: Apache-2.0
 metadata:
-  author: Yoizen
+  
   version: "1.0"
   scope: [root]
   auto_invoke:
     - "skill operations"
     - "workflow"
     - "sdd"
-  author: Yoizen
+  
   version: "1.0"
   scope: [root]
   auto_invoke:

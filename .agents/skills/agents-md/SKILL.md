@@ -6,7 +6,7 @@ description: >
   Trigger: When generating AGENTS.md, updating agent docs, or standardizing AI-facing project guidance.
 license: Apache-2.0
 metadata:
-  author: Yoizen
+  
   version: "1.0"
   scope: [root]
   auto_invoke:

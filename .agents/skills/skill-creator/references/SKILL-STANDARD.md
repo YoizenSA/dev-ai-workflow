@@ -20,7 +20,7 @@ name: skill-name
 description: Short description of what it does and when to invoke it.
 
 metadata:
-  author: Yoizen
+  
   version: "1.0"
   scope: [root, api, backend, frontend]
   auto_invoke:
