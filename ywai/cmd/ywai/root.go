@@ -170,9 +170,23 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		}
 	}
 
+	// When global-only, run gentle-ai from a neutral directory so it does not
+	// write workspace skills (skills/, .sdd/, AGENTS.md) into the current project.
+	if globalOnly {
+		neutralDir := filepath.Join(config.DataDir(), "global-workspace")
+		if err := os.MkdirAll(neutralDir, 0o755); err != nil {
+			fmt.Printf("  Warning: failed to create global-workspace dir: %v\n", err)
+		} else {
+			opts.WorkDir = neutralDir
+		}
+	}
+
 	fmt.Println("=== ywai install ===")
 	if opts.DryRun {
 		fmt.Println("\n[DRY RUN] No changes will be made.")
+	}
+	if globalOnly {
+		fmt.Println("  Global-only: gentle-ai will not write into the current project.")
 	}
 
 	fmt.Println("\n[1/3] Checking gentle-ai...")

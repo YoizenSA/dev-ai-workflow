@@ -85,6 +85,7 @@ type InstallOptions struct {
 	Scope     string // global, workspace
 	SDDMode   string // single, multi
 	Persona   string // gentleman, neutral, custom
+	WorkDir   string // working directory for gentle-ai (isolates workspace writes); empty = current dir
 	DryRun    bool
 }
 
@@ -100,6 +101,9 @@ func InstallEcosystem(opts InstallOptions) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+	if opts.WorkDir != "" {
+		cmd.Dir = opts.WorkDir
+	}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
