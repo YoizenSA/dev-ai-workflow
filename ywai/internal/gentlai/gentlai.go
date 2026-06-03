@@ -78,26 +78,47 @@ func Install() error {
 	return nil
 }
 
-func InstallEcosystem(agentName string) error {
+// InstallOptions holds all configurable options for gentle-ai install.
+type InstallOptions struct {
+	AgentName string
+	Preset    string // full-gentleman, ecosystem-only, minimal, custom
+	Scope     string // global, workspace
+	SDDMode   string // single, multi
+	Persona   string // gentleman, neutral, custom
+	DryRun    bool
+}
+
+func InstallEcosystem(opts InstallOptions) error {
 	if !IsInstalled() {
 		return fmt.Errorf("gentle-ai is not installed. Run install first.")
 	}
 
-	components := []string{
-		"engram", "sdd", "skills", "context7",
-		"persona", "permissions", "theme",
+	preset := opts.Preset
+	if preset == "" {
+		preset = "full-gentleman"
+	}
+	persona := opts.Persona
+	if persona == "" {
+		persona = "neutral"
 	}
 
 	args := []string{
 		"install",
-		"--agent", agentName,
-		"--persona", "neutral",
+		"--agent", opts.AgentName,
+		"--persona", persona,
+		"--preset", preset,
 	}
-	for _, c := range components {
-		args = append(args, "--component", c)
+	if opts.Scope != "" {
+		args = append(args, "--scope", opts.Scope)
+	}
+	if opts.SDDMode != "" {
+		args = append(args, "--sdd-mode", opts.SDDMode)
+	}
+	if opts.DryRun {
+		args = append(args, "--dry-run")
 	}
 
-	fmt.Printf("Running gentle-ai install --agent %s...\n", agentName)
+	fmt.Printf("Running gentle-ai install --agent %s --preset %s...\n", opts.AgentName, preset)
 	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -177,7 +198,18 @@ func Upgrade() error {
 	return upgradeErr
 }
 
-func Sync() error {
+// SyncOptions holds configurable options for gentle-ai sync.
+type SyncOptions struct {
+	SDDMode       string // single, multi
+	StrictTDD     bool
+	Profiles      []string // e.g. "cheap:openrouter/qwen/qwen3-30b-a3b:free"
+	ProfilePhases []string // e.g. "cheap:sdd-design:anthropic/claude-sonnet-4"
+	IncludePerms  bool
+	IncludeTheme  bool
+	DryRun        bool
+}
+
+func Sync(opts SyncOptions) error {
 	if !IsInstalled() {
 		return fmt.Errorf("gentle-ai is not installed")
 	}
@@ -187,7 +219,57 @@ func Sync() error {
 	} else {
 		fmt.Println("Syncing gentle-ai assets...")
 	}
-	cmd := exec.Command(config.GentleAIBin, "sync")
+
+	args := []string{"sync"}
+	if opts.SDDMode != "" {
+		args = append(args, "--sdd-mode", opts.SDDMode)
+	}
+	if opts.StrictTDD {
+		args = append(args, "--strict-tdd")
+	}
+	for _, p := range opts.Profiles {
+		args = append(args, "--profile", p)
+	}
+	for _, pp := range opts.ProfilePhases {
+		args = append(args, "--profile-phase", pp)
+	}
+	if opts.IncludePerms {
+		args = append(args, "--include-permissions")
+	}
+	if opts.IncludeTheme {
+		args = append(args, "--include-theme")
+	}
+	if opts.DryRun {
+		args = append(args, "--dry-run")
+	}
+
+	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// Doctor runs gentle-ai doctor for a read-only health check.
+func Doctor() error {
+	if !IsInstalled() {
+		return fmt.Errorf("gentle-ai is not installed")
+	}
+	cmd := exec.Command(config.GentleAIBin, "doctor")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// SkillRegistryRefresh runs gentle-ai skill-registry refresh.
+func SkillRegistryRefresh(cwd string) error {
+	if !IsInstalled() {
+		return fmt.Errorf("gentle-ai is not installed")
+	}
+	args := []string{"skill-registry", "refresh"}
+	if cwd != "" {
+		args = append(args, "--cwd", cwd)
+	}
+	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

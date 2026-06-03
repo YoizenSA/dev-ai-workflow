@@ -96,7 +96,7 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 	return agents
 }
 
-func installEcosystem(agents []agent.Agent, dryRun bool) {
+func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOptions) {
 	for _, a := range agents {
 		configDir := filepath.Dir(a.SkillsDir)
 		if skills.IsLinkOrJunction(configDir) {
@@ -114,7 +114,9 @@ func installEcosystem(agents []agent.Agent, dryRun bool) {
 		} else if len(removed) > 0 {
 			fmt.Printf("  [%s] Removed stale legacy skill links: %s\n", a.Name, strings.Join(removed, ", "))
 		}
-		if err := gentlai.InstallEcosystem(a.Name); err != nil {
+		agentOpts := opts
+		agentOpts.AgentName = a.Name
+		if err := gentlai.InstallEcosystem(agentOpts); err != nil {
 			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
 		}
 	}
@@ -142,10 +144,10 @@ func runTUI(agents []agent.Agent) (string, bool, bool, error) {
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly bool) {
+func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool) {
 	var agents []agent.Agent
-	if agentFlag != "" {
-		a, err := agent.FindByName(agentFlag)
+	if opts.AgentName != "" {
+		a, err := agent.FindByName(opts.AgentName)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return
@@ -160,12 +162,12 @@ func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly b
 	}
 
 	fmt.Println("=== ywai install ===")
-	if dryRun {
+	if opts.DryRun {
 		fmt.Println("\n[DRY RUN] No changes will be made.")
 	}
 
 	fmt.Println("\n[1/3] Checking gentle-ai...")
-	if dryRun {
+	if opts.DryRun {
 		fmt.Println("  Would install or update gentle-ai if needed.")
 	} else {
 		if err := gentlai.Install(); err != nil {
@@ -180,10 +182,10 @@ func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly b
 	}
 
 	fmt.Println("\n[3/3] Installing ecosystem + copying extra skills...")
-	installEcosystem(agents, dryRun)
-	copySkillsForAgents(agents, dryRun)
+	installEcosystem(agents, opts.DryRun, opts)
+	copySkillsForAgents(agents, opts.DryRun)
 
-	if !dryRun {
+	if !opts.DryRun {
 		agentDirs := make(map[string]string)
 		for _, a := range agents {
 			agentDirs[a.Name] = a.SkillsDir
@@ -193,7 +195,7 @@ func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly b
 		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
 		fmt.Println("\n[3.6/3] Installing opencode-quota plugin...")
-		installPluginsForAgents(agents, dryRun, installMCP)
+		installPluginsForAgents(agents, opts.DryRun, installMCP)
 	}
 
 	fmt.Println("\n=== Done! ===")

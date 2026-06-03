@@ -28,8 +28,8 @@ ywai install
 # Preview changes
 ywai install --dry-run
 
-# Specific agent
-ywai install --agent opencode
+# Specific agent with preset
+ywai install --agent opencode --preset full-gentleman
 
 # Update everything
 ywai update
@@ -44,6 +44,9 @@ ywai update
 | `ywai install` | Install gentle-ai + ecosystem + all extra skills |
 | `ywai update` | Upgrade gentle-ai + sync + re-link skills |
 | `ywai skills` | List available extra skills |
+| `ywai agents` | List detected AI agents |
+| `ywai doctor` | Run gentle-ai health check |
+| `ywai skill-registry` | Refresh project skill registry |
 
 ### Install flags
 
@@ -51,6 +54,49 @@ ywai update
 |------|-------------|
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
+| `--preset` | Install preset: `full-gentleman` (default), `ecosystem-only`, `minimal`, `custom` |
+| `--scope` | Install scope: `global` (default) or `workspace` |
+| `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
+| `--persona` | Persona: `gentleman`, `neutral`, `custom` |
+| `--mcp` | Install Microsoft Learn MCP (for opencode/kilocode) |
+| `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
+
+### Update flags
+
+| Flag | Description |
+|------|-------------|
+| `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
+| `--strict-tdd` | Enable Strict TDD Mode for SDD agents |
+| `--include-permissions` | Include permissions in sync |
+| `--include-theme` | Include theme in sync |
+
+### Skill registry flags
+
+| Flag | Description |
+|------|-------------|
+| `--cwd` | Project directory (defaults to current) |
+
+---
+
+## Supported Agents
+
+| Agent | ID | Detection |
+|-------|----|-----------|
+| OpenCode | `opencode` | Binary in PATH |
+| Claude Code | `claude-code` | Binary in PATH |
+| Cursor | `cursor` | Binary in PATH |
+| Gemini CLI | `gemini-cli` | Binary in PATH |
+| VS Code Copilot | `vscode-copilot` | Binary in PATH |
+| Codex | `codex` | Binary in PATH |
+| Kilo Code | `kilocode` | Binary in PATH |
+| Kimi Code | `kimi` | Binary in PATH |
+| Qwen Code | `qwen-code` | Binary in PATH |
+| Antigravity | `antigravity` | Config dir `~/.gemini/antigravity/` |
+| Kiro IDE | `kiro-ide` | Binary in PATH |
+| OpenClaw | `openclaw` | Binary in PATH |
+| Trae IDE | `trae-ide` | Config dir `~/.trae/` |
+| Windsurf | `windsurf` | Config dir `~/.codeium/windsurf/` |
+| Pi | `pi` | Binary in PATH |
 
 ---
 
@@ -67,8 +113,8 @@ ywai/
 │   └── devops/           # CI/CD & infrastructure
 ├── cmd/ywai/             # CLI entry point
 ├── internal/
-│   ├── agent/            # Agent detection (opencode, claude-code, etc.)
-│   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade)
+│   ├── agent/            # Agent detection (15 supported agents)
+│   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade, doctor)
 │   ├── skills/           # Symlink extra skills to agent dirs
 │   └── config/           # Paths, constants
 ├── skills/               # Extra skills not in gentle-ai

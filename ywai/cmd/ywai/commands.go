@@ -55,7 +55,16 @@ var installCmd = &cobra.Command{
 			globalOnly = globalFlag
 		}
 
-		executeInstall(agentFlag, dryRun, installMCP, globalOnly)
+		installOpts := gentlai.InstallOptions{
+			AgentName: agentFlag,
+			Preset:    getStringFlag(cmd, "preset"),
+			Scope:     getStringFlag(cmd, "scope"),
+			SDDMode:   getStringFlag(cmd, "sdd-mode"),
+			Persona:   getStringFlag(cmd, "persona"),
+			DryRun:    dryRun,
+		}
+
+		executeInstall(installOpts, installMCP, globalOnly)
 	},
 }
 
@@ -114,7 +123,13 @@ var updateCmd = &cobra.Command{
 
 		fmt.Println("\n[5/7] Syncing ecosystem...")
 		if gentlai.IsInstalled() {
-			if err := gentlai.Sync(); err != nil {
+			syncOpts := gentlai.SyncOptions{
+				SDDMode:      getStringFlag(cmd, "sdd-mode"),
+				StrictTDD:    getBoolFlag(cmd, "strict-tdd"),
+				IncludePerms: getBoolFlag(cmd, "include-permissions"),
+				IncludeTheme: getBoolFlag(cmd, "include-theme"),
+			}
+			if err := gentlai.Sync(syncOpts); err != nil {
 				warn("gentle-ai sync failed: %v", err)
 				fmt.Println("  Continuing with ywai cache, skill copies, and overrides.")
 			}
@@ -202,19 +217,70 @@ var skillsCmd = &cobra.Command{
 	},
 }
 
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Run gentle-ai health check",
+	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := gentlai.Doctor(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
+var skillRegistryCmd = &cobra.Command{
+	Use:   "skill-registry",
+	Short: "Refresh the project skill registry",
+	Long:  "Scan project and global skills, build the registry used by SDD orchestrators.",
+	Run: func(cmd *cobra.Command, args []string) {
+		cwd, _ := cmd.Flags().GetString("cwd")
+		if cwd == "" {
+			cwd, _ = os.Getwd()
+		}
+		if err := gentlai.SkillRegistryRefresh(cwd); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
 func init() {
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode/kilocode)")
 	installCmd.Flags().Bool("global", false, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
+	installCmd.Flags().String("preset", "full-gentleman", "Install preset: full-gentleman, ecosystem-only, minimal, custom")
+	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
+	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
+	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
+
+	updateCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
+	updateCmd.Flags().Bool("strict-tdd", false, "Enable Strict TDD Mode for SDD agents")
+	updateCmd.Flags().Bool("include-permissions", false, "Include permissions in sync")
+	updateCmd.Flags().Bool("include-theme", false, "Include theme in sync")
 
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)
+	rootCmd.AddCommand(doctorCmd)
+
+	skillRegistryCmd.Flags().String("cwd", "", "Project directory (defaults to current)")
+	rootCmd.AddCommand(skillRegistryCmd)
 }
 
 func isInteractiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+func getStringFlag(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return v
+}
+
+func getBoolFlag(cmd *cobra.Command, name string) bool {
+	v, _ := cmd.Flags().GetBool(name)
+	return v
 }

@@ -45,9 +45,9 @@ var KnownAgents = []struct {
 	},
 	{
 		Name:   "windsurf",
-		Binary: "windsurf",
+		Binary: "", // desktop app, no binary on PATH
 		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".windsurf", "skills")
+			return filepath.Join(homeDir(), ".codeium", "windsurf", "skills")
 		},
 	},
 	{
@@ -88,7 +88,7 @@ var KnownAgents = []struct {
 		Name:   "kimi",
 		Binary: "kimi",
 		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".config", "agents", "skills")
+			return filepath.Join(homeDir(), ".kimi", "skills")
 		},
 	},
 	{
@@ -110,6 +110,27 @@ var KnownAgents = []struct {
 		Binary: "kiro",
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".kiro", "skills")
+		},
+	},
+	{
+		Name:   "openclaw",
+		Binary: "openclaw",
+		SkillsPath: func() string {
+			return filepath.Join(homeDir(), ".openclaw", "skills")
+		},
+	},
+	{
+		Name:   "trae-ide",
+		Binary: "", // desktop app, no binary on PATH
+		SkillsPath: func() string {
+			return filepath.Join(homeDir(), ".trae", "skills")
+		},
+	},
+	{
+		Name:   "pi",
+		Binary: "pi",
+		SkillsPath: func() string {
+			return filepath.Join(homeDir(), ".pi", "agent", "npm", "node_modules", "gentle-pi", "skills")
 		},
 	},
 }
@@ -269,7 +290,7 @@ func SettingsPaths() map[string]string {
 	return map[string]string{
 		"opencode":   filepath.Join(home, ".config", "opencode", "opencode.json"),
 		"kilocode":   filepath.Join(home, ".config", "kilo", "opencode.json"),
-		"windsurf":   pathIfExists(filepath.Join(home, ".windsurf", "settings.json")),
+		"windsurf":   pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli": pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 	}
 }
@@ -286,5 +307,6 @@ func AvailableNames() []string {
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
 		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
+		"openclaw", "trae-ide", "pi",
 	}
 }
