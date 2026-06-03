@@ -1,6 +1,6 @@
 ---
 name: git-commit
-description: Git commit standards, conventions, and commit message formatting
+description: Git commit standards and conventional commits.
 
 metadata:
   author: Yoizen

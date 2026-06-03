@@ -1,8 +1,6 @@
 ---
 name: dotnet
-description: >
-  .NET 9 / ASP.NET Core patterns with Minimal APIs, Clean Architecture, and EF Core.
-  Trigger: When writing C# code, .NET APIs, or Entity Framework models.
+description: .NET 9 / ASP.NET Core patterns. Trigger: writing C#, Minimal APIs, EF Core.
 license: Apache-2.0
 metadata:
   author: Yoizen

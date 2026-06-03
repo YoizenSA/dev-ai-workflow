@@ -1,8 +1,6 @@
 ---
 name: angular-forms
-description: >
-  Angular forms: Signal Forms (experimental) and Reactive Forms.
-  Trigger: When working with forms, validation, or form state in Angular.
+description: Angular forms. Trigger: forms, validation, form state in Angular.
 license: Apache-2.0
 metadata:
   author: Yoizen

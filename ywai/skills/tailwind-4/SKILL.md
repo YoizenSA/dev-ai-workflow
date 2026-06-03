@@ -1,8 +1,6 @@
 ---
 name: tailwind-4
-description: >
-  Tailwind CSS 4 patterns and best practices.
-  Trigger: When styling with Tailwind - cn(), theme variables, no var() in className.
+description: Tailwind CSS 4 patterns. Trigger: styling, CSS utilities, responsive design.
 license: Apache-2.0
 metadata:
   author: Yoizen

@@ -1,9 +1,6 @@
 ---
 name: devops
-description: >
-  Azure DevOps YAML pipelines and Helm Umbrella chart conventions for multi-service projects.
-  Concrete actions: create multi-stage pipeline YAML for Docker build/push to ACR, generate Umbrella Helm charts with sub-charts, configure values.yaml environment contracts, set up tag-triggered versioning strategy.
-  Trigger: When the user asks to create or modify Azure DevOps pipelines, generate or maintain Helm Umbrella charts, configure values.yaml service nodes, set up Docker-to-ACR image tagging, or scaffold the DevOps directory for a new project.
+description: Azure DevOps pipelines and Helm Umbrella charts. Trigger: CI/CD, Azure Pipelines, Helm, Kubernetes.
 license: Apache-2.0
 metadata:
   author: Yoizen

@@ -1,8 +1,6 @@
 ---
 name: typescript
-description: >
-  TypeScript strict patterns and best practices.
-  Trigger: When writing TypeScript code - types, interfaces, generics.
+description: TypeScript strict patterns. Trigger: writing TS code, types, interfaces, generics.
 license: Apache-2.0
 metadata:
   author: Yoizen

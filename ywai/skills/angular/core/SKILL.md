@@ -1,8 +1,6 @@
 ---
 name: angular-core
-description: >
-  Angular core patterns: standalone components, signals, inject, control flow, zoneless.
-  Trigger: When creating Angular components, using signals, or setting up zoneless.
+description: Angular core patterns. Trigger: Angular components, signals, inject, zoneless.
 license: Apache-2.0
 metadata:
   author: Yoizen

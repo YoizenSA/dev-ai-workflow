@@ -1,8 +1,6 @@
 ---
 name: angular-architecture
-description: >
-  Angular architecture: Scope Rule, project structure, file naming, style guide.
-  Trigger: When structuring Angular projects or deciding where to place components.
+description: Angular architecture and project structure. Trigger: structuring Angular projects, file placement.
 license: Apache-2.0
 metadata:
   author: Yoizen

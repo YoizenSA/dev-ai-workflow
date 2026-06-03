@@ -1,8 +1,6 @@
 ---
 name: yz-ui
-description: >
-  Yoizen UI design system guidelines and resources.
-  Trigger: When working on Yoizen UI components, styling, colors, typography, or icons.
+description: Yoizen UI design system. Trigger: Yoizen UI components, styling, colors, typography.
 license: Apache-2.0
 metadata:
   author: Yoizen
