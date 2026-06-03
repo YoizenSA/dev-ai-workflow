@@ -217,12 +217,16 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 }
 
 func installAgentProfiles(agents []agent.Agent, dryRun bool) {
-	sourceDir := agentprofiles.AgentsSourceDir()
-	if sourceDir == "" {
-		fmt.Println("  No agent profiles found.")
-		return
+	// Always read agent profiles from the seeded data dir (~/.ywai/agents).
+	// If it's empty, seed it from embedded data first.
+	if !config.IsDirPopulated(config.DataAgentsDir()) {
+		if err := config.SeedAgentsFromEmbedded(); err != nil {
+			fmt.Printf("  Warning: no agent profiles available: %v\n", err)
+			return
+		}
 	}
 
+	sourceDir := config.DataAgentsDir()
 	profiles, err := agentprofiles.LoadProfiles(sourceDir)
 	if err != nil {
 		fmt.Printf("  Warning: failed to load agent profiles: %v\n", err)
@@ -359,15 +363,16 @@ func reseedData() {
 	}
 
 	// Reseed agent profiles
+	seededAgents := false
 	if isRealRepo {
-		if err := config.SeedAgentsFrom(repo); err != nil {
-			fmt.Printf("  Warning: seed agents from repo failed: %v\n", err)
-		} else {
+		if err := config.SeedAgentsFrom(repo); err == nil && config.IsDirPopulated(config.DataAgentsDir()) {
 			fmt.Println("  Agent profiles re-seeded from repo.")
+			seededAgents = true
 		}
-	} else {
+	}
+	if !seededAgents {
 		if err := config.SeedAgentsFromEmbedded(); err != nil {
-			// Not fatal
+			// Not fatal — agent profiles are optional
 		} else {
 			fmt.Println("  Agent profiles re-seeded from embedded.")
 		}
