@@ -136,15 +136,14 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	}
 }
 
-func runTUI(agents []agent.Agent) (string, bool, bool, error) {
-	// Convert internal agent.Agent to tui agent format
+func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	tuiAgents := make([]agent.Agent, len(agents))
 	copy(tuiAgents, agents)
 
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool) {
+func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, installADO bool) {
 	var agents []agent.Agent
 	if opts.AgentName != "" {
 		a, err := agent.FindByName(opts.AgentName)
@@ -195,7 +194,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
 		fmt.Println("\n[3.6/3] Installing opencode-quota plugin...")
-		installPluginsForAgents(agents, opts.DryRun, installMCP)
+		installPluginsForAgents(agents, opts.DryRun, installMCP, installADO)
 	}
 
 	fmt.Println("\n=== Done! ===")
@@ -297,7 +296,7 @@ func applyOverrides(agents []agent.Agent) {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool, installADO bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 
 	for _, a := range agents {
@@ -317,6 +316,9 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
 			}
+			if installADO {
+				fmt.Printf("  [%s] Would install Azure DevOps plugin\n", a.Name)
+			}
 			continue
 		}
 
@@ -335,5 +337,53 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 				fmt.Printf("  [%s] Installed Microsoft Learn MCP\n", a.Name)
 			}
 		}
+	}
+
+	// Install ADO plugin for opencode + pi
+	if installADO && !dryRun {
+		fmt.Println("\n  Configuring Azure DevOps plugin...")
+
+		// 1. Interactive setup (collects org, project, repos, PAT)
+		if err := plugins.InstallADOFromSetup(); err != nil {
+			fmt.Printf("  Warning: ADO setup failed: %v\n", err)
+			fmt.Println("  You can configure it later with: npx @nahuelcio/opencode-ado init")
+		}
+
+		// 2. Read back the config we just wrote
+		adoConfig, _ := plugins.ReadExistingADOConfig()
+		if adoConfig == nil {
+			adoConfig = &plugins.ADOPluginConfig{}
+		}
+
+		// 3. Add to opencode.json
+		for _, a := range agents {
+			if a.Name != "opencode" && a.Name != "kilocode" {
+				continue
+			}
+			configPath, ok := agentSettingsPaths[a.Name]
+			if !ok || configPath == "" {
+				continue
+			}
+			if err := plugins.InstallADOOpenCode(configPath, *adoConfig); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install ADO plugin: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] ✓ Azure DevOps plugin installed\n", a.Name)
+			}
+		}
+
+		// 4. Add to Pi
+		home, _ := os.UserHomeDir()
+		piSettingsPath := filepath.Join(home, ".pi", "agent", "settings.json")
+		if _, err := os.Stat(piSettingsPath); err == nil {
+			if err := plugins.InstallADOPi(piSettingsPath); err != nil {
+				fmt.Printf("  [pi] Warning: failed to install ADO plugin: %v\n", err)
+			} else {
+				fmt.Println("  [pi] ✓ Azure DevOps plugin installed")
+			}
+		} else {
+			fmt.Println("  [pi] Skipped — Pi not configured yet")
+		}
+
+		fmt.Println("  Azure DevOps plugin setup complete!")
 	}
 }

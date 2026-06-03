@@ -32,39 +32,51 @@ var installCmd = &cobra.Command{
 
 		var installMCP bool
 		var globalOnly bool
+		var preset, scope, sddMode, persona string
+
 		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
 			if !isInteractiveTerminal() {
 				fmt.Fprintln(os.Stderr, "Error: install requires --agent or --dry-run when running non-interactively.")
 				fmt.Fprintln(os.Stderr, "Run `ywai install --help` for flags, or run `ywai install` from an interactive terminal.")
 				os.Exit(1)
 			}
-			selectedAgent, selectedMCP, selectedGlobal, err := runTUI(agents)
+			result, err := runTUI(agents)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			if selectedAgent == "" {
+			if result.Agent == "" {
 				fmt.Println("Installation cancelled.")
 				return
 			}
-			agentFlag = selectedAgent
-			installMCP = selectedMCP
-			globalOnly = selectedGlobal
+			agentFlag = result.Agent
+			installMCP = result.MCP
+			globalOnly = result.GlobalOnly
+			preset = result.Preset
+			scope = result.Scope
+			sddMode = result.SDDMode
+			persona = result.Persona
 		} else {
 			installMCP = mcpFlag
 			globalOnly = globalFlag
+			preset = getStringFlag(cmd, "preset")
+			scope = getStringFlag(cmd, "scope")
+			sddMode = getStringFlag(cmd, "sdd-mode")
+			persona = getStringFlag(cmd, "persona")
 		}
 
 		installOpts := gentlai.InstallOptions{
 			AgentName: agentFlag,
-			Preset:    getStringFlag(cmd, "preset"),
-			Scope:     getStringFlag(cmd, "scope"),
-			SDDMode:   getStringFlag(cmd, "sdd-mode"),
-			Persona:   getStringFlag(cmd, "persona"),
+			Preset:    preset,
+			Scope:     scope,
+			SDDMode:   sddMode,
+			Persona:   persona,
 			DryRun:    dryRun,
 		}
 
-		executeInstall(installOpts, installMCP, globalOnly)
+		adoFlag := getBoolFlag(cmd, "ado")
+
+		executeInstall(installOpts, installMCP, globalOnly, adoFlag)
 	},
 }
 
@@ -255,6 +267,7 @@ func init() {
 	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
 	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
+	installCmd.Flags().Bool("ado", false, "Install Azure DevOps plugin (opencode + pi)")
 
 	updateCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	updateCmd.Flags().Bool("strict-tdd", false, "Enable Strict TDD Mode for SDD agents")

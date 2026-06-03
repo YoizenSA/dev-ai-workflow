@@ -68,15 +68,33 @@ type step int
 const (
 	stepWelcome step = iota
 	stepAgent
+	stepOptions
 	stepMCP
 	stepConfirm
 	stepProgress
+)
+
+var (
+	presetChoices  = []string{"full-gentleman", "ecosystem-only", "minimal"}
+	scopeChoices   = []string{"global", "workspace"}
+	sddModeChoices = []string{"single", "multi"}
+	personaChoices = []string{"neutral", "gentleman"}
 )
 
 type agentOption struct {
 	Name     string
 	Binary   string
 	Detected bool
+}
+
+type TUIResult struct {
+	Agent      string
+	MCP        bool
+	GlobalOnly bool
+	Preset     string
+	Scope      string
+	SDDMode    string
+	Persona    string
 }
 
 type Model struct {
@@ -88,6 +106,14 @@ type Model struct {
 	agents        []agentOption
 	agentCursor   int
 	selectedAgent string
+
+	// Options step
+	optionsCursor int
+	presetIdx     int
+	scopeIdx      int
+	globalOnly    bool
+	sddModeIdx    int
+	personaIdx    int
 
 	// MCP selection
 	installMicrosoftLearnMCP bool
@@ -118,8 +144,12 @@ func NewModel(detectedAgents []agent.Agent) Model {
 	}
 
 	return Model{
-		step:   stepWelcome,
-		agents: agentOpts,
+		step:       stepWelcome,
+		agents:     agentOpts,
+		presetIdx:  0,
+		scopeIdx:   0,
+		sddModeIdx: 0,
+		personaIdx: 0,
 	}
 }
 
@@ -128,18 +158,23 @@ func (m *Model) advanceToNextValidStep() {
 		m.quitting = true
 		return
 	}
-	// Skip MCP step if not opencode/kilocode
-	// But ONLY after agent is selected (not when first entering Agent step)
-	if m.step == stepAgent && m.selectedAgent != "" && !m.shouldShowMCPStep() {
-		m.step = stepConfirm
-	}
 }
 
 func (m *Model) shouldShowMCPStep() bool {
 	if m.selectedAgent == "" {
 		return false
 	}
-	return m.selectedAgent == "opencode" || m.selectedAgent == "kilocode"
+	if m.selectedAgent == "opencode" || m.selectedAgent == "kilocode" {
+		return true
+	}
+	if m.selectedAgent == "all" {
+		for _, a := range m.agents {
+			if a.Name == "opencode" || a.Name == "kilocode" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (m Model) Init() tea.Cmd {
@@ -181,6 +216,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUp()
 		case "down", "j":
 			return m.handleDown()
+		case "left", "h":
+			return m.handleLeft()
+		case "right", "l", " ":
+			return m.handleRight()
 		default:
 			// Any key exits when installation is done
 			if m.step == stepProgress && (m.installDone || m.installError != nil) {
@@ -199,13 +238,15 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case stepAgent:
 		m.step = stepWelcome
-	case stepMCP:
+	case stepOptions:
 		m.step = stepAgent
+	case stepMCP:
+		m.step = stepOptions
 	case stepConfirm:
 		if m.shouldShowMCPStep() {
 			m.step = stepMCP
 		} else {
-			m.step = stepAgent
+			m.step = stepOptions
 		}
 	}
 	return m, nil
@@ -222,21 +263,20 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.selectedAgent = m.agents[m.agentCursor].Name
+		m.step = stepOptions
+	case stepOptions:
 		if m.shouldShowMCPStep() {
 			m.step = stepMCP
 		} else {
 			m.step = stepConfirm
 		}
-		m.advanceToNextValidStep()
 	case stepMCP:
 		m.step = stepConfirm
 	case stepConfirm:
-		// Start installation and move to progress
 		m.installAgent = m.selectedAgent
 		m.step = stepProgress
 		return m, m.startInstall()
 	case stepProgress:
-		// Wait for installation to complete
 		if m.installDone || m.installError != nil {
 			m.quitting = true
 			return m, tea.Quit
@@ -252,6 +292,10 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 		if m.agentCursor > 0 {
 			m.agentCursor--
 		}
+	case stepOptions:
+		if m.optionsCursor > 0 {
+			m.optionsCursor--
+		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
 	}
@@ -264,10 +308,43 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 		if m.agentCursor < len(m.agents)-1 {
 			m.agentCursor++
 		}
+	case stepOptions:
+		if m.optionsCursor < 4 {
+			m.optionsCursor++
+		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
 	}
 	return m, nil
+}
+
+func (m *Model) handleLeft() (tea.Model, tea.Cmd) {
+	if m.step == stepOptions {
+		m.cycleOption(-1)
+	}
+	return m, nil
+}
+
+func (m *Model) handleRight() (tea.Model, tea.Cmd) {
+	if m.step == stepOptions {
+		m.cycleOption(1)
+	}
+	return m, nil
+}
+
+func (m *Model) cycleOption(dir int) {
+	switch m.optionsCursor {
+	case 0:
+		m.presetIdx = (m.presetIdx + dir + len(presetChoices)) % len(presetChoices)
+	case 1:
+		m.scopeIdx = (m.scopeIdx + dir + len(scopeChoices)) % len(scopeChoices)
+	case 2:
+		m.globalOnly = !m.globalOnly
+	case 3:
+		m.sddModeIdx = (m.sddModeIdx + dir + len(sddModeChoices)) % len(sddModeChoices)
+	case 4:
+		m.personaIdx = (m.personaIdx + dir + len(personaChoices)) % len(personaChoices)
+	}
 }
 
 func (m *Model) View() string {
@@ -285,6 +362,8 @@ func (m *Model) View() string {
 		b.WriteString(m.viewWelcome())
 	case stepAgent:
 		b.WriteString(m.viewAgent())
+	case stepOptions:
+		b.WriteString(m.viewOptions())
 	case stepMCP:
 		b.WriteString(m.viewMCP())
 	case stepConfirm:
@@ -297,8 +376,8 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Agent", "MCP", "Confirm", "Install"}
-	steps := []step{stepWelcome, stepAgent, stepMCP, stepConfirm, stepProgress}
+	labels := []string{"Welcome", "Agent", "Options", "MCP", "Confirm", "Install"}
+	steps := []step{stepWelcome, stepAgent, stepOptions, stepMCP, stepConfirm, stepProgress}
 
 	var parts []string
 	for i, label := range labels {
@@ -403,6 +482,67 @@ func (m *Model) viewAgent() string {
 	return b.String()
 }
 
+func (m *Model) viewOptions() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Configure installation"))
+	b.WriteString("\n\n")
+
+	type optionRow struct {
+		label string
+		value string
+	}
+
+	globalLabel := "no"
+	if m.globalOnly {
+		globalLabel = "yes"
+	}
+
+	rows := []optionRow{
+		{"Preset", presetChoices[m.presetIdx]},
+		{"Scope", scopeChoices[m.scopeIdx]},
+		{"Global only", globalLabel},
+		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
+		{"Persona", personaChoices[m.personaIdx]},
+	}
+
+	maxLabel := 0
+	for _, r := range rows {
+		if len(r.label) > maxLabel {
+			maxLabel = len(r.label)
+		}
+	}
+
+	for i, r := range rows {
+		cursor := "  "
+		if i == m.optionsCursor {
+			cursor = selStyle.Render("▶")
+		}
+
+		label := dimStyle.Render(r.label)
+		if i == m.optionsCursor {
+			label = itemStyle.Render(r.label)
+		}
+
+		pad := strings.Repeat(" ", maxLabel-len(r.label)+1)
+
+		value := monoStyle.Render(r.value)
+		if i == m.optionsCursor {
+			value = selStyle.Render(r.value)
+		}
+
+		arrows := ""
+		if i == m.optionsCursor {
+			arrows = dimStyle.Render(" ◀ ▶")
+		}
+
+		b.WriteString(fmt.Sprintf("  %s %s%s%s%s\n", cursor, label, pad, value, arrows))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  ←/→ change  •  Enter continue  •  Esc back"))
+	return b.String()
+}
+
 func (m *Model) viewMCP() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Optional MCP servers"))
@@ -444,13 +584,41 @@ func (m *Model) viewConfirm() string {
 	} else if agentLabel == "all" {
 		agentLabel = "all detected agents"
 	}
-	b.WriteString(fmt.Sprintf("  Agent:         %s\n", agentLabel))
 
-	b.WriteString(fmt.Sprintf("  Scope:         %s\n", dimStyle.Render("Global")))
+	globalLabel := "no"
+	if m.globalOnly {
+		globalLabel = "yes"
+	}
 
-	b.WriteString("\n  Skills to install: ")
-	b.WriteString(skillStyle.Render("all extra skills"))
-	b.WriteString("\n")
+	rows := [][2]string{
+		{"Agent", agentLabel},
+		{"Preset", presetChoices[m.presetIdx]},
+		{"Scope", scopeChoices[m.scopeIdx]},
+		{"Global only", globalLabel},
+		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
+		{"Persona", personaChoices[m.personaIdx]},
+		{"Skills", "all extra skills"},
+	}
+
+	if m.shouldShowMCPStep() {
+		mcpLabel := "no"
+		if m.installMicrosoftLearnMCP {
+			mcpLabel = "yes"
+		}
+		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
+	}
+
+	maxLabel := 0
+	for _, r := range rows {
+		if len(r[0]) > maxLabel {
+			maxLabel = len(r[0])
+		}
+	}
+
+	for _, r := range rows {
+		pad := strings.Repeat(" ", maxLabel-len(r[0])+1)
+		b.WriteString(fmt.Sprintf("  %s%s%s\n", dimStyle.Render(r[0]+":"), pad, monoStyle.Render(r[1])))
+	}
 
 	b.WriteString("\n")
 	b.WriteString(okStyle.Render("  Enter to install"))
@@ -468,18 +636,30 @@ func (m *Model) InstallMicrosoftLearnMCP() bool {
 }
 
 func (m *Model) GlobalOnly() bool {
-	return true
+	return m.globalOnly
 }
 
-func Run(detectedAgents []agent.Agent) (string, bool, bool, error) {
+func (m *Model) Result() TUIResult {
+	return TUIResult{
+		Agent:      m.selectedAgent,
+		MCP:        m.installMicrosoftLearnMCP,
+		GlobalOnly: m.globalOnly,
+		Preset:     presetChoices[m.presetIdx],
+		Scope:      scopeChoices[m.scopeIdx],
+		SDDMode:    sddModeChoices[m.sddModeIdx],
+		Persona:    personaChoices[m.personaIdx],
+	}
+}
+
+func Run(detectedAgents []agent.Agent) (TUIResult, error) {
 	m := NewModel(detectedAgents)
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
-		return "", false, false, err
+		return TUIResult{}, err
 	}
 	model := final.(*Model)
-	return model.SelectedAgent(), model.InstallMicrosoftLearnMCP(), model.GlobalOnly(), nil
+	return model.Result(), nil
 }
 
 func shortPath(p string) string {
@@ -525,14 +705,22 @@ func (m *Model) startInstall() tea.Cmd {
 }
 
 func (m *Model) runInstall() (string, error) {
-	// Find ywai binary in PATH
 	ywaiBin, err := exec.LookPath("ywai")
 	if err != nil {
 		return "", fmt.Errorf("ywai not found in PATH: %w", err)
 	}
 
-	// Build the ywai command with selected flags
 	args := []string{"install", "--agent", m.installAgent}
+	args = append(args, "--preset", presetChoices[m.presetIdx])
+	args = append(args, "--scope", scopeChoices[m.scopeIdx])
+	args = append(args, "--sdd-mode", sddModeChoices[m.sddModeIdx])
+	args = append(args, "--persona", personaChoices[m.personaIdx])
+	if m.globalOnly {
+		args = append(args, "--global")
+	}
+	if m.installMicrosoftLearnMCP {
+		args = append(args, "--mcp")
+	}
 
 	cmd := exec.Command(ywaiBin, args...)
 	cmd.Env = os.Environ()

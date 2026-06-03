@@ -10,7 +10,7 @@ func TestSkillsList(t *testing.T) {
 	out := runYwai(t, bin, "skills")
 
 	expected := []string{
-		"angular", "biome", "devops", "dotnet", "git-commit",
+		"angular", "devops", "dotnet", "git-commit",
 		"playwright", "react-19", "tailwind-4", "typescript", "yz-ui",
 	}
 	for _, skill := range expected {

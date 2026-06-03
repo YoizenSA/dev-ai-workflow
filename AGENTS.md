@@ -59,6 +59,7 @@ ywai update
 | `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
 | `--persona` | Persona: `gentleman`, `neutral`, `custom` |
 | `--mcp` | Install Microsoft Learn MCP (for opencode/kilocode) |
+| `--ado` | Install Azure DevOps plugin (opencode + pi) |
 | `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
 
 ### Update flags
