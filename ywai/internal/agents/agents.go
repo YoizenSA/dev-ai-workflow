@@ -29,6 +29,7 @@ var opencodeToolMap = map[string]string{
 	"Glob":       "glob",
 	"Grep":       "grep",
 	"LSP":        "lsp",
+	"ASTGrep":    "ast_grep",
 	"WebSearch":  "web_search",
 	"CodeSearch": "code_search",
 }
@@ -88,7 +89,7 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	if data, err := os.ReadFile(skillsFile); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)
-			if line != "" {
+			if line != "" && !strings.HasPrefix(line, "#") {
 				skills = append(skills, line)
 			}
 		}
@@ -97,14 +98,36 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	return &AgentProfile{
 		Name:        name,
 		Description: description,
-		Prompt:      prompt,
+		Prompt:      promptWithSkills(prompt, skills),
 		Tools:       tools,
 		Skills:      skills,
 	}, nil
 }
 
-// extractDescription gets the first line after the frontmatter that looks like a description.
+// promptWithSkills appends a section listing the ywai skills this agent should
+// prefer, so the model knows which domain skills to invoke. No-op when empty.
+func promptWithSkills(prompt string, skills []string) string {
+	if len(skills) == 0 {
+		return prompt
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(prompt, "\n"))
+	b.WriteString("\n\n## Preferred ywai Skills\n\n")
+	b.WriteString("When relevant, invoke these ywai skills for domain-specific guidance:\n\n")
+	for _, s := range skills {
+		b.WriteString("- `" + s + "`\n")
+	}
+	return b.String()
+}
+
+// extractDescription returns the agent description. It prefers the YAML
+// frontmatter `description:` field (including folded `>`/literal `|` blocks),
+// and falls back to the first body line, then the first heading.
 func extractDescription(prompt string) string {
+	if desc := frontmatterDescription(prompt); desc != "" {
+		return desc
+	}
+
 	// Strip YAML frontmatter
 	content := prompt
 	if strings.HasPrefix(content, "---") {
@@ -135,6 +158,49 @@ func extractDescription(prompt string) string {
 	}
 
 	return "agent"
+}
+
+// frontmatterDescription parses the `description:` field from YAML frontmatter.
+// It supports inline values (`description: text`) and folded/literal block
+// scalars (`description: >` followed by indented lines).
+func frontmatterDescription(prompt string) string {
+	if !strings.HasPrefix(prompt, "---") {
+		return ""
+	}
+	end := strings.Index(prompt[3:], "---")
+	if end == -1 {
+		return ""
+	}
+	frontmatter := prompt[3 : end+3]
+	lines := strings.Split(frontmatter, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "description:") {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(trimmed, "description:"))
+
+		// Inline value (not a block scalar indicator).
+		if value != "" && value != ">" && value != "|" && value != ">-" && value != "|-" {
+			return value
+		}
+
+		// Block scalar: collect subsequent more-indented lines until the next key.
+		var parts []string
+		for _, next := range lines[i+1:] {
+			if strings.TrimSpace(next) == "" {
+				continue
+			}
+			// A new top-level key (e.g. `role:`, `tools:`) ends the block.
+			if !strings.HasPrefix(next, " ") && !strings.HasPrefix(next, "\t") {
+				break
+			}
+			parts = append(parts, strings.TrimSpace(next))
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
 }
 
 // parseOpenCodeTools reads tools.json and converts to opencode tool map.
@@ -250,14 +316,8 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 			continue
 		}
 
-		// Build Claude-style agent file
-		toolsStr := "Read, Edit, Write, Glob, Grep, Bash"
-		switch name {
-		case "ask", "architect", "reviewer":
-			toolsStr = "Read, Glob, Grep"
-		case "qa":
-			toolsStr = "Read, Edit, Write, Bash, Glob, Grep"
-		}
+		// Build Claude-style agent file, deriving tools from the parsed profile.
+		toolsStr := claudeToolsString(profile.Tools)
 
 		content := fmt.Sprintf("---\nname: %s\ndescription: >\n  %s\ntools: %s\n---\n\n%s",
 			name, profile.Description, toolsStr, profile.Prompt)
@@ -315,6 +375,35 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, promptsDir)
 	}
 	return nil
+}
+
+// claudeToolsString renders the enabled tools from a parsed profile as a
+// comma-separated list of Claude-style tool names, in a stable order.
+func claudeToolsString(tools map[string]bool) string {
+	// Ordered opencode tool name -> Claude display name.
+	order := []struct{ oc, claude string }{
+		{"read", "Read"},
+		{"edit", "Edit"},
+		{"write", "Write"},
+		{"bash", "Bash"},
+		{"glob", "Glob"},
+		{"grep", "Grep"},
+		{"lsp", "LSP"},
+		{"ast_grep", "ASTGrep"},
+		{"web_search", "WebSearch"},
+		{"code_search", "CodeSearch"},
+	}
+
+	var names []string
+	for _, t := range order {
+		if tools[t.oc] {
+			names = append(names, t.claude)
+		}
+	}
+	if len(names) == 0 {
+		return "Read, Glob, Grep"
+	}
+	return strings.Join(names, ", ")
 }
 
 // stripFrontmatter removes YAML frontmatter from a markdown string.
