@@ -93,32 +93,9 @@ func InstallEcosystem(opts InstallOptions) error {
 		return fmt.Errorf("gentle-ai is not installed. Run install first.")
 	}
 
-	preset := opts.Preset
-	if preset == "" {
-		preset = "full-gentleman"
-	}
-	persona := opts.Persona
-	if persona == "" {
-		persona = "neutral"
-	}
+	args := opts.buildArgs()
 
-	args := []string{
-		"install",
-		"--agent", opts.AgentName,
-		"--persona", persona,
-		"--preset", preset,
-	}
-	if opts.Scope != "" {
-		args = append(args, "--scope", opts.Scope)
-	}
-	if opts.SDDMode != "" {
-		args = append(args, "--sdd-mode", opts.SDDMode)
-	}
-	if opts.DryRun {
-		args = append(args, "--dry-run")
-	}
-
-	fmt.Printf("Running gentle-ai install --agent %s --preset %s...\n", opts.AgentName, preset)
+	fmt.Printf("Running gentle-ai install --agent %s --preset %s...\n", opts.AgentName, opts.effectivePreset())
 	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -129,6 +106,39 @@ func InstallEcosystem(opts InstallOptions) error {
 
 	UpgradeEngram()
 	return nil
+}
+
+func (o InstallOptions) effectivePreset() string {
+	if o.Preset == "" {
+		return "full-gentleman"
+	}
+	return o.Preset
+}
+
+func (o InstallOptions) effectivePersona() string {
+	if o.Persona == "" {
+		return "neutral"
+	}
+	return o.Persona
+}
+
+func (o InstallOptions) buildArgs() []string {
+	args := []string{
+		"install",
+		"--agent", o.AgentName,
+		"--persona", o.effectivePersona(),
+		"--preset", o.effectivePreset(),
+	}
+	if o.Scope != "" {
+		args = append(args, "--scope", o.Scope)
+	}
+	if o.SDDMode != "" {
+		args = append(args, "--sdd-mode", o.SDDMode)
+	}
+	if o.DryRun {
+		args = append(args, "--dry-run")
+	}
+	return args
 }
 
 func UpgradeEngram() {
@@ -220,33 +230,38 @@ func Sync(opts SyncOptions) error {
 		fmt.Println("Syncing gentle-ai assets...")
 	}
 
-	args := []string{"sync"}
-	if opts.SDDMode != "" {
-		args = append(args, "--sdd-mode", opts.SDDMode)
-	}
-	if opts.StrictTDD {
-		args = append(args, "--strict-tdd")
-	}
-	for _, p := range opts.Profiles {
-		args = append(args, "--profile", p)
-	}
-	for _, pp := range opts.ProfilePhases {
-		args = append(args, "--profile-phase", pp)
-	}
-	if opts.IncludePerms {
-		args = append(args, "--include-permissions")
-	}
-	if opts.IncludeTheme {
-		args = append(args, "--include-theme")
-	}
-	if opts.DryRun {
-		args = append(args, "--dry-run")
-	}
+	args := opts.buildArgs()
 
 	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func (o SyncOptions) buildArgs() []string {
+	args := []string{"sync"}
+	if o.SDDMode != "" {
+		args = append(args, "--sdd-mode", o.SDDMode)
+	}
+	if o.StrictTDD {
+		args = append(args, "--strict-tdd")
+	}
+	for _, p := range o.Profiles {
+		args = append(args, "--profile", p)
+	}
+	for _, pp := range o.ProfilePhases {
+		args = append(args, "--profile-phase", pp)
+	}
+	if o.IncludePerms {
+		args = append(args, "--include-permissions")
+	}
+	if o.IncludeTheme {
+		args = append(args, "--include-theme")
+	}
+	if o.DryRun {
+		args = append(args, "--dry-run")
+	}
+	return args
 }
 
 // Doctor runs gentle-ai doctor for a read-only health check.
