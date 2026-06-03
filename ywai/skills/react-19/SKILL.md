@@ -5,12 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [generic]
-  auto_invoke:
-    - "Writing React code"
-    - "Components"
-    - "Hooks"
-    - "State management"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

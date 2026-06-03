@@ -5,22 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "3.0"
-  scope: [root]
-  auto_invoke:
-    - "pipeline"
-    - "azure pipelines"
-    - "azure devops"
-    - "helm"
-    - "helm chart"
-    - "umbrella chart"
-    - "docker acr"
-    - "devops"
-    - "kubernetes"
-    - "k8s"
-    - "deploy"
-    - "ci/cd"
-    - "cicd"
-    - "values.yaml"
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 

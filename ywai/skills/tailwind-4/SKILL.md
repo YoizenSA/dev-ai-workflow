@@ -5,11 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "1.1"
-  scope: [generic]
-  auto_invoke:
-    - "Styling with Tailwind"
-    - "CSS utilities"
-    - "Responsive design"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

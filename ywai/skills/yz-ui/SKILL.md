@@ -5,12 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "ui design"
-    - "yoizen"
-    - "styling"
-    - "components"
 ---
 
 ## When to Use

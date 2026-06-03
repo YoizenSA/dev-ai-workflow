@@ -5,12 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [dotnet]
-  auto_invoke:
-    - "Writing C# code"
-    - "Implement .NET patterns"
-    - "Minimal APIs"
-    - "Entity Framework"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

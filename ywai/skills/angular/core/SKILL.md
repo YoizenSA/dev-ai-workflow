@@ -5,14 +5,6 @@ license: Apache-2.0
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [angular, web, frontend]
-  auto_invoke:
-    - "angular component"
-    - "standalone component"
-    - "signals"
-    - "inject"
-    - "zoneless"
-    - "control flow"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

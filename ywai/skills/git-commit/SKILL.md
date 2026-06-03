@@ -5,13 +5,6 @@ description: Git commit standards and conventional commits.
 metadata:
   author: Yoizen
   version: "1.0"
-  scope: [root]
-  auto_invoke:
-    - "commit"
-    - "git"
-    - "versioning"
-    - "changelog"
-    - "release"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
