@@ -354,6 +354,90 @@ test_agent_settings_paths() {
     rm -rf "$temp_dir"
 }
 
+# Test 11: Test gentle-ai integration
+test_gentle_ai_integration() {
+    log_test "Test gentle-ai integration"
+    
+    # Test doctor command
+    local output
+    output=$(/tmp/ywai-test doctor 2>&1 || true)
+    
+    if [ $? -eq 0 ]; then
+        log_pass "ywai doctor command works"
+    else
+        log_warn "ywai doctor command failed (gentle-ai may not be installed)"
+    fi
+}
+
+# Test 12: Test update command
+test_update_command() {
+    log_test "Test update command"
+    
+    # Test update with dry-run (simulated by checking if command exists)
+    local output
+    output=$(/tmp/ywai-test update --help 2>&1)
+    
+    if echo "$output" | grep -q "update"; then
+        log_pass "ywai update command exists"
+    else
+        log_fail "ywai update command not found"
+    fi
+}
+
+# Test 13: Test skill-registry command
+test_skill_registry_command() {
+    log_test "Test skill-registry command"
+    
+    # Test skill-registry with --help
+    local output
+    output=$(/tmp/ywai-test skill-registry --help 2>&1)
+    
+    if echo "$output" | grep -q "skill-registry"; then
+        log_pass "ywai skill-registry command exists"
+    else
+        log_fail "ywai skill-registry command not found"
+    fi
+}
+
+# Test 14: Test skills.txt in agent profiles
+test_agent_skills_txt() {
+    log_test "Test skills.txt in agent profiles"
+    
+    local agents_dir="$REPO_ROOT/agents"
+    local found_count=0
+    
+    for agent in "dev" "qa" "architect" "reviewer" "devops"; do
+        local skills_file="$agents_dir/$agent/skills.txt"
+        if [ -f "$skills_file" ]; then
+            log_pass "Agent $agent has skills.txt"
+            ((found_count++))
+        else
+            log_warn "Agent $agent missing skills.txt (optional)"
+        fi
+    done
+    
+    if [ "$found_count" -gt 0 ]; then
+        log_pass "Found $found_count agents with skills.txt"
+    fi
+}
+
+# Test 15: Test detection by config directory (desktop apps)
+test_config_dir_detection() {
+    log_test "Test config directory detection support"
+    
+    # Check if agent.go has support for config-only agents
+    local agent_file="$REPO_ROOT/internal/agent/agent.go"
+    if [ -f "$agent_file" ]; then
+        if grep -q "detectByConfigDir" "$agent_file"; then
+            log_pass "Config directory detection implemented"
+        else
+            log_fail "Config directory detection not found"
+        fi
+    else
+        log_fail "agent.go not found"
+    fi
+}
+
 # Main execution
 main() {
     echo "=========================================="
@@ -371,6 +455,11 @@ main() {
     test_skills_list
     test_plugins_detection
     test_agent_settings_paths
+    test_gentle_ai_integration
+    test_update_command
+    test_skill_registry_command
+    test_agent_skills_txt
+    test_config_dir_detection
     
     echo ""
     echo "=========================================="

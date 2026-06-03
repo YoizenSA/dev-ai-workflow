@@ -46,6 +46,11 @@ ywai skills                   # List extra skills
 | `ywai update` | Self-update + upgrade + sync + re-seed + re-link + rename orchestrator |
 | `ywai init <type>` | Copy AGENTS.md/REVIEW.md for a project type |
 | `ywai skills` | List available extra skills |
+| `ywai agents` | List detected AI agents |
+| `ywai status` | Show ywai installation status |
+| `ywai config` | Manage ywai configuration |
+| `ywai doctor` | Run gentle-ai health check |
+| `ywai skill-registry` | Refresh the project skill registry |
 
 ### Install flags
 
@@ -55,11 +60,32 @@ ywai skills                   # List extra skills
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
 
+### Configuration
+
+ywai stores configuration in `~/.ywai/config.yaml`. Use the `config` command to manage it:
+
+```bash
+ywai config get                    # Show all configuration
+ywai config get default_preset    # Get specific value
+ywai config set default_preset minimal  # Set a value
+ywai config reset                 # Reset to defaults
+```
+
+Available configuration options:
+- `default_preset`: Installation preset (full-gentleman, ecosystem-only, minimal, custom)
+- `default_sdd_mode`: SDD orchestrator mode (single, multi)
+- `default_persona`: Agent persona (gentleman, neutral, custom)
+- `default_scope`: Install scope (global, workspace)
+- `default_tui`: Use TUI by default (true/false)
+- `default_mcp`: Install MCP by default for opencode/kilocode (true/false)
+- `colored_output`: Use colored output (true/false)
+- `log_level`: Logging level (debug, info, warn, error)
+
 ---
 
-## 12 Supported Agents
+## 15 Supported Agents
 
-opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide
+opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi
 
 ---
 
