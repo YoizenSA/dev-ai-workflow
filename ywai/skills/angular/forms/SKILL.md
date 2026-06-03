@@ -2,9 +2,6 @@
 name: angular-forms
 description: Angular forms. Trigger: forms, validation, form state in Angular.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "1.0"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

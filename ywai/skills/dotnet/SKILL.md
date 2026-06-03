@@ -2,9 +2,6 @@
 name: dotnet
 description: .NET 9 / ASP.NET Core patterns. Trigger: writing C#, Minimal APIs, EF Core.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "1.0"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

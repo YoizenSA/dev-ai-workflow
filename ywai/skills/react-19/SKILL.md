@@ -2,9 +2,6 @@
 name: react-19
 description: React 19 patterns with React Compiler. Trigger: writing React components.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "1.0"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

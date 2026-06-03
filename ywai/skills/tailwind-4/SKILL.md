@@ -2,9 +2,6 @@
 name: tailwind-4
 description: Tailwind CSS 4 patterns. Trigger: styling, CSS utilities, responsive design.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "1.1"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

@@ -2,9 +2,6 @@
 name: devops
 description: Azure DevOps pipelines and Helm Umbrella charts. Trigger: CI/CD, Azure Pipelines, Helm, Kubernetes.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "3.0"
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 

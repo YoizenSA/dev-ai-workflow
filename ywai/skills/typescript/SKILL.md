@@ -2,9 +2,6 @@
 name: typescript
 description: TypeScript strict patterns. Trigger: writing TS code, types, interfaces, generics.
 license: Apache-2.0
-metadata:
-  author: Yoizen
-  version: "1.0"
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
