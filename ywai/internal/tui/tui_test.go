@@ -65,8 +65,14 @@ func TestNewModel_Defaults(t *testing.T) {
 	if m.presetIdx != 0 || presetChoices[0] != "full-gentleman" {
 		t.Fatal("default preset should be full-gentleman")
 	}
-	if m.globalOnly != false {
-		t.Fatal("globalOnly should default to false")
+	if m.globalOnly != true {
+		t.Fatal("globalOnly should default to true")
+	}
+	if m.sddModeIdx != 1 || sddModeChoices[1] != "multi" {
+		t.Fatal("default sddMode should be multi")
+	}
+	if m.personaIdx != 0 || personaChoices[0] != "neutral" {
+		t.Fatal("default persona should be neutral")
 	}
 }
 
@@ -173,16 +179,16 @@ func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
 	if m.optionsCursor != 2 {
 		t.Fatalf("expected optionsCursor=2, got %d", m.optionsCursor)
 	}
-	if m.globalOnly {
-		t.Fatal("globalOnly should be false initially")
+	if !m.globalOnly {
+		t.Fatal("globalOnly should be true initially")
 	}
 	sendKey(&m, "right")
-	if !m.globalOnly {
-		t.Fatal("globalOnly should be true after toggle")
+	if m.globalOnly {
+		t.Fatal("globalOnly should be false after toggle")
 	}
 	sendKey(&m, " ") // space also toggles
-	if m.globalOnly {
-		t.Fatal("globalOnly should be false after second toggle")
+	if !m.globalOnly {
+		t.Fatal("globalOnly should be true after second toggle")
 	}
 }
 
@@ -250,11 +256,11 @@ func TestEscNavigation_WithMCP(t *testing.T) {
 
 func TestGlobalOnly_NotHardcoded(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	if m.GlobalOnly() {
-		t.Fatal("GlobalOnly should be false by default, not hardcoded true")
-	}
-	m.globalOnly = true
 	if !m.GlobalOnly() {
+		t.Fatal("GlobalOnly should be true by default")
+	}
+	m.globalOnly = false
+	if m.GlobalOnly() {
 		t.Fatal("GlobalOnly should reflect model state")
 	}
 }
@@ -303,7 +309,7 @@ func TestViewConfirm_ShowsAllOptions(t *testing.T) {
 
 	view := m.viewConfirm()
 
-	checks := []string{"opencode", "full-gentleman", "global", "yes", "single", "neutral", "all extra skills", "Microsoft Learn MCP"}
+	checks := []string{"opencode", "full-gentleman", "global", "yes", "multi", "neutral", "all extra skills", "Microsoft Learn MCP"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewConfirm missing %q", c)
@@ -316,7 +322,7 @@ func TestViewOptions_Renders(t *testing.T) {
 	m.step = stepOptions
 	view := m.viewOptions()
 
-	checks := []string{"Preset", "Scope", "Global only", "SDD Mode", "Persona", "full-gentleman", "global", "no", "single", "neutral"}
+	checks := []string{"Preset", "Scope", "Global only", "SDD Mode", "Persona", "full-gentleman", "global", "yes", "multi", "neutral"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewOptions missing %q", c)

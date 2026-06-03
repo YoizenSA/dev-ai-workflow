@@ -148,7 +148,8 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		agents:     agentOpts,
 		presetIdx:  0,
 		scopeIdx:   0,
-		sddModeIdx: 0,
+		globalOnly: true,
+		sddModeIdx: 1,
 		personaIdx: 0,
 	}
 }
