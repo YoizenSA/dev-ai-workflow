@@ -11,7 +11,7 @@ func TestInstallOptions_BuildArgs_Minimal(t *testing.T) {
 	opts := InstallOptions{
 		AgentName: "opencode",
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	want := []string{
 		"install", "--agent", "opencode", "--persona", "neutral", "--scope", "global",
@@ -32,7 +32,7 @@ func TestInstallOptions_BuildArgs_AllFlags(t *testing.T) {
 		Persona:   "gentleman",
 		DryRun:    true,
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	want := []string{
 		"install", "--agent", "claude-code",
@@ -51,7 +51,7 @@ func TestInstallOptions_BuildArgs_CustomPersona(t *testing.T) {
 		AgentName: "cursor",
 		Persona:   "custom",
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	if !slices.Contains(args, "--persona") {
 		t.Fatal("missing --persona flag")
@@ -69,7 +69,7 @@ func TestInstallOptions_BuildArgs_AlwaysHasScope(t *testing.T) {
 	opts := InstallOptions{
 		AgentName: "opencode",
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	if !slices.Contains(args, "--scope") {
 		t.Fatal("--scope should always be present")
@@ -85,7 +85,7 @@ func TestInstallOptions_BuildArgs_NoSDDModeWhenEmpty(t *testing.T) {
 		AgentName: "opencode",
 		SDDMode:   "",
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	if slices.Contains(args, "--sdd-mode") {
 		t.Fatal("--sdd-mode should not be present when empty")
@@ -97,7 +97,7 @@ func TestInstallOptions_BuildArgs_NoDryRunWhenFalse(t *testing.T) {
 		AgentName: "opencode",
 		DryRun:    false,
 	}
-	args := opts.buildArgs()
+	args := opts.buildArgs(nil)
 
 	if slices.Contains(args, "--dry-run") {
 		t.Fatal("--dry-run should not be present when false")

@@ -22,6 +22,10 @@ import (
 const (
 	gentleAIOwner = "Gentleman-Programming"
 	gentleAIRepo  = "gentle-ai"
+
+	engramOwner = "Gentleman-Programming"
+	engramRepo  = "engram"
+	engramBin   = "engram"
 )
 
 var versionPattern = regexp.MustCompile(`v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?`)
@@ -88,15 +92,42 @@ func InstallEcosystem(opts InstallOptions) error {
 		return fmt.Errorf("gentle-ai is not installed. Run install first.")
 	}
 
-	args := opts.buildArgs()
+	// engram is installed via Homebrew by gentle-ai. On machines without a C
+	// compiler (and without Go) the bottle build fails, which would abort the
+	// whole multi-component install. Install engram on its own so a failure
+	// there never blocks the other components, and fall back to a prebuilt
+	// release binary when gentle-ai cannot install it.
+	var extraEnv []string
+	if !opts.DryRun {
+		if err := installEngramComponent(opts); err != nil {
+			fmt.Printf("  Warning: engram install via gentle-ai failed: %v\n", err)
+			installDir, ferr := installEngramReleaseBinary()
+			if ferr != nil {
+				fmt.Printf("  Warning: engram prebuilt-binary fallback failed: %v\n", ferr)
+			} else {
+				fmt.Println("  engram installed from prebuilt release binary.")
+				extraEnv = pathEnvWith(installDir)
+				// Retry the engram component now that the binary exists so
+				// gentle-ai can wire up the engram MCP config without brew.
+				if rerr := installEngramComponent(opts, extraEnv...); rerr != nil {
+					fmt.Printf("  Warning: engram MCP wiring still failed: %v\n", rerr)
+				}
+			}
+		}
+	}
 
-	fmt.Printf("Running gentle-ai install --agent %s (%d components)...\n", opts.AgentName, len(installComponents))
+	// Install the remaining components together.
+	args := opts.buildArgs(ecosystemComponents)
+	fmt.Printf("Running gentle-ai install --agent %s (%d components)...\n", opts.AgentName, len(ecosystemComponents))
 	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	if opts.WorkDir != "" {
 		cmd.Dir = opts.WorkDir
+	}
+	if len(extraEnv) > 0 {
+		cmd.Env = extraEnv
 	}
 	if err := cmd.Run(); err != nil {
 		return err
@@ -106,9 +137,35 @@ func InstallEcosystem(opts InstallOptions) error {
 	return nil
 }
 
+// installEngramComponent runs `gentle-ai install --component engram` in
+// isolation. extraEnv, when provided, replaces the subprocess environment
+// (used to inject a PATH that includes a freshly downloaded engram binary).
+func installEngramComponent(opts InstallOptions, extraEnv ...string) error {
+	args := opts.buildArgs([]string{"engram"})
+	fmt.Printf("Running gentle-ai install --agent %s --component engram...\n", opts.AgentName)
+	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if opts.WorkDir != "" {
+		cmd.Dir = opts.WorkDir
+	}
+	if len(extraEnv) > 0 {
+		cmd.Env = extraEnv
+	}
+	return cmd.Run()
+}
+
 // Components to install via gentle-ai (explicit list, no gga).
 var installComponents = []string{
 	"engram", "sdd", "skills", "context7",
+	"persona", "permissions",
+}
+
+// ecosystemComponents are all components except engram, which is installed
+// separately so its (Homebrew-based) failure cannot abort the others.
+var ecosystemComponents = []string{
+	"sdd", "skills", "context7",
 	"persona", "permissions",
 }
 
@@ -126,14 +183,17 @@ func (o InstallOptions) effectiveScope() string {
 	return o.Scope
 }
 
-func (o InstallOptions) buildArgs() []string {
+func (o InstallOptions) buildArgs(components []string) []string {
+	if len(components) == 0 {
+		components = installComponents
+	}
 	args := []string{
 		"install",
 		"--agent", o.AgentName,
 		"--persona", o.effectivePersona(),
 		"--scope", o.effectiveScope(),
 	}
-	for _, c := range installComponents {
+	for _, c := range components {
 		args = append(args, "--component", c)
 	}
 	if o.SDDMode != "" {
@@ -695,4 +755,241 @@ func runCommand(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// pathEnvWith returns a copy of the current environment with dir prepended to
+// PATH, so a freshly downloaded binary in dir is found by child processes.
+func pathEnvWith(dir string) []string {
+	if dir == "" {
+		return os.Environ()
+	}
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	replaced := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			out = append(out, "PATH="+dir+string(os.PathListSeparator)+strings.TrimPrefix(kv, "PATH="))
+			replaced = true
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, "PATH="+dir)
+	}
+	return out
+}
+
+func latestEngramRelease() (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", engramOwner, engramRepo)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "ywai")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", err
+	}
+	if release.TagName == "" {
+		return "", fmt.Errorf("latest release did not include tag_name")
+	}
+	return release.TagName, nil
+}
+
+func engramAssetName(version string) string {
+	clean := normalizeVersion(version)
+	ext := "tar.gz"
+	if runtime.GOOS == "windows" {
+		ext = "zip"
+	}
+	return fmt.Sprintf("%s_%s_%s_%s.%s", engramBin, clean, runtime.GOOS, runtime.GOARCH, ext)
+}
+
+// installEngramReleaseBinary downloads the latest prebuilt engram binary into a
+// user-local bin directory. This is the fallback for machines without a C
+// compiler (Homebrew bottle build fails) and without Go (`go install` fails).
+// It returns the directory the binary was installed into.
+func installEngramReleaseBinary() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+
+	var installDir string
+	for _, dir := range []string{
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, "go", "bin"),
+		filepath.Join(home, ".bin"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			installDir = dir
+			break
+		}
+	}
+	if installDir == "" {
+		return "", fmt.Errorf("no writable bin directory found in home")
+	}
+
+	version, err := latestEngramRelease()
+	if err != nil {
+		return "", fmt.Errorf("failed to check latest engram release: %w", err)
+	}
+
+	archiveName := engramAssetName(version)
+	downloadURL := fmt.Sprintf(
+		"https://github.com/%s/%s/releases/download/%s/%s",
+		engramOwner,
+		engramRepo,
+		version,
+		archiveName,
+	)
+
+	tmpDir, err := os.MkdirTemp("", "engram-install-*")
+	if err != nil {
+		return "", fmt.Errorf("cannot create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	archivePath := filepath.Join(tmpDir, archiveName)
+	fmt.Printf("  Downloading %s...\n", downloadURL)
+	if err := downloadFile(downloadURL, archivePath); err != nil {
+		return "", fmt.Errorf("download failed: %w", err)
+	}
+
+	binaryPath, err := extractNamedBinary(archivePath, tmpDir, engramBin)
+	if err != nil {
+		return "", fmt.Errorf("extract failed: %w", err)
+	}
+
+	if err := os.Chmod(binaryPath, 0o755); err != nil {
+		return "", err
+	}
+
+	binName := engramBin
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	target := filepath.Join(installDir, binName)
+	if err := os.Rename(binaryPath, target); err != nil {
+		return "", fmt.Errorf("cannot move binary into place: %w", err)
+	}
+
+	fmt.Printf("  Installed engram to %s\n", target)
+
+	pathEnv := os.Getenv("PATH")
+	if !strings.Contains(pathEnv, installDir) {
+		fmt.Printf("  Warning: %s is not in your PATH. Add it or restart your shell.\n", installDir)
+	}
+
+	return installDir, nil
+}
+
+// extractNamedBinary extracts the file whose base name matches binName (or
+// binName+".exe" on Windows) from a .tar.gz or .zip archive into destDir.
+func extractNamedBinary(archivePath, destDir, binName string) (string, error) {
+	if runtime.GOOS == "windows" {
+		return extractNamedBinaryFromZip(archivePath, destDir, binName+".exe")
+	}
+	return extractNamedBinaryFromTarGz(archivePath, destDir, binName)
+}
+
+func extractNamedBinaryFromTarGz(archivePath, destDir, binName string) (string, error) {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if header.Typeflag != tar.TypeReg || filepath.Base(header.Name) != binName {
+			continue
+		}
+
+		outPath := filepath.Join(destDir, binName)
+		out, err := os.Create(outPath)
+		if err != nil {
+			return "", err
+		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			return "", err
+		}
+		if err := out.Close(); err != nil {
+			return "", err
+		}
+		if err := os.Chmod(outPath, 0o755); err != nil {
+			return "", err
+		}
+		return outPath, nil
+	}
+
+	return "", fmt.Errorf("%s not found in archive", binName)
+}
+
+func extractNamedBinaryFromZip(archivePath, destDir, binName string) (string, error) {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if filepath.Base(f.Name) != binName {
+			continue
+		}
+
+		src, err := f.Open()
+		if err != nil {
+			return "", err
+		}
+		defer src.Close()
+
+		outPath := filepath.Join(destDir, binName)
+		out, err := os.Create(outPath)
+		if err != nil {
+			return "", err
+		}
+		if _, err := io.Copy(out, src); err != nil {
+			out.Close()
+			return "", err
+		}
+		if err := out.Close(); err != nil {
+			return "", err
+		}
+		return outPath, nil
+	}
+
+	return "", fmt.Errorf("%s not found in archive", binName)
 }
