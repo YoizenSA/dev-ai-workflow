@@ -256,6 +256,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool) {
 		case "cursor":
 			agentsDir := filepath.Join(home, ".cursor", "agents")
 			agentprofiles.InstallCursor(agentsDir, profiles)
+
+		case "vscode-copilot":
+			promptsDir := agentprofiles.VSCodePromptsDir()
+			if promptsDir != "" {
+				agentprofiles.InstallVSCode(promptsDir, profiles)
+			}
 		}
 	}
 }
