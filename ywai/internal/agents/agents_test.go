@@ -220,6 +220,39 @@ func TestInstallOpenCode(t *testing.T) {
 	}
 }
 
+func TestInstallOpenCodeCreatesMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	// File does not exist yet.
+
+	profiles := map[string]AgentProfile{
+		"ask": {
+			Name:        "ask",
+			Description: "Research agent",
+			Prompt:      "# Ask\n\nClean body.",
+			Tools:       map[string]bool{"read": true},
+		},
+	}
+
+	if err := InstallOpenCode(configPath, profiles); err != nil {
+		t.Fatalf("InstallOpenCode() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	agents := root["agent"].(map[string]any)
+	ask := agents["ask"].(map[string]any)
+	if ask["description"] != "Research agent" {
+		t.Errorf("description = %v", ask["description"])
+	}
+}
+
 func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")

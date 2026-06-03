@@ -49,31 +49,25 @@ func Install() error {
 		return nil
 	}
 
+	// Prefer go install when Go is available.
 	_, err := exec.LookPath("go")
-	if err != nil {
-		return fmt.Errorf("Go is not installed. Install Go first: https://go.dev/dl/")
+	if err == nil {
+		fmt.Println("Installing gentle-ai...")
+		cmd := exec.Command("go", "install", "github.com/Gentleman-Programming/gentle-ai/cmd/gentle-ai@latest")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to install gentle-ai: %w", err)
+		}
+		fmt.Println("gentle-ai installed successfully.")
+		return nil
 	}
 
-	fmt.Println("Installing gentle-ai...")
-	cmd := exec.Command("go", "install", "github.com/Gentleman-Programming/gentle-ai/cmd/gentle-ai@latest")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// Fallback: download pre-built release binary.
+	fmt.Println("Go not found. Downloading pre-built gentle-ai binary...")
+	if err := installGentleAIReleaseBinaryFirstTime(); err != nil {
 		return fmt.Errorf("failed to install gentle-ai: %w", err)
 	}
-
-	if runtime.GOOS == "windows" {
-		gopath := os.Getenv("GOPATH")
-		if gopath == "" {
-			home, _ := os.UserHomeDir()
-			gopath = home + "\\go"
-		}
-		binDir := gopath + "\\bin"
-		path := os.Getenv("PATH")
-		fmt.Printf("Make sure %s is in your PATH.\n", binDir)
-		_ = path
-	}
-
 	fmt.Println("gentle-ai installed successfully.")
 	return nil
 }
@@ -578,6 +572,81 @@ func extractBinaryFromTarGz(archivePath, destDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%s not found in archive", config.GentleAIBin)
+}
+
+// installGentleAIReleaseBinaryFirstTime downloads the latest release binary
+// to a user-local bin directory (~/.local/bin or ~/go/bin) when Go is not available.
+func installGentleAIReleaseBinaryFirstTime() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot determine home directory: %w", err)
+	}
+
+	// Pick a writable install directory.
+	var installDir string
+	for _, dir := range []string{
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, "go", "bin"),
+		filepath.Join(home, ".bin"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			installDir = dir
+			break
+		}
+	}
+	if installDir == "" {
+		return fmt.Errorf("no writable bin directory found in home")
+	}
+
+	version, err := latestGentleAIRelease()
+	if err != nil {
+		return fmt.Errorf("failed to check latest release: %w", err)
+	}
+
+	archiveName := gentleAIAssetName(version)
+	downloadURL := fmt.Sprintf(
+		"https://github.com/%s/%s/releases/download/%s/%s",
+		gentleAIOwner,
+		gentleAIRepo,
+		version,
+		archiveName,
+	)
+
+	tmpDir, err := os.MkdirTemp("", "gentle-ai-install-*")
+	if err != nil {
+		return fmt.Errorf("cannot create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	archivePath := filepath.Join(tmpDir, archiveName)
+	fmt.Printf("  Downloading %s...\n", downloadURL)
+	if err := downloadFile(downloadURL, archivePath); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	binaryPath, err := extractGentleAIBinary(archivePath, tmpDir)
+	if err != nil {
+		return fmt.Errorf("extract failed: %w", err)
+	}
+
+	if err := os.Chmod(binaryPath, 0o755); err != nil {
+		return err
+	}
+
+	target := filepath.Join(installDir, config.GentleAIBin)
+	if err := os.Rename(binaryPath, target); err != nil {
+		return fmt.Errorf("cannot move binary into place: %w", err)
+	}
+
+	fmt.Printf("  Installed to %s\n", target)
+
+	// Warn if the install directory is not in PATH.
+	pathEnv := os.Getenv("PATH")
+	if !strings.Contains(pathEnv, installDir) {
+		fmt.Printf("  Warning: %s is not in your PATH. Add it or restart your shell.\n", installDir)
+	}
+
+	return nil
 }
 
 func replaceBinary(target, replacement string) error {

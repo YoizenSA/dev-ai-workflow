@@ -270,15 +270,19 @@ func parseOpenCodeTools(path string) (map[string]bool, error) {
 }
 
 // InstallOpenCode injects agent profiles into opencode.json.
+// If the file does not exist, it is created with an empty agent section.
 func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", configPath, err)
+	root := map[string]any{}
+
+	if data, err := os.ReadFile(configPath); err == nil {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parse %s: %w", configPath, err)
+		}
 	}
 
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("parse %s: %w", configPath, err)
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
 	}
 
 	// Get or create agent section
