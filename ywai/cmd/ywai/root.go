@@ -67,7 +67,7 @@ var rootCmd = &cobra.Command{
 			}
 			if !config.IsDirPopulated(config.DataAgentsDir()) {
 				if err := config.SeedAgentsFromEmbedded(); err != nil {
-					// Not fatal — agent profiles are optional
+					fmt.Fprintf(os.Stderr, "Warning: failed to seed agent profiles: %v\n", err)
 				}
 			}
 		}
