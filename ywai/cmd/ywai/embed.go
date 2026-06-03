@@ -17,5 +17,10 @@ func init() {
 		sub, _ := fs.Sub(embeddedFS, "embedded_data/skills")
 		return sub
 	}
+	agentsFS := func() fs.FS {
+		sub, _ := fs.Sub(embeddedFS, "embedded_data/agents")
+		return sub
+	}
 	config.RegisterEmbeddedProviders(skillsFS)
+	config.RegisterEmbeddedAgents(agentsFS)
 }

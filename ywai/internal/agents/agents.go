@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // AgentProfile represents a parsed agent from ywai/agents/.
@@ -360,38 +362,5 @@ func isWindows() bool { return runtime.GOOS == "windows" }
 
 // AgentsSourceDir returns the path to ywai/agents/ directory.
 func AgentsSourceDir() string {
-	// Check repo root first
-	repoAgents := filepath.Join(repoRoot(), "agents")
-	if isDirPopulated(repoAgents) {
-		return repoAgents
-	}
-
-	// Check data dir
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	dataAgents := filepath.Join(home, ".ywai", "agents")
-	if isDirPopulated(dataAgents) {
-		return dataAgents
-	}
-
-	return repoAgents
-}
-
-func repoRoot() string {
-	if cwd, err := os.Getwd(); err == nil {
-		if _, err := os.Stat(filepath.Join(cwd, "go.mod")); err == nil {
-			return cwd
-		}
-	}
-	return "."
-}
-
-func isDirPopulated(dir string) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	return len(entries) > 0
+	return config.AgentsSourceDir()
 }

@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	AppName       = "ywai"
-	GentleAIBin   = "gentle-ai"
-	SkillsDirName = "skills"
+	AppName        = "ywai"
+	GentleAIBin    = "gentle-ai"
+	SkillsDirName  = "skills"
+	AgentsDirName  = "agents"
 )
 
 var repoRootOverride string
@@ -32,6 +33,10 @@ func DataDir() string {
 
 func DataSkillsDir() string {
 	return filepath.Join(DataDir(), SkillsDirName)
+}
+
+func DataAgentsDir() string {
+	return filepath.Join(DataDir(), AgentsDirName)
 }
 
 func RepoRoot() string {
@@ -71,6 +76,10 @@ func RepoRoot() string {
 
 func SkillsSourceDir() string {
 	return findSourceDir(SkillsDirName)
+}
+
+func AgentsSourceDir() string {
+	return findSourceDir(AgentsDirName)
 }
 
 // findSourceDir locates a source directory (skills/).

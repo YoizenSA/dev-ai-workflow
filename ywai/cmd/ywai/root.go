@@ -26,19 +26,15 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		repo := config.RepoRoot()
+		isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
+
 		// Seed skills data if skills dir is empty
-		needsSeed := !config.IsDirPopulated(config.DataSkillsDir())
-
-		if needsSeed {
-			repo := config.RepoRoot()
-			isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
-
+		if !config.IsDirPopulated(config.DataSkillsDir()) {
 			if isRealRepo {
 				if err := config.SeedSkillsFrom(repo); err != nil {
 					fmt.Printf("Warning: failed to seed skills from repo: %v\n", err)
 				}
-				// Fallback: if repo seed ran but no skills were loaded,
-				// force embedded seed to avoid stale/local repo issues.
 				if len(config.AvailableSkills()) == 0 {
 					if err := config.SeedSkillsFromEmbedded(); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
@@ -50,7 +46,6 @@ var rootCmd = &cobra.Command{
 				}
 			}
 
-			// Verify seeding actually worked
 			if len(config.AvailableSkills()) == 0 && cmd.Name() != "update" {
 				fmt.Fprintln(os.Stderr, "")
 				fmt.Fprintln(os.Stderr, "Error: no skills available after seeding.")
@@ -60,6 +55,20 @@ var rootCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, "  curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash")
 				fmt.Fprintln(os.Stderr, "Or, from a source checkout:")
 				fmt.Fprintln(os.Stderr, "  cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
+			}
+		}
+
+		// Seed agent profiles if agents dir is empty
+		if !config.IsDirPopulated(config.DataAgentsDir()) {
+			if isRealRepo {
+				if err := config.SeedAgentsFrom(repo); err != nil {
+					fmt.Printf("Warning: failed to seed agents from repo: %v\n", err)
+				}
+			}
+			if !config.IsDirPopulated(config.DataAgentsDir()) {
+				if err := config.SeedAgentsFromEmbedded(); err != nil {
+					// Not fatal — agent profiles are optional
+				}
 			}
 		}
 	},
@@ -317,9 +326,8 @@ func selfUpdateViaGo() {
 }
 
 func reseedData() {
-	skillsDir := config.DataSkillsDir()
-
-	os.RemoveAll(skillsDir)
+	os.RemoveAll(config.DataSkillsDir())
+	os.RemoveAll(config.DataAgentsDir())
 
 	if err := config.EnsureDataDir(); err != nil {
 		fmt.Printf("  Warning: failed to create data directory: %v\n", err)
@@ -327,25 +335,43 @@ func reseedData() {
 	}
 
 	repo := config.RepoRoot()
-	if config.IsOurRepoByPath(repo) && repo != config.DataDir() {
+	isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
+
+	// Reseed skills
+	if isRealRepo {
 		if err := config.SeedSkillsFrom(repo); err != nil {
-			fmt.Printf("  Warning: seed from repo failed: %v\n", err)
+			fmt.Printf("  Warning: seed skills from repo failed: %v\n", err)
+		} else if len(config.AvailableSkills()) > 0 {
+			fmt.Println("  Skills re-seeded from repo.")
 		} else {
-			if len(config.AvailableSkills()) > 0 {
-				fmt.Println("  Skills re-seeded from repo.")
-				return
-			}
 			fmt.Println("  Repo seed had no skills, falling back to embedded...")
+			if err := config.SeedSkillsFromEmbedded(); err != nil {
+				fmt.Printf("  Warning: seed skills from embedded failed: %v\n", err)
+			}
+		}
+	} else {
+		if err := config.SeedSkillsFromEmbedded(); err != nil {
+			fmt.Printf("  Warning: seed skills from embedded failed: %v\n", err)
+			fmt.Println("  The updated binary will seed data on next run.")
+		} else {
+			fmt.Println("  Skills re-seeded from embedded.")
 		}
 	}
 
-	if err := config.SeedSkillsFromEmbedded(); err != nil {
-		fmt.Printf("  Warning: seed from embedded failed: %v\n", err)
-		fmt.Println("  The updated binary will seed data on next run.")
-		return
+	// Reseed agent profiles
+	if isRealRepo {
+		if err := config.SeedAgentsFrom(repo); err != nil {
+			fmt.Printf("  Warning: seed agents from repo failed: %v\n", err)
+		} else {
+			fmt.Println("  Agent profiles re-seeded from repo.")
+		}
+	} else {
+		if err := config.SeedAgentsFromEmbedded(); err != nil {
+			// Not fatal
+		} else {
+			fmt.Println("  Agent profiles re-seeded from embedded.")
+		}
 	}
-
-	fmt.Println("  Skills re-seeded from embedded.")
 }
 
 func applyOverrides(agents []agent.Agent) {

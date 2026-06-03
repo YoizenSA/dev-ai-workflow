@@ -12,6 +12,7 @@ import (
 
 var (
 	getEmbeddedSkillsFS func() fs.FS
+	getEmbeddedAgentsFS func() fs.FS
 	fsMutex             sync.Mutex
 )
 
@@ -61,6 +62,64 @@ func SeedSkillsFrom(repoRoot string) error {
 
 func RegisterEmbeddedProviders(skillsFS func() fs.FS) {
 	getEmbeddedSkillsFS = skillsFS
+}
+
+func RegisterEmbeddedAgents(agentsFS func() fs.FS) {
+	getEmbeddedAgentsFS = agentsFS
+}
+
+func SeedAgentsFrom(repoRoot string) error {
+	if err := EnsureDataDir(); err != nil {
+		return err
+	}
+
+	srcDir := AgentsSourceDir()
+	dstDir := DataAgentsDir()
+
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		srcPath := filepath.Join(srcDir, entry.Name())
+		dstPath := filepath.Join(dstDir, entry.Name())
+
+		if err := copyDirRecursive(srcPath, dstPath); err != nil {
+			return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+		}
+	}
+	return nil
+}
+
+func SeedAgentsFromEmbedded() error {
+	if err := EnsureDataDir(); err != nil {
+		return fmt.Errorf("failed to ensure data directory: %w", err)
+	}
+
+	if fn := getEmbeddedAgentsFS; fn != nil {
+		if fsys := fn(); fsys != nil {
+			count := 0
+			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					count++
+				}
+				return nil
+			})
+			if count > 0 {
+				fmt.Printf("  Seeding agents from embedded (%d files)...\n", count)
+				if err := extractFS(fsys, ".", DataAgentsDir()); err != nil {
+					return fmt.Errorf("failed to extract embedded agents: %w", err)
+				}
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("no embedded agents data available")
 }
 
 func SeedSkillsFromEmbedded() error {
