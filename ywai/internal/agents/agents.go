@@ -295,8 +295,21 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 
 	installed := 0
 	for name, profile := range profiles {
-		// Skip if already present (don't overwrite existing agents)
-		if _, exists := agents[name]; exists {
+		if existing, exists := agents[name]; exists {
+			// Migrate agents that were injected with frontmatter in the prompt (old bug).
+			existingMap, ok := existing.(map[string]any)
+			if !ok {
+				continue
+			}
+			existingPrompt, ok := existingMap["prompt"].(string)
+			if !ok || !strings.HasPrefix(existingPrompt, "---") {
+				continue
+			}
+			existingMap["mode"] = profile.Mode
+			existingMap["description"] = profile.Description
+			existingMap["prompt"] = profile.Prompt
+			existingMap["tools"] = profile.Tools
+			installed++
 			continue
 		}
 

@@ -219,3 +219,121 @@ func TestInstallOpenCode(t *testing.T) {
 		t.Errorf("existing agent was overwritten: %v", existing["description"])
 	}
 }
+
+func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	// Simulate an old buggy agent whose prompt contains leaked frontmatter.
+	initial := `{"agent": {"ask": {"mode": "all", "description": "old", "prompt": "---\nname: ask\ndescription: old\n---\n\n# Ask\nBody."}}}`
+	if err := os.WriteFile(configPath, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"ask": {
+			Name:        "ask",
+			Description: "Research agent",
+			Prompt:      "# Ask\n\nClean body.",
+			Tools:       map[string]bool{"read": true},
+		},
+	}
+
+	if err := InstallOpenCode(configPath, profiles); err != nil {
+		t.Fatalf("InstallOpenCode() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	agents := root["agent"].(map[string]any)
+	ask := agents["ask"].(map[string]any)
+
+	prompt := ask["prompt"].(string)
+	if strings.HasPrefix(prompt, "---") {
+		t.Errorf("migrated prompt should not start with frontmatter, got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Clean body") {
+		t.Errorf("migrated prompt should contain new body, got: %s", prompt)
+	}
+	if ask["description"] != "Research agent" {
+		t.Errorf("description should be updated, got: %v", ask["description"])
+	}
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "basic frontmatter",
+			content: "---\nname: dev\n---\n\n# Hello",
+			want:    "# Hello",
+		},
+		{
+			name:    "no frontmatter",
+			content: "# Hello\n\nbody",
+			want:    "# Hello\n\nbody",
+		},
+		{
+			name:    "frontmatter with separator in body",
+			content: "---\nname: dev\n---\n\n# Hello\n\n---\n\nMore body",
+			want:    "# Hello\n\n---\n\nMore body",
+		},
+		{
+			name:    "unclosed frontmatter",
+			content: "---\nname: dev\n# Hello",
+			want:    "---\nname: dev\n# Hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripFrontmatter(tt.content)
+			if got != tt.want {
+				t.Errorf("stripFrontmatter() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadProfilesStripsFrontmatter(t *testing.T) {
+	src := t.TempDir()
+	devDir := filepath.Join(src, "dev")
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	agentMD := "---\nname: dev\ndescription: >\n  Developer agent.\n  Trigger: code.\nrole: developer\nmode: all\ntools: [Read, Edit]\n---\n\n# Dev Agent\n\nBody."
+	if err := os.WriteFile(filepath.Join(devDir, "AGENT.md"), []byte(agentMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "tools.json"), []byte(`{"allowed": ["Read", "Edit"], "denied": []}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, err := LoadProfiles(src)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+
+	dev, ok := profiles["dev"]
+	if !ok {
+		t.Fatal("expected dev profile")
+	}
+	if strings.Contains(dev.Prompt, "---") {
+		t.Errorf("Prompt should not contain frontmatter delimiters, got:\n%s", dev.Prompt)
+	}
+	if strings.HasPrefix(dev.Prompt, "name:") {
+		t.Errorf("Prompt should not start with frontmatter keys, got:\n%s", dev.Prompt)
+	}
+	if !strings.HasPrefix(dev.Prompt, "# Dev Agent") {
+		t.Errorf("Prompt should start with body heading, got:\n%s", dev.Prompt)
+	}
+}
