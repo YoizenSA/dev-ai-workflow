@@ -280,6 +280,7 @@ func FindByName(name string) (*Agent, error) {
 }
 
 // SettingsPaths returns the config file paths for agents that have JSON settings.
+// OpenCode and Kilo Code prefer .jsonc when it exists, falling back to .json.
 // Used by plugins and other install steps.
 func SettingsPaths() map[string]string {
 	home, err := os.UserHomeDir()
@@ -288,8 +289,8 @@ func SettingsPaths() map[string]string {
 	}
 
 	return map[string]string{
-		"opencode":   filepath.Join(home, ".config", "opencode", "opencode.json"),
-		"kilocode":   filepath.Join(home, ".config", "kilo", "opencode.json"),
+		"opencode":   config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode"),
+		"kilocode":   config.FindJSONCPath(filepath.Join(home, ".config", "kilo"), "opencode"),
 		"windsurf":   pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli": pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 	}

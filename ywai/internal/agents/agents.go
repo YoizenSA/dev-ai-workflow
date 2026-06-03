@@ -269,14 +269,16 @@ func parseOpenCodeTools(path string) (map[string]bool, error) {
 	return tools, nil
 }
 
-// InstallOpenCode injects agent profiles into opencode.json.
+// InstallOpenCode injects agent profiles into opencode.json (or opencode.jsonc).
 // If the file does not exist, it is created with an empty agent section.
 func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error {
 	root := map[string]any{}
 
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := json.Unmarshal(data, &root); err != nil {
-			return fmt.Errorf("parse %s: %w", configPath, err)
+	if _, err := os.Stat(configPath); err == nil {
+		var readErr error
+		root, readErr = config.ReadJSONC(configPath)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", configPath, readErr)
 		}
 	}
 
@@ -330,13 +332,7 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		return nil
 	}
 
-	updated, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-	updated = append(updated, '\n')
-
-	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
+	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
 	}
 

@@ -170,15 +170,30 @@ func TestSettingsPaths_ReturnsMap(t *testing.T) {
 	}
 }
 
-func TestSettingsPaths_OpenCodePath(t *testing.T) {
+func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
+	// Without any file, should fall back to .json
 	paths := SettingsPaths()
 	want := filepath.Join(home, ".config", "opencode", "opencode.json")
 	if paths["opencode"] != want {
 		t.Fatalf("opencode path = %q, want %q", paths["opencode"], want)
+	}
+
+	// Create .jsonc — should be preferred
+	jsonc := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(jsonc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jsonc, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	paths = SettingsPaths()
+	wantJSONC := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if paths["opencode"] != wantJSONC {
+		t.Fatalf("opencode path with .jsonc = %q, want %q", paths["opencode"], wantJSONC)
 	}
 }
 

@@ -5,20 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // InstallQuota adds the opencode-quota plugin to opencode.json and creates quota-toast.json
 // with percentDisplayMode set to "used"
 func InstallQuota(configPath string) error {
-	// Read opencode.json
-	data, err := os.ReadFile(configPath)
+	root, err := config.ReadJSONC(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to read opencode.json: %w", err)
-	}
-
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("failed to parse opencode.json: %w", err)
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
 	// Add plugin to plugin array if not already present
@@ -48,15 +44,8 @@ func InstallQuota(configPath string) error {
 		root["plugin"] = plugins
 	}
 
-	// Write updated opencode.json
-	updated, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal opencode.json: %w", err)
-	}
-	updated = append(updated, '\n')
-
-	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
-		return fmt.Errorf("failed to write opencode.json: %w", err)
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
 
 	// Create opencode-quota directory and quota-toast.json

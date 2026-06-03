@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // ADOProfile defines a single Azure DevOps profile configuration.
@@ -364,16 +366,11 @@ func InstallADODefaultConfig(config ADOPluginConfig) error {
 	return nil
 }
 
-// InstallADOOpenCode adds the @nahuelcio/opencode-ado plugin to opencode.json.
+// InstallADOOpenCode adds the @nahuelcio/opencode-ado plugin to opencode.json (or .jsonc).
 func InstallADOOpenCode(configPath string, adoConfig ADOPluginConfig) error {
-	data, err := os.ReadFile(configPath)
+	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
-	}
-
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	pluginsRaw, ok := root["plugin"]
@@ -403,13 +400,7 @@ func InstallADOOpenCode(configPath string, adoConfig ADOPluginConfig) error {
 	root["plugin"] = plugins
 
 write:
-	updated, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-	updated = append(updated, '\n')
-
-	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
+	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
