@@ -58,6 +58,13 @@ ywai update
 
 ```
 ywai/
+├── agents/               # Pre-configured agent profiles
+│   ├── ask/              # Research & Q&A
+│   ├── dev/              # Implementation
+│   ├── qa/               # Testing & quality
+│   ├── architect/        # Design & architecture
+│   ├── reviewer/         # Code review
+│   └── devops/           # CI/CD & infrastructure
 ├── cmd/ywai/             # CLI entry point
 ├── internal/
 │   ├── agent/            # Agent detection (opencode, claude-code, etc.)
@@ -97,6 +104,27 @@ ywai/
 | `devops` | Azure Pipelines, Helm charts, Kubernetes |
 | `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
 | `git-commit` | Conventional commits |
+
+---
+
+## Pre-configured Agents
+
+Role-based agent profiles in `ywai/agents/`. Each has a system prompt (`AGENT.md`), tool permissions (`tools.json`), and linked skills (`skills.txt`).
+
+| Agent | Role | Best For |
+|:------|:-----|:---------|
+| `ask` | Research & Q&A | Quick questions, explanations, research, analysis |
+| `dev` | Developer | Implementation, coding, debugging, refactoring |
+| `qa` | QA Engineer | Test strategy, writing tests, coverage analysis |
+| `architect` | Architect | Design decisions, patterns, system architecture |
+| `reviewer` | Code Reviewer | PR reviews, bug finding, security audits |
+| `devops` | DevOps Engineer | CI/CD, deployments, Docker, K8s, monitoring |
+
+### Agent Composability
+
+```
+ask → (research) → architect → (design) → dev → (implement) → qa → (test) → reviewer → (approve) → devops → (deploy)
+```
 
 ---
 

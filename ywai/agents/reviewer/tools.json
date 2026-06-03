@@ -1,0 +1,4 @@
+{
+  "allowed": ["Read", "Glob", "Grep", "ASTGrep", "LSP", "Bash"],
+  "denied": ["Edit", "Write"]
+}
