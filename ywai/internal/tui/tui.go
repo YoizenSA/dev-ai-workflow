@@ -76,9 +76,26 @@ const (
 
 var (
 	presetChoices  = []string{"full-gentleman", "ecosystem-only", "minimal"}
+	presetDescs    = map[string]string{
+		"full-gentleman":  "Instala gentle-ai completo + todos los skills + agentes preconfigurados",
+		"ecosystem-only":  "Solo gentle-ai core (sin skills extra)",
+		"minimal":         "Solo lo esencial (gentle-ai básico)",
+	}
 	scopeChoices   = []string{"global", "workspace"}
+	scopeDescs     = map[string]string{
+		"global":     "Skills compartidos entre todos tus proyectos (~/.local)",
+		"workspace":  "Skills solo en este proyecto (directorio actual)",
+	}
 	sddModeChoices = []string{"single", "multi"}
+	sddModeDescs   = map[string]string{
+		"single": "Un solo agente hace todo el trabajo",
+		"multi":  "Divide trabajo entre múltiples agentes (build, plan, etc.)",
+	}
 	personaChoices = []string{"neutral", "gentleman"}
+	personaDescs   = map[string]string{
+		"neutral":   "Respuestas directas y concisas",
+		"gentleman": "Más cortés y explicativo",
+	}
 )
 
 type agentOption struct {
@@ -541,6 +558,30 @@ func (m *Model) viewOptions() string {
 
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  ←/→ change  •  Enter continue  •  Esc back"))
+
+	// Show description of selected option
+	b.WriteString("\n\n")
+	switch m.optionsCursor {
+	case 0: // Preset
+		desc := presetDescs[presetChoices[m.presetIdx]]
+		b.WriteString(dimStyle.Render("  " + desc))
+	case 1: // Scope
+		desc := scopeDescs[scopeChoices[m.scopeIdx]]
+		b.WriteString(dimStyle.Render("  " + desc))
+	case 2: // Global only
+		if m.globalOnly {
+			b.WriteString(dimStyle.Render("  Solo skills globales (sin AGENTS.md/REVIEW.md en el repo)"))
+		} else {
+			b.WriteString(dimStyle.Render("  Skills globales + AGENTS.md/REVIEW.md en el repo"))
+		}
+	case 3: // SDD Mode
+		desc := sddModeDescs[sddModeChoices[m.sddModeIdx]]
+		b.WriteString(dimStyle.Render("  " + desc))
+	case 4: // Persona
+		desc := personaDescs[personaChoices[m.personaIdx]]
+		b.WriteString(dimStyle.Render("  " + desc))
+	}
+
 	return b.String()
 }
 
