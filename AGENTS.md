@@ -70,7 +70,6 @@ ywai/
 │   ├── agent/            # Agent detection (opencode, claude-code, etc.)
 │   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade)
 │   ├── skills/           # Symlink extra skills to agent dirs
-│   ├── orchestrator/     # Orchestrator renaming (gentle-orchestrator → sdd-orchestrator)
 │   └── config/           # Paths, constants
 ├── skills/               # Extra skills not in gentle-ai
 │   ├── angular/

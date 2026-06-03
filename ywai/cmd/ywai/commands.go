@@ -8,7 +8,6 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/spf13/cobra"
@@ -62,7 +61,7 @@ var installCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Upgrade ywai + gentle-ai + re-seed + sync + copy skills + rename orchestrator",
+	Short: "Upgrade ywai + gentle-ai + re-seed + sync + copy skills",
 	Run: func(cmd *cobra.Command, args []string) {
 		var warnings []string
 		warn := func(format string, args ...any) {
@@ -137,11 +136,7 @@ var updateCmd = &cobra.Command{
 			fmt.Printf("  [%s] Copied skills\n", a.Name)
 		}
 
-		fmt.Println("\n[7/7] Renaming orchestrator...")
-		results := orchestrator.RenameAll(orchestrator.AgentSettingsPaths())
-		orchestrator.PrintResults(results)
-
-		fmt.Println("\n[7.5/7] Re-applying ywai overrides...")
+		fmt.Println("\n[6/7] Re-applying ywai overrides...")
 		agentDirs := overrides.AgentSkillsDirs()
 		for name, dir := range agentDirs {
 			if _, err := os.Stat(dir); err == nil {

@@ -10,7 +10,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/orchestrator"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -185,11 +184,13 @@ func executeInstall(agentFlag string, dryRun bool, installMCP bool, globalOnly b
 	copySkillsForAgents(agents, dryRun)
 
 	if !dryRun {
-		results := orchestrator.RenameAll(orchestrator.AgentSettingsPaths())
-		orchestrator.PrintResults(results)
+		agentDirs := make(map[string]string)
+		for _, a := range agents {
+			agentDirs[a.Name] = a.SkillsDir
+		}
 
 		fmt.Println("\n[3.5/3] Applying ywai overrides...")
-		applyOverrides(agents)
+		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
 		fmt.Println("\n[3.6/3] Installing opencode-quota plugin...")
 		installPluginsForAgents(agents, dryRun, installMCP)
@@ -295,7 +296,7 @@ func applyOverrides(agents []agent.Agent) {
 }
 
 func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool) {
-	agentSettingsPaths := orchestrator.AgentSettingsPaths()
+	agentSettingsPaths := agent.SettingsPaths()
 
 	for _, a := range agents {
 		// Only install plugins for opencode/kilocode

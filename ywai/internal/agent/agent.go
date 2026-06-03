@@ -258,6 +258,29 @@ func FindByName(name string) (*Agent, error) {
 	return nil, fmt.Errorf("agent %q not found or not installed", name)
 }
 
+// SettingsPaths returns the config file paths for agents that have JSON settings.
+// Used by plugins and other install steps.
+func SettingsPaths() map[string]string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	return map[string]string{
+		"opencode":   filepath.Join(home, ".config", "opencode", "opencode.json"),
+		"kilocode":   filepath.Join(home, ".config", "kilo", "opencode.json"),
+		"windsurf":   pathIfExists(filepath.Join(home, ".windsurf", "settings.json")),
+		"gemini-cli": pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
+	}
+}
+
+func pathIfExists(path string) string {
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
 func AvailableNames() []string {
 	return []string{
 		"opencode", "claude-code", "cursor", "windsurf",
