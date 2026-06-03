@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
@@ -190,10 +191,13 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 			agentDirs[a.Name] = a.SkillsDir
 		}
 
-		fmt.Println("\n[3.5/3] Applying ywai overrides...")
+		fmt.Println("\n[3.5/3] Installing agent profiles...")
+		installAgentProfiles(agents, opts.DryRun)
+
+		fmt.Println("\n[3.6/3] Applying ywai overrides...")
 		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
-		fmt.Println("\n[3.6/3] Installing opencode-quota plugin...")
+		fmt.Println("\n[3.7/3] Installing opencode-quota plugin...")
 		installPluginsForAgents(agents, opts.DryRun, installMCP, installADO)
 	}
 
@@ -201,6 +205,59 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Open your AI agent in this project")
 	fmt.Println("  2. Run `ywai skills` to see available skills")
+}
+
+func installAgentProfiles(agents []agent.Agent, dryRun bool) {
+	sourceDir := agentprofiles.AgentsSourceDir()
+	if sourceDir == "" {
+		fmt.Println("  No agent profiles found.")
+		return
+	}
+
+	profiles, err := agentprofiles.LoadProfiles(sourceDir)
+	if err != nil {
+		fmt.Printf("  Warning: failed to load agent profiles: %v\n", err)
+		return
+	}
+
+	if len(profiles) == 0 {
+		fmt.Println("  No agent profiles to install.")
+		return
+	}
+
+	if dryRun {
+		fmt.Printf("  Would install %d agent profiles (ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+
+	for _, a := range agents {
+		switch a.Name {
+		case "opencode", "kilocode":
+			configPath := ""
+			settingsPaths := agent.SettingsPaths()
+			if p, ok := settingsPaths[a.Name]; ok && p != "" {
+				configPath = p
+			}
+			if configPath == "" {
+				continue
+			}
+			if err := agentprofiles.InstallOpenCode(configPath, profiles); err != nil {
+				fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
+			}
+
+		case "claude-code":
+			agentsDir := filepath.Join(home, ".claude", "agents")
+			agentprofiles.InstallClaude(agentsDir, profiles)
+
+		case "cursor":
+			agentsDir := filepath.Join(home, ".cursor", "agents")
+			agentprofiles.InstallCursor(agentsDir, profiles)
+		}
+	}
 }
 
 func ternary(cond bool, a, b string) string {
