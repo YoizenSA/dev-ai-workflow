@@ -41,20 +41,22 @@ func replaceInFile(path string, old, new string) error {
 	return nil
 }
 
-// AgentSkillsDirs returns the skills directory for each detected agent
+// AgentSkillsDirs returns the skills directory for each detected agent.
 func AgentSkillsDirs() map[string]string {
 	home, _ := os.UserHomeDir()
 	return map[string]string{
 		"opencode":    filepath.Join(home, ".config", "opencode", "skills"),
 		"claude-code": filepath.Join(home, ".claude", "skills"),
 		"cursor":      filepath.Join(home, ".cursor", "skills"),
-		"windsurf":    filepath.Join(home, ".windsurf", "skills"),
+		"windsurf":    filepath.Join(home, ".codeium", "windsurf", "skills"),
 		"gemini-cli":  filepath.Join(home, ".gemini", "skills"),
-		"vscode-copilot": filepath.Join(home, os.Getenv("APPDATA"), "Code", "User", "skills"),
 		"codex":       filepath.Join(home, ".codex", "skills"),
 		"kilocode":    filepath.Join(home, ".config", "kilo", "skills"),
-		"kimi":        filepath.Join(home, ".config", "agents", "skills"),
+		"kimi":        filepath.Join(home, ".kimi", "skills"),
 		"qwen-code":   filepath.Join(home, ".qwen", "skills"),
 		"kiro-ide":    filepath.Join(home, ".kiro", "skills"),
+		"openclaw":    filepath.Join(home, ".openclaw", "skills"),
+		"trae-ide":    filepath.Join(home, ".trae", "skills"),
+		"antigravity": filepath.Join(home, ".gemini", "antigravity", "skills"),
 	}
 }

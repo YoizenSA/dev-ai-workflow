@@ -95,7 +95,7 @@ func InstallEcosystem(opts InstallOptions) error {
 
 	args := opts.buildArgs()
 
-	fmt.Printf("Running gentle-ai install --agent %s --preset %s...\n", opts.AgentName, opts.effectivePreset())
+	fmt.Printf("Running gentle-ai install --agent %s (%d components)...\n", opts.AgentName, len(installComponents))
 	cmd := exec.Command(config.GentleAIBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -108,11 +108,10 @@ func InstallEcosystem(opts InstallOptions) error {
 	return nil
 }
 
-func (o InstallOptions) effectivePreset() string {
-	if o.Preset == "" {
-		return "full-gentleman"
-	}
-	return o.Preset
+// Components to install via gentle-ai (explicit list, no gga).
+var installComponents = []string{
+	"engram", "sdd", "skills", "context7",
+	"persona", "permissions",
 }
 
 func (o InstallOptions) effectivePersona() string {
@@ -122,15 +121,22 @@ func (o InstallOptions) effectivePersona() string {
 	return o.Persona
 }
 
+func (o InstallOptions) effectiveScope() string {
+	if o.Scope == "" {
+		return "global"
+	}
+	return o.Scope
+}
+
 func (o InstallOptions) buildArgs() []string {
 	args := []string{
 		"install",
 		"--agent", o.AgentName,
 		"--persona", o.effectivePersona(),
-		"--preset", o.effectivePreset(),
+		"--scope", o.effectiveScope(),
 	}
-	if o.Scope != "" {
-		args = append(args, "--scope", o.Scope)
+	for _, c := range installComponents {
+		args = append(args, "--component", c)
 	}
 	if o.SDDMode != "" {
 		args = append(args, "--sdd-mode", o.SDDMode)

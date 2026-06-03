@@ -13,7 +13,11 @@ func TestInstallOptions_BuildArgs_Minimal(t *testing.T) {
 	}
 	args := opts.buildArgs()
 
-	want := []string{"install", "--agent", "opencode", "--persona", "neutral", "--preset", "full-gentleman"}
+	want := []string{
+		"install", "--agent", "opencode", "--persona", "neutral", "--scope", "global",
+		"--component", "engram", "--component", "sdd", "--component", "skills",
+		"--component", "context7", "--component", "persona", "--component", "permissions",
+	}
 	if !slices.Equal(args, want) {
 		t.Fatalf("args = %v, want %v", args, want)
 	}
@@ -32,48 +36,47 @@ func TestInstallOptions_BuildArgs_AllFlags(t *testing.T) {
 
 	want := []string{
 		"install", "--agent", "claude-code",
-		"--persona", "gentleman", "--preset", "minimal",
-		"--scope", "workspace", "--sdd-mode", "multi",
-		"--dry-run",
+		"--persona", "gentleman", "--scope", "workspace",
+		"--component", "engram", "--component", "sdd", "--component", "skills",
+		"--component", "context7", "--component", "persona", "--component", "permissions",
+		"--sdd-mode", "multi", "--dry-run",
 	}
 	if !slices.Equal(args, want) {
 		t.Fatalf("args = %v, want %v", args, want)
 	}
 }
 
-func TestInstallOptions_BuildArgs_CustomPreset(t *testing.T) {
+func TestInstallOptions_BuildArgs_CustomPersona(t *testing.T) {
 	opts := InstallOptions{
 		AgentName: "cursor",
-		Preset:    "ecosystem-only",
 		Persona:   "custom",
 	}
 	args := opts.buildArgs()
 
-	if !slices.Contains(args, "--preset") {
-		t.Fatal("missing --preset flag")
-	}
-	idx := slices.Index(args, "--preset")
-	if args[idx+1] != "ecosystem-only" {
-		t.Fatalf("preset = %q, want ecosystem-only", args[idx+1])
-	}
 	if !slices.Contains(args, "--persona") {
 		t.Fatal("missing --persona flag")
 	}
-	idx = slices.Index(args, "--persona")
+	idx := slices.Index(args, "--persona")
 	if args[idx+1] != "custom" {
 		t.Fatalf("persona = %q, want custom", args[idx+1])
 	}
+	if !slices.Contains(args, "--component") {
+		t.Fatal("missing --component flags")
+	}
 }
 
-func TestInstallOptions_BuildArgs_NoScopeWhenEmpty(t *testing.T) {
+func TestInstallOptions_BuildArgs_AlwaysHasScope(t *testing.T) {
 	opts := InstallOptions{
 		AgentName: "opencode",
-		Scope:     "",
 	}
 	args := opts.buildArgs()
 
-	if slices.Contains(args, "--scope") {
-		t.Fatal("--scope should not be present when empty")
+	if !slices.Contains(args, "--scope") {
+		t.Fatal("--scope should always be present")
+	}
+	idx := slices.Index(args, "--scope")
+	if args[idx+1] != "global" {
+		t.Fatalf("default scope = %q, want global", args[idx+1])
 	}
 }
 
@@ -103,17 +106,17 @@ func TestInstallOptions_BuildArgs_NoDryRunWhenFalse(t *testing.T) {
 
 // ─── InstallOptions defaults ──────────────────────────────────────────────
 
-func TestInstallOptions_EffectivePreset_Default(t *testing.T) {
+func TestInstallOptions_EffectiveScope_Default(t *testing.T) {
 	opts := InstallOptions{}
-	if got, want := opts.effectivePreset(), "full-gentleman"; got != want {
-		t.Fatalf("effectivePreset() = %q, want %q", got, want)
+	if got, want := opts.effectiveScope(), "global"; got != want {
+		t.Fatalf("effectiveScope() = %q, want %q", got, want)
 	}
 }
 
-func TestInstallOptions_EffectivePreset_Explicit(t *testing.T) {
-	opts := InstallOptions{Preset: "minimal"}
-	if got, want := opts.effectivePreset(), "minimal"; got != want {
-		t.Fatalf("effectivePreset() = %q, want %q", got, want)
+func TestInstallOptions_EffectiveScope_Explicit(t *testing.T) {
+	opts := InstallOptions{Scope: "workspace"}
+	if got, want := opts.effectiveScope(), "workspace"; got != want {
+		t.Fatalf("effectiveScope() = %q, want %q", got, want)
 	}
 }
 
