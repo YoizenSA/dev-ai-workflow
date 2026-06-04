@@ -16,33 +16,14 @@ type AgentProfile struct {
 	Name        string
 	Description string
 	Prompt      string
-	Tools       map[string]bool
+	Permission  map[string]string
 	Skills      []string
 	Mode        string
 }
 
-// toolMapping maps our tool names to opencode-style tool names.
-var opencodeToolMap = map[string]string{
-	"Read":           "read",
-	"Edit":           "edit",
-	"Write":          "write",
-	"Bash":           "bash",
-	"Glob":           "glob",
-	"Grep":           "grep",
-	"LSP":            "lsp",
-	"ASTGrep":        "ast_grep",
-	"WebSearch":      "web_search",
-	"CodeSearch":     "code_search",
-	"Task":           "task",
-	"Delegate":       "delegate",
-	"DelegationList": "delegation_list",
-	"DelegationRead": "delegation_read",
-	"Question":       "question",
-	"TodoWrite":      "todowrite",
-}
 
 // LoadProfiles reads all agent directories from the given source dir.
-// Each subdirectory should have AGENT.md and tools.json.
+// Each subdirectory should have AGENT.md and permissions.json.
 func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 	profiles := map[string]AgentProfile{}
 
@@ -87,12 +68,12 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	}
 	prompt = stripFrontmatter(prompt)
 
-	// Read tools.json
-	toolsFile := filepath.Join(dir, "tools.json")
-	tools, err := parseOpenCodeTools(toolsFile)
+	// Read permissions.json
+	permsFile := filepath.Join(dir, "permissions.json")
+	perms, err := parsePermissions(permsFile)
 	if err != nil {
-		fmt.Printf("  Warning: agent %s tools.json error: %v, using defaults\n", name, err)
-		tools = map[string]bool{"read": true, "edit": true, "write": true, "bash": true}
+		fmt.Printf("  Warning: agent %s permissions.json error: %v, using defaults\n", name, err)
+		perms = map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"}
 	}
 
 	// Read skills.txt (optional)
@@ -111,7 +92,7 @@ func loadProfile(dir string) (*AgentProfile, error) {
 		Name:        name,
 		Description: description,
 		Prompt:      promptWithSkills(prompt, skills),
-		Tools:       tools,
+		Permission:  perms,
 		Skills:      skills,
 		Mode:        mode,
 	}, nil
@@ -235,44 +216,19 @@ func extractMode(prompt string) string {
 	return ""
 }
 
-// parseOpenCodeTools reads tools.json and converts to opencode tool map.
-func parseOpenCodeTools(path string) (map[string]bool, error) {
+// parsePermissions reads permissions.json and returns a permission map.
+func parsePermissions(path string) (map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Allowed []string `json:"allowed"`
-		Denied  []string `json:"denied"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	var perms map[string]string
+	if err := json.Unmarshal(data, &perms); err != nil {
 		return nil, err
 	}
 
-	// Build opencode tool map
-	tools := map[string]bool{}
-
-	// Start with all false for common tools
-	for _, oc := range []string{"read", "edit", "write", "bash"} {
-		tools[oc] = false
-	}
-
-	// Enable allowed tools
-	for _, t := range raw.Allowed {
-		if oc, ok := opencodeToolMap[t]; ok {
-			tools[oc] = true
-		}
-	}
-
-	// Explicitly disable denied tools
-	for _, t := range raw.Denied {
-		if oc, ok := opencodeToolMap[t]; ok {
-			tools[oc] = false
-		}
-	}
-
-	return tools, nil
+	return perms, nil
 }
 
 // InstallOpenCode injects agent profiles into opencode.json (or opencode.jsonc).
@@ -320,7 +276,8 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 			existingMap["mode"] = profile.Mode
 			existingMap["description"] = profile.Description
 			existingMap["prompt"] = profile.Prompt
-			existingMap["tools"] = profile.Tools
+			existingMap["permission"] = profile.Permission
+			delete(existingMap, "tools") // remove deprecated tools field
 			installed++
 			continue
 		}
@@ -329,7 +286,7 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 			"mode":        profile.Mode,
 			"description": profile.Description,
 			"prompt":      profile.Prompt,
-			"tools":       profile.Tools,
+			"permission":  profile.Permission,
 		}
 		installed++
 	}
@@ -362,7 +319,7 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 		}
 
 		// Build Claude-style agent file, deriving tools from the parsed profile.
-		toolsStr := claudeToolsString(profile.Tools)
+		toolsStr := claudeToolsString(profile.Permission)
 
 		content := fmt.Sprintf("---\nname: %s\ndescription: >\n  %s\ntools: %s\n---\n\n%s",
 			name, profile.Description, toolsStr, profile.Prompt)
@@ -424,7 +381,7 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 
 // claudeToolsString renders the enabled tools from a parsed profile as a
 // comma-separated list of Claude-style tool names, in a stable order.
-func claudeToolsString(tools map[string]bool) string {
+func claudeToolsString(perms map[string]string) string {
 	// Ordered opencode tool name -> Claude display name.
 	order := []struct{ oc, claude string }{
 		{"read", "Read"},
@@ -435,13 +392,13 @@ func claudeToolsString(tools map[string]bool) string {
 		{"grep", "Grep"},
 		{"lsp", "LSP"},
 		{"ast_grep", "ASTGrep"},
-		{"web_search", "WebSearch"},
+		{"websearch", "WebSearch"},
 		{"code_search", "CodeSearch"},
 	}
 
 	var names []string
 	for _, t := range order {
-		if tools[t.oc] {
+		if v, ok := perms[t.oc]; ok && (v == "allow" || v == "ask") {
 			names = append(names, t.claude)
 		}
 	}
@@ -541,13 +498,33 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
 	b.WriteString("temperature: 0.1\n")
 
-	// Tools as nested YAML
-	b.WriteString("tools:\n")
-	toolOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "web_search", "code_search"}
-	for _, tool := range toolOrder {
-		if enabled, ok := profile.Tools[tool]; ok {
-			b.WriteString(fmt.Sprintf("  %s: %t\n", tool, enabled))
+	// Permission as nested YAML
+	b.WriteString("permission:\n")
+	permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "delegation_list", "delegation_read", "question", "todowrite", "todoread", "skill"}
+	written := map[string]bool{}
+	for _, key := range permOrder {
+		if val, ok := profile.Permission[key]; ok {
+			b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+			written[key] = true
 		}
+	}
+	// Append any remaining permission keys not in permOrder (e.g. custom/MCP tools)
+	var remaining []string
+	for k := range profile.Permission {
+		if !written[k] {
+			remaining = append(remaining, k)
+		}
+	}
+	// Simple sort
+	for i := 0; i < len(remaining); i++ {
+		for j := i + 1; j < len(remaining); j++ {
+			if remaining[j] < remaining[i] {
+				remaining[i], remaining[j] = remaining[j], remaining[i]
+			}
+		}
+	}
+	for _, key := range remaining {
+		b.WriteString(fmt.Sprintf("  %s: %s\n", key, profile.Permission[key]))
 	}
 	b.WriteString("---\n\n")
 
@@ -658,11 +635,23 @@ func mapToAgentProfile(name string, m map[string]any) AgentProfile {
 		mode = md
 	}
 
-	tools := map[string]bool{"read": true, "edit": true, "write": true, "bash": true}
-	if t, ok := m["tools"].(map[string]any); ok {
+	// Prefer permission over deprecated tools
+	permission := map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"}
+	if perm, ok := m["permission"].(map[string]any); ok {
+		for k, v := range perm {
+			if val, ok := v.(string); ok {
+				permission[k] = val
+			}
+		}
+	} else if t, ok := m["tools"].(map[string]any); ok {
+		// Legacy: convert tools bool map to permission strings
 		for k, v := range t {
 			if enabled, ok := v.(bool); ok {
-				tools[k] = enabled
+				if enabled {
+					permission[k] = "allow"
+				} else {
+					permission[k] = "deny"
+				}
 			}
 		}
 	}
@@ -671,7 +660,7 @@ func mapToAgentProfile(name string, m map[string]any) AgentProfile {
 		Name:        name,
 		Description: description,
 		Prompt:      prompt,
-		Tools:       tools,
+		Permission:  permission,
 		Mode:        mode,
 	}
 }

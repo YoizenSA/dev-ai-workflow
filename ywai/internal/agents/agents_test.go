@@ -64,49 +64,49 @@ func TestExtractDescriptionFallsBackToBody(t *testing.T) {
 	}
 }
 
-func TestParseOpenCodeTools(t *testing.T) {
+func TestParsePermissions(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "tools.json")
-	content := `{"allowed": ["Read", "Glob", "Grep", "ASTGrep"], "denied": ["Edit", "Write", "Bash"]}`
+	path := filepath.Join(dir, "permissions.json")
+	content := `{"read": "allow", "glob": "allow", "grep": "allow", "ast_grep": "allow", "edit": "deny", "write": "deny", "bash": "deny"}`
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	tools, err := parseOpenCodeTools(path)
+	perms, err := parsePermissions(path)
 	if err != nil {
-		t.Fatalf("parseOpenCodeTools() error = %v", err)
+		t.Fatalf("parsePermissions() error = %v", err)
 	}
 
-	wantTrue := []string{"read", "glob", "grep", "ast_grep"}
-	for _, k := range wantTrue {
-		if !tools[k] {
-			t.Errorf("expected tool %q enabled", k)
+	wantAllow := []string{"read", "glob", "grep", "ast_grep"}
+	for _, k := range wantAllow {
+		if perms[k] != "allow" {
+			t.Errorf("expected permission %q = allow, got %q", k, perms[k])
 		}
 	}
-	wantFalse := []string{"edit", "write", "bash"}
-	for _, k := range wantFalse {
-		if tools[k] {
-			t.Errorf("expected tool %q disabled", k)
+	wantDeny := []string{"edit", "write", "bash"}
+	for _, k := range wantDeny {
+		if perms[k] != "deny" {
+			t.Errorf("expected permission %q = deny, got %q", k, perms[k])
 		}
 	}
 }
 
 func TestClaudeToolsString(t *testing.T) {
-	tools := map[string]bool{"read": true, "edit": true, "write": true, "bash": true, "glob": true, "grep": true}
-	got := claudeToolsString(tools)
+	perms := map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow", "glob": "allow", "grep": "allow"}
+	got := claudeToolsString(perms)
 	want := "Read, Edit, Write, Bash, Glob, Grep"
 	if got != want {
 		t.Errorf("claudeToolsString() = %q, want %q", got, want)
 	}
 
-	// Read-only set stays ordered and excludes disabled tools.
-	ro := map[string]bool{"read": true, "glob": true, "grep": true, "edit": false}
+	// Read-only set stays ordered and excludes denied tools.
+	ro := map[string]string{"read": "allow", "glob": "allow", "grep": "allow", "edit": "deny"}
 	if got := claudeToolsString(ro); got != "Read, Glob, Grep" {
 		t.Errorf("claudeToolsString(read-only) = %q, want %q", got, "Read, Glob, Grep")
 	}
 
 	// Empty falls back to a safe default.
-	if got := claudeToolsString(map[string]bool{}); got != "Read, Glob, Grep" {
+	if got := claudeToolsString(map[string]string{}); got != "Read, Glob, Grep" {
 		t.Errorf("claudeToolsString(empty) = %q, want default", got)
 	}
 }
@@ -137,8 +137,8 @@ func TestLoadProfiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(devDir, "AGENT.md"), []byte(agentMD), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	toolsJSON := `{"allowed": ["Read", "Edit", "Write", "Bash"], "denied": []}`
-	if err := os.WriteFile(filepath.Join(devDir, "tools.json"), []byte(toolsJSON), 0o644); err != nil {
+	permsJSON := `{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"}`
+	if err := os.WriteFile(filepath.Join(devDir, "permissions.json"), []byte(permsJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(devDir, "skills.txt"), []byte("typescript\n# comment\nreact-19\n"), 0o644); err != nil {
@@ -162,8 +162,8 @@ func TestLoadProfiles(t *testing.T) {
 	if dev.Description != "Developer agent. Trigger: code." {
 		t.Errorf("description = %q", dev.Description)
 	}
-	if !dev.Tools["read"] || !dev.Tools["edit"] {
-		t.Error("expected read/edit tools enabled")
+	if dev.Permission["read"] != "allow" || dev.Permission["edit"] != "allow" {
+		t.Error("expected read/edit permissions allowed")
 	}
 	if len(dev.Skills) != 2 || dev.Skills[0] != "typescript" || dev.Skills[1] != "react-19" {
 		t.Errorf("skills = %v, want [typescript react-19] (comment skipped)", dev.Skills)
@@ -187,13 +187,13 @@ func TestInstallOpenCode(t *testing.T) {
 			Name:        "dev",
 			Description: "Developer agent",
 			Prompt:      "# Dev",
-			Tools:       map[string]bool{"read": true, "edit": true},
+			Permission:  map[string]string{"read": "allow", "edit": "allow"},
 		},
 		"existing": {
 			Name:        "existing",
 			Description: "should be skipped",
 			Prompt:      "# nope",
-			Tools:       map[string]bool{"read": true},
+			Permission:  map[string]string{"read": "allow"},
 		},
 	}
 
@@ -230,7 +230,7 @@ func TestInstallOpenCodeCreatesMissingFile(t *testing.T) {
 			Name:        "ask",
 			Description: "Research agent",
 			Prompt:      "# Ask\n\nClean body.",
-			Tools:       map[string]bool{"read": true},
+			Permission:  map[string]string{"read": "allow"},
 		},
 	}
 
@@ -267,7 +267,7 @@ func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
 			Name:        "ask",
 			Description: "Research agent",
 			Prompt:      "# Ask\n\nClean body.",
-			Tools:       map[string]bool{"read": true},
+			Permission:  map[string]string{"read": "allow"},
 		},
 	}
 
@@ -347,7 +347,7 @@ func TestLoadProfilesStripsFrontmatter(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(devDir, "AGENT.md"), []byte(agentMD), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(devDir, "tools.json"), []byte(`{"allowed": ["Read", "Edit"], "denied": []}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(devDir, "permissions.json"), []byte(`{"read": "allow", "edit": "allow"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -376,7 +376,7 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 		Name:        "dev",
 		Description: "Developer agent",
 		Prompt:      "# Dev Agent\n\nYou are a developer.",
-		Tools:       map[string]bool{"read": true, "edit": true, "write": true, "bash": true},
+		Permission:  map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"},
 		Mode:        "subagent",
 	}
 
@@ -394,11 +394,11 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	if !strings.Contains(markdown, "temperature: 0.1") {
 		t.Error("markdown should contain temperature")
 	}
-	if !strings.Contains(markdown, "tools:") {
-		t.Error("markdown should contain tools section")
+	if !strings.Contains(markdown, "permission:") {
+		t.Error("markdown should contain permission section")
 	}
-	if !strings.Contains(markdown, "read: true") {
-		t.Error("markdown should contain read tool")
+	if !strings.Contains(markdown, "read: allow") {
+		t.Error("markdown should contain read permission")
 	}
 	if !strings.Contains(markdown, "# Dev Agent") {
 		t.Error("markdown should contain prompt body")
@@ -414,7 +414,7 @@ func TestInstallOpenCodeMarkdown(t *testing.T) {
 			Name:        "dev",
 			Description: "Developer agent",
 			Prompt:      "# Dev\n\nBody.",
-			Tools:       map[string]bool{"read": true, "edit": true},
+			Permission:  map[string]string{"read": "allow", "edit": "allow"},
 			Mode:        "subagent",
 		},
 	}
@@ -457,7 +457,7 @@ func TestInstallOpenCodeMarkdownSkipsExisting(t *testing.T) {
 			Name:        "dev",
 			Description: "New description",
 			Prompt:      "# New\n\nShould not overwrite",
-			Tools:       map[string]bool{"read": true},
+			Permission:  map[string]string{"read": "allow"},
 			Mode:        "subagent",
 		},
 	}
@@ -573,7 +573,7 @@ func TestMapToAgentProfile(t *testing.T) {
 		"prompt":      "# Test\n\nBody",
 		"description": "Test agent",
 		"mode":        "primary",
-		"tools":       map[string]any{"read": true, "edit": false, "bash": true},
+		"permission":  map[string]any{"read": "allow", "edit": "deny", "bash": "allow"},
 	}
 
 	profile := mapToAgentProfile("test", m)
@@ -590,13 +590,13 @@ func TestMapToAgentProfile(t *testing.T) {
 	if profile.Prompt != "# Test\n\nBody" {
 		t.Errorf("Prompt = %q", profile.Prompt)
 	}
-	if !profile.Tools["read"] {
-		t.Error("read tool should be true")
+	if profile.Permission["read"] != "allow" {
+		t.Error("read permission should be allow")
 	}
-	if profile.Tools["edit"] {
-		t.Error("edit tool should be false")
+	if profile.Permission["edit"] != "deny" {
+		t.Error("edit permission should be deny")
 	}
-	if !profile.Tools["bash"] {
-		t.Error("bash tool should be true")
+	if profile.Permission["bash"] != "allow" {
+		t.Error("bash permission should be allow")
 	}
 }
