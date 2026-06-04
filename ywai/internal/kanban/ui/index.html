@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ywai Kanban</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <h1 class="header-title">
+                <span class="logo-y">y</span><span class="logo-wai">wai</span> <span class="logo-kanban">Kanban</span>
+            </h1>
+            <div class="session-control">
+                <select id="session-select" class="session-select">
+                    <option value="">-- Select a session --</option>
+                </select>
+                <button id="new-session-btn" class="btn btn-primary">+ New Session</button>
+                <button id="close-session-btn" class="btn btn-danger" style="display: none;">Close Session</button>
+            </div>
+        </div>
+        <div class="header-right">
+            <span id="ws-status" class="ws-status">● disconnected</span>
+        </div>
+    </header>
+
+    <main id="board" class="board">
+        <div class="column" data-column="backlog">
+            <div class="column-header">
+                <h2>Backlog</h2>
+                <span class="column-count" id="count-backlog">0</span>
+            </div>
+            <div class="column-cards" id="col-backlog"></div>
+        </div>
+        <div class="column" data-column="ready">
+            <div class="column-header">
+                <h2>Ready</h2>
+                <span class="column-count" id="count-ready">0</span>
+            </div>
+            <div class="column-cards" id="col-ready"></div>
+        </div>
+        <div class="column" data-column="in_progress">
+            <div class="column-header">
+                <h2>In Progress</h2>
+                <span class="column-count" id="count-in_progress">0</span>
+            </div>
+            <div class="column-cards" id="col-in_progress"></div>
+        </div>
+        <div class="column" data-column="review">
+            <div class="column-header">
+                <h2>Review</h2>
+                <span class="column-count" id="count-review">0</span>
+            </div>
+            <div class="column-cards" id="col-review"></div>
+        </div>
+        <div class="column" data-column="done">
+            <div class="column-header">
+                <h2>Done</h2>
+                <span class="column-count" id="count-done">0</span>
+            </div>
+            <div class="column-cards" id="col-done"></div>
+        </div>
+    </main>
+
+    <!-- New Session Modal -->
+    <div id="session-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Session</h2>
+                <button type="button" class="close-icon" id="session-modal-close-icon">&times;</button>
+            </div>
+            <form id="session-form">
+                <div class="form-group">
+                    <label for="session-goal">Goal:</label>
+                    <input type="text" id="session-goal" name="goal" placeholder="e.g. Build auth system" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="session-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Delegation Modal -->
+    <div id="delegation-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create Delegation</h2>
+                <button type="button" class="close-icon" id="delegation-modal-close-icon">&times;</button>
+            </div>
+            <form id="delegation-form">
+                <div class="form-group">
+                    <label for="delegation-agent">Agent:</label>
+                    <select id="delegation-agent" name="agent" required>
+                        <option value="dev">🚧 Dev</option>
+                        <option value="qa">🧪 QA</option>
+                        <option value="architect">📋 Architect</option>
+                        <option value="reviewer">🔍 Reviewer</option>
+                        <option value="devops">🚀 DevOps</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="delegation-task">Task Summary:</label>
+                    <input type="text" id="delegation-task" name="task_summary" placeholder="e.g. Implement JWT auth" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="delegation-deps">Dependencies (comma-separated IDs):</label>
+                    <input type="text" id="delegation-deps" name="dependencies" placeholder="e.g. dep-id-1, dep-id-2">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="delegation-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delegation Details Modal -->
+    <div id="details-modal" class="modal" style="display:none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Delegation Details</h2>
+                <button type="button" class="close-icon" id="details-modal-close-icon">&times;</button>
+            </div>
+            <div class="details-body">
+                <div class="details-meta-grid">
+                    <div class="meta-item">
+                        <span class="meta-label">ID</span>
+                        <span id="details-id" class="meta-value code-font"></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Agent</span>
+                        <span id="details-agent" class="meta-value"></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Column</span>
+                        <span id="details-column" class="meta-value badge"></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Status</span>
+                        <span id="details-status" class="meta-value badge"></span>
+                    </div>
+                </div>
+
+                <div class="details-section">
+                    <h3>Task Summary</h3>
+                    <div id="details-task-summary" class="task-summary-text"></div>
+                </div>
+
+                <form id="details-form">
+                    <input type="hidden" id="details-delegation-id">
+                    
+                    <div class="details-section">
+                        <div class="checkbox-container">
+                            <label class="checkbox-label-wrapper">
+                                <input type="checkbox" id="details-blocked-checkbox" class="modern-checkbox">
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-text">Mark as Blocked</span>
+                            </label>
+                        </div>
+                        <div id="details-blocker-container" class="form-group slide-down" style="display: none;">
+                            <label for="details-blocker-input">Blocker Reason:</label>
+                            <input type="text" id="details-blocker-input" placeholder="Explain what is blocking this task..." class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="details-section">
+                        <label for="details-handoff-input">Handoff Preview / Notes:</label>
+                        <textarea id="details-handoff-input" rows="5" placeholder="Document the key outputs, links to PRs, or findings for the next step..." class="form-control text-area"></textarea>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="details-modal-cancel">Close</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -156,3 +156,14 @@ When you finish, end your response with this standard handoff so the orchestrato
 
 If the user asks to implement a feature, the primary agent should invoke `@dev`.
 After writing tests, the primary agent may invoke `@reviewer` for test code review.
+
+## Kanban Reporting
+
+When you complete your task and provide your handoff, include a **Kanban status update**:
+
+```
+## Kanban Update
+- **Status**: done
+- **Column**: review
+- **Summary**: All auth tests passing, 95% coverage
+```

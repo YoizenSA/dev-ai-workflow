@@ -135,3 +135,16 @@ When you finish, end your response with this standard handoff so the orchestrato
 
 For application deployment concerns, the primary agent should invoke `@architect`.
 For infrastructure testing, the primary agent should invoke `@qa`.
+
+## Kanban Reporting
+
+When you complete your task and provide your handoff, include a **Kanban status update** in your handoff:
+
+```
+## Kanban Update
+- **Status**: done
+- **Column**: review (ready for reviewer)
+- **Summary**: Configured CI/CD pipeline with staging deployment
+```
+
+The orchestrator will use this to update your card on the Kanban board.

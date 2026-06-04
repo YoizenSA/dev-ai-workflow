@@ -125,6 +125,32 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 - If a slice comes back `blocked`/`needs-decision`, resolve it before integrating dependents.
 - Prefer sequential when in doubt — correctness over speed.
 
+## Kanban Tracking
+
+The orchestrator maintains a visual Kanban board tracking all delegations. This board is automatically updated via the `ywai-kanban` MCP server.
+
+### Workflow
+1. **On session start**: Call `kanban_create_session(goal=<session goal>)` to create a new Kanban session. Store the returned `session_id`.
+2. **On every delegation**: After calling `delegate()` or `task()`, call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card on the board.
+3. **On handoff received**: When a subagent completes, call `kanban_update_delegation(id, column="review", status="review")` to move the card to the Review column.
+4. **On approval**: After `@reviewer` approves, call `kanban_update_delegation(id, column="done", status="done")` to mark complete.
+5. **On changes requested**: If `@reviewer` requests changes, call `kanban_update_delegation(id, column="backlog", status="changes")` to move back.
+
+### Column mapping
+- `backlog` → Pending / Changes requested
+- `ready` → Ready to start
+- `in_progress` → Running
+- `review` → Under review
+- `done` → Completed
+
+### Status mapping
+- `pending` → Not started
+- `running` → In progress
+- `review` → Under review
+- `changes` → Changes requested
+- `blocked` → Blocked / Needs decision
+- `done` → Completed
+
 ## Delegation Brief Format
 
 Every delegation (tool or `@mention`) must include:

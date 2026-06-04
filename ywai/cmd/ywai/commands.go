@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/spf13/cobra"
@@ -459,7 +461,54 @@ var statusCmd = &cobra.Command{
 	},
 }
 
+// daemonCmd starts the Kanban UI server.
+var daemonCmd = &cobra.Command{
+	Use:   "daemon",
+	Short: "Start the Kanban UI server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		mcpMode, _ := cmd.Flags().GetBool("mcp")
+		if mcpMode {
+			// Run as MCP adapter (stdio JSON-RPC)
+			adapter := kanban.NewMCPAdapter()
+			adapter.Run()
+			return nil
+		}
+
+		// Normal HTTP server mode
+		port, _ := cmd.Flags().GetInt("port")
+		s := kanban.New(port)
+		fmt.Printf("ywai Kanban server running on http://localhost:%d\n", s.Port())
+		return s.Start()
+	},
+}
+
+// uiCmd opens the Kanban UI in the default browser.
+var uiCmd = &cobra.Command{
+	Use:   "ui",
+	Short: "Open Kanban UI in browser",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		port, _ := cmd.Flags().GetInt("port")
+		url := fmt.Sprintf("http://localhost:%d", port)
+
+		// Try to open browser
+		browserCmd := exec.Command("xdg-open", url)
+		if err := browserCmd.Start(); err != nil {
+			fmt.Printf("Open %s in your browser\n", url)
+			return nil
+		}
+		fmt.Printf("Opening %s ...\n", url)
+		return nil
+	},
+}
+
 func init() {
+	daemonCmd.Flags().IntP("port", "p", 5768, "Port for Kanban UI server")
+	daemonCmd.Flags().Bool("mcp", false, "Run as MCP server (stdio JSON-RPC)")
+	uiCmd.Flags().IntP("port", "p", 5768, "Port for Kanban UI server")
+
+	rootCmd.AddCommand(daemonCmd)
+	rootCmd.AddCommand(uiCmd)
+
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")

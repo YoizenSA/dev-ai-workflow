@@ -125,3 +125,23 @@ When you finish, end your response with this standard handoff so the orchestrato
 - ❌ Do NOT make architecture decisions (that's the architect agent)
 
 After review, the primary agent should invoke the appropriate subagent for follow-up work.
+
+## Kanban Reporting
+
+When you approve or request changes, include a **Kanban status update** in your verdict:
+
+**Approve:**
+```
+## Kanban Update
+- **Status**: done
+- **Column**: done
+- **Verdict**: approved
+```
+
+**Request changes:**
+```
+## Kanban Update
+- **Status**: changes
+- **Column**: backlog
+- **Verdict**: changes requested
+```
