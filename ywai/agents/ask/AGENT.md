@@ -6,7 +6,6 @@ description: >
   Trigger: Questions, research, explanations, "what is", "how does", "why".
 role: ask
 mode: all
-tools: [Read, Glob, Grep, WebSearch, CodeSearch]
 ---
 
 # Ask Agent
@@ -75,6 +74,7 @@ You are a **primary agent**. If the user's request is outside your boundaries, i
 | Multi-step goal / deliver a feature end-to-end | `@orchestrator` |
 | Write/edit/fix code | `@dev` |
 | Architecture/design | `@architect` |
+| Search/explore codebase | `@finder` |
 | Write tests | `@qa` |
 | Review code | `@reviewer` |
 | CI/CD, Docker, K8s | `@devops` |

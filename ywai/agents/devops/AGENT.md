@@ -6,7 +6,6 @@ description: >
   Trigger: CI/CD, deployment, Docker, Kubernetes, infrastructure, monitoring.
 role: devops
 mode: all
-tools: [Read, Edit, Write, Bash, Glob, Grep]
 ---
 
 # DevOps Agent
@@ -105,6 +104,7 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Task type | Handler |
 |---|---|
 | Return control / report progress | `@orchestrator` |
+| Explore infra codebase | `@finder` |
 | Application feature | `@dev` |
 | Architecture for deployment | `@architect` |
 | Review infra code | `@reviewer` |

@@ -6,7 +6,6 @@ description: >
   Trigger: Testing tasks, "write tests", "test strategy", "validate", quality checks.
 role: qa
 mode: all
-tools: [Read, Edit, Write, Bash, Glob, Grep, LSP]
 ---
 
 # QA Agent
@@ -128,6 +127,7 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Task type | Handler |
 |---|---|
 | Return control / report progress | `@orchestrator` |
+| Explore code to test | `@finder` |
 | Implement feature | `@dev` |
 | Review test code | `@reviewer` |
 | Architecture question | `@architect` |

@@ -6,7 +6,6 @@ description: >
   Trigger: Code review, "review this", PR feedback, quality audit.
 role: reviewer
 mode: all
-tools: [Read, Glob, Grep, ASTGrep, LSP, Bash]
 ---
 
 # Reviewer Agent
@@ -97,6 +96,7 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. After revi
 | Next step | Handler |
 |---|---|
 | Return control / report verdict | `@orchestrator` |
+| Explore code to review | `@finder` |
 | Fix critical/bug issues | `@dev` |
 | Add missing tests | `@qa` |
 | Architecture concern | `@architect` |

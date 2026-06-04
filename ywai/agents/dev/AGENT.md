@@ -6,7 +6,6 @@ description: >
   Trigger: Implementation tasks, coding, debugging, "implement", "fix", "add feature".
 role: developer
 mode: all
-tools: [Read, Edit, Write, Bash, Glob, Grep, ASTGrep, LSP]
 ---
 
 # Dev Agent
@@ -65,6 +64,7 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Task type | Handler |
 |---|---|
 | Return control / report progress | `@orchestrator` |
+| Explore/search codebase | `@finder` |
 | Architecture/design before coding | `@architect` |
 | Review code | `@reviewer` |
 | Write tests | `@qa` |

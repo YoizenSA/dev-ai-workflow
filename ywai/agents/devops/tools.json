@@ -1,4 +1,0 @@
-{
-  "allowed": ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
-  "denied": []
-}

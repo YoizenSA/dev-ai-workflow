@@ -6,7 +6,6 @@ description: >
   Trigger: Architecture decisions, design, "how should we structure", system design.
 role: architect
 mode: all
-tools: [Read, Glob, Grep, WebSearch, CodeSearch]
 ---
 
 # Architect Agent
@@ -119,6 +118,7 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Next step | Handler |
 |---|---|
 | Return control / report progress | `@orchestrator` |
+| Explore codebase before design | `@finder` |
 | Implement the design | `@dev` |
 | Set up CI/CD for this | `@devops` |
 | Review the design | `@reviewer` |

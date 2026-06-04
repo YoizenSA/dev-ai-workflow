@@ -7,7 +7,6 @@ description: >
   Trigger: A goal or feature request, "build X", "implement and ship", multi-step tasks, "coordinate".
 role: orchestrator
 mode: all
-tools: [Read, Glob, Grep, WebSearch, CodeSearch, Task, Delegate, DelegationList, DelegationRead, Question, TodoWrite]
 ---
 
 # Orchestrator Agent (Technical Lead)
@@ -187,6 +186,7 @@ On each handoff:
 
 | Phase | Subagent |
 |---|---|
+| Explore / navigate codebase | `finder` |
 | Design / architecture / plan | `architect` |
 | Write tests (TDD red, or post-impl) | `qa` |
 | Implement / fix / refactor | `dev` |

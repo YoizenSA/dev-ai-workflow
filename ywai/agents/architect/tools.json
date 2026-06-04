@@ -1,4 +1,0 @@
-{
-  "allowed": ["Read", "Glob", "Grep", "WebSearch", "CodeSearch"],
-  "denied": ["Edit", "Write", "Bash"]
-}
