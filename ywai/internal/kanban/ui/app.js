@@ -826,6 +826,7 @@
                 document.querySelectorAll('.config-section').forEach(s => s.classList.remove('active'));
                 document.getElementById(`section-${section}`).classList.add('active');
                 if (section === 'providers') loadProviders();
+                if (section === 'permissions') loadPermissions();
             });
         });
 
@@ -980,23 +981,38 @@
 
         const providers = configData.providers;
         if (!providers || Object.keys(providers).length === 0) {
-            container.innerHTML = '<p class="empty-state">No providers configured.</p>';
+            container.innerHTML = `
+                <div class="providers-empty">
+                    <svg class="providers-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <span class="providers-empty-text">No providers configured</span>
+                    <span class="providers-empty-hint">Add your first LLM provider to get started</span>
+                </div>`;
             return;
         }
 
-        let html = '';
+        let html = '<div class="providers-grid">';
         for (const [name, config] of Object.entries(providers)) {
             const modelCount = config.models ? Object.keys(config.models).length : 0;
-            const hasKey = config.apiKey ? '✓' : '✗';
+            const hasKey = !!config.apiKey;
+            const keyBadge = hasKey
+                ? `<span class="provider-badge key-ok"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Key set</span>`
+                : `<span class="provider-badge key-missing"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Missing key</span>`;
             html += `
-                <div class="config-item" onclick="window.kanbanApp.editProvider('${name.replace(/'/g, "\\'")}')">
-                    <div class="config-item-info">
-                        <strong>${name}</strong>
-                        <span class="config-item-meta">${config.baseUrl || 'No URL'} &middot; ${modelCount} models &middot; Key: ${hasKey}</span>
+                <div class="provider-card" onclick="window.kanbanApp.editProvider('${name.replace(/'/g, "\\'")}')">
+                    <div class="provider-card-header">
+                        <span class="provider-card-name">${name}</span>
+                        <button class="provider-card-delete" onclick="event.stopPropagation(); window.kanbanApp.deleteProvider('${name.replace(/'/g, "\\'")}')" title="Delete provider">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
                     </div>
-                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); window.kanbanApp.deleteProvider('${name.replace(/'/g, "\\'")}')">Delete</button>
+                    <div class="provider-card-meta">
+                        <span class="provider-badge models"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>${modelCount} models</span>
+                        ${keyBadge}
+                    </div>
+                    <div class="provider-card-url">${config.baseUrl || 'No base URL configured'}</div>
                 </div>`;
         }
+        html += '</div>';
         container.innerHTML = html;
     }
 
@@ -1008,7 +1024,7 @@
         document.getElementById('provider-apikey-input').value = '';
         document.getElementById('provider-models-input').value = '';
         document.getElementById('provider-delete-btn').style.display = 'none';
-        document.getElementById('provider-editor').style.display = 'block';
+        showProviderEditor();
     }
 
     async function editProvider(name) {
@@ -1023,11 +1039,20 @@
             document.getElementById('provider-baseurl-input').value = p.baseUrl || '';
             document.getElementById('provider-apikey-input').value = p.apiKey || '';
             document.getElementById('provider-models-input').value = JSON.stringify(p.models || {}, null, 2);
-            document.getElementById('provider-delete-btn').style.display = 'inline-block';
-            document.getElementById('provider-editor').style.display = 'block';
+            document.getElementById('provider-delete-btn').style.display = 'inline-flex';
+            showProviderEditor();
         } catch (e) {
             console.error('Failed to load provider for edit:', e);
         }
+    }
+
+    function showProviderEditor() {
+        const overlay = document.getElementById('provider-modal-overlay');
+        overlay.style.display = 'flex';
+        setTimeout(() => {
+            const firstInput = document.getElementById('provider-name-input');
+            if (firstInput && !firstInput.disabled) firstInput.focus();
+        }, 50);
     }
 
     async function saveProvider() {
@@ -1057,7 +1082,7 @@
 
             if (res.ok) {
                 showToast('Provider saved', 'success');
-                document.getElementById('provider-editor').style.display = 'none';
+                document.getElementById('provider-modal-overlay').style.display = 'none';
                 loadProviders();
             } else {
                 const err = await res.json();
@@ -1070,7 +1095,7 @@
     }
 
     function cancelProviderEdit() {
-        document.getElementById('provider-editor').style.display = 'none';
+        document.getElementById('provider-modal-overlay').style.display = 'none';
     }
 
     async function deleteProvider(name) {
@@ -1082,7 +1107,7 @@
             const res = await fetch(`/api/config/providers/${encodeURIComponent(name)}`, { method: 'DELETE' });
             if (res.ok) {
                 showToast('Provider deleted', 'success');
-                document.getElementById('provider-editor').style.display = 'none';
+                document.getElementById('provider-modal-overlay').style.display = 'none';
                 loadProviders();
             } else {
                 const err = await res.json();
@@ -1182,6 +1207,159 @@
         } catch (e) {
             console.error('Failed to delete agent:', e);
             showToast('Failed to delete agent', 'error');
+        }
+    }
+
+    // --- Permissions ---
+    async function loadPermissions() {
+        const container = document.getElementById('permissions-container');
+        const loading = document.getElementById('permissions-loading');
+        container.innerHTML = '';
+        loading.style.display = 'flex';
+
+        try {
+            // Fetch available tools (built-in + MCP discovered)
+            const toolsRes = await fetch('/api/config/tools');
+            const toolsData = await toolsRes.json();
+            const allTools = toolsData.all || [];
+            const mcpTools = toolsData.mcp_tools || {};
+
+            // Fetch current opencode config for agent permissions
+            const res = await fetch('/api/config/opencode');
+            const config = await res.json();
+            const agents = config.agent || {};
+
+            const agentNames = Object.keys(agents).sort();
+            if (agentNames.length === 0) {
+                container.innerHTML = '<p class="empty-state">No agents found in opencode.json.</p>';
+                loading.style.display = 'none';
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'permissions-grid';
+
+            // Build a set of MCP tool names for quick lookup
+            const mcpToolSet = new Set();
+            for (const [, tools] of Object.entries(mcpTools)) {
+                tools.forEach(t => mcpToolSet.add(t));
+            }
+
+            for (const name of agentNames) {
+                const agent = agents[name];
+                const permission = agent.permission || {};
+                const mode = agent.mode || 'all';
+
+                const card = document.createElement('div');
+                card.className = 'permission-card';
+                card.dataset.agent = name;
+
+                let rowsHtml = '';
+                for (const key of allTools) {
+                    const val = permission[key] || 'deny';
+                    const isMcp = mcpToolSet.has(key);
+                    const mcpBadge = isMcp ? '<span class="mcp-badge">MCP</span>' : '';
+                    rowsHtml += `
+                        <div class="permission-row">
+                            <span class="permission-key">${key}${mcpBadge}</span>
+                            <select class="permission-select ${val}" data-key="${key}" data-agent="${name}">
+                                <option value="allow" ${val === 'allow' ? 'selected' : ''}>allow</option>
+                                <option value="ask" ${val === 'ask' ? 'selected' : ''}>ask</option>
+                                <option value="deny" ${val === 'deny' ? 'selected' : ''}>deny</option>
+                            </select>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="permission-card-header">
+                        <div>
+                            <span class="permission-card-name">${name}</span>
+                            <span class="permission-card-mode">${mode}</span>
+                        </div>
+                        <div class="permission-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="window.kanbanApp.addCustomTool('${name}')">+ Tool</button>
+                            <button class="btn btn-primary btn-sm" onclick="window.kanbanApp.savePermissions('${name}')">Save</button>
+                        </div>
+                    </div>
+                    <div class="permission-rows">
+                        ${rowsHtml}
+                    </div>
+                `;
+                grid.appendChild(card);
+            }
+
+            container.appendChild(grid);
+
+            // Add change listeners to update select styling
+            container.querySelectorAll('.permission-select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    sel.className = `permission-select ${sel.value}`;
+                });
+            });
+        } catch (e) {
+            console.error('Failed to load permissions:', e);
+            container.innerHTML = '<p class="empty-state">Failed to load permissions.</p>';
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
+
+    function addCustomTool(agentName) {
+        const name = prompt('Tool name (e.g. my_custom_tool or MCP tool):');
+        if (!name || !name.trim()) return;
+        const key = name.trim();
+
+        const card = document.querySelector(`.permission-card[data-agent="${agentName}"]`);
+        if (!card) return;
+        const rowsContainer = card.querySelector('.permission-rows');
+        if (!rowsContainer) return;
+
+        // Check if already exists
+        if (rowsContainer.querySelector(`[data-key="${key}"]`)) {
+            showToast('Tool already exists', 'error');
+            return;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'permission-row';
+        row.innerHTML = `
+            <span class="permission-key">${key}</span>
+            <select class="permission-select deny" data-key="${key}" data-agent="${agentName}">
+                <option value="allow">allow</option>
+                <option value="ask">ask</option>
+                <option value="deny" selected>deny</option>
+            </select>
+        `;
+        rowsContainer.appendChild(row);
+        row.querySelector('.permission-select').addEventListener('change', function() {
+            this.className = `permission-select ${this.value}`;
+        });
+    }
+
+    async function savePermissions(agentName) {
+        const selects = document.querySelectorAll(`.permission-select[data-agent="${agentName}"]`);
+        const permission = {};
+        selects.forEach(sel => {
+            permission[sel.dataset.key] = sel.value;
+        });
+
+        try {
+            const res = await fetch(`/api/config/agents/${agentName}/permissions`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(permission)
+            });
+
+            if (res.ok) {
+                showToast(`Permissions for "${agentName}" saved`, 'success');
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to save permissions', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to save permissions:', e);
+            showToast('Failed to save permissions', 'error');
         }
     }
 
@@ -1298,7 +1476,18 @@
     }
 
     // Expose functions for onclick handlers
-    window.kanbanApp = { editAgent, deleteAgent, deleteSkill, toggleMCP, addProvider, editProvider, saveProvider, cancelProviderEdit, deleteProvider };
+    window.kanbanApp = { editAgent, deleteAgent, deleteSkill, toggleMCP, addProvider, editProvider, saveProvider, cancelProviderEdit, deleteProvider, savePermissions, addCustomTool };
 
     document.addEventListener('DOMContentLoaded', init);
 })();
+
+    // Close provider modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const overlay = document.getElementById('provider-modal-overlay');
+            if (overlay && overlay.style.display !== 'none') {
+                window.kanbanApp.cancelProviderEdit();
+            }
+        }
+    });
+
