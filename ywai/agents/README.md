@@ -20,23 +20,66 @@ The `orchestrator` is a `primary` agent that owns a goal and delegates to the
 specialist subagents, collecting a standard **handoff** from each before deciding
 the next step.
 
+```mermaid
+graph TD
+    U[User] -->|goal| O[orchestrator]
+
+    O -->|PLAN| A[architect]
+    A -->|handoff| O
+
+    O -->|¿TDD?| Q{TDD?}
+    Q -->|yes| QA1[qa: write failing tests]
+    QA1 -->|handoff| O
+    O -->|IMPLEMENT| D1[dev: make tests pass]
+    D1 -->|handoff| O
+    O -->|VALIDATE| QA2[qa: run + extend coverage]
+    QA2 -->|handoff| O
+
+    Q -->|no| D2[dev: implement feature]
+    D2 -->|handoff| O
+    O -->|TEST| QA3[qa: add tests after]
+    QA3 -->|handoff| O
+
+    O -->|REVIEW| R[reviewer]
+    R -->|approve| O
+    R -->|request changes| D3[dev: fix]
+    D3 -->|handoff| R
+
+    O -->|DEPLOY?| DO[devops]
+    DO -->|handoff| O
+
+    O -->|CLOSE| U[summary]
+
+    %% Fan-out annotation
+    O -.->|fan-out: parallel @dev slices| D1
+    O -.->|fan-out: parallel @dev slices| D2
+    O -.->|fan-out: parallel @dev slices| D3
+
+    %% Statusline plugin
+    SL[sub-agent-statusline plugin]
+    SL -.->|visibility: running/completed/failed| O
+    SL -.->|visibility: running/completed/failed| A
+    SL -.->|visibility: running/completed/failed| D1
+    SL -.->|visibility: running/completed/failed| D2
+    SL -.->|visibility: running/completed/failed| D3
+    SL -.->|visibility: running/completed/failed| QA1
+    SL -.->|visibility: running/completed/failed| QA2
+    SL -.->|visibility: running/completed/failed| QA3
+    SL -.->|visibility: running/completed/failed| R
+    SL -.->|visibility: running/completed/failed| DO
 ```
-User → @orchestrator (goal)
-  1. PLAN      → @architect   (design / plan, ADR if needed)
-  2. ¿TDD?     → orchestrator asks the user (question tool)
-       yes → @qa writes failing tests → @dev makes them pass → @qa validates
-       no  → @dev implements → @qa adds tests after
-  3. REVIEW    → @reviewer   (approve / request changes → back to @dev)
-  4. DEPLOY    → @devops      (optional: CI/CD, container, deploy)
-  5. CLOSE     → orchestrator summarizes delivered work
-```
+
+**Key points:**
+- The orchestrator owns the goal and decides the next step from each handoff.
+- TDD branch: `@qa` writes failing tests → `@dev` makes them pass → `@qa` validates.
+- Fan-out: the orchestrator can spawn multiple `@dev` (or `@qa`) in parallel for disjoint workstreams.
+- Each subagent ends with a `## Handoff (report back to @orchestrator)` block.
+- The `sub-agent-statusline` plugin (installed automatically with `ywai install`) gives real-time visibility into running/completed/failed subagents, elapsed time, and token/context usage.
 
 On opencode the orchestrator delegates asynchronously with the native
 `delegate` / `delegation_list` / `delegation_read` tools, asks branching
 decisions with `question`, and tracks the plan with `todowrite`. On other
-agents it falls back to `@mention` routing. Each subagent ends its turn with a
-`## Handoff (report back to @orchestrator)` block (status, did, artifacts, next
-suggested, notes/risks).
+agents it falls back to `@mention` routing.
 
 ## Config Format
 

@@ -41,6 +41,7 @@ func InstallSubAgentStatusline() error {
 
 	for _, p := range plugins {
 		if s, ok := p.(string); ok && s == subAgentStatuslinePlugin {
+			fmt.Printf("  %s plugin already installed in tui.json\n", subAgentStatuslinePlugin)
 			return nil
 		}
 	}
