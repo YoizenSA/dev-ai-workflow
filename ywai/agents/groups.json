@@ -15,7 +15,13 @@
     },
     "social-refactor": {
       "description": "Social refactoring and collaboration agents",
-      "agents": []
+      "agents": [
+        "migration-orchestrator",
+        "migration-planner",
+        "migration-scope",
+        "migration-validator-focused",
+        "migration-validator"
+      ]
     }
   }
 }
