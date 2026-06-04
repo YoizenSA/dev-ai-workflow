@@ -76,10 +76,12 @@ graph TD
 - Each subagent ends with a `## Handoff (report back to @orchestrator)` block.
 - The `sub-agent-statusline` plugin (installed automatically with `ywai install`) gives real-time visibility into running/completed/failed subagents, elapsed time, and token/context usage.
 
-On opencode the orchestrator delegates asynchronously with the native
-`delegate` / `delegation_list` / `delegation_read` tools, asks branching
-decisions with `question`, and tracks the plan with `todowrite`. On other
-agents it falls back to `@mention` routing.
+On opencode the orchestrator delegates with two tools from the `background-agents`
+plugin: synchronous **`task`** for the sequential spine (each phase needs the
+previous handoff) and asynchronous **`delegate`** for fan-out / parallel work
+(read results with `delegation_read` when a `<task-notification>` arrives — never
+poll). It asks branching decisions with `question` and tracks the plan with
+`todowrite`. On other agents it falls back to `@mention` routing.
 
 ## Config Format
 

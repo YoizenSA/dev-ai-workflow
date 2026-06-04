@@ -17,6 +17,18 @@ graph LR
     O --> U
 ```
 
+## Delegation Tools (opencode)
+
+On opencode the orchestrator uses two tools from the `background-agents` plugin:
+
+| Tool | Behavior | Used for |
+|------|----------|----------|
+| `task(prompt, agent)` | **Synchronous** — blocks, returns the handoff inline | The sequential spine (PLAN, IMPLEMENT, VALIDATE, REVIEW, DEPLOY) |
+| `delegate(prompt, agent)` | **Asynchronous** — returns an ID, runs in background, notifies on completion | Fan-out / parallel work and background research |
+| `delegation_read(id)` | Read a finished async delegation | After a `<task-notification>` arrives |
+
+**Never poll** `delegation_list` to check completion — the plugin sends a `<task-notification>` automatically. On non-opencode hosts the orchestrator falls back to `@mention` routing.
+
 ## 1. Planning Phase
 
 The orchestrator delegates design/planning to the architect, which produces a **Product plan** (what/why) and a **Technical plan** (how).
@@ -79,9 +91,10 @@ graph LR
 ```
 
 **Guardrails:**
+- Use async `delegate` for the parallel slices; **do not poll** — wait for each `<task-notification>`, then `delegation_read(id)`.
 - Never run parallel delegations that write the same files.
 - Assign disjoint scopes in each brief's `Constraints`.
-- Join handoffs, resolve conflicts, then integrate.
+- Join handoffs, resolve conflicts, then integrate the wiring with a final sync `task` so it lands in the normal session.
 
 ## 4. Review Cycle
 
@@ -135,7 +148,7 @@ The `sub-agent-statusline` plugin (installed automatically with `ywai install`) 
 
 ```mermaid
 graph LR
-    O[orchestrator] -->|delegate| D[dev]
+    O[orchestrator] -->|task / delegate| D[dev]
     SL[sub-agent-statusline] -.->|visibility| O
     SL -.->|visibility| D
 ```
@@ -144,3 +157,5 @@ graph LR
 - Sidebar shows running/completed/failed subagents
 - Footer summary when there's activity
 - Keyboard navigation: Alt+B to focus sidebar
+
+Note: the statusline plugin only **visualizes** subagent activity — the actual delegation tools (`task` / `delegate`) come from the `background-agents` plugin.
