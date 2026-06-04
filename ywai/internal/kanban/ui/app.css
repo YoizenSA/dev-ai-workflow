@@ -1396,41 +1396,62 @@ body {
 .provider-editor {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 18px;
     padding: 0;
     width: 100%;
-    max-width: 520px;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    max-width: 640px;
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.04);
     animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     overflow: hidden;
 }
 
 @keyframes modal-in {
     from { opacity: 0; transform: translateY(-16px) scale(0.96); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Header */
 .provider-editor-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
+    padding: 18px 24px 18px;
     border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(var(--accent-rgb, 139,92,246), 0.06) 0%, transparent 60%);
+}
+
+.provider-editor-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.provider-editor-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), rgba(var(--accent-rgb, 139,92,246), 0.6));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb, 139,92,246), 0.35);
 }
 
 .provider-editor-header h3 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
 /* Form Grid inside editor */
 .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: 20px 24px;
 }
 
 .form-group-full {
@@ -1438,7 +1459,9 @@ body {
 }
 
 .provider-editor .form-group {
-    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .provider-editor .form-group label {
@@ -1447,12 +1470,27 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
-    margin-bottom: 6px;
     display: block;
 }
 
-.provider-editor input,
-.provider-editor textarea {
+/* Input wrapper with leading icon */
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.provider-editor input {
     width: 100%;
     padding: 10px 14px;
     border: 1px solid var(--border);
@@ -1460,12 +1498,20 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 0.875rem;
-    transition: all 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     outline: none;
+    box-sizing: border-box;
 }
 
-.provider-editor input:focus,
-.provider-editor textarea:focus {
+.provider-editor input.has-icon {
+    padding-left: 38px;
+}
+
+.provider-editor input.has-action {
+    padding-right: 42px;
+}
+
+.provider-editor input:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-glow);
 }
@@ -1474,14 +1520,116 @@ body {
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-muted);
     cursor: not-allowed;
+    border-style: dashed;
 }
 
+/* Show/hide button inside API key input */
+.input-wrapper-with-action {
+    position: relative;
+}
+
+.input-action-btn {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background 0.2s;
+    z-index: 2;
+}
+
+.input-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* Field hint */
+.field-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.field-hint code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    background: rgba(255,255,255,0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    color: var(--accent);
+}
+
+/* Models JSON label + toolbar row */
+.models-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.models-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.models-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+}
+
+.models-tool-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb, 139,92,246), 0.08);
+}
+
+/* JSON validation status badge */
+.json-status {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.json-status.valid {
+    background: rgba(46, 213, 115, 0.12);
+    color: #2ed573;
+    border: 1px solid rgba(46, 213, 115, 0.25);
+}
+
+.json-status.invalid {
+    background: rgba(255, 71, 87, 0.12);
+    color: #ff4757;
+    border: 1px solid rgba(255, 71, 87, 0.25);
+}
+
+/* Textarea wrapper */
 .textarea-wrapper {
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--bg-primary);
     padding: 2px;
-    transition: all 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .textarea-wrapper:focus-within {
@@ -1489,17 +1637,26 @@ body {
     box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.textarea-wrapper.invalid {
+    border-color: #ff4757;
+    box-shadow: 0 0 0 3px rgba(255, 71, 87, 0.15);
+}
+
 .provider-editor textarea {
+    width: 100%;
     border: none;
     border-radius: 8px;
     background: transparent;
     resize: vertical;
-    min-height: 180px;
+    min-height: 200px;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.8rem;
-    line-height: 1.6;
-    padding: 12px;
+    line-height: 1.65;
+    padding: 12px 14px;
     box-shadow: none;
+    outline: none;
+    color: var(--text-primary);
+    box-sizing: border-box;
 }
 
 .provider-editor textarea:focus {
@@ -1508,7 +1665,7 @@ body {
 
 .provider-editor textarea::placeholder {
     color: var(--text-muted);
-    opacity: 0.6;
+    opacity: 0.5;
 }
 
 .editor-toolbar {
