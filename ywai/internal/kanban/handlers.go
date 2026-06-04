@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -606,6 +607,308 @@ func (h *Handlers) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// GET /api/config/agents/{name}/permissions
+func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var agents map[string]json.RawMessage
+	if agentRaw, ok := config["agent"]; ok {
+		if err := json.Unmarshal(agentRaw, &agents); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		writeJSON(w, http.StatusOK, map[string]string{})
+		return
+	}
+
+	agentRaw, ok := agents[name]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	var agent map[string]json.RawMessage
+	if err := json.Unmarshal(agentRaw, &agent); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var permission map[string]string
+	if permRaw, ok := agent["permission"]; ok {
+		if err := json.Unmarshal(permRaw, &permission); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, permission)
+}
+
+// PUT /api/config/agents/{name}/permissions
+func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+
+	var body map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Validate permission values
+	validValues := map[string]bool{"allow": true, "ask": true, "deny": true}
+	for k, v := range body {
+		if !validValues[v] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid value %q for key %q: must be allow, ask, or deny", v, k)})
+			return
+		}
+		_ = k // keys can be any tool name (including custom/MCP tools)
+	}
+
+	// Read current config
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Get agent section
+	var agents map[string]json.RawMessage
+	if agentRaw, ok := config["agent"]; ok {
+		if err := json.Unmarshal(agentRaw, &agents); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	agentRaw, ok := agents[name]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	var agent map[string]json.RawMessage
+	if err := json.Unmarshal(agentRaw, &agent); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Update permission
+	permJSON, _ := json.Marshal(body)
+	agent["permission"] = permJSON
+
+	// Write back agent
+	agentRaw, _ = json.Marshal(agent)
+	agents[name] = agentRaw
+	agentsJSON, _ := json.Marshal(agents)
+	config["agent"] = agentsJSON
+
+	// Backup and write
+	_ = os.WriteFile(path+".bak", data, 0644)
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, body)
+}
+
+// GET /api/config/tools
+func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Built-in opencode tools
+	builtIn := []string{
+		"read", "edit", "write", "bash", "glob", "grep", "lsp",
+		"ast_grep", "websearch", "code_search", "webfetch",
+		"task", "delegate", "delegation_list", "delegation_read",
+		"question", "todowrite", "todoread", "skill",
+	}
+
+	// Collect all known tool names in a set
+	toolSet := map[string]bool{}
+	for _, t := range builtIn {
+		toolSet[t] = true
+	}
+
+	// Also collect tools already referenced in agent permissions
+	var agents map[string]json.RawMessage
+	if agentRaw, ok := config["agent"]; ok {
+		_ = json.Unmarshal(agentRaw, &agents)
+		for _, agentRaw := range agents {
+			var agent map[string]json.RawMessage
+			if err := json.Unmarshal(agentRaw, &agent); err != nil {
+				continue
+			}
+			var perm map[string]string
+			if permRaw, ok := agent["permission"]; ok {
+				if err := json.Unmarshal(permRaw, &perm); err == nil {
+					for k := range perm {
+						toolSet[k] = true
+					}
+				}
+			}
+		}
+	}
+
+	// MCP discovery — best effort for HTTP/SSE MCPs
+	mcpTools := map[string][]string{}
+	var mcpServers map[string]json.RawMessage
+	if mcpRaw, ok := config["mcp"]; ok {
+		_ = json.Unmarshal(mcpRaw, &mcpServers)
+		for name, serverRaw := range mcpServers {
+			var server map[string]interface{}
+			if err := json.Unmarshal(serverRaw, &server); err != nil {
+				continue
+			}
+			// Skip disabled MCPs
+			if disabled, ok := server["disabled"].(bool); ok && disabled {
+				continue
+			}
+
+			// Try HTTP/SSE discovery
+			urlStr := ""
+			if u, ok := server["url"].(string); ok && u != "" {
+				urlStr = u
+			}
+			if urlStr == "" {
+				// Try command+args to detect stdio (skip for now)
+				continue
+			}
+
+			tools, err := discoverMCPTools(urlStr)
+			if err == nil && len(tools) > 0 {
+				mcpTools[name] = tools
+				for _, t := range tools {
+					toolSet[t] = true
+				}
+			}
+		}
+	}
+
+	// Convert set to sorted slice
+	var allTools []string
+	for t := range toolSet {
+		allTools = append(allTools, t)
+	}
+	sortStrings(allTools)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"built_in":  builtIn,
+		"all":       allTools,
+		"mcp_tools": mcpTools,
+	})
+}
+
+func discoverMCPTools(urlStr string) ([]string, error) {
+	// JSON-RPC request for tools/list
+	reqBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+		"params":  map[string]interface{}{},
+	}
+	payload, _ := json.Marshal(reqBody)
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Post(urlStr, "application/json", strings.NewReader(string(payload)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	var rpcResp struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		return nil, err
+	}
+
+	var names []string
+	for _, t := range rpcResp.Result.Tools {
+		if t.Name != "" {
+			names = append(names, t.Name)
+		}
+	}
+	return names, nil
+}
+
+func sortStrings(a []string) {
+	for i := 0; i < len(a); i++ {
+		for j := i + 1; j < len(a); j++ {
+			if a[j] < a[i] {
+				a[i], a[j] = a[j], a[i]
+			}
+		}
+	}
 }
 
 // GET /api/config/skills
