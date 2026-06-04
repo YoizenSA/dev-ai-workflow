@@ -253,7 +253,7 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool) {
 	}
 
 	if dryRun {
-		fmt.Printf("  Would install %d agent profiles (ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
+		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
 		return
 	}
 
@@ -261,7 +261,36 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool) {
 
 	for _, a := range agents {
 		switch a.Name {
-		case "opencode", "kilocode":
+		case "opencode":
+			configPath := ""
+			settingsPaths := agent.SettingsPaths()
+			if p, ok := settingsPaths[a.Name]; ok && p != "" {
+				configPath = p
+			}
+			if configPath == "" {
+				continue
+			}
+			agentsDir := filepath.Join(home, ".config", "opencode", "agents")
+
+			// Migrate existing agents from JSON to markdown
+			if err := agentprofiles.MigrateOpenCodeAgents(configPath, agentsDir); err != nil {
+				fmt.Printf("  [%s] Warning: migration failed: %v\n", a.Name, err)
+			}
+
+			// Install new agents as markdown
+			if err := agentprofiles.InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
+				fmt.Printf("  [%s] Warning: markdown install failed, falling back to JSON: %v\n", a.Name, err)
+				// Fallback to JSON method
+				if err := agentprofiles.InstallOpenCode(configPath, profiles); err != nil {
+					fmt.Printf("  [%s] Warning: JSON fallback also failed: %v\n", a.Name, err)
+				} else {
+					fmt.Printf("  [%s] Agent profiles installed (JSON fallback)\n", a.Name)
+				}
+			} else {
+				fmt.Printf("  [%s] Agent profiles installed (markdown)\n", a.Name)
+			}
+
+		case "kilocode":
 			configPath := ""
 			settingsPaths := agent.SettingsPaths()
 			if p, ok := settingsPaths[a.Name]; ok && p != "" {
@@ -406,6 +435,15 @@ func applyOverrides(agents []agent.Agent) {
 
 func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool, installADO bool) {
 	agentSettingsPaths := agent.SettingsPaths()
+
+	// Install sub-agent-statusline TUI plugin (global config, not per-agent)
+	if !dryRun {
+		if err := plugins.InstallSubAgentStatusline(); err != nil {
+			fmt.Printf("  Warning: failed to install sub-agent-statusline plugin: %v\n", err)
+		}
+	} else {
+		fmt.Println("  Would install sub-agent-statusline TUI plugin")
+	}
 
 	for _, a := range agents {
 		// Only install plugins for opencode/kilocode

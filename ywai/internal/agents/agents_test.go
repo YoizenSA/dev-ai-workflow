@@ -370,3 +370,233 @@ func TestLoadProfilesStripsFrontmatter(t *testing.T) {
 		t.Errorf("Prompt should start with body heading, got:\n%s", dev.Prompt)
 	}
 }
+
+func TestBuildOpenCodeMarkdown(t *testing.T) {
+	profile := AgentProfile{
+		Name:        "dev",
+		Description: "Developer agent",
+		Prompt:      "# Dev Agent\n\nYou are a developer.",
+		Tools:       map[string]bool{"read": true, "edit": true, "write": true, "bash": true},
+		Mode:        "subagent",
+	}
+
+	markdown := buildOpenCodeMarkdown("dev", profile)
+
+	if !strings.Contains(markdown, "---") {
+		t.Error("markdown should start with frontmatter delimiter")
+	}
+	if !strings.Contains(markdown, "description: Developer agent") {
+		t.Error("markdown should contain description")
+	}
+	if !strings.Contains(markdown, "mode: subagent") {
+		t.Error("markdown should contain mode")
+	}
+	if !strings.Contains(markdown, "temperature: 0.1") {
+		t.Error("markdown should contain temperature")
+	}
+	if !strings.Contains(markdown, "tools:") {
+		t.Error("markdown should contain tools section")
+	}
+	if !strings.Contains(markdown, "read: true") {
+		t.Error("markdown should contain read tool")
+	}
+	if !strings.Contains(markdown, "# Dev Agent") {
+		t.Error("markdown should contain prompt body")
+	}
+}
+
+func TestInstallOpenCodeMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "Developer agent",
+			Prompt:      "# Dev\n\nBody.",
+			Tools:       map[string]bool{"read": true, "edit": true},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
+		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
+	}
+
+	// Check file was created
+	devPath := filepath.Join(agentsDir, "dev.md")
+	data, err := os.ReadFile(devPath)
+	if err != nil {
+		t.Fatalf("failed to read dev.md: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "description: Developer agent") {
+		t.Error("markdown should contain description")
+	}
+	if !strings.Contains(content, "# Dev") {
+		t.Error("markdown should contain prompt")
+	}
+}
+
+func TestInstallOpenCodeMarkdownSkipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+
+	// Pre-existing file
+	existingPath := filepath.Join(agentsDir, "dev.md")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existingPath, []byte("# Existing\n\nKeep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "New description",
+			Prompt:      "# New\n\nShould not overwrite",
+			Tools:       map[string]bool{"read": true},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
+		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
+	}
+
+	// Check file was NOT overwritten
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Keep me") {
+		t.Error("existing file should not be overwritten")
+	}
+	if strings.Contains(content, "New description") {
+		t.Error("existing file should not contain new content")
+	}
+}
+
+func TestMigrateOpenCodeAgents(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	agentsDir := filepath.Join(dir, "agents")
+
+	// Pre-existing JSON with agents
+	initial := `{"agent": {"dev": {"mode": "subagent", "description": "Dev agent", "prompt": "# Dev\n\nBody.", "tools": {"read": true, "edit": true}}}}`
+	if err := os.WriteFile(configPath, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateOpenCodeAgents(configPath, agentsDir); err != nil {
+		t.Fatalf("MigrateOpenCodeAgents() error = %v", err)
+	}
+
+	// Check markdown file was created
+	devPath := filepath.Join(agentsDir, "dev.md")
+	data, err := os.ReadFile(devPath)
+	if err != nil {
+		t.Fatalf("failed to read dev.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "description: Dev agent") {
+		t.Error("migrated markdown should contain description")
+	}
+
+	// Check JSON was cleaned
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(configData, &root); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := root["agent"]; ok {
+		t.Error("agent section should be removed from JSON after migration")
+	}
+}
+
+func TestMigrateOpenCodeAgentsSkipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	agentsDir := filepath.Join(dir, "agents")
+
+	// Pre-existing markdown file
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existingPath := filepath.Join(agentsDir, "dev.md")
+	if err := os.WriteFile(existingPath, []byte("# Existing\n\nKeep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// JSON with same agent
+	initial := `{"agent": {"dev": {"mode": "subagent", "description": "Dev agent", "prompt": "# Dev\n\nBody.", "tools": {"read": true}}}}`
+	if err := os.WriteFile(configPath, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateOpenCodeAgents(configPath, agentsDir); err != nil {
+		t.Fatalf("MigrateOpenCodeAgents() error = %v", err)
+	}
+
+	// Check existing markdown was NOT overwritten
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Keep me") {
+		t.Error("existing markdown should not be overwritten")
+	}
+
+	// Check JSON was still cleaned
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(configData, &root); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := root["agent"]; ok {
+		t.Error("agent section should be removed from JSON even if markdown exists")
+	}
+}
+
+func TestMapToAgentProfile(t *testing.T) {
+	m := map[string]any{
+		"prompt":      "# Test\n\nBody",
+		"description": "Test agent",
+		"mode":        "primary",
+		"tools":       map[string]any{"read": true, "edit": false, "bash": true},
+	}
+
+	profile := mapToAgentProfile("test", m)
+
+	if profile.Name != "test" {
+		t.Errorf("Name = %q, want test", profile.Name)
+	}
+	if profile.Description != "Test agent" {
+		t.Errorf("Description = %q, want Test agent", profile.Description)
+	}
+	if profile.Mode != "primary" {
+		t.Errorf("Mode = %q, want primary", profile.Mode)
+	}
+	if profile.Prompt != "# Test\n\nBody" {
+		t.Errorf("Prompt = %q", profile.Prompt)
+	}
+	if !profile.Tools["read"] {
+		t.Error("read tool should be true")
+	}
+	if profile.Tools["edit"] {
+		t.Error("edit tool should be false")
+	}
+	if !profile.Tools["bash"] {
+		t.Error("bash tool should be true")
+	}
+}

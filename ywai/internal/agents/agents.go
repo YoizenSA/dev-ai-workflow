@@ -23,16 +23,21 @@ type AgentProfile struct {
 
 // toolMapping maps our tool names to opencode-style tool names.
 var opencodeToolMap = map[string]string{
-	"Read":       "read",
-	"Edit":       "edit",
-	"Write":      "write",
-	"Bash":       "bash",
-	"Glob":       "glob",
-	"Grep":       "grep",
-	"LSP":        "lsp",
-	"ASTGrep":    "ast_grep",
-	"WebSearch":  "web_search",
-	"CodeSearch": "code_search",
+	"Read":           "read",
+	"Edit":           "edit",
+	"Write":          "write",
+	"Bash":           "bash",
+	"Glob":           "glob",
+	"Grep":           "grep",
+	"LSP":            "lsp",
+	"ASTGrep":        "ast_grep",
+	"WebSearch":      "web_search",
+	"CodeSearch":     "code_search",
+	"Delegate":       "delegate",
+	"DelegationList": "delegation_list",
+	"DelegationRead": "delegation_read",
+	"Question":       "question",
+	"TodoWrite":      "todowrite",
 }
 
 // LoadProfiles reads all agent directories from the given source dir.
@@ -491,4 +496,181 @@ func isWindows() bool { return runtime.GOOS == "windows" }
 // AgentsSourceDir returns the path to ywai/agents/ directory.
 func AgentsSourceDir() string {
 	return config.AgentsSourceDir()
+}
+
+// InstallOpenCodeMarkdown writes agent profiles as .md files to ~/.config/opencode/agents/.
+// This is the native OpenCode format and takes precedence over JSON configuration.
+func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile) error {
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		return fmt.Errorf("create dir %s: %w", agentsDir, err)
+	}
+
+	installed := 0
+	for name, profile := range profiles {
+		targetPath := filepath.Join(agentsDir, name+".md")
+
+		// Skip if already exists
+		if _, err := os.Stat(targetPath); err == nil {
+			continue
+		}
+
+		// Build OpenCode-style markdown with YAML frontmatter
+		content := buildOpenCodeMarkdown(name, profile)
+
+		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
+			continue
+		}
+		installed++
+	}
+
+	if installed > 0 {
+		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
+	}
+	return nil
+}
+
+// buildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
+func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
+	var b strings.Builder
+
+	// YAML frontmatter
+	b.WriteString("---\n")
+	b.WriteString(fmt.Sprintf("description: %s\n", profile.Description))
+	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
+	b.WriteString("temperature: 0.1\n")
+
+	// Tools as nested YAML
+	b.WriteString("tools:\n")
+	toolOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "web_search", "code_search"}
+	for _, tool := range toolOrder {
+		if enabled, ok := profile.Tools[tool]; ok {
+			b.WriteString(fmt.Sprintf("  %s: %t\n", tool, enabled))
+		}
+	}
+	b.WriteString("---\n\n")
+
+	// Prompt body (strip frontmatter if present)
+	prompt := stripFrontmatter(profile.Prompt)
+	b.WriteString(prompt)
+
+	return b.String()
+}
+
+// MigrateOpenCodeAgents migrates agents from opencode.json to markdown format.
+// After successful migration, agents are removed from the JSON file.
+func MigrateOpenCodeAgents(configPath, agentsDir string) error {
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil // Nothing to migrate
+	}
+
+	// Read existing config
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", configPath, err)
+	}
+
+	// Get agent section
+	agentsRaw, ok := root["agent"]
+	if !ok {
+		return nil // No agents to migrate
+	}
+
+	agents, ok := agentsRaw.(map[string]any)
+	if !ok {
+		return nil // Invalid format, skip
+	}
+
+	if len(agents) == 0 {
+		return nil
+	}
+
+	// Ensure agents directory exists
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		return fmt.Errorf("create agents dir %s: %w", agentsDir, err)
+	}
+
+	migrated := 0
+	for name, agentRaw := range agents {
+		agentMap, ok := agentRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Convert to AgentProfile
+		profile := mapToAgentProfile(name, agentMap)
+
+		// Write markdown file
+		targetPath := filepath.Join(agentsDir, name+".md")
+		if _, err := os.Stat(targetPath); err == nil {
+			// Already exists, skip migration but remove from JSON
+			delete(agents, name)
+			migrated++
+			continue
+		}
+
+		content := buildOpenCodeMarkdown(name, profile)
+		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+			fmt.Printf("  Warning: failed to migrate agent %s: %v\n", name, err)
+			continue
+		}
+
+		// Remove from JSON
+		delete(agents, name)
+		migrated++
+	}
+
+	if migrated > 0 {
+		fmt.Printf("  Migrated %d agents from %s to markdown\n", migrated, filepath.Base(configPath))
+
+		// Update config file
+		if len(agents) == 0 {
+			// Remove agent section entirely if empty
+			delete(root, "agent")
+		} else {
+			root["agent"] = agents
+		}
+
+		if err := config.WriteJSONC(configPath, root); err != nil {
+			return fmt.Errorf("write updated config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// mapToAgentProfile converts a map from JSON to AgentProfile.
+func mapToAgentProfile(name string, m map[string]any) AgentProfile {
+	prompt := ""
+	if p, ok := m["prompt"].(string); ok {
+		prompt = p
+	}
+
+	description := ""
+	if d, ok := m["description"].(string); ok {
+		description = d
+	}
+
+	mode := "primary"
+	if md, ok := m["mode"].(string); ok {
+		mode = md
+	}
+
+	tools := map[string]bool{"read": true, "edit": true, "write": true, "bash": true}
+	if t, ok := m["tools"].(map[string]any); ok {
+		for k, v := range t {
+			if enabled, ok := v.(bool); ok {
+				tools[k] = enabled
+			}
+		}
+	}
+
+	return AgentProfile{
+		Name:        name,
+		Description: description,
+		Prompt:      prompt,
+		Tools:       tools,
+		Mode:        mode,
+	}
 }
