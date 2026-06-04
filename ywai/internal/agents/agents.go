@@ -33,6 +33,7 @@ var opencodeToolMap = map[string]string{
 	"ASTGrep":        "ast_grep",
 	"WebSearch":      "web_search",
 	"CodeSearch":     "code_search",
+	"Task":           "task",
 	"Delegate":       "delegate",
 	"DelegationList": "delegation_list",
 	"DelegationRead": "delegation_read",
