@@ -26,6 +26,12 @@
     let boardData = null; // { session, columns: { backlog: [], ready: [], ... } }
     let ws = null;
     let wsReconnectTimer = null;
+    let reconnectDelay = 1000;
+    const MAX_RECONNECT_DELAY = 30000;
+    let apiToken = null;
+
+    // Expose functions to global scope for inline event handlers
+    window.kanbanApp = {};
 
     /* ─── DOM refs ─── */
     const $ = (sel) => document.querySelector(sel);
@@ -80,8 +86,12 @@
 
     async function apiFetch(path, opts = {}) {
         const url = `${apiBase()}${path}`;
+        const headers = { 'Content-Type': 'application/json', ...opts.headers };
+        if (apiToken && path.startsWith('/api/config')) {
+            headers['Authorization'] = `Bearer ${apiToken}`;
+        }
         const res = await fetch(url, {
-            headers: { 'Content-Type': 'application/json', ...opts.headers },
+            headers,
             ...opts,
         });
         if (!res.ok) {
@@ -89,6 +99,15 @@
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         return res.json();
+    }
+
+    async function loadApiToken() {
+        try {
+            const data = await apiFetch('/api/token');
+            apiToken = data.token;
+        } catch (e) {
+            console.error('Failed to load API token:', e);
+        }
     }
 
     function showToast(msg) {
@@ -121,6 +140,7 @@
         ws = new WebSocket(`${wsBase()}/api/events`);
 
         ws.onopen = () => {
+            reconnectDelay = 1000; // reset on successful connection
             wsStatus.textContent = '● connected';
             wsStatus.className = 'ws-status connected';
             if (wsReconnectTimer) {
@@ -133,8 +153,9 @@
             wsStatus.textContent = '● disconnected';
             wsStatus.className = 'ws-status disconnected';
             ws = null;
-            // Reconnect after 3s
-            wsReconnectTimer = setTimeout(connectWS, 3000);
+            const delay = reconnectDelay + Math.random() * 1000; // jitter
+            reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+            wsReconnectTimer = setTimeout(connectWS, delay);
         };
 
         ws.onerror = () => {
@@ -161,23 +182,28 @@
                 showToast(`Session created: <strong>${payload.goal}</strong>`);
                 break;
 
-            case 'session.status_changed':
+            case 'session.updated':
+            case 'session.status_changed': {
                 const idx = sessions.findIndex(s => s.id === payload.id);
                 if (idx !== -1) sessions[idx] = payload;
                 renderSessionSelect();
                 updateCloseSessionButtonVisibility();
-                if (currentSessionId === payload.id) {
-                    refreshBoard();
-                    if (payload.status === 'closed') {
-                        showToast('Session closed successfully');
-                    }
+                if (currentSessionId === payload.id && payload.status === 'closed') {
+                    showToast('Session closed successfully');
+                    refreshBoard(); // Full refresh when session closes (to disable all cards)
+                }
+                break;
+            }
+
+            case 'delegation.created':
+                if (currentSessionId && payload.session_id === currentSessionId) {
+                    addCardToBoard(payload);
                 }
                 break;
 
-            case 'delegation.created':
             case 'delegation.status_changed':
                 if (currentSessionId && payload.session_id === currentSessionId) {
-                    refreshBoard();
+                    moveCardOnBoard(payload);
                 }
                 break;
         }
@@ -186,7 +212,8 @@
     /* ─── Sessions ─── */
     async function loadSessions() {
         try {
-            sessions = await apiFetch('/api/sessions');
+            const data = await apiFetch('/api/sessions');
+            sessions = Array.isArray(data) ? data : [];
             renderSessionSelect();
 
             // Auto-select first active session
@@ -202,6 +229,7 @@
     }
 
     function renderSessionSelect() {
+        if (!Array.isArray(sessions)) return;
         const active = sessions.filter(s => s.status === 'active');
         const closed = sessions.filter(s => s.status === 'closed');
 
@@ -272,6 +300,8 @@
     }
 
     function renderBoard() {
+        const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
+
         COLUMNS.forEach(col => {
             const container = document.getElementById(`col-${col}`);
             const countEl = document.getElementById(`count-${col}`);
@@ -281,7 +311,6 @@
 
             // In backlog column, show "Add delegation" button at top
             if (col === 'backlog' && currentSessionId) {
-                const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
                 if (!sessionClosed) {
                     const addBtn = document.createElement('button');
                     addBtn.className = 'add-delegation-btn';
@@ -301,7 +330,7 @@
                 container.appendChild(empty);
             } else {
                 delegations.forEach(d => {
-                    const card = createCard(d);
+                    const card = createCard(d, sessionClosed);
                     container.appendChild(card);
                 });
             }
@@ -310,18 +339,18 @@
         });
     }
 
-    function createCard(d) {
+    function createCard(d, sessionClosed) {
         const agent = AGENTS[d.agent] || { icon: '❓', label: d.agent, color: '#888' };
         const card = document.createElement('div');
         card.className = `card card-agent-${d.agent}`;
         
         // Disable drag if session is closed
-        const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
         if (!sessionClosed) {
             card.draggable = true;
         }
         
         card.dataset.delegationId = d.id;
+        card.dataset.id = d.id;
 
         // Header: agent badge + ID
         const header = document.createElement('div');
@@ -395,6 +424,76 @@
         });
 
         return card;
+    }
+
+    /* ─── Targeted DOM Updates ─── */
+    function findCard(delegationId) {
+        return document.querySelector(`.card[data-id="${delegationId}"]`);
+    }
+
+    function addCardToBoard(d) {
+        const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
+        const card = createCard(d, sessionClosed);
+        const container = document.querySelector(`.column[data-column="${d.column}"] .column-cards`);
+        if (container) {
+            container.appendChild(card);
+            const countEl = document.querySelector(`.column[data-column="${d.column}"] .column-count`);
+            if (countEl) {
+                countEl.textContent = container.children.length;
+            }
+        }
+    }
+
+    function removeCardFromBoard(delegationId) {
+        const card = findCard(delegationId);
+        if (card) {
+            const container = card.closest('.column-cards');
+            const column = card.closest('.column');
+            card.remove();
+            if (column) {
+                const countEl = column.querySelector('.column-count');
+                const cardsContainer = column.querySelector('.column-cards');
+                if (countEl && cardsContainer) {
+                    countEl.textContent = cardsContainer.children.length;
+                }
+            }
+        }
+    }
+
+    function moveCardOnBoard(d) {
+        const existingCard = findCard(d.id);
+        if (existingCard) {
+            const currentColumn = existingCard.closest('.column');
+            const currentColumnName = currentColumn?.dataset.column;
+
+            if (currentColumnName !== d.column) {
+                // Different column: remove from old, add to new
+                const oldContainer = currentColumn.querySelector('.column-cards');
+                const oldCount = currentColumn.querySelector('.column-count');
+
+                existingCard.remove();
+
+                const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
+                const newCard = createCard(d, sessionClosed);
+                const newContainer = document.querySelector(`.column[data-column="${d.column}"] .column-cards`);
+                if (newContainer) {
+                    newContainer.appendChild(newCard);
+                }
+
+                if (oldCount && oldContainer) oldCount.textContent = oldContainer.children.length;
+                const newColumn = document.querySelector(`.column[data-column="${d.column}"]`);
+                const newCount = newColumn?.querySelector('.column-count');
+                const newCardsContainer = newColumn?.querySelector('.column-cards');
+                if (newCount && newCardsContainer) newCount.textContent = newCardsContainer.children.length;
+            } else {
+                // Same column: just update the card in place
+                const sessionClosed = sessions.find(s => s.id === currentSessionId)?.status === 'closed';
+                const newCard = createCard(d, sessionClosed);
+                existingCard.replaceWith(newCard);
+            }
+        } else {
+            addCardToBoard(d);
+        }
     }
 
     /* ─── Drag & Drop ─── */
@@ -659,19 +758,30 @@
         }
     });
 
-    // Close modals on backdrop click
-    [sessionModal, delegationModal, detailsModal].forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.style.display = 'none';
+        // Close modals on backdrop click
+        [sessionModal, delegationModal, detailsModal].forEach(modal => {
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
             }
         });
-    });
+
+        // Close session modal on X button and Cancel button
+        const closeModalBtn = $('#close-modal-btn');
+        const cancelSessionBtn = $('#cancel-session-btn');
+        if (closeModalBtn) closeModalBtn.addEventListener('click', () => sessionModal.style.display = 'none');
+        if (cancelSessionBtn) cancelSessionBtn.addEventListener('click', () => sessionModal.style.display = 'none');
 
     /* ─── Init ─── */
     async function init() {
+        await loadApiToken();
         connectWS();
         setupDragDrop();
+        setupTabs();
+        setupConfig();
         await loadSessions();
 
         // Periodic refresh every 30s as fallback
@@ -679,6 +789,516 @@
             if (currentSessionId) refreshBoard();
         }, 30000);
     }
+
+    // --- Tab System ---
+    function setupTabs() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+                
+                // Update buttons
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(`tab-${tab}`).classList.add('active');
+                
+                // Load config data when switching to config tab
+                if (tab === 'config') {
+                    loadConfigData();
+                }
+            });
+        });
+    }
+
+    // --- Config System ---
+    let configData = { mcp: [], agents: [], skills: [], json: null, providers: {} };
+    let currentAgent = null;
+
+    function setupConfig() {
+        // Config nav
+        document.querySelectorAll('.config-nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const section = btn.dataset.section;
+                document.querySelectorAll('.config-nav-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.config-section').forEach(s => s.classList.remove('active'));
+                document.getElementById(`section-${section}`).classList.add('active');
+                if (section === 'providers') loadProviders();
+            });
+        });
+
+        // Agent editor
+        document.getElementById('agent-cancel-btn').addEventListener('click', () => {
+            document.getElementById('agent-editor').style.display = 'none';
+            currentAgent = null;
+        });
+
+        document.getElementById('agent-save-btn').addEventListener('click', saveAgent);
+
+        document.getElementById('agent-delete-btn').addEventListener('click', () => {
+            if (currentAgent) {
+                deleteAgent(currentAgent);
+            }
+        });
+
+        // New agent
+        document.getElementById('new-agent-btn').addEventListener('click', () => {
+            const name = prompt('Agent name:');
+            if (name) {
+                currentAgent = name;
+                document.getElementById('agent-editor-title').textContent = `New: ${name}`;
+                document.getElementById('agent-content').value = `# ${name}\n\nYou are a ${name} agent.\n\n## Role\nDescribe your role here.\n`;
+                document.getElementById('agent-delete-btn').style.display = 'none';
+                document.getElementById('agent-editor').style.display = 'flex';
+            }
+        });
+
+        // JSON save
+        document.getElementById('save-json-btn').addEventListener('click', saveJson);
+    }
+
+    async function loadConfigData() {
+        await Promise.all([
+            loadMCP(),
+            loadAgents(),
+            loadSkills(),
+            loadJson(),
+            loadProviders()
+        ]);
+    }
+
+    // --- MCP ---
+    async function loadMCP() {
+        try {
+            const res = await fetch('/api/config/mcp');
+            configData.mcp = await res.json();
+            renderMCP();
+        } catch (e) {
+            console.error('Failed to load MCP:', e);
+        }
+    }
+
+    function renderMCP() {
+        const list = document.getElementById('mcp-list');
+        list.innerHTML = configData.mcp.map(mcp => {
+            let type = 'unknown';
+            let detailsHtml = '';
+            try {
+                const cfg = JSON.parse(typeof mcp.config === 'string' ? mcp.config : JSON.stringify(mcp.config));
+                type = cfg.type || 'local';
+                
+                const details = [];
+                if (cfg.url) {
+                    details.push(`<strong>URL:</strong> <span class="code-font">${cfg.url}</span>`);
+                }
+                if (cfg.command && cfg.command.length > 0) {
+                    const cmdStr = Array.isArray(cfg.command) ? cfg.command.join(' ') : cfg.command;
+                    details.push(`<strong>Command:</strong> <span class="code-font">${cmdStr}</span>`);
+                }
+                if (cfg.args && cfg.args.length > 0) {
+                    details.push(`<strong>Args:</strong> <span class="code-font">${cfg.args.join(' ')}</span>`);
+                }
+                if (cfg.env && Object.keys(cfg.env).length > 0) {
+                    const envStrings = Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`);
+                    details.push(`<strong>Env:</strong> <span class="code-font">${envStrings.join(', ')}</span>`);
+                }
+                
+                for (const [key, val] of Object.entries(cfg)) {
+                    if (['type', 'url', 'command', 'args', 'env', 'enabled', 'disabled'].includes(key)) continue;
+                    
+                    if (typeof val === 'object' && val !== null) {
+                        details.push(`<strong>${key}:</strong> <span class="code-font">${JSON.stringify(val)}</span>`);
+                    } else {
+                        let displayVal = val;
+                        if (key.toLowerCase().includes('key') || key.toLowerCase().includes('secret') || key.toLowerCase().includes('token')) {
+                            if (typeof val === 'string' && val.length > 8) {
+                                displayVal = val.substring(0, 4) + '...' + val.substring(val.length - 4);
+                            }
+                        }
+                        details.push(`<strong>${key}:</strong> <span class="code-font">${displayVal}</span>`);
+                    }
+                }
+                
+                if (details.length > 0) {
+                    detailsHtml = `<div class="mcp-details">${details.join('<br>')}</div>`;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            
+            return `
+                <div class="mcp-item">
+                    <div class="mcp-header">
+                        <div class="mcp-info">
+                            <div class="mcp-name">${mcp.name}</div>
+                            <div class="mcp-type">${type}</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" ${mcp.enabled ? 'checked' : ''} onchange="window.kanbanApp.toggleMCP('${mcp.name}', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    ${detailsHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function toggleMCP(name, enabled) {
+        try {
+            await fetch(`/api/config/mcp/${name}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+            showToast(`${name} ${enabled ? 'enabled' : 'disabled'}. Restart opencode to apply.`);
+        } catch (e) {
+            console.error('Failed to toggle MCP:', e);
+            showToast('Failed to toggle MCP', 'error');
+        }
+    }
+
+    // Expose toggleMCP to global scope
+    window.kanbanApp.toggleMCP = toggleMCP;
+
+    // --- Providers ---
+    async function loadProviders() {
+        try {
+            const res = await fetch('/api/config/providers');
+            configData.providers = await res.json();
+            renderProviders();
+        } catch (e) {
+            console.error('Failed to load providers:', e);
+        }
+    }
+
+    function renderProviders() {
+        const container = document.getElementById('providers-list');
+        if (!container) return;
+
+        const providers = configData.providers;
+        if (!providers || Object.keys(providers).length === 0) {
+            container.innerHTML = '<p class="empty-state">No providers configured.</p>';
+            return;
+        }
+
+        let html = '';
+        for (const [name, config] of Object.entries(providers)) {
+            const modelCount = config.models ? Object.keys(config.models).length : 0;
+            const hasKey = config.apiKey ? '✓' : '✗';
+            html += `
+                <div class="config-item" onclick="window.kanbanApp.editProvider('${name.replace(/'/g, "\\'")}')">
+                    <div class="config-item-info">
+                        <strong>${name}</strong>
+                        <span class="config-item-meta">${config.baseUrl || 'No URL'} &middot; ${modelCount} models &middot; Key: ${hasKey}</span>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); window.kanbanApp.deleteProvider('${name.replace(/'/g, "\\'")}')">Delete</button>
+                </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    async function addProvider() {
+        document.getElementById('provider-editor-title').textContent = 'Add Provider';
+        document.getElementById('provider-name-input').value = '';
+        document.getElementById('provider-name-input').disabled = false;
+        document.getElementById('provider-baseurl-input').value = '';
+        document.getElementById('provider-apikey-input').value = '';
+        document.getElementById('provider-models-input').value = '';
+        document.getElementById('provider-delete-btn').style.display = 'none';
+        document.getElementById('provider-editor').style.display = 'block';
+    }
+
+    async function editProvider(name) {
+        try {
+            const res = await fetch('/api/config/providers');
+            const providers = await res.json();
+            const p = providers[name];
+            if (!p) return;
+            document.getElementById('provider-editor-title').textContent = `Edit: ${name}`;
+            document.getElementById('provider-name-input').value = name;
+            document.getElementById('provider-name-input').disabled = true;
+            document.getElementById('provider-baseurl-input').value = p.baseUrl || '';
+            document.getElementById('provider-apikey-input').value = p.apiKey || '';
+            document.getElementById('provider-models-input').value = JSON.stringify(p.models || {}, null, 2);
+            document.getElementById('provider-delete-btn').style.display = 'inline-block';
+            document.getElementById('provider-editor').style.display = 'block';
+        } catch (e) {
+            console.error('Failed to load provider for edit:', e);
+        }
+    }
+
+    async function saveProvider() {
+        const nameInput = document.getElementById('provider-name-input');
+        const name = nameInput.value.trim();
+        if (!name) { showToast('Provider name is required', 'error'); return; }
+
+        let models = {};
+        const modelsText = document.getElementById('provider-models-input').value.trim();
+        if (modelsText) {
+            try { models = JSON.parse(modelsText); }
+            catch { showToast('Invalid models JSON', 'error'); return; }
+        }
+
+        const provider = {
+            baseUrl: document.getElementById('provider-baseurl-input').value.trim(),
+            apiKey: document.getElementById('provider-apikey-input').value.trim(),
+            models: models
+        };
+
+        try {
+            const res = await fetch(`/api/config/providers/${encodeURIComponent(name)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(provider)
+            });
+
+            if (res.ok) {
+                showToast('Provider saved', 'success');
+                document.getElementById('provider-editor').style.display = 'none';
+                loadProviders();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to save provider', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to save provider:', e);
+            showToast('Failed to save provider', 'error');
+        }
+    }
+
+    function cancelProviderEdit() {
+        document.getElementById('provider-editor').style.display = 'none';
+    }
+
+    async function deleteProvider(name) {
+        if (!name) name = document.getElementById('provider-name-input').value.trim();
+        if (!name) return;
+        if (!confirm(`Delete provider "${name}"?`)) return;
+
+        try {
+            const res = await fetch(`/api/config/providers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('Provider deleted', 'success');
+                document.getElementById('provider-editor').style.display = 'none';
+                loadProviders();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to delete provider', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to delete provider:', e);
+            showToast('Failed to delete provider', 'error');
+        }
+    }
+
+    // --- Agents ---
+    async function loadAgents() {
+        try {
+            const res = await fetch('/api/config/agents');
+            configData.agents = await res.json();
+            renderAgents();
+        } catch (e) {
+            console.error('Failed to load agents:', e);
+        }
+    }
+
+    function renderAgents() {
+        const list = document.getElementById('agents-list');
+        list.innerHTML = configData.agents.map(agent => `
+            <div class="agent-item" onclick="window.kanbanApp.editAgent('${agent.name}')">
+                <span class="agent-item-name">${agent.name}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="agent-item-size">${formatSize(agent.size)}</span>
+                    <button class="agent-delete-btn" onclick="event.stopPropagation(); window.kanbanApp.deleteAgent('${agent.name}')">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function editAgent(name) {
+        try {
+            const res = await fetch(`/api/config/agents/${name}`);
+            const data = await res.json();
+            currentAgent = name;
+            document.getElementById('agent-editor-title').textContent = `Edit: ${name}`;
+            document.getElementById('agent-content').value = data.content;
+            document.getElementById('agent-delete-btn').style.display = 'inline-flex';
+            document.getElementById('agent-editor').style.display = 'flex';
+            
+            // Highlight active
+            document.querySelectorAll('.agent-item').forEach(item => item.classList.remove('active'));
+            const activeItem = Array.from(document.querySelectorAll('.agent-item')).find(item => item.textContent.includes(name));
+            if (activeItem) activeItem.classList.add('active');
+        } catch (e) {
+            console.error('Failed to load agent:', e);
+        }
+    }
+
+    async function saveAgent() {
+        if (!currentAgent) return;
+        
+        const content = document.getElementById('agent-content').value;
+        try {
+            const res = await fetch(`/api/config/agents/${currentAgent}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+            
+            if (res.ok) {
+                showToast(`Agent "${currentAgent}" saved`);
+                document.getElementById('agent-editor').style.display = 'none';
+                loadAgents();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to save', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to save agent:', e);
+            showToast('Failed to save agent', 'error');
+        }
+    }
+
+    async function deleteAgent(name) {
+        if (!confirm(`Are you sure you want to delete the agent "${name}"?`)) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/config/agents/${name}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                showToast(`Agent "${name}" deleted`);
+                document.getElementById('agent-editor').style.display = 'none';
+                currentAgent = null;
+                loadAgents();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to delete agent', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to delete agent:', e);
+            showToast('Failed to delete agent', 'error');
+        }
+    }
+
+    // --- Skills ---
+    async function loadSkills() {
+        try {
+            const res = await fetch('/api/config/skills');
+            configData.skills = await res.json();
+            renderSkills();
+        } catch (e) {
+            console.error('Failed to load skills:', e);
+        }
+    }
+
+    function renderSkills() {
+        const list = document.getElementById('skills-list');
+        list.innerHTML = configData.skills.map(skill => `
+            <div class="skill-item">
+                <div class="skill-header-row" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div class="skill-name" style="margin-bottom: 0;">${skill.name}</div>
+                    <button class="agent-delete-btn" onclick="window.kanbanApp.deleteSkill('${skill.name}')" style="padding: 2px 6px;">🗑️</button>
+                </div>
+                <div class="skill-desc">${skill.description || 'No description'}</div>
+                ${skill.hasSkillMD ? '<span class="skill-badge">SKILL.md</span>' : ''}
+            </div>
+        `).join('');
+    }
+
+    async function deleteSkill(name) {
+        if (!confirm(`Are you sure you want to delete the skill "${name}"?`)) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/config/skills/${name}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                showToast(`Skill "${name}" deleted`);
+                loadSkills();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to delete skill', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to delete skill:', e);
+            showToast('Failed to delete skill', 'error');
+        }
+    }
+
+    // --- JSON Editor ---
+    async function loadJson() {
+        try {
+            const res = await fetch('/api/config/opencode');
+            const data = await res.json();
+            configData.json = data;
+            document.getElementById('json-editor').value = JSON.stringify(data, null, 2);
+        } catch (e) {
+            console.error('Failed to load JSON:', e);
+        }
+    }
+
+    async function saveJson() {
+        const content = document.getElementById('json-editor').value;
+        try {
+            // Validate JSON
+            JSON.parse(content);
+            
+            const res = await fetch('/api/config/opencode', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: content
+            });
+            
+            if (res.ok) {
+                showToast('opencode.json saved. Restart opencode to apply.');
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to save', 'error');
+            }
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                showToast('Invalid JSON', 'error');
+            } else {
+                console.error('Failed to save JSON:', e);
+                showToast('Failed to save', 'error');
+            }
+        }
+    }
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: ${type === 'error' ? 'var(--danger)' : 'var(--accent)'};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Expose functions for onclick handlers
+    window.kanbanApp = { editAgent, deleteAgent, deleteSkill, toggleMCP, addProvider, editProvider, saveProvider, cancelProviderEdit, deleteProvider };
 
     document.addEventListener('DOMContentLoaded', init);
 })();

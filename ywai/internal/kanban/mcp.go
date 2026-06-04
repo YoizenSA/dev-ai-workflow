@@ -89,7 +89,7 @@ type MCPAdapter struct {
 // NewMCPAdapter creates a new MCP adapter, starting the kanban server internally.
 func NewMCPAdapter() *MCPAdapter {
 	// Start kanban server on a random port
-	s := New(0) // port 0 = random
+	s := New(0, "") // port 0 = random, use default data dir
 	go s.Start()
 
 	// Wait for server to be ready (poll up to 10 seconds)

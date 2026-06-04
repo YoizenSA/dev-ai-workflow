@@ -25,8 +25,13 @@
         </div>
         <div class="header-right">
             <span id="ws-status" class="ws-status">● disconnected</span>
+            <button class="tab-btn active" data-tab="kanban">Kanban</button>
+            <button class="tab-btn" data-tab="config">Config</button>
         </div>
     </header>
+
+    <!-- Kanban Tab -->
+    <div class="tab-content active" id="tab-kanban">
 
     <main id="board" class="board">
         <div class="column" data-column="backlog">
@@ -186,6 +191,117 @@
                         <button type="submit" class="btn btn-primary">Save Changes</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- Config Tab -->
+    <div class="tab-content" id="tab-config">
+        <div class="config-container">
+            <nav class="config-nav">
+                <button class="config-nav-btn active" data-section="mcp">MCP Servers</button>
+                <button class="config-nav-btn" data-section="agents">Agents</button>
+                <button class="config-nav-btn" data-section="skills">Skills</button>
+                <button class="config-nav-btn" data-section="providers">Providers</button>
+                <button class="config-nav-btn" data-section="json">opencode.json</button>
+            </nav>
+
+            <!-- MCP Section -->
+            <div class="config-section active" id="section-mcp">
+                <div class="section-header">
+                    <div>
+                        <h2>MCP Servers</h2>
+                        <p class="section-desc">Toggle MCP servers on/off. Changes require opencode restart.</p>
+                    </div>
+                </div>
+                <div class="mcp-list" id="mcp-list"></div>
+            </div>
+
+            <!-- Agents Section -->
+            <div class="config-section" id="section-agents">
+                <div class="section-header">
+                    <div>
+                        <h2>Agents</h2>
+                        <p class="section-desc">View and edit agent configurations.</p>
+                    </div>
+                    <button class="btn btn-primary" id="new-agent-btn">+ New Agent</button>
+                </div>
+                <div class="agents-container">
+                    <div class="agents-list" id="agents-list"></div>
+                    <div class="agent-editor" id="agent-editor" style="display: none;">
+                        <div class="editor-header">
+                            <h3 id="agent-editor-title">Edit Agent</h3>
+                            <div class="editor-actions">
+                                <button class="btn btn-danger" id="agent-delete-btn" style="display: none;">Delete</button>
+                                <button class="btn btn-secondary" id="agent-cancel-btn">Cancel</button>
+                                <button class="btn btn-primary" id="agent-save-btn">Save</button>
+                            </div>
+                        </div>
+                        <textarea id="agent-content" class="agent-textarea" spellcheck="false"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Skills Section -->
+            <div class="config-section" id="section-skills">
+                <div class="section-header">
+                    <div>
+                        <h2>Skills</h2>
+                        <p class="section-desc">Installed skills and their descriptions.</p>
+                    </div>
+                </div>
+                <div class="skills-list" id="skills-list"></div>
+            </div>
+
+            <!-- JSON Section -->
+            <div class="config-section" id="section-json">
+                <div class="section-header">
+                    <div>
+                        <h2>opencode.json</h2>
+                        <p class="section-desc">Raw configuration file. Edit with caution.</p>
+                    </div>
+                    <button class="btn btn-primary" id="save-json-btn">Save Changes</button>
+                </div>
+                <div class="json-textarea-wrapper">
+                    <textarea id="json-editor" class="json-textarea" spellcheck="false"></textarea>
+                </div>
+            </div>
+
+            <!-- Providers Section -->
+            <div class="config-section" id="section-providers">
+                <div class="section-header">
+                    <h2>Providers</h2>
+                    <button class="btn btn-primary" onclick="window.kanbanApp.addProvider()">+ Add Provider</button>
+                </div>
+                <p class="section-desc">LLM provider configurations (API keys, base URLs, models).</p>
+                <div id="providers-list"></div>
+
+                <!-- Provider Editor (hidden by default) -->
+                <div id="provider-editor" style="display:none; margin-top:16px;">
+                    <h3 id="provider-editor-title">Add Provider</h3>
+                    <div class="form-group">
+                        <label>Provider Name</label>
+                        <input type="text" id="provider-name-input" placeholder="e.g. openai" />
+                    </div>
+                    <div class="form-group">
+                        <label>Base URL</label>
+                        <input type="text" id="provider-baseurl-input" placeholder="e.g. https://api.openai.com/v1" />
+                    </div>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" id="provider-apikey-input" placeholder="sk-..." />
+                    </div>
+                    <div class="form-group">
+                        <label>Models (JSON)</label>
+                        <textarea id="provider-models-input" rows="8" placeholder='{"gpt-4": {"name": "GPT-4", "limit": {"context": 128000, "output": 4096}}}'></textarea>
+                    </div>
+                    <div class="editor-toolbar">
+                        <button class="btn btn-primary" onclick="window.kanbanApp.saveProvider()">Save</button>
+                        <button class="btn" onclick="window.kanbanApp.cancelProviderEdit()">Cancel</button>
+                        <button class="btn btn-danger" id="provider-delete-btn" style="display:none" onclick="window.kanbanApp.deleteProvider()">Delete</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

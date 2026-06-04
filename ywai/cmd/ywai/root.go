@@ -220,8 +220,11 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		fmt.Println("\n[3.6/3] Applying ywai overrides...")
 		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
-		fmt.Println("\n[3.7/3] Installing opencode-quota plugin...")
+		fmt.Println("\n[3.7/3] Installing plugins...")
 		installPluginsForAgents(agents, opts.DryRun, installMCP, installADO)
+
+		fmt.Println("\n[3.8/3] Removing deprecated opencode-quota plugin...")
+		removeQuotaForAgents(agents, opts.DryRun)
 	}
 
 	fmt.Println("\n=== Done! ===")
@@ -458,7 +461,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 		}
 
 		if dryRun {
-			fmt.Printf("  [%s] Would install opencode-quota plugin\n", a.Name)
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
 			}
@@ -466,13 +468,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 				fmt.Printf("  [%s] Would install Azure DevOps plugin\n", a.Name)
 			}
 			continue
-		}
-
-		// Install opencode-quota (always for opencode/kilocode)
-		if err := plugins.InstallQuota(configPath); err != nil {
-			fmt.Printf("  [%s] Warning: failed to install opencode-quota: %v\n", a.Name, err)
-		} else {
-			fmt.Printf("  [%s] Installed opencode-quota plugin\n", a.Name)
 		}
 
 		// Install Microsoft Learn MCP if requested
@@ -531,5 +526,32 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 		}
 
 		fmt.Println("  Azure DevOps plugin setup complete!")
+	}
+}
+
+func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
+	agentSettingsPaths := agent.SettingsPaths()
+
+	for _, a := range agents {
+		// Only remove quota for opencode/kilocode
+		if a.Name != "opencode" && a.Name != "kilocode" {
+			continue
+		}
+
+		configPath, ok := agentSettingsPaths[a.Name]
+		if !ok || configPath == "" {
+			continue
+		}
+
+		if dryRun {
+			fmt.Printf("  [%s] Would remove opencode-quota plugin\n", a.Name)
+			continue
+		}
+
+		if err := plugins.RemoveQuota(configPath); err != nil {
+			fmt.Printf("  [%s] Warning: failed to remove opencode-quota: %v\n", a.Name, err)
+		} else {
+			fmt.Printf("  [%s] Removed opencode-quota plugin\n", a.Name)
+		}
 	}
 }

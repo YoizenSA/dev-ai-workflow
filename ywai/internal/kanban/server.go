@@ -6,22 +6,30 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 )
 
 // Server is the embedded HTTP server for the Kanban board.
 type Server struct {
-	port    int
-	store   *Store
-	hub     *Hub
-	httpSrv *http.Server
-	mux     *http.ServeMux
+	port     int
+	store    *Store
+	hub      *Hub
+	httpSrv  *http.Server
+	mux      *http.ServeMux
 }
 
 // New creates a new Kanban server listening on the given port.
 // Use port 0 to let the OS pick a free port.
-func New(port int) *Server {
-	store := NewStore()
+func New(port int, dataDir string) *Server {
+	if dataDir == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			dataDir = filepath.Join(home, ".config", "opencode", "kanban-data")
+		}
+	}
+	store := NewStore(dataDir)
 	hub := NewHub()
 	handlers := &Handlers{store: store, hub: hub}
 
@@ -44,14 +52,31 @@ func New(port int) *Server {
 	// WebSocket route
 	mux.HandleFunc("GET /api/events", handlers.HandleWebSocket)
 
+	// Config API
+	mux.HandleFunc("GET /api/config/opencode", handlers.GetOpenCodeConfig)
+	mux.HandleFunc("PUT /api/config/opencode", handlers.PutOpenCodeConfig)
+	mux.HandleFunc("GET /api/config/agents", handlers.ListAgents)
+	mux.HandleFunc("GET /api/config/agents/{name}", handlers.GetAgent)
+	mux.HandleFunc("PUT /api/config/agents/{name}", handlers.PutAgent)
+	mux.HandleFunc("POST /api/config/agents", handlers.CreateAgent)
+	mux.HandleFunc("DELETE /api/config/agents/{name}", handlers.DeleteAgent)
+	mux.HandleFunc("GET /api/config/skills", handlers.ListSkills)
+	mux.HandleFunc("GET /api/config/skills/{name}", handlers.GetSkill)
+	mux.HandleFunc("DELETE /api/config/skills/{name}", handlers.DeleteSkill)
+	mux.HandleFunc("GET /api/config/mcp", handlers.ListMCP)
+	mux.HandleFunc("PUT /api/config/mcp/{name}", handlers.PutMCP)
+	mux.HandleFunc("GET /api/config/providers", handlers.ListProviders)
+	mux.HandleFunc("PUT /api/config/providers/{name}", handlers.PutProvider)
+	mux.HandleFunc("DELETE /api/config/providers/{name}", handlers.DeleteProvider)
+
 	// UI (frontend)
 	mux.Handle("GET /", uiHandler())
 
 	return &Server{
-		port:  port,
-		store: store,
-		hub:   hub,
-		mux:   mux,
+		port:     port,
+		store:    store,
+		hub:      hub,
+		mux: mux,
 	}
 }
 

@@ -1,9 +1,14 @@
 package kanban
 
 import (
-	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -12,20 +17,106 @@ type Store struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
 	delegations map[string]*Delegation
+	filePath    string
 }
 
-// NewStore creates a new empty Store.
-func NewStore() *Store {
-	return &Store{
+// NewStore creates a new Store backed by a JSON file in the given data directory.
+func NewStore(dataDir string) *Store {
+	s := &Store{
 		sessions:    make(map[string]*Session),
 		delegations: make(map[string]*Delegation),
+		filePath:    filepath.Join(dataDir, "kanban-state.json"),
 	}
+	// Try to load existing state
+	if err := s.Load(); err != nil {
+		log.Printf("kanban: failed to load state: %v", err)
+	}
+	return s
 }
 
+var idCounter atomic.Uint64
+
 func newID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+	return fmt.Sprintf("%x-%x", time.Now().UnixNano(), idCounter.Add(1))
+}
+
+// Save persists the current store state to a JSON file using atomic write.
+func (s *Store) Save() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.saveLocked()
+}
+
+// saveLocked is the inner save implementation; caller must hold at least an RLock.
+func (s *Store) saveLocked() error {
+	data := struct {
+		Sessions    map[string]*Session    `json:"sessions"`
+		Delegations map[string]*Delegation `json:"delegations"`
+	}{
+		Sessions:    s.sessions,
+		Delegations: s.delegations,
+	}
+
+	pretty, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(s.filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	// Write to temp file first, then rename (atomic)
+	tmpFile := s.filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, pretty, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFile, s.filePath)
+}
+
+// Load reads store state from the JSON file, if it exists.
+func (s *Store) Load() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(s.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // fresh start
+		}
+		return err
+	}
+
+	var state struct {
+		Sessions    map[string]*Session    `json:"sessions"`
+		Delegations map[string]*Delegation `json:"delegations"`
+	}
+
+	if err := json.Unmarshal(data, &state); err != nil {
+		return err
+	}
+
+	if state.Sessions != nil {
+		s.sessions = state.Sessions
+	}
+	if state.Delegations != nil {
+		s.delegations = state.Delegations
+	}
+	return nil
+}
+
+// autoSave persists state after every write operation.
+// Caller must already hold at least a write lock (mu.Lock()).
+func (s *Store) autoSave() {
+	if s.filePath == "" {
+		return
+	}
+	if err := s.saveLocked(); err != nil {
+		log.Printf("kanban: failed to save state: %v", err)
+	}
 }
 
 // --- Session operations ---
@@ -34,6 +125,7 @@ func newID() string {
 func (s *Store) CreateSession(project, goal string) *Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.autoSave()
 
 	session := &Session{
 		ID:        newID(),
@@ -59,7 +151,7 @@ func (s *Store) ListSessions(status string) []*Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var result []*Session
+	result := make([]*Session, 0)
 	for _, session := range s.sessions {
 		if status == "" || session.Status == status {
 			result = append(result, session)
@@ -72,6 +164,7 @@ func (s *Store) ListSessions(status string) []*Session {
 func (s *Store) CloseSession(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.autoSave()
 
 	session, ok := s.sessions[id]
 	if !ok {
@@ -87,6 +180,7 @@ func (s *Store) CloseSession(id string) error {
 func (s *Store) CreateDelegation(sessionID, agent, taskSummary string, deps []string) (*Delegation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.autoSave()
 
 	if _, ok := s.sessions[sessionID]; !ok {
 		return nil, fmt.Errorf("session %s not found", sessionID)
@@ -129,6 +223,9 @@ func (s *Store) ListDelegations(sessionID string) []*Delegation {
 			result = append(result, d)
 		}
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
 	return result
 }
 
@@ -137,6 +234,7 @@ func (s *Store) ListDelegations(sessionID string) []*Delegation {
 func (s *Store) UpdateDelegation(id string, status, column, handoffPreview, blocker *string) (*Delegation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.autoSave()
 
 	d, ok := s.delegations[id]
 	if !ok {
@@ -193,6 +291,12 @@ func (s *Store) BoardView(sessionID string) (*BoardView, error) {
 			}
 			columns[col] = append(columns[col], *d)
 		}
+	}
+
+	for col := range columns {
+		sort.Slice(columns[col], func(i, j int) bool {
+			return columns[col][i].CreatedAt.After(columns[col][j].CreatedAt)
+		})
 	}
 
 	return &BoardView{

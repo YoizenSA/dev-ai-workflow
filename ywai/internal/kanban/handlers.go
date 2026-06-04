@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -331,4 +335,667 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("Error writing JSON response: %v", err)
 	}
+}
+
+func isValidName(name string) bool {
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, name)
+	return matched
+}
+
+// --- Config Handlers ---
+
+func opencodeConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
+}
+
+func agentsDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "opencode", "agents"), nil
+}
+
+func skillsDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "opencode", "skills"), nil
+}
+
+// GET /api/config/opencode
+func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+// PUT /api/config/opencode
+func (h *Handlers) PutOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
+
+	var body json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Validate the JSON is an object/map, not an array or primitive
+	if len(body) > 0 && body[0] != '{' {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "expected JSON object"})
+		return
+	}
+
+	// Backup existing config
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if existing, err := os.ReadFile(path); err == nil {
+		_ = os.WriteFile(path+".bak", existing, 0644)
+	}
+
+	// Write new config
+	pretty, _ := json.MarshalIndent(body, "", "  ")
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// GET /api/config/agents
+func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
+	dir, err := agentsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+
+	type agentInfo struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	}
+	var agents []agentInfo
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			info, _ := e.Info()
+			name := strings.TrimSuffix(e.Name(), ".md")
+			agents = append(agents, agentInfo{Name: name, Size: info.Size()})
+		}
+	}
+	writeJSON(w, http.StatusOK, agents)
+}
+
+// GET /api/config/agents/{name}
+func (h *Handlers) GetAgent(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	agentsDirPath, err := agentsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	path := filepath.Join(agentsDirPath, name+".md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"name": name, "content": string(data)})
+}
+
+// PUT /api/config/agents/{name}
+func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	agentsDirPath, err := agentsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	path := filepath.Join(agentsDirPath, name+".md")
+
+	// Prevent path traversal
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	baseDir, err := filepath.Abs(agentsDirPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+		return
+	}
+
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// POST /api/config/agents
+func (h *Handlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if body.Name == "" || !isValidName(body.Name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	agentsDirPath, err := agentsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	path := filepath.Join(agentsDirPath, body.Name+".md")
+
+	// Prevent path traversal
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	baseDir, err := filepath.Abs(agentsDirPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+		return
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent already exists"})
+		return
+	}
+
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
+}
+
+// DELETE /api/config/agents/{name}
+func (h *Handlers) DeleteAgent(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	agentsDirPath, err := agentsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	path := filepath.Join(agentsDirPath, name+".md")
+
+	// Prevent path traversal
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	baseDir, err := filepath.Abs(agentsDirPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// GET /api/config/skills
+func (h *Handlers) ListSkills(w http.ResponseWriter, r *http.Request) {
+	dir, err := skillsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+
+	type skillInfo struct {
+		Name        string `json:"name"`
+		HasSkillMD  bool   `json:"hasSkillMD"`
+		Description string `json:"description"`
+	}
+	var skills []skillInfo
+	for _, e := range entries {
+		if e.IsDir() {
+			skillPath := filepath.Join(dir, e.Name(), "SKILL.md")
+			hasSkill := false
+			desc := ""
+			if data, err := os.ReadFile(skillPath); err == nil {
+				hasSkill = true
+				// Extract description from frontmatter
+				lines := strings.Split(string(data), "\n")
+				for _, line := range lines {
+					if strings.HasPrefix(line, "description:") {
+						desc = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
+						break
+					}
+				}
+			}
+			skills = append(skills, skillInfo{
+				Name:        e.Name(),
+				HasSkillMD:  hasSkill,
+				Description: desc,
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, skills)
+}
+
+// GET /api/config/skills/{name}
+func (h *Handlers) GetSkill(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid skill name"})
+		return
+	}
+
+	skillsDirPath, err := skillsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	path := filepath.Join(skillsDirPath, name, "SKILL.md")
+
+	// Prevent path traversal
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	baseDir, err := filepath.Abs(skillsDirPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "skill not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"name": name, "content": string(data)})
+}
+
+// DELETE /api/config/skills/{name}
+func (h *Handlers) DeleteSkill(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid skill name"})
+		return
+	}
+
+	dir, err := skillsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	path := filepath.Join(dir, name)
+	cleanPath := filepath.Clean(path)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(dir)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
+		return
+	}
+
+	if err := os.RemoveAll(cleanPath); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// GET /api/config/mcp
+func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config struct {
+		MCP map[string]json.RawMessage `json:"mcp"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	type mcpInfo struct {
+		Name    string          `json:"name"`
+		Config  json.RawMessage `json:"config"`
+		Enabled bool            `json:"enabled"`
+	}
+	var mcps []mcpInfo
+	for name, cfg := range config.MCP {
+		// Check if disabled or enabled flag is false
+		var serverCfg map[string]interface{}
+		enabled := true
+		if err := json.Unmarshal(cfg, &serverCfg); err == nil {
+			if disabled, ok := serverCfg["disabled"].(bool); ok && disabled {
+				enabled = false
+			} else if val, ok := serverCfg["enabled"].(bool); ok && !val {
+				enabled = false
+			}
+		}
+		mcps = append(mcps, mcpInfo{Name: name, Config: cfg, Enabled: enabled})
+	}
+	writeJSON(w, http.StatusOK, mcps)
+}
+
+// PUT /api/config/mcp/{name} - toggle enabled/disabled
+func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid mcp name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Read current config
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Get MCP section
+	var mcpSection map[string]json.RawMessage
+	if mcpRaw, ok := config["mcp"]; ok {
+		if err := json.Unmarshal(mcpRaw, &mcpSection); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		mcpSection = make(map[string]json.RawMessage)
+	}
+
+	// Toggle: add/remove "disabled" field, toggle "enabled" field
+	if serverRaw, ok := mcpSection[name]; ok {
+		var serverCfg map[string]interface{}
+		if err := json.Unmarshal(serverRaw, &serverCfg); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		if body.Enabled {
+			delete(serverCfg, "disabled")
+			serverCfg["enabled"] = true
+		} else {
+			serverCfg["disabled"] = true
+			serverCfg["enabled"] = false
+		}
+
+		updated, _ := json.Marshal(serverCfg)
+		mcpSection[name] = updated
+	} else {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
+		return
+	}
+
+	// Write back
+	mcpJSON, _ := json.Marshal(mcpSection)
+	config["mcp"] = mcpJSON
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+
+	// Backup
+	_ = os.WriteFile(path+".bak", data, 0644)
+
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// GET /api/config/providers - list all providers
+func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Get provider section
+	if providerRaw, ok := config["provider"]; ok {
+		var providers map[string]json.RawMessage
+		if err := json.Unmarshal(providerRaw, &providers); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, providers)
+	} else {
+		writeJSON(w, http.StatusOK, map[string]json.RawMessage{})
+	}
+}
+
+// PUT /api/config/providers/{name} - create or update a provider
+func (h *Handlers) PutProvider(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid provider name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
+
+	var provider json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&provider); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Get provider section
+	var providerSection map[string]json.RawMessage
+	if providerRaw, ok := config["provider"]; ok {
+		if err := json.Unmarshal(providerRaw, &providerSection); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		providerSection = make(map[string]json.RawMessage)
+	}
+
+	providerSection[name] = provider
+
+	// Write back
+	providerJSON, _ := json.Marshal(providerSection)
+	config["provider"] = providerJSON
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+
+	// Backup
+	_ = os.WriteFile(path+".bak", data, 0644)
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// DELETE /api/config/providers/{name} - delete a provider
+func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "provider name required"})
+		return
+	}
+
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Get provider section
+	var providerSection map[string]json.RawMessage
+	if providerRaw, ok := config["provider"]; ok {
+		if err := json.Unmarshal(providerRaw, &providerSection); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if _, ok := providerSection[name]; ok {
+		delete(providerSection, name)
+	} else {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
+		return
+	}
+
+	// Write back
+	providerJSON, _ := json.Marshal(providerSection)
+	config["provider"] = providerJSON
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+
+	// Backup
+	_ = os.WriteFile(path+".bak", data, 0644)
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

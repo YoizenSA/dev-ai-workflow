@@ -476,7 +476,7 @@ var daemonCmd = &cobra.Command{
 
 		// Normal HTTP server mode
 		port, _ := cmd.Flags().GetInt("port")
-		s := kanban.New(port)
+		s := kanban.New(port, "")
 		fmt.Printf("ywai Kanban server running on http://localhost:%d\n", s.Port())
 		return s.Start()
 	},

@@ -97,7 +97,6 @@ func TestInstallADOOpenCode_PreservesOtherPlugins(t *testing.T) {
 
 	writeJSON(t, configPath, map[string]any{
 		"plugin": []any{
-			"@slkiser/opencode-quota",
 			[]any{"@other/plugin", map[string]any{}},
 		},
 	})
@@ -115,13 +114,13 @@ func TestInstallADOOpenCode_PreservesOtherPlugins(t *testing.T) {
 	readJSON(t, configPath, &result)
 
 	plugins := result["plugin"].([]any)
-	if len(plugins) != 3 {
-		t.Fatalf("expected 3 plugins, got %d", len(plugins))
+	if len(plugins) != 2 {
+		t.Fatalf("expected 2 plugins, got %d", len(plugins))
 	}
 
-	// First two preserved
-	if plugins[0] != "@slkiser/opencode-quota" {
-		t.Fatalf("first plugin = %v, want @slkiser/opencode-quota", plugins[0])
+	// First plugin preserved
+	if plugins[0].([]any)[0] != "@other/plugin" {
+		t.Fatalf("first plugin = %v, want @other/plugin", plugins[0])
 	}
 }
 

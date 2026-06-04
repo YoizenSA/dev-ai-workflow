@@ -48,12 +48,12 @@ func TestMCPAdapter_Flow(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected tools array, got %T", resultMap["tools"])
 		}
-		if len(toolsRaw) != 5 {
-			t.Fatalf("expected 5 tools, got %d", len(toolsRaw))
+		if len(toolsRaw) != 6 {
+			t.Fatalf("expected 6 tools, got %d", len(toolsRaw))
 		}
 	} else {
-		if len(tools) != 5 {
-			t.Fatalf("expected 5 tools, got %d", len(tools))
+		if len(tools) != 6 {
+			t.Fatalf("expected 6 tools, got %d", len(tools))
 		}
 	}
 
