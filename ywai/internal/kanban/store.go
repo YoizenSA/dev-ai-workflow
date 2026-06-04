@@ -174,6 +174,27 @@ func (s *Store) CloseSession(id string) error {
 	return nil
 }
 
+// DeleteSession removes a session and all its delegations from the store.
+func (s *Store) DeleteSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	if _, ok := s.sessions[id]; !ok {
+		return fmt.Errorf("session %s not found", id)
+	}
+
+	// Remove all delegations belonging to this session.
+	for dID, d := range s.delegations {
+		if d.SessionID == id {
+			delete(s.delegations, dID)
+		}
+	}
+
+	delete(s.sessions, id)
+	return nil
+}
+
 // --- Delegation operations ---
 
 // CreateDelegation creates a new delegation in the specified session.

@@ -296,6 +296,20 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 				"properties": map[string]interface{}{},
 			},
 		},
+		{
+			"name":        "kanban_delete_session",
+			"description": "Delete a kanban session and all its delegations",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"session_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Session ID to delete",
+					},
+				},
+				"required": []string{"session_id"},
+			},
+		},
 	}
 
 	return &JSONRPCResponse{
@@ -329,6 +343,8 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 		result, err = m.callGetBoard(params.Arguments)
 	case "kanban_get_ui_url":
 		result, err = m.callGetUIURL()
+	case "kanban_delete_session":
+		result, err = m.callDeleteSession(params.Arguments)
 	default:
 		return m.errorResponse(req.ID, -32601, "Tool not found: "+params.Name)
 	}
@@ -590,6 +606,26 @@ func (m *MCPAdapter) callGetUIURL() (*ToolsCallResult, error) {
 	return &ToolsCallResult{
 		Content: []ToolContent{
 			{Type: "text", Text: fmt.Sprintf("🚀 ywai Kanban UI: %s\n📊 Open this URL in your browser to view the Kanban board", url)},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callDeleteSession(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	_, err := m.doRequest("DELETE", fmt.Sprintf("/api/sessions/%s", req.SessionID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: fmt.Sprintf("🗑️ Session %s deleted successfully.", req.SessionID)},
 		},
 	}, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -501,6 +502,125 @@ var uiCmd = &cobra.Command{
 	},
 }
 
+// ---------------------------------------------------------------------------
+// TokenBank commands
+// ---------------------------------------------------------------------------
+
+var tokenbankCmd = &cobra.Command{
+	Use:   "tokenbank",
+	Short: "Configure agents to use TokenBank proxy",
+}
+
+var tokenbankSetupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Save TokenBank URL and API key to ywai config",
+	Run: func(cmd *cobra.Command, args []string) {
+		url := getStringFlag(cmd, "url")
+		key := getStringFlag(cmd, "key")
+
+		if url == "" {
+			fmt.Fprintln(os.Stderr, "Error: --url is required")
+			os.Exit(1)
+		}
+		if key == "" {
+			fmt.Fprintln(os.Stderr, "Error: --key is required")
+			os.Exit(1)
+		}
+
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+
+		cfg.TokenBankURL = url
+		cfg.TokenBankAPIKey = key
+
+		if err := config.SaveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("TokenBank configuration saved.")
+		fmt.Printf("  URL: %s\n", url)
+		fmt.Printf("  Key: %s***\n", maskKey(key))
+
+		// Verify connection
+		fmt.Println("\nVerifying connection...")
+		models, err := tokenbank.FetchModels(url, key)
+		if err != nil {
+			fmt.Printf("  ⚠ Warning: could not connect to TokenBank: %v\n", err)
+			fmt.Println("  Config saved anyway. Run 'ywai tokenbank configure' when the server is available.")
+			return
+		}
+		fmt.Printf("  ✓ Connected! %d models available (default: %s)\n", len(models.Models), models.DefaultModel)
+	},
+}
+
+var tokenbankConfigureCmd = &cobra.Command{
+	Use:   "configure",
+	Short: "Configure agents to use TokenBank proxy",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+
+		if cfg.TokenBankURL == "" || cfg.TokenBankAPIKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: TokenBank not configured. Run 'ywai tokenbank setup --url <url> --key <key>' first.")
+			os.Exit(1)
+		}
+
+		agentFlag := getStringFlag(cmd, "agent")
+		fmt.Println("=== TokenBank Configure ===")
+		fmt.Printf("  Server: %s\n\n", cfg.TokenBankURL)
+
+		if agentFlag != "" {
+			// Configure a single agent
+			switch agentFlag {
+			case "opencode":
+				if err := tokenbank.ConfigureOpenCode(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
+					fmt.Fprintf(os.Stderr, "Error configuring opencode: %v\n", err)
+					os.Exit(1)
+				}
+			case "pi":
+				if err := tokenbank.ConfigurePi(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
+					fmt.Fprintf(os.Stderr, "Error configuring pi: %v\n", err)
+					os.Exit(1)
+				}
+			case "copilot":
+				if err := tokenbank.ConfigureCopilot(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
+					fmt.Fprintf(os.Stderr, "Error configuring copilot: %v\n", err)
+					os.Exit(1)
+				}
+			default:
+				fmt.Fprintf(os.Stderr, "Error: unknown agent %q. Use: opencode, pi, copilot\n", agentFlag)
+				os.Exit(1)
+			}
+		} else {
+			// Configure all agents
+			errors := tokenbank.ConfigureAll(cfg.TokenBankURL, cfg.TokenBankAPIKey)
+			if len(errors) > 0 {
+				fmt.Fprintln(os.Stderr, "\nSome agents failed:")
+				for _, e := range errors {
+					fmt.Fprintf(os.Stderr, "  ✗ %v\n", e)
+				}
+				os.Exit(1)
+			}
+		}
+
+		fmt.Println("\nDone! Restart your agents to pick up the new configuration.")
+	},
+}
+
+func maskKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	return key[:4] + strings.Repeat("*", len(key)-4)
+}
+
 func init() {
 	daemonCmd.Flags().IntP("port", "p", 5768, "Port for Kanban UI server")
 	daemonCmd.Flags().Bool("mcp", false, "Run as MCP server (stdio JSON-RPC)")
@@ -540,6 +660,16 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	
 	rootCmd.AddCommand(statusCmd)
+
+	// TokenBank commands
+	tokenbankSetupCmd.Flags().String("url", "", "TokenBank instance URL (e.g. https://tokenbank.example.com)")
+	tokenbankSetupCmd.Flags().String("key", "", "TokenBank proxy API key")
+	tokenbankCmd.AddCommand(tokenbankSetupCmd)
+
+	tokenbankConfigureCmd.Flags().String("agent", "", "Agent to configure: opencode, copilot, pi (default: all)")
+	tokenbankCmd.AddCommand(tokenbankConfigureCmd)
+
+	rootCmd.AddCommand(tokenbankCmd)
 }
 
 func isInteractiveTerminal() bool {

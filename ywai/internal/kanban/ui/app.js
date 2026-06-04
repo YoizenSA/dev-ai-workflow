@@ -36,6 +36,7 @@
 	const sessionSelect = $("#session-select");
 	const newSessionBtn = $("#new-session-btn");
 	const closeSessionBtn = $("#close-session-btn");
+	const deleteSessionBtn = $("#delete-session-btn");
 	const wsStatus = $("#ws-status");
 
 	const sessionModal = $("#session-modal");
@@ -190,6 +191,18 @@
 					moveCardOnBoard(payload);
 				}
 				break;
+
+			case "session.deleted":
+				if (currentSessionId && payload.session_id === currentSessionId) {
+					currentSessionId = null;
+					boardData = null;
+					loadSessions();
+					renderBoard();
+					showToast("Session was deleted");
+				} else {
+					loadSessions();
+				}
+				break;
 		}
 	}
 
@@ -262,6 +275,11 @@
 			closeSessionBtn.style.display = "inline-flex";
 		} else {
 			closeSessionBtn.style.display = "none";
+		}
+		if (current) {
+			deleteSessionBtn.style.display = "inline-flex";
+		} else {
+			deleteSessionBtn.style.display = "none";
 		}
 	}
 
@@ -677,6 +695,30 @@
 				body: JSON.stringify({ status: "closed" }),
 			});
 			showToast("Session closed successfully!");
+		} catch (e) {
+			showToast(`Error: ${e.message}`);
+		}
+	});
+
+	deleteSessionBtn.addEventListener("click", async () => {
+		if (!currentSessionId) return;
+		if (
+			!confirm(
+				"⚠️ Are you sure you want to DELETE this session? This will permanently remove the session and all its delegations. This action cannot be undone.",
+			)
+		) {
+			return;
+		}
+
+		try {
+			await apiFetch(`/api/sessions/${currentSessionId}`, {
+				method: "DELETE",
+			});
+			currentSessionId = null;
+			boardData = null;
+			await loadSessions();
+			renderBoard();
+			showToast("Session deleted successfully!");
 		} catch (e) {
 			showToast(`Error: ${e.message}`);
 		}

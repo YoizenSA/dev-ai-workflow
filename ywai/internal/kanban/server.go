@@ -40,6 +40,7 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("POST /api/sessions", handlers.CreateSession)
 	mux.HandleFunc("GET /api/sessions/{id}", handlers.GetSession)
 	mux.HandleFunc("PATCH /api/sessions/{id}", handlers.UpdateSession)
+	mux.HandleFunc("DELETE /api/sessions/{id}", handlers.DeleteSession)
 
 	// Board route
 	mux.HandleFunc("GET /api/sessions/{id}/board", handlers.GetBoard)

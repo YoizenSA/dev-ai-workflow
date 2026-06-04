@@ -39,6 +39,10 @@ type UserConfig struct {
 	
 	// Custom skills directory
 	CustomSkillsDir string `yaml:"custom_skills_dir,omitempty"`
+
+	// TokenBank proxy configuration
+	TokenBankURL    string `yaml:"tokenbank_url,omitempty"`
+	TokenBankAPIKey string `yaml:"tokenbank_api_key,omitempty"`
 }
 
 // ConfigPath returns the path to the user config file

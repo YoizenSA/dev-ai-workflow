@@ -225,6 +225,16 @@ func (h *Handlers) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+func (h *Handlers) DeleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := h.store.DeleteSession(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	h.broadcastUpdate("session.deleted", map[string]string{"session_id": id})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "session deleted"})
+}
+
 // --- Board handler ---
 
 func (h *Handlers) GetBoard(w http.ResponseWriter, r *http.Request) {
