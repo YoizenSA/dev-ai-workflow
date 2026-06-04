@@ -600,3 +600,457 @@ func TestMapToAgentProfile(t *testing.T) {
 		t.Error("bash permission should be allow")
 	}
 }
+
+// ─── Agent Group tests ──────────────────────────────────────────────────────
+
+// writeGroupsJSON is a test helper that writes a groups.json file to dir.
+func writeGroupsJSON(t *testing.T, dir, content string) {
+	t.Helper()
+	path := filepath.Join(dir, "groups.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write groups.json: %v", err)
+	}
+}
+
+// writeLocalGroupsJSON is a test helper that writes a groups.local.json file to dir.
+func writeLocalGroupsJSON(t *testing.T, dir, content string) {
+	t.Helper()
+	path := filepath.Join(dir, "groups.local.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write groups.local.json: %v", err)
+	}
+}
+
+// writeAgentDir creates a minimal agent directory that LoadProfiles will recognise.
+func writeAgentDir(t *testing.T, parentDir, name string) {
+	t.Helper()
+	agentDir := filepath.Join(parentDir, name)
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatalf("failed to create agent dir %s: %v", agentDir, err)
+	}
+	agendPath := filepath.Join(agentDir, "AGENT.md")
+	content := "---\nname: " + name + "\ndescription: " + name + " agent\ntools: [Read]\n---\n\nBody"
+	if err := os.WriteFile(agendPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write AGENT.md for %s: %v", name, err)
+	}
+	permPath := filepath.Join(agentDir, "permissions.json")
+	permContent := `{"read": true, "edit": false}`
+	if err := os.WriteFile(permPath, []byte(permContent), 0o644); err != nil {
+		t.Fatalf("failed to write permissions.json for %s: %v", name, err)
+	}
+}
+
+func TestLoadGroupManifest_Valid(t *testing.T) {
+	dir := t.TempDir()
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core development agents",
+				"agents": ["orchestrator", "dev", "qa"]
+			},
+			"social-refactor": {
+				"description": "Social refactoring agents",
+				"agents": ["reviewer", "architect"]
+			}
+		}
+	}`)
+
+	manifest, err := LoadGroupManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadGroupManifest() unexpected error: %v", err)
+	}
+	if manifest == nil {
+		t.Fatal("LoadGroupManifest() returned nil")
+	}
+
+	// Check groups exist
+	core, ok := manifest.Groups["core"]
+	if !ok {
+		t.Fatal("expected 'core' group")
+	}
+	if core.Description != "Core development agents" {
+		t.Errorf("core description = %q, want %q", core.Description, "Core development agents")
+	}
+	if len(core.Agents) != 3 || core.Agents[0] != "orchestrator" {
+		t.Errorf("core agents = %v, want [orchestrator dev qa]", core.Agents)
+	}
+
+	social, ok := manifest.Groups["social-refactor"]
+	if !ok {
+		t.Fatal("expected 'social-refactor' group")
+	}
+	if social.Description != "Social refactoring agents" {
+		t.Errorf("social-refactor description = %q, want %q", social.Description, "Social refactoring agents")
+	}
+	if len(social.Agents) != 2 || social.Agents[0] != "reviewer" {
+		t.Errorf("social-refactor agents = %v, want [reviewer architect]", social.Agents)
+	}
+}
+
+func TestLoadGroupManifest_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	// No groups.json written
+
+	_, err := LoadGroupManifest(dir)
+	if err == nil {
+		t.Fatal("LoadGroupManifest() expected error for missing groups.json, got nil")
+	}
+	if !strings.Contains(err.Error(), "groups.json") {
+		t.Errorf("error should mention groups.json, got: %v", err)
+	}
+}
+
+func TestLoadGroupManifest_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	writeGroupsJSON(t, dir, `{invalid json here}`)
+
+	_, err := LoadGroupManifest(dir)
+	if err == nil {
+		t.Fatal("LoadGroupManifest() expected error for invalid JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid groups.json") {
+		t.Errorf("error should mention invalid groups.json, got: %v", err)
+	}
+}
+
+func TestLoadGroupManifest_LocalOverride(t *testing.T) {
+	dir := t.TempDir()
+	// Base groups.json
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["dev"]
+			}
+		}
+	}`)
+	// Local override adds a group
+	writeLocalGroupsJSON(t, dir, `{
+		"groups": {
+			"custom": {
+				"description": "Custom agents",
+				"agents": ["qa", "reviewer"]
+			}
+		}
+	}`)
+
+	manifest, err := LoadGroupManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadGroupManifest() unexpected error: %v", err)
+	}
+
+	// Both groups should exist
+	if _, ok := manifest.Groups["core"]; !ok {
+		t.Error("expected 'core' group after merge")
+	}
+	custom, ok := manifest.Groups["custom"]
+	if !ok {
+		t.Fatal("expected 'custom' group from local override")
+	}
+	if custom.Description != "Custom agents" {
+		t.Errorf("custom description = %q, want %q", custom.Description, "Custom agents")
+	}
+}
+
+func TestLoadGroupManifest_LocalOverride_MergesWithBase(t *testing.T) {
+	dir := t.TempDir()
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["dev"]
+			},
+			"extra": {
+				"description": "Extra agents",
+				"agents": ["reviewer"]
+			}
+		}
+	}`)
+	// Local override overrides "extra" description
+	writeLocalGroupsJSON(t, dir, `{
+		"groups": {
+			"extra": {
+				"description": "Overridden extra agents",
+				"agents": ["reviewer", "architect"]
+			}
+		}
+	}`)
+
+	manifest, err := LoadGroupManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadGroupManifest() unexpected error: %v", err)
+	}
+
+	// core should still be present
+	if _, ok := manifest.Groups["core"]; !ok {
+		t.Error("expected 'core' group to survive local override")
+	}
+	// extra should have overridden description
+	extra, ok := manifest.Groups["extra"]
+	if !ok {
+		t.Fatal("expected 'extra' group")
+	}
+	if extra.Description != "Overridden extra agents" {
+		t.Errorf("extra description = %q, want %q", extra.Description, "Overridden extra agents")
+	}
+	if len(extra.Agents) != 2 {
+		t.Errorf("extra agents = %v, want [reviewer architect]", extra.Agents)
+	}
+}
+
+func TestLoadProfilesByGroup_AllGroups(t *testing.T) {
+	dir := t.TempDir()
+	// Create a few agent dirs
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+	writeAgentDir(t, dir, "qa")
+
+	// No groups.json — AllGroups=true should skip groups and load all
+	filter := GroupFilter{AllGroups: true}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
+	}
+	if len(profiles) != 3 {
+		t.Errorf("expected 3 profiles with AllGroups=true, got %d", len(profiles))
+	}
+	for _, name := range []string{"orchestrator", "dev", "qa"} {
+		if _, ok := profiles[name]; !ok {
+			t.Errorf("expected profile %q with AllGroups=true", name)
+		}
+	}
+}
+
+func TestLoadProfilesByGroup_CoreOnly(t *testing.T) {
+	dir := t.TempDir()
+	// Agent dirs — some in core, some not
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+	writeAgentDir(t, dir, "qa")
+	writeAgentDir(t, dir, "external-agent")
+
+	// groups.json: only core agents
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["orchestrator", "dev", "qa"]
+			}
+		}
+	}`)
+
+	filter := GroupFilter{}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
+	}
+
+	// Core agents must be present
+	for _, name := range []string{"orchestrator", "dev", "qa"} {
+		if _, ok := profiles[name]; !ok {
+			t.Errorf("expected core agent %q in profiles", name)
+		}
+	}
+	// external-agent should NOT be present
+	if _, ok := profiles["external-agent"]; ok {
+		t.Error("external-agent should NOT be in core-only profiles")
+	}
+	if len(profiles) != 3 {
+		t.Errorf("expected 3 core agents, got %d: %v", len(profiles), profiles)
+	}
+}
+
+func TestLoadProfilesByGroup_WithAdditionalGroup(t *testing.T) {
+	dir := t.TempDir()
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+	writeAgentDir(t, dir, "reviewer")
+	writeAgentDir(t, dir, "architect")
+
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["orchestrator", "dev"]
+			},
+			"social-refactor": {
+				"description": "Social refactoring",
+				"agents": ["reviewer", "architect"]
+			}
+		}
+	}`)
+
+	filter := GroupFilter{Groups: []string{"social-refactor"}}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
+	}
+
+	// Core + social-refactor agents must be present
+	for _, name := range []string{"orchestrator", "dev", "reviewer", "architect"} {
+		if _, ok := profiles[name]; !ok {
+			t.Errorf("expected agent %q in profiles", name)
+		}
+	}
+	if len(profiles) != 4 {
+		t.Errorf("expected 4 agents, got %d: %v", len(profiles), profiles)
+	}
+}
+
+func TestLoadProfilesByGroup_BrokenGroupsJSON_Fallback(t *testing.T) {
+	dir := t.TempDir()
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+	writeAgentDir(t, dir, "qa")
+
+	// Invalid JSON = broken groups file
+	writeGroupsJSON(t, dir, `{broken`)
+
+	filter := GroupFilter{Groups: []string{"nonexistent"}}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() should fallback on broken JSON, got error: %v", err)
+	}
+	// Should fall back to all profiles
+	if len(profiles) != 3 {
+		t.Errorf("expected all 3 profiles in fallback, got %d", len(profiles))
+	}
+}
+
+func TestLoadProfilesByGroup_MissingGroupsJSON_Fallback(t *testing.T) {
+	dir := t.TempDir()
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+
+	// No groups.json at all
+	filter := GroupFilter{Groups: []string{"nonexistent"}}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() should fallback on missing groups.json, got error: %v", err)
+	}
+	if len(profiles) != 2 {
+		t.Errorf("expected all 2 profiles in fallback, got %d", len(profiles))
+	}
+}
+
+func TestLoadProfilesByGroup_UnknownGroup(t *testing.T) {
+	dir := t.TempDir()
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+	writeAgentDir(t, dir, "qa")
+
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["orchestrator", "dev", "qa"]
+			}
+		}
+	}`)
+
+	// Request a non-existent group — should just return core agents (no error)
+	filter := GroupFilter{Groups: []string{"does-not-exist"}}
+	profiles, err := LoadProfilesByGroup(dir, filter)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error for unknown group: %v", err)
+	}
+	// Should still return core
+	if len(profiles) != 3 {
+		t.Errorf("expected 3 core agents with unknown group filter, got %d", len(profiles))
+	}
+}
+
+func TestGroupFilter_ZeroValue(t *testing.T) {
+	// Zero-value GroupFilter should have AllGroups=false and nil Groups
+	var f GroupFilter
+	if f.AllGroups {
+		t.Error("zero-value GroupFilter should have AllGroups=false")
+	}
+	if f.Groups != nil {
+		t.Error("zero-value GroupFilter should have nil Groups")
+	}
+
+	// A zero-value filter should only include core agents
+	dir := t.TempDir()
+	writeAgentDir(t, dir, "core-agent")
+	writeAgentDir(t, dir, "non-core-agent")
+
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["core-agent"]
+			}
+		}
+	}`)
+
+	profiles, err := LoadProfilesByGroup(dir, f)
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
+	}
+	if _, ok := profiles["core-agent"]; !ok {
+		t.Error("expected core-agent with zero-value GroupFilter")
+	}
+	if _, ok := profiles["non-core-agent"]; ok {
+		t.Error("non-core-agent should NOT be in zero-value GroupFilter profiles")
+	}
+}
+
+func TestListGroups_Sorted(t *testing.T) {
+	dir := t.TempDir()
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"social-refactor": {
+				"description": "Social refactoring",
+				"agents": []
+			},
+			"core": {
+				"description": "Core agents",
+				"agents": []
+			},
+			"alpha": {
+				"description": "Alpha group",
+				"agents": []
+			}
+		}
+	}`)
+
+	names, err := ListGroups(dir)
+	if err != nil {
+		t.Fatalf("ListGroups() unexpected error: %v", err)
+	}
+
+	// Must be sorted alphabetically: alpha, core, social-refactor
+	expected := []string{"alpha", "core", "social-refactor"}
+	if len(names) != len(expected) {
+		t.Fatalf("ListGroups() = %v (len=%d), want %v (len=%d)", names, len(names), expected, len(expected))
+	}
+	for i, name := range names {
+		if name != expected[i] {
+			t.Errorf("ListGroups()[%d] = %q, want %q", i, name, expected[i])
+		}
+	}
+}
+
+func TestListGroups_Empty(t *testing.T) {
+	dir := t.TempDir()
+	writeGroupsJSON(t, dir, `{
+		"groups": {}
+	}`)
+
+	names, err := ListGroups(dir)
+	if err != nil {
+		t.Fatalf("ListGroups() unexpected error: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("expected empty list for no groups, got %v", names)
+	}
+}
+
+func TestListGroups_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ListGroups(dir)
+	if err == nil {
+		t.Fatal("ListGroups() expected error for missing groups.json")
+	}
+}

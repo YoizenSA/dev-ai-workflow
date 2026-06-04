@@ -1,0 +1,21 @@
+{
+  "groups": {
+    "core": {
+      "description": "Core agent profiles — always installed",
+      "agents": [
+        "orchestrator",
+        "ask",
+        "dev",
+        "qa",
+        "architect",
+        "reviewer",
+        "devops",
+        "finder"
+      ]
+    },
+    "social-refactor": {
+      "description": "Social refactoring and collaboration agents",
+      "agents": []
+    }
+  }
+}

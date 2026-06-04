@@ -153,7 +153,7 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, installADO bool) {
+func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, installADO bool, groupFilter agentprofiles.GroupFilter) {
 	var agents []agent.Agent
 	if opts.AgentName != "" {
 		a, err := agent.FindByName(opts.AgentName)
@@ -215,7 +215,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		}
 
 		fmt.Println("\n[3.5/3] Installing agent profiles...")
-		installAgentProfiles(agents, opts.DryRun)
+		installAgentProfiles(agents, opts.DryRun, groupFilter)
 
 		fmt.Println("\n[3.6/3] Applying ywai overrides...")
 		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
@@ -233,7 +233,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 	fmt.Println("  2. Run `ywai skills` to see available skills")
 }
 
-func installAgentProfiles(agents []agent.Agent, dryRun bool) {
+func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofiles.GroupFilter) {
 	// Always read agent profiles from the seeded data dir (~/.ywai/agents).
 	// If it's empty, seed it from embedded data first.
 	if !config.IsDirPopulated(config.DataAgentsDir()) {
@@ -244,7 +244,13 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool) {
 	}
 
 	sourceDir := config.DataAgentsDir()
-	profiles, err := agentprofiles.LoadProfiles(sourceDir)
+	var profiles map[string]agentprofiles.AgentProfile
+	var err error
+	if filter.AllGroups || len(filter.Groups) == 0 {
+		profiles, err = agentprofiles.LoadProfiles(sourceDir)
+	} else {
+		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, filter)
+	}
 	if err != nil {
 		fmt.Printf("  Warning: failed to load agent profiles: %v\n", err)
 		return

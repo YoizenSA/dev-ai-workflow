@@ -12,6 +12,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 	"github.com/spf13/cobra"
@@ -38,6 +39,7 @@ var installCmd = &cobra.Command{
 		var installMCP bool
 		var globalOnly bool
 		var preset, scope, sddMode, persona string
+		var groupFilter agentprofiles.GroupFilter
 
 		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
 			if !isInteractiveTerminal() {
@@ -61,6 +63,7 @@ var installCmd = &cobra.Command{
 			scope = result.Scope
 			sddMode = result.SDDMode
 			persona = result.Persona
+			groupFilter = result.GroupFilter
 		} else {
 			installMCP = mcpFlag
 			globalOnly = globalFlag
@@ -68,6 +71,12 @@ var installCmd = &cobra.Command{
 			scope = getStringFlag(cmd, "scope")
 			sddMode = getStringFlag(cmd, "sdd-mode")
 			persona = getStringFlag(cmd, "persona")
+			groups := getStringSliceFlag(cmd, "group")
+			allGroups := getBoolFlag(cmd, "all-groups")
+			groupFilter = agentprofiles.GroupFilter{
+				Groups:    groups,
+				AllGroups: allGroups,
+			}
 		}
 
 		installOpts := gentlai.InstallOptions{
@@ -81,7 +90,7 @@ var installCmd = &cobra.Command{
 
 		adoFlag := getBoolFlag(cmd, "ado")
 
-		executeInstall(installOpts, installMCP, globalOnly, adoFlag)
+		executeInstall(installOpts, installMCP, globalOnly, adoFlag, groupFilter)
 	},
 }
 
@@ -462,6 +471,32 @@ var statusCmd = &cobra.Command{
 	},
 }
 
+var groupsCmd = &cobra.Command{
+	Use:   "groups",
+	Short: "List available agent groups",
+	Long:  "List available agent groups from groups.json. Core group is always installed.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if !config.IsDirPopulated(config.DataAgentsDir()) {
+			if err := config.SeedAgentsFromEmbedded(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: no agent data available: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		names, err := agentprofiles.ListGroups(config.DataAgentsDir())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if len(names) == 0 {
+			fmt.Println("No groups found.")
+			return
+		}
+		for _, name := range names {
+			fmt.Println(name)
+		}
+	},
+}
+
 // daemonCmd starts the Kanban UI server.
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
@@ -639,6 +674,8 @@ func init() {
 	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
 	installCmd.Flags().Bool("ado", false, "Install Azure DevOps plugin (opencode + pi)")
+	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
+	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 
 	updateCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	updateCmd.Flags().Bool("strict-tdd", false, "Enable Strict TDD Mode for SDD agents")
@@ -660,6 +697,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(groupsCmd)
 
 	// TokenBank commands
 	tokenbankSetupCmd.Flags().String("url", "", "TokenBank instance URL (e.g. https://tokenbank.example.com)")
@@ -683,5 +721,10 @@ func getStringFlag(cmd *cobra.Command, name string) string {
 
 func getBoolFlag(cmd *cobra.Command, name string) bool {
 	v, _ := cmd.Flags().GetBool(name)
+	return v
+}
+
+func getStringSliceFlag(cmd *cobra.Command, name string) []string {
+	v, _ := cmd.Flags().GetStringSlice(name)
 	return v
 }

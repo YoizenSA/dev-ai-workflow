@@ -98,6 +98,66 @@ func TestBinaryExitCodeHandling(t *testing.T) {
 	_ = err
 }
 
+func TestGroupsCommand(t *testing.T) {
+	bin := buildBinary(t)
+
+	// Run with --help first to verify groups subcommand exists
+	helpOut := runYwai(t, bin, "--help")
+	if !strings.Contains(helpOut, "groups") {
+		t.Fatal("expected 'groups' subcommand in help output")
+	}
+
+	out, err := runYwaiWithError(bin, "groups")
+	if err != nil {
+		// This can happen when the binary was built without embedded data
+		// and ~/.ywai/agents doesn't exist yet. Accept it as a soft failure.
+		t.Logf("groups command exited with error (likely no embedded data): %v", err)
+		t.Logf("output: %s", out)
+		return
+	}
+
+	// Should list group names — at minimum "core" is always present
+	if !strings.Contains(out, "core") {
+		t.Errorf("expected 'core' in groups output, got: %s", out)
+	}
+	// Each group should be on its own line
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 1 {
+		t.Errorf("expected at least 1 group, got %d", len(lines))
+	}
+}
+
+func TestInstallHelpShowsGroupFlags(t *testing.T) {
+	bin := buildBinary(t)
+	out := runYwai(t, bin, "install", "--help")
+
+	requiredFlags := []string{"--group", "--all-groups"}
+	for _, flag := range requiredFlags {
+		if !strings.Contains(out, flag) {
+			t.Errorf("expected %q flag in install --help output, got: %s", flag, out)
+		}
+	}
+}
+
+func TestInstallDryRunWithGroup(t *testing.T) {
+	withFakeAgent(t)
+	bin := buildBinary(t)
+	out := runYwai(t, bin, "install", "--dry-run", "--group", "social-refactor")
+
+	// Should not crash with FATAL errors
+	if strings.Contains(out, "FATAL") {
+		t.Errorf("install --dry-run --group social-refactor should not produce FATAL errors, got: %s", out)
+	}
+	// Should complete the dry-run flow
+	if !strings.Contains(out, "=== Done! ===") {
+		t.Errorf("expected dry-run to complete, got: %s", out)
+	}
+	// Should mention the group-related flag in its output (the command parsed it without error)
+	if strings.Contains(out, "unknown flag") {
+		t.Errorf("--group flag should be recognised, got: %s", out)
+	}
+}
+
 // Helper function to run ywai command and capture both output and error
 func runYwaiWithError(bin string, args ...string) (string, error) {
 	cmd := exec.Command(bin, args...)

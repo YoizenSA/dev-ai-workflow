@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -19,6 +20,23 @@ type AgentProfile struct {
 	Permission  map[string]string
 	Skills      []string
 	Mode        string
+}
+
+// GroupManifest represents the groups.json file.
+type GroupManifest struct {
+	Groups map[string]GroupDefinition `json:"groups"`
+}
+
+// GroupDefinition defines a single agent group.
+type GroupDefinition struct {
+	Description string   `json:"description"`
+	Agents      []string `json:"agents"`
+}
+
+// GroupFilter controls which groups to install.
+type GroupFilter struct {
+	Groups    []string // group names to include (in addition to core)
+	AllGroups bool     // install ALL groups (backward compat)
 }
 
 
@@ -663,4 +681,98 @@ func mapToAgentProfile(name string, m map[string]any) AgentProfile {
 		Permission:  permission,
 		Mode:        mode,
 	}
+}
+
+// LoadGroupManifest loads and parses groups.json, merging with groups.local.json if present.
+func LoadGroupManifest(sourceDir string) (*GroupManifest, error) {
+	manifest := &GroupManifest{Groups: make(map[string]GroupDefinition)}
+
+	path := filepath.Join(sourceDir, "groups.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read groups.json: %w", err)
+	}
+
+	var base GroupManifest
+	if err := json.Unmarshal(data, &base); err != nil {
+		return nil, fmt.Errorf("invalid groups.json: %w", err)
+	}
+	for k, v := range base.Groups {
+		manifest.Groups[k] = v
+	}
+
+	// Try local override (groups.local.json)
+	localPath := filepath.Join(sourceDir, "groups.local.json")
+	if localData, err := os.ReadFile(localPath); err == nil {
+		var local GroupManifest
+		if err := json.Unmarshal(localData, &local); err == nil {
+			for k, v := range local.Groups {
+				manifest.Groups[k] = v
+			}
+		}
+	}
+
+	return manifest, nil
+}
+
+// LoadProfilesByGroup loads agent profiles filtered by group.
+func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]AgentProfile, error) {
+	if filter.AllGroups {
+		return LoadProfiles(sourceDir)
+	}
+
+	manifest, err := LoadGroupManifest(sourceDir)
+	if err != nil {
+		// Fallback: if groups.json is broken/missing, load all
+		return LoadProfiles(sourceDir)
+	}
+
+	// Build set of allowed agent names
+	allowed := make(map[string]bool)
+
+	// Core is always included
+	if core, ok := manifest.Groups["core"]; ok {
+		for _, name := range core.Agents {
+			allowed[name] = true
+		}
+	}
+
+	// Add requested groups
+	for _, groupName := range filter.Groups {
+		if def, ok := manifest.Groups[groupName]; ok {
+			for _, name := range def.Agents {
+				allowed[name] = true
+			}
+		}
+	}
+
+	// Load all profiles, then filter
+	allProfiles, err := LoadProfiles(sourceDir)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]AgentProfile)
+	for name, profile := range allProfiles {
+		if allowed[name] {
+			result[name] = profile
+		}
+	}
+
+	return result, nil
+}
+
+// ListGroups returns available group names sorted alphabetically.
+func ListGroups(sourceDir string) ([]string, error) {
+	manifest, err := LoadGroupManifest(sourceDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var names []string
+	for name := range manifest.Groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }

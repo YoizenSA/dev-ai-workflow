@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -105,13 +108,14 @@ type agentOption struct {
 }
 
 type TUIResult struct {
-	Agent      string
-	MCP        bool
-	GlobalOnly bool
-	Preset     string
-	Scope      string
-	SDDMode    string
-	Persona    string
+	Agent       string
+	MCP         bool
+	GlobalOnly  bool
+	Preset      string
+	Scope       string
+	SDDMode     string
+	Persona     string
+	GroupFilter agents.GroupFilter
 }
 
 type Model struct {
@@ -134,6 +138,13 @@ type Model struct {
 
 	// MCP selection
 	installMicrosoftLearnMCP bool
+
+	// Agent groups selection
+	availableGroups []agents.GroupDefinition
+	selectedGroups  map[string]bool
+	groupNames      []string
+	groupCursor     int
+	showGroupOptions bool
 
 	// Progress state
 	installOutput []string
@@ -161,13 +172,14 @@ func NewModel(detectedAgents []agent.Agent) Model {
 	}
 
 	return Model{
-		step:       stepWelcome,
-		agents:     agentOpts,
-		presetIdx:  0,
-		scopeIdx:   0,
-		globalOnly: true,
-		sddModeIdx: 1,
-		personaIdx: 0,
+		step:           stepWelcome,
+		agents:         agentOpts,
+		presetIdx:      0,
+		scopeIdx:       0,
+		globalOnly:     true,
+		sddModeIdx:     1,
+		personaIdx:     0,
+		selectedGroups: make(map[string]bool),
 	}
 }
 
@@ -193,6 +205,55 @@ func (m *Model) shouldShowMCPStep() bool {
 		}
 	}
 	return false
+}
+
+// LoadGroups loads the group manifest from the given source directory
+// and populates the available/selected groups for the TUI.
+func (m *Model) LoadGroups(sourceDir string) error {
+	manifest, err := agents.LoadGroupManifest(sourceDir)
+	if err != nil {
+		return err
+	}
+	m.availableGroups = nil
+	m.groupNames = nil
+	m.selectedGroups = make(map[string]bool)
+	// Core is always first
+	if def, ok := manifest.Groups["core"]; ok {
+		m.availableGroups = append(m.availableGroups, def)
+		m.groupNames = append(m.groupNames, "core")
+		m.selectedGroups["core"] = true
+	}
+	// All other groups in insertion order
+	for name, def := range manifest.Groups {
+		if name == "core" {
+			continue
+		}
+		m.availableGroups = append(m.availableGroups, def)
+		m.groupNames = append(m.groupNames, name)
+		m.selectedGroups[name] = false
+	}
+	return nil
+}
+
+// GroupFilter builds a GroupFilter from the current selection.
+func (m *Model) GroupFilter() agents.GroupFilter {
+	var groups []string
+	for name, selected := range m.selectedGroups {
+		if selected && name != "core" {
+			groups = append(groups, name)
+		}
+	}
+	return agents.GroupFilter{Groups: groups}
+}
+
+// toggleGroup toggles the currently selected group (unless it's "core").
+func (m *Model) toggleGroup() {
+	if m.groupCursor >= 0 && m.groupCursor < len(m.groupNames) {
+		name := m.groupNames[m.groupCursor]
+		if name != "core" {
+			m.selectedGroups[name] = !m.selectedGroups[name]
+		}
+	}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -283,7 +344,9 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 		m.selectedAgent = m.agents[m.agentCursor].Name
 		m.step = stepOptions
 	case stepOptions:
-		if m.shouldShowMCPStep() {
+		if m.showGroupOptions {
+			m.toggleGroup()
+		} else if m.shouldShowMCPStep() {
 			m.step = stepMCP
 		} else {
 			m.step = stepConfirm
@@ -311,8 +374,18 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 			m.agentCursor--
 		}
 	case stepOptions:
-		if m.optionsCursor > 0 {
-			m.optionsCursor--
+		if m.showGroupOptions {
+			if m.groupCursor > 0 {
+				m.groupCursor--
+			} else {
+				// Move back to options rows
+				m.showGroupOptions = false
+				m.optionsCursor = 4
+			}
+		} else {
+			if m.optionsCursor > 0 {
+				m.optionsCursor--
+			}
 		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
@@ -327,8 +400,18 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 			m.agentCursor++
 		}
 	case stepOptions:
-		if m.optionsCursor < 4 {
-			m.optionsCursor++
+		if m.showGroupOptions {
+			if m.groupCursor < len(m.groupNames)-1 {
+				m.groupCursor++
+			}
+		} else {
+			if m.optionsCursor < 4 {
+				m.optionsCursor++
+			} else if len(m.groupNames) > 0 {
+				// Move to group selection
+				m.showGroupOptions = true
+				m.groupCursor = 0
+			}
 		}
 	case stepMCP:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
@@ -338,14 +421,22 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleLeft() (tea.Model, tea.Cmd) {
 	if m.step == stepOptions {
-		m.cycleOption(-1)
+		if m.showGroupOptions {
+			m.toggleGroup()
+		} else {
+			m.cycleOption(-1)
+		}
 	}
 	return m, nil
 }
 
 func (m *Model) handleRight() (tea.Model, tea.Cmd) {
 	if m.step == stepOptions {
-		m.cycleOption(1)
+		if m.showGroupOptions {
+			m.toggleGroup()
+		} else {
+			m.cycleOption(1)
+		}
 	}
 	return m, nil
 }
@@ -556,12 +647,66 @@ func (m *Model) viewOptions() string {
 		b.WriteString(fmt.Sprintf("  %s %s%s%s%s\n", cursor, label, pad, value, arrows))
 	}
 
+	// Agent groups section
+	if len(m.groupNames) > 0 {
+		b.WriteString("\n")
+		b.WriteString(titleStyle.Render("  Agent Groups"))
+
+		for i, name := range m.groupNames {
+			gCursor := "  "
+			if m.showGroupOptions && i == m.groupCursor {
+				gCursor = selStyle.Render("▶")
+			}
+
+			checked := " "
+			if m.selectedGroups[name] {
+				checked = "x"
+			}
+
+			gName := itemStyle.Render(name)
+			gDesc := ""
+			if i < len(m.availableGroups) {
+				gDesc = m.availableGroups[i].Description
+			}
+
+			if name == "core" {
+				desc := descStyle.Render("  " + gDesc)
+				b.WriteString(fmt.Sprintf("  %s [%s] %s %s\n", gCursor, checked, gName, desc))
+			} else {
+				desc := descStyle.Render("  " + gDesc)
+				b.WriteString(fmt.Sprintf("  %s [%s] %s%s\n", gCursor, checked, gName, desc))
+			}
+		}
+	}
+
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  ←/→ change  •  Enter continue  •  Esc back"))
+	if m.showGroupOptions {
+		b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  Space/Enter toggle  •  Esc back"))
+	} else {
+		b.WriteString(dimStyle.Render("  ↑/↓ navigate  •  ←/→ change  •  Enter continue  •  Esc back"))
+	}
 
 	// Show description of selected option
 	b.WriteString("\n\n")
-	switch m.optionsCursor {
+	if m.showGroupOptions {
+		if m.groupCursor >= 0 && m.groupCursor < len(m.groupNames) {
+			name := m.groupNames[m.groupCursor]
+			if name == "core" {
+				b.WriteString(dimStyle.Render("  Core agent group (always installed)"))
+			} else {
+				desc := ""
+				if m.groupCursor < len(m.availableGroups) {
+					desc = m.availableGroups[m.groupCursor].Description
+				}
+				if desc != "" {
+					b.WriteString(dimStyle.Render("  " + desc))
+				} else {
+					b.WriteString(dimStyle.Render("  " + name))
+				}
+			}
+		}
+	} else {
+		switch m.optionsCursor {
 	case 0: // Preset
 		desc := presetDescs[presetChoices[m.presetIdx]]
 		b.WriteString(dimStyle.Render("  " + desc))
@@ -580,6 +725,7 @@ func (m *Model) viewOptions() string {
 	case 4: // Persona
 		desc := personaDescs[personaChoices[m.personaIdx]]
 		b.WriteString(dimStyle.Render("  " + desc))
+		}
 	}
 
 	return b.String()
@@ -642,6 +788,20 @@ func (m *Model) viewConfirm() string {
 		{"Skills", "all extra skills"},
 	}
 
+	// Add selected groups
+	if len(m.selectedGroups) > 0 {
+		var groupNames []string
+		for name, selected := range m.selectedGroups {
+			if selected && name != "core" {
+				groupNames = append(groupNames, name)
+			}
+		}
+		if len(groupNames) > 0 {
+			sort.Strings(groupNames)
+			rows = append(rows, [2]string{"Groups", strings.Join(groupNames, ", ")})
+		}
+	}
+
 	if m.shouldShowMCPStep() {
 		mcpLabel := "no"
 		if m.installMicrosoftLearnMCP {
@@ -683,18 +843,22 @@ func (m *Model) GlobalOnly() bool {
 
 func (m *Model) Result() TUIResult {
 	return TUIResult{
-		Agent:      m.selectedAgent,
-		MCP:        m.installMicrosoftLearnMCP,
-		GlobalOnly: m.globalOnly,
-		Preset:     presetChoices[m.presetIdx],
-		Scope:      scopeChoices[m.scopeIdx],
-		SDDMode:    sddModeChoices[m.sddModeIdx],
-		Persona:    personaChoices[m.personaIdx],
+		Agent:       m.selectedAgent,
+		MCP:         m.installMicrosoftLearnMCP,
+		GlobalOnly:  m.globalOnly,
+		Preset:      presetChoices[m.presetIdx],
+		Scope:       scopeChoices[m.scopeIdx],
+		SDDMode:     sddModeChoices[m.sddModeIdx],
+		Persona:     personaChoices[m.personaIdx],
+		GroupFilter: m.GroupFilter(),
 	}
 }
 
 func Run(detectedAgents []agent.Agent) (TUIResult, error) {
 	m := NewModel(detectedAgents)
+	if err := m.LoadGroups(config.DataAgentsDir()); err != nil {
+		// Non-fatal: groups.json might not exist, TUI still works without groups
+	}
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
@@ -762,6 +926,13 @@ func (m *Model) runInstall() (string, error) {
 	}
 	if m.installMicrosoftLearnMCP {
 		args = append(args, "--mcp")
+	}
+
+	// Add selected agent groups (excluding core which is always included)
+	for name, selected := range m.selectedGroups {
+		if selected && name != "core" {
+			args = append(args, "--group", name)
+		}
 	}
 
 	cmd := exec.Command(ywaiBin, args...)
