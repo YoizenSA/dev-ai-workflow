@@ -37,6 +37,56 @@ ywai update
 
 ---
 
+## Local Development
+
+The `dev.sh` script wraps all local build/test workflows so you don't have to remember the commands.
+
+### Subcommands
+
+| Subcommand | What it does | When to use |
+|---|---|---|
+| `test` | Run all tests (`go test ./... -v`) | Before every commit |
+| `test-kanban` | Run only kanban tests (`go test ./internal/kanban/... -v`) | After touching kanban code |
+| `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
+| `build-full` | Full build WITH embedded skills/agents | Before pushing |
+| `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode/kilocode |
+| `check` | Full pipeline: test → build-full → verify → install | **Before pushing to main** |
+| `kanban` | Build + install + start kanban UI on port 5768 | To visually test the kanban board |
+| `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
+| `version` | Print the current dev version string | Debug |
+| `help` | Show all available subcommands | Reference |
+
+### Typical workflows
+
+**Before every commit:**
+```bash
+cd ywai && bash scripts/dev.sh check
+```
+
+**Quick iteration loop (no embedded):**
+```bash
+cd ywai && bash scripts/dev.sh build
+```
+
+**Testing kanban changes:**
+```bash
+cd ywai && bash scripts/dev.sh test-kanban
+```
+
+**Visual kanban testing:**
+```bash
+cd ywai && bash scripts/dev.sh kanban
+# Opens http://localhost:5768
+```
+
+### Notes
+
+- The script auto-detects the project root (looks for `go.mod` with module `github.com/Yoizen/dev-ai-workflow/ywai`), so you can run it from any subdirectory
+- Two build modes exist: `build` (fast, reads skills from disk) vs `build-full` (bundles skills into the binary, like production)
+- After `install`, restart your AI agent (opencode, etc.) to pick up the new binary
+
+---
+
 ## Commands
 
 | Command | Description |
