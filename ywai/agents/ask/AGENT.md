@@ -72,6 +72,7 @@ You are a **primary agent**. If the user's request is outside your boundaries, i
 
 | Task type | Invoke |
 |---|---|
+| Multi-step goal / deliver a feature end-to-end | `@orchestrator` |
 | Write/edit/fix code | `@dev` |
 | Architecture/design | `@architect` |
 | Write tests | `@qa` |

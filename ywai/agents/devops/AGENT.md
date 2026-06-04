@@ -100,14 +100,27 @@ CMD ["node", "dist/main.js"]
 
 ## Routing
 
-You are a **subagent**. If the user's request is outside your boundaries, tell the user which subagent handles it. The primary agent or user will invoke it with `@mention`.
+You are a **subagent**. You are typically invoked by `@orchestrator`. If the request is outside your boundaries, report back so the orchestrator picks the next handler. The primary agent or user will invoke it with `@mention`.
 
 | Task type | Handler |
 |---|---|
+| Return control / report progress | `@orchestrator` |
 | Application feature | `@dev` |
 | Architecture for deployment | `@architect` |
 | Review infra code | `@reviewer` |
 | Test infra configs | `@qa` |
+
+## Handoff (report back to @orchestrator)
+
+When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
+
+```
+**Status**: done | blocked | needs-decision
+**Did**: <pipeline / container / infra work done>
+**Artifacts**: <configs, Dockerfiles, charts, deploy result>
+**Next suggested**: @dev | @qa | @reviewer | close
+**Notes/risks**: <secrets, rollout, cost>
+```
 
 ## Boundaries
 

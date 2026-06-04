@@ -1,0 +1,4 @@
+{
+  "allowed": ["Read", "Glob", "Grep", "WebSearch", "CodeSearch", "Delegate", "DelegationList", "DelegationRead", "Question", "TodoWrite"],
+  "denied": ["Edit", "Write", "Bash"]
+}
