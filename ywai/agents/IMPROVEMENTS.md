@@ -218,16 +218,24 @@ var engramToolMap = map[string]string{
 
 #### B. Add ENGRAM tools to orchestrator
 
-Update `orchestrator/tools.json` to include ENGRAM tools:
+Update `orchestrator/permissions.json` to include ENGRAM tools:
 
 ```json
 {
-  "allowed": [
-    "Read", "Glob", "Grep", "WebSearch", "CodeSearch",
-    "Delegate", "DelegationList", "DelegationRead", "Question", "TodoWrite",
-    "MemSave", "MemSearch", "MemContext", "MemSessionStart", "MemSessionEnd", "MemSessionSummary", "MemTimeline"
-  ],
-  "denied": ["Edit", "Write", "Bash"]
+  "read": "allow",
+  "glob": "allow",
+  "grep": "allow",
+  "websearch": "allow",
+  "code_search": "allow",
+  "task": "allow",
+  "delegate": "allow",
+  "delegation_list": "allow",
+  "delegation_read": "allow",
+  "question": "allow",
+  "todowrite": "allow",
+  "edit": "deny",
+  "write": "deny",
+  "bash": "deny"
 }
 ```
 

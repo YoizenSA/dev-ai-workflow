@@ -8,6 +8,7 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 |-------|------|----------|
 | `orchestrator` | Technical Lead | Multi-step goals: plan → test/implement → review → ship via delegation |
 | `ask` | Research & Q&A | Quick questions, explanations, research, analysis |
+| `finder` | Codebase Explorer | Search, navigate, and explore files and code (read-only) |
 | `dev` | Developer | Implementation, coding, debugging, refactoring |
 | `qa` | QA Engineer | Testing, test strategy, quality assurance |
 | `architect` | Architect | Design decisions, patterns, system design |
@@ -91,7 +92,7 @@ Each agent directory contains:
 agents/
 ├── ask/
 │   ├── AGENT.md        # System prompt (required)
-│   ├── tools.json      # Allowed tools (optional)
+│   ├── permissions.json # Tool permissions (optional)
 │   └── skills.txt      # Linked skills (optional)
 ├── dev/
 │   └── ...
@@ -106,18 +107,22 @@ The main system prompt. Uses the same SKILL.md frontmatter format:
 name: dev
 description: Implementation-focused developer agent
 role: developer
-tools: [Read, Edit, Write, Bash, Glob, Grep]
+mode: all
 ---
 ```
 
-### tools.json (optional)
+### permissions.json (optional)
 
-Override which tools the agent can use:
+Configure which tools the agent can use. Valid values are `allow`, `ask`, or `deny`:
 
 ```json
 {
-  "allowed": ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
-  "denied": []
+  "read": "allow",
+  "edit": "allow",
+  "write": "allow",
+  "bash": "allow",
+  "glob": "allow",
+  "grep": "allow"
 }
 ```
 
