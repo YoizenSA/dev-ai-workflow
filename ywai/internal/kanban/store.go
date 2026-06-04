@@ -30,13 +30,14 @@ func newID() string {
 
 // --- Session operations ---
 
-// CreateSession creates a new session with the given goal.
-func (s *Store) CreateSession(goal string) *Session {
+// CreateSession creates a new session with the given project and goal.
+func (s *Store) CreateSession(project, goal string) *Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	session := &Session{
 		ID:        newID(),
+		Project:   project,
 		Goal:      goal,
 		Status:    "active",
 		CreatedAt: time.Now(),

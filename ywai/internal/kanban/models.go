@@ -5,6 +5,7 @@ import "time"
 // Session represents a working session in the Kanban board.
 type Session struct {
 	ID        string    `json:"id"`
+	Project   string    `json:"project"` // repo/project name
 	Goal      string    `json:"goal"`
 	Status    string    `json:"status"` // active, closed
 	CreatedAt time.Time `json:"created_at"`

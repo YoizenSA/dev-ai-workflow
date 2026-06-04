@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -111,9 +112,13 @@ func NewMCPAdapter() *MCPAdapter {
 		// Best effort: the server may still be starting; proceed anyway
 	}
 
+	port := s.Port()
+	log.Printf("🚀 ywai Kanban UI: http://localhost:%d", port)
+	log.Printf("📊 Open this URL in your browser to view the Kanban board")
+
 	return &MCPAdapter{
 		server: s,
-		port:   s.Port(),
+		port:   port,
 		client: client,
 	}
 }
@@ -197,6 +202,10 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
+					"project": map[string]interface{}{
+						"type":        "string",
+						"description": "Project or repository name",
+					},
 					"goal": map[string]interface{}{
 						"type":        "string",
 						"description": "Session goal",
@@ -279,6 +288,14 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 				"required": []string{"session_id"},
 			},
 		},
+		{
+			"name":        "kanban_get_ui_url",
+			"description": "Get the Kanban UI URL to open in browser",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
 	}
 
 	return &JSONRPCResponse{
@@ -310,6 +327,8 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 		result, err = m.callListSessions()
 	case "kanban_get_board":
 		result, err = m.callGetBoard(params.Arguments)
+	case "kanban_get_ui_url":
+		result, err = m.callGetUIURL()
 	default:
 		return m.errorResponse(req.ID, -32601, "Tool not found: "+params.Name)
 	}
@@ -382,13 +401,14 @@ func (m *MCPAdapter) doRequest(method, path string, body []byte) ([]byte, error)
 
 func (m *MCPAdapter) callCreateSession(args json.RawMessage) (*ToolsCallResult, error) {
 	var req struct {
-		Goal string `json:"goal"`
+		Project string `json:"project"`
+		Goal    string `json:"goal"`
 	}
 	if err := json.Unmarshal(args, &req); err != nil {
 		return nil, err
 	}
 
-	body, err := json.Marshal(map[string]string{"goal": req.Goal})
+	body, err := json.Marshal(map[string]interface{}{"project": req.Project, "goal": req.Goal})
 	if err != nil {
 		return nil, err
 	}
@@ -403,9 +423,10 @@ func (m *MCPAdapter) callCreateSession(args json.RawMessage) (*ToolsCallResult, 
 		return nil, err
 	}
 
+	url := fmt.Sprintf("http://localhost:%d", m.port)
 	return &ToolsCallResult{
 		Content: []ToolContent{
-			{Type: "text", Text: fmt.Sprintf("Session created: %s (goal: %s)", session.ID, session.Goal)},
+			{Type: "text", Text: fmt.Sprintf("Session created: %s (goal: %s)\n🚀 Kanban UI: %s", session.ID, session.Goal, url)},
 		},
 	}, nil
 }
@@ -560,6 +581,15 @@ func (m *MCPAdapter) callGetBoard(args json.RawMessage) (*ToolsCallResult, error
 	return &ToolsCallResult{
 		Content: []ToolContent{
 			{Type: "text", Text: strings.Join(lines, "\n")},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callGetUIURL() (*ToolsCallResult, error) {
+	url := fmt.Sprintf("http://localhost:%d", m.port)
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: fmt.Sprintf("🚀 ywai Kanban UI: %s\n📊 Open this URL in your browser to view the Kanban board", url)},
 		},
 	}, nil
 }

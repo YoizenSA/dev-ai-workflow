@@ -38,6 +38,7 @@
 
     const sessionModal = $('#session-modal');
     const sessionForm = $('#session-form');
+    const sessionProject = $('#session-project');
     const sessionGoal = $('#session-goal');
     const sessionModalCancel = $('#session-modal-cancel');
     const sessionModalCloseIcon = $('#session-modal-close-icon');
@@ -212,7 +213,8 @@
             active.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.id;
-                opt.textContent = s.goal;
+                const projectLabel = s.project ? `[${s.project}] ` : '';
+                opt.textContent = projectLabel + s.goal;
                 if (s.id === currentSessionId) opt.selected = true;
                 optgroup.appendChild(opt);
             });
@@ -225,7 +227,8 @@
             closed.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.id;
-                opt.textContent = s.goal;
+                const projectLabel = s.project ? `[${s.project}] ` : '';
+                opt.textContent = projectLabel + s.goal;
                 if (s.id === currentSessionId) opt.selected = true;
                 optgroup.appendChild(opt);
             });
@@ -568,13 +571,14 @@
     // Session form submit
     sessionForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const project = sessionProject.value.trim();
         const goal = sessionGoal.value.trim();
-        if (!goal) return;
+        if (!project || !goal) return;
 
         try {
             const newSession = await apiFetch('/api/sessions', {
                 method: 'POST',
-                body: JSON.stringify({ goal }),
+                body: JSON.stringify({ project, goal }),
             });
             closeSessionModal();
             selectSession(newSession.id);

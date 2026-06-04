@@ -164,7 +164,8 @@ func (h *Handlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Goal string `json:"goal"`
+		Project string `json:"project"`
+		Goal    string `json:"goal"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -175,7 +176,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := h.store.CreateSession(req.Goal)
+	session := h.store.CreateSession(req.Project, req.Goal)
 	h.broadcastUpdate("session.created", session)
 	writeJSON(w, http.StatusCreated, session)
 }
