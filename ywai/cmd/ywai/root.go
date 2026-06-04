@@ -461,6 +461,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 		}
 
 		if dryRun {
+			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
 			}
@@ -468,6 +469,13 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 				fmt.Printf("  [%s] Would install Azure DevOps plugin\n", a.Name)
 			}
 			continue
+		}
+
+		// Install kanban MCP (always, required for orchestrator)
+		if err := plugins.InstallKanbanMCP(configPath); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
+		} else {
+			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
 		}
 
 		// Install Microsoft Learn MCP if requested
