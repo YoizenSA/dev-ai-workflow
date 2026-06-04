@@ -61,3 +61,5 @@ GEMINI.md
 
 # Local development
 *.local
+# Local Pi runtime state
+.atl/
