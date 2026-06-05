@@ -2021,14 +2021,28 @@
 
 	async function editAgent(name) {
 		try {
-			const res = await fetch(`/api/config/agents/${name}`);
-			const data = await res.json();
+			const [agentRes, toolsRes, permsRes] = await Promise.all([
+				fetch(`/api/config/agents/${name}`),
+				fetch("/api/config/tools"),
+				fetch(`/api/config/agents/${name}/permissions`),
+			]);
+			const data = await agentRes.json();
+			const toolsData = await toolsRes.json();
+			const perms = permsRes.ok ? await permsRes.json() : {};
+
 			currentAgent = name;
 			document.getElementById("agent-editor-title").textContent =
 				`Edit: ${name}`;
 			document.getElementById("agent-content").value = data.content;
 			document.getElementById("agent-delete-btn").style.display = "inline-flex";
 			document.getElementById("agent-editor").style.display = "flex";
+
+			// Collapse permissions section by default
+			document.getElementById("agent-perms-body").style.display = "none";
+			document.getElementById("agent-perms-arrow").classList.remove("open");
+
+			// Render inline permissions
+			renderAgentPerms(name, toolsData, perms);
 
 			// Highlight active
 			document
@@ -2043,25 +2057,138 @@
 		}
 	}
 
+	function renderAgentPerms(_agentName, toolsData, perms) {
+		const allTools = toolsData.all || [];
+		const mcpTools = toolsData.mcp_tools || {};
+		const pluginTools = toolsData.plugin_tools || {};
+		const builtInSet = new Set(toolsData.built_in || []);
+
+		// Build MCP lookup maps
+		const mcpToolSet = new Set();
+		const toolToMcpServer = {};
+		for (const [srv, tools] of Object.entries(mcpTools)) {
+			tools.forEach((t) => {
+				mcpToolSet.add(t);
+				toolToMcpServer[t] = srv;
+			});
+		}
+		const pluginToolSet = new Set();
+		for (const [, tools] of Object.entries(pluginTools)) {
+			if (Array.isArray(tools)) tools.forEach((t) => pluginToolSet.add(t));
+		}
+
+		let html = "";
+		let currentCat = "";
+		for (const key of allTools) {
+			const val = perms[key] || (builtInSet.has(key) ? "allow" : "deny");
+			const isMcp = mcpToolSet.has(key);
+			const isPlugin = pluginToolSet.has(key);
+			let badge = "";
+			if (isMcp) badge = '<span class="mcp-badge">MCP</span>';
+			else if (isPlugin) badge = '<span class="plugin-badge">Plugin</span>';
+
+			let category = "Built-in";
+			if (isMcp) category = "MCP: " + (toolToMcpServer[key] || "Tools");
+			else if (isPlugin) category = "Plugin Tools";
+
+			if (category !== currentCat) {
+				currentCat = category;
+				const catId = category.replace(/[^a-zA-Z0-9_-]/g, "_");
+				const bulkBtns = category.startsWith("MCP: ")
+					? `<div class="category-bulk-actions">
+							<button class="btn btn-secondary btn-xs" onclick="window.kanbanApp.bulkSetAgentPermCategory('${catId}', 'allow')" title="Allow all">✓</button>
+							<button class="btn btn-secondary btn-xs" onclick="window.kanbanApp.bulkSetAgentPermCategory('${catId}', 'deny')" title="Deny all">✗</button>
+						</div>`
+					: "";
+				html += `<div class="tool-category" data-category="${catId}">
+							<span class="tool-category-label">${category}</span>
+							${bulkBtns}
+						</div>`;
+			}
+
+			html += `<div class="permission-row" data-tool="${key}">
+						<span class="permission-key">${key}${badge}</span>
+						<select class="permission-select ${val}" data-key="${key}">
+							<option value="allow" ${val === "allow" ? "selected" : ""}>allow</option>
+							<option value="ask" ${val === "ask" ? "selected" : ""}>ask</option>
+							<option value="deny" ${val === "deny" ? "selected" : ""}>deny</option>
+						</select>
+					</div>`;
+		}
+
+		const body = document.getElementById("agent-perms-body");
+		body.innerHTML = html;
+		body.querySelectorAll(".permission-select").forEach((sel) => {
+			sel.addEventListener("change", () => {
+				sel.className = `permission-select ${sel.value}`;
+			});
+		});
+	}
+
+	function toggleAgentPerms() {
+		const body = document.getElementById("agent-perms-body");
+		const arrow = document.getElementById("agent-perms-arrow");
+		const open = body.style.display === "none";
+		body.style.display = open ? "block" : "none";
+		arrow.classList.toggle("open", open);
+	}
+
+	function bulkSetAgentPermCategory(catId, value) {
+		const cat = document.querySelector(
+			`#agent-perms-body .tool-category[data-category="${catId}"]`,
+		);
+		if (!cat) return;
+		let sibling = cat.nextElementSibling;
+		while (sibling && !sibling.classList.contains("tool-category")) {
+			if (sibling.classList.contains("permission-row")) {
+				const sel = sibling.querySelector(".permission-select");
+				if (sel) {
+					sel.value = value;
+					sel.className = `permission-select ${value}`;
+				}
+			}
+			sibling = sibling.nextElementSibling;
+		}
+		showToast(`Category set to ${value}`, "success");
+	}
+
 	async function saveAgent() {
 		if (!currentAgent) return;
 
 		const content = document.getElementById("agent-content").value;
 		try {
+			// Save agent content
 			const res = await fetch(`/api/config/agents/${currentAgent}`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ content }),
 			});
 
-			if (res.ok) {
-				showToast(`Agent "${currentAgent}" saved`);
-				document.getElementById("agent-editor").style.display = "none";
-				loadAgents();
-			} else {
+			if (!res.ok) {
 				const err = await res.json();
 				showToast(err.error || "Failed to save", "error");
+				return;
 			}
+
+			// Save permissions from inline editor
+			const permSelects = document.querySelectorAll(
+				"#agent-perms-body .permission-select",
+			);
+			if (permSelects.length > 0) {
+				const permission = {};
+				permSelects.forEach((sel) => {
+					permission[sel.dataset.key] = sel.value;
+				});
+				await fetch(`/api/config/agents/${currentAgent}/permissions`, {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(permission),
+				});
+			}
+
+			showToast(`Agent "${currentAgent}" saved`);
+			document.getElementById("agent-editor").style.display = "none";
+			loadAgents();
 		} catch (e) {
 			console.error("Failed to save agent:", e);
 			showToast("Failed to save agent", "error");
@@ -2529,6 +2656,8 @@
 		addCustomTool,
 		bulkSetPermission,
 		bulkSetCategoryPermission,
+		bulkSetAgentPermCategory,
+		toggleAgentPerms,
 		filterPermissions,
 	};
 

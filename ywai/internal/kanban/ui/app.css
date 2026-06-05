@@ -1190,6 +1190,56 @@ body {
 	outline: none;
 }
 
+/* Agent inline permissions */
+.agent-perms-section {
+	border-top: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+.agent-perms-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	cursor: pointer;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	user-select: none;
+	transition: background 0.15s;
+}
+
+.agent-perms-toggle:hover {
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.agent-perms-arrow {
+	transition: transform 0.2s;
+	font-size: 0.75rem;
+}
+
+.agent-perms-arrow.open {
+	transform: rotate(90deg);
+}
+
+.agent-perms-body {
+	padding: 0 16px 16px;
+	max-height: 340px;
+	overflow-y: auto;
+}
+
+.agent-perms-body .tool-category {
+	margin-top: 6px;
+}
+
+.agent-perms-body .permission-row {
+	padding: 6px 10px;
+}
+
+.agent-perms-body .permission-key {
+	font-size: 0.75rem;
+}
+
 /* --- JSON Editor Section --- */
 #section-json {
 	height: 100%;
