@@ -1,12 +1,16 @@
 package kanban
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -272,11 +276,35 @@ func (h *Handlers) CreateDelegation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate dependencies exist in the same session
+	for _, depID := range req.Dependencies {
+		dep, ok := h.store.GetDelegation(depID)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("dependency %s not found", depID)})
+			return
+		}
+		if dep.SessionID != req.SessionID {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("dependency %s belongs to a different session", depID)})
+			return
+		}
+	}
+
 	d, err := h.store.CreateDelegation(req.SessionID, req.Agent, req.TaskSummary, req.Dependencies)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Check for cycles after creation and roll back if detected
+	for _, depID := range req.Dependencies {
+		if h.store.HasCycle(d.ID, depID) {
+			// Roll back: delete the delegation we just created
+			_ = h.store.DeleteDelegation(d.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("adding dependency on %s would create a cycle", depID)})
+			return
+		}
+	}
+
 	h.broadcastUpdate("delegation.created", d)
 	writeJSON(w, http.StatusCreated, d)
 }
@@ -316,6 +344,22 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.broadcastUpdate("delegation.status_changed", d)
+
+	// Auto-unblock dependent delegations when this one moves to done
+	if req.Status != nil && *req.Status == "done" {
+		unblockedIDs := h.store.AutoUnblock(id)
+		for _, uid := range unblockedIDs {
+			if ud, ok := h.store.GetDelegation(uid); ok {
+				h.broadcastUpdate("delegation.status_changed", ud)
+				h.broadcastUpdate("delegation.auto_unblocked", map[string]string{
+					"id":           uid,
+					"unblocked_by": id,
+					"task_summary": ud.TaskSummary,
+				})
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -412,6 +456,17 @@ func (h *Handlers) GetPendingDecisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pending)
 }
 
+// GetGraph returns the dependency graph for a session.
+func (h *Handlers) GetGraph(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	graph, err := h.store.GraphView(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, graph)
+}
+
 // --- WebSocket handler ---
 
 func (h *Handlers) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -445,6 +500,187 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 func isValidName(name string) bool {
 	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, name)
 	return matched
+}
+
+// --- Markdown Frontmatter Helpers ---
+
+// readAgentMarkdownPath returns the path to an agent's .md file, or "" if it doesn't exist.
+func readAgentMarkdownPath(name string) string {
+	dir, err := agentsDir()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(dir, name+".md")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+// parseFrontmatter extracts YAML frontmatter from a markdown file.
+// Returns frontmatter body (between --- delimiters) and the rest of the content.
+func parseFrontmatter(content string) (frontmatter string, body string) {
+	if !strings.HasPrefix(content, "---") {
+		return "", content
+	}
+	end := strings.Index(content[3:], "---")
+	if end == -1 {
+		return "", content
+	}
+	fm := content[3 : end+3]
+	body = strings.TrimSpace(content[end+6:])
+	return fm, body
+}
+
+// extractPermissionsFromFrontmatter parses permissions from YAML frontmatter.
+// Supports both formats:
+//   - New: permission:\n  read: allow\n  edit: deny\n ...
+//   - Old: tools:\n  read: true\n  edit: false\n ...
+func extractPermissionsFromFrontmatter(fm string) map[string]string {
+	perms := map[string]string{}
+	lines := strings.Split(fm, "\n")
+
+	// Find the permission: or tools: key
+	headerIdx := -1
+	headerKey := ""
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "permission:" || strings.HasPrefix(trimmed, "permission:") {
+			headerIdx = i
+			headerKey = "permission"
+			break
+		}
+		if trimmed == "tools:" || strings.HasPrefix(trimmed, "tools:") {
+			headerIdx = i
+			headerKey = "tools"
+			break
+		}
+	}
+	if headerIdx == -1 {
+		return perms
+	}
+
+	// Collect indented lines under the key
+	for _, line := range lines[headerIdx+1:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		// Must be indented (child of the key)
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			break // next top-level key
+		}
+		parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		if headerKey == "tools" {
+			// Old format: tools: read: true → convert to permission string
+			if val == "true" {
+				perms[key] = "allow"
+			} else if val == "false" {
+				perms[key] = "deny"
+			}
+		} else {
+			// New format: permission: read: allow
+			perms[key] = val
+		}
+	}
+	return perms
+}
+
+// extractModeFromFrontmatter parses the mode: field from YAML frontmatter.
+func extractModeFromFrontmatter(fm string) string {
+	for _, line := range strings.Split(fm, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "mode:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "mode:"))
+		}
+	}
+	return ""
+}
+
+// updatePermissionsInFrontmatter replaces the permission: block in frontmatter
+// with the given permissions map. If no permission: block exists, it adds one.
+// Returns the updated full markdown content.
+func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		// No frontmatter at all — wrap content with new frontmatter
+		var b strings.Builder
+		b.WriteString("---\npermission:\n")
+		for _, k := range sortedKeys(perms) {
+			b.WriteString(fmt.Sprintf("  %s: %s\n", k, perms[k]))
+		}
+		b.WriteString("---\n\n")
+		b.WriteString(body)
+		return b.String()
+	}
+
+	lines := strings.Split(fm, "\n")
+	var result []string
+	skipping := false
+	inserted := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Detect start of permission: or tools: block
+		if !skipping && (trimmed == "permission:" || trimmed == "tools:" ||
+			strings.HasPrefix(trimmed, "permission:") || strings.HasPrefix(trimmed, "tools:")) {
+			skipping = true
+			// Insert new permission: block here
+			result = append(result, "permission:")
+			for _, k := range sortedKeys(perms) {
+				result = append(result, fmt.Sprintf("  %s: %s", k, perms[k]))
+			}
+			inserted = true
+			continue
+		}
+
+		if skipping {
+			// Skip child lines (indented)
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+				continue
+			}
+			// Not indented anymore — stop skipping
+			skipping = false
+		}
+
+		result = append(result, line)
+
+		// If we reached the end of frontmatter without finding a block, insert before end
+		if !inserted && i == len(lines)-1 {
+			result = append(result, "permission:")
+			for _, k := range sortedKeys(perms) {
+				result = append(result, fmt.Sprintf("  %s: %s", k, perms[k]))
+			}
+			inserted = true
+		}
+	}
+
+	newFM := strings.Join(result, "\n")
+	return "---\n" + newFM + "\n---\n\n" + body
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[j] < keys[i] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	return keys
 }
 
 // --- Config Handlers ---
@@ -539,15 +775,30 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type agentInfo struct {
-		Name string `json:"name"`
-		Size int64  `json:"size"`
+		Name string            `json:"name"`
+		Size int64             `json:"size"`
+		Mode string            `json:"mode,omitempty"`
+		Perm map[string]string `json:"permission,omitempty"`
 	}
 	var agents []agentInfo
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
 			info, _ := e.Info()
 			name := strings.TrimSuffix(e.Name(), ".md")
-			agents = append(agents, agentInfo{Name: name, Size: info.Size()})
+			ai := agentInfo{Name: name, Size: info.Size()}
+
+			// Read frontmatter to extract mode and permissions
+			if data, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
+				fm, _ := parseFrontmatter(string(data))
+				if mode := extractModeFromFrontmatter(fm); mode != "" {
+					ai.Mode = mode
+				}
+				if perms := extractPermissionsFromFrontmatter(fm); len(perms) > 0 {
+					ai.Perm = perms
+				}
+			}
+
+			agents = append(agents, ai)
 		}
 	}
 	writeJSON(w, http.StatusOK, agents)
@@ -714,6 +965,7 @@ func (h *Handlers) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/config/agents/{name}/permissions
+// Reads permissions from opencode.json first; falls back to markdown frontmatter.
 func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -721,58 +973,54 @@ func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Try opencode.json first
 	path, err := opencodeConfigPath()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	var agents map[string]json.RawMessage
-	if agentRaw, ok := config["agent"]; ok {
-		if err := json.Unmarshal(agentRaw, &agents); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
+	if err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var config map[string]json.RawMessage
+			if err := json.Unmarshal(data, &config); err == nil {
+				if agentRaw, ok := config["agent"]; ok {
+					var agents map[string]json.RawMessage
+					if err := json.Unmarshal(agentRaw, &agents); err == nil {
+						if agentData, ok := agents[name]; ok {
+							var agent map[string]json.RawMessage
+							if err := json.Unmarshal(agentData, &agent); err == nil {
+								if permRaw, ok := agent["permission"]; ok {
+									var permission map[string]string
+									if err := json.Unmarshal(permRaw, &permission); err == nil {
+										writeJSON(w, http.StatusOK, permission)
+										return
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
-	} else {
-		writeJSON(w, http.StatusOK, map[string]string{})
-		return
 	}
 
-	agentRaw, ok := agents[name]
-	if !ok {
+	// Fallback: read from markdown frontmatter
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
 
-	var agent map[string]json.RawMessage
-	if err := json.Unmarshal(agentRaw, &agent); err != nil {
+	mdContent, err := os.ReadFile(mdPath)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	var permission map[string]string
-	if permRaw, ok := agent["permission"]; ok {
-		if err := json.Unmarshal(permRaw, &permission); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-	}
-
-	writeJSON(w, http.StatusOK, permission)
+	fm, _ := parseFrontmatter(string(mdContent))
+	perms := extractPermissionsFromFrontmatter(fm)
+	writeJSON(w, http.StatusOK, perms)
 }
 
 // PUT /api/config/agents/{name}/permissions
+// Writes permissions to opencode.json if the agent exists there;
+// otherwise writes to the agent's markdown frontmatter.
 func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -795,65 +1043,60 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid value %q for key %q: must be allow, ask, or deny", v, k)})
 			return
 		}
-		_ = k // keys can be any tool name (including custom/MCP tools)
+		_ = k
 	}
 
-	// Read current config
+	// Try opencode.json first
 	path, err := opencodeConfigPath()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Get agent section
-	var agents map[string]json.RawMessage
-	if agentRaw, ok := config["agent"]; ok {
-		if err := json.Unmarshal(agentRaw, &agents); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
+	if err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var config map[string]json.RawMessage
+			if err := json.Unmarshal(data, &config); err == nil {
+				if agentRaw, ok := config["agent"]; ok {
+					var agents map[string]json.RawMessage
+					if err := json.Unmarshal(agentRaw, &agents); err == nil {
+						if agentData, ok := agents[name]; ok {
+							var agent map[string]json.RawMessage
+							if err := json.Unmarshal(agentData, &agent); err == nil {
+								// Agent exists in opencode.json — update there
+								permJSON, _ := json.Marshal(body)
+								agent["permission"] = permJSON
+								agentRaw, _ = json.Marshal(agent)
+								agents[name] = agentRaw
+								agentsJSON, _ := json.Marshal(agents)
+								config["agent"] = agentsJSON
+								_ = os.WriteFile(path+".bak", data, 0644)
+								pretty, _ := json.MarshalIndent(config, "", "  ")
+								if err := os.WriteFile(path, pretty, 0644); err != nil {
+									writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+									return
+								}
+								writeJSON(w, http.StatusOK, body)
+								return
+							}
+						}
+					}
+				}
+			}
 		}
-	} else {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+	}
+
+	// Fallback: write to markdown frontmatter
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
 		return
 	}
 
-	agentRaw, ok := agents[name]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
-		return
-	}
-
-	var agent map[string]json.RawMessage
-	if err := json.Unmarshal(agentRaw, &agent); err != nil {
+	mdContent, err := os.ReadFile(mdPath)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	// Update permission
-	permJSON, _ := json.Marshal(body)
-	agent["permission"] = permJSON
-
-	// Write back agent
-	agentRaw, _ = json.Marshal(agent)
-	agents[name] = agentRaw
-	agentsJSON, _ := json.Marshal(agents)
-	config["agent"] = agentsJSON
-
-	// Backup and write
-	_ = os.WriteFile(path+".bak", data, 0644)
-	pretty, _ := json.MarshalIndent(config, "", "  ")
-	if err := os.WriteFile(path, pretty, 0644); err != nil {
+	updated := updatePermissionsInFrontmatter(string(mdContent), body)
+	_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+	if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -930,23 +1173,64 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			// Try HTTP/SSE discovery
-			urlStr := ""
-			if u, ok := server["url"].(string); ok && u != "" {
-				urlStr = u
-			}
-			if urlStr == "" {
-				// Try command+args to detect stdio (skip for now)
-				continue
+			// Discover tools based on server type
+			var tools []string
+
+			// Try HTTP/SSE discovery first (remote servers)
+			if urlStr, ok := server["url"].(string); ok && urlStr != "" {
+				tools, _ = discoverMCPTools(urlStr)
 			}
 
-			tools, err := discoverMCPTools(urlStr)
-			if err == nil && len(tools) > 0 {
+			// Try stdio discovery (local servers with command)
+			if len(tools) == 0 {
+				var command []string
+				if cmdRaw, ok := server["command"]; ok {
+					switch v := cmdRaw.(type) {
+					case []interface{}:
+						for _, arg := range v {
+							if s, ok := arg.(string); ok {
+								command = append(command, s)
+							}
+						}
+					case string:
+						command = strings.Fields(v)
+						if argsRaw, ok := server["args"].([]interface{}); ok {
+							for _, arg := range argsRaw {
+								if s, ok := arg.(string); ok {
+									command = append(command, s)
+								}
+							}
+						}
+					}
+				}
+
+				if len(command) > 0 {
+					env := map[string]string{}
+					if envRaw, ok := server["env"].(map[string]interface{}); ok {
+						for k, v := range envRaw {
+							if s, ok := v.(string); ok {
+								env[k] = s
+							}
+						}
+					}
+					tools, _ = discoverStdioMCPTools(command, env)
+				}
+			}
+
+			if len(tools) > 0 {
 				mcpTools[name] = tools
 				for _, t := range tools {
 					toolSet[t] = true
 				}
 			}
+		}
+	}
+
+	// Plugin discovery — scan .cache/opencode/packages for tool registrations
+	pluginTools := discoverAllPluginTools()
+	for _, tools := range pluginTools {
+		for _, t := range tools {
+			toolSet[t] = true
 		}
 	}
 
@@ -958,9 +1242,10 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 	sortStrings(allTools)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"built_in":  builtIn,
-		"all":       allTools,
-		"mcp_tools": mcpTools,
+		"built_in":     builtIn,
+		"all":          allTools,
+		"mcp_tools":    mcpTools,
+		"plugin_tools": pluginTools,
 	})
 }
 
@@ -1013,6 +1298,242 @@ func sortStrings(a []string) {
 			}
 		}
 	}
+}
+
+// discoverStdioMCPTools starts a stdio MCP server process, sends initialize
+// + tools/list JSON-RPC requests, and returns the discovered tool names.
+// The process is killed after discovery.
+func discoverStdioMCPTools(command []string, env map[string]string) ([]string, error) {
+	if len(command) == 0 {
+		return nil, fmt.Errorf("empty command")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start: %w", err)
+	}
+	defer func() {
+		stdin.Close()
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
+
+	reader := bufio.NewReader(stdout)
+
+	// Send initialize request
+	initReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]interface{}{
+			"protocolVersion": "2024-11-05",
+			"capabilities":    map[string]interface{}{},
+			"clientInfo": map[string]interface{}{
+				"name":    "ywai-kanban",
+				"version": "1.0.0",
+			},
+		},
+	}
+	if err := sendJSONRPC(stdin, initReq); err != nil {
+		return nil, fmt.Errorf("send initialize: %w", err)
+	}
+
+	// Read initialize response (skip any notifications)
+	if _, err := readJSONRPCResponse(reader); err != nil {
+		return nil, fmt.Errorf("read initialize: %w", err)
+	}
+
+	// Send initialized notification
+	initialized := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "notifications/initialized",
+	}
+	_ = sendJSONRPC(stdin, initialized)
+
+	// Send tools/list request
+	toolsReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+		"params":  map[string]interface{}{},
+	}
+	if err := sendJSONRPC(stdin, toolsReq); err != nil {
+		return nil, fmt.Errorf("send tools/list: %w", err)
+	}
+
+	// Read tools/list response
+	resp, err := readJSONRPCResponse(reader)
+	if err != nil {
+		return nil, fmt.Errorf("read tools/list: %w", err)
+	}
+
+	// Parse tool names from result
+	var names []string
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if tools, ok := result["tools"].([]interface{}); ok {
+			for _, t := range tools {
+				if tool, ok := t.(map[string]interface{}); ok {
+					if name, ok := tool["name"].(string); ok && name != "" {
+						names = append(names, name)
+					}
+				}
+			}
+		}
+	}
+	return names, nil
+}
+
+func sendJSONRPC(w io.Writer, msg map[string]interface{}) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "%s\n", data)
+	return err
+}
+
+func readJSONRPCResponse(reader *bufio.Reader) (map[string]interface{}, error) {
+	for i := 0; i < 50; i++ {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var resp map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &resp); err != nil {
+			continue
+		}
+		// Skip notifications (no id field)
+		if _, ok := resp["id"]; !ok {
+			continue
+		}
+		return resp, nil
+	}
+	return nil, fmt.Errorf("no response after 50 lines")
+}
+
+// discoverPluginTools parses plugin source code to find tool registrations.
+// Looks for patterns like: toolName: tool({ ... }) or "toolName": tool({ ... })
+func discoverPluginTools(pluginDir string) []string {
+	var tools []string
+
+	// Find the main dist/index.js file
+	indexPath := filepath.Join(pluginDir, "dist", "index.js")
+	if _, err := os.Stat(indexPath); err != nil {
+		// Try root index.js
+		indexPath = filepath.Join(pluginDir, "index.js")
+		if _, err := os.Stat(indexPath); err != nil {
+			return tools
+		}
+	}
+
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return tools
+	}
+
+	content := string(data)
+
+	// Pattern 1: toolName: tool({ ... }) — look for tool keys before `: tool(`
+	// This matches lines like: ado_prs: tool({ or "ado_prs": tool({
+	toolPattern := regexp.MustCompile(`(?:"|')?([a-z][a-z0-9_]*)(?:"|')?:\s*tool\s*\(`)
+	for _, match := range toolPattern.FindAllStringSubmatch(content, -1) {
+		if len(match) > 1 && match[1] != "" {
+			tools = append(tools, match[1])
+		}
+	}
+
+	// Pattern 2: look for tool name in description patterns
+	// Some plugins register tools differently
+	if len(tools) == 0 {
+		// Fallback: look for patterns like name: "toolname" in tool definitions
+		namePattern := regexp.MustCompile(`name\s*:\s*["']([a-z][a-z0-9_]*)["']`)
+		for _, match := range namePattern.FindAllStringSubmatch(content, -1) {
+			if len(match) > 1 && match[1] != "" {
+				tools = append(tools, match[1])
+			}
+		}
+	}
+
+	return tools
+}
+
+// discoverAllPluginTools scans the opencode packages directory for plugin tools.
+func discoverAllPluginTools() map[string][]string {
+	result := map[string][]string{}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return result
+	}
+
+	// Check .cache/opencode/packages/ for npm plugins
+	packagesDir := filepath.Join(home, ".cache", "opencode", "packages")
+	if _, err := os.Stat(packagesDir); err != nil {
+		return result
+	}
+
+	entries, err := os.ReadDir(packagesDir)
+	if err != nil {
+		return result
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// Check for @scope/package pattern
+		if strings.HasPrefix(entry.Name(), "@") {
+			scopeEntries, err := os.ReadDir(filepath.Join(packagesDir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			for _, scopeEntry := range scopeEntries {
+				if !scopeEntry.IsDir() {
+					continue
+				}
+				pluginPath := filepath.Join(packagesDir, entry.Name(), scopeEntry.Name())
+				// Check for node_modules/@scope/package/dist or node_modules/@scope/package
+				nmPath := filepath.Join(pluginPath, "node_modules", entry.Name(), scopeEntry.Name())
+				tools := discoverPluginTools(nmPath)
+				if len(tools) == 0 {
+					tools = discoverPluginTools(pluginPath)
+				}
+				if len(tools) > 0 {
+					pluginName := entry.Name() + "/" + scopeEntry.Name()
+					result[pluginName] = tools
+				}
+			}
+		} else {
+			pluginPath := filepath.Join(packagesDir, entry.Name())
+			tools := discoverPluginTools(pluginPath)
+			if len(tools) > 0 {
+				result[entry.Name()] = tools
+			}
+		}
+	}
+
+	return result
 }
 
 // GET /api/config/skills

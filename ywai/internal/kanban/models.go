@@ -59,6 +59,28 @@ type BoardUpdate struct {
 
 // BoardView groups delegations by column for a session.
 type BoardView struct {
-	Session    *Session              `json:"session"`
-	Columns    map[string][]Delegation `json:"columns"`
+	Session *Session                `json:"session"`
+	Columns map[string][]Delegation `json:"columns"`
+}
+
+// GraphNode represents a delegation node in the dependency graph.
+type GraphNode struct {
+	ID          string `json:"id"`
+	Agent       string `json:"agent"`
+	TaskSummary string `json:"task_summary"`
+	Status      string `json:"status"`
+	Column      string `json:"column"`
+}
+
+// GraphEdge represents a dependency edge in the graph.
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// GraphView is the full dependency graph for a session.
+type GraphView struct {
+	Session *Session    `json:"session"`
+	Nodes   []GraphNode `json:"nodes"`
+	Edges   []GraphEdge `json:"edges"`
 }

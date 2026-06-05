@@ -1,0 +1,31 @@
+{
+  // ywai install defaults
+  // Edit this file to customize your default installation options.
+  // These values are used when selecting "Quick Install" in the TUI.
+
+  // Preset: full-gentleman | ecosystem-only | minimal
+  "preset": "full-gentleman",
+
+  // Scope: global | workspace
+  "scope": "global",
+
+  // Install only global skills (skip AGENTS.md/REVIEW.md in project)
+  "global_only": true,
+
+  // SDD orchestrator mode: single | multi
+  "sdd_mode": "multi",
+
+  // Persona: neutral | gentleman
+  "persona": "neutral",
+
+  // Install Microsoft Learn MCP (for opencode)
+  "mcp": false,
+
+  // Install Azure DevOps plugin (for opencode/pi)
+  "ado": false,
+
+  // Agent groups to install (besides core, which is always included)
+  // Add group names here to install them by default.
+  // Example: ["social-refactor", "experiment"]
+  "groups": []
+}

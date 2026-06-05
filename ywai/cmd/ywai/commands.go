@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
-	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 	"github.com/spf13/cobra"
@@ -37,6 +37,7 @@ var installCmd = &cobra.Command{
 		}
 
 		var installMCP bool
+		var installADO bool
 		var globalOnly bool
 		var preset, scope, sddMode, persona string
 		var groupFilter agentprofiles.GroupFilter
@@ -58,6 +59,7 @@ var installCmd = &cobra.Command{
 			}
 			agentFlag = result.Agent
 			installMCP = result.MCP
+			installADO = result.ADO
 			globalOnly = result.GlobalOnly
 			preset = result.Preset
 			scope = result.Scope
@@ -88,9 +90,11 @@ var installCmd = &cobra.Command{
 			DryRun:    dryRun,
 		}
 
-		adoFlag := getBoolFlag(cmd, "ado")
+		if !tuiFlag {
+			installADO = getBoolFlag(cmd, "ado")
+		}
 
-		executeInstall(installOpts, installMCP, globalOnly, adoFlag, groupFilter)
+		executeInstall(installOpts, installMCP, globalOnly, installADO, groupFilter)
 	},
 }
 
@@ -414,16 +418,16 @@ var statusCmd = &cobra.Command{
 	Long:  "Display information about ywai, gentle-ai, and detected agents",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("=== ywai Status ===")
-		
+
 		// ywai version
 		fmt.Printf("\nVersion: %s\n", version)
-		
+
 		// Config location
 		fmt.Printf("Config: %s\n", config.ConfigPath())
-		
+
 		// Data directory
 		fmt.Printf("Data dir: %s\n", config.DataDir())
-		
+
 		// gentle-ai status
 		fmt.Println("\n=== gentle-ai ===")
 		if gentlai.IsInstalled() {
@@ -431,7 +435,7 @@ var statusCmd = &cobra.Command{
 		} else {
 			fmt.Println("Status: Not installed")
 		}
-		
+
 		// Detected agents
 		fmt.Println("\n=== Detected Agents ===")
 		agents := agent.Detect()
@@ -446,7 +450,7 @@ var statusCmd = &cobra.Command{
 				fmt.Printf("    Skills: %s\n", a.SkillsDir)
 			}
 		}
-		
+
 		// Available skills
 		fmt.Println("\n=== Available Skills ===")
 		skills := config.AvailableSkills()
@@ -457,7 +461,7 @@ var statusCmd = &cobra.Command{
 				fmt.Printf("  - %s\n", s)
 			}
 		}
-		
+
 		// User config
 		fmt.Println("\n=== User Configuration ===")
 		cfg, err := config.LoadConfig()
@@ -667,7 +671,7 @@ func init() {
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
-	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode/kilocode)")
+	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("global", false, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
 	installCmd.Flags().String("preset", "full-gentleman", "Install preset: full-gentleman, ecosystem-only, minimal, custom")
 	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
@@ -695,7 +699,7 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configResetCmd)
 	rootCmd.AddCommand(configCmd)
-	
+
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(groupsCmd)
 

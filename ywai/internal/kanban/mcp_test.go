@@ -48,12 +48,12 @@ func TestMCPAdapter_Flow(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected tools array, got %T", resultMap["tools"])
 		}
-		if len(toolsRaw) != 10 {
-			t.Fatalf("expected 10 tools, got %d", len(toolsRaw))
+		if len(toolsRaw) != 11 {
+			t.Fatalf("expected 11 tools, got %d", len(toolsRaw))
 		}
 	} else {
-		if len(tools) != 10 {
-			t.Fatalf("expected 10 tools, got %d", len(tools))
+		if len(tools) != 11 {
+			t.Fatalf("expected 11 tools, got %d", len(tools))
 		}
 	}
 
@@ -453,4 +453,3 @@ func TestMCPAdapter_GetPendingDecisions(t *testing.T) {
 		t.Fatalf("progress activity should NOT appear in pending decisions, got: %s", pendingText)
 	}
 }
-

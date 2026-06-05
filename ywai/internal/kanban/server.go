@@ -13,11 +13,11 @@ import (
 
 // Server is the embedded HTTP server for the Kanban board.
 type Server struct {
-	port     int
-	store    *Store
-	hub      *Hub
-	httpSrv  *http.Server
-	mux      *http.ServeMux
+	port    int
+	store   *Store
+	hub     *Hub
+	httpSrv *http.Server
+	mux     *http.ServeMux
 }
 
 // New creates a new Kanban server listening on the given port.
@@ -56,6 +56,9 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("PATCH /api/delegations/{id}/activities/{actId}", handlers.ResolveActivity)
 	mux.HandleFunc("GET /api/sessions/{id}/decisions", handlers.GetPendingDecisions)
 
+	// Dependency graph route
+	mux.HandleFunc("GET /api/sessions/{id}/graph", handlers.GetGraph)
+
 	// WebSocket route
 	mux.HandleFunc("GET /api/events", handlers.HandleWebSocket)
 
@@ -83,10 +86,10 @@ func New(port int, dataDir string) *Server {
 	mux.Handle("GET /", uiHandler())
 
 	return &Server{
-		port:     port,
-		store:    store,
-		hub:      hub,
-		mux: mux,
+		port:  port,
+		store: store,
+		hub:   hub,
+		mux:   mux,
 	}
 }
 

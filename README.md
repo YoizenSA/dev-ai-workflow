@@ -77,7 +77,7 @@ Available configuration options:
 - `default_persona`: Agent persona (gentleman, neutral, custom)
 - `default_scope`: Install scope (global, workspace)
 - `default_tui`: Use TUI by default (true/false)
-- `default_mcp`: Install MCP by default for opencode/kilocode (true/false)
+- `default_mcp`: Install MCP by default for opencode (true/false)
 - `colored_output`: Use colored output (true/false)
 - `log_level`: Logging level (debug, info, warn, error)
 

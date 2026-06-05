@@ -46,12 +46,58 @@
       <div class="header-right">
         <span id="ws-status" class="ws-status">● disconnected</span>
         <button class="tab-btn active" data-tab="kanban">Kanban</button>
+        <button
+          id="graph-toggle-btn"
+          class="btn btn-secondary graph-toggle-btn"
+          title="Toggle dependency graph"
+        >
+          🔗 Graph
+        </button>
         <button class="tab-btn" data-tab="config">Config</button>
       </div>
     </header>
 
     <!-- Kanban Tab -->
     <div class="tab-content active" id="tab-kanban">
+      <!-- Dependency Graph Panel (hidden by default) -->
+      <div id="graph-panel" class="graph-panel" style="display: none">
+        <div class="graph-header">
+          <h2>🔗 Dependency Graph</h2>
+          <span id="graph-stats" class="graph-stats"></span>
+          <button id="graph-close-btn" class="btn btn-secondary btn-sm">
+            ✕ Close
+          </button>
+        </div>
+        <div id="graph-container" class="graph-container">
+          <svg id="graph-svg"></svg>
+        </div>
+        <div id="graph-legend" class="graph-legend">
+          <span class="legend-item"
+            ><span class="legend-dot" style="background: #2ed573"></span>
+            Done</span
+          >
+          <span class="legend-item"
+            ><span class="legend-dot" style="background: #5e60f0"></span>
+            Running</span
+          >
+          <span class="legend-item"
+            ><span class="legend-dot" style="background: #ffa502"></span>
+            Review</span
+          >
+          <span class="legend-item"
+            ><span class="legend-dot" style="background: #ff4757"></span>
+            Blocked</span
+          >
+          <span class="legend-item"
+            ><span class="legend-dot" style="background: #888"></span>
+            Pending</span
+          >
+          <span class="legend-item"
+            ><span class="legend-line"></span> depends on</span
+          >
+        </div>
+      </div>
+
       <main id="board" class="board">
         <div class="column" data-column="backlog">
           <div class="column-header">
@@ -378,9 +424,32 @@
             <div>
               <h2>Agent Permissions</h2>
               <p class="section-desc">
-                Configure tool permissions per agent in opencode.json. Green =
-                allow, Yellow = ask, Red = deny.
+                Configure tool permissions per agent. Green = allow, Yellow =
+                ask, Red = deny.
               </p>
+            </div>
+            <div class="permissions-header-actions">
+              <div class="permissions-search">
+                <svg
+                  class="permissions-search-icon"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input
+                  type="text"
+                  id="permissions-search-input"
+                  placeholder="Search tools..."
+                />
+              </div>
             </div>
           </div>
           <div

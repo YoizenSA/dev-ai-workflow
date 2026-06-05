@@ -49,7 +49,7 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | `test-kanban` | Run only kanban tests (`go test ./internal/kanban/... -v`) | After touching kanban code |
 | `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
 | `build-full` | Full build WITH embedded skills/agents | Before pushing |
-| `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode/kilocode |
+| `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode |
 | `check` | Full pipeline: test → build-full → verify → install | **Before pushing to main** |
 | `kanban` | Build + install + start kanban UI on port 5768 | To visually test the kanban board |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
@@ -108,7 +108,7 @@ cd ywai && bash scripts/dev.sh kanban
 | `--scope` | Install scope: `global` (default) or `workspace` |
 | `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
 | `--persona` | Persona: `gentleman`, `neutral`, `custom` |
-| `--mcp` | Install Microsoft Learn MCP (for opencode/kilocode) |
+| `--mcp` | Install Microsoft Learn MCP (for opencode) |
 | `--ado` | Install Azure DevOps plugin (opencode + pi) |
 | `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
 

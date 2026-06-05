@@ -40,6 +40,20 @@ func sendKey(m *Model, key string) {
 	m.Update(msg)
 }
 
+// Helper: navigate from welcome to custom install mode
+func goToCustomInstall(m *Model) {
+	sendKey(m, "enter") // welcome -> installMode
+	sendKey(m, "down")  // select custom (index 1)
+	sendKey(m, "enter") // installMode -> agent
+}
+
+// Helper: navigate from welcome to quick install mode
+func goToQuickInstall(m *Model) {
+	sendKey(m, "enter") // welcome -> installMode
+	// quick is index 0 (default)
+	sendKey(m, "enter") // installMode -> agent
+}
+
 func TestNewModel_MultipleAgentsHasAll(t *testing.T) {
 	m := NewModel(testAgents())
 	if len(m.agents) != 3 {
@@ -76,29 +90,49 @@ func TestNewModel_Defaults(t *testing.T) {
 	}
 }
 
-func TestStepFlow_WelcomeToAgent(t *testing.T) {
+func TestStepFlow_WelcomeToInstallMode(t *testing.T) {
 	m := NewModel(testAgents())
 	sendKey(&m, "enter")
-	if m.step != stepAgent {
-		t.Fatalf("expected stepAgent after enter on welcome, got %d", m.step)
+	if m.step != stepInstallMode {
+		t.Fatalf("expected stepInstallMode after enter on welcome, got %d", m.step)
 	}
 }
 
-func TestStepFlow_AgentToOptions(t *testing.T) {
+func TestStepFlow_QuickInstallFlow(t *testing.T) {
 	m := NewModel(testAgents())
-	sendKey(&m, "enter") // welcome -> agent
-	sendKey(&m, "enter") // select first agent (opencode) -> options
-	if m.step != stepOptions {
-		t.Fatalf("expected stepOptions after selecting agent, got %d", m.step)
+	goToQuickInstall(&m)
+	if m.step != stepAgent {
+		t.Fatalf("expected stepAgent after quick install mode, got %d", m.step)
 	}
-	if m.selectedAgent != "opencode" {
-		t.Fatalf("expected selectedAgent='opencode', got %q", m.selectedAgent)
+	if !m.quickInstall {
+		t.Fatal("quickInstall should be true")
+	}
+	// Select agent and go to confirm (skip options)
+	sendKey(&m, "enter") // select opencode
+	if m.step != stepConfirm {
+		t.Fatalf("expected stepConfirm for quick install, got %d", m.step)
+	}
+}
+
+func TestStepFlow_CustomInstallFlow(t *testing.T) {
+	m := NewModel(testAgents())
+	goToCustomInstall(&m)
+	if m.step != stepAgent {
+		t.Fatalf("expected stepAgent after custom install mode, got %d", m.step)
+	}
+	if m.quickInstall {
+		t.Fatal("quickInstall should be false")
+	}
+	// Select agent and go to options
+	sendKey(&m, "enter") // select opencode
+	if m.step != stepOptions {
+		t.Fatalf("expected stepOptions for custom install, got %d", m.step)
 	}
 }
 
 func TestStepFlow_OptionsToMCP_WhenOpencode(t *testing.T) {
 	m := NewModel(singleAgent("opencode"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // select opencode -> options
 	sendKey(&m, "enter") // options -> MCP (because opencode)
 	if m.step != stepMCP {
@@ -108,7 +142,7 @@ func TestStepFlow_OptionsToMCP_WhenOpencode(t *testing.T) {
 
 func TestStepFlow_OptionsToConfirm_WhenWindsurf(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // select windsurf -> options
 	sendKey(&m, "enter") // options -> confirm (skip MCP)
 	if m.step != stepConfirm {
@@ -118,7 +152,7 @@ func TestStepFlow_OptionsToConfirm_WhenWindsurf(t *testing.T) {
 
 func TestShouldShowMCPStep_All_WithOpencode(t *testing.T) {
 	m := NewModel(testAgents()) // has opencode + windsurf
-	sendKey(&m, "enter")        // welcome -> agent
+	goToCustomInstall(&m)
 	// Navigate to "all" (index 2)
 	sendKey(&m, "down")
 	sendKey(&m, "down")
@@ -145,7 +179,7 @@ func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 
 func TestOptionsStep_CyclePreset(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Cursor starts at 0 (Preset)
 	if m.presetIdx != 0 {
@@ -171,7 +205,7 @@ func TestOptionsStep_CyclePreset(t *testing.T) {
 
 func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Navigate to Global only (row 2)
 	sendKey(&m, "down") // -> Scope
@@ -194,7 +228,7 @@ func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
 
 func TestOptionsStep_NavigationBounds(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Try going up from 0
 	sendKey(&m, "up")
@@ -212,7 +246,7 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 
 func TestEscNavigation(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	sendKey(&m, "enter") // options -> confirm (windsurf skips MCP)
 	if m.step != stepConfirm {
@@ -226,15 +260,19 @@ func TestEscNavigation(t *testing.T) {
 	if m.step != stepAgent {
 		t.Fatalf("expected stepAgent on esc from options, got %d", m.step)
 	}
-	sendKey(&m, "esc") // agent -> welcome
+	sendKey(&m, "esc") // agent -> installMode
+	if m.step != stepInstallMode {
+		t.Fatalf("expected stepInstallMode on esc from agent, got %d", m.step)
+	}
+	sendKey(&m, "esc") // installMode -> welcome
 	if m.step != stepWelcome {
-		t.Fatalf("expected stepWelcome on esc from agent, got %d", m.step)
+		t.Fatalf("expected stepWelcome on esc from installMode, got %d", m.step)
 	}
 }
 
 func TestEscNavigation_WithMCP(t *testing.T) {
 	m := NewModel(singleAgent("opencode"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	sendKey(&m, "enter") // options -> MCP
 	if m.step != stepMCP {
@@ -251,6 +289,19 @@ func TestEscNavigation_WithMCP(t *testing.T) {
 	sendKey(&m, "esc") // MCP -> options
 	if m.step != stepOptions {
 		t.Fatalf("expected stepOptions on esc from MCP, got %d", m.step)
+	}
+}
+
+func TestEscNavigation_QuickInstall(t *testing.T) {
+	m := NewModel(singleAgent("windsurf"))
+	goToQuickInstall(&m)
+	sendKey(&m, "enter") // agent -> confirm (quick)
+	if m.step != stepConfirm {
+		t.Fatalf("expected stepConfirm, got %d", m.step)
+	}
+	sendKey(&m, "esc") // confirm -> agent (quick)
+	if m.step != stepAgent {
+		t.Fatalf("expected stepAgent on esc from confirm in quick mode, got %d", m.step)
 	}
 }
 
@@ -274,6 +325,8 @@ func TestResult_AllFields(t *testing.T) {
 	m.sddModeIdx = 1
 	m.personaIdx = 1
 	m.installMicrosoftLearnMCP = true
+	m.installADO = true
+	m.confirmed = true
 
 	r := m.Result()
 	if r.Agent != "windsurf" {
@@ -297,6 +350,9 @@ func TestResult_AllFields(t *testing.T) {
 	if !r.MCP {
 		t.Fatal("MCP should be true")
 	}
+	if !r.ADO {
+		t.Fatal("ADO should be true")
+	}
 }
 
 func TestViewConfirm_ShowsAllOptions(t *testing.T) {
@@ -314,6 +370,17 @@ func TestViewConfirm_ShowsAllOptions(t *testing.T) {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewConfirm missing %q", c)
 		}
+	}
+}
+
+func TestViewConfirm_ShowsQuickInstallMode(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	m.selectedAgent = "opencode"
+	m.quickInstall = true
+
+	view := m.viewConfirm()
+	if !strings.Contains(view, "Quick Install") {
+		t.Error("viewConfirm should show 'Quick Install' when quickInstall is true")
 	}
 }
 
@@ -339,9 +406,19 @@ func TestBreadcrumbs_IncludesOptions(t *testing.T) {
 	}
 }
 
+func TestBreadcrumbs_HidesOptionsInQuickMode(t *testing.T) {
+	m := NewModel(singleAgent("windsurf"))
+	m.quickInstall = true
+	m.step = stepConfirm
+	bc := m.renderBreadcrumbs()
+	if strings.Contains(bc, "Options") {
+		t.Fatal("breadcrumbs should hide Options in quick install mode")
+	}
+}
+
 func TestMCPToggle(t *testing.T) {
 	m := NewModel(singleAgent("opencode"))
-	sendKey(&m, "enter") // welcome -> agent
+	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	sendKey(&m, "enter") // options -> MCP
 	if m.step != stepMCP {
@@ -350,12 +427,84 @@ func TestMCPToggle(t *testing.T) {
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should start as false")
 	}
-	sendKey(&m, "up") // toggle
+	sendKey(&m, " ") // space to toggle
 	if !m.installMicrosoftLearnMCP {
-		t.Fatal("MCP should be true after toggle")
+		t.Fatal("MCP should be true after space toggle")
 	}
-	sendKey(&m, "down") // toggle back
+	sendKey(&m, " ") // space to toggle back
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should be false after second toggle")
+	}
+}
+
+func TestADOToggle(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	goToCustomInstall(&m)
+	sendKey(&m, "enter") // agent -> options
+	sendKey(&m, "enter") // options -> MCP
+	if m.step != stepMCP {
+		t.Fatalf("expected stepMCP, got %d", m.step)
+	}
+	if m.installADO {
+		t.Fatal("ADO should start as false")
+	}
+	sendKey(&m, "down") // navigate to ADO
+	sendKey(&m, " ")    // space to toggle
+	if !m.installADO {
+		t.Fatal("ADO should be true after space toggle")
+	}
+}
+
+func TestShouldShowADOStep_Opencode(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	m.selectedAgent = "opencode"
+	if !m.shouldShowADOStep() {
+		t.Fatal("shouldShowADOStep should be true for opencode")
+	}
+}
+
+func TestShouldShowADOStep_Pi(t *testing.T) {
+	m := NewModel(singleAgent("pi"))
+	m.selectedAgent = "pi"
+	if !m.shouldShowADOStep() {
+		t.Fatal("shouldShowADOStep should be true for pi")
+	}
+}
+
+func TestShouldShowADOStep_Windsurf(t *testing.T) {
+	m := NewModel(singleAgent("windsurf"))
+	m.selectedAgent = "windsurf"
+	if m.shouldShowADOStep() {
+		t.Fatal("shouldShowADOStep should be false for windsurf")
+	}
+}
+
+func TestResult_ADOField(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	m.selectedAgent = "opencode"
+	m.installADO = true
+	m.confirmed = true
+	r := m.Result()
+	if !r.ADO {
+		t.Fatal("ADO should be true in result")
+	}
+}
+
+func TestInstallMode_DefaultsToQuick(t *testing.T) {
+	m := NewModel(testAgents())
+	if m.installModeCursor != 0 {
+		t.Fatal("installModeCursor should default to 0 (quick)")
+	}
+}
+
+func TestViewInstallMode_Renders(t *testing.T) {
+	m := NewModel(testAgents())
+	m.step = stepInstallMode
+	view := m.viewInstallMode()
+	if !strings.Contains(view, "Quick Install") {
+		t.Error("viewInstallMode should show 'Quick Install'")
+	}
+	if !strings.Contains(view, "Custom Install") {
+		t.Error("viewInstallMode should show 'Custom Install'")
 	}
 }

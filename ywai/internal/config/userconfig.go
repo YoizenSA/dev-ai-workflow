@@ -25,7 +25,7 @@ type UserConfig struct {
 	// Whether to use TUI by default
 	DefaultTUI bool `yaml:"default_tui,omitempty"`
 	
-	// Whether to install MCP by default for opencode/kilocode
+	// Whether to install MCP by default for opencode
 	DefaultMCP bool `yaml:"default_mcp,omitempty"`
 	
 	// Whether to use colored output

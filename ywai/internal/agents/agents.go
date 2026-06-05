@@ -39,30 +39,39 @@ type GroupFilter struct {
 	AllGroups bool     // install ALL groups (backward compat)
 }
 
-
 // LoadProfiles reads all agent directories from the given source dir.
-// Each subdirectory should have AGENT.md and permissions.json.
+// It walks subdirectories recursively (e.g. core/, social-refactor/) and
+// loads any directory containing AGENT.md.
 func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 	profiles := map[string]AgentProfile{}
 
-	entries, err := os.ReadDir(sourceDir)
-	if err != nil {
-		return nil, fmt.Errorf("read agents dir %s: %w", sourceDir, err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	err := filepath.WalkDir(sourceDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		// Skip the root dir itself
+		if path == sourceDir {
+			return nil
+		}
+		// Skip if this dir doesn't have AGENT.md (it's a group folder, not an agent)
+		if _, err := os.Stat(filepath.Join(path, "AGENT.md")); err != nil {
+			return nil
 		}
 
-		agentDir := filepath.Join(sourceDir, entry.Name())
-		profile, err := loadProfile(agentDir)
+		profile, err := loadProfile(path)
 		if err != nil {
-			fmt.Printf("  Warning: skip agent %s: %v\n", entry.Name(), err)
-			continue
+			fmt.Printf("  Warning: skip agent %s: %v\n", filepath.Base(path), err)
+			return nil
 		}
 
 		profiles[profile.Name] = *profile
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk agents dir %s: %w", sourceDir, err)
 	}
 
 	return profiles, nil
@@ -723,7 +732,9 @@ func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]Agent
 
 	manifest, err := LoadGroupManifest(sourceDir)
 	if err != nil {
-		// Fallback: if groups.json is broken/missing, load all
+		// Fallback: if groups.json is broken/missing, load only core-like agents
+		// (agents in the root of sourceDir, not in subfolders)
+		fmt.Printf("  Warning: groups.json unavailable (%v), loading root agents only\n", err)
 		return LoadProfiles(sourceDir)
 	}
 

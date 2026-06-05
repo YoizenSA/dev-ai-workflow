@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	getEmbeddedSkillsFS func() fs.FS
-	getEmbeddedAgentsFS func() fs.FS
-	fsMutex             sync.Mutex
+	getEmbeddedSkillsFS   func() fs.FS
+	getEmbeddedAgentsFS   func() fs.FS
+	getEmbeddedDefaultsFS func() fs.FS
+	fsMutex               sync.Mutex
 )
 
 func EnsureDataDir() error {
@@ -68,6 +69,20 @@ func RegisterEmbeddedAgents(agentsFS func() fs.FS) {
 	getEmbeddedAgentsFS = agentsFS
 }
 
+func RegisterEmbeddedDefaults(defaultsFS func() fs.FS) {
+	getEmbeddedDefaultsFS = defaultsFS
+}
+
+// GetEmbeddedDefaults reads the defaults.jsonc from embedded FS.
+func GetEmbeddedDefaults() ([]byte, error) {
+	if fn := getEmbeddedDefaultsFS; fn != nil {
+		if fsys := fn(); fsys != nil {
+			return fs.ReadFile(fsys, "defaults.jsonc")
+		}
+	}
+	return nil, fmt.Errorf("no embedded defaults available")
+}
+
 func SeedAgentsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err
@@ -82,14 +97,22 @@ func SeedAgentsFrom(repoRoot string) error {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
 		srcPath := filepath.Join(srcDir, entry.Name())
 		dstPath := filepath.Join(dstDir, entry.Name())
 
-		if err := copyDirRecursive(srcPath, dstPath); err != nil {
-			return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+		if entry.IsDir() {
+			if err := copyDirRecursive(srcPath, dstPath); err != nil {
+				return fmt.Errorf("failed to copy %s to %s: %w", srcPath, dstPath, err)
+			}
+		} else {
+			// Copy individual files (like groups.json)
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to read %s: %w", srcPath, err)
+			}
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", dstPath, err)
+			}
 		}
 	}
 	return nil

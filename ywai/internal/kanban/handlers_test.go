@@ -500,3 +500,166 @@ func TestHandlers_ResolveActivity_Validation(t *testing.T) {
 		t.Errorf("expected 400 for bad JSON, got %d", resp.StatusCode)
 	}
 }
+
+// --- Permission Frontmatter Helper Tests ---
+
+func TestExtractPermissionsFromFrontmatter_NewFormat(t *testing.T) {
+	fm := `description: Test agent
+mode: all
+permission:
+  read: allow
+  edit: deny
+  write: deny
+  bash: allow
+  glob: allow
+`
+	perms := extractPermissionsFromFrontmatter(fm)
+	if perms["read"] != "allow" {
+		t.Errorf("expected read=allow, got %q", perms["read"])
+	}
+	if perms["edit"] != "deny" {
+		t.Errorf("expected edit=deny, got %q", perms["edit"])
+	}
+	if perms["bash"] != "allow" {
+		t.Errorf("expected bash=allow, got %q", perms["bash"])
+	}
+	if len(perms) != 5 {
+		t.Errorf("expected 5 permissions, got %d", len(perms))
+	}
+}
+
+func TestExtractPermissionsFromFrontmatter_OldFormat(t *testing.T) {
+	fm := `description: Test agent
+mode: all
+tools:
+  read: true
+  edit: false
+  write: false
+  bash: true
+`
+	perms := extractPermissionsFromFrontmatter(fm)
+	if perms["read"] != "allow" {
+		t.Errorf("expected read=allow, got %q", perms["read"])
+	}
+	if perms["edit"] != "deny" {
+		t.Errorf("expected edit=deny, got %q", perms["edit"])
+	}
+	if perms["write"] != "deny" {
+		t.Errorf("expected write=deny, got %q", perms["write"])
+	}
+	if perms["bash"] != "allow" {
+		t.Errorf("expected bash=allow, got %q", perms["bash"])
+	}
+}
+
+func TestExtractPermissionsFromFrontmatter_Empty(t *testing.T) {
+	fm := `description: Test agent
+mode: all
+`
+	perms := extractPermissionsFromFrontmatter(fm)
+	if len(perms) != 0 {
+		t.Errorf("expected 0 permissions, got %d", len(perms))
+	}
+}
+
+func TestExtractModeFromFrontmatter(t *testing.T) {
+	fm := `description: Test agent
+mode: primary
+permission:
+  read: allow
+`
+	mode := extractModeFromFrontmatter(fm)
+	if mode != "primary" {
+		t.Errorf("expected mode=primary, got %q", mode)
+	}
+}
+
+func TestExtractModeFromFrontmatter_Empty(t *testing.T) {
+	fm := `description: Test agent
+`
+	mode := extractModeFromFrontmatter(fm)
+	if mode != "" {
+		t.Errorf("expected empty mode, got %q", mode)
+	}
+}
+
+func TestUpdatePermissionsInFrontmatter_ExistingPermission(t *testing.T) {
+	content := "---\ndescription: Test agent\nmode: all\npermission:\n  read: allow\n  edit: deny\n---\n\n# Agent Body"
+	newPerms := map[string]string{"read": "allow", "edit": "allow", "bash": "ask"}
+	updated := updatePermissionsInFrontmatter(content, newPerms)
+
+	// Verify the body is preserved
+	if !strings.Contains(updated, "# Agent Body") {
+		t.Error("body was lost")
+	}
+
+	// Verify new permissions are present
+	if !strings.Contains(updated, "  edit: allow") {
+		t.Error("edit permission not updated")
+	}
+	if !strings.Contains(updated, "  bash: ask") {
+		t.Error("bash permission not added")
+	}
+
+	// Verify old permission block is replaced (not duplicated)
+	count := strings.Count(updated, "permission:")
+	if count != 1 {
+		t.Errorf("expected 1 permission: block, got %d", count)
+	}
+}
+
+func TestUpdatePermissionsInFrontmatter_OldToolsFormat(t *testing.T) {
+	content := "---\ndescription: Test agent\ntools:\n  read: true\n  edit: false\n---\n\n# Agent Body"
+	newPerms := map[string]string{"read": "allow", "edit": "allow"}
+	updated := updatePermissionsInFrontmatter(content, newPerms)
+
+	// Should replace tools: with permission:
+	if strings.Contains(updated, "tools:") {
+		t.Error("old tools: block should be replaced")
+	}
+	if !strings.Contains(updated, "permission:") {
+		t.Error("permission: block should exist")
+	}
+	if !strings.Contains(updated, "  edit: allow") {
+		t.Error("edit should be allow")
+	}
+}
+
+func TestUpdatePermissionsInFrontmatter_NoFrontmatter(t *testing.T) {
+	content := "# Agent Body\n\nSome content"
+	newPerms := map[string]string{"read": "allow"}
+	updated := updatePermissionsInFrontmatter(content, newPerms)
+
+	if !strings.HasPrefix(updated, "---") {
+		t.Error("should add frontmatter")
+	}
+	if !strings.Contains(updated, "  read: allow") {
+		t.Error("permission should be present")
+	}
+	if !strings.Contains(updated, "# Agent Body") {
+		t.Error("body should be preserved")
+	}
+}
+
+func TestParseFrontmatter(t *testing.T) {
+	content := "---\nfoo: bar\n---\n\nBody text"
+	fm, body := parseFrontmatter(content)
+	// Frontmatter includes leading/trailing whitespace from between --- delimiters
+	if strings.TrimSpace(fm) != "foo: bar" {
+		t.Errorf("unexpected frontmatter: %q", fm)
+	}
+	if body != "Body text" {
+		t.Errorf("unexpected body: %q", body)
+	}
+}
+
+func TestParseFrontmatter_NoFrontmatter(t *testing.T) {
+	content := "No frontmatter here"
+	fm, body := parseFrontmatter(content)
+	if fm != "" {
+		t.Errorf("expected empty frontmatter, got %q", fm)
+	}
+	if body != content {
+		t.Errorf("body should equal content")
+	}
+}

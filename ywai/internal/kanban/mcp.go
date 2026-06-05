@@ -23,9 +23,9 @@ type JSONRPCRequest struct {
 }
 
 type JSONRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      int         `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      int           `json:"id"`
+	Result  interface{}   `json:"result,omitempty"`
 	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
@@ -366,6 +366,20 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 				"required": []string{"session_id"},
 			},
 		},
+		{
+			"name":        "kanban_get_graph",
+			"description": "Get dependency graph for a session (nodes + edges). Shows task dependencies and helps identify blockers.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"session_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Session ID",
+					},
+				},
+				"required": []string{"session_id"},
+			},
+		},
 	}
 
 	return &JSONRPCResponse{
@@ -407,6 +421,8 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 		result, err = m.callGetActivities(params.Arguments)
 	case "kanban_get_pending_decisions":
 		result, err = m.callGetPendingDecisions(params.Arguments)
+	case "kanban_get_graph":
+		result, err = m.callGetGraph(params.Arguments)
 	default:
 		return m.errorResponse(req.ID, -32601, "Tool not found: "+params.Name)
 	}
@@ -798,6 +814,84 @@ func (m *MCPAdapter) callGetPendingDecisions(args json.RawMessage) (*ToolsCallRe
 			opts = fmt.Sprintf(" [options: %s]", strings.Join(a.Options, ", "))
 		}
 		lines = append(lines, fmt.Sprintf("- [%s] %s%s (id: %s)", a.Type, a.Content, opts, a.ID))
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: strings.Join(lines, "\n")},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callGetGraph(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	respBody, err := m.doRequest("GET", fmt.Sprintf("/api/sessions/%s/graph", req.SessionID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var graph GraphView
+	if err := json.Unmarshal(respBody, &graph); err != nil {
+		return nil, err
+	}
+
+	if len(graph.Nodes) == 0 {
+		return &ToolsCallResult{
+			Content: []ToolContent{
+				{Type: "text", Text: "No delegations in this session."},
+			},
+		}, nil
+	}
+
+	lines := []string{fmt.Sprintf("Dependency graph for session %s:", req.SessionID)}
+	lines = append(lines, "")
+
+	// Build a quick lookup for nodes
+	nodeMap := map[string]GraphNode{}
+	for _, n := range graph.Nodes {
+		nodeMap[n.ID] = n
+	}
+
+	lines = append(lines, fmt.Sprintf("Nodes (%d):", len(graph.Nodes)))
+	for _, n := range graph.Nodes {
+		lines = append(lines, fmt.Sprintf("  [%s] %s (%s/%s)", n.ID[:8], n.TaskSummary, n.Agent, n.Status))
+	}
+
+	lines = append(lines, "")
+	if len(graph.Edges) == 0 {
+		lines = append(lines, "Edges: none (no dependencies)")
+	} else {
+		lines = append(lines, fmt.Sprintf("Edges (%d dependencies):", len(graph.Edges)))
+		for _, e := range graph.Edges {
+			fromLabel := e.From[:8]
+			if n, ok := nodeMap[e.From]; ok {
+				fromLabel = n.TaskSummary
+			}
+			toLabel := e.To[:8]
+			if n, ok := nodeMap[e.To]; ok {
+				toLabel = n.TaskSummary
+			}
+			lines = append(lines, fmt.Sprintf("  %s → %s", fromLabel, toLabel))
+		}
+	}
+
+	// Highlight blocked tasks
+	var blocked []string
+	for _, n := range graph.Nodes {
+		if n.Status == "blocked" {
+			blocked = append(blocked, fmt.Sprintf("  🚫 %s (%s)", n.TaskSummary, n.Agent))
+		}
+	}
+	if len(blocked) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Blocked tasks:")
+		lines = append(lines, blocked...)
 	}
 
 	return &ToolsCallResult{

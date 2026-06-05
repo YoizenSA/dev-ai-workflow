@@ -12,5 +12,5 @@ cp -a "$REPO_ROOT/skills/." "$EMBED_DIR/skills/"
 cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
 
 skill_count=$(ls -d "$EMBED_DIR/skills"/*/ 2>/dev/null | wc -l)
-agent_count=$(ls -d "$EMBED_DIR/agents"/*/ 2>/dev/null | wc -l)
+agent_count=$(find "$EMBED_DIR/agents" -name "AGENT.md" | wc -l)
 echo "Prepared embedded data: $skill_count skills, $agent_count agent profiles"

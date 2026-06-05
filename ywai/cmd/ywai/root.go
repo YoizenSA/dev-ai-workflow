@@ -246,8 +246,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 	sourceDir := config.DataAgentsDir()
 	var profiles map[string]agentprofiles.AgentProfile
 	var err error
-	if filter.AllGroups || len(filter.Groups) == 0 {
+	if filter.AllGroups {
+		// --all-groups flag: install everything
 		profiles, err = agentprofiles.LoadProfiles(sourceDir)
+	} else if len(filter.Groups) == 0 {
+		// No groups specified: install core only
+		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{Groups: []string{}})
 	} else {
 		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, filter)
 	}
@@ -455,7 +459,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 	}
 
 	for _, a := range agents {
-		// Only install plugins for opencode/kilocode
+		// Only install plugins for opencode
 		if a.Name != "opencode" && a.Name != "kilocode" {
 			continue
 		}
@@ -547,7 +551,7 @@ func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 
 	for _, a := range agents {
-		// Only remove quota for opencode/kilocode
+		// Only remove quota for opencode
 		if a.Name != "opencode" && a.Name != "kilocode" {
 			continue
 		}

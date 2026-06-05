@@ -1,0 +1,21 @@
+{
+  "read": "allow",
+  "glob": "allow",
+  "grep": "allow",
+  "websearch": "allow",
+  "code_search": "allow",
+  "task": "allow",
+  "delegate": "allow",
+  "delegation_list": "allow",
+  "delegation_read": "allow",
+  "question": "allow",
+  "todowrite": "allow",
+  "todoread": "allow",
+  "skill": "allow",
+  "edit": "deny",
+  "write": "deny",
+  "bash": "deny",
+  "lsp": "deny",
+  "ast_grep": "deny",
+  "webfetch": "deny"
+}

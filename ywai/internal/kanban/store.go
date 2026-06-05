@@ -52,9 +52,9 @@ func (s *Store) Save() error {
 // saveLocked is the inner save implementation; caller must hold at least an RLock.
 func (s *Store) saveLocked() error {
 	data := struct {
-		Sessions    map[string]*Session             `json:"sessions"`
-		Delegations map[string]*Delegation          `json:"delegations"`
-		Activities  map[string][]ActivityEvent      `json:"activities"`
+		Sessions    map[string]*Session        `json:"sessions"`
+		Delegations map[string]*Delegation     `json:"delegations"`
+		Activities  map[string][]ActivityEvent `json:"activities"`
 	}{
 		Sessions:    s.sessions,
 		Delegations: s.delegations,
@@ -267,6 +267,20 @@ func (s *Store) DelegationExists(id string) bool {
 	return ok
 }
 
+// DeleteDelegation removes a delegation and its activities.
+func (s *Store) DeleteDelegation(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	if _, ok := s.delegations[id]; !ok {
+		return fmt.Errorf("delegation %s not found", id)
+	}
+	delete(s.delegations, id)
+	delete(s.activities, id)
+	return nil
+}
+
 // UpdateDelegation applies the given updates to a delegation.
 // Supported fields: status, column, handoff_preview, blocker.
 func (s *Store) UpdateDelegation(id string, status, column, handoffPreview, blocker *string) (*Delegation, error) {
@@ -466,4 +480,114 @@ func (s *Store) GetPendingDecisions(sessionID string) ([]ActivityEvent, error) {
 	}
 
 	return pending, nil
+}
+
+// GraphView returns the dependency graph for a session.
+func (s *Store) GraphView(sessionID string) (*GraphView, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, fmt.Errorf("session %s not found", sessionID)
+	}
+
+	var nodes []GraphNode
+	var edges []GraphEdge
+
+	for _, d := range s.delegations {
+		if d.SessionID != sessionID {
+			continue
+		}
+		nodes = append(nodes, GraphNode{
+			ID:          d.ID,
+			Agent:       d.Agent,
+			TaskSummary: d.TaskSummary,
+			Status:      d.Status,
+			Column:      d.Column,
+		})
+		for _, dep := range d.Dependencies {
+			edges = append(edges, GraphEdge{From: dep, To: d.ID})
+		}
+	}
+
+	return &GraphView{
+		Session: session,
+		Nodes:   nodes,
+		Edges:   edges,
+	}, nil
+}
+
+// HasCycle checks if adding a dependency from -> to would create a cycle.
+// Uses DFS from 'to' to see if we can reach 'from'.
+func (s *Store) HasCycle(from, to string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	visited := make(map[string]bool)
+	var dfs func(node string) bool
+	dfs = func(node string) bool {
+		if node == from {
+			return true // found a cycle back to the source
+		}
+		if visited[node] {
+			return false
+		}
+		visited[node] = true
+		if d, ok := s.delegations[node]; ok {
+			for _, dep := range d.Dependencies {
+				if dfs(dep) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return dfs(to)
+}
+
+// AutoUnblock checks all delegations that depend on the given delegationID.
+// If all dependencies of a dependent delegation are now "done", it moves
+// the dependent from blocked → ready and clears its blocker.
+// Returns the list of delegation IDs that were auto-unblocked.
+// Caller must NOT already hold a write lock.
+func (s *Store) AutoUnblock(delegationID string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	var unblocked []string
+
+	// Find all delegations that depend on delegationID
+	for _, d := range s.delegations {
+		dependsOnThis := false
+		for _, dep := range d.Dependencies {
+			if dep == delegationID {
+				dependsOnThis = true
+				break
+			}
+		}
+		if !dependsOnThis {
+			continue
+		}
+
+		// Check if ALL dependencies are done
+		allDone := true
+		for _, dep := range d.Dependencies {
+			depD, ok := s.delegations[dep]
+			if !ok || depD.Status != "done" {
+				allDone = false
+				break
+			}
+		}
+
+		if allDone && (d.Column == "backlog" || d.Status == "blocked") {
+			d.Column = "ready"
+			d.Status = "pending"
+			d.Blocker = ""
+			unblocked = append(unblocked, d.ID)
+		}
+	}
+
+	return unblocked
 }

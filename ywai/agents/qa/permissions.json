@@ -1,9 +1,0 @@
-{
-  "read": "allow",
-  "edit": "allow",
-  "write": "allow",
-  "bash": "allow",
-  "glob": "allow",
-  "grep": "allow",
-  "lsp": "allow"
-}

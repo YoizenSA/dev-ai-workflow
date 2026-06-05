@@ -215,6 +215,13 @@
 			case "decision.pending":
 				addToDecisionFeed(payload);
 				break;
+
+			case "delegation.auto_unblocked":
+				showToast(
+					`✅ Auto-unblocked: <strong>${payload.task_summary}</strong>`,
+				);
+				refreshGraphIfVisible();
+				break;
 		}
 	}
 
@@ -254,7 +261,9 @@
 		// Mark the activity as resolved in the stream
 		const activityStream = card.querySelector(".card-activity");
 		if (activityStream) {
-			const entry = activityStream.querySelector(`[data-activity-id="${payload.activity_id}"]`);
+			const entry = activityStream.querySelector(
+				`[data-activity-id="${payload.activity_id}"]`,
+			);
 			if (entry) {
 				entry.classList.add("resolved");
 				const resolutionEl = entry.querySelector(".activity-resolution");
@@ -305,10 +314,13 @@
 	}
 
 	async function resolveActivity(delegationId, activityId, resolution) {
-		return apiFetch(`/api/delegations/${delegationId}/activities/${activityId}`, {
-			method: "PATCH",
-			body: JSON.stringify({ resolution }),
-		});
+		return apiFetch(
+			`/api/delegations/${delegationId}/activities/${activityId}`,
+			{
+				method: "PATCH",
+				body: JSON.stringify({ resolution }),
+			},
+		);
 	}
 
 	async function getPendingDecisions(sessionId) {
@@ -463,6 +475,7 @@
 			boardData = data;
 			renderBoard();
 			renderDecisionFeed();
+			refreshGraphIfVisible();
 		} catch (e) {
 			console.error("Failed to load board:", e);
 			boardData = null;
@@ -526,9 +539,11 @@
 		};
 
 		const statusClass = d.status || "pending";
-		const statusLabel = (d.status || "pending").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+		const statusLabel = (d.status || "pending")
+			.replace(/_/g, " ")
+			.replace(/\b\w/g, (c) => c.toUpperCase());
 		const elapsed = formatTimeAgo(d.started_at || d.created_at);
-		const pendingAction = (d.pending_action ?? false);
+		const pendingAction = d.pending_action ?? false;
 		const latestMsg = d.latest_activity || "";
 
 		const card = document.createElement("div");
@@ -1062,12 +1077,236 @@
 			() => (sessionModal.style.display = "none"),
 		);
 
+	/* ─── Dependency Graph ─── */
+	let graphVisible = false;
+	let graphData = null; // stored for node click lookup
+
+	const GRAPH_COLORS = {
+		done: "#2ed573",
+		running: "#5e60f0",
+		in_progress: "#5e60f0",
+		review: "#ffa502",
+		changes: "#ffa502",
+		blocked: "#ff4757",
+		pending: "#555",
+	};
+
+	function setupGraphToggle() {
+		const toggleBtn = document.getElementById("graph-toggle-btn");
+		const closeBtn = document.getElementById("graph-close-btn");
+
+		if (toggleBtn) {
+			toggleBtn.addEventListener("click", () => {
+				graphVisible = !graphVisible;
+				const panel = document.getElementById("graph-panel");
+				if (graphVisible) {
+					panel.style.display = "block";
+					toggleBtn.classList.add("active");
+					refreshGraph();
+				} else {
+					panel.style.display = "none";
+					toggleBtn.classList.remove("active");
+				}
+			});
+		}
+
+		if (closeBtn) {
+			closeBtn.addEventListener("click", () => {
+				graphVisible = false;
+				document.getElementById("graph-panel").style.display = "none";
+				if (toggleBtn) toggleBtn.classList.remove("active");
+			});
+		}
+	}
+
+	async function refreshGraph() {
+		if (!currentSessionId || !graphVisible) return;
+
+		try {
+			const data = await apiFetch(`/api/sessions/${currentSessionId}/graph`);
+			graphData = data;
+			renderGraph(data);
+		} catch (e) {
+			console.error("Failed to load graph:", e);
+		}
+	}
+
+	function refreshGraphIfVisible() {
+		if (graphVisible) refreshGraph();
+	}
+
+	function renderGraph(data) {
+		const svg = document.getElementById("graph-svg");
+		const statsEl = document.getElementById("graph-stats");
+		if (!svg || !data) return;
+
+		const nodes = data.nodes || [];
+		const edges = data.edges || [];
+
+		// Update stats
+		if (statsEl) {
+			const blocked = nodes.filter((n) => n.status === "blocked").length;
+			statsEl.textContent = `${nodes.length} tasks · ${edges.length} dependencies${blocked > 0 ? ` · ${blocked} blocked` : ""}`;
+		}
+
+		if (nodes.length === 0) {
+			svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#888" font-size="14">No delegations to display</text>`;
+			return;
+		}
+
+		// ─── Layout ───
+		// Group nodes by column for a left-to-right swimlane layout
+		const columnOrder = ["backlog", "ready", "in_progress", "review", "done"];
+		const columnGroups = {};
+		columnOrder.forEach((c) => (columnGroups[c] = []));
+		nodes.forEach((n) => {
+			const col = columnGroups[n.column] ? n.column : "backlog";
+			columnGroups[col].push(n);
+		});
+
+		const NODE_W = 160;
+		const NODE_H = 56;
+		const COL_GAP = 60;
+		const ROW_GAP = 20;
+		const PADDING = 30;
+
+		// Calculate positions
+		const positions = {};
+		let maxX = 0;
+		let maxY = 0;
+		let colX = PADDING;
+
+		columnOrder.forEach((colName) => {
+			const colNodes = columnGroups[colName];
+			if (colNodes.length === 0) {
+				colX += NODE_W + COL_GAP;
+				return;
+			}
+			let y = PADDING;
+			colNodes.forEach((node) => {
+				positions[node.id] = { x: colX, y: y };
+				if (colX + NODE_W > maxX) maxX = colX + NODE_W;
+				if (y + NODE_H > maxY) maxY = y + NODE_H;
+				y += NODE_H + ROW_GAP;
+			});
+			colX += NODE_W + COL_GAP;
+		});
+
+		const svgW = Math.max(maxX + PADDING, 600);
+		const svgH = Math.max(maxY + PADDING, 380);
+
+		// Build SVG content
+		let svgContent = "";
+
+		// Arrow marker
+		svgContent += `
+			<defs>
+				<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+					<polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+				</marker>
+			</defs>`;
+
+		// Column labels (swimlane headers)
+		const colLabels = {
+			backlog: "Backlog",
+			ready: "Ready",
+			in_progress: "In Progress",
+			review: "Review",
+			done: "Done",
+		};
+		let labelX = PADDING;
+		columnOrder.forEach((colName) => {
+			const colNodes = columnGroups[colName];
+			const colWidth = colNodes.length > 0 ? NODE_W : NODE_W;
+			svgContent += `<text x="${labelX + colWidth / 2}" y="18" text-anchor="middle" fill="#666" font-size="10" font-weight="700" text-transform="uppercase" letter-spacing="1">${colLabels[colName] || colName}</text>`;
+			labelX += NODE_W + COL_GAP;
+		});
+
+		// Draw edges first (behind nodes)
+		const nodeMap = {};
+		nodes.forEach((n) => (nodeMap[n.id] = n));
+
+		edges.forEach((edge) => {
+			const from = positions[edge.from];
+			const to = positions[edge.to];
+			if (!from || !to) return;
+
+			const x1 = from.x + NODE_W;
+			const y1 = from.y + NODE_H / 2;
+			const x2 = to.x;
+			const y2 = to.y + NODE_H / 2;
+
+			// Bezier curve for smooth edges
+			const dx = Math.abs(x2 - x1) * 0.4;
+			const cp1x = x1 + dx;
+			const cp2x = x2 - dx;
+
+			const fromNode = nodeMap[edge.from];
+			const edgeColor = fromNode
+				? GRAPH_COLORS[fromNode.status] || "#555"
+				: "#555";
+
+			svgContent += `<path class="graph-edge" d="M${x1},${y1} C${cp1x},${y1} ${cp2x},${y2} ${x2},${y2}" stroke="${edgeColor}" stroke-opacity="0.4" />`;
+		});
+
+		// Draw nodes
+		nodes.forEach((node) => {
+			const pos = positions[node.id];
+			if (!pos) return;
+
+			const color = GRAPH_COLORS[node.status] || "#555";
+			const agent = AGENTS[node.agent] || { icon: "❓", label: node.agent };
+			const shortId = node.id.substring(0, 8);
+
+			// Truncate task summary
+			const maxLen = 22;
+			const summary =
+				node.task_summary.length > maxLen
+					? node.task_summary.substring(0, maxLen) + "..."
+					: node.task_summary;
+
+			svgContent += `
+				<g class="graph-node" data-id="${node.id}">
+					<rect class="graph-node-rect" x="${pos.x}" y="${pos.y}" width="${NODE_W}" height="${NODE_H}"
+						fill="${color}22" stroke="${color}" stroke-width="2" />
+					<circle cx="${pos.x + 14}" cy="${pos.y + 16}" r="9" fill="${color}33" />
+					<text class="graph-node-agent" x="${pos.x + 14}" y="${pos.y + 19}" text-anchor="middle">${agent.icon}</text>
+					<text class="graph-node-label" x="${pos.x + 28}" y="${pos.y + 19}">${escapeHtml(summary)}</text>
+					<text class="graph-node-id" x="${pos.x + NODE_W - 6}" y="${pos.y + 14}" text-anchor="end">#${shortId}</text>
+					<text class="graph-node-status" x="${pos.x + 8}" y="${pos.y + NODE_H - 8}" fill="${color}">${node.status.toUpperCase()}</text>
+				</g>`;
+		});
+
+		svg.setAttribute("viewBox", `0 0 ${svgW} ${svgH}`);
+		svg.setAttribute("width", svgW);
+		svg.setAttribute("height", svgH);
+		svg.innerHTML = svgContent;
+
+		// Click on node to open detail modal
+		svg.querySelectorAll(".graph-node").forEach((nodeEl) => {
+			nodeEl.addEventListener("click", () => {
+				const id = nodeEl.dataset.id;
+				// Find the delegation in boardData
+				if (boardData && boardData.columns) {
+					for (const col of Object.values(boardData.columns)) {
+						const d = col.find((d) => d.id === id);
+						if (d) {
+							openDetailsModal(d);
+							return;
+						}
+					}
+				}
+			});
+		});
+	}
+
 	/* ─── Init ─── */
 	async function init() {
 		connectWS();
 		setupDragDrop();
 		setupTabs();
 		setupConfig();
+		setupGraphToggle();
 		createDecisionFeedSidebar();
 		setupBoardEventDelegation();
 		await loadSessions();
@@ -1129,7 +1368,9 @@
 								showAll.textContent = `Show all ${activities.length} events...`;
 								showAll.addEventListener("click", (ev) => {
 									ev.stopPropagation();
-									stream.querySelectorAll(".hidden-event").forEach((el) => el.classList.add("visible"));
+									stream
+										.querySelectorAll(".hidden-event")
+										.forEach((el) => el.classList.add("visible"));
 									showAll.remove();
 									stream.style.maxHeight = "360px";
 								});
@@ -1151,7 +1392,9 @@
 				return;
 			}
 
-			const actionBtn = e.target.closest(".action-approve, .action-reject, .action-modify");
+			const actionBtn = e.target.closest(
+				".action-approve, .action-reject, .action-modify",
+			);
 			if (actionBtn) {
 				const card = actionBtn.closest(".card");
 				if (!card) return;
@@ -1856,11 +2099,12 @@
 		loading.style.display = "flex";
 
 		try {
-			// Fetch available tools (built-in + MCP discovered)
+			// Fetch available tools (built-in + MCP discovered + plugin discovered)
 			const toolsRes = await fetch("/api/config/tools");
 			const toolsData = await toolsRes.json();
 			const allTools = toolsData.all || [];
 			const mcpTools = toolsData.mcp_tools || {};
+			const pluginTools = toolsData.plugin_tools || {};
 
 			// Fetch agents from markdown files
 			const agentsRes = await fetch("/api/config/agents");
@@ -1871,6 +2115,12 @@
 			const configRes = await fetch("/api/config/opencode");
 			const config = await configRes.json();
 			const jsonAgents = config.agent || {};
+
+			// Build lookup maps from markdown agents (now includes mode + permission)
+			const mdAgentMap = {};
+			for (const a of mdAgents) {
+				mdAgentMap[a.name] = a;
+			}
 
 			// Merge: agents from markdown + agents from opencode.json
 			const allAgentNames = [
@@ -1893,11 +2143,18 @@
 				tools.forEach((t) => mcpToolSet.add(t));
 			}
 
+			// Build a set of plugin tool names for quick lookup
+			const pluginToolSet = new Set();
+			for (const [, tools] of Object.entries(pluginTools)) {
+				if (Array.isArray(tools)) tools.forEach((t) => pluginToolSet.add(t));
+			}
+
 			for (const name of allAgentNames) {
-				// Get permission from opencode.json if exists
 				const jsonAgent = jsonAgents[name] || {};
-				const permission = jsonAgent.permission || {};
-				const mode = jsonAgent.mode || "all";
+				const mdAgent = mdAgentMap[name] || {};
+				// Prefer opencode.json permissions, fall back to markdown frontmatter
+				const permission = jsonAgent.permission || mdAgent.permission || {};
+				const mode = jsonAgent.mode || mdAgent.mode || "all";
 				const isMdAgent = mdAgentNames.includes(name);
 
 				const card = document.createElement("div");
@@ -1905,42 +2162,67 @@
 				card.dataset.agent = name;
 
 				let rowsHtml = "";
+				let currentCategory = "";
 				for (const key of allTools) {
 					const val = permission[key] || "deny";
 					const isMcp = mcpToolSet.has(key);
-					const mcpBadge = isMcp ? '<span class="mcp-badge">MCP</span>' : "";
+					const isPlugin = pluginToolSet.has(key);
+					let badge = "";
+					if (isMcp) badge = '<span class="mcp-badge">MCP</span>';
+					else if (isPlugin) badge = '<span class="plugin-badge">Plugin</span>';
+
+					// Determine category
+					let category = "Built-in";
+					if (isMcp) category = "MCP Tools";
+					else if (isPlugin) category = "Plugin Tools";
+
+					if (category !== currentCategory) {
+						currentCategory = category;
+						rowsHtml += `
+										<div class="tool-category">
+											<span class="tool-category-label">${category}</span>
+										</div>
+									`;
+					}
+
 					rowsHtml += `
-                        <div class="permission-row">
-                            <span class="permission-key">${key}${mcpBadge}</span>
-                            <select class="permission-select ${val}" data-key="${key}" data-agent="${name}">
-                                <option value="allow" ${val === "allow" ? "selected" : ""}>allow</option>
-                                <option value="ask" ${val === "ask" ? "selected" : ""}>ask</option>
-                                <option value="deny" ${val === "deny" ? "selected" : ""}>deny</option>
-                            </select>
-                        </div>
-                    `;
+									<div class="permission-row" data-tool="${key}">
+										<span class="permission-key">${key}${badge}</span>
+										<select class="permission-select ${val}" data-key="${key}" data-agent="${name}">
+											<option value="allow" ${val === "allow" ? "selected" : ""}>allow</option>
+											<option value="ask" ${val === "ask" ? "selected" : ""}>ask</option>
+											<option value="deny" ${val === "deny" ? "selected" : ""}>deny</option>
+										</select>
+									</div>
+								`;
 				}
 
 				const sourceBadge = isMdAgent
-					? '<span class="skill-badge" style="margin-left: 8px;">MD</span>'
+					? '<span class="skill-badge">MD</span>'
 					: "";
 
 				card.innerHTML = `
-                    <div class="permission-card-header">
-                        <div>
-                            <span class="permission-card-name">${name}</span>
-                            <span class="permission-card-mode">${mode}</span>
-                            ${sourceBadge}
-                        </div>
-                        <div class="permission-actions">
-                            <button class="btn btn-secondary btn-sm" onclick="window.kanbanApp.addCustomTool('${name}')">+ Tool</button>
-                            <button class="btn btn-primary btn-sm" onclick="window.kanbanApp.savePermissions('${name}')">Save</button>
-                        </div>
-                    </div>
-                    <div class="permission-rows">
-                        ${rowsHtml}
-                    </div>
-                `;
+								<div class="permission-card-header">
+									<div class="permission-card-header-left">
+										<div class="permission-card-header-top">
+											<span class="permission-card-name">${name}</span>
+											<span class="permission-card-mode">${mode}</span>
+											${sourceBadge}
+										</div>
+									</div>
+									<div class="permission-actions">
+										<div class="bulk-actions">
+											<button class="btn btn-secondary btn-sm" onclick="window.kanbanApp.bulkSetPermission('${name}', 'allow')" title="Allow all tools">✓ All</button>
+											<button class="btn btn-secondary btn-sm" onclick="window.kanbanApp.bulkSetPermission('${name}', 'deny')" title="Deny all tools">✗ All</button>
+										</div>
+										<button class="btn btn-secondary btn-sm" onclick="window.kanbanApp.addCustomTool('${name}')">+ Tool</button>
+										<button class="btn btn-primary btn-sm" onclick="window.kanbanApp.savePermissions('${name}')">Save</button>
+									</div>
+								</div>
+								<div class="permission-rows">
+									${rowsHtml}
+								</div>
+							`;
 				grid.appendChild(card);
 			}
 
@@ -1981,20 +2263,67 @@
 
 		const row = document.createElement("div");
 		row.className = "permission-row";
+		row.setAttribute("data-tool", key);
 		row.innerHTML = `
-            <span class="permission-key">${key}</span>
-            <select class="permission-select deny" data-key="${key}" data-agent="${agentName}">
-                <option value="allow">allow</option>
-                <option value="ask">ask</option>
-                <option value="deny" selected>deny</option>
-            </select>
-        `;
+			<span class="permission-key">${key}</span>
+			<select class="permission-select deny" data-key="${key}" data-agent="${agentName}">
+				<option value="allow">allow</option>
+				<option value="ask">ask</option>
+				<option value="deny" selected>deny</option>
+			</select>
+		`;
 		rowsContainer.appendChild(row);
 		row
 			.querySelector(".permission-select")
 			.addEventListener("change", function () {
 				this.className = `permission-select ${this.value}`;
 			});
+	}
+
+	function bulkSetPermission(agentName, value) {
+		const selects = document.querySelectorAll(
+			`.permission-select[data-agent="${agentName}"]`,
+		);
+		selects.forEach((sel) => {
+			sel.value = value;
+			sel.className = `permission-select ${value}`;
+		});
+		showToast(`All tools set to ${value}`, "success");
+	}
+
+	function filterPermissions(query) {
+		const normalizedQuery = query.toLowerCase().trim();
+		const rows = document.querySelectorAll(".permission-row");
+		const categories = document.querySelectorAll(".tool-category");
+
+		if (!normalizedQuery) {
+			rows.forEach((row) => (row.style.display = ""));
+			categories.forEach((cat) => (cat.style.display = ""));
+			return;
+		}
+
+		rows.forEach((row) => {
+			const toolName = row.getAttribute("data-tool") || "";
+			if (toolName.toLowerCase().includes(normalizedQuery)) {
+				row.style.display = "";
+			} else {
+				row.style.display = "none";
+			}
+		});
+
+		// Hide category headers if all their tools are hidden
+		categories.forEach((cat) => {
+			const nextRows = [];
+			let sibling = cat.nextElementSibling;
+			while (sibling && !sibling.classList.contains("tool-category")) {
+				if (sibling.classList.contains("permission-row")) {
+					nextRows.push(sibling);
+				}
+				sibling = sibling.nextElementSibling;
+			}
+			const hasVisible = nextRows.some((r) => r.style.display !== "none");
+			cat.style.display = hasVisible ? "" : "none";
+		});
 	}
 
 	async function savePermissions(agentName) {
@@ -2162,9 +2491,24 @@
 		clearModelsJson,
 		savePermissions,
 		addCustomTool,
+		bulkSetPermission,
+		filterPermissions,
 	};
 
-	document.addEventListener("DOMContentLoaded", init);
+	// Setup permissions search
+	function setupPermissionsSearch() {
+		const searchInput = document.getElementById("permissions-search-input");
+		if (searchInput) {
+			searchInput.addEventListener("input", (e) => {
+				filterPermissions(e.target.value);
+			});
+		}
+	}
+
+	document.addEventListener("DOMContentLoaded", () => {
+		init();
+		setupPermissionsSearch();
+	});
 })();
 
 // Close provider modal on Escape key
@@ -2178,7 +2522,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 // --- Activity Stream & Decision Feed Styles ---
-(function () {
+(() => {
 	const style = document.createElement("style");
 	style.textContent = `
 /* ═══════════════════════════════════════════

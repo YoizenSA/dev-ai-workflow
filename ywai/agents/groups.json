@@ -22,6 +22,10 @@
         "migration-validator-focused",
         "migration-validator"
       ]
+    },
+    "experiment": {
+      "description": "Experimental and temporary agents",
+      "agents": []
     }
   }
 }
