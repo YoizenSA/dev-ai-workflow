@@ -236,10 +236,10 @@ func TestStore_GetActivities(t *testing.T) {
 	}
 
 	// Verify chronological order is maintained
-	if !activities[0].CreatedAt.Before(activities[1].CreatedAt) {
+	if activities[0].CreatedAt.After(activities[1].CreatedAt) {
 		t.Error("activities should be in chronological order: 0 before 1")
 	}
-	if !activities[1].CreatedAt.Before(activities[2].CreatedAt) {
+	if activities[1].CreatedAt.After(activities[2].CreatedAt) {
 		t.Error("activities should be in chronological order: 1 before 2")
 	}
 

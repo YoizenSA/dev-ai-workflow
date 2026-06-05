@@ -405,6 +405,11 @@ func (s *Store) GetActivities(delegationID string) ([]ActivityEvent, error) {
 	if !ok {
 		return []ActivityEvent{}, nil
 	}
+
+	// Sort by CreatedAt to guarantee chronological order regardless of insertion timing
+	sort.Slice(activities, func(i, j int) bool {
+		return activities[i].CreatedAt.Before(activities[j].CreatedAt)
+	})
 	return activities, nil
 }
 
