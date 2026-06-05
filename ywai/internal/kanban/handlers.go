@@ -1205,7 +1205,8 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 		toolSet[t] = true
 	}
 
-	// Also collect tools already referenced in agent permissions
+	// Also collect valid tools referenced in agent permissions
+	// (skip deprecated keys like todoread/todowrite that aren't in ValidPermissionKeys)
 	var agents map[string]json.RawMessage
 	if agentRaw, ok := config["agent"]; ok {
 		_ = json.Unmarshal(agentRaw, &agents)
@@ -1218,7 +1219,9 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 			if permRaw, ok := agent["permission"]; ok {
 				if err := json.Unmarshal(permRaw, &perm); err == nil {
 					for k := range perm {
-						toolSet[k] = true
+						if ValidPermissionKeys[k] {
+							toolSet[k] = true
+						}
 					}
 				}
 			}

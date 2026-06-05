@@ -1885,6 +1885,9 @@ body {
 .tool-category {
 	padding: 8px 6px 4px;
 	margin-top: 8px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
 .tool-category:first-child {
@@ -1907,6 +1910,20 @@ body {
 	flex: 1;
 	height: 1px;
 	background: var(--border);
+}
+
+.category-bulk-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.btn-xs {
+	padding: 2px 6px !important;
+	font-size: 0.6rem !important;
+	font-weight: 600;
+	line-height: 1;
+	min-width: 0;
 }
 
 .permission-row {
@@ -2424,8 +2441,16 @@ body {
 }
 
 @keyframes graphSlideIn {
-	from { opacity: 0; transform: translateY(-10px); max-height: 0; }
-	to { opacity: 1; transform: translateY(0); max-height: 600px; }
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+		max-height: 0;
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+		max-height: 600px;
+	}
 }
 
 .graph-header {
@@ -2434,7 +2459,7 @@ body {
 	justify-content: space-between;
 	padding: 12px 16px;
 	border-bottom: 1px solid var(--border);
-	background: rgba(255,255,255,0.02);
+	background: rgba(255, 255, 255, 0.02);
 }
 
 .graph-header h2 {
@@ -2455,8 +2480,11 @@ body {
 	width: 100%;
 	height: 400px;
 	overflow: auto;
-	background:
-		radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
+	background: radial-gradient(
+		circle at 1px 1px,
+		rgba(255, 255, 255, 0.03) 1px,
+		transparent 0
+	);
 	background-size: 24px 24px;
 }
 
@@ -2473,7 +2501,7 @@ body {
 	gap: 16px;
 	padding: 8px 16px;
 	border-top: 1px solid var(--border);
-	background: rgba(255,255,255,0.02);
+	background: rgba(255, 255, 255, 0.02);
 	flex-wrap: wrap;
 }
 
@@ -2539,7 +2567,7 @@ body {
 .graph-node-agent {
 	font-size: 8px;
 	font-weight: 700;
-	fill: rgba(255,255,255,0.7);
+	fill: rgba(255, 255, 255, 0.7);
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
 	pointer-events: none;
@@ -2547,7 +2575,7 @@ body {
 
 .graph-node-id {
 	font-size: 7px;
-	fill: rgba(255,255,255,0.4);
+	fill: rgba(255, 255, 255, 0.4);
 	font-family: "SF Mono", "Fira Code", monospace;
 	pointer-events: none;
 }

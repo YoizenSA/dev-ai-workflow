@@ -2137,11 +2137,17 @@
 			const grid = document.createElement("div");
 			grid.className = "permissions-grid";
 
-			// Build a set of MCP tool names for quick lookup
+			// Build maps: tool -> MCP server name, and MCP server -> tool set
 			const mcpToolSet = new Set();
-			for (const [, tools] of Object.entries(mcpTools)) {
-				tools.forEach((t) => mcpToolSet.add(t));
+			const toolToMcpServer = {};
+			for (const [serverName, tools] of Object.entries(mcpTools)) {
+				tools.forEach((t) => {
+					mcpToolSet.add(t);
+					toolToMcpServer[t] = serverName;
+				});
 			}
+			// Built-in tools default to "allow" when not specified
+			const builtInSet = new Set(toolsData.built_in || []);
 
 			// Build a set of plugin tool names for quick lookup
 			const pluginToolSet = new Set();
@@ -2164,23 +2170,34 @@
 				let rowsHtml = "";
 				let currentCategory = "";
 				for (const key of allTools) {
-					const val = permission[key] || "deny";
+					// Built-in tools default to allow, others (MCP/plugin/custom) to deny
+					const val =
+						permission[key] || (builtInSet.has(key) ? "allow" : "deny");
 					const isMcp = mcpToolSet.has(key);
 					const isPlugin = pluginToolSet.has(key);
 					let badge = "";
 					if (isMcp) badge = '<span class="mcp-badge">MCP</span>';
 					else if (isPlugin) badge = '<span class="plugin-badge">Plugin</span>';
 
-					// Determine category
+					// Determine category (MCP tools grouped by server name)
 					let category = "Built-in";
-					if (isMcp) category = "MCP Tools";
+					if (isMcp) category = "MCP: " + (toolToMcpServer[key] || "Tools");
 					else if (isPlugin) category = "Plugin Tools";
 
 					if (category !== currentCategory) {
 						currentCategory = category;
+						const catId = category.replace(/[^a-zA-Z0-9_-]/g, "_");
+						// Add bulk buttons for MCP categories
+						const bulkBtns = category.startsWith("MCP: ")
+							? `<div class="category-bulk-actions">
+										<button class="btn btn-secondary btn-xs" onclick="window.kanbanApp.bulkSetCategoryPermission('${name}', '${catId}', 'allow')" title="Allow all">✓</button>
+										<button class="btn btn-secondary btn-xs" onclick="window.kanbanApp.bulkSetCategoryPermission('${name}', '${catId}', 'deny')" title="Deny all">✗</button>
+									</div>`
+							: "";
 						rowsHtml += `
-										<div class="tool-category">
+										<div class="tool-category" data-category="${catId}">
 											<span class="tool-category-label">${category}</span>
+											${bulkBtns}
 										</div>
 									`;
 					}
@@ -2289,6 +2306,25 @@
 			sel.className = `permission-select ${value}`;
 		});
 		showToast(`All tools set to ${value}`, "success");
+	}
+
+	function bulkSetCategoryPermission(agentName, catId, value) {
+		const cat = document.querySelector(
+			`.permission-card[data-agent="${agentName}"] .tool-category[data-category="${catId}"]`,
+		);
+		if (!cat) return;
+		let sibling = cat.nextElementSibling;
+		while (sibling && !sibling.classList.contains("tool-category")) {
+			if (sibling.classList.contains("permission-row")) {
+				const sel = sibling.querySelector(".permission-select");
+				if (sel) {
+					sel.value = value;
+					sel.className = `permission-select ${value}`;
+				}
+			}
+			sibling = sibling.nextElementSibling;
+		}
+		showToast(`Category set to ${value}`, "success");
 	}
 
 	function filterPermissions(query) {
@@ -2492,6 +2528,7 @@
 		savePermissions,
 		addCustomTool,
 		bulkSetPermission,
+		bulkSetCategoryPermission,
 		filterPermissions,
 	};
 

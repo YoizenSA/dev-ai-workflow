@@ -666,6 +666,7 @@ func maskKey(key string) string {
 }
 
 func init() {
+	daemonCmd.Flags().Bool("mcp", false, "Run as MCP stdio adapter")
 	daemonCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
 	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
