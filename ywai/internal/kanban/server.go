@@ -8,16 +8,21 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
+// DefaultUIPort is the default port for the Kanban UI server.
+const DefaultUIPort = 5768
+
 // Server is the embedded HTTP server for the Kanban board.
 type Server struct {
-	port    int
-	store   *Store
-	hub     *Hub
-	httpSrv *http.Server
-	mux     *http.ServeMux
+	port      int
+	store     *Store
+	hub       *Hub
+	httpSrv   *http.Server
+	mux       *http.ServeMux
+	portReady chan struct{} // closed when port is assigned
 }
 
 // New creates a new Kanban server listening on the given port.
@@ -86,10 +91,11 @@ func New(port int, dataDir string) *Server {
 	mux.Handle("GET /", uiHandler())
 
 	return &Server{
-		port:  port,
-		store: store,
-		hub:   hub,
-		mux:   mux,
+		port:      port,
+		store:     store,
+		hub:       hub,
+		mux:       mux,
+		portReady: make(chan struct{}),
 	}
 }
 
@@ -109,12 +115,25 @@ func (s *Server) Start() error {
 
 	ln, err := net.Listen("tcp", s.httpSrv.Addr)
 	if err != nil {
-		return fmt.Errorf("kanban: failed to listen on %s: %w", s.httpSrv.Addr, err)
+		if s.port != 0 {
+			log.Printf("Port %d in use, falling back to random port", s.port)
+			s.port = 0
+			s.httpSrv.Addr = ":0"
+			ln, err = net.Listen("tcp", ":0")
+		}
+		if err != nil {
+			return fmt.Errorf("kanban: failed to listen: %w", err)
+		}
 	}
 
 	// Capture the actual port (useful when port 0 is used)
 	s.port = ln.Addr().(*net.TCPAddr).Port
 	log.Printf("ywai Kanban server running on http://localhost:%d", s.port)
+
+	// Signal that port is ready (for async starts)
+	if s.portReady != nil {
+		close(s.portReady)
+	}
 
 	if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("kanban: server error: %w", err)
@@ -134,4 +153,38 @@ func (s *Server) Stop() {
 // Port returns the actual port the server is listening on.
 func (s *Server) Port() int {
 	return s.port
+}
+
+// WaitForPort blocks until the server has a port assigned (for async starts).
+// Returns the assigned port.
+func (s *Server) WaitForPort() int {
+	<-s.portReady
+	return s.port
+}
+
+var (
+	defaultServer   *Server
+	defaultServerMu sync.Mutex
+)
+
+// GetOrStart returns the default kanban server, starting it if needed.
+// If the server is already running, it returns the existing instance.
+// port is the desired port (0 for random). If the port is in use, it falls back to random.
+func GetOrStart(port int) (*Server, error) {
+	defaultServerMu.Lock()
+	defer defaultServerMu.Unlock()
+
+	if defaultServer != nil {
+		return defaultServer, nil
+	}
+
+	s := New(port, "")
+	go func() {
+		if err := s.Start(); err != nil {
+			log.Printf("kanban: server error: %v", err)
+		}
+	}()
+	s.WaitForPort() // wait for server to be ready
+	defaultServer = s
+	return s, nil
 }

@@ -86,39 +86,16 @@ type MCPAdapter struct {
 	client *http.Client
 }
 
-// NewMCPAdapter creates a new MCP adapter, starting the kanban server internally.
+// NewMCPAdapter creates a new MCP adapter, using the singleton kanban server.
 func NewMCPAdapter() *MCPAdapter {
-	// Start kanban server on a random port
-	s := New(0, "") // port 0 = random, use default data dir
-	go s.Start()
-
-	// Wait for server to be ready (poll up to 10 seconds)
+	s, err := GetOrStart(DefaultUIPort) // Get or start singleton server on UI port
+	if err != nil {
+		log.Fatalf("kanban: failed to start server: %v", err)
+	}
 	client := &http.Client{Timeout: 2 * time.Second}
-	ready := false
-	for i := 0; i < 100; i++ {
-		port := s.Port()
-		if port > 0 {
-			// Try to hit an endpoint to confirm the server is serving
-			resp, err := client.Get(fmt.Sprintf("http://localhost:%d/api/sessions", port))
-			if err == nil {
-				resp.Body.Close()
-				ready = true
-				break
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !ready {
-		// Best effort: the server may still be starting; proceed anyway
-	}
-
-	port := s.Port()
-	log.Printf("🚀 ywai Kanban UI: http://localhost:%d", port)
-	log.Printf("📊 Open this URL in your browser to view the Kanban board")
-
 	return &MCPAdapter{
 		server: s,
-		port:   port,
+		port:   s.Port(),
 		client: client,
 	}
 }

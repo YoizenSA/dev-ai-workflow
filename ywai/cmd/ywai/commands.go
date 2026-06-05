@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -514,11 +515,15 @@ var daemonCmd = &cobra.Command{
 			return nil
 		}
 
-		// Normal HTTP server mode
-		port, _ := cmd.Flags().GetInt("port")
-		s := kanban.New(port, "")
-		fmt.Printf("ywai Kanban server running on http://localhost:%d\n", s.Port())
-		return s.Start()
+	// Normal HTTP server mode with auto-start and port resolution
+	port, _ := cmd.Flags().GetInt("port")
+	s, err := kanban.GetOrStart(port)
+	if err != nil {
+		return err
+	}
+	log.Printf("ywai Kanban server running on http://localhost:%d", s.Port())
+	// Block forever (server runs in background from GetOrStart)
+	select {}
 	},
 }
 
@@ -661,9 +666,9 @@ func maskKey(key string) string {
 }
 
 func init() {
-	daemonCmd.Flags().IntP("port", "p", 5768, "Port for Kanban UI server")
-	daemonCmd.Flags().Bool("mcp", false, "Run as MCP server (stdio JSON-RPC)")
-	uiCmd.Flags().IntP("port", "p", 5768, "Port for Kanban UI server")
+	daemonCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
+
+	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(uiCmd)

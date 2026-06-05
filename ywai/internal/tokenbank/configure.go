@@ -102,29 +102,73 @@ func ConfigurePi(baseURL, apiKey string) error {
 // Copilot
 // ---------------------------------------------------------------------------
 
-// Copilot config path depends on OS.
-func CopilotConfigPath() string {
+// CopilotConfigPaths returns all VS Code chatLanguageModels.json paths:
+// - Default user config (Code)
+// - Default user config (Code - Insiders)
+// - All profile-specific configs found under both Code and Code - Insiders.
+func CopilotConfigPaths() []string {
+	home, _ := os.UserHomeDir()
+	var paths []string
+	var baseDirs []string
+
 	switch runtime.GOOS {
 	case "darwin":
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "Application Support", "Code", "User", "chatLanguageModels.json")
+		baseDirs = append(baseDirs,
+			filepath.Join(home, "Library", "Application Support", "Code"),
+			filepath.Join(home, "Library", "Application Support", "Code - Insiders"),
+		)
 	case "windows":
 		appdata := os.Getenv("APPDATA")
 		if appdata == "" {
-			home, _ := os.UserHomeDir()
 			appdata = filepath.Join(home, "AppData", "Roaming")
 		}
-		return filepath.Join(appdata, "Code", "User", "chatLanguageModels.json")
+		baseDirs = append(baseDirs,
+			filepath.Join(appdata, "Code"),
+			filepath.Join(appdata, "Code - Insiders"),
+		)
 	default: // linux
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, ".config", "Code", "User", "chatLanguageModels.json")
+		baseDirs = append(baseDirs,
+			filepath.Join(home, ".config", "Code"),
+			filepath.Join(home, ".config", "Code - Insiders"),
+		)
 	}
+
+	seen := make(map[string]bool)
+	for _, base := range baseDirs {
+		// Default user config
+		defaultPath := filepath.Join(base, "User", "chatLanguageModels.json")
+		if !seen[defaultPath] {
+			seen[defaultPath] = true
+			if _, err := os.Stat(filepath.Dir(defaultPath)); err == nil {
+				// Only add if the parent dir (User/) exists
+				paths = append(paths, defaultPath)
+			}
+		}
+
+		// Profile-specific configs
+		profilesDir := filepath.Join(base, "User", "profiles")
+		entries, err := os.ReadDir(profilesDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			profilePath := filepath.Join(profilesDir, entry.Name(), "chatLanguageModels.json")
+			if !seen[profilePath] {
+				seen[profilePath] = true
+				paths = append(paths, profilePath)
+			}
+		}
+	}
+
+	return paths
 }
 
-// ConfigureCopilot merges the tokenbank provider into VS Code's chatLanguageModels.json.
+// ConfigureCopilot merges the tokenbank provider into VS Code's chatLanguageModels.json
+// for the default user config and all discovered profiles.
 func ConfigureCopilot(baseURL, apiKey string) error {
-	configPath := CopilotConfigPath()
-
 	// Fetch config from API
 	resp, err := FetchConfig(baseURL, apiKey, "copilot")
 	if err != nil {
@@ -137,52 +181,92 @@ func ConfigureCopilot(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing copilot config: %w", err)
 	}
 
-	// Read existing config (array)
-	existing, err := ReadJSONArrayFile(configPath)
-	if err != nil {
-		return err
+	// Inject thinking/reasoning support into each model entry
+	newEntries = injectThinkingFields(newEntries)
+
+	// Discover all config paths (default + profiles)
+	configPaths := CopilotConfigPaths()
+	if len(configPaths) == 0 {
+		return fmt.Errorf("no VS Code installation found (checked Code and Code - Insiders)")
 	}
 
-	// Find and replace existing Token Bank entry, or append
-	newEntriesMap := makeEntryMap(newEntries)
-	merged := make([]interface{}, 0, len(existing)+len(newEntries))
-
-	// Track which new entries we've added
-	added := make(map[string]bool)
-
-	for _, entry := range existing {
-		entryMap, ok := entry.(map[string]interface{})
-		if ok {
-			name, _ := entryMap["name"].(string)
-			vendor, _ := entryMap["vendor"].(string)
-			key := vendor + "/" + name
-
-			// If this is a Token Bank entry, replace with new config
-			if replacement, exists := newEntriesMap[key]; exists {
-				merged = append(merged, replacement)
-				added[key] = true
-				continue
-			}
+	for _, configPath := range configPaths {
+		// Read existing config (array)
+		existing, err := ReadJSONArrayFile(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ Skipping %s: %v\n", configPath, err)
+			continue
 		}
-		merged = append(merged, entry)
-	}
 
-	// Append any new entries not yet added
-	for key, entry := range newEntriesMap {
-		if !added[key] {
+		// Find and replace existing Token Bank entry, or append
+		newEntriesMap := makeEntryMap(newEntries)
+		merged := make([]interface{}, 0, len(existing)+len(newEntries))
+
+		// Track which new entries we've added
+		added := make(map[string]bool)
+
+		for _, entry := range existing {
+			entryMap, ok := entry.(map[string]interface{})
+			if ok {
+				name, _ := entryMap["name"].(string)
+				vendor, _ := entryMap["vendor"].(string)
+				key := vendor + "/" + name
+
+				// If this is a Token Bank entry, replace with new config
+				if replacement, exists := newEntriesMap[key]; exists {
+					merged = append(merged, replacement)
+					added[key] = true
+					continue
+				}
+			}
 			merged = append(merged, entry)
 		}
+
+		// Append any new entries not yet added
+		for key, entry := range newEntriesMap {
+			if !added[key] {
+				merged = append(merged, entry)
+			}
+		}
+
+		// Write
+		if err := WriteJSONFile(configPath, merged); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ Failed to write %s: %v\n", configPath, err)
+			continue
+		}
+
+		fmt.Printf("  ✓ Copilot configured: %s\n", configPath)
 	}
 
-	// Write
-	if err := WriteJSONFile(configPath, merged); err != nil {
-		return err
-	}
-
-	fmt.Printf("  ✓ Copilot configured: %s\n", configPath)
 	fmt.Printf("    Provider: Token Bank → %s/v1/chat/completions\n", resp.Origin)
 	fmt.Printf("    NOTE: Set TOKENBANK_API_KEY environment variable for Copilot to authenticate\n")
 	return nil
+}
+
+// injectThinkingFields adds thinking and supportsReasoningEffort to every model
+// in each provider entry, matching the format VS Code expects for reasoning models.
+func injectThinkingFields(entries []interface{}) []interface{} {
+	reasoningEffort := []interface{}{"low", "medium", "high"}
+
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		modelsRaw, ok := entryMap["models"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, model := range modelsRaw {
+			modelMap, ok := model.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			modelMap["thinking"] = true
+			modelMap["supportsReasoningEffort"] = reasoningEffort
+		}
+	}
+	return entries
 }
 
 // makeEntryMap converts a slice of entries to a map keyed by "vendor/name".
