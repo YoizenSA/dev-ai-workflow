@@ -7,15 +7,15 @@
   "code_search": "allow",
   "task": "allow",
   "question": "allow",
-  "todowrite": "allow",
-  "todoread": "allow",
   "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow",
   "edit": "deny",
   "write": "deny",
   "bash": "deny",
   "websearch": "deny",
   "webfetch": "deny",
-  "delegate": "deny",
-  "delegation_list": "deny",
-  "delegation_read": "deny"
+  "delegate": "deny"
 }

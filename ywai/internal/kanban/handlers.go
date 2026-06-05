@@ -683,6 +683,22 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
+// sortedPermissionKeys returns ValidPermissionKeys as a sorted slice for error messages.
+func sortedPermissionKeys() []string {
+	keys := make([]string, 0, len(ValidPermissionKeys))
+	for k := range ValidPermissionKeys {
+		keys = append(keys, k)
+	}
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[j] < keys[i] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	return keys
+}
+
 // --- Config Handlers ---
 
 func opencodeConfigPath() (string, error) {
@@ -1018,6 +1034,40 @@ func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, perms)
 }
 
+// ValidPermissionKeys is the canonical set of allowed permission keys.
+// Includes all built-in Pi tools plus extended categories (memory, intercom, ado, mcp).
+var ValidPermissionKeys = map[string]bool{
+	// File & code tools
+	"read":        true,
+	"edit":        true,
+	"write":       true,
+	"bash":        true,
+	"glob":        true,
+	"grep":        true,
+	"lsp":         true,
+	"ast_grep":    true,
+	"websearch":   true,
+	"code_search": true,
+	"webfetch":    true,
+	// Task & orchestration (consolidated: task=full todo, delegate=full subagent)
+	"task":     true,
+	"delegate": true,
+	"question": true,
+	"skill":    true,
+	// Extended categories (plugins, MCP, integrations)
+	"memory":   true,
+	"intercom": true,
+	"ado":      true,
+	"mcp":      true,
+}
+
+// ValidPermissionValues are the only accepted permission values.
+var ValidPermissionValues = map[string]bool{
+	"allow": true,
+	"ask":   true,
+	"deny":  true,
+}
+
 // PUT /api/config/agents/{name}/permissions
 // Writes permissions to opencode.json if the agent exists there;
 // otherwise writes to the agent's markdown frontmatter.
@@ -1036,14 +1086,31 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate permission values
-	validValues := map[string]bool{"allow": true, "ask": true, "deny": true}
+	// Validate permission keys and values
+	var invalidKeys []string
+	var invalidValues []string
 	for k, v := range body {
-		if !validValues[v] {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid value %q for key %q: must be allow, ask, or deny", v, k)})
-			return
+		if !ValidPermissionKeys[k] {
+			invalidKeys = append(invalidKeys, k)
 		}
-		_ = k
+		if !ValidPermissionValues[v] {
+			invalidValues = append(invalidValues, fmt.Sprintf("%s=%q", k, v))
+		}
+	}
+	if len(invalidKeys) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":   "invalid permission key(s)",
+			"invalid": invalidKeys,
+			"valid":   sortedPermissionKeys(),
+		})
+		return
+	}
+	if len(invalidValues) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":   "invalid permission value(s), must be allow, ask, or deny",
+			"invalid": invalidValues,
+		})
+		return
 	}
 
 	// Try opencode.json first
@@ -1128,8 +1195,8 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 	builtIn := []string{
 		"read", "edit", "write", "bash", "glob", "grep", "lsp",
 		"ast_grep", "websearch", "code_search", "webfetch",
-		"task", "delegate", "delegation_list", "delegation_read",
-		"question", "todowrite", "todoread", "skill",
+		"task", "delegate", "question", "skill",
+		"memory", "intercom", "ado", "mcp",
 	}
 
 	// Collect all known tool names in a set

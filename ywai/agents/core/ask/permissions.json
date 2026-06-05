@@ -9,13 +9,13 @@
   "ast_grep": "allow",
   "task": "allow",
   "question": "allow",
-  "todowrite": "allow",
-  "todoread": "allow",
   "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow",
   "edit": "deny",
   "write": "deny",
   "bash": "deny",
-  "delegate": "deny",
-  "delegation_list": "deny",
-  "delegation_read": "deny"
+  "delegate": "deny"
 }

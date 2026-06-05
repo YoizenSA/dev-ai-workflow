@@ -10,12 +10,12 @@
   "code_search": "allow",
   "task": "allow",
   "question": "allow",
-  "todowrite": "allow",
-  "todoread": "allow",
   "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow",
   "ast_grep": "deny",
   "webfetch": "deny",
-  "delegate": "deny",
-  "delegation_list": "deny",
-  "delegation_read": "deny"
+  "delegate": "deny"
 }

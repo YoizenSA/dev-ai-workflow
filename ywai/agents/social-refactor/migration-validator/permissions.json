@@ -3,6 +3,13 @@
   "glob": "allow",
   "grep": "allow",
   "webfetch": "allow",
+  "task": "allow",
+  "question": "allow",
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow",
   "edit": "deny",
   "write": "deny",
   "bash": "deny"

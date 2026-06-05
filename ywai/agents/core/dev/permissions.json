@@ -12,10 +12,10 @@
   "webfetch": "allow",
   "task": "allow",
   "delegate": "allow",
-  "delegation_list": "allow",
-  "delegation_read": "allow",
   "question": "allow",
-  "todowrite": "allow",
-  "todoread": "allow",
-  "skill": "allow"
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow"
 }

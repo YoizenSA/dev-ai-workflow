@@ -527,7 +527,7 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 
 	// Permission as nested YAML
 	b.WriteString("permission:\n")
-	permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "delegation_list", "delegation_read", "question", "todowrite", "todoread", "skill"}
+	permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
 	written := map[string]bool{}
 	for _, key := range permOrder {
 		if val, ok := profile.Permission[key]; ok {

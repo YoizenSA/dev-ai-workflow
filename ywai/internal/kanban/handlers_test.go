@@ -663,3 +663,58 @@ func TestParseFrontmatter_NoFrontmatter(t *testing.T) {
 		t.Errorf("body should equal content")
 	}
 }
+
+// --- Permission validation tests ---
+
+func TestValidPermissionKeys_AllKnownKeys(t *testing.T) {
+	expected := []string{
+		"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep",
+		"websearch", "code_search", "webfetch",
+		"task", "delegate", "question", "skill",
+		"memory", "intercom", "ado", "mcp",
+	}
+	for _, key := range expected {
+		if !ValidPermissionKeys[key] {
+			t.Errorf("expected key %q to be valid", key)
+		}
+	}
+}
+
+func TestValidPermissionKeys_RejectsInvalid(t *testing.T) {
+	invalid := []string{"unknown_tool", "sudo", "admin", "root", "exec", "",
+		"todowrite", "todoread", "delegation_list", "delegation_read"} // deprecated keys
+	for _, key := range invalid {
+		if ValidPermissionKeys[key] {
+			t.Errorf("key %q should NOT be valid", key)
+		}
+	}
+}
+
+func TestValidPermissionValues_AllKnown(t *testing.T) {
+	for _, v := range []string{"allow", "ask", "deny"} {
+		if !ValidPermissionValues[v] {
+			t.Errorf("expected value %q to be valid", v)
+		}
+	}
+}
+
+func TestValidPermissionValues_RejectsInvalid(t *testing.T) {
+	invalid := []string{"yes", "no", "true", "false", "1", "0", "ENABLED", ""}
+	for _, v := range invalid {
+		if ValidPermissionValues[v] {
+			t.Errorf("value %q should NOT be valid", v)
+		}
+	}
+}
+
+func TestSortedPermissionKeys_IsSorted(t *testing.T) {
+	keys := sortedPermissionKeys()
+	if len(keys) != len(ValidPermissionKeys) {
+		t.Errorf("expected %d keys, got %d", len(ValidPermissionKeys), len(keys))
+	}
+	for i := 1; i < len(keys); i++ {
+		if keys[i-1] >= keys[i] {
+			t.Errorf("keys not sorted: %q >= %q", keys[i-1], keys[i])
+		}
+	}
+}
