@@ -34,6 +34,13 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing opencode config: %w", err)
 	}
 
+	// Fetch models and inject context limits
+	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
+		injectModelLimits(newConfig, modelsResp.Models)
+	} else {
+		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
+	}
+
 	// Read existing config
 	existing, err := ReadJSONFile(configPath)
 	if err != nil {
@@ -51,6 +58,45 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 	fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
 	fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	return nil
+}
+
+// injectModelLimits inyecta limit.context y limit.output en cada modelo
+// del provider opencode-admin dentro del config map.
+func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
+	provider, _ := config["provider"].(map[string]interface{})
+	if provider == nil {
+		return
+	}
+	admin, _ := provider["opencode-admin"].(map[string]interface{})
+	if admin == nil {
+		return
+	}
+	modelsSection, _ := admin["models"].(map[string]interface{})
+	if modelsSection == nil {
+		return
+	}
+
+	for _, m := range models {
+		entry, ok := modelsSection[m.ID].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		hasCtx := m.MaxInputTokens > 0
+		hasOut := m.MaxOutputToken > 0
+		if !hasCtx && !hasOut {
+			continue
+		}
+
+		limit := make(map[string]interface{})
+		if hasCtx {
+			limit["context"] = m.MaxInputTokens
+		}
+		if hasOut {
+			limit["output"] = m.MaxOutputToken
+		}
+		entry["limit"] = limit
+	}
 }
 
 // ---------------------------------------------------------------------------
