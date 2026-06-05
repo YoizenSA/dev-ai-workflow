@@ -5,6 +5,7 @@
 	--bg-card: rgba(22, 26, 45, 0.65);
 	--bg-card-hover: rgba(28, 33, 56, 0.85);
 	--bg-column: rgba(14, 17, 30, 0.8);
+	--bg-hover: rgba(255, 255, 255, 0.06);
 	--text-primary: #f1f3f9;
 	--text-secondary: #a3a8c3;
 	--text-muted: #646a8a;
@@ -57,20 +58,38 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 16px 32px;
+	padding: 12px 24px;
+	gap: 16px;
 	background: var(--bg-secondary);
 	border-bottom: 1px solid var(--border);
 	backdrop-filter: blur(12px);
 	position: sticky;
 	top: 0;
 	z-index: 100;
+	min-height: 64px;
 }
 
 .header-left {
 	display: flex;
 	align-items: center;
-	gap: 32px;
-	flex: 1;
+	flex: 0 0 auto;
+	min-width: 140px;
+}
+
+.header-center {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1 1 auto;
+	min-width: 0;
+	justify-content: flex-start;
+}
+
+.header-right {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex: 0 0 auto;
 }
 
 .header-title {
@@ -99,19 +118,6 @@ body {
 	margin-left: 8px;
 	border-left: 1px solid var(--border);
 	padding-left: 8px;
-}
-
-.session-control {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	flex-wrap: wrap;
-}
-
-.header-right {
-	display: flex;
-	align-items: center;
-	gap: 16px;
 }
 
 /* Buttons */
@@ -187,10 +193,13 @@ body {
 	color: var(--text-primary);
 	font-size: 0.875rem;
 	font-weight: 500;
-	min-width: 280px;
+	min-width: 200px;
+	max-width: 320px;
+	flex: 1 1 auto;
 	cursor: pointer;
 	transition: all 0.2s;
 	outline: none;
+	text-overflow: ellipsis;
 }
 
 .session-select:hover {
@@ -845,29 +854,28 @@ body {
 	}
 
 	.header {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 16px;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
+	.header-left {
+		min-width: auto;
+	}
+
+	.header-center {
+		flex: 1 1 100%;
+		order: 3;
+		flex-wrap: wrap;
 	}
 
 	.header-right {
-		width: 100%;
-		justify-content: space-between;
-	}
-
-	.session-bar {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 16px;
-	}
-
-	.session-control {
-		width: 100%;
+		margin-left: auto;
 	}
 
 	.session-select {
-		flex: 1;
+		flex: 1 1 200px;
 		min-width: auto;
+		max-width: none;
 	}
 }
 

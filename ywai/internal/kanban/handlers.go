@@ -3,6 +3,7 @@ package kanban
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"os"
@@ -316,6 +317,99 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 	}
 	h.broadcastUpdate("delegation.status_changed", d)
 	writeJSON(w, http.StatusOK, d)
+}
+
+// --- Activity handlers ---
+
+// CreateActivity adds a new activity event to a delegation.
+func (h *Handlers) CreateActivity(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var req struct {
+		Type    string   `json:"type"`
+		Content string   `json:"content"`
+		Options []string `json:"options,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+
+	if req.Type == "" || req.Content == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type and content are required"})
+		return
+	}
+
+	activity := &ActivityEvent{
+		Type:    ActivityType(req.Type),
+		Content: html.EscapeString(req.Content),
+		Options: req.Options,
+	}
+
+	if err := h.store.AddActivity(id, activity); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.broadcastUpdate("activity.created", activity)
+	writeJSON(w, http.StatusCreated, activity)
+}
+
+// GetActivities returns all activity events for a delegation.
+func (h *Handlers) GetActivities(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !h.store.DelegationExists(id) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "delegation not found"})
+		return
+	}
+	activities, err := h.store.GetActivities(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, activities)
+}
+
+// ResolveActivity sets the resolution on a pending activity.
+func (h *Handlers) ResolveActivity(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	actID := r.PathValue("actId")
+
+	var req struct {
+		Resolution string `json:"resolution"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+
+	if req.Resolution == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resolution is required"})
+		return
+	}
+
+	if err := h.store.ResolveActivity(id, actID, req.Resolution); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.broadcastUpdate("activity.resolved", map[string]string{
+		"delegation_id": id,
+		"activity_id":   actID,
+		"resolution":    req.Resolution,
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "resolved"})
+}
+
+// GetPendingDecisions returns all unresolved decision/question/blocked activities for a session.
+func (h *Handlers) GetPendingDecisions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pending, err := h.store.GetPendingDecisions(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, pending)
 }
 
 // --- WebSocket handler ---

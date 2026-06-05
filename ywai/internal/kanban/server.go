@@ -50,6 +50,12 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("GET /api/delegations/{id}", handlers.GetDelegation)
 	mux.HandleFunc("PATCH /api/delegations/{id}", handlers.UpdateDelegation)
 
+	// Activity routes
+	mux.HandleFunc("POST /api/delegations/{id}/activities", handlers.CreateActivity)
+	mux.HandleFunc("GET /api/delegations/{id}/activities", handlers.GetActivities)
+	mux.HandleFunc("PATCH /api/delegations/{id}/activities/{actId}", handlers.ResolveActivity)
+	mux.HandleFunc("GET /api/sessions/{id}/decisions", handlers.GetPendingDecisions)
+
 	// WebSocket route
 	mux.HandleFunc("GET /api/events", handlers.HandleWebSocket)
 

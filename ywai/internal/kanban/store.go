@@ -17,6 +17,7 @@ type Store struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
 	delegations map[string]*Delegation
+	activities  map[string][]ActivityEvent // keyed by delegationID
 	filePath    string
 }
 
@@ -25,6 +26,7 @@ func NewStore(dataDir string) *Store {
 	s := &Store{
 		sessions:    make(map[string]*Session),
 		delegations: make(map[string]*Delegation),
+		activities:  make(map[string][]ActivityEvent),
 		filePath:    filepath.Join(dataDir, "kanban-state.json"),
 	}
 	// Try to load existing state
@@ -50,11 +52,13 @@ func (s *Store) Save() error {
 // saveLocked is the inner save implementation; caller must hold at least an RLock.
 func (s *Store) saveLocked() error {
 	data := struct {
-		Sessions    map[string]*Session    `json:"sessions"`
-		Delegations map[string]*Delegation `json:"delegations"`
+		Sessions    map[string]*Session             `json:"sessions"`
+		Delegations map[string]*Delegation          `json:"delegations"`
+		Activities  map[string][]ActivityEvent      `json:"activities"`
 	}{
 		Sessions:    s.sessions,
 		Delegations: s.delegations,
+		Activities:  s.activities,
 	}
 
 	pretty, err := json.MarshalIndent(data, "", "  ")
@@ -91,8 +95,9 @@ func (s *Store) Load() error {
 	}
 
 	var state struct {
-		Sessions    map[string]*Session    `json:"sessions"`
-		Delegations map[string]*Delegation `json:"delegations"`
+		Sessions    map[string]*Session        `json:"sessions"`
+		Delegations map[string]*Delegation     `json:"delegations"`
+		Activities  map[string][]ActivityEvent `json:"activities"`
 	}
 
 	if err := json.Unmarshal(data, &state); err != nil {
@@ -104,6 +109,9 @@ func (s *Store) Load() error {
 	}
 	if state.Delegations != nil {
 		s.delegations = state.Delegations
+	}
+	if state.Activities != nil {
+		s.activities = state.Activities
 	}
 	return nil
 }
@@ -188,6 +196,7 @@ func (s *Store) DeleteSession(id string) error {
 	for dID, d := range s.delegations {
 		if d.SessionID == id {
 			delete(s.delegations, dID)
+			delete(s.activities, dID)
 		}
 	}
 
@@ -248,6 +257,14 @@ func (s *Store) ListDelegations(sessionID string) []*Delegation {
 		return result[i].CreatedAt.After(result[j].CreatedAt)
 	})
 	return result
+}
+
+// DelegationExists returns true if a delegation with the given ID exists.
+func (s *Store) DelegationExists(id string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.delegations[id]
+	return ok
 }
 
 // UpdateDelegation applies the given updates to a delegation.
@@ -324,4 +341,129 @@ func (s *Store) BoardView(sessionID string) (*BoardView, error) {
 		Session: session,
 		Columns: columns,
 	}, nil
+}
+
+// --- Activity operations ---
+
+// AddActivity appends a new activity event to the given delegation.
+func (s *Store) AddActivity(delegationID string, activity *ActivityEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	// Validate activity type.
+	switch activity.Type {
+	case ActivityProgress, ActivityDecision, ActivityQuestion, ActivityBlocked:
+		// valid
+	default:
+		return fmt.Errorf("invalid activity type: %s", activity.Type)
+	}
+
+	d, ok := s.delegations[delegationID]
+	if !ok {
+		return fmt.Errorf("delegation %s not found", delegationID)
+	}
+
+	activity.ID = newID()
+	activity.DelegationID = delegationID
+	activity.CreatedAt = time.Now()
+	if activity.Options == nil {
+		activity.Options = []string{}
+	}
+
+	s.activities[delegationID] = append(s.activities[delegationID], *activity)
+
+	// Update delegation's latest activity and pending action flag
+	d.LatestActivity = string(activity.Type)
+	if activity.Type == ActivityDecision || activity.Type == ActivityQuestion || activity.Type == ActivityBlocked {
+		d.PendingAction = true
+	}
+
+	return nil
+}
+
+// GetActivities returns all activity events for a delegation in chronological order.
+func (s *Store) GetActivities(delegationID string) ([]ActivityEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	activities, ok := s.activities[delegationID]
+	if !ok {
+		return []ActivityEvent{}, nil
+	}
+	return activities, nil
+}
+
+// ResolveActivity sets the resolution on a pending activity event.
+func (s *Store) ResolveActivity(delegationID string, activityID string, resolution string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	activities, ok := s.activities[delegationID]
+	if !ok {
+		return fmt.Errorf("no activities found for delegation %s", delegationID)
+	}
+
+	found := false
+	for i := range activities {
+		if activities[i].ID == activityID {
+			if activities[i].Resolution != "" {
+				return fmt.Errorf("activity %s already resolved", activityID)
+			}
+			now := time.Now()
+			activities[i].Resolution = resolution
+			activities[i].ResolvedAt = &now
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("activity %s not found in delegation %s", activityID, delegationID)
+	}
+
+	s.activities[delegationID] = activities
+
+	// Check if there are still pending activities for this delegation
+	if d, ok := s.delegations[delegationID]; ok {
+		hasPending := false
+		for _, a := range activities {
+			if a.ResolvedAt == nil && (a.Type == ActivityDecision || a.Type == ActivityQuestion || a.Type == ActivityBlocked) {
+				hasPending = true
+				break
+			}
+		}
+		d.PendingAction = hasPending
+	}
+
+	return nil
+}
+
+// GetPendingDecisions returns unresolved decision, question, or blocked activities for a session.
+func (s *Store) GetPendingDecisions(sessionID string) ([]ActivityEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var pending []ActivityEvent
+
+	for _, d := range s.delegations {
+		if d.SessionID != sessionID {
+			continue
+		}
+		activities, ok := s.activities[d.ID]
+		if !ok {
+			continue
+		}
+		for _, a := range activities {
+			if a.ResolvedAt != nil {
+				continue
+			}
+			if a.Type == ActivityDecision || a.Type == ActivityQuestion || a.Type == ActivityBlocked {
+				pending = append(pending, a)
+			}
+		}
+	}
+
+	return pending, nil
 }

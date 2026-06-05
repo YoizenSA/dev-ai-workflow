@@ -25,6 +25,30 @@ type Delegation struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 	HandoffPreview string     `json:"handoff_preview,omitempty"`
 	Blocker        string     `json:"blocker,omitempty"`
+	PendingAction  bool       `json:"pending_action,omitempty"`
+	LatestActivity string     `json:"latest_activity,omitempty"`
+}
+
+// ActivityType categorizes agent activity events.
+type ActivityType string
+
+const (
+	ActivityProgress ActivityType = "progress"
+	ActivityDecision ActivityType = "decision"
+	ActivityQuestion ActivityType = "question"
+	ActivityBlocked  ActivityType = "blocked"
+)
+
+// ActivityEvent represents a progress update, decision request, or question from an agent.
+type ActivityEvent struct {
+	ID           string       `json:"id"`
+	DelegationID string       `json:"delegation_id"`
+	Type         ActivityType `json:"type"`
+	Content      string       `json:"content"`
+	Options      []string     `json:"options,omitempty"`
+	Resolution   string       `json:"resolution,omitempty"`
+	CreatedAt    time.Time    `json:"created_at"`
+	ResolvedAt   *time.Time   `json:"resolved_at,omitempty"`
 }
 
 // BoardUpdate is sent via WebSocket to notify clients of changes.

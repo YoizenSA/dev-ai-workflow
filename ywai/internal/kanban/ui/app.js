@@ -203,6 +203,171 @@
 					loadSessions();
 				}
 				break;
+
+			case "activity.created":
+				handleActivityCreated(payload);
+				break;
+
+			case "activity.resolved":
+				handleActivityResolved(payload);
+				break;
+
+			case "decision.pending":
+				addToDecisionFeed(payload);
+				break;
+		}
+	}
+
+	function handleActivityCreated(payload) {
+		const card = findCard(payload.delegation_id);
+		if (!card) return;
+
+		// Update the action bar
+		const actionBar = card.querySelector(".card-action-bar");
+		const latestMsg = card.querySelector(".action-latest-msg");
+		if (actionBar) {
+			actionBar.style.display = "flex";
+		}
+		if (latestMsg && payload.content) {
+			latestMsg.textContent = payload.content;
+		}
+
+		// Append to the activity stream if visible
+		const activityStream = card.querySelector(".card-activity");
+		if (activityStream && activityStream.style.display !== "none") {
+			const entry = createActivityEntry(payload);
+			activityStream.appendChild(entry);
+			activityStream.scrollTop = activityStream.scrollHeight;
+		}
+	}
+
+	function handleActivityResolved(payload) {
+		const card = findCard(payload.delegation_id);
+		if (!card) return;
+
+		// Hide the action bar
+		const actionBar = card.querySelector(".card-action-bar");
+		if (actionBar) {
+			actionBar.style.display = "none";
+		}
+
+		// Mark the activity as resolved in the stream
+		const activityStream = card.querySelector(".card-activity");
+		if (activityStream) {
+			const entry = activityStream.querySelector(`[data-activity-id="${payload.activity_id}"]`);
+			if (entry) {
+				entry.classList.add("resolved");
+				const resolutionEl = entry.querySelector(".activity-resolution");
+				if (resolutionEl) {
+					resolutionEl.textContent = `✓ Resolved: ${escapeHtml(payload.resolution || "done")}`;
+				}
+			}
+		}
+	}
+
+	function addToDecisionFeed(payload) {
+		const feed = document.getElementById("decision-feed");
+		if (!feed) return;
+		const list = feed.querySelector(".feed-list");
+		if (!list) return;
+
+		const item = document.createElement("div");
+		item.className = "feed-item";
+		item.setAttribute("data-decision-id", payload.id);
+		item.innerHTML = `
+			<div class="feed-item-agent">🤖 ${escapeHtml(payload.agent || "agent")}</div>
+			<div class="feed-item-content">${escapeHtml(payload.content || payload.question || "")}</div>
+			<div class="feed-item-time">${formatTimeAgo(payload.created_at || new Date().toISOString())}</div>
+		`;
+		list.prepend(item);
+		updateFeedBadge();
+	}
+
+	function createActivityEntry(activity) {
+		const entry = document.createElement("div");
+		const actType = activity.type || "progress";
+		entry.className = `activity-event type-${actType}`;
+		entry.setAttribute("data-activity-id", activity.id);
+		entry.innerHTML = `
+			<div class="activity-header">
+				<span class="activity-type type-${activity.type || "progress"}">${activity.type || "progress"}</span>
+				<span class="activity-time">${formatTimeAgo(activity.created_at)}</span>
+			</div>
+			<div class="activity-content">${escapeHtml(activity.content || "")}</div>
+			<div class="activity-resolution"></div>
+		`;
+		return entry;
+	}
+
+	/* ─── Activity & Decision API Helpers ─── */
+	async function fetchActivities(delegationId) {
+		return apiFetch(`/api/delegations/${delegationId}/activities`);
+	}
+
+	async function resolveActivity(delegationId, activityId, resolution) {
+		return apiFetch(`/api/delegations/${delegationId}/activities/${activityId}`, {
+			method: "PATCH",
+			body: JSON.stringify({ resolution }),
+		});
+	}
+
+	async function getPendingDecisions(sessionId) {
+		return apiFetch(`/api/sessions/${sessionId}/decisions`);
+	}
+
+	async function renderDecisionFeed() {
+		if (!currentSessionId) {
+			const feed = document.getElementById("decision-feed");
+			if (feed) feed.style.display = "none";
+			return;
+		}
+
+		try {
+			const decisions = await getPendingDecisions(currentSessionId);
+			const feed = document.getElementById("decision-feed");
+			if (!feed) return;
+
+			feed.style.display = decisions && decisions.length > 0 ? "block" : "none";
+			const list = feed.querySelector(".feed-list");
+			if (!list) return;
+
+			list.innerHTML = "";
+			const items = decisions || [];
+			if (items.length === 0) {
+				list.innerHTML = `
+					<div class="feed-empty">
+						<span class="feed-empty-icon">🎉</span>
+						<span>No pending decisions</span>
+					</div>
+				`;
+			} else {
+				items.forEach((d) => {
+					const item = document.createElement("div");
+					item.className = "feed-item";
+					item.setAttribute("data-decision-id", d.id);
+					item.innerHTML = `
+						<div class="feed-item-agent">🤖 ${escapeHtml(d.agent || "agent")}</div>
+						<div class="feed-item-content">${escapeHtml(d.content || d.question || "")}</div>
+						<div class="feed-item-time">${formatTimeAgo(d.created_at || new Date().toISOString())}</div>
+					`;
+					list.appendChild(item);
+				});
+			}
+		} catch (e) {
+			console.error("Failed to load decisions:", e);
+		}
+	}
+
+	function updateFeedBadge() {
+		const feed = document.getElementById("decision-feed");
+		if (!feed) return;
+		const list = feed.querySelector(".feed-list");
+		if (!list) return;
+		const badge = feed.querySelector(".feed-badge");
+		if (badge) {
+			const count = list.children.length;
+			badge.textContent = count;
+			badge.style.display = count > 0 ? "inline" : "none";
 		}
 	}
 
@@ -267,6 +432,7 @@
 		sessionSelect.value = id;
 		updateCloseSessionButtonVisibility();
 		refreshBoard();
+		renderDecisionFeed();
 	}
 
 	function updateCloseSessionButtonVisibility() {
@@ -288,6 +454,7 @@
 		if (!currentSessionId) {
 			boardData = null;
 			renderBoard();
+			renderDecisionFeed();
 			return;
 		}
 
@@ -295,10 +462,12 @@
 			const data = await apiFetch(`/api/sessions/${currentSessionId}/board`);
 			boardData = data;
 			renderBoard();
+			renderDecisionFeed();
 		} catch (e) {
 			console.error("Failed to load board:", e);
 			boardData = null;
 			renderBoard();
+			renderDecisionFeed();
 		}
 	}
 
@@ -343,16 +512,28 @@
 		});
 	}
 
+	function escapeHtml(str) {
+		const div = document.createElement("div");
+		div.textContent = str;
+		return div.innerHTML;
+	}
+
 	function createCard(d, sessionClosed) {
 		const agent = AGENTS[d.agent] || {
 			icon: "❓",
 			label: d.agent,
 			color: "#888",
 		};
+
+		const statusClass = d.status || "pending";
+		const statusLabel = (d.status || "pending").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+		const elapsed = formatTimeAgo(d.started_at || d.created_at);
+		const pendingAction = (d.pending_action ?? false);
+		const latestMsg = d.latest_activity || "";
+
 		const card = document.createElement("div");
 		card.className = `card card-agent-${d.agent}`;
 
-		// Disable drag if session is closed
 		if (!sessionClosed) {
 			card.draggable = true;
 		}
@@ -360,36 +541,73 @@
 		card.dataset.delegationId = d.id;
 		card.dataset.id = d.id;
 
-		// Header: agent badge + ID
-		const header = document.createElement("div");
-		header.className = "card-header";
-		header.innerHTML = `
-            <span class="card-agent-badge">${agent.icon} &nbsp;${agent.label}</span>
-            <span class="card-id">#${d.id.substring(0, 8)}</span>
-        `;
-		card.appendChild(header);
+		// Agent header with colored circle
+		const agentHeader = document.createElement("div");
+		agentHeader.className = "card-agent";
+		agentHeader.innerHTML = `
+			<span class="agent-circle" style="--agent-color:${agent.color}">${agent.icon}</span>
+			<span class="agent-label">${agent.label}</span>
+			<span class="card-id">#${d.id.substring(0, 8)}</span>
+		`;
+		card.appendChild(agentHeader);
 
-		// Title
+		// Title (bold task summary)
 		const title = document.createElement("div");
 		title.className = "card-title";
 		title.textContent = d.task_summary;
 		card.appendChild(title);
 
-		// Meta
+		// Status row: pill + elapsed time
+		const statusRow = document.createElement("div");
+		statusRow.className = "card-status-row";
+		statusRow.innerHTML = `
+			<span class="status-pill status-${statusClass}">${statusLabel}</span>
+			<span class="status-elapsed">${elapsed}</span>
+		`;
+		card.appendChild(statusRow);
+
+		// Pending Action Bar
+		const actionBar = document.createElement("div");
+		actionBar.className = "card-action-bar";
+		actionBar.style.display = pendingAction ? "flex" : "none";
+		actionBar.innerHTML = `
+			<span class="action-badge">⚠️ Needs your input</span>
+			<div class="action-latest-msg"></div>
+			<div class="action-buttons">
+				<button class="action-approve" data-action="approve">✅ Approve</button>
+				<button class="action-reject" data-action="reject">❌ Reject</button>
+				<button class="action-modify" data-action="modify">✏️ Modify</button>
+			</div>
+		`;
+		actionBar.querySelector(".action-latest-msg").textContent = latestMsg;
+		card.appendChild(actionBar);
+
+		// Activity Toggle
+		const activityToggle = document.createElement("button");
+		activityToggle.className = "card-activity-toggle";
+		activityToggle.setAttribute("data-action", "toggle-activity");
+		activityToggle.textContent = "📋 Activity (0)";
+		card.appendChild(activityToggle);
+
+		// Hidden Activity Stream
+		const activityStream = document.createElement("div");
+		activityStream.className = "card-activity";
+		activityStream.style.display = "none";
+		activityStream.setAttribute("data-delegation-id", d.id);
+		card.appendChild(activityStream);
+
+		// Meta: time + badges
 		const meta = document.createElement("div");
 		meta.className = "card-meta";
 
-		// Time ago
 		const timeSpan = document.createElement("span");
 		timeSpan.className = "card-time";
-		timeSpan.innerHTML = `⏱️ ${formatTimeAgo(d.created_at)}`;
+		timeSpan.textContent = `Created ${formatTimeAgo(d.created_at)}`;
 		meta.appendChild(timeSpan);
 
-		// Badges container
 		const badgesContainer = document.createElement("div");
 		badgesContainer.className = "card-badges";
 
-		// Dependencies badge
 		if (d.dependencies && d.dependencies.length > 0) {
 			const depBadge = document.createElement("span");
 			depBadge.className = "card-badge";
@@ -398,7 +616,6 @@
 			badgesContainer.appendChild(depBadge);
 		}
 
-		// Blocker badge
 		if (d.blocker) {
 			const blockBadge = document.createElement("span");
 			blockBadge.className = "card-badge blocked";
@@ -424,9 +641,11 @@
 
 		// Click event -> open detail modal
 		card.addEventListener("click", (e) => {
-			// Ignore if clicking badges, or dragging
 			if (
 				e.target.closest(".card-badge") ||
+				e.target.closest(".card-action-bar button") ||
+				e.target.closest(".card-activity-toggle") ||
+				e.target.closest(".card-activity") ||
 				card.classList.contains("dragging")
 			) {
 				return;
@@ -849,12 +1068,125 @@
 		setupDragDrop();
 		setupTabs();
 		setupConfig();
+		createDecisionFeedSidebar();
+		setupBoardEventDelegation();
 		await loadSessions();
 
 		// Periodic refresh every 30s as fallback
 		setInterval(() => {
-			if (currentSessionId) refreshBoard();
+			if (currentSessionId) {
+				refreshBoard();
+				renderDecisionFeed();
+			}
 		}, 30000);
+	}
+
+	// --- Decision Feed Sidebar ---
+	function createDecisionFeedSidebar() {
+		// Avoid duplicates
+		if (document.getElementById("decision-feed")) return;
+
+		const feed = document.createElement("div");
+		feed.id = "decision-feed";
+		feed.style.display = "none";
+		feed.innerHTML = `
+			<div class="feed-header">
+				<h3>📋 Pending Decisions</h3>
+				<span class="feed-badge" style="display:none">0</span>
+			</div>
+			<div class="feed-list"></div>
+		`;
+		document.body.appendChild(feed);
+	}
+
+	// --- Board Event Delegation ---
+	function setupBoardEventDelegation() {
+		document.getElementById("board")?.addEventListener("click", (e) => {
+			const toggle = e.target.closest("[data-action='toggle-activity']");
+			if (toggle) {
+				const card = toggle.closest(".card");
+				if (!card) return;
+				const stream = card.querySelector(".card-activity");
+				if (!stream) return;
+
+				if (stream.style.display === "none") {
+					// Load activities
+					const delegationId = card.dataset.delegationId;
+					fetchActivities(delegationId)
+						.then((activities) => {
+							if (!Array.isArray(activities)) return;
+							stream.innerHTML = "";
+							const MAX_VISIBLE = 3;
+							activities.forEach((a, i) => {
+								const entry = createActivityEntry(a);
+								if (i >= MAX_VISIBLE) entry.classList.add("hidden-event");
+								stream.appendChild(entry);
+							});
+							// "Show all N events" button
+							if (activities.length > MAX_VISIBLE) {
+								const showAll = document.createElement("button");
+								showAll.className = "activity-show-all";
+								showAll.textContent = `Show all ${activities.length} events...`;
+								showAll.addEventListener("click", (ev) => {
+									ev.stopPropagation();
+									stream.querySelectorAll(".hidden-event").forEach((el) => el.classList.add("visible"));
+									showAll.remove();
+									stream.style.maxHeight = "360px";
+								});
+								stream.appendChild(showAll);
+							}
+							stream.style.display = "block";
+							toggle.textContent = `📋 Hide Activity (${activities.length})`;
+						})
+						.catch((err) => {
+							console.error("Failed to load activities:", err);
+						});
+				} else {
+					stream.style.display = "none";
+					stream.style.maxHeight = "240px";
+					// Count only actual activity events (not the show-all button)
+					const count = stream.querySelectorAll(".activity-event").length;
+					toggle.textContent = `📋 Activity (${count})`;
+				}
+				return;
+			}
+
+			const actionBtn = e.target.closest(".action-approve, .action-reject, .action-modify");
+			if (actionBtn) {
+				const card = actionBtn.closest(".card");
+				if (!card) return;
+				const delegationId = card.dataset.delegationId;
+				const action = actionBtn.dataset.action;
+
+				const resolutionMap = {
+					approve: "Approved via UI",
+					reject: "Rejected via UI",
+					modify: "Needs modification",
+				};
+				const resolution = resolutionMap[action] || action;
+
+				// Get the pending activity ID from the action bar's parent context
+				// For simplicity, resolve the latest pending activity
+				fetchActivities(delegationId)
+					.then((activities) => {
+						if (!Array.isArray(activities) || activities.length === 0) return;
+						// Find the latest unresolved activity
+						const pending = activities.find((a) => !a.resolved_at);
+						if (!pending) return;
+						return resolveActivity(delegationId, pending.id, resolution);
+					})
+					.then(() => {
+						// Hide the action bar
+						const actionBar = card.querySelector(".card-action-bar");
+						if (actionBar) actionBar.style.display = "none";
+						showToast(`Action "${action}" sent`);
+					})
+					.catch((err) => {
+						console.error("Failed to resolve activity:", err);
+					});
+				return;
+			}
+		});
 	}
 
 	// --- Tab System ---
@@ -1844,3 +2176,537 @@ document.addEventListener("keydown", (e) => {
 		}
 	}
 });
+
+// --- Activity Stream & Decision Feed Styles ---
+(function () {
+	const style = document.createElement("style");
+	style.textContent = `
+/* ═══════════════════════════════════════════
+   CSS Custom Properties (extends app.css :root)
+   ═══════════════════════════════════════════ */
+:root {
+	--card-radius: 10px;
+	--timeline-dot-size: 8px;
+	--shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+	--shadow-md: 0 4px 12px rgba(0,0,0,0.2);
+	--shadow-lg: 0 8px 30px rgba(0,0,0,0.3);
+	--glass-bg: rgba(14, 17, 30, 0.75);
+}
+
+/* ═══════════════════════════════════════════
+   Card Agent Header
+   ═══════════════════════════════════════════ */
+.card-agent {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.agent-circle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--agent-color, #888) 20%, transparent);
+	font-size: 14px;
+	flex-shrink: 0;
+}
+
+.agent-label {
+	font-size: 0.7rem;
+	font-weight: 700;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.card-id {
+	font-size: 0.6rem;
+	color: var(--text-muted);
+	margin-left: auto;
+	font-family: "SF Mono", "Fira Code", monospace;
+}
+
+/* ═══════════════════════════════════════════
+   Status Pills & Row
+   ═══════════════════════════════════════════ */
+.card-status-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 0 8px;
+}
+
+.status-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 10px;
+	border-radius: 20px;
+	font-size: 0.6rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.status-pill.status-running,
+.status-pill.status-in_progress {
+	background: rgba(94, 96, 240, 0.15);
+	color: #7b7dfb;
+}
+.status-pill.status-pending {
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text-muted);
+}
+.status-pill.status-blocked {
+	background: rgba(255, 71, 87, 0.15);
+	color: var(--danger);
+	animation: pulse-red 2s infinite;
+}
+.status-pill.status-review,
+.status-pill.status-changes {
+	background: rgba(255, 165, 2, 0.15);
+	color: #ffa502;
+}
+.status-pill.status-done {
+	background: rgba(46, 213, 115, 0.15);
+	color: var(--success);
+}
+
+.status-elapsed {
+	font-size: 0.6rem;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+/* ═══════════════════════════════════════════
+   Activity Toggle Button
+   ═══════════════════════════════════════════ */
+.card-activity-toggle {
+	display: block;
+	width: 100%;
+	font-size: 0.65rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+	padding: 6px 10px;
+	margin-top: 8px;
+	border: 1px dashed var(--border);
+	border-radius: 6px;
+	background: transparent;
+	text-align: center;
+	transition: all 0.2s ease;
+	user-select: none;
+	font-family: inherit;
+}
+.card-activity-toggle:hover {
+	background: var(--bg-secondary);
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════
+   Activity Stream — Timeline Style
+   ═══════════════════════════════════════════ */
+.card-activity {
+	max-height: 240px;
+	overflow: hidden;
+	margin-top: 8px;
+	padding: 8px 4px 8px 20px;
+	background: var(--bg-secondary);
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	position: relative;
+	transition: max-height 0.35s ease;
+}
+.card-activity::before {
+	content: "";
+	position: absolute;
+	left: 11px;
+	top: 12px;
+	bottom: 12px;
+	width: 1px;
+	background: var(--border);
+}
+
+.activity-event {
+	position: relative;
+	padding: 5px 0 5px 6px;
+	font-size: 0.65rem;
+	border-bottom: none;
+}
+.activity-event:nth-child(even) {
+	background: rgba(255,255,255,0.015);
+}
+.activity-event::before {
+	content: "";
+	position: absolute;
+	left: -13px;
+	top: 9px;
+	width: var(--timeline-dot-size);
+	height: var(--timeline-dot-size);
+	border-radius: 50%;
+	background: var(--accent);
+	border: 2px solid var(--bg-secondary);
+	z-index: 1;
+}
+.activity-event.type-decision::before { background: #ffa502; }
+.activity-event.type-question::before { background: #9b59b6; }
+.activity-event.type-blocked::before { background: var(--danger); }
+.activity-event.type-progress::before { background: var(--accent); }
+
+.activity-event.resolved {
+	opacity: 0.5;
+}
+.activity-event.resolved .activity-content {
+	text-decoration: line-through;
+}
+.activity-event:last-child {
+	border-bottom: none;
+}
+
+.activity-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 2px;
+}
+.activity-type {
+	font-size: 0.55rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	padding: 1px 6px;
+	border-radius: 3px;
+	letter-spacing: 0.04em;
+}
+.activity-type.type-decision { background: rgba(255,165,2,0.15); color: #ffa502; }
+.activity-type.type-question { background: rgba(155,89,182,0.15); color: #b07cd8; }
+.activity-type.type-blocked { background: rgba(255,71,87,0.15); color: var(--danger); }
+.activity-type.type-progress { background: rgba(94,96,240,0.15); color: #7b7dfb; }
+
+.activity-time {
+	font-size: 0.55rem;
+	color: var(--text-muted);
+}
+.activity-content {
+	color: var(--text-primary);
+	line-height: 1.35;
+	font-size: 0.65rem;
+}
+.activity-resolution {
+	font-size: 0.55rem;
+	color: var(--accent);
+	margin-top: 2px;
+	font-style: italic;
+}
+
+/* Show-all button at bottom of activity */
+.activity-show-all {
+	display: block;
+	width: 100%;
+	padding: 5px 0;
+	font-size: 0.6rem;
+	font-weight: 600;
+	color: var(--accent);
+	text-align: center;
+	cursor: pointer;
+	background: none;
+	border: none;
+	border-top: 1px solid var(--border);
+	margin-top: 4px;
+	transition: color 0.2s;
+	font-family: inherit;
+}
+.activity-show-all:hover {
+	color: #7b7dfb;
+}
+
+/* Hidden events (beyond 3) */
+.activity-event.hidden-event {
+	display: none;
+}
+.activity-event.hidden-event.visible {
+	display: block;
+}
+
+/* ═══════════════════════════════════════════
+   Pending Action Bar — Prominent CTA
+   ═══════════════════════════════════════════ */
+.card-action-bar {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px;
+	margin-top: 10px;
+	background: linear-gradient(135deg, rgba(255,243,205,0.12), rgba(255,243,205,0.06));
+	border: 1px solid rgba(255,193,7,0.35);
+	border-left: 4px solid #ffc107;
+	border-radius: 8px;
+	font-size: 0.7rem;
+	animation: actionSlideIn 0.35s ease-out;
+}
+
+@keyframes actionSlideIn {
+	from {
+		opacity: 0;
+		transform: translateY(-6px);
+		max-height: 0;
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+		max-height: 120px;
+	}
+}
+
+.action-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-weight: 700;
+	color: #b8860b;
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.action-badge::before {
+	content: "●";
+	color: #ffc107;
+	animation: pulse-badge 1.8s ease-in-out infinite;
+}
+@keyframes pulse-badge {
+	0%, 100% { opacity: 1; transform: scale(1); }
+	50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.action-latest-msg {
+	color: rgba(241, 243, 249, 0.7);
+	font-size: 0.65rem;
+	background: rgba(0,0,0,0.15);
+	padding: 5px 8px;
+	border-radius: 4px;
+	max-height: 44px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.35;
+}
+
+.action-buttons {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.action-approve,
+.action-reject,
+.action-modify {
+	font-size: 0.65rem;
+	padding: 5px 12px;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+	font-weight: 700;
+	transition: all 0.2s ease;
+	font-family: inherit;
+}
+.action-approve:hover,
+.action-reject:hover,
+.action-modify:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+}
+
+.action-approve {
+	background: linear-gradient(135deg, #28a745, #20c997);
+	color: #fff;
+}
+.action-reject {
+	background: linear-gradient(135deg, #dc3545, #e74c3c);
+	color: #fff;
+}
+.action-modify {
+	background: linear-gradient(135deg, #6c757d, #5a6268);
+	color: #fff;
+}
+
+/* ═══════════════════════════════════════════
+   Decision Feed Sidebar — Glass Morphism
+   ═══════════════════════════════════════════ */
+#decision-feed {
+	position: fixed;
+	right: 20px;
+	top: 80px;
+	width: 290px;
+	max-height: calc(100vh - 120px);
+	background: var(--glass-bg);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	border: 1px solid rgba(255,255,255,0.08);
+	border-radius: 12px;
+	box-shadow: var(--shadow-lg);
+	z-index: 50;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.feed-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 16px;
+	background: rgba(255,255,255,0.03);
+	border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.feed-header h3 {
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: var(--text-primary);
+	margin: 0;
+}
+.feed-badge {
+	background: var(--accent);
+	color: #fff;
+	font-size: 0.65rem;
+	font-weight: 700;
+	padding: 3px 8px;
+	border-radius: 12px;
+	min-width: 22px;
+	text-align: center;
+	transition: transform 0.2s ease;
+}
+.feed-badge.bump {
+	animation: badgeBump 0.35s ease-out;
+}
+@keyframes badgeBump {
+	0% { transform: scale(1); }
+	40% { transform: scale(1.35); }
+	100% { transform: scale(1); }
+}
+
+.feed-list {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px 10px;
+}
+
+.feed-item {
+	padding: 10px;
+	margin-bottom: 6px;
+	background: rgba(255,255,255,0.03);
+	border-radius: 8px;
+	border: 1px solid rgba(255,255,255,0.05);
+	font-size: 0.7rem;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	border-left: 3px solid transparent;
+}
+.feed-item:hover {
+	background: rgba(255,255,255,0.06);
+	border-color: rgba(255,255,255,0.1);
+	transform: translateX(2px);
+}
+.feed-item.type-decision { border-left-color: #5e60f0; }
+.feed-item.type-question { border-left-color: #9b59b6; }
+.feed-item.type-blocked { border-left-color: var(--danger); }
+
+.feed-item:last-child {
+	margin-bottom: 0;
+}
+
+.feed-item-agent {
+	font-size: 0.6rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--accent);
+	margin-bottom: 3px;
+}
+.feed-item-content {
+	color: var(--text-primary);
+	line-height: 1.35;
+	margin-bottom: 4px;
+}
+.feed-item-time {
+	font-size: 0.55rem;
+	color: var(--text-muted);
+}
+
+/* Empty state for feed */
+.feed-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 30px 16px;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	text-align: center;
+	gap: 8px;
+	opacity: 0.7;
+}
+.feed-empty-icon {
+	font-size: 2rem;
+	margin-bottom: 4px;
+}
+
+/* ═══════════════════════════════════════════
+   Card Gradients & Agent-specific styling
+   ═══════════════════════════════════════════ */
+.card.card-agent-dev { background: linear-gradient(160deg, rgba(46,213,115,0.06), transparent), var(--bg-card); }
+.card.card-agent-qa { background: linear-gradient(160deg, rgba(255,165,2,0.06), transparent), var(--bg-card); }
+.card.card-agent-architect { background: linear-gradient(160deg, rgba(30,144,255,0.06), transparent), var(--bg-card); }
+.card.card-agent-reviewer { background: linear-gradient(160deg, rgba(155,89,182,0.06), transparent), var(--bg-card); }
+.card.card-agent-devops { background: linear-gradient(160deg, rgba(255,71,87,0.06), transparent), var(--bg-card); }
+
+.card.card-agent-dev:hover { background: linear-gradient(160deg, rgba(46,213,115,0.1), transparent), var(--bg-card-hover); }
+.card.card-agent-qa:hover { background: linear-gradient(160deg, rgba(255,165,2,0.1), transparent), var(--bg-card-hover); }
+.card.card-agent-architect:hover { background: linear-gradient(160deg, rgba(30,144,255,0.1), transparent), var(--bg-card-hover); }
+.card.card-agent-reviewer:hover { background: linear-gradient(160deg, rgba(155,89,182,0.1), transparent), var(--bg-card-hover); }
+.card.card-agent-devops:hover { background: linear-gradient(160deg, rgba(255,71,87,0.1), transparent), var(--bg-card-hover); }
+
+/* ═══════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════ */
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.65; }
+}
+@keyframes pulse-red {
+	0% { box-shadow: 0 0 0 0 rgba(255,71,87,0.2); }
+	70% { box-shadow: 0 0 0 5px rgba(255,71,87,0); }
+	100% { box-shadow: 0 0 0 0 rgba(255,71,87,0); }
+}
+@keyframes fadeInUp {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+.card {
+	animation: fadeInUp 0.3s ease-out;
+}
+
+/* ═══════════════════════════════════════════
+   Card Hover Enhancement (extends app.css)
+   ═══════════════════════════════════════════ */
+.card:hover {
+	transform: translateY(-2px);
+	box-shadow: var(--shadow-md);
+}
+
+/* ═══════════════════════════════════════════
+   Scrollbar styling for activity stream & feed
+   ═══════════════════════════════════════════ */
+.card-activity::-webkit-scrollbar,
+.feed-list::-webkit-scrollbar {
+	width: 4px;
+}
+.card-activity::-webkit-scrollbar-thumb,
+.feed-list::-webkit-scrollbar-thumb {
+	background: rgba(255,255,255,0.1);
+	border-radius: 4px;
+}
+`;
+	document.head.appendChild(style);
+})();

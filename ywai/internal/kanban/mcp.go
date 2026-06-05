@@ -310,6 +310,62 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 				"required": []string{"session_id"},
 			},
 		},
+		{
+			"name":        "kanban_add_activity",
+			"description": "Add a progress update, decision request, or question to a delegation",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"delegation_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Delegation ID to attach activity to",
+					},
+					"type": map[string]interface{}{
+						"type":        "string",
+						"description": "Activity type",
+						"enum":        []string{"progress", "decision", "question", "blocked"},
+					},
+					"content": map[string]interface{}{
+						"type":        "string",
+						"description": "Activity content / message",
+					},
+					"options": map[string]interface{}{
+						"type":        "array",
+						"description": "Optional choices for decisions/questions",
+						"items":       map[string]interface{}{"type": "string"},
+					},
+				},
+				"required": []string{"delegation_id", "type", "content"},
+			},
+		},
+		{
+			"name":        "kanban_get_activities",
+			"description": "Get activity timeline for a delegation",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"delegation_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Delegation ID",
+					},
+				},
+				"required": []string{"delegation_id"},
+			},
+		},
+		{
+			"name":        "kanban_get_pending_decisions",
+			"description": "Get unresolved decisions, questions, and blockers for a session",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"session_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Session ID",
+					},
+				},
+				"required": []string{"session_id"},
+			},
+		},
 	}
 
 	return &JSONRPCResponse{
@@ -345,6 +401,12 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 		result, err = m.callGetUIURL()
 	case "kanban_delete_session":
 		result, err = m.callDeleteSession(params.Arguments)
+	case "kanban_add_activity":
+		result, err = m.callAddActivity(params.Arguments)
+	case "kanban_get_activities":
+		result, err = m.callGetActivities(params.Arguments)
+	case "kanban_get_pending_decisions":
+		result, err = m.callGetPendingDecisions(params.Arguments)
 	default:
 		return m.errorResponse(req.ID, -32601, "Tool not found: "+params.Name)
 	}
@@ -626,6 +688,121 @@ func (m *MCPAdapter) callDeleteSession(args json.RawMessage) (*ToolsCallResult, 
 	return &ToolsCallResult{
 		Content: []ToolContent{
 			{Type: "text", Text: fmt.Sprintf("🗑️ Session %s deleted successfully.", req.SessionID)},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callAddActivity(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		DelegationID string   `json:"delegation_id"`
+		Type         string   `json:"type"`
+		Content      string   `json:"content"`
+		Options      []string `json:"options"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	body, err := json.Marshal(map[string]interface{}{
+		"type":    req.Type,
+		"content": req.Content,
+		"options": req.Options,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := m.doRequest("POST", fmt.Sprintf("/api/delegations/%s/activities", req.DelegationID), body)
+	if err != nil {
+		return nil, err
+	}
+
+	var activity ActivityEvent
+	if err := json.Unmarshal(respBody, &activity); err != nil {
+		return nil, err
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: fmt.Sprintf("Activity added: %s (%s)", activity.ID, activity.Type)},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callGetActivities(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		DelegationID string `json:"delegation_id"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	respBody, err := m.doRequest("GET", fmt.Sprintf("/api/delegations/%s/activities", req.DelegationID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var activities []ActivityEvent
+	if err := json.Unmarshal(respBody, &activities); err != nil {
+		return nil, err
+	}
+
+	lines := []string{fmt.Sprintf("Activities for delegation %s:", req.DelegationID)}
+	for _, a := range activities {
+		status := ""
+		if a.ResolvedAt != nil {
+			status = fmt.Sprintf(" [resolved: %s]", a.Resolution)
+		} else {
+			status = " [pending]"
+		}
+		lines = append(lines, fmt.Sprintf("- [%s] %s%s", a.Type, a.Content, status))
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: strings.Join(lines, "\n")},
+		},
+	}, nil
+}
+
+func (m *MCPAdapter) callGetPendingDecisions(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	respBody, err := m.doRequest("GET", fmt.Sprintf("/api/sessions/%s/decisions", req.SessionID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var activities []ActivityEvent
+	if err := json.Unmarshal(respBody, &activities); err != nil {
+		return nil, err
+	}
+
+	if len(activities) == 0 {
+		return &ToolsCallResult{
+			Content: []ToolContent{
+				{Type: "text", Text: "No pending decisions for this session."},
+			},
+		}, nil
+	}
+
+	lines := []string{fmt.Sprintf("Pending decisions for session %s:", req.SessionID)}
+	for _, a := range activities {
+		opts := ""
+		if len(a.Options) > 0 {
+			opts = fmt.Sprintf(" [options: %s]", strings.Join(a.Options, ", "))
+		}
+		lines = append(lines, fmt.Sprintf("- [%s] %s%s (id: %s)", a.Type, a.Content, opts, a.ID))
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: strings.Join(lines, "\n")},
 		},
 	}, nil
 }
