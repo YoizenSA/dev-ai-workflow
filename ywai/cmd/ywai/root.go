@@ -290,15 +290,9 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				fmt.Printf("  [%s] Warning: migration failed: %v\n", a.Name, err)
 			}
 
-			// Install new agents as markdown
+			// Install agents as markdown ONLY (no JSON fallback)
 			if err := agentprofiles.InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
-				fmt.Printf("  [%s] Warning: markdown install failed, falling back to JSON: %v\n", a.Name, err)
-				// Fallback to JSON method
-				if err := agentprofiles.InstallOpenCode(configPath, profiles); err != nil {
-					fmt.Printf("  [%s] Warning: JSON fallback also failed: %v\n", a.Name, err)
-				} else {
-					fmt.Printf("  [%s] Agent profiles installed (JSON fallback)\n", a.Name)
-				}
+				fmt.Printf("  [%s] Warning: markdown install failed: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Agent profiles installed (markdown)\n", a.Name)
 			}

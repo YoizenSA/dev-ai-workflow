@@ -2238,18 +2238,18 @@
 			const mdAgents = await agentsRes.json();
 			const mdAgentNames = mdAgents.map((a) => a.name);
 
-			// Fetch current opencode config for agent permissions
+			// Fetch current opencode config for agent permissions (for reading)
 			const configRes = await fetch("/api/config/opencode");
 			const config = await configRes.json();
 			const jsonAgents = config.agent || {};
 
-			// Build lookup maps from markdown agents (now includes mode + permission)
+			// Build lookup maps from markdown agents
 			const mdAgentMap = {};
 			for (const a of mdAgents) {
 				mdAgentMap[a.name] = a;
 			}
 
-			// Merge: agents from markdown + agents from opencode.json
+			// Merge: agents from markdown + agents from opencode.json (deduplicated)
 			const allAgentNames = [
 				...new Set([...mdAgentNames, ...Object.keys(jsonAgents)]),
 			].sort();
@@ -2285,7 +2285,7 @@
 			for (const name of allAgentNames) {
 				const jsonAgent = jsonAgents[name] || {};
 				const mdAgent = mdAgentMap[name] || {};
-				// Prefer opencode.json permissions, fall back to markdown frontmatter
+				// Read from both sources, prefer JSON if exists (for backward compat)
 				const permission = jsonAgent.permission || mdAgent.permission || {};
 				const mode = jsonAgent.mode || mdAgent.mode || "all";
 				const isMdAgent = mdAgentNames.includes(name);

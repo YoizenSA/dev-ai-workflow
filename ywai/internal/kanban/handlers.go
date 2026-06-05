@@ -725,6 +725,45 @@ func skillsDir() (string, error) {
 	return filepath.Join(home, ".config", "opencode", "skills"), nil
 }
 
+// removeAgentFromJSON removes an agent from opencode.json if it exists there.
+// Used to clean up duplicates when the agent also exists in markdown.
+func removeAgentFromJSON(agentName string) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		return
+	}
+	agentRaw, ok := config["agent"]
+	if !ok {
+		return
+	}
+	var agents map[string]json.RawMessage
+	if err := json.Unmarshal(agentRaw, &agents); err != nil {
+		return
+	}
+	if _, exists := agents[agentName]; !exists {
+		return
+	}
+	delete(agents, agentName)
+	if len(agents) == 0 {
+		delete(config, "agent")
+	} else {
+		agentsJSON, _ := json.Marshal(agents)
+		config["agent"] = agentsJSON
+	}
+	_ = os.WriteFile(path+".bak", data, 0644)
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+	_ = os.WriteFile(path, pretty, 0644)
+	log.Printf("Removed duplicate agent %s from opencode.json (exists in markdown)", agentName)
+}
+
 // GET /api/config/opencode
 func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 	path, err := opencodeConfigPath()
@@ -1069,8 +1108,8 @@ var ValidPermissionValues = map[string]bool{
 }
 
 // PUT /api/config/agents/{name}/permissions
-// Writes permissions to opencode.json if the agent exists there;
-// otherwise writes to the agent's markdown frontmatter.
+// Writes permissions to markdown frontmatter.
+// If agent exists in both JSON and markdown, removes from JSON (markdown wins).
 func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -1113,43 +1152,13 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try opencode.json first
-	path, err := opencodeConfigPath()
-	if err == nil {
-		if data, err := os.ReadFile(path); err == nil {
-			var config map[string]json.RawMessage
-			if err := json.Unmarshal(data, &config); err == nil {
-				if agentRaw, ok := config["agent"]; ok {
-					var agents map[string]json.RawMessage
-					if err := json.Unmarshal(agentRaw, &agents); err == nil {
-						if agentData, ok := agents[name]; ok {
-							var agent map[string]json.RawMessage
-							if err := json.Unmarshal(agentData, &agent); err == nil {
-								// Agent exists in opencode.json — update there
-								permJSON, _ := json.Marshal(body)
-								agent["permission"] = permJSON
-								agentRaw, _ = json.Marshal(agent)
-								agents[name] = agentRaw
-								agentsJSON, _ := json.Marshal(agents)
-								config["agent"] = agentsJSON
-								_ = os.WriteFile(path+".bak", data, 0644)
-								pretty, _ := json.MarshalIndent(config, "", "  ")
-								if err := os.WriteFile(path, pretty, 0644); err != nil {
-									writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-									return
-								}
-								writeJSON(w, http.StatusOK, body)
-								return
-							}
-						}
-					}
-				}
-			}
-		}
+	// Check if agent exists in markdown — if so, remove duplicate from JSON
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath != "" {
+		removeAgentFromJSON(name)
 	}
 
-	// Fallback: write to markdown frontmatter
-	mdPath := readAgentMarkdownPath(name)
+	// Write to markdown frontmatter
 	if mdPath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
 		return
