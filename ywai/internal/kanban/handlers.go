@@ -168,7 +168,26 @@ func (h *Handlers) broadcastUpdate(updateType string, payload interface{}) {
 // --- Session handlers ---
 
 func (h *Handlers) ListSessions(w http.ResponseWriter, r *http.Request) {
-	sessions := h.store.ListSessions("")
+	status := r.URL.Query().Get("status")
+	project := r.URL.Query().Get("project")
+	query := r.URL.Query().Get("q")
+
+	sessions := h.store.ListSessions(status, project, query)
+
+	groupParam := r.URL.Query().Get("group")
+	if groupParam == "project" {
+		grouped := make(map[string][]*Session)
+		for _, s := range sessions {
+			p := s.Project
+			if p == "" {
+				p = "(no project)"
+			}
+			grouped[p] = append(grouped[p], s)
+		}
+		writeJSON(w, http.StatusOK, grouped)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, sessions)
 }
 
@@ -432,17 +451,14 @@ func (h *Handlers) ResolveActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.ResolveActivity(id, actID, req.Resolution); err != nil {
+	activity, err := h.store.ResolveActivity(id, actID, req.Resolution)
+	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	h.broadcastUpdate("activity.resolved", map[string]string{
-		"delegation_id": id,
-		"activity_id":   actID,
-		"resolution":    req.Resolution,
-	})
-	writeJSON(w, http.StatusOK, map[string]string{"status": "resolved"})
+	h.broadcastUpdate("activity.resolved", activity)
+	writeJSON(w, http.StatusOK, activity)
 }
 
 // GetPendingDecisions returns all unresolved decision/question/blocked activities for a session.

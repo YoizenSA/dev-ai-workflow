@@ -154,18 +154,68 @@ func (s *Store) GetSession(id string) (*Session, bool) {
 	return session, ok
 }
 
-// ListSessions returns all sessions, optionally filtered by status.
-func (s *Store) ListSessions(status string) []*Session {
+// ListSessions returns all sessions, optionally filtered by status, project, and search query.
+func (s *Store) ListSessions(status, project, query string) []*Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]*Session, 0)
 	for _, session := range s.sessions {
-		if status == "" || session.Status == status {
-			result = append(result, session)
+		if status != "" && session.Status != status {
+			continue
 		}
+		if project != "" && session.Project != project {
+			continue
+		}
+		if query != "" && !session.matchQuery(query) {
+			continue
+		}
+		result = append(result, session)
 	}
 	return result
+}
+
+// ListSessionsByProject groups all sessions by project.
+func (s *Store) ListSessionsByProject(status, query string) map[string][]*Session {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	grouped := make(map[string][]*Session)
+	for _, session := range s.sessions {
+		if status != "" && session.Status != status {
+			continue
+		}
+		if query != "" && !session.matchQuery(query) {
+			continue
+		}
+		project := session.Project
+		if project == "" {
+			project = "(no project)"
+		}
+		grouped[project] = append(grouped[project], session)
+	}
+	return grouped
+}
+
+// SessionProjects returns all unique project names from sessions.
+func (s *Store) SessionProjects() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	seen := make(map[string]bool)
+	for _, session := range s.sessions {
+		p := session.Project
+		if p == "" {
+			p = "(no project)"
+		}
+		seen[p] = true
+	}
+	projects := make([]string, 0, len(seen))
+	for p := range seen {
+		projects = append(projects, p)
+	}
+	sort.Strings(projects)
+	return projects
 }
 
 // CloseSession marks a session as closed.
@@ -414,32 +464,34 @@ func (s *Store) GetActivities(delegationID string) ([]ActivityEvent, error) {
 }
 
 // ResolveActivity sets the resolution on a pending activity event.
-func (s *Store) ResolveActivity(delegationID string, activityID string, resolution string) error {
+func (s *Store) ResolveActivity(delegationID string, activityID string, resolution string) (*ActivityEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer s.autoSave()
 
 	activities, ok := s.activities[delegationID]
 	if !ok {
-		return fmt.Errorf("no activities found for delegation %s", delegationID)
+		return nil, fmt.Errorf("no activities found for delegation %s", delegationID)
 	}
 
 	found := false
+	var resolvedIdx int
 	for i := range activities {
 		if activities[i].ID == activityID {
 			if activities[i].Resolution != "" {
-				return fmt.Errorf("activity %s already resolved", activityID)
+				return nil, fmt.Errorf("activity %s already resolved", activityID)
 			}
 			now := time.Now()
 			activities[i].Resolution = resolution
 			activities[i].ResolvedAt = &now
 			found = true
+			resolvedIdx = i
 			break
 		}
 	}
 
 	if !found {
-		return fmt.Errorf("activity %s not found in delegation %s", activityID, delegationID)
+		return nil, fmt.Errorf("activity %s not found in delegation %s", activityID, delegationID)
 	}
 
 	s.activities[delegationID] = activities
@@ -456,7 +508,7 @@ func (s *Store) ResolveActivity(delegationID string, activityID string, resoluti
 		d.PendingAction = hasPending
 	}
 
-	return nil
+	return &activities[resolvedIdx], nil
 }
 
 // GetPendingDecisions returns unresolved decision, question, or blocked activities for a session.
@@ -505,11 +557,13 @@ func (s *Store) GraphView(sessionID string) (*GraphView, error) {
 			continue
 		}
 		nodes = append(nodes, GraphNode{
-			ID:          d.ID,
-			Agent:       d.Agent,
-			TaskSummary: d.TaskSummary,
-			Status:      d.Status,
-			Column:      d.Column,
+			ID:             d.ID,
+			Agent:          d.Agent,
+			TaskSummary:    d.TaskSummary,
+			Status:         d.Status,
+			Column:         d.Column,
+			HandoffPreview: d.HandoffPreview,
+			PendingAction:  d.PendingAction,
 		})
 		for _, dep := range d.Dependencies {
 			edges = append(edges, GraphEdge{From: dep, To: d.ID})

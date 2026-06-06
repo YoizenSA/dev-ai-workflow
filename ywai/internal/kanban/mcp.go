@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -246,10 +248,23 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 		},
 		{
 			"name":        "kanban_list_sessions",
-			"description": "List active kanban sessions",
+			"description": "List kanban sessions, grouped by project. Filter by status, project, or search query.",
 			"inputSchema": map[string]interface{}{
-				"type":       "object",
-				"properties": map[string]interface{}{},
+				"type": "object",
+				"properties": map[string]interface{}{
+					"status": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by status: active, closed, or empty for all",
+					},
+					"project": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by project name",
+					},
+					"q": map[string]interface{}{
+						"type":        "string",
+						"description": "Search query matches goal, project, or ID",
+					},
+				},
 			},
 		},
 		{
@@ -357,6 +372,28 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 				"required": []string{"session_id"},
 			},
 		},
+		{
+			"name":        "kanban_resolve_activity",
+			"description": "Resolve a pending decision, question, or blocker on a delegation",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"delegation_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Delegation ID",
+					},
+					"activity_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Activity ID to resolve",
+					},
+					"resolution": map[string]interface{}{
+						"type":        "string",
+						"description": "Resolution message / decision outcome",
+					},
+				},
+				"required": []string{"delegation_id", "activity_id", "resolution"},
+			},
+		},
 	}
 
 	return &JSONRPCResponse{
@@ -385,7 +422,7 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 	case "kanban_update_delegation":
 		result, err = m.callUpdateDelegation(params.Arguments)
 	case "kanban_list_sessions":
-		result, err = m.callListSessions()
+		result, err = m.callListSessions(params.Arguments)
 	case "kanban_get_board":
 		result, err = m.callGetBoard(params.Arguments)
 	case "kanban_get_ui_url":
@@ -398,6 +435,8 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 		result, err = m.callGetActivities(params.Arguments)
 	case "kanban_get_pending_decisions":
 		result, err = m.callGetPendingDecisions(params.Arguments)
+	case "kanban_resolve_activity":
+		result, err = m.callResolveActivity(params.Arguments)
 	case "kanban_get_graph":
 		result, err = m.callGetGraph(params.Arguments)
 	default:
@@ -583,31 +622,82 @@ func (m *MCPAdapter) callUpdateDelegation(args json.RawMessage) (*ToolsCallResul
 
 	return &ToolsCallResult{
 		Content: []ToolContent{
-			{Type: "text", Text: fmt.Sprintf("Delegation updated: %s (status: %s, column: %s)", delegation.ID, delegation.Status, delegation.Column)},
+			{Type: "text", Text: buildUpdateMsg(delegation)},
 		},
 	}, nil
 }
 
-func (m *MCPAdapter) callListSessions() (*ToolsCallResult, error) {
-	respBody, err := m.doRequest("GET", "/api/sessions", nil)
+func buildUpdateMsg(d Delegation) string {
+	parts := []string{fmt.Sprintf("id: %s", d.ID)}
+	if d.Status != "" {
+		parts = append(parts, fmt.Sprintf("status: %s", d.Status))
+	}
+	if d.Column != "" {
+		parts = append(parts, fmt.Sprintf("column: %s", d.Column))
+	}
+	if d.HandoffPreview != "" {
+		parts = append(parts, fmt.Sprintf("handoff: %s", d.HandoffPreview))
+	}
+	if d.Blocker != "" {
+		parts = append(parts, fmt.Sprintf("blocker: %s", d.Blocker))
+	}
+	return fmt.Sprintf("Delegation updated: %s", strings.Join(parts, ", "))
+}
+
+func (m *MCPAdapter) callListSessions(args json.RawMessage) (*ToolsCallResult, error) {
+	var params struct {
+		Status  string `json:"status"`
+		Project string `json:"project"`
+		Query   string `json:"q"`
+	}
+	if args != nil {
+		_ = json.Unmarshal(args, &params)
+	}
+
+	url := fmt.Sprintf("/api/sessions?group=project&status=%s&project=%s&q=%s",
+		url.QueryEscape(params.Status),
+		url.QueryEscape(params.Project),
+		url.QueryEscape(params.Query),
+	)
+	respBody, err := m.doRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var sessions []Session
-	if err := json.Unmarshal(respBody, &sessions); err != nil {
+	var grouped map[string][]Session
+	if err := json.Unmarshal(respBody, &grouped); err != nil {
 		return nil, err
 	}
 
 	var text string
-	if len(sessions) == 0 {
-		text = "No active sessions found."
+	total := 0
+	for _, ss := range grouped {
+		total += len(ss)
+	}
+
+	if total == 0 {
+		text = "No sessions found."
 	} else {
-		lines := make([]string, 0, len(sessions))
-		for _, s := range sessions {
-			lines = append(lines, fmt.Sprintf("- %s: %s (%s)", s.ID, s.Goal, s.Status))
+		parts := make([]string, 0, len(grouped))
+		// Sort project keys for stable output
+		projects := make([]string, 0, len(grouped))
+		for p := range grouped {
+			projects = append(projects, p)
 		}
-		text = fmt.Sprintf("Active sessions (%d):\n%s", len(sessions), strings.Join(lines, "\n"))
+		sort.Strings(projects)
+		for _, project := range projects {
+			ss := grouped[project]
+			lines := make([]string, 0, len(ss))
+			for _, s := range ss {
+				statusMark := ""
+				if s.Status == "active" {
+					statusMark = " ▶"
+				}
+				lines = append(lines, fmt.Sprintf("  %s%s (%s)%s", s.ID[:8], statusMark, s.Goal, s.Status))
+			}
+			parts = append(parts, fmt.Sprintf("%s (%d):\n%s", project, len(ss), strings.Join(lines, "\n")))
+		}
+		text = fmt.Sprintf("Sessions (%d) grouped by project:\n\n%s", total, strings.Join(parts, "\n\n"))
 	}
 
 	return &ToolsCallResult{
@@ -644,7 +734,16 @@ func (m *MCPAdapter) callGetBoard(args json.RawMessage) (*ToolsCallResult, error
 		delegations := board.Columns[col]
 		lines = append(lines, fmt.Sprintf("## %s (%d)", col, len(delegations)))
 		for _, d := range delegations {
-			lines = append(lines, fmt.Sprintf("- [%s] %s: %s", d.Status, d.Agent, d.TaskSummary))
+			extra := ""
+			if d.Blocker != "" {
+				extra = fmt.Sprintf(" [blocked: %s]", d.Blocker)
+			} else if d.HandoffPreview != "" {
+				extra = fmt.Sprintf(" [handoff: %s]", d.HandoffPreview)
+			}
+			if d.PendingAction {
+				extra += " ⏳pending-action"
+			}
+			lines = append(lines, fmt.Sprintf("- [%s] %s: %s%s", d.Status, d.Agent, d.TaskSummary, extra))
 		}
 		lines = append(lines, "")
 	}
@@ -800,6 +899,40 @@ func (m *MCPAdapter) callGetPendingDecisions(args json.RawMessage) (*ToolsCallRe
 	}, nil
 }
 
+func (m *MCPAdapter) callResolveActivity(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		DelegationID string `json:"delegation_id"`
+		ActivityID   string `json:"activity_id"`
+		Resolution   string `json:"resolution"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, err
+	}
+
+	body, err := json.Marshal(map[string]string{
+		"resolution": req.Resolution,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := m.doRequest("PATCH", fmt.Sprintf("/api/delegations/%s/activities/%s", req.DelegationID, req.ActivityID), body)
+	if err != nil {
+		return nil, err
+	}
+
+	var activity ActivityEvent
+	if err := json.Unmarshal(respBody, &activity); err != nil {
+		return nil, err
+	}
+
+	return &ToolsCallResult{
+		Content: []ToolContent{
+			{Type: "text", Text: fmt.Sprintf("Activity resolved: %s (%s)", activity.ID, activity.Resolution)},
+		},
+	}, nil
+}
+
 func (m *MCPAdapter) callGetGraph(args json.RawMessage) (*ToolsCallResult, error) {
 	var req struct {
 		SessionID string `json:"session_id"`
@@ -837,7 +970,14 @@ func (m *MCPAdapter) callGetGraph(args json.RawMessage) (*ToolsCallResult, error
 
 	lines = append(lines, fmt.Sprintf("Nodes (%d):", len(graph.Nodes)))
 	for _, n := range graph.Nodes {
-		lines = append(lines, fmt.Sprintf("  [%s] %s (%s/%s)", n.ID[:8], n.TaskSummary, n.Agent, n.Status))
+		extra := ""
+		if n.HandoffPreview != "" {
+			extra = fmt.Sprintf(" handoff:%s", n.HandoffPreview)
+		}
+		if n.PendingAction {
+			extra += " ⏳pending"
+		}
+		lines = append(lines, fmt.Sprintf("  [%s] %s (%s/%s%s)", n.ID[:8], n.TaskSummary, n.Agent, n.Status, extra))
 	}
 
 	lines = append(lines, "")

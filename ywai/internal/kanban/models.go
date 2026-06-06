@@ -1,6 +1,9 @@
 package kanban
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Session represents a working session in the Kanban board.
 type Session struct {
@@ -9,6 +12,24 @@ type Session struct {
 	Goal      string    `json:"goal"`
 	Status    string    `json:"status"` // active, closed
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// matchQuery checks if the session matches a search query (case-insensitive).
+func (s *Session) matchQuery(query string) bool {
+	if query == "" {
+		return true
+	}
+	q := strings.ToLower(query)
+	if strings.Contains(strings.ToLower(s.Goal), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(s.Project), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(s.ID), q) {
+		return true
+	}
+	return false
 }
 
 // Delegation represents a task delegated to an agent on the board.
@@ -65,11 +86,13 @@ type BoardView struct {
 
 // GraphNode represents a delegation node in the dependency graph.
 type GraphNode struct {
-	ID          string `json:"id"`
-	Agent       string `json:"agent"`
-	TaskSummary string `json:"task_summary"`
-	Status      string `json:"status"`
-	Column      string `json:"column"`
+	ID             string `json:"id"`
+	Agent          string `json:"agent"`
+	TaskSummary    string `json:"task_summary"`
+	Status         string `json:"status"`
+	Column         string `json:"column"`
+	HandoffPreview string `json:"handoff_preview,omitempty"`
+	PendingAction  bool   `json:"pending_action,omitempty"`
 }
 
 // GraphEdge represents a dependency edge in the graph.

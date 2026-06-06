@@ -264,10 +264,13 @@ func TestHandlers_ResolveActivity(t *testing.T) {
 		t.Errorf("expected 200 for resolve, got %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
-	if result["status"] != "resolved" {
-		t.Errorf("expected status 'resolved', got '%s'", result["status"])
+	var resolved ActivityEvent
+	json.NewDecoder(resp.Body).Decode(&resolved)
+	if resolved.Resolution != "approve" {
+		t.Errorf("expected resolution 'approve', got '%s'", resolved.Resolution)
+	}
+	if resolved.ResolvedAt == nil {
+		t.Error("expected ResolvedAt to be set")
 	}
 
 	// Test PATCH 404 — invalid delegation ID

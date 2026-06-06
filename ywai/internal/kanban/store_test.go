@@ -280,8 +280,18 @@ func TestStore_ResolveActivity(t *testing.T) {
 	}
 
 	// Resolve the activity
-	if err := s.ResolveActivity(del.ID, decision.ID, "approve"); err != nil {
+	resolved, err := s.ResolveActivity(del.ID, decision.ID, "approve")
+	if err != nil {
 		t.Fatalf("ResolveActivity failed: %v", err)
+	}
+	if resolved == nil {
+		t.Fatal("expected non-nil activity on successful resolve")
+	}
+	if resolved.Resolution != "approve" {
+		t.Errorf("expected resolution 'approve', got '%s'", resolved.Resolution)
+	}
+	if resolved.ResolvedAt == nil {
+		t.Error("ResolvedAt should be set after resolve")
 	}
 
 	// Verify the activity is resolved
@@ -289,11 +299,14 @@ func TestStore_ResolveActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetActivities failed: %v", err)
 	}
-	resolved := activities[0]
-	if resolved.Resolution != "approve" {
-		t.Errorf("expected resolution 'approve', got '%s'", resolved.Resolution)
+	if len(activities) == 0 {
+		t.Fatal("expected at least one activity")
 	}
-	if resolved.ResolvedAt == nil {
+	resolved2 := activities[0]
+	if resolved2.Resolution != "approve" {
+		t.Errorf("expected resolution 'approve', got '%s'", resolved2.Resolution)
+	}
+	if resolved2.ResolvedAt == nil {
 		t.Error("ResolvedAt should be set after resolve")
 	}
 
@@ -304,17 +317,17 @@ func TestStore_ResolveActivity(t *testing.T) {
 	}
 
 	// Test resolving non-existent delegation
-	if err := s.ResolveActivity("nonexistent", decision.ID, "ok"); err == nil {
+	if _, err := s.ResolveActivity("nonexistent", decision.ID, "ok"); err == nil {
 		t.Error("expected error when resolving activity in non-existent delegation")
 	}
 
 	// Test resolving non-existent activity
-	if err := s.ResolveActivity(del.ID, "nonexistent", "ok"); err == nil {
+	if _, err := s.ResolveActivity(del.ID, "nonexistent", "ok"); err == nil {
 		t.Error("expected error when resolving non-existent activity")
 	}
 
 	// Test re-resolving an already-resolved activity — should fail now.
-	if err := s.ResolveActivity(del.ID, decision.ID, "again"); err == nil {
+	if _, err := s.ResolveActivity(del.ID, decision.ID, "again"); err == nil {
 		t.Errorf("expected error on re-resolve, got nil")
 	}
 	// Verify the original resolution was NOT overwritten

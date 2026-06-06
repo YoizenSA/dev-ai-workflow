@@ -21,30 +21,22 @@
         </h1>
       </div>
       <div class="header-center">
-        <select id="session-select" class="session-select">
-          <option value="">-- Select a session --</option>
-        </select>
-        <button id="new-session-btn" class="btn btn-primary">
-          + New Session
-        </button>
-        <button
-          id="close-session-btn"
-          class="btn btn-danger"
-          style="display: none"
-        >
-          Close Session
-        </button>
-        <button
-          id="delete-session-btn"
-          class="btn btn-danger"
-          style="display: none"
-          title="Delete this session permanently"
-        >
-          🗑️
-        </button>
+        <div class="session-select-group">
+          <input id="session-search" class="session-search" type="text" placeholder="Search sessions..." />
+          <select id="session-select" class="session-select">
+            <option value="">-- Select a session --</option>
+          </select>
+        </div>
+        <div class="session-actions">
+          <button id="new-session-btn" class="btn btn-primary">+ New</button>
+          <button id="show-archived-btn" class="btn btn-sm" title="Show archived sessions">📦</button>
+          <button id="close-session-btn" class="btn btn-danger" style="display: none">Close</button>
+          <button id="delete-session-btn" class="btn btn-danger" style="display: none" title="Delete permanently">🗑️</button>
+        </div>
       </div>
       <div class="header-right">
         <span id="ws-status" class="ws-status">● disconnected</span>
+        <button id="sound-toggle-btn" class="btn btn-sm" title="Toggle notification sounds">🔊</button>
         <button class="tab-btn active" data-tab="kanban">Kanban</button>
         <button
           id="graph-toggle-btn"

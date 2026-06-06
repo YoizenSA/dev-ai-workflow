@@ -378,12 +378,14 @@ the orchestrator stops with `LOOP_GUARD` and escalates to the user.
 ### Orchestrator Kanban commands
 
 | Event | Command |
-|-------|---------|
+|-------|--------|
 | New delegation created | `kanban_create_delegation(agent, task_summary)` |
 | Phase started | `kanban_update_delegation(id, column="in_progress", status="running")` |
-| Handoff received (pass) | `kanban_update_delegation(id, column="review", status="review")` |
+| Progress / activity logged | `kanban_add_activity(delegation_id=<id>, type="progress", content="<update>")` |
+| Handoff received (pass) | `kanban_add_activity(delegation_id=<id>, type="progress", content="<handoff>")` then `kanban_update_delegation(id, handoff_preview="<summary>", column="review", status="review")` |
 | Handoff rejected (changes) | `kanban_update_delegation(id, column="backlog", status="changes")` |
-| Phase blocked | `kanban_update_delegation(id, status="blocked", blocker="<reason>")` |
+| Phase blocked / needs decision | `kanban_add_activity(delegation_id=<id>, type="blocked", content="<reason>")` then `kanban_update_delegation(id, status="blocked", blocker="<reason>")` |
+| Decision resolved | `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>, resolution="<outcome>")` then `kanban_update_delegation(id, status="pending", column="ready")` |
 | Work complete | `kanban_update_delegation(id, column="done", status="done")` |
 
 ### Status mapping reference

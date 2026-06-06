@@ -1,11 +1,28 @@
 // ywai Kanban — Vanilla JS
 (() => {
 	/* ─── Agent Config ─── */
+	/* ─── Sound Effects ─── */
+	let soundMuted = localStorage.getItem("kanban-sound-muted") === "true";
+
+	// Sound map: event → supabase MP3 URL
+	const SOUNDS = {
+		session:   "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/aoe2-horn.mp3",
+		newTask:   "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/aoe2-villager.mp3",
+		completed: "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/duolingo-complete.mp3",
+		blocked:   "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/windows-xp-error.mp3",
+		unblocked: "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/warcraft-ready-to-work.mp3",
+		activity:  "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/zelda-chest.mp3",
+		resolved:  "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/wololo.mp3",
+		decision:  "https://etamlorphqxcdkctbmzb.supabase.co/storage/v1/object/public/sounds/sounds/warcraft-work-work.mp3",
+	};
+
+
+
 	const AGENTS = {
-		dev: { icon: "🚧", label: "Dev", color: "#2ed573" },
-		qa: { icon: "🧪", label: "QA", color: "#ffa502" },
-		architect: { icon: "📋", label: "Architect", color: "#1e90ff" },
-		reviewer: { icon: "🔍", label: "Reviewer", color: "#9b59b6" },
+		architect: { icon: "🏗️", label: "Architect", color: "#2ed573" },
+		dev: { icon: "💻", label: "Developer", color: "#1e90ff" },
+		qa: { icon: "🔍", label: "QA", color: "#ffa502" },
+		reviewer: { icon: "👀", label: "Reviewer", color: "#a55eea" },
 		devops: { icon: "🚀", label: "DevOps", color: "#ff4757" },
 	};
 
@@ -22,6 +39,8 @@
 	let sessions = [];
 	let currentSessionId = null;
 	let boardData = null; // { session, columns: { backlog: [], ready: [], ... } }
+	let showArchived = false;
+	let sessionSearchQuery = "";
 	let ws = null;
 	let wsReconnectTimer = null;
 	let reconnectDelay = 1000;
@@ -34,7 +53,9 @@
 	const $ = (sel) => document.querySelector(sel);
 
 	const sessionSelect = $("#session-select");
+	const sessionSearch = $("#session-search");
 	const newSessionBtn = $("#new-session-btn");
+	const showArchivedBtn = $("#show-archived-btn");
 	const closeSessionBtn = $("#close-session-btn");
 	const deleteSessionBtn = $("#delete-session-btn");
 	const wsStatus = $("#ws-status");
@@ -165,6 +186,7 @@
 				sessions.push(payload);
 				renderSessionSelect();
 				showToast(`Session created: <strong>${payload.goal}</strong>`);
+				playKanbanSound("session", 0.25);
 				break;
 
 			case "session.updated":
@@ -184,11 +206,17 @@
 				if (currentSessionId && payload.session_id === currentSessionId) {
 					addCardToBoard(payload);
 				}
+				playKanbanSound("newTask", 0.3);
 				break;
 
 			case "delegation.status_changed":
 				if (currentSessionId && payload.session_id === currentSessionId) {
 					moveCardOnBoard(payload);
+				}
+				if (payload.status === "done") {
+					playKanbanSound("completed", 0.4);
+				} else if (payload.status === "blocked") {
+					playKanbanSound("blocked", 0.3);
 				}
 				break;
 
@@ -206,20 +234,24 @@
 
 			case "activity.created":
 				handleActivityCreated(payload);
+				playKanbanSound("activity", 0.25);
 				break;
 
 			case "activity.resolved":
 				handleActivityResolved(payload);
+				playKanbanSound("resolved", 0.3);
 				break;
 
 			case "decision.pending":
 				addToDecisionFeed(payload);
+				playKanbanSound("decision", 0.25);
 				break;
 
 			case "delegation.auto_unblocked":
 				showToast(
 					`✅ Auto-unblocked: <strong>${payload.task_summary}</strong>`,
 				);
+				playKanbanSound("unblocked", 0.3);
 				refreshGraphIfVisible();
 				break;
 		}
@@ -404,38 +436,64 @@
 
 	function renderSessionSelect() {
 		if (!Array.isArray(sessions)) return;
-		const active = sessions.filter((s) => s.status === "active");
-		const closed = sessions.filter((s) => s.status === "closed");
+
+		// Filter by search query
+		let filtered = sessions;
+		if (sessionSearchQuery) {
+			const q = sessionSearchQuery.toLowerCase();
+			filtered = sessions.filter((s) =>
+				(s.goal && s.goal.toLowerCase().includes(q)) ||
+				(s.project && s.project.toLowerCase().includes(q)) ||
+				(s.id && s.id.toLowerCase().includes(q))
+			);
+		}
+
+		// Split by status
+		const active = filtered.filter((s) => s.status === "active");
+		const closed = filtered.filter((s) => s.status === "closed");
 
 		sessionSelect.innerHTML =
 			'<option value="">-- Select a session --</option>';
 
-		if (active.length > 0) {
-			const optgroup = document.createElement("optgroup");
-			optgroup.label = "Active Sessions";
-			active.forEach((s) => {
-				const opt = document.createElement("option");
-				opt.value = s.id;
-				const projectLabel = s.project ? `[${s.project}] ` : "";
-				opt.textContent = projectLabel + s.goal;
-				if (s.id === currentSessionId) opt.selected = true;
-				optgroup.appendChild(opt);
+		// Helper to group sessions by project
+		function groupByProject(list) {
+			const map = {};
+			list.forEach((s) => {
+				const p = s.project || "(no project)";
+				if (!map[p]) map[p] = [];
+				map[p].push(s);
 			});
-			sessionSelect.appendChild(optgroup);
+			return map;
 		}
 
-		if (closed.length > 0) {
-			const optgroup = document.createElement("optgroup");
-			optgroup.label = "Closed Sessions";
-			closed.forEach((s) => {
-				const opt = document.createElement("option");
-				opt.value = s.id;
-				const projectLabel = s.project ? `[${s.project}] ` : "";
-				opt.textContent = projectLabel + s.goal;
-				if (s.id === currentSessionId) opt.selected = true;
-				optgroup.appendChild(opt);
+		// Render a status section grouped by project
+		function renderGrouped(list, label) {
+			if (list.length === 0) return;
+			const grouped = groupByProject(list);
+			const projects = Object.keys(grouped).sort();
+			projects.forEach((project) => {
+				const optgroup = document.createElement("optgroup");
+				optgroup.label = `${label} — ${project}`;
+				grouped[project].forEach((s) => {
+					const opt = document.createElement("option");
+					opt.value = s.id;
+					opt.textContent = s.goal;
+					if (s.id === currentSessionId) opt.selected = true;
+					optgroup.appendChild(opt);
+				});
+				sessionSelect.appendChild(optgroup);
 			});
-			sessionSelect.appendChild(optgroup);
+		}
+
+		renderGrouped(active, "Active");
+
+		if (showArchived) {
+			renderGrouped(closed, "Archived");
+		} else if (closed.length > 0) {
+			const opt = document.createElement("option");
+			opt.disabled = true;
+			opt.textContent = `── ${closed.length} archived session(s) — click 📦 to show ──`;
+			sessionSelect.appendChild(opt);
 		}
 	}
 
@@ -909,6 +967,20 @@
 		}
 	});
 
+	// Session search input
+	sessionSearch.addEventListener("input", () => {
+		sessionSearchQuery = sessionSearch.value;
+		renderSessionSelect();
+	});
+
+	// Show archived toggle
+	showArchivedBtn.addEventListener("click", () => {
+		showArchived = !showArchived;
+		showArchivedBtn.style.opacity = showArchived ? "1" : "0.5";
+		showArchivedBtn.style.background = showArchived ? "var(--accent)" : "";
+		renderSessionSelect();
+	});
+
 	// New session button
 	newSessionBtn.addEventListener("click", openSessionModal);
 
@@ -1308,7 +1380,16 @@
 		setupConfig();
 		setupGraphToggle();
 		createDecisionFeedSidebar();
-		setupBoardEventDelegation();
+
+		// Sound toggle
+		const soundBtn = document.getElementById("sound-toggle-btn");
+		if (soundBtn) {
+			soundBtn.textContent = soundMuted ? "🔇" : "🔊";
+			soundBtn.addEventListener("click", toggleSound);
+		}
+
+		// Debug panel: 🎯 button, Ctrl+Shift+9, or double-click ws-status
+
 		await loadSessions();
 
 		// Periodic refresh every 30s as fallback
@@ -3220,3 +3301,30 @@ document.addEventListener("keydown", (e) => {
 `;
 	document.head.appendChild(style);
 })();
+
+	// Pre-create Audio elements for default sounds
+	const audioEls = {};
+	Object.entries(SOUNDS).forEach(([key, url]) => {
+		const a = new Audio(url);
+		a.preload = "auto";
+		audioEls[key] = a;
+	});
+
+	function playKanbanSound(key, volume = 0.5) {
+		if (soundMuted) return;
+		try {
+			const audio = audioEls[key];
+			if (!audio) return;
+			const clone = audio.cloneNode();
+			clone.volume = Math.min(1, Math.max(0, volume));
+			clone.play().catch(() => {});
+		} catch {}
+	}
+
+	function toggleSound() {
+		soundMuted = !soundMuted;
+		localStorage.setItem("kanban-sound-muted", soundMuted);
+		const btn = document.getElementById("sound-toggle-btn");
+		if (btn) btn.textContent = soundMuted ? "🔇" : "🔊";
+	}
+

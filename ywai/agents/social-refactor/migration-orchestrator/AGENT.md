@@ -229,24 +229,59 @@ visually without reading handoffs. The Kanban is your audit trail.
 
 1. **On session start**: Call `kanban_create_session(goal="<migration goal>")`
    to get a `session_id`. Use this session for all subsequent board calls.
+
 2. **Before each delegation**: Call
    `kanban_create_delegation(session_id, agent="<agent>",
    task_summary="<one-liner>")` to create a card. Save the returned delegation
    `id`.
-3. **On delegation start**: Call
+
+3. **On phase start**: After delegating, call
    `kanban_update_delegation(id, column="in_progress", status="running")` to
-   move the card to In Progress.
-4. **On delegation complete** (after reading the handoff): Call
-   `kanban_update_delegation(id, column="review", status="review")` to move
-   the card to the Review column.
-5. **On validation approved**: After `@migration-validator` returns `APPROVED`,
-   call `kanban_update_delegation(id, column="done", status="done")` to mark
-   complete.
-6. **On changes requested**: If validation returns `CHANGES_REQUESTED`, call
+   mark the card as in progress.
+
+4. **On progress updates**: Call
+   `kanban_add_activity(delegation_id=<id>, type="progress",
+   content="<what happened>")` to log progress events. This populates the
+   activity history visible in the board UI.
+
+5. **On handoff received** (after reading the handoff):
+   - Call `kanban_add_activity(delegation_id=<id>, type="progress",
+     content="<handoff summary>")` to store the handoff content
+   - Call `kanban_update_delegation(id, handoff_preview="<brief summary>")`
+     to set a short preview on the card
+   - Call `kanban_update_delegation(id, column="review", status="review")`
+     to move the card to the Review column
+
+6. **On validation approved**: After `@migration-validator` returns `APPROVED`,
+   - Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>,
+     resolution="approved")` if there were pending decisions
+   - Call `kanban_update_delegation(id, column="done", status="done")` to mark
+     complete
+
+7. **On changes requested**: If validation returns `CHANGES_REQUESTED`, call
    `kanban_update_delegation(id, column="backlog", status="changes")` to move
    back.
-7. **On blocked**: If any phase returns `BLOCKED`, call
+
+8. **On blocked / needs decision**: If any phase returns `BLOCKED`, call
+   `kanban_add_activity(delegation_id=<id>, type="blocked",
+   content="<reason>", options=["opt1", "opt2"])` to log the blocker, then
    `kanban_update_delegation(id, status="blocked", blocker="<reason>")`.
+
+### Reading board state
+
+- **Check board**: Call `kanban_get_board(session_id=<id>)` anytime to see
+  all delegations grouped by column, including handoff_preview, blocker, and
+  pending_action indicators.
+- **Check activities**: Call `kanban_get_activities(delegation_id=<id>)` to
+  see the full activity timeline for a specific card.
+- **Check pending decisions**: Call
+  `kanban_get_pending_decisions(session_id=<id>)` to see all unresolved
+  blockers, decisions, and questions.
+- **Check dependency graph**: Call `kanban_get_graph(session_id=<id>)` to
+  visualize task dependencies and identify blockers.
+- **Resolve decisions**: Call
+  `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>,
+  resolution="<decision>")` to resolve a pending decision/question/blocker.
 
 ### Getting the Kanban UI URL
 
@@ -256,9 +291,18 @@ board is visible. Share this with the user so they can open it.
 ### Column mapping
 
 - `backlog` → Pending / Changes requested
-- `ready` → Ready to start
+- `ready` → Ready to start (auto-unblocked)
 - `in_progress` → Running
 - `review` → Under review
+- `done` → Completed
+
+### Status mapping
+
+- `pending` → Not started
+- `running` → In progress
+- `review` → Under review
+- `changes` → Changes requested
+- `blocked` → Blocked / Needs decision
 - `done` → Completed
 
 ### Status mapping

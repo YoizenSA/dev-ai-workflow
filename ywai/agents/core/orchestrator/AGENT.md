@@ -123,24 +123,47 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 - Cap concurrency to what's useful (typically 2-4 slices); more adds merge cost.
 - If a slice comes back `blocked`/`needs-decision`, resolve it before integrating dependents.
 - Prefer sequential when in doubt — correctness over speed.
-
 ## Kanban Tracking
 
 The orchestrator maintains a visual Kanban board tracking all delegations. This board is automatically updated via the `ywai-kanban` MCP server.
 
 ### Workflow
+
 1. **On session start**: Call `kanban_create_session(project=<repo/project name>, goal=<session goal>)` to create a new Kanban session. Store the returned `session_id`. The project name helps identify which repository or codebase this session belongs to.
-2. **On every delegation**: After calling `delegate()` or `task()`, call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card on the board.
-3. **On handoff received**: When a subagent completes, call `kanban_update_delegation(id, column="review", status="review")` to move the card to the Review column.
-4. **On approval**: After `@reviewer` approves, call `kanban_update_delegation(id, column="done", status="done")` to mark complete.
-5. **On changes requested**: If `@reviewer` requests changes, call `kanban_update_delegation(id, column="backlog", status="changes")` to move back.
+
+2. **On every delegation**: After calling `delegate()` or `task()`, call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card on the board. Store the returned `delegation_id`.
+
+3. **On phase start**: Call `kanban_update_delegation(id, column="in_progress", status="running")` to mark the card as in progress.
+
+4. **On progress updates**: Call `kanban_add_activity(delegation_id=<id>, type="progress", content="<what happened>")` to log progress events to the card's activity timeline. This populates the activity history.
+
+5. **On handoff received**: When a subagent completes:
+   - Call `kanban_add_activity(delegation_id=<id>, type="progress", content="<handoff summary>")` to store the handoff content in the activity timeline (so it's visible via `kanban_get_activities`)
+   - Call `kanban_update_delegation(id, handoff_preview="<brief handoff summary>")` to set a short preview on the card itself
+   - Call `kanban_update_delegation(id, column="review", status="review")` to move the card to the Review column
+
+6. **On blockers / need decisions**: Call `kanban_add_activity(delegation_id=<id>, type="blocked", content="<reason>", options=["option1", "option2"])` to log a blocker or decision request. Then call `kanban_update_delegation(id, status="blocked", blocker="<reason>")`.
+
+7. **On approval**: After `@reviewer` approves:
+   - Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>, resolution="approved")` to resolve any pending decision
+   - Call `kanban_update_delegation(id, column="done", status="done")` to mark complete
+
+8. **On changes requested**: If `@reviewer` requests changes, call `kanban_update_delegation(id, column="backlog", status="changes")` to move back.
+
+### Reading board state
+
+- **Check board**: Call `kanban_get_board(session_id=<id>)` anytime to see all delegations grouped by column, including handoff_preview, blocker, and pending_action indicators.
+- **Check activities**: Call `kanban_get_activities(delegation_id=<id>)` to see the full activity timeline for a specific card.
+- **Check pending decisions**: Call `kanban_get_pending_decisions(session_id=<id>)` to see all unresolved blockers, decisions, and questions.
+- **Check dependency graph**: Call `kanban_get_graph(session_id=<id>)` to visualize task dependencies and identify blockers.
+- **Resolve decisions**: Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>, resolution="<decision>")` to resolve a pending decision/question/blocker.
 
 ### Getting the Kanban UI URL
 Call `kanban_get_ui_url()` anytime to get the browser URL where the Kanban board is visible. Share this with the user so they can open it.
 
 ### Column mapping
 - `backlog` → Pending / Changes requested
-- `ready` → Ready to start
+- `ready` → Ready to start (auto-unblocked)
 - `in_progress` → Running
 - `review` → Under review
 - `done` → Completed
