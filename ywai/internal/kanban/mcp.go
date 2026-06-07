@@ -693,7 +693,7 @@ func (m *MCPAdapter) callListSessions(args json.RawMessage) (*ToolsCallResult, e
 				if s.Status == "active" {
 					statusMark = " ▶"
 				}
-				lines = append(lines, fmt.Sprintf("  %s%s (%s)%s", s.ID[:8], statusMark, s.Goal, s.Status))
+				lines = append(lines, fmt.Sprintf("  %s%s (%s)%s", s.ID, statusMark, s.Goal, s.Status))
 			}
 			parts = append(parts, fmt.Sprintf("%s (%d):\n%s", project, len(ss), strings.Join(lines, "\n")))
 		}
@@ -743,7 +743,7 @@ func (m *MCPAdapter) callGetBoard(args json.RawMessage) (*ToolsCallResult, error
 			if d.PendingAction {
 				extra += " ⏳pending-action"
 			}
-			lines = append(lines, fmt.Sprintf("- [%s] %s: %s%s", d.Status, d.Agent, d.TaskSummary, extra))
+			lines = append(lines, fmt.Sprintf("- [%s] %s %s: %s%s", d.ID, d.Status, d.Agent, d.TaskSummary, extra))
 		}
 		lines = append(lines, "")
 	}
@@ -977,7 +977,7 @@ func (m *MCPAdapter) callGetGraph(args json.RawMessage) (*ToolsCallResult, error
 		if n.PendingAction {
 			extra += " ⏳pending"
 		}
-		lines = append(lines, fmt.Sprintf("  [%s] %s (%s/%s%s)", n.ID[:8], n.TaskSummary, n.Agent, n.Status, extra))
+		lines = append(lines, fmt.Sprintf("  [%s] %s (%s/%s%s)", n.ID, n.TaskSummary, n.Agent, n.Status, extra))
 	}
 
 	lines = append(lines, "")
