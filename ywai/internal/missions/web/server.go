@@ -45,8 +45,12 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux.HandleFunc("GET /api/missions", h.ListMissions)
 	mux.HandleFunc("GET /api/missions/{id}", h.GetMission)
 	mux.HandleFunc("GET /api/missions/{id}/features", h.ListFeatures)
+	mux.HandleFunc("GET /api/missions/{id}/validation", h.GetValidation)
+	mux.HandleFunc("GET /api/missions/{id}/features/{featureId}/logs", h.GetFeatureLogs)
 	mux.HandleFunc("POST /api/missions/{id}/pause", h.PauseMission)
 	mux.HandleFunc("POST /api/missions/{id}/resume", h.ResumeMission)
+	mux.HandleFunc("POST /api/missions/{id}/cancel", h.CancelMission)
+	mux.HandleFunc("POST /api/missions/{id}/features/{featureId}/retry", h.RetryFeature)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.HandleWebSocket)

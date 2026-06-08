@@ -294,6 +294,171 @@ func (h *Handlers) ResumeMission(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, mission)
 }
 
+// ─── Cancel / Retry ──────────────────────────────────────────────────────────
+
+// CancelMission cancels an active or paused mission.
+func (h *Handlers) CancelMission(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "mission id is required")
+		return
+	}
+
+	mission, err := h.store.LoadMission(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("mission %q not found", id))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to load mission: %v", err))
+		return
+	}
+
+	// State validation: only active or paused missions can be cancelled
+	if mission.Status != missions.MissionActive && mission.Status != missions.MissionPaused {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":  fmt.Sprintf("cannot cancel mission in state %q", mission.Status),
+			"status": mission.Status,
+		})
+		return
+	}
+
+	if err := missions.CancelMission(h.store, mission); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to cancel mission: %v", err))
+		return
+	}
+
+	// Reload mission to get updated state
+	mission, err = h.store.LoadMission(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to load mission after cancel: %v", err))
+		return
+	}
+
+	// Broadcast state change via WebSocket
+	h.hub.BroadcastEvent("mission_status_changed", map[string]interface{}{
+		"id":     mission.ID,
+		"status": mission.Status,
+		"action": "cancel",
+	})
+
+	writeJSON(w, http.StatusOK, mission)
+}
+
+// RetryFeature re-queues a failed feature for retry.
+func (h *Handlers) RetryFeature(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	featureID := r.PathValue("featureId")
+	if id == "" || featureID == "" {
+		writeError(w, http.StatusBadRequest, "mission id and feature id are required")
+		return
+	}
+
+	mission, err := h.store.LoadMission(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("mission %q not found", id))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to load mission: %v", err))
+		return
+	}
+
+	feat, err := missions.GetFeatureByID(mission, featureID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("feature %q not found: %v", featureID, err))
+		return
+	}
+
+	// Only failed features can be retried
+	if feat.Status != missions.FeatureFailed {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":  fmt.Sprintf("cannot retry feature in state %q", feat.Status),
+			"status": feat.Status,
+		})
+		return
+	}
+
+	if _, err := missions.RequeueFeature(h.store, mission, featureID); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to retry feature: %v", err))
+		return
+	}
+
+	// Reload mission to get updated state
+	mission, err = h.store.LoadMission(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to reload mission: %v", err))
+		return
+	}
+
+	// Broadcast state change via WebSocket
+	h.hub.BroadcastEvent("feature_status_changed", map[string]interface{}{
+		"missionId":  mission.ID,
+		"featureId":  featureID,
+		"status":     missions.FeaturePending,
+		"action":     "retry",
+	})
+
+	writeJSON(w, http.StatusOK, mission)
+}
+
+// ─── Validation ──────────────────────────────────────────────────────────────
+
+// GetValidation returns the validation state for a mission.
+func (h *Handlers) GetValidation(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "mission id is required")
+		return
+	}
+
+	vs, err := h.store.LoadValidationState(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"missionId":  id,
+				"status":     "not_started",
+				"assertions": []interface{}{},
+				"reports":    []interface{}{},
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to load validation state: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, vs)
+}
+
+// ─── Logs ────────────────────────────────────────────────────────────────────
+
+// GetFeatureLogs returns the log content for a feature.
+func (h *Handlers) GetFeatureLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	featureID := r.PathValue("featureId")
+	if id == "" || featureID == "" {
+		writeError(w, http.StatusBadRequest, "mission id and feature id are required")
+		return
+	}
+
+	logContent, err := h.store.ReadWorkerLog(id, featureID)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"missionId": id,
+			"featureId": featureID,
+			"content":   "",
+			"error":     err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"missionId": id,
+		"featureId": featureID,
+		"content":   logContent,
+	})
+}
+
 // ─── WebSocket ─────────────────────────────────────────────────────────────
 
 // HandleWebSocket upgrades HTTP connection to WebSocket.

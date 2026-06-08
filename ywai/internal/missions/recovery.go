@@ -455,3 +455,22 @@ func (s *MissionsStore) RecordWorkerLog(missionID, featureID, logContent string)
 
 	return nil
 }
+
+// ReadWorkerLog reads the worker's log output from the workers artifact directory.
+// Returns empty string if no log file exists.
+func (s *MissionsStore) ReadWorkerLog(missionID, featureID string) (string, error) {
+	logPath := filepath.Join(s.MissionDir(missionID), "workers", featureID, "output.log")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("log not found for feature %q in mission %q", featureID, missionID)
+		}
+		return "", fmt.Errorf("read worker log: %w", err)
+	}
+	return string(data), nil
+}
+
+// WorkerLogPath returns the path to a worker's log file.
+func (s *MissionsStore) WorkerLogPath(missionID, featureID string) string {
+	return filepath.Join(s.MissionDir(missionID), "workers", featureID, "output.log")
+}

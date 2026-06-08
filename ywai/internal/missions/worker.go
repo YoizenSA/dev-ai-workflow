@@ -64,19 +64,31 @@ type WorkerResult struct {
 	Err      error
 }
 
+// LogBroadcastFunc is a callback for broadcasting log output to UIs.
+type LogBroadcastFunc func(missionID, featureID, line string)
+
 // WorkerManager manages spawning opencode workers for features.
 type WorkerManager struct {
-	store       *MissionsStore
-	config      WorkerConfig
-	cmdCreator  func(ctx context.Context, name string, args ...string) *exec.Cmd
+	store        *MissionsStore
+	config       WorkerConfig
+	cmdCreator   func(ctx context.Context, name string, args ...string) *exec.Cmd
+	logBroadcast LogBroadcastFunc
 }
 
 // NewWorkerManager creates a new WorkerManager.
 func NewWorkerManager(store *MissionsStore, config WorkerConfig) *WorkerManager {
 	return &WorkerManager{
-		store:      store,
-		config:     config,
-		cmdCreator: exec.CommandContext,
+		store:        store,
+		config:       config,
+		cmdCreator:   exec.CommandContext,
+		logBroadcast: func(string, string, string) {},
+	}
+}
+
+// SetLogBroadcast sets the log broadcast callback for streaming logs to UIs.
+func (wm *WorkerManager) SetLogBroadcast(fn LogBroadcastFunc) {
+	if fn != nil {
+		wm.logBroadcast = fn
 	}
 }
 
@@ -279,11 +291,17 @@ func (wm *WorkerManager) streamOutput(
 		for scanner.Scan() {
 			line := scanner.Text()
 			fmt.Fprintln(multiWriter, line)
+			wm.logBroadcast(mission.ID, feature.ID, line)
 		}
 	}()
 
-	// Read stderr and write to log
-	io.Copy(multiWriter, stderr)
+	// Read stderr and write to log with broadcast
+	stderrScanner := bufio.NewScanner(stderr)
+	for stderrScanner.Scan() {
+		line := stderrScanner.Text()
+		fmt.Fprintln(multiWriter, line)
+		wm.logBroadcast(mission.ID, feature.ID, "[stderr] "+line)
+	}
 
 	// Wait for stdout to finish
 	stdoutWg.Wait()

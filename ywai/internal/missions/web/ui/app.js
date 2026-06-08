@@ -180,15 +180,20 @@
       } else {
         featuresHTML = featList.map(f => {
           const fIcon = STATUS_ICONS[f.status] || '⏳';
+          let featureActions = '';
+          if (f.status === 'failed') {
+            featureActions = `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();window.app.retryFeature('${mission.id}', '${f.id}')">↻ Retry</button>`;
+          }
           return `
             <div class="feature-item">
               <div class="feature-item-left">
                 <span class="status-icon ${f.status}">${fIcon}</span>
                 <span class="feature-item-name">${escapeHtml(f.description || f.id)}</span>
               </div>
-              <div>
+              <div class="feature-item-right">
                 <span class="feature-status ${f.status}">${f.status}</span>
                 <span class="feature-item-meta">${f.skillName || ''}</span>
+                ${featureActions}
               </div>
             </div>
           `;
@@ -215,9 +220,40 @@
     // Determine action buttons based on status
     let actionsHTML = '';
     if (mission.status === 'active') {
-      actionsHTML = `<button class="btn btn-danger" onclick="window.app.pauseMission('${mission.id}')">⏸ Pause</button>`;
+      actionsHTML += `<button class="btn btn-danger" onclick="window.app.pauseMission('${mission.id}')">⏸ Pause</button>`;
+      actionsHTML += `<button class="btn btn-danger" onclick="window.app.cancelMission('${mission.id}')">✕ Cancel</button>`;
     } else if (mission.status === 'paused') {
-      actionsHTML = `<button class="btn btn-success" onclick="window.app.resumeMission('${mission.id}')">▶ Resume</button>`;
+      actionsHTML += `<button class="btn btn-success" onclick="window.app.resumeMission('${mission.id}')">▶ Resume</button>`;
+      actionsHTML += `<button class="btn btn-danger" onclick="window.app.cancelMission('${mission.id}')">✕ Cancel</button>`;
+    }
+
+    function renderValidation(vs) {
+      if (!vs || vs.status === 'not_started') {
+        return '<div class="validation-section"><h3>🔍 Validation</h3><p class="validation-none">Not yet started</p></div>';
+      }
+      const assertions = vs.assertions || [];
+      const passed = assertions.filter(a => a.status === 'passed').length;
+      const failed = assertions.filter(a => a.status === 'failed').length;
+      const total = assertions.length;
+      let rows = assertions.map(a => `
+        <div class="assertion-item ${a.status}">
+          <span class="assertion-icon">${a.status === 'passed' ? '✅' : a.status === 'failed' ? '❌' : '⏳'}</span>
+          <span class="assertion-id">${escapeHtml(a.id)}</span>
+          <span class="assertion-surface">${escapeHtml(a.surface || '')}</span>
+          ${a.error ? `<span class="assertion-error">${escapeHtml(a.error)}</span>` : ''}
+        </div>
+      `).join('');
+      return `
+        <div class="validation-section">
+          <h3>🔍 Validation</h3>
+          <div class="validation-summary">
+            <span class="validation-pass">✅ ${passed} passed</span>
+            <span class="validation-fail">❌ ${failed} failed</span>
+            <span class="validation-total">📊 ${total} total</span>
+          </div>
+          <div class="assertion-list">${rows}</div>
+        </div>
+      `;
     }
 
     detailContent.innerHTML = `
@@ -237,7 +273,17 @@
         ${actionsHTML ? `<div class="detail-actions">${actionsHTML}</div>` : ''}
       </div>
       <div id="milestones-container">${milestonesHTML}</div>
+      <div id="validation-container"></div>
+      <div id="logs-container"></div>
     `;
+
+    // Load validation state asynchronously
+    loadValidation(mission.id).then(vs => {
+      const vc = document.getElementById('validation-container');
+      if (vc && vs) {
+        vc.innerHTML = renderValidation(vs);
+      }
+    });
   }
 
   /* ─── Pause / Resume ─── */
@@ -266,6 +312,51 @@
     } catch (err) {
       showToast(`Failed to resume: ${err.message}`, 'error');
     }
+  }
+
+  /* ─── Cancel Mission ─── */
+  async function cancelMission(id) {
+    if (id && !confirm('Are you sure you want to cancel this mission?')) return;
+    try {
+      const result = await apiFetch(`/missions/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+      showToast('Mission cancelled', 'success');
+      if (currentMissionId === id && result) {
+        const features = await apiFetch(`/missions/${encodeURIComponent(id)}/features`).catch(() => []);
+        renderMissionDetail(result, features);
+      } else {
+        loadMissions();
+      }
+    } catch (err) {
+      showToast(`Failed to cancel: ${err.message}`, 'error');
+    }
+  }
+
+  /* ─── Retry Feature ─── */
+  async function retryFeature(missionId, featureId) {
+    if (!confirm(`Retry feature "${featureId}"?`)) return;
+    try {
+      const result = await apiFetch(`/missions/${encodeURIComponent(missionId)}/features/${encodeURIComponent(featureId)}/retry`, { method: 'POST' });
+      showToast('Feature queued for retry', 'success');
+      if (currentMissionId === missionId && result) {
+        const features = await apiFetch(`/missions/${encodeURIComponent(missionId)}/features`).catch(() => []);
+        renderMissionDetail(result, features);
+      }
+    } catch (err) {
+      showToast(`Failed to retry: ${err.message}`, 'error');
+    }
+  }
+
+  /* ─── Validation & Logs ─── */
+  async function loadValidation(missionId) {
+    try {
+      return await apiFetch(`/missions/${encodeURIComponent(missionId)}/validation`);
+    } catch (e) { return null; }
+  }
+
+  async function loadFeatureLogs(missionId, featureId) {
+    try {
+      return await apiFetch(`/missions/${encodeURIComponent(missionId)}/features/${encodeURIComponent(featureId)}/logs`);
+    } catch (e) { return null; }
   }
 
   /* ─── Navigation ─── */
@@ -332,6 +423,18 @@
           loadMissions();
         }
         break;
+      case 'feature_status_changed':
+        showToast(`Feature ${msg.payload?.featureId} → ${msg.payload?.status}`, 'info');
+        if (currentMissionId === msg.payload?.missionId) {
+          showMission(currentMissionId);
+        }
+        break;
+      case 'log_update':
+        // Log updates - refresh if viewing a mission
+        if (currentMissionId) {
+          showMission(currentMissionId);
+        }
+        break;
       default:
         break;
     }
@@ -366,7 +469,7 @@
   /* ─── Init ─── */
   function init() {
     // Expose functions globally for inline onclick handlers
-    window.app = { showMission, showMissionsList, pauseMission, resumeMission, showKeyboardHelp };
+    window.app = { showMission, showMissionsList, pauseMission, resumeMission, cancelMission, retryFeature, loadValidation, loadFeatureLogs, showKeyboardHelp };
 
     loadMissions();
     connectWebSocket();

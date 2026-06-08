@@ -340,6 +340,46 @@ body { min-height: 100vh; }
   font-size: 13px;
 }
 
+/* ─── Feature item right (status + actions) ─── */
+.feature-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Validation Section ─── */
+.validation-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.validation-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.validation-none { color: var(--text-muted); font-size: 13px; font-style: italic; }
+.validation-summary { display: flex; gap: 16px; font-size: 13px; margin-bottom: 12px; }
+.validation-pass { color: var(--accent-green); }
+.validation-fail { color: var(--accent-red); }
+.validation-total { color: var(--text-secondary); }
+
+.assertion-list { display: flex; flex-direction: column; gap: 6px; }
+.assertion-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+}
+.assertion-item.passed { border-left: 3px solid var(--accent-green); }
+.assertion-item.failed { border-left: 3px solid var(--accent-red); }
+.assertion-item.pending { border-left: 3px solid var(--text-muted); }
+.assertion-icon { font-size: 14px; }
+.assertion-id { font-family: monospace; font-weight: 600; min-width: 100px; }
+.assertion-surface { color: var(--text-muted); font-size: 11px; min-width: 50px; }
+.assertion-error { color: var(--accent-red); font-size: 11px; flex: 1; }
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .header { padding: 10px 16px; }
