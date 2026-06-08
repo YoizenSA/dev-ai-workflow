@@ -13,6 +13,8 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
@@ -665,7 +667,40 @@ func maskKey(key string) string {
 	return key[:4] + strings.Repeat("*", len(key)-4)
 }
 
+// ---------------------------------------------------------------------------
+// Missions commands
+// ---------------------------------------------------------------------------
+
+var missionsCmd = &cobra.Command{
+	Use:   "missions",
+	Short: "Manage ywai missions",
+}
+
+var missionsServeCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the Mission Control Web UI server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		port, _ := cmd.Flags().GetInt("port")
+
+		store, err := missions.OpenStore()
+		if err != nil {
+			return fmt.Errorf("failed to open missions store: %w", err)
+		}
+
+		s := web.New(port, store)
+		log.Printf("Mission Control Web UI starting on http://localhost:%d", port)
+		if err := s.Start(); err != nil {
+			return fmt.Errorf("failed to start missions web UI: %w", err)
+		}
+		return nil
+	},
+}
+
 func init() {
+	missionsServeCmd.Flags().IntP("port", "p", web.DefaultPort, "Port for Mission Control Web UI")
+	missionsCmd.AddCommand(missionsServeCmd)
+	rootCmd.AddCommand(missionsCmd)
+
 	daemonCmd.Flags().Bool("mcp", false, "Run as MCP stdio adapter")
 	daemonCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ywai Mission Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <h1 class="header-title">
+            <span class="logo-y">y</span><span class="logo-wai">wai</span>
+            <span class="logo-mission">Mission Control</span>
+          </h1>
+          <span class="header-version" id="header-version">v0.1.0</span>
+        </div>
+        <div class="header-right">
+          <span class="connection-status" id="connection-status">● Connected</span>
+          <button class="btn btn-sm" onclick="showKeyboardHelp()" title="Keyboard shortcuts">?</button>
+        </div>
+      </header>
+
+      <!-- Toast container -->
+      <div id="toast-container" class="toast-container"></div>
+
+      <!-- Main content -->
+      <main id="main-content">
+        <!-- Loading state -->
+        <div id="loading-state" class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading missions...</p>
+        </div>
+
+        <!-- Error state -->
+        <div id="error-state" class="error-state hidden">
+          <div class="error-icon">⚠</div>
+          <h2>Connection Lost</h2>
+          <p id="error-message">Unable to connect to the server.</p>
+          <button class="btn" onclick="loadMissions()">Retry</button>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="empty-state hidden">
+          <div class="empty-icon">📋</div>
+          <h2>No Missions Yet</h2>
+          <p>Create your first mission using the CLI: <code>ywai missions start</code></p>
+        </div>
+
+        <!-- Missions list -->
+        <div id="missions-list" class="missions-list hidden">
+          <div id="missions-grid" class="missions-grid"></div>
+        </div>
+
+        <!-- Mission detail -->
+        <div id="mission-detail" class="mission-detail hidden">
+          <button class="btn btn-back" onclick="showMissionsList()">← Back to Missions</button>
+          <div id="detail-content"></div>
+        </div>
+
+        <!-- 404 state -->
+        <div id="not-found-state" class="error-state hidden">
+          <div class="error-icon">🔍</div>
+          <h2>Mission Not Found</h2>
+          <p id="not-found-message"></p>
+          <button class="btn" onclick="showMissionsList()">← Back to Missions</button>
+        </div>
+      </main>
+
+      <!-- Keyboard shortcuts overlay -->
+      <div id="keyboard-help" class="overlay hidden" onclick="this.classList.add('hidden')">
+        <div class="overlay-content" onclick="event.stopPropagation()">
+          <h2>Keyboard Shortcuts</h2>
+          <div class="shortcut-list">
+            <div class="shortcut"><kbd>?</kbd> <span>Toggle this help</span></div>
+            <div class="shortcut"><kbd>Esc</kbd> <span>Close help / Back to list</span></div>
+            <div class="shortcut"><kbd>r</kbd> <span>Refresh missions</span></div>
+          </div>
+          <button class="btn" onclick="document.getElementById('keyboard-help').classList.add('hidden')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
