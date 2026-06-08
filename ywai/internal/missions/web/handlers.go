@@ -525,6 +525,8 @@ func (h *Handlers) CreateMission(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Goal    string `json:"goal"`
 		Project string `json:"project,omitempty"`
+		Model   string `json:"model,omitempty"`
+		Agent   string `json:"agent,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -538,7 +540,7 @@ func (h *Handlers) CreateMission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate plan using opencode
-	plan := missions.GeneratePlanWithOpencode(req.Goal, nil, req.Project)
+	plan := missions.GeneratePlanWithOpencode(req.Goal, nil, req.Project, req.Model, req.Agent)
 	if plan == nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate plan")
 		return

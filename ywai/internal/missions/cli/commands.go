@@ -142,6 +142,8 @@ Non-interactive terminals:
 
 	cmd.Flags().String("file", "", "Path to a plan.json file")
 	cmd.Flags().String("project", "", "Project name for the mission")
+	cmd.Flags().String("model", "", "OpenCode model to use (e.g. openai/gpt-4o)")
+	cmd.Flags().String("agent", "", "OpenCode agent profile to use")
 	return cmd
 }
 
@@ -262,6 +264,8 @@ Features are processed sequentially.`,
 		Args: cobra.ExactArgs(1),
 		RunE: runRun,
 	}
+	cmd.Flags().String("model", "", "Override OpenCode model for this run")
+	cmd.Flags().String("agent", "", "Override OpenCode agent profile for this run")
 	return cmd
 }
 
@@ -276,6 +280,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 	mission, err := store.LoadMission(missionID)
 	if err != nil {
 		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	// Apply optional model/agent overrides
+	if model, _ := cmd.Flags().GetString("model"); model != "" {
+		mission.Model = model
+	}
+	if agent, _ := cmd.Flags().GetString("agent"); agent != "" {
+		mission.Agent = agent
+	}
+	if mission.Model != "" || mission.Agent != "" {
+		_ = store.SaveMission(mission)
 	}
 
 	// Create a broadcast function that logs to stdout for CLI users.

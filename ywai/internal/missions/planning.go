@@ -100,7 +100,7 @@ func GeneratePlan(goal string, clarifications []QAPair) *PlanMission {
 
 // GeneratePlanWithOpencode spawns opencode to generate a plan from a goal.
 // Falls back to GeneratePlan if opencode is unavailable or fails.
-func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project string) *PlanMission {
+func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, model, agent string) *PlanMission {
 	opencodePath, err := DetectOpencode()
 	if err != nil {
 		log.Printf("opencode not available, falling back to local planning: %v", err)
@@ -115,7 +115,17 @@ func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project stri
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, opencodePath, "run", prompt)
+	// Build args with optional --model and --agent
+	args := []string{"run"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if agent != "" {
+		args = append(args, "--agent", agent)
+	}
+	args = append(args, prompt)
+
+	cmd := exec.CommandContext(ctx, opencodePath, args...)
 	cmd.Stderr = os.Stderr // let stderr show through for debugging
 
 	output, err := cmd.Output()
@@ -495,7 +505,7 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, proj
 	}
 
 	// Step 3-7: Plan → review → approve/reject loop
-	plan := GeneratePlanWithOpencode(goal, clarifications, project)
+	plan := GeneratePlanWithOpencode(goal, clarifications, project, "", "")
 	if plan == nil {
 		return nil, ErrEmptyGoal
 	}
@@ -756,13 +766,16 @@ func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, e
 	}
 
 	mission := &Mission{
-		ID:        missionID,
-		Name:      plan.Name,
-		Status:    MissionPlanning,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Features:  features,
+		ID:         missionID,
+		Name:       plan.Name,
+		Project:    plan.Project,
+		Status:     MissionPlanning,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Features:   features,
 		Milestones: milestones,
+		Model:      plan.Model,
+		Agent:      plan.Agent,
 	}
 
 	if err := store.CreateMission(mission); err != nil {
@@ -783,6 +796,7 @@ func updateMissionFromPlan(store *MissionsStore, mission *Mission, plan *PlanMis
 
 	// Update mission fields
 	mission.Name = plan.Name
+	mission.Project = plan.Project
 	mission.UpdatedAt = now
 
 	// Rebuild milestones

@@ -223,7 +223,14 @@ func (wm *WorkerManager) SpawnWorker(mission *Mission, feature *Feature, context
 		}
 	}
 
-	args := []string{"run", taskDesc}
+	args := []string{"run"}
+	if mission.Model != "" {
+		args = append(args, "--model", mission.Model)
+	}
+	if mission.Agent != "" {
+		args = append(args, "--agent", mission.Agent)
+	}
+	args = append(args, taskDesc)
 	cmd := wm.cmdCreator(ctx, opencodePath, args...)
 	cmd.Dir = contextDir
 
@@ -413,23 +420,23 @@ func parseHandoff(output string) (*WorkerHandoff, error) {
 		return nil, ErrEmptyHandoff
 	}
 
-	// Verify it looks like a JSON object
-	if !strings.HasPrefix(lastLine, "{") {
-		return nil, fmt.Errorf("%w: last output line is not JSON", ErrInvalidHandoff)
-	}
-
 	var handoff WorkerHandoff
-	if err := json.Unmarshal([]byte(lastLine), &handoff); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidHandoff, err)
+	if strings.HasPrefix(lastLine, "{") {
+		if err := json.Unmarshal([]byte(lastLine), &handoff); err == nil {
+			// Validate required fields: at least one of salientSummary or
+			// whatWasImplemented must be non-empty.
+			if handoff.SalientSummary != "" || handoff.WhatWasImplemented != "" {
+				return &handoff, nil
+			}
+		}
 	}
 
-	// Validate required fields: at least one of salientSummary or
-	// whatWasImplemented must be non-empty.
-	if handoff.SalientSummary == "" && handoff.WhatWasImplemented == "" {
-		return nil, fmt.Errorf("%w: missing required fields (salientSummary, whatWasImplemented)", ErrInvalidHandoff)
-	}
-
-	return &handoff, nil
+	// Not JSON or missing required fields: create a handoff from the full output.
+	// opencode run produces natural language, not JSON, so use the entire output.
+	return &WorkerHandoff{
+		SalientSummary:     output,
+		WhatWasImplemented: output,
+	}, nil
 }
 
 // ─── High-Level Feature Execution ──────────────────────────────────────────

@@ -48,6 +48,8 @@ type PlanMission struct {
 	Project     string          `json:"project,omitempty"`
 	Milestones  []PlanMilestone `json:"milestones"`
 	Features    []PlanFeature   `json:"features"`
+	Model       string          `json:"model,omitempty"`
+	Agent       string          `json:"agent,omitempty"`
 }
 
 // Clone returns a deep copy of the PlanMission.
@@ -93,6 +95,8 @@ type Mission struct {
 	CompletedAt *time.Time     `json:"completedAt,omitempty"`
 	Features    []Feature      `json:"features"`
 	Milestones  []Milestone    `json:"milestones"`
+	Model       string         `json:"model,omitempty"`
+	Agent       string         `json:"agent,omitempty"`
 }
 
 // Clone returns a deep copy of the Mission.

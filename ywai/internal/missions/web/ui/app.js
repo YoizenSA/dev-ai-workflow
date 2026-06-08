@@ -48,6 +48,12 @@ function toast(msg, type = 'info') {
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 3000);
 }
 
+/* ─── Mission count helper ─── */
+function countMissions(projectName) {
+    if (!state.missions || !Array.isArray(state.missions)) return 0;
+    return state.missions.filter(m => m.project === projectName).length;
+}
+
 /* ─── Modal ─── */
 function showModal(content, wide = false) {
   const overlay = $('modal-overlay');
@@ -320,7 +326,7 @@ function renderProjectsList() {
       <div class="project-card-meta">
         <span class="project-card-count">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="12,8 16,12 12,16"/></svg>
-          ${p.missionCount || p.mission_count || 0} missions
+          ${countMissions(p.name)} missions
         </span>
         <span>${formatDate(p.createdAt || p.created_at)}</span>
       </div>
@@ -624,6 +630,19 @@ function renderNewMission(projectName) {
         <label class="form-label" for="mission-goal">Describe what you want to build</label>
         <textarea id="mission-goal" class="form-textarea" rows="6" placeholder="e.g. Build a REST API for user management with CRUD operations, authentication, and role-based access control...">${state.missionGoals[projectName || ''] || ''}</textarea>
       </div>
+      <details style="margin-top:12px;font-size:0.9em;">
+        <summary style="cursor:pointer;color:var(--text-muted);">Advanced options (model/agent)</summary>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <div style="flex:1;">
+            <label class="form-label" for="mission-model">Model</label>
+            <input id="mission-model" class="form-input" type="text" placeholder="e.g. openai/gpt-4o" value="${state.missionModel || ''}">
+          </div>
+          <div style="flex:1;">
+            <label class="form-label" for="mission-agent">Agent</label>
+            <input id="mission-agent" class="form-input" type="text" placeholder="e.g. dev" value="${state.missionAgent || ''}">
+          </div>
+        </div>
+      </details>
       <div class="form-actions" style="justify-content:center;">
         <button class="btn btn-ghost" onclick="navigate('${state.currentProject ? `project-detail',{projectName:'${esc(state.currentProject.name)}'}` : 'projects'}">Cancel</button>
         <button class="btn btn-primary" id="generate-plan-btn" onclick="generatePlan('${esc(projectName || '')}')">
@@ -647,9 +666,16 @@ async function generatePlan(projectName) {
   const errEl = $('plan-error');
   if (errEl) errEl.classList.add('hidden');
 
+  const model = $('mission-model')?.value.trim() || '';
+  const agent = $('mission-agent')?.value.trim() || '';
+  state.missionModel = model;
+  state.missionAgent = agent;
+
   try {
     const body = { goal };
     if (projectName) body.project = projectName;
+    if (model) body.model = model;
+    if (agent) body.agent = agent;
 
     const data = await apiFetch('/api/missions', {
       method: 'POST',
