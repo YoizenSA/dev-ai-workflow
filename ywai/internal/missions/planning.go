@@ -2,13 +2,17 @@ package missions
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -92,6 +96,141 @@ func GeneratePlan(goal string, clarifications []QAPair) *PlanMission {
 		Milestones:  milestones,
 		Features:    features,
 	}
+}
+
+// GeneratePlanWithOpencode spawns opencode to generate a plan from a goal.
+// Falls back to GeneratePlan if opencode is unavailable or fails.
+func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project string) *PlanMission {
+	opencodePath, err := DetectOpencode()
+	if err != nil {
+		log.Printf("opencode not available, falling back to local planning: %v", err)
+		return GeneratePlan(goal, clarifications)
+	}
+
+	// Build the prompt for opencode
+	prompt := buildPlanPrompt(goal, clarifications, project)
+
+	// Spawn opencode with the prompt as a task argument
+	// opencode run "..." processes a task non-interactively and exits
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, opencodePath, "run", prompt)
+	cmd.Stderr = os.Stderr // let stderr show through for debugging
+
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("opencode plan generation failed: %v, falling back to local planning", err)
+		return GeneratePlan(goal, clarifications)
+	}
+
+	// Try to parse the output as JSON plan
+	plan, parseErr := parsePlanFromOutput(string(output))
+	if parseErr != nil {
+		log.Printf("parse opencode output: %v, falling back to local planning", parseErr)
+		return GeneratePlan(goal, clarifications)
+	}
+
+	// Set project if provided
+	if project != "" {
+		plan.Project = project
+	}
+
+	return plan
+}
+
+// buildPlanPrompt creates the prompt for opencode to generate a plan.
+func buildPlanPrompt(goal string, clarifications []QAPair, project string) string {
+	var sb strings.Builder
+	sb.WriteString("You are a technical architect. Generate a development plan for the following goal.\n\n")
+	sb.WriteString("## Goal\n")
+	sb.WriteString(goal)
+	sb.WriteString("\n\n")
+
+	if len(clarifications) > 0 {
+		sb.WriteString("## Clarifications\n")
+		for _, qa := range clarifications {
+			sb.WriteString(fmt.Sprintf("- Q: %s\n  A: %s\n", qa.Question, qa.Answer))
+		}
+		sb.WriteString("\n")
+	}
+
+	if project != "" {
+		sb.WriteString(fmt.Sprintf("## Project\n%s\n\n", project))
+	}
+
+	sb.WriteString(`Output ONLY a valid JSON object with this exact structure (no markdown, no code fences, no explanations):
+
+{
+  "name": "short mission name",
+  "description": "brief description of what this mission accomplishes",
+  "project": "` + project + `",
+  "milestones": [
+    {"name": "milestone-name", "description": "what this milestone delivers"}
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "concrete description",
+      "skillName": "implementation",
+      "milestone": "milestone-name",
+      "preconditions": [],
+      "expectedBehavior": ["assertion 1"],
+      "fulfills": ["requirement reference"]
+    }
+  ]
+}
+
+IMPORTANT RULES:
+- Each feature must have a unique id (feat-1, feat-2, etc.)
+- Each feature must reference a milestone that exists
+- preconditions is a list of feature IDs that must be done first
+- Valid skillName values: implementation, qa, devops, documentation, architecture. Default to 'implementation' for coding tasks.
+- expectedBehavior is a list of verifiable assertions
+- Features should be small and focused (one feature = one logical change)
+- Order features by dependency (prerequisites first)
+`)
+	return sb.String()
+}
+
+// parsePlanFromOutput extracts a PlanMission from opencode's output.
+// Handles both raw JSON and markdown code-fenced JSON.
+func parsePlanFromOutput(output string) (*PlanMission, error) {
+	// Try to find JSON within markdown code fences first
+	re := regexp.MustCompile("```(?:json)?\\s*\\n([\\s\\S]*?)```")
+	matches := re.FindStringSubmatch(output)
+
+	var jsonStr string
+	if len(matches) >= 2 {
+		jsonStr = strings.TrimSpace(matches[1])
+	} else {
+		// Try the whole output as JSON
+		jsonStr = strings.TrimSpace(output)
+	}
+
+	var plan PlanMission
+	if err := json.Unmarshal([]byte(jsonStr), &plan); err != nil {
+		return nil, fmt.Errorf("unmarshal plan: %w", err)
+	}
+
+	if plan.Name == "" {
+		return nil, errors.New("plan missing name")
+	}
+	if len(plan.Milestones) == 0 {
+		return nil, errors.New("plan missing milestones")
+	}
+	if len(plan.Features) == 0 {
+		return nil, errors.New("plan missing features")
+	}
+
+	// Set default skillName for features missing it
+	for i := range plan.Features {
+		if plan.Features[i].SkillName == "" {
+			plan.Features[i].SkillName = "implementation"
+		}
+	}
+
+	return &plan, nil
 }
 
 // generateFeatures creates features based on the goal and milestone structure.
@@ -328,7 +467,7 @@ func ValidatePlan(plan *PlanMission) error {
 //	5. Ask for approval (y/n)
 //	6. On "y": save mission, approve (→ active), return mission
 //	7. On "n": ask for feedback, regenerate, go to 4
-func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer) (*Mission, error) {
+func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, project string) (*Mission, error) {
 	scanner := bufio.NewScanner(r)
 
 	// Write welcome banner
@@ -346,8 +485,13 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer) (*Mi
 	var clarifications []QAPair
 	clarifications = askClarifyingQuestions(scanner, w)
 
+	// Step 2.5: Optional project name (used if not passed from CLI)
+	if project == "" {
+		project = promptProject(scanner, w)
+	}
+
 	// Step 3-7: Plan → review → approve/reject loop
-	plan := GeneratePlan(goal, clarifications)
+	plan := GeneratePlanWithOpencode(goal, clarifications, project)
 	if plan == nil {
 		return nil, ErrEmptyGoal
 	}
@@ -427,6 +571,15 @@ func promptGoal(scanner *bufio.Scanner, w io.Writer) (string, error) {
 		}
 		return goal, nil
 	}
+}
+
+// promptProject asks for an optional project name.
+func promptProject(scanner *bufio.Scanner, w io.Writer) string {
+	fmt.Fprintf(w, "\nProject (optional, press Enter to skip):\n> ")
+	if !scanner.Scan() {
+		return ""
+	}
+	return strings.TrimSpace(scanner.Text())
 }
 
 // askClarifyingQuestions asks optional clarifying questions.

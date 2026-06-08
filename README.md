@@ -83,6 +83,44 @@ Available configuration options:
 
 ---
 
+## Missions
+
+`ywai missions` — Multi-agent orchestration system for large, multi-feature projects. Breaks complex work into milestones and features, delegates each feature to an `opencode` worker agent, and validates results against expected behaviors.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `ywai missions start` | Start interactive mission planning |
+| `ywai missions start --file plan.json` | Start mission from a JSON plan file |
+| `ywai missions list` | List all missions |
+| `ywai missions show <id>` | Show detailed mission information |
+| `ywai missions resume <id>` | Resume a paused mission |
+| `ywai missions cancel <id>` | Cancel a mission |
+| `ywai missions serve` | Start the Mission Control Web UI on port 5769 |
+
+### Architecture
+
+- **Package**: `ywai/internal/missions/` — self-contained module with CLI, TUI, and Web UI surfaces
+- **State Machine**: Missions and features follow strict FSM transitions (`fsm.go`) — `planning → active → paused / completed / failed / validating`
+- **Persistence**: JSON files stored at `~/.local/share/ywai/missions/{id}/` with atomic writes for crash safety
+- **Worker Agent**: Uses `opencode` as the worker agent for feature implementation. Each feature gets a dedicated temp directory with its spec, mission context, and handoff format
+- **Validation Pipeline**: Per-milestone validation runs structural scrutiny, automated user testing, and generates fix features for blocking issues
+- **Dashboard**: Embedded Web UI (`internal/missions/web/ui/`) with WebSocket real-time updates, CRUD operations, and live feature log streaming
+- **Plan File**: Missions can be bootstrapped from a `plan.json` file (see `PlanMission` schema in `models.go`)
+
+### State Lifecycle
+
+```
+planning ──► active ──► paused ──► active
+                  ├──► completed
+                  ├──► failed ──► planning
+                  └──► validating ──► completed / failed
+                                    └──► active (re-enter after fixes)
+```
+
+---
+
 ## 15 Supported Agents
 
 opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi

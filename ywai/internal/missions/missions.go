@@ -54,13 +54,22 @@ func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFun
 	if broadcast == nil {
 		broadcast = func(string, interface{}) {}
 	}
-	return &Engine{
+	e := &Engine{
 		store:     store,
 		config:    config,
-		workers:   NewWorkerManager(store, WorkerConfig{Timeout: config.WorkerTimeout, MaxRetries: config.MaxRetries}),
 		val:       NewValidationPipeline(store, config.Validation),
 		broadcast: broadcast,
 	}
+	e.workers = NewWorkerManager(store, WorkerConfig{Timeout: config.WorkerTimeout, MaxRetries: config.MaxRetries})
+	e.workers.SetLogBroadcast(func(missionID, featureID, line string) {
+		e.broadcast("log_update", map[string]interface{}{
+			"missionId": missionID,
+			"featureId": featureID,
+			"line":      line,
+			"timestamp": time.Now().Unix(),
+		})
+	})
+	return e
 }
 
 // RunMission runs a mission from active through all features and milestones.
@@ -363,7 +372,12 @@ func (vp *ValidationPipeline) PersistReport(missionID, milestoneName string, rep
 
 // StartInteractivePlanning begins an interactive planning session.
 func StartInteractivePlanning(store *MissionsStore) (*Mission, error) {
-	return RunInteractivePlanning(store, os.Stdin, os.Stdout)
+	return RunInteractivePlanning(store, os.Stdin, os.Stdout, "")
+}
+
+// StartInteractivePlanningWithProject begins an interactive planning session with a project name.
+func StartInteractivePlanningWithProject(store *MissionsStore, project string) (*Mission, error) {
+	return RunInteractivePlanning(store, os.Stdin, os.Stdout, project)
 }
 
 // OpenStore opens (or creates) the missions store at the default location.

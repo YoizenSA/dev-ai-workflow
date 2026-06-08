@@ -50,6 +50,7 @@ Subcommands:
 
 	missionsCmd.AddCommand(newStartCmd())
 	missionsCmd.AddCommand(newListCmd())
+	missionsCmd.AddCommand(newRunCmd())
 	missionsCmd.AddCommand(newShowCmd())
 	missionsCmd.AddCommand(newResumeCmd())
 	missionsCmd.AddCommand(newCancelCmd())
@@ -140,11 +141,13 @@ Non-interactive terminals:
 	}
 
 	cmd.Flags().String("file", "", "Path to a plan.json file")
+	cmd.Flags().String("project", "", "Project name for the mission")
 	return cmd
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
+	project, _ := cmd.Flags().GetString("project")
 
 	store, err := openStore()
 	if err != nil {
@@ -166,7 +169,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("interactive mode requires a terminal; use --file to start from a plan file")
 	}
 
-	mission, err := missions.StartInteractivePlanning(store)
+	mission, err := missions.StartInteractivePlanningWithProject(store, project)
 	if err != nil {
 		return fmt.Errorf("planning failed: %w", err)
 	}
@@ -187,6 +190,7 @@ func newListCmd() *cobra.Command {
 	}
 
 	cmd.Flags().String("format", "", "Output format: json")
+	cmd.Flags().String("project", "", "Filter missions by project")
 	return cmd
 }
 
@@ -202,6 +206,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	format, _ := cmd.Flags().GetString("format")
+	projectFilter, _ := cmd.Flags().GetString("project")
 
 	if format == "json" {
 		if missionsList == nil {
@@ -222,15 +227,72 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Table header
-	fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %s\n", "ID", "Name", "Status", "Created", "Features")
+	if projectFilter != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %s\n", "ID", "Name", "Status", "Created", "Features")
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %s\n", "ID", "Name", "Status", "Created", "Features")
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 100))
 
 	for _, m := range missionsList {
+		if projectFilter != "" && m.Project != projectFilter {
+			continue
+		}
 		featCount := len(m.Features)
-		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %d\n",
-			m.ID, truncate(m.Name, 28), statusIcon(string(m.Status)), formatTime(m.CreatedAt), featCount)
+		projectDisplay := ""
+		if projectFilter == "" && m.Project != "" {
+			projectDisplay = " [" + m.Project + "]"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s%-14s %-18s %d\n",
+			m.ID, truncate(m.Name, 28)+projectDisplay, statusIcon(string(m.Status)), formatTime(m.CreatedAt), featCount)
 	}
 
+	return nil
+}
+
+// ─── Run Command ───────────────────────────────────────────────────────────
+
+func newRunCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run <mission-id>",
+		Short: "Execute a mission's features using opencode workers",
+		Long: `Run all pending features of a mission. Each feature spawns an opencode
+subprocess with its worker prompt and waits for a structured handoff.
+Features are processed sequentially.`,
+		Args: cobra.ExactArgs(1),
+		RunE: runRun,
+	}
+	return cmd
+}
+
+func runRun(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	mission, err := store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	// Create a broadcast function that logs to stdout for CLI users.
+	broadcast := func(evtType string, payload interface{}) {
+		fmt.Fprintf(cmd.OutOrStdout(), "[%s] %v\n", evtType, payload)
+	}
+
+	engine := missions.NewEngine(store, missions.DefaultEngineConfig(), broadcast)
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Running mission %q (%s) with %d features across %d milestones...\n",
+		mission.Name, mission.ID, len(mission.Features), len(mission.Milestones))
+
+	if err := engine.RunMission(missionID); err != nil {
+		return fmt.Errorf("mission %q failed: %w", missionID, err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) completed successfully!\n", mission.Name, mission.ID)
 	return nil
 }
 

@@ -45,8 +45,22 @@ const (
 type PlanMission struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
+	Project     string          `json:"project,omitempty"`
 	Milestones  []PlanMilestone `json:"milestones"`
 	Features    []PlanFeature   `json:"features"`
+}
+
+// Clone returns a deep copy of the PlanMission.
+func (pm *PlanMission) Clone() *PlanMission {
+	if pm == nil {
+		return nil
+	}
+	cp := *pm
+	cp.Milestones = make([]PlanMilestone, len(pm.Milestones))
+	copy(cp.Milestones, pm.Milestones)
+	cp.Features = make([]PlanFeature, len(pm.Features))
+	copy(cp.Features, pm.Features)
+	return &cp
 }
 
 // PlanMilestone describes a milestone in a plan.
@@ -72,6 +86,7 @@ type PlanFeature struct {
 type Mission struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
+	Project     string         `json:"project,omitempty"`
 	Status      MissionStatus  `json:"status"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`

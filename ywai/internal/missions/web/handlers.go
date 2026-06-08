@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -21,11 +22,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Handlers holds references to the store and hub for HTTP handlers.
+// Handlers holds references to the store, project store, and hub for HTTP handlers.
 type Handlers struct {
-	store     *missions.MissionsStore
-	hub       *Hub
-	startTime time.Time
+	store        *missions.MissionsStore
+	projectStore *missions.ProjectStore
+	hub          *Hub
+	startTime    time.Time
 }
 
 // ─── Health Check ──────────────────────────────────────────────────────────
@@ -82,6 +84,7 @@ func (h *Handlers) ListMissions(w http.ResponseWriter, r *http.Request) {
 	type missionSummary struct {
 		ID             string                `json:"id"`
 		Name           string                `json:"name"`
+		Project        string                `json:"project,omitempty"`
 		Status         missions.MissionStatus `json:"status"`
 		CreatedAt      time.Time             `json:"createdAt"`
 		UpdatedAt      time.Time             `json:"updatedAt"`
@@ -95,6 +98,7 @@ func (h *Handlers) ListMissions(w http.ResponseWriter, r *http.Request) {
 		summaries = append(summaries, missionSummary{
 			ID:             m.ID,
 			Name:           m.Name,
+			Project:        m.Project,
 			Status:         m.Status,
 			CreatedAt:      m.CreatedAt,
 			UpdatedAt:      m.UpdatedAt,
@@ -462,6 +466,240 @@ func (h *Handlers) GetFeatureLogs(w http.ResponseWriter, r *http.Request) {
 		"featureId": featureID,
 		"content":   logContent,
 	})
+}
+
+// ─── Filesystem Browser ────────────────────────────────────────────────────
+
+// BrowseFS lists directories and files at the given path.
+func (h *Handlers) BrowseFS(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "path is required")
+			return
+		}
+		path = home
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot read path: %v", err))
+		return
+	}
+
+	type Entry struct {
+		Name    string `json:"name"`
+		IsDir   bool   `json:"isDir"`
+		Size    int64  `json:"size,omitempty"`
+		ModTime string `json:"modTime"`
+	}
+
+	var result []Entry
+	for _, e := range entries {
+		info, err := e.Info()
+		size := int64(0)
+		modTime := ""
+		if err == nil {
+			size = info.Size()
+			modTime = info.ModTime().Format(time.RFC3339)
+		}
+		result = append(result, Entry{
+			Name:    e.Name(),
+			IsDir:   e.IsDir(),
+			Size:    size,
+			ModTime: modTime,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"path":    path,
+		"entries": result,
+	})
+}
+
+// ─── Mission Creation via Opencode ─────────────────────────────────────────
+
+// CreateMission generates a plan from a goal via opencode and returns the proposed plan.
+func (h *Handlers) CreateMission(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Goal    string `json:"goal"`
+		Project string `json:"project,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if strings.TrimSpace(req.Goal) == "" {
+		writeError(w, http.StatusBadRequest, "goal is required")
+		return
+	}
+
+	// Generate plan using opencode
+	plan := missions.GeneratePlanWithOpencode(req.Goal, nil, req.Project)
+	if plan == nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate plan")
+		return
+	}
+
+	// Don't save the mission yet - return the proposed plan for approval
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"plan": plan,
+	})
+}
+
+// ApprovePlan creates a mission from the approved plan.
+func (h *Handlers) ApprovePlan(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Plan *missions.PlanMission `json:"plan"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if req.Plan == nil {
+		writeError(w, http.StatusBadRequest, "plan is required")
+		return
+	}
+
+	// Validate the plan
+	if err := missions.ValidatePlan(req.Plan); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid plan: %v", err))
+		return
+	}
+
+	// Create the mission from the plan
+	mission, err := missions.CreateMissionFromPlan(h.store, req.Plan)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("create mission: %v", err))
+		return
+	}
+
+	// Transition from planning to active
+	if mission.Status == missions.MissionPlanning {
+		newStatus, err := missions.TransitionMissionStatus(mission.Status, missions.MissionActive)
+		if err == nil {
+			mission.Status = newStatus
+			mission.UpdatedAt = time.Now()
+			_ = h.store.SaveMission(mission)
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"mission": mission,
+	})
+}
+
+// RunMission executes a mission's features.
+func (h *Handlers) RunMission(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "mission id is required")
+		return
+	}
+
+	mission, err := h.store.LoadMission(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("mission %q not found", id))
+		return
+	}
+	_ = mission // mission is loaded; engine will reload it
+
+	// Create broadcast function that sends events via websocket hub.
+	// We flatten payload into the top-level message so the JS handler
+	// can destructure fields like missionId, featureId directly.
+	broadcast := func(evtType string, payload interface{}) {
+		msg := map[string]interface{}{
+			"type": evtType,
+		}
+		if p, ok := payload.(map[string]interface{}); ok {
+			for k, v := range p {
+				msg[k] = v
+			}
+		}
+		data, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("broadcast marshal error: %v", err)
+			return
+		}
+		h.hub.Broadcast(data)
+	}
+
+	engine := missions.NewEngine(h.store, missions.DefaultEngineConfig(), broadcast)
+
+	// Run in background
+	go func() {
+		if err := engine.RunMission(id); err != nil {
+			h.hub.BroadcastEvent("mission_error", map[string]interface{}{
+				"missionId": id,
+				"error":     err.Error(),
+			})
+		}
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status":    "started",
+		"missionId": id,
+	})
+}
+
+// ─── Project Management ────────────────────────────────────────────────────
+
+// ListProjects returns all registered projects.
+func (h *Handlers) ListProjects(w http.ResponseWriter, r *http.Request) {
+	projects := h.projectStore.List()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"projects": projects,
+	})
+}
+
+// CreateProject registers a new project.
+func (h *Handlers) CreateProject(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name        string `json:"name"`
+		Path        string `json:"path"`
+		Description string `json:"description,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(w, http.StatusBadRequest, "project name is required")
+		return
+	}
+
+	project, err := h.projectStore.Create(req.Name, req.Path, req.Description)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"project": project,
+	})
+}
+
+// DeleteProject removes a project by name.
+func (h *Handlers) DeleteProject(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "project name is required")
+		return
+	}
+
+	if err := h.projectStore.Delete(name); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "deleted"})
 }
 
 // ─── WebSocket ─────────────────────────────────────────────────────────────

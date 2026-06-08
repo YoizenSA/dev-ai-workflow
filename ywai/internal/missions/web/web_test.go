@@ -761,7 +761,6 @@ func TestMethodNotAllowedReturnsJSONForAllEndpoints(t *testing.T) {
 	// Test POST on GET-only endpoints
 	postEndpoints := []string{
 		"/api/health",
-		"/api/missions",
 		"/api/missions/test-id",
 	}
 

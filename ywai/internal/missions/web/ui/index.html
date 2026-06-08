@@ -1,94 +1,62 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ywai Mission Control</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/static/app.css" />
-  </head>
-  <body>
-    <div id="app">
-      <!-- Header -->
-      <header class="header">
-        <div class="header-left">
-          <h1 class="header-title">
-            <span class="logo-y">y</span><span class="logo-wai">wai</span>
-            <span class="logo-mission">Mission Control</span>
-          </h1>
-          <span class="header-version" id="header-version">v0.1.0</span>
-        </div>
-        <div class="header-right">
-          <span class="connection-status" id="connection-status">● Connected</span>
-          <button class="btn btn-sm" onclick="showKeyboardHelp()" title="Keyboard shortcuts">?</button>
-        </div>
-      </header>
-
-      <!-- Toast container -->
-      <div id="toast-container" class="toast-container"></div>
-
-      <!-- Main content -->
-      <main id="main-content">
-        <!-- Loading state -->
-        <div id="loading-state" class="loading-state">
-          <div class="spinner"></div>
-          <p>Loading missions...</p>
-        </div>
-
-        <!-- Error state -->
-        <div id="error-state" class="error-state hidden">
-          <div class="error-icon">⚠</div>
-          <h2>Connection Lost</h2>
-          <p id="error-message">Unable to connect to the server.</p>
-          <button class="btn" onclick="loadMissions()">Retry</button>
-        </div>
-
-        <!-- Empty state -->
-        <div id="empty-state" class="empty-state hidden">
-          <div class="empty-icon">📋</div>
-          <h2>No Missions Yet</h2>
-          <p>Create your first mission using the CLI: <code>ywai missions start</code></p>
-        </div>
-
-        <!-- Missions list -->
-        <div id="missions-list" class="missions-list hidden">
-          <div id="missions-grid" class="missions-grid"></div>
-        </div>
-
-        <!-- Mission detail -->
-        <div id="mission-detail" class="mission-detail hidden">
-          <button class="btn btn-back" onclick="showMissionsList()">← Back to Missions</button>
-          <div id="detail-content"></div>
-        </div>
-
-        <!-- 404 state -->
-        <div id="not-found-state" class="error-state hidden">
-          <div class="error-icon">🔍</div>
-          <h2>Mission Not Found</h2>
-          <p id="not-found-message"></p>
-          <button class="btn" onclick="showMissionsList()">← Back to Missions</button>
-        </div>
-      </main>
-
-      <!-- Keyboard shortcuts overlay -->
-      <div id="keyboard-help" class="overlay hidden" onclick="this.classList.add('hidden')">
-        <div class="overlay-content" onclick="event.stopPropagation()">
-          <h2>Keyboard Shortcuts</h2>
-          <div class="shortcut-list">
-            <div class="shortcut"><kbd>?</kbd> <span>Toggle this help</span></div>
-            <div class="shortcut"><kbd>Esc</kbd> <span>Close help / Back to list</span></div>
-            <div class="shortcut"><kbd>r</kbd> <span>Refresh missions</span></div>
-          </div>
-          <button class="btn" onclick="document.getElementById('keyboard-help').classList.add('hidden')">Close</button>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mission Control</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">◈</span>
+          <span class="logo-text">Mission Control</span>
         </div>
       </div>
-    </div>
+      <ul class="nav-links">
+        <li data-view="projects" class="active">
+          <a href="#" data-nav="projects">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Projects</span>
+          </a>
+        </li>
+        <li data-view="missions">
+          <a href="#" data-nav="missions">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="12,8 16,12 12,16"/><line x1="8" y1="12" x2="14" y2="12"/></svg>
+            <span>Missions</span>
+          </a>
+        </li>
+      </ul>
+      <div class="sidebar-footer">
+        <div id="ws-status" class="ws-status ws-disconnected" title="Disconnected">
+          <span class="ws-dot"></span>
+          <span class="ws-label">Disconnected</span>
+        </div>
+      </div>
+    </nav>
 
-    <script src="/static/app.js"></script>
-  </body>
+    <!-- Main content -->
+    <main id="content">
+      <div id="view-projects" class="view active"><div id="projects-list"></div></div>
+      <div id="view-project-detail" class="view"></div>
+      <div id="view-new-mission" class="view"></div>
+      <div id="view-plan-review" class="view"></div>
+      <div id="view-mission-detail" class="view"></div>
+      <div id="view-missions" class="view"><div id="missions-dashboard-content"></div></div>
+    </main>
+  </div>
+
+  <!-- Modal overlay -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="hideModal(event)">
+    <div id="modal-content" class="modal-content" onclick="event.stopPropagation()"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
 </html>

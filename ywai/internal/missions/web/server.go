@@ -39,8 +39,15 @@ func New(port int, store *missions.MissionsStore) *Server {
 		startedAt: time.Now(),
 	}
 
+	// Create project store (persists to the missions base directory)
+	projectStore, err := missions.NewProjectStore(store.BaseDir())
+	if err != nil {
+		log.Printf("WARNING: failed to create project store: %v", err)
+		projectStore, _ = missions.NewProjectStore("") // Fallback to in-memory
+	}
+
 	mux := http.NewServeMux()
-	h := &Handlers{store: store, hub: s.hub, startTime: s.startedAt}
+	h := &Handlers{store: store, projectStore: projectStore, hub: s.hub, startTime: s.startedAt}
 
 	// API routes
 	mux.HandleFunc("GET /api/health", h.HealthCheck)
@@ -53,6 +60,19 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux.HandleFunc("POST /api/missions/{id}/resume", h.ResumeMission)
 	mux.HandleFunc("POST /api/missions/{id}/cancel", h.CancelMission)
 	mux.HandleFunc("POST /api/missions/{id}/features/{featureId}/retry", h.RetryFeature)
+
+	// Mission creation + execution
+	mux.HandleFunc("POST /api/missions", h.CreateMission)
+	mux.HandleFunc("POST /api/missions/approve", h.ApprovePlan)
+	mux.HandleFunc("POST /api/missions/{id}/run", h.RunMission)
+
+	// Project routes
+	mux.HandleFunc("GET /api/projects", h.ListProjects)
+	mux.HandleFunc("POST /api/projects", h.CreateProject)
+	mux.HandleFunc("DELETE /api/projects/{name}", h.DeleteProject)
+
+	// Filesystem browser
+	mux.HandleFunc("GET /api/fs/browse", h.BrowseFS)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.HandleWebSocket)

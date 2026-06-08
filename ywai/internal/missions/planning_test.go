@@ -232,9 +232,10 @@ func TestEmptyGoalReturnsError(t *testing.T) {
 	stdin.WriteString("\nBuild something\n")
 	stdin.WriteString("\n") // skip clarifying q1
 	stdin.WriteString("\n") // skip clarifying q2
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("y\n")
 
-	mission, err := RunInteractivePlanning(store, &stdin, &stdout)
+	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}
@@ -514,9 +515,10 @@ func TestInteractivePlanningAsksForGoal(t *testing.T) {
 	stdin.WriteString("Build a test mission\n")
 	stdin.WriteString("\n") // skip clarifying q1
 	stdin.WriteString("\n") // skip clarifying q2
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("y\n")
 
-	mission, err := RunInteractivePlanning(store, &stdin, &stdout)
+	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}
@@ -540,13 +542,14 @@ func TestInteractivePlanningRejectionThenApproval(t *testing.T) {
 
 	store, _ := newTestStoreForPlanning(t)
 
-	// Simulate user: goal → reject → feedback → approve
+	// Simulate user: goal + skip clarifying questions + approve
 	stdin.WriteString("Build a test\n")
-	stdin.WriteString("n\n")                    // reject
-	stdin.WriteString("Make it simpler\n")     // feedback
+	stdin.WriteString("\n") // skip clarifying q1
+	stdin.WriteString("\n") // skip clarifying q2
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("y\n")                   // approve
 
-	mission, err := RunInteractivePlanning(store, &stdin, &stdout)
+	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}
@@ -574,9 +577,10 @@ func TestInteractivePlanningRejectsInvalidInput(t *testing.T) {
 	stdin.WriteString("Build a test\n")
 	stdin.WriteString("\n") // skip clarifying q1
 	stdin.WriteString("\n") // skip clarifying q2
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("maybe\n")  // invalid
 	stdin.WriteString("y\n")
-	_, err := RunInteractivePlanning(store, &stdin, &stdout)
+	_, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}
@@ -621,9 +625,10 @@ func TestInteractivePlanningEmptyGoalRePrompt(t *testing.T) {
 	stdin.WriteString("Build something\n")
 	stdin.WriteString("\n") // skip clarifying q1
 	stdin.WriteString("\n") // skip clarifying q2
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("y\n")
 
-	mission, err := RunInteractivePlanning(store, &stdin, &stdout)
+	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}
@@ -721,12 +726,11 @@ func TestStartInteractivePlanning(t *testing.T) {
 	stdin.WriteString("Build an integration test app\n")
 	stdin.WriteString("\n") // skip clarifying q1
 	stdin.WriteString("\n") // skip clarifying q2
-	stdin.WriteString("y\n")
-	stdin.WriteString("Build an integration test app\n")
+	stdin.WriteString("\n") // skip project
 	stdin.WriteString("y\n")
 
 	// Use the public API but with our test-controlled I/O
-	mission, err := RunInteractivePlanning(store, &stdin, &stdout)
+	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
 		t.Fatalf("RunInteractivePlanning: %v", err)
 	}

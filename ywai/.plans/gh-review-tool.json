@@ -1,0 +1,168 @@
+{
+  "name": "gh-review-tool",
+  "description": "Go CLI tool that fetches a GitHub PR diff, runs configurable review rules, and posts line-level comments as a single PR review",
+  "project": "",
+  "milestones": [
+    {"name": "scaffold", "description": "Go module init, cobra CLI skeleton, flag parsing for --repo, --pr, --token"},
+    {"name": "github-client", "description": "GitHub API client with token auth, PR metadata and diff fetching"},
+    {"name": "diff-engine", "description": "Unified diff parser and line classification engine"},
+    {"name": "review-engine", "description": "Rule interface, built-in rules, and RuleSet engine"},
+    {"name": "pr-poster", "description": "Convert findings to GitHub comments and submit PR review"},
+    {"name": "polish", "description": "Config file, output formatters, exit codes, dry-run, error handling"}
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "Initialize Go module, vendor cobra, implement root + review subcommand with --repo, --pr-number, --github-token flags and help text",
+      "milestone": "scaffold",
+      "preconditions": [],
+      "expectedBehavior": [
+        "`go build` compiles without errors",
+        "`gh-review-tool --help` prints usage with flags",
+        "`gh-review-tool review --help` prints subcommand help",
+        "Missing required --pr flag produces a clear error message"
+      ],
+      "fulfills": "CLI entry point"
+    },
+    {
+      "id": "feat-2",
+      "description": "Implement GitHub client struct wrapping go-github with token auth, configurable timeout (default 30s), rate-limit awareness, and wrapped errors",
+      "milestone": "github-client",
+      "preconditions": ["feat-1"],
+      "expectedBehavior": [
+        "Client initializes from GITHUB_TOKEN env var or --github-token flag",
+        "Authenticated requests to GitHub API succeed",
+        "Non-200 responses return wrapped errors with status code and message",
+        "Rate-limit responses wait and retry"
+      ],
+      "fulfills": "GitHub auth"
+    },
+    {
+      "id": "feat-3",
+      "description": "Implement FetchPR and FetchDiff methods on GitHub client returning PR metadata (author, title, refs) and raw unified diff body",
+      "milestone": "github-client",
+      "preconditions": ["feat-2"],
+      "expectedBehavior": [
+        "FetchPR returns PR number, title, author login, base SHA, head SHA",
+        "FetchDiff returns raw diff string matching `git diff` format",
+        "Both methods accept owner, repo, and PR number arguments",
+        "Both methods return descriptive errors for 404, 403, and network failures"
+      ],
+      "fulfills": "PR data retrieval"
+    },
+    {
+      "id": "feat-4",
+      "description": "Implement DiffParser that converts a raw unified diff string into []DiffFile, each containing []Hunk with []Line (type: added/removed/context, old/new line numbers, content)",
+      "milestone": "diff-engine",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Parsed DiffFile slice has one entry per file in the diff",
+        "Each Hunk has correct oldStart, oldLines, newStart, newLines",
+        "Each Line is correctly classified as added, removed, or context",
+        "Line numbers are correct for both old and new positions",
+        "Binary files are detected and stored with isBinary=true"
+      ],
+      "fulfills": "Diff parsing"
+    },
+    {
+      "id": "feat-5",
+      "description": "Implement LineClassifier utility that scans parsed lines for common issues: leftover debug statements (fmt.Println, log.Printf), TODO/FIXME comments, missing error checks on Go returns, and large function bodies (>50 lines added in one hunk)",
+      "milestone": "diff-engine",
+      "preconditions": ["feat-4"],
+      "expectedBehavior": [
+        "Debug statement detector flags fmt.Println and log.Printf in added lines",
+        "TODO detector flags TODO and FIXME comments in added lines",
+        "Error check detector flags added lines calling funcs returning error without assigning to _ or err",
+        "Large hunk detector flags hunks with >50 added lines",
+        "Each detection returns a Finding with file, line, severity, and message"
+      ],
+      "fulfills": "Line classification"
+    },
+    {
+      "id": "feat-6",
+      "description": "Define Rule interface (Name, Severity, Check([]DiffFile) []Finding) and implement 3 built-in rules: NoDebugStatements, NoTODOsInCode, LargeDiffWarning using the line classifier",
+      "milestone": "review-engine",
+      "preconditions": ["feat-5"],
+      "expectedBehavior": [
+        "Rule interface can be implemented by external packages",
+        "NoDebugStatements rule produces findings for each flagged debug line",
+        "NoTODOsInCode rule produces findings for each flagged TODO comment",
+        "LargeDiffWarning rule produces one finding per overlarge hunk",
+        "Each finding includes file path, line number, severity (warning/error), and human-readable message"
+      ],
+      "fulfills": "Rule system"
+    },
+    {
+      "id": "feat-7",
+      "description": "Implement RuleSet engine that accepts a slice of Rules, runs Check on each against the parsed diff, deduplicates and sorts findings by severity then file then line",
+      "milestone": "review-engine",
+      "preconditions": ["feat-6"],
+      "expectedBehavior": [
+        "All registered rules execute against the full parsed diff",
+        "Findings are deduplicated by (file, line, rule name)",
+        "Findings are sorted: errors first, then warnings, then info",
+        "Empty rules slice produces zero findings",
+        "RuleSet is reusable across multiple diffs"
+      ],
+      "fulfills": "Finding aggregation"
+    },
+    {
+      "id": "feat-8",
+      "description": "Implement Poster that converts []Finding to []github.DraftReviewComment with correct path, line, side (LEFT/RIGHT), body, and submits a single PR Review via GitHub Checks API (event=COMMENT)",
+      "milestone": "pr-poster",
+      "preconditions": ["feat-7", "feat-3"],
+      "expectedBehavior": [
+        "Each finding maps to a DraftReviewComment with correct file path and line number",
+        "Side is LEFT for removed lines, RIGHT for added lines",
+        "Body truncates at 65536 chars (GitHub limit) with truncation notice",
+        "SubmitReview posts all comments as a single review with event=COMMENT",
+        "Zero findings skips the API call entirely",
+        "API errors return wrapped errors with the failed comment details"
+      ],
+      "fulfills": "PR comment posting"
+    },
+    {
+      "id": "feat-9",
+      "description": "Wire full pipeline in the review CLI command: fetch diff -> parse -> classify -> run rules -> post results. Add --dry-run flag that runs pipeline but skips posting, printing findings to stdout instead",
+      "milestone": "pr-poster",
+      "preconditions": ["feat-8"],
+      "expectedBehavior": [
+        "`gh-review-tool review --repo owner/repo --pr 42` runs full pipeline and posts review",
+        "`--dry-run` prints all findings as formatted table to stdout without API call",
+        "Exit code is 0 when no findings, 1 when findings exist, 2 on errors",
+        "Pipeline aborts early with clear message on fetch or parse failure",
+        "Progress messages print to stderr, results to stdout"
+      ],
+      "fulfills": "CLI pipeline"
+    },
+    {
+      "id": "feat-10",
+      "description": "Implement YAML config file loading from .gh-review-tool.yaml (search cwd and parents). Config supports: enabled_rules list, severity overrides per rule, ignore_paths globs, max-hunk-size threshold, and custom rule options",
+      "milestone": "polish",
+      "preconditions": ["feat-9"],
+      "expectedBehavior": [
+        "Missing config file is not an error (defaults apply)",
+        "enabled_rules: ['no-debug'] only runs matching rules",
+        "ignore_paths: ['vendor/*', '*.pb.go'] skips matching files",
+        "severity overrides: 'no-debug: error' upgrades finding severity",
+        "CLI --config flag overrides default config file path",
+        "Config values merge with CLI flags (CLI takes precedence)"
+      ],
+      "fulfills": "Configuration"
+    },
+    {
+      "id": "feat-11",
+      "description": "Implement --format flag with table (default), json, and summary modes. Table shows per-file grouping with line numbers. JSON outputs all findings as structured JSON array. Summary shows counts per severity. Add --verbose flag for structured logging",
+      "milestone": "polish",
+      "preconditions": ["feat-9"],
+      "expectedBehavior": [
+        "--format table prints findings grouped by file with severity, line, message columns",
+        "--format json prints a valid JSON array with all finding fields",
+        "--format summary prints '3 errors, 5 warnings, 2 info' with breakdown per rule",
+        "--verbose prints info-level logs to stderr (API calls, parsing stats, timing)",
+        "JSON output is parseable by jq"
+      ],
+      "fulfills": "Output formatting"
+    }
+  ]
+}
