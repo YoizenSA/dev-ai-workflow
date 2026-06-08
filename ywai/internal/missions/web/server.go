@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -189,6 +190,16 @@ func (w *json405Writer) Write(b []byte) (int, error) {
 		return len(b), nil
 	}
 	return w.ResponseWriter.Write(b)
+}
+
+// Hijack implements http.Hijacker so WebSocket upgrades work through
+// the json405Middleware chain. It delegates to the underlying ResponseWriter's
+// Hijacker if available.
+func (w *json405Writer) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, fmt.Errorf("hijacking not supported")
 }
 
 func json405Middleware(next http.Handler) http.Handler {
