@@ -173,6 +173,84 @@ func CancelFeature(store *MissionsStore, mission *Mission, featureID string) (*F
 	return feat, nil
 }
 
+// CancelMission cancels an entire mission: transitions the mission status
+// to cancelled and cancels all pending/in-progress features.
+// Idempotent: if already cancelled, returns nil error.
+// Returns error if mission is in a state that cannot be cancelled (e.g., completed).
+func CancelMission(store *MissionsStore, mission *Mission) error {
+	if mission == nil {
+		return ErrInvalidMission
+	}
+
+	// Idempotent: already cancelled is not an error
+	if mission.Status == MissionCancelled {
+		return nil
+	}
+
+	// Explicitly validate that cancellation is allowed from current state.
+	// We do this because TransitionMissionStatus allows idempotent transitions,
+	// but we need to reject transitions that don't make sense.
+	switch mission.Status {
+	case MissionActive, MissionPaused:
+		// Valid cancellation sources
+	default:
+		return fmt.Errorf("cannot cancel mission in state %q: only active or paused missions can be cancelled", mission.Status)
+	}
+
+	newStatus, err := TransitionMissionStatus(mission.Status, MissionCancelled)
+	if err != nil {
+		return fmt.Errorf("cannot cancel mission in state %q: %w", mission.Status, err)
+	}
+
+	now := time.Now().UTC().Round(time.Millisecond)
+	mission.Status = newStatus
+	mission.UpdatedAt = now
+
+	// Cancel all pending/in-progress features
+	for i := range mission.Features {
+		f := &mission.Features[i]
+		if f.Status == FeaturePending || f.Status == FeatureInProgress {
+			f.Status = FeatureCancelled
+			f.UpdatedAt = now
+		}
+	}
+
+	if err := store.SaveMission(mission); err != nil {
+		return fmt.Errorf("persist cancel mission: %w", err)
+	}
+
+	return nil
+}
+
+// ResumeMission resumes a paused mission: transitions the mission status
+// to active. Preserves all feature states (completed features remain completed).
+// Returns error if mission is not in paused state.
+func ResumeMission(store *MissionsStore, mission *Mission) error {
+	if mission == nil {
+		return ErrInvalidMission
+	}
+
+	// Explicitly require paused state
+	if mission.Status != MissionPaused {
+		return fmt.Errorf("cannot resume mission in state %q: only paused missions can be resumed", mission.Status)
+	}
+
+	newStatus, err := TransitionMissionStatus(mission.Status, MissionActive)
+	if err != nil {
+		return fmt.Errorf("cannot resume mission in state %q: %w", mission.Status, err)
+	}
+
+	now := time.Now().UTC().Round(time.Millisecond)
+	mission.Status = newStatus
+	mission.UpdatedAt = now
+
+	if err := store.SaveMission(mission); err != nil {
+		return fmt.Errorf("persist resume mission: %w", err)
+	}
+
+	return nil
+}
+
 // RequeueFeature transitions a failed feature back to pending for retry.
 // Preserves the current RetryCount and persists the change.
 func RequeueFeature(store *MissionsStore, mission *Mission, featureID string) (*Feature, error) {

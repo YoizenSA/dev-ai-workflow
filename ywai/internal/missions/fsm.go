@@ -20,13 +20,15 @@ var missionTransitions = map[MissionStatus]map[MissionStatus]bool{
 		MissionActive: true,
 	},
 	MissionActive: {
-		MissionPaused:    true,
-		MissionCompleted: true,
-		MissionFailed:    true,
+		MissionPaused:     true,
+		MissionCompleted:  true,
+		MissionFailed:     true,
+		MissionCancelled:  true,
 		MissionValidating: true,
 	},
 	MissionPaused: {
-		MissionActive: true,
+		MissionActive:    true,
+		MissionCancelled: true,
 	},
 	MissionCompleted: {},
 	MissionFailed: {

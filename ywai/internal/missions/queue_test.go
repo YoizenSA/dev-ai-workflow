@@ -684,3 +684,174 @@ func TestProcessMilestoneStorePersistence(t *testing.T) {
 		t.Fatalf("expected persisted status to be validating, got %s", loaded.Status)
 	}
 }
+
+// ─── CancelMission Tests ───────────────────────────────────────────────────
+
+func TestCancelMissionActive(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("cancel-active")
+	m.Status = MissionActive
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := CancelMission(store, m); err != nil {
+		t.Fatalf("CancelMission: %v", err)
+	}
+
+	if m.Status != MissionCancelled {
+		t.Errorf("expected cancelled, got %q", m.Status)
+	}
+
+	// Verify persistence
+	loaded, err := store.LoadMission(m.ID)
+	if err != nil {
+		t.Fatalf("load mission: %v", err)
+	}
+	if loaded.Status != MissionCancelled {
+		t.Errorf("persisted status should be cancelled, got %q", loaded.Status)
+	}
+}
+
+func TestCancelMissionAlreadyCancelled(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("cancel-already")
+	m.Status = MissionCancelled
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := CancelMission(store, m); err != nil {
+		t.Fatalf("cancel cancelled should succeed: %v", err)
+	}
+	if m.Status != MissionCancelled {
+		t.Errorf("expected cancelled, got %q", m.Status)
+	}
+}
+
+func TestCancelMissionCompletedError(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("cancel-completed")
+	m.Status = MissionCompleted
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := CancelMission(store, m); err == nil {
+		t.Fatal("expected error cancelling completed mission")
+	}
+}
+
+func TestCancelMissionCancelsPendingFeatures(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("cancel-features")
+	m.Status = MissionActive
+	m.Features[0].Status = FeaturePending
+	m.Features[1].Status = FeatureInProgress
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := CancelMission(store, m); err != nil {
+		t.Fatalf("CancelMission: %v", err)
+	}
+
+	if m.Features[0].Status != FeatureCancelled {
+		t.Errorf("pending feature should be cancelled, got %q", m.Features[0].Status)
+	}
+	if m.Features[1].Status != FeatureCancelled {
+		t.Errorf("in_progress feature should be cancelled, got %q", m.Features[1].Status)
+	}
+}
+
+// ─── ResumeMission Tests ───────────────────────────────────────────────────
+
+func TestResumeMissionPaused(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("resume-paused")
+	m.Status = MissionPaused
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := ResumeMission(store, m); err != nil {
+		t.Fatalf("ResumeMission: %v", err)
+	}
+
+	if m.Status != MissionActive {
+		t.Errorf("expected active, got %q", m.Status)
+	}
+
+	// Verify persistence
+	loaded, err := store.LoadMission(m.ID)
+	if err != nil {
+		t.Fatalf("load mission: %v", err)
+	}
+	if loaded.Status != MissionActive {
+		t.Errorf("persisted status should be active, got %q", loaded.Status)
+	}
+}
+
+func TestResumeMissionActiveError(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("resume-active")
+	m.Status = MissionActive
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := ResumeMission(store, m); err == nil {
+		t.Fatal("expected error resuming active mission")
+	}
+}
+
+func TestResumeMissionCompletedError(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("resume-completed")
+	m.Status = MissionCompleted
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := ResumeMission(store, m); err == nil {
+		t.Fatal("expected error resuming completed mission")
+	}
+}
+
+func TestResumeMissionPreservesCompletedFeatures(t *testing.T) {
+	store, dir := newTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testQueueMission("resume-preserve")
+	m.Status = MissionPaused
+	m.Features[0].Status = FeatureCompleted
+	m.Features[1].Status = FeaturePending
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("create mission: %v", err)
+	}
+
+	if err := ResumeMission(store, m); err != nil {
+		t.Fatalf("ResumeMission: %v", err)
+	}
+
+	if m.Features[0].Status != FeatureCompleted {
+		t.Errorf("completed feature should remain completed, got %q", m.Features[0].Status)
+	}
+	if m.Features[1].Status != FeaturePending {
+		t.Errorf("pending feature should remain pending, got %q", m.Features[1].Status)
+	}
+}

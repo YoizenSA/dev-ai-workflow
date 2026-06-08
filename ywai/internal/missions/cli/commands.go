@@ -1,0 +1,444 @@
+// Package cli provides Cobra commands for ywai Missions.
+// Each subcommand wires to the missions engine API.
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+)
+
+// DefaultBaseDir is the default location for missions store.
+// Must match missions.DefaultBaseDir (~/.local/share/ywai/missions).
+const DefaultBaseDir = "~/.local/share/ywai/missions"
+
+// ─── Command Registration ──────────────────────────────────────────────────
+
+// RegisterCommands adds all missions subcommands to the given parent command.
+func RegisterCommands(parent *cobra.Command) {
+	missionsCmd := &cobra.Command{
+		Use:   "missions",
+		Short: "Manage ywai missions",
+		Long: `Mission Control for ywai — orchestrate multi-agent software missions.
+
+Subcommands:
+  start              Start a new mission (interactive planning or from file)
+  list               List all missions
+  show               Show mission detail
+  resume             Resume a paused mission
+  cancel             Cancel a mission
+  serve              Start the Mission Control Web UI server`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown subcommand %q for missions", args[0])
+			}
+			return cmd.Help()
+		},
+		// Suppress Cobra's default "unknown command" printing; we handle it
+		// ourselves via RunE above.
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+
+	missionsCmd.AddCommand(newStartCmd())
+	missionsCmd.AddCommand(newListCmd())
+	missionsCmd.AddCommand(newShowCmd())
+	missionsCmd.AddCommand(newResumeCmd())
+	missionsCmd.AddCommand(newCancelCmd())
+	missionsCmd.AddCommand(newServeCmd())
+
+	parent.AddCommand(missionsCmd)
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+// openStore opens the missions store at the default location.
+func openStore() (*missions.MissionsStore, error) {
+	return missions.OpenStore()
+}
+
+// isInteractiveTerminal returns true if stdin is a terminal.
+func isInteractiveTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// formatTime formats a time.Time for display.
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
+// statusIcon returns a human-readable status label with optional ANSI color.
+func statusIcon(status string) string {
+	switch status {
+	case "planning":
+		return "📋 planning"
+	case "active":
+		return "🔄 active"
+	case "paused":
+		return "⏸️  paused"
+	case "completed":
+		return "✅ completed"
+	case "failed":
+		return "❌ failed"
+	case "cancelled":
+		return "🚫 cancelled"
+	case "validating":
+		return "🔍 validating"
+	default:
+		return status
+	}
+}
+
+// featureStatusIcon returns a human-readable feature status label.
+func featureStatusIcon(status string) string {
+	switch status {
+	case "pending":
+		return "⏳ pending"
+	case "in_progress":
+		return "🔄 in_progress"
+	case "completed":
+		return "✅ completed"
+	case "failed":
+		return "❌ failed"
+	case "cancelled":
+		return "🚫 cancelled"
+	default:
+		return status
+	}
+}
+
+// ─── Start Command ─────────────────────────────────────────────────────────
+
+func newStartCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "start [--file plan.json]",
+		Short: "Start a new mission",
+		Long: `Start a new mission with interactive planning or from a plan file.
+
+Interactive mode (default):
+  Guides you through defining the mission goal, generating a structured plan
+  with milestones and features, and approving it.
+
+File mode (--file):
+  Reads a plan.json file and creates a mission from it. The plan file must
+  include name, description, milestones, and features.
+
+Non-interactive terminals:
+  If stdin is not a TTY, --file is required.`,
+		RunE: runStart,
+	}
+
+	cmd.Flags().String("file", "", "Path to a plan.json file")
+	return cmd
+}
+
+func runStart(cmd *cobra.Command, args []string) error {
+	filePath, _ := cmd.Flags().GetString("file")
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	// File mode
+	if filePath != "" {
+		mission, err := missions.PlanFromFile(store, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to start mission from file: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) created and activated from plan file.\n", mission.Name, mission.ID)
+		return nil
+	}
+
+	// Interactive mode: require TTY
+	if !isInteractiveTerminal() {
+		return fmt.Errorf("interactive mode requires a terminal; use --file to start from a plan file")
+	}
+
+	mission, err := missions.StartInteractivePlanning(store)
+	if err != nil {
+		return fmt.Errorf("planning failed: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) is now active with %d features across %d milestones.\n",
+		mission.Name, mission.ID, len(mission.Features), len(mission.Milestones))
+	return nil
+}
+
+// ─── List Command ──────────────────────────────────────────────────────────
+
+func newListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all missions",
+		Long:  "List all missions sorted by creation date (newest first).",
+		RunE:  runList,
+	}
+
+	cmd.Flags().String("format", "", "Output format: json")
+	return cmd
+}
+
+func runList(cmd *cobra.Command, args []string) error {
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	missionsList, err := store.ListMissions()
+	if err != nil {
+		return fmt.Errorf("failed to list missions: %w", err)
+	}
+
+	format, _ := cmd.Flags().GetString("format")
+
+	if format == "json" {
+		if missionsList == nil {
+			missionsList = []*missions.Mission{}
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(missionsList); err != nil {
+			return fmt.Errorf("encode json: %w", err)
+		}
+		return nil
+	}
+
+	if len(missionsList) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "No missions found.")
+		fmt.Fprintln(cmd.OutOrStdout(), "Start one with: ywai missions start")
+		return nil
+	}
+
+	// Table header
+	fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %s\n", "ID", "Name", "Status", "Created", "Features")
+	fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 100))
+
+	for _, m := range missionsList {
+		featCount := len(m.Features)
+		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %d\n",
+			m.ID, truncate(m.Name, 28), statusIcon(string(m.Status)), formatTime(m.CreatedAt), featCount)
+	}
+
+	return nil
+}
+
+// ─── Show Command ──────────────────────────────────────────────────────────
+
+func newShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show <mission-id>",
+		Short: "Show mission detail",
+		Long:  "Display detailed information about a mission including milestones and features.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runShow,
+	}
+
+	cmd.Flags().String("format", "", "Output format: json")
+	return cmd
+}
+
+func runShow(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	mission, err := store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	format, _ := cmd.Flags().GetString("format")
+
+	if format == "json" {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(mission); err != nil {
+			return fmt.Errorf("encode json: %w", err)
+		}
+		return nil
+	}
+
+	// Human-readable output
+	fmt.Fprintf(cmd.OutOrStdout(), "Mission: %s\n", mission.Name)
+	fmt.Fprintf(cmd.OutOrStdout(), "ID:      %s\n", mission.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "Status:  %s\n", statusIcon(string(mission.Status)))
+	fmt.Fprintf(cmd.OutOrStdout(), "Created: %s\n", formatTime(mission.CreatedAt))
+	fmt.Fprintf(cmd.OutOrStdout(), "Updated: %s\n", formatTime(mission.UpdatedAt))
+	if mission.CompletedAt != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "Completed: %s\n", formatTime(*mission.CompletedAt))
+	}
+
+	// Milestones
+	fmt.Fprintln(cmd.OutOrStdout(), "")
+	if len(mission.Milestones) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "Milestones (%d):\n", len(mission.Milestones))
+		for _, ms := range mission.Milestones {
+			summary := missions.GetMilestoneStatus(mission, ms.Name)
+			progress := ""
+			if summary != nil {
+				progress = fmt.Sprintf(" [%d/%d completed]", summary.Completed, summary.Total)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  • %s — %s%s\n", ms.Name, ms.Description, progress)
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Milestones: (none)")
+	}
+
+	// Features
+	fmt.Fprintln(cmd.OutOrStdout(), "")
+	if len(mission.Features) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "Features (%d):\n", len(mission.Features))
+		fmt.Fprintf(cmd.OutOrStdout(), "  %-25s %-16s %-20s %s\n", "ID", "Status", "Milestone", "Description")
+		fmt.Fprintln(cmd.OutOrStdout(), "  "+strings.Repeat("─", 90))
+		for _, f := range mission.Features {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %-25s %-16s %-20s %s\n",
+				f.ID, featureStatusIcon(string(f.Status)), f.Milestone, truncate(f.Description, 50))
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Features: (none)")
+	}
+
+	return nil
+}
+
+// ─── Resume Command ────────────────────────────────────────────────────────
+
+func newResumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resume <mission-id>",
+		Short: "Resume a paused mission",
+		Long:  "Resume a paused mission, transitioning it back to active state.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runResume,
+	}
+}
+
+func runResume(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	mission, err := store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	if err := missions.ResumeMission(store, mission); err != nil {
+		return fmt.Errorf("failed to resume mission %q: %w", missionID, err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) resumed — status: %s\n", mission.Name, mission.ID, statusIcon(string(mission.Status)))
+	return nil
+}
+
+// ─── Cancel Command ────────────────────────────────────────────────────────
+
+func newCancelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cancel <mission-id>",
+		Short: "Cancel a mission",
+		Long: `Cancel an active or paused mission.
+
+By default, cancel prompts for confirmation in interactive terminals.
+Use --force to skip the confirmation prompt.`,
+		Args: cobra.ExactArgs(1),
+		RunE: runCancel,
+	}
+
+	cmd.Flags().Bool("force", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func runCancel(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+	force, _ := cmd.Flags().GetBool("force")
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	mission, err := store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	// Confirmation for interactive terminals
+	if !force && isInteractiveTerminal() {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Are you sure you want to cancel mission %q (%s)? [y/N] ", mission.Name, mission.ID)
+		var response string
+		_, err := fmt.Scanln(&response)
+		if err != nil || (strings.ToLower(strings.TrimSpace(response)) != "y" && strings.ToLower(strings.TrimSpace(response)) != "yes") {
+			fmt.Fprintln(cmd.OutOrStdout(), "Cancel aborted.")
+			return nil
+		}
+	} else if !force {
+		// Non-interactive: require --force
+		return fmt.Errorf("confirmation required; use --force to cancel without confirmation")
+	}
+
+	if err := missions.CancelMission(store, mission); err != nil {
+		return fmt.Errorf("failed to cancel mission %q: %w", missionID, err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) cancelled.\n", mission.Name, mission.ID)
+	return nil
+}
+
+// ─── Serve Command ─────────────────────────────────────────────────────────
+
+func newServeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the Mission Control Web UI server",
+		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).",
+		RunE:  runServe,
+	}
+
+	cmd.Flags().IntP("port", "p", web.DefaultPort, "Port for Mission Control Web UI")
+	return cmd
+}
+
+func runServe(cmd *cobra.Command, args []string) error {
+	port, _ := cmd.Flags().GetInt("port")
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	s := web.New(port, store)
+	log.Printf("Mission Control Web UI starting on http://localhost:%d", port)
+	if err := s.Start(); err != nil {
+		return fmt.Errorf("failed to start missions web UI: %w", err)
+	}
+	return nil
+}
+
+// ─── Utilities ─────────────────────────────────────────────────────────────
+
+// truncate shortens a string to maxLen, adding "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
