@@ -6,35 +6,61 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// InstallKanbanMCP adds the ywai-kanban MCP server to opencode.json.
+// mcpConfigKey returns the top-level key for MCP servers based on agent format.
+func mcpConfigKey(agentName string) string {
+	switch agentName {
+	case "claude-code":
+		return "mcpServers"
+	default:
+		return "mcp"
+	}
+}
+
+// InstallKanbanMCP adds the ywai-kanban MCP server to the agent's config file.
 // This enables the Kanban board UI and tracking for orchestrator agents.
-func InstallKanbanMCP(configPath string) error {
+func InstallKanbanMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
-	// Get or create mcp object
-	mcpRaw, ok := root["mcp"]
-	if !ok {
-		mcpRaw = map[string]any{}
-		root["mcp"] = mcpRaw
-	}
+	key := mcpConfigKey(agentName)
 
-	mcp, ok := mcpRaw.(map[string]any)
-	if !ok {
-		mcp = map[string]any{}
-		root["mcp"] = mcp
-	}
-
-	// Add ywai-kanban MCP server if not already present
-	if _, exists := mcp["ywai-kanban"]; !exists {
-		mcp["ywai-kanban"] = map[string]any{
-			"type":    "local",
-			"command": []string{"ywai", "daemon", "--mcp"},
-			"enabled": true,
+	if key == "mcpServers" {
+		// Claude Code format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
 		}
-		root["mcp"] = mcp
+		if _, exists := mcp["ywai-kanban"]; !exists {
+			mcp["ywai-kanban"] = map[string]any{
+				"command": "ywai",
+				"args":    []any{"daemon", "--mcp"},
+			}
+			root[key] = mcp
+		}
+	} else {
+		// opencode format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		servers, _ := mcp["servers"].(map[string]any)
+		if servers == nil {
+			servers = map[string]any{}
+			mcp["servers"] = servers
+		}
+		if _, exists := servers["ywai-kanban"]; !exists {
+			servers["ywai-kanban"] = map[string]any{
+				"type":    "local",
+				"command": []any{"ywai", "daemon", "--mcp"},
+				"enabled": true,
+			}
+			mcp["servers"] = servers
+			root[key] = mcp
+		}
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
@@ -44,34 +70,50 @@ func InstallKanbanMCP(configPath string) error {
 	return nil
 }
 
-// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to opencode.json
-func InstallMicrosoftLearnMCP(configPath string) error {
+// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's config file.
+func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
-	// Get or create mcp object
-	mcpRaw, ok := root["mcp"]
-	if !ok {
-		mcpRaw = map[string]any{}
-		root["mcp"] = mcpRaw
-	}
+	key := mcpConfigKey(agentName)
 
-	mcp, ok := mcpRaw.(map[string]any)
-	if !ok {
-		mcp = map[string]any{}
-		root["mcp"] = mcp
-	}
-
-	// Add microsoft-learn MCP server if not already present
-	if _, exists := mcp["microsoft-learn"]; !exists {
-		mcp["microsoft-learn"] = map[string]any{
-			"type":    "remote",
-			"url":     "https://learn.microsoft.com/api/mcp",
-			"enabled": true,
+	if key == "mcpServers" {
+		// Claude Code format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
 		}
-		root["mcp"] = mcp
+		if _, exists := mcp["microsoft-learn"]; !exists {
+			mcp["microsoft-learn"] = map[string]any{
+				"command": "npx",
+				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
+			}
+			root[key] = mcp
+		}
+	} else {
+		// opencode format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		servers, _ := mcp["servers"].(map[string]any)
+		if servers == nil {
+			servers = map[string]any{}
+			mcp["servers"] = servers
+		}
+		if _, exists := servers["microsoft-learn"]; !exists {
+			servers["microsoft-learn"] = map[string]any{
+				"type":    "remote",
+				"url":     "https://learn.microsoft.com/api/mcp",
+				"enabled": true,
+			}
+			mcp["servers"] = servers
+			root[key] = mcp
+		}
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {

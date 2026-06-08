@@ -453,8 +453,8 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 	}
 
 	for _, a := range agents {
-		// Only install plugins for opencode
-		if a.Name != "opencode" && a.Name != "kilocode" {
+		// Only install plugins for opencode and claude-code
+		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" {
 			continue
 		}
 
@@ -476,7 +476,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 		}
 
 		// Install kanban MCP (always, required for orchestrator)
-		if err := plugins.InstallKanbanMCP(configPath); err != nil {
+		if err := plugins.InstallKanbanMCP(configPath, a.Name); err != nil {
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
 		} else {
 			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
@@ -484,7 +484,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 
 		// Install Microsoft Learn MCP if requested
 		if installMCP {
-			if err := plugins.InstallMicrosoftLearnMCP(configPath); err != nil {
+			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Installed Microsoft Learn MCP\n", a.Name)
@@ -546,7 +546,7 @@ func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
 
 	for _, a := range agents {
 		// Only remove quota for opencode
-		if a.Name != "opencode" && a.Name != "kilocode" {
+		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" {
 			continue
 		}
 
