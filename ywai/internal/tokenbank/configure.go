@@ -84,18 +84,26 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 
 		hasCtx := m.MaxInputTokens > 0
 		hasOut := m.MaxOutputToken > 0
-		if !hasCtx && !hasOut {
-			continue
+		if hasCtx || hasOut {
+			limit := make(map[string]interface{})
+			if hasCtx {
+				limit["context"] = m.MaxInputTokens
+			}
+			if hasOut {
+				limit["output"] = m.MaxOutputToken
+			}
+			entry["limit"] = limit
 		}
 
-		limit := make(map[string]interface{})
-		if hasCtx {
-			limit["context"] = m.MaxInputTokens
+		// Inject additional capability flags
+		entry["reasoning"] = true
+		entry["temperature"] = true
+		entry["tool_call"] = true
+		entry["attachment"] = true
+		entry["modalities"] = map[string]interface{}{
+			"input": []string{"text", "audio", "image", "video", "pdf"},
+			"output": []string{"text"},
 		}
-		if hasOut {
-			limit["output"] = m.MaxOutputToken
-		}
-		entry["limit"] = limit
 	}
 }
 
