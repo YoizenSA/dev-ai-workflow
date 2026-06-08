@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -50,6 +51,74 @@ func (h *Handlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"version": "dev",
 		"uptime":  time.Since(h.startTime).String(),
+	})
+}
+
+// ─── OpenCode Config ───────────────────────────────────────────────────────
+
+// ListModels returns available opencode models from config.
+func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
+	home, _ := os.UserHomeDir()
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"models": []string{}})
+		return
+	}
+
+	var config struct {
+		Model string `json:"model"`
+	}
+	json.Unmarshal(data, &config)
+
+	models := []string{}
+	if config.Model != "" {
+		models = append(models, config.Model)
+	}
+	// Add common alternatives
+	for _, m := range []string{
+		"openai/gpt-4o", "openai/gpt-4o-mini", "openai/o3-mini",
+		"anthropic/claude-sonnet-4", "anthropic/claude-haiku-4-5",
+		"google/gemini-2.5-flash", "google/gemini-2.5-pro",
+		"deepseek/deepseek-v4-flash", "deepseek/deepseek-v4",
+		"xiaomi-token-plan-sgp/deepseek-v4-flash",
+		"xiaomi-token-plan-sgp/deepseek-v4",
+		"xiaomi-token-plan-sgp/gpt-4o",
+	} {
+		if m != config.Model {
+			models = append(models, m)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"models":  models,
+		"default": config.Model,
+	})
+}
+
+// ListAgents returns available opencode agent profiles.
+func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
+	home, _ := os.UserHomeDir()
+	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
+
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"agents": []string{}})
+		return
+	}
+
+	var agents []string
+	for _, e := range entries {
+		if !e.IsDir() && (strings.HasSuffix(e.Name(), ".md") || strings.HasSuffix(e.Name(), ".txt") || strings.HasSuffix(e.Name(), ".json")) {
+			name := strings.TrimSuffix(e.Name(), ".md")
+			name = strings.TrimSuffix(name, ".txt")
+			name = strings.TrimSuffix(name, ".json")
+			agents = append(agents, name)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"agents": agents,
 	})
 }
 
@@ -108,7 +177,9 @@ func (h *Handlers) ListMissions(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, summaries)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"missions": summaries,
+	})
 }
 
 // handleEmptyMissionID returns 400 when the mission ID is empty (e.g., /api/missions/).

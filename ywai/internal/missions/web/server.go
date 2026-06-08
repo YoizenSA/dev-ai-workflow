@@ -74,6 +74,10 @@ func New(port int, store *missions.MissionsStore) *Server {
 	// Filesystem browser
 	mux.HandleFunc("GET /api/fs/browse", h.BrowseFS)
 
+	// OpenCode config
+	mux.HandleFunc("GET /api/opencode/models", h.ListModels)
+	mux.HandleFunc("GET /api/opencode/agents", h.ListAgents)
+
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.HandleWebSocket)
 

@@ -398,7 +398,7 @@ function deleteProject(name) {
 /* ─── File Browser Modal ─── */
 function showFileBrowser(inputId) {
   fileBrowserContext = inputId;
-  const currentPath = $(inputId)?.value || process.cwd ? '' : '';
+  const currentPath = $(inputId)?.value || '';
   openFileBrowser(currentPath || '/');
 }
 
@@ -635,11 +635,15 @@ function renderNewMission(projectName) {
         <div style="display:flex;gap:8px;margin-top:8px;">
           <div style="flex:1;">
             <label class="form-label" for="mission-model">Model</label>
-            <input id="mission-model" class="form-input" type="text" placeholder="e.g. openai/gpt-4o" value="${state.missionModel || ''}">
+            <select id="mission-model" class="form-input">
+              <option value="">Default</option>
+            </select>
           </div>
           <div style="flex:1;">
             <label class="form-label" for="mission-agent">Agent</label>
-            <input id="mission-agent" class="form-input" type="text" placeholder="e.g. dev" value="${state.missionAgent || ''}">
+            <select id="mission-agent" class="form-input">
+              <option value="">Default</option>
+            </select>
           </div>
         </div>
       </details>
@@ -1047,7 +1051,32 @@ function updateMissionActions(missionId, status) {
         ${showPause ? `<button class="btn btn-ghost" onclick="pauseMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause</button>` : ''}
         ${showResume ? `<button class="btn btn-success" onclick="resumeMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg> Resume</button>` : ''}
         ${showCancel ? `<button class="btn btn-ghost btn-danger" onclick="cancelMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel</button>` : ''}
-      `;
+  `;
+
+  // Load model/agent options from API
+  apiFetch('/api/opencode/models').then(data => {
+    const select = $('mission-model');
+    if (select && data.models) {
+      data.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+    }
+  }).catch(() => {});
+
+  apiFetch('/api/opencode/agents').then(data => {
+    const select = $('mission-agent');
+    if (select && data.agents) {
+      data.agents.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a;
+        opt.textContent = a;
+        select.appendChild(opt);
+      });
+    }
+  }).catch(() => {});
 }
 
 async function retryFeature(featureId) {
