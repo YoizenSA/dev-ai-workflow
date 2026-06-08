@@ -52,6 +52,9 @@ func (s *MissionsStore) MissionDir(missionID string) string {
 // ensureDir creates the mission directory if it doesn't exist.
 // Caller must NOT hold the lock.
 func (s *MissionsStore) ensureDir(missionID string) error {
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
 	dir := s.MissionDir(missionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create mission dir: %w", err)
@@ -80,6 +83,11 @@ func (s *MissionsStore) CreateMission(m *Mission) error {
 		return ErrInvalidMission
 	}
 
+	// Prevent path traversal in mission ID
+	if err := ValidateMissionID(m.ID); err != nil {
+		return err
+	}
+
 	// Validate duplicate feature IDs
 	seen := make(map[string]bool, len(m.Features))
 	for _, f := range m.Features {
@@ -104,6 +112,10 @@ func (s *MissionsStore) CreateMission(m *Mission) error {
 
 // LoadMission reads a mission from its directory.
 func (s *MissionsStore) LoadMission(missionID string) (*Mission, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return nil, err
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -115,6 +127,11 @@ func (s *MissionsStore) LoadMission(missionID string) (*Mission, error) {
 func (s *MissionsStore) SaveMission(m *Mission) error {
 	if m == nil {
 		return ErrInvalidMission
+	}
+
+	// Prevent path traversal in mission ID
+	if err := ValidateMissionID(m.ID); err != nil {
+		return err
 	}
 
 	// Validate duplicate feature IDs
@@ -175,6 +192,10 @@ func (s *MissionsStore) ListMissions() ([]*Mission, error) {
 
 // DeleteMission removes a mission and all its data.
 func (s *MissionsStore) DeleteMission(missionID string) error {
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -187,6 +208,10 @@ func (s *MissionsStore) DeleteMission(missionID string) error {
 
 // MissionExists checks if a mission directory exists.
 func (s *MissionsStore) MissionExists(missionID string) (bool, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return false, err
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -206,6 +231,10 @@ func (s *MissionsStore) MissionExists(missionID string) (bool, error) {
 // UpdateFeatureStatus updates a single feature's status inside a mission.
 // It loads the mission, modifies the feature in memory, and saves atomically.
 func (s *MissionsStore) UpdateFeatureStatus(missionID, featureID string, status FeatureStatus) error {
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -237,6 +266,10 @@ func (s *MissionsStore) UpdateFeatureStatus(missionID, featureID string, status 
 
 // GetFeature returns a specific feature from a mission.
 func (s *MissionsStore) GetFeature(missionID, featureID string) (*Feature, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return nil, err
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -261,6 +294,10 @@ func (s *MissionsStore) SaveValidationState(missionID string, vs *ValidationStat
 		return fmt.Errorf("validation state is nil")
 	}
 
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -280,6 +317,10 @@ func (s *MissionsStore) SaveValidationState(missionID string, vs *ValidationStat
 // LoadValidationState reads validation results for a mission.
 // If the file doesn't exist yet, returns an empty validation state (no error).
 func (s *MissionsStore) LoadValidationState(missionID string) (*ValidationState, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return nil, err
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
