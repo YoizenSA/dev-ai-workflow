@@ -358,6 +358,91 @@ func TestLoadValidationStateRejectsPathTraversal(t *testing.T) {
 	}
 }
 
+// ─── Path traversal rejection for recovery functions ──────────────────────
+
+func TestDetectPartialHandoffRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	m := testMission("safe-mission")
+	if err := store.CreateMission(m); err != nil {
+		t.Fatalf("CreateMission: %v", err)
+	}
+
+	_, err := store.DetectPartialHandoff("../evil", "feat-1")
+	if err == nil {
+		t.Fatal("expected error for path traversal missionID")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' in error, got: %v", err)
+	}
+}
+
+func TestRecoverCorruptMissionRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	_, err := store.RecoverCorruptMission("../evil")
+	if err == nil {
+		t.Fatal("expected error for path traversal missionID")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' in error, got: %v", err)
+	}
+}
+
+func TestRecordWorkerHandoffRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	err := store.RecordWorkerHandoff("../evil", "feat-1", &WorkerHandoff{
+		SalientSummary:     "test",
+		WhatWasImplemented: "test",
+	})
+	if err == nil {
+		t.Fatal("expected error for path traversal missionID")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' in error, got: %v", err)
+	}
+}
+
+func TestRecordWorkerLogRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	err := store.RecordWorkerLog("../evil", "feat-1", "some log content")
+	if err == nil {
+		t.Fatal("expected error for path traversal missionID")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' in error, got: %v", err)
+	}
+}
+
+func TestReadWorkerLogRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	_, err := store.ReadWorkerLog("../evil", "feat-1")
+	if err == nil {
+		t.Fatal("expected error for path traversal missionID")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("expected 'path traversal' in error, got: %v", err)
+	}
+}
+
+func TestWorkerLogPathRejectsPathTraversal(t *testing.T) {
+	store, dir := recoveryTestStore(t)
+	defer os.RemoveAll(dir)
+
+	path := store.WorkerLogPath("../evil", "feat-1")
+	if path != "" {
+		t.Errorf("expected empty path for path traversal missionID, got %q", path)
+	}
+}
+
 // ─── VAL-ENG-REC-001: Crash mid-feature recovers correctly ─────────────────
 
 func TestRecoverInProgressFeatures(t *testing.T) {

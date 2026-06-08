@@ -314,6 +314,9 @@ func (s *MissionsStore) RecoverInProgressFeatures(mission *Mission) ([]string, e
 // When a partial handoff is detected, the raw content is preserved in the
 // artifact directory so it can be inspected later.
 func (s *MissionsStore) DetectPartialHandoff(missionID, featureID string) (bool, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return false, err
+	}
 	workersDir := filepath.Join(s.MissionDir(missionID), "workers", featureID)
 	handoffPath := filepath.Join(workersDir, "handoff.json")
 
@@ -353,6 +356,9 @@ func (s *MissionsStore) DetectPartialHandoff(missionID, featureID string) (bool,
 // Returns the new minimal mission if recovery succeeded, or an error if
 // recovery is not possible.
 func (s *MissionsStore) RecoverCorruptMission(missionID string) (*Mission, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -422,6 +428,9 @@ func (s *MissionsStore) RecordWorkerStart(mission *Mission, featureID string, se
 // RecordWorkerHandoff records the handoff result for a completed worker
 // session and persists the handoff JSON to the workers artifact directory.
 func (s *MissionsStore) RecordWorkerHandoff(missionID, featureID string, handoff *WorkerHandoff) error {
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
 	workersDir := filepath.Join(s.MissionDir(missionID), "workers", featureID)
 	if err := os.MkdirAll(workersDir, 0755); err != nil {
 		return fmt.Errorf("create workers artifact dir for handoff: %w", err)
@@ -443,6 +452,9 @@ func (s *MissionsStore) RecordWorkerHandoff(missionID, featureID string, handoff
 // RecordWorkerLog saves the worker's log output to the workers artifact
 // directory for persistence across crashes.
 func (s *MissionsStore) RecordWorkerLog(missionID, featureID, logContent string) error {
+	if err := ValidateMissionID(missionID); err != nil {
+		return err
+	}
 	workersDir := filepath.Join(s.MissionDir(missionID), "workers", featureID)
 	if err := os.MkdirAll(workersDir, 0755); err != nil {
 		return fmt.Errorf("create workers artifact dir for log: %w", err)
@@ -459,6 +471,9 @@ func (s *MissionsStore) RecordWorkerLog(missionID, featureID, logContent string)
 // ReadWorkerLog reads the worker's log output from the workers artifact directory.
 // Returns empty string if no log file exists.
 func (s *MissionsStore) ReadWorkerLog(missionID, featureID string) (string, error) {
+	if err := ValidateMissionID(missionID); err != nil {
+		return "", err
+	}
 	logPath := filepath.Join(s.MissionDir(missionID), "workers", featureID, "output.log")
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -472,5 +487,11 @@ func (s *MissionsStore) ReadWorkerLog(missionID, featureID string) (string, erro
 
 // WorkerLogPath returns the path to a worker's log file.
 func (s *MissionsStore) WorkerLogPath(missionID, featureID string) string {
+	// Note: WorkerLogPath returns a path for external use. Validation is expected
+	// to happen before the path is used for actual file operations, but we validate
+	// here as a defense-in-depth measure.
+	if err := ValidateMissionID(missionID); err != nil {
+		return ""
+	}
 	return filepath.Join(s.MissionDir(missionID), "workers", featureID, "output.log")
 }
