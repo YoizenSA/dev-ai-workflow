@@ -107,6 +107,11 @@ func (h *Handlers) ListMissions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summaries)
 }
 
+// handleEmptyMissionID returns 400 when the mission ID is empty (e.g., /api/missions/).
+func (h *Handlers) handleEmptyMissionID(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusBadRequest, "mission id is required")
+}
+
 // GetMission returns a single mission with full detail.
 func (h *Handlers) GetMission(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

@@ -47,8 +47,7 @@ func createTestMission(t *testing.T, store *missions.MissionsStore, id, name str
 func newTestServer(t *testing.T, store *missions.MissionsStore) *httptest.Server {
 	t.Helper()
 	s := New(0, store)
-	handler := recoveryMiddleware(s.mux)
-	return httptest.NewServer(handler)
+	return httptest.NewServer(s.Handler())
 }
 
 // mustGet issues a GET request and returns the response, failing the test on error.
@@ -668,6 +667,118 @@ func TestErrorResponseSchemaAllEndpoints(t *testing.T) {
 
 		if _, ok := body["error"]; !ok {
 			t.Errorf("endpoint %s: expected 'error' field in response", ep)
+		}
+	}
+}
+
+// ─── VAL-WEB-010: Empty/null mission ID ────────────────────────────────────
+
+func TestEmptyMissionIDReturns400(t *testing.T) {
+	store := setupTestStore(t)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	// GET /api/missions/ (empty ID)
+	resp := mustGet(t, server.URL+"/api/missions/")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty mission ID, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if _, ok := body["error"]; !ok {
+		t.Error("expected 'error' field in response")
+	}
+}
+
+func TestNullByteMissionIDReturns400(t *testing.T) {
+	store := setupTestStore(t)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	// GET /api/missions/%00 (null byte)
+	resp := mustGet(t, server.URL+"/api/missions/%00")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for null byte mission ID, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if _, ok := body["error"]; !ok {
+		t.Error("expected 'error' field in response")
+	}
+}
+
+// ─── VAL-WEB-047: 405 returns JSON ─────────────────────────────────────────
+
+func TestMethodNotAllowedReturnsJSON(t *testing.T) {
+	store := setupTestStore(t)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	// POST on GET-only endpoint (health check)
+	resp := mustPost(t, server.URL+"/api/health")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+
+	// Verify JSON response
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		t.Errorf("expected Content-Type application/json for 405, got %q", ct)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response body as JSON: %v", err)
+	}
+
+	errMsg, ok := body["error"]
+	if !ok {
+		t.Error("expected 'error' field in 405 response")
+	} else if errMsg != "method not allowed" {
+		t.Errorf("expected error message 'method not allowed', got %q", errMsg)
+	}
+}
+
+func TestMethodNotAllowedReturnsJSONForAllEndpoints(t *testing.T) {
+	store := setupTestStore(t)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	// Test POST on GET-only endpoints
+	postEndpoints := []string{
+		"/api/health",
+		"/api/missions",
+		"/api/missions/test-id",
+	}
+
+	for _, ep := range postEndpoints {
+		resp := mustPost(t, server.URL+ep)
+		var body map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			resp.Body.Close()
+			t.Fatalf("POST %s: failed to decode JSON response: %v", ep, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s: expected 405, got %d", ep, resp.StatusCode)
+		}
+		if _, ok := body["error"]; !ok {
+			t.Errorf("POST %s: expected 'error' field in 405 response", ep)
 		}
 	}
 }

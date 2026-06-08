@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,6 +63,18 @@ func New(port int, store *missions.MissionsStore) *Server {
 	return s
 }
 
+// Handler returns the full middleware-wrapped handler for testing.
+func (s *Server) Handler() http.Handler {
+	// Chain middleware (outermost to innermost):
+	// 1. recoveryMiddleware - catch panics
+	// 2. json405Middleware - intercept 405 responses to return JSON (VAL-WEB-047)
+	// 3. validateMissionIDMiddleware - reject empty/null mission IDs (VAL-WEB-010)
+	handler := validateMissionIDMiddleware(s.mux)
+	handler = json405Middleware(handler)
+	handler = recoveryMiddleware(handler)
+	return handler
+}
+
 // Start starts the HTTP server on the configured port.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
@@ -78,7 +91,7 @@ func (s *Server) Start() error {
 	close(s.portReady)
 
 	s.httpSrv = &http.Server{
-		Handler:      recoveryMiddleware(s.mux),
+		Handler:      s.Handler(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -141,6 +154,80 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 				})
 			}
 		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ─── 405 JSON Middleware (VAL-WEB-047) ─────────────────────────────────────
+// Intercepts 405 Method Not Allowed responses from Go's http.ServeMux
+// and returns JSON format instead of Go's default plain text.
+
+type json405Writer struct {
+	http.ResponseWriter
+	statusCode int
+	wroteBody  bool
+}
+
+func (w *json405Writer) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	if statusCode == http.StatusMethodNotAllowed {
+		// Replace 405 body with JSON
+		w.ResponseWriter.Header().Set("Content-Type", "application/json")
+		w.ResponseWriter.WriteHeader(statusCode)
+		_, _ = w.ResponseWriter.Write([]byte(`{"error":"method not allowed"}`))
+		w.wroteBody = true
+		return
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *json405Writer) Write(b []byte) (int, error) {
+	if w.wroteBody {
+		return len(b), nil
+	}
+	if w.statusCode == http.StatusMethodNotAllowed {
+		return len(b), nil
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func json405Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jw := &json405Writer{ResponseWriter: w}
+		next.ServeHTTP(jw, r)
+	})
+}
+
+// ─── Mission ID Validation Middleware (VAL-WEB-010) ────────────────────────
+// Returns 400 for empty mission IDs (e.g., /api/missions/) or
+// null byte in mission IDs (e.g., /api/missions/%00).
+
+func validateMissionIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for empty mission ID: /api/missions/ (trailing slash, nothing after)
+		if strings.HasPrefix(r.URL.Path, "/api/missions/") {
+			rest := strings.TrimPrefix(r.URL.Path, "/api/missions/")
+			// Extract the first path segment (the mission ID)
+			idx := strings.Index(rest, "/")
+			var missionID string
+			if idx >= 0 {
+				missionID = rest[:idx]
+			} else {
+				missionID = rest
+			}
+
+			if missionID == "" {
+				writeError(w, http.StatusBadRequest, "mission id is required")
+				return
+			}
+
+			// Check for null byte in mission ID (from %00 encoding)
+			if strings.ContainsRune(missionID, 0) {
+				writeError(w, http.StatusBadRequest, "mission id contains invalid characters")
+				return
+			}
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

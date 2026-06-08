@@ -380,6 +380,91 @@ body { min-height: 100vh; }
 .assertion-surface { color: var(--text-muted); font-size: 11px; min-width: 50px; }
 .assertion-error { color: var(--accent-red); font-size: 11px; flex: 1; }
 
+/* ─── Log Filters ─── */
+.log-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+.log-filters-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+.log-filter-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.log-filter-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.log-filter-btn.active {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+
+/* ─── Log Lines ─── */
+.logs-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+.log-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+.log-ts {
+  color: var(--text-muted);
+  min-width: 70px;
+  font-size: 11px;
+}
+.log-level {
+  min-width: 45px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.log-msg {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-info .log-level { color: var(--accent-blue); }
+.log-warn .log-level { color: var(--accent-orange); }
+.log-error .log-level { color: var(--accent-red); }
+.log-error { background: rgba(248,81,73,0.08); }
+
+/* ─── Timer ─── */
+.timer-label {
+  font-weight: 600;
+}
+#elapsed-timer {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--accent-cyan);
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .header { padding: 10px 16px; }

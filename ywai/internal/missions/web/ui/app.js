@@ -10,6 +10,8 @@
   let wsReconnectTimer = null;
   let reconnectDelay = 1000;
   const MAX_RECONNECT_DELAY = 30000;
+  let logLevelFilter = 'all';
+  let timerInterval = null;
   const STATUS_ICONS = {
     planning: '📋',
     active: '▶',
@@ -256,6 +258,55 @@
       `;
     }
 
+    // Start elapsed timer
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => updateElapsedTimer(mission), 1000);
+
+    // Helper to get elapsed time string
+    function getElapsed(startDate) {
+      const diff = Date.now() - new Date(startDate).getTime();
+      if (diff < 0) return '0m 0s';
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      if (days > 0) return `${days}d ${hours % 24}h`;
+      if (hours > 0) return `${hours}h ${minutes % 60}m`;
+      return `${minutes}m ${seconds % 60}s`;
+    }
+
+    const elapsedStart = mission.createdAt;
+    const elapsedStr = getElapsed(elapsedStart);
+
+    // Render logs with filter
+    function renderLogs(logsArray, filterLevel) {
+      if (!logsArray || logsArray.length === 0) {
+        return '<div class="logs-empty">No logs available</div>';
+      }
+      const filtered = filterLevel === 'all' ? logsArray : logsArray.filter(l => {
+        const level = (l.level || 'info').toLowerCase();
+        return level === filterLevel;
+      });
+      if (filtered.length === 0) {
+        return `<div class="logs-empty">No ${filterLevel} logs</div>`;
+      }
+      return filtered.map(l => {
+        const ts = l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : '';
+        const level = (l.level || 'info').toLowerCase();
+        return `<div class="log-line log-${level}"><span class="log-ts">${ts}</span><span class="log-level">[${level}]</span><span class="log-msg">${escapeHtml(l.message || l.content || '')}</span></div>`;
+      }).join('');
+    }
+
+    const logFilterButtons = `
+      <div class="log-filters">
+        <span class="log-filters-label">Log Level:</span>
+        <button class="log-filter-btn ${logLevelFilter === 'all' ? 'active' : ''}" data-level="all" onclick="window.app.setLogFilter('all')">All</button>
+        <button class="log-filter-btn ${logLevelFilter === 'info' ? 'active' : ''}" data-level="info" onclick="window.app.setLogFilter('info')">Info</button>
+        <button class="log-filter-btn ${logLevelFilter === 'warn' ? 'active' : ''}" data-level="warn" onclick="window.app.setLogFilter('warn')">Warn</button>
+        <button class="log-filter-btn ${logLevelFilter === 'error' ? 'active' : ''}" data-level="error" onclick="window.app.setLogFilter('error')">Error</button>
+      </div>
+    `;
+
     detailContent.innerHTML = `
       <div class="detail-header">
         <div class="detail-title">
@@ -269,12 +320,17 @@
           <div class="detail-meta-item"><span class="detail-meta-label">Updated:</span> ${updated}</div>
           ${completed ? `<div class="detail-meta-item"><span class="detail-meta-label">Completed:</span> ${completed}</div>` : ''}
           <div class="detail-meta-item"><span class="detail-meta-label">Features:</span> ${(features || []).length}</div>
+          <div class="detail-meta-item"><span class="detail-meta-label timer-label">⏱ Elapsed:</span> <span id="elapsed-timer">${elapsedStr}</span></div>
         </div>
         ${actionsHTML ? `<div class="detail-actions">${actionsHTML}</div>` : ''}
       </div>
       <div id="milestones-container">${milestonesHTML}</div>
       <div id="validation-container"></div>
-      <div id="logs-container"></div>
+      <div id="logs-section">
+        <h3 style="margin:16px 0 8px;font-size:15px;font-weight:600;">📋 Logs</h3>
+        ${logFilterButtons}
+        <div id="logs-container"><div class="logs-empty">Loading logs...</div></div>
+      </div>
     `;
 
     // Load validation state asynchronously
@@ -284,7 +340,83 @@
         vc.innerHTML = renderValidation(vs);
       }
     });
+
+    // Load and render logs for all features
+    loadFeatureLogsForMission(mission.id, features);
   }
+
+  // Timer update helper
+  function updateElapsedTimer(mission) {
+    const el = document.getElementById('elapsed-timer');
+    if (!el) return;
+    const diff = Date.now() - new Date(mission.createdAt).getTime();
+    if (diff < 0) { el.textContent = '0m 0s'; return; }
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) el.textContent = `${days}d ${hours % 24}h`;
+    else if (hours > 0) el.textContent = `${hours}h ${minutes % 60}m`;
+    else el.textContent = `${minutes}m ${seconds % 60}s`;
+  }
+
+  // Load logs for all features in a mission
+  async function loadFeatureLogsForMission(missionId, features) {
+    if (!features || features.length === 0) {
+      const lc = document.getElementById('logs-container');
+      if (lc) lc.innerHTML = '<div class="logs-empty">No logs available (no features)</div>';
+      return;
+    }
+    try {
+      const allLogs = [];
+      for (const f of features) {
+        try {
+          const data = await loadFeatureLogs(missionId, f.id);
+          if (data && data.content) {
+            // Parse log content - split by newlines and determine level
+            const lines = data.content.split('\n').filter(l => l.trim());
+            lines.forEach(line => {
+              let level = 'info';
+              const lower = line.toLowerCase();
+              if (lower.includes('[error]') || lower.includes('error:')) level = 'error';
+              else if (lower.includes('[warn]') || lower.includes('warn:') || lower.includes('warning:')) level = 'warn';
+              allLogs.push({
+                featureId: f.id,
+                level: level,
+                message: line,
+                timestamp: data.timestamp || null,
+              });
+            });
+          }
+        } catch (e) { /* skip features without logs */ }
+      }
+      const lc = document.getElementById('logs-container');
+      if (lc) {
+        lc.innerHTML = renderLogs(allLogs, logLevelFilter);
+      }
+    } catch (e) {
+      const lc = document.getElementById('logs-container');
+      if (lc) lc.innerHTML = '<div class="logs-empty">Failed to load logs</div>';
+    }
+  }
+
+  // Set log level filter
+  function setLogFilter(level) {
+    logLevelFilter = level;
+    // Update active button styling
+    document.querySelectorAll('.log-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.level === level);
+    });
+    // Re-render logs with new filter
+    const mission = missions.find(m => m.id === currentMissionId);
+    if (mission) {
+      apiFetch(`/missions/${encodeURIComponent(currentMissionId)}/features`).then(features => {
+        loadFeatureLogsForMission(currentMissionId, features || []);
+      }).catch(() => {});
+    }
+  }
+
+  // setLogFilter is exposed via init()
 
   /* ─── Pause / Resume ─── */
   async function pauseMission(id) {
@@ -469,7 +601,7 @@
   /* ─── Init ─── */
   function init() {
     // Expose functions globally for inline onclick handlers
-    window.app = { showMission, showMissionsList, pauseMission, resumeMission, cancelMission, retryFeature, loadValidation, loadFeatureLogs, showKeyboardHelp };
+    window.app = { showMission, showMissionsList, pauseMission, resumeMission, cancelMission, retryFeature, loadValidation, loadFeatureLogs, showKeyboardHelp, setLogFilter, loadFeatureLogsForMission, updateElapsedTimer };
 
     loadMissions();
     connectWebSocket();
