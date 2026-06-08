@@ -58,6 +58,34 @@ body {
 a { color: var(--accent-cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* ─── Logo / Brand ─── */
+.header-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.logo-y {
+  color: #3b82f6;
+}
+
+.logo-wai {
+  color: var(--text-primary, #e2e8f0);
+  font-weight: 300;
+}
+
+.logo-sub {
+  color: var(--text-muted, #94a3b8);
+  font-weight: 400;
+  font-size: 1.15rem;
+  margin-left: 8px;
+  border-left: 1px solid var(--border-color, #334155);
+  padding-left: 8px;
+}
+
 /* ─── Layout ─── */
 #app {
   display: flex;
@@ -79,24 +107,6 @@ a:hover { text-decoration: underline; }
 .sidebar-header {
   padding: 20px 16px 16px;
   border-bottom: 1px solid var(--border-color);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-icon {
-  font-size: 24px;
-  color: var(--accent-cyan);
-}
-
-.logo-text {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
 }
 
 .nav-links {
@@ -1343,8 +1353,6 @@ a:hover { text-decoration: underline; }
     min-width: 56px;
   }
   .sidebar-header { padding: 12px 8px; }
-  .logo-text { display: none; }
-  .logo-icon { font-size: 20px; }
   .nav-links a span { display: none; }
   .nav-links a { justify-content: center; padding: 12px; }
   .sidebar-footer { display: none; }
