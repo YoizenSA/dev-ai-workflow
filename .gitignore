@@ -63,3 +63,4 @@ GEMINI.md
 *.local
 # Local Pi runtime state
 .atl/
+ywai/ywai
