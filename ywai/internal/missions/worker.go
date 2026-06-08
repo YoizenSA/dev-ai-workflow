@@ -214,12 +214,16 @@ func (wm *WorkerManager) SpawnWorker(mission *Mission, feature *Feature, context
 	ctx, cancel := context.WithTimeout(context.Background(), wm.config.Timeout)
 
 	// Build the opencode command
-	args := []string{"--skill", "backend-worker"}
-	if feature.SkillName != "" && feature.SkillName != "backend-worker" {
-		args = []string{"--skill", feature.SkillName}
+	// Use "opencode run" for non-interactive task execution
+	taskDesc := fmt.Sprintf("Implement feature %s: %s", feature.ID, feature.Description)
+	if len(feature.ExpectedBehavior) > 0 {
+		taskDesc += "\n\nExpected behavior:\n"
+		for _, exp := range feature.ExpectedBehavior {
+			taskDesc += "- " + exp + "\n"
+		}
 	}
-	args = append(args, "implement", feature.ID)
 
+	args := []string{"run", taskDesc}
 	cmd := wm.cmdCreator(ctx, opencodePath, args...)
 	cmd.Dir = contextDir
 
