@@ -208,6 +208,10 @@ func parsePlanFromOutput(output string) (*PlanMission, error) {
 		jsonStr = strings.TrimSpace(output)
 	}
 
+	// Normalize opencode output: some fields may be strings instead of arrays
+	reStr := regexp.MustCompile(`"(fulfills|expectedBehavior|preconditions)":\s*"([^"]+)"`)
+	jsonStr = reStr.ReplaceAllString(jsonStr, `"$1":["$2"]`)
+
 	var plan PlanMission
 	if err := json.Unmarshal([]byte(jsonStr), &plan); err != nil {
 		return nil, fmt.Errorf("unmarshal plan: %w", err)
