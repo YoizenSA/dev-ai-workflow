@@ -250,9 +250,10 @@ func TestFeatureTransitionPendingToCompleted(t *testing.T) {
 }
 
 func TestFeatureTransitionPendingToFailed(t *testing.T) {
+	// pending→failed is valid e.g. max retries reached before starting
 	_, err := TransitionFeatureStatus(FeaturePending, FeatureFailed)
-	if err == nil {
-		t.Fatal("expected error for invalid transition pending→failed")
+	if err != nil {
+		t.Fatalf("pending→failed should be valid: %v", err)
 	}
 }
 

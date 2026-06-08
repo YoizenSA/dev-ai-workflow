@@ -88,6 +88,7 @@ func ValidMissionTransitions() [][2]MissionStatus {
 var featureTransitions = map[FeatureStatus]map[FeatureStatus]bool{
 	FeaturePending: {
 		FeatureInProgress: true,
+		FeatureFailed:     true, // e.g., max retries reached before starting
 		FeatureCancelled:  true,
 	},
 	FeatureInProgress: {
