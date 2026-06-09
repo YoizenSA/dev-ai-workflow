@@ -297,33 +297,41 @@ func TestParseHandoffWhitespaceOnly(t *testing.T) {
 	}
 }
 
-// VAL-ENG-WORK-009: Invalid handoff handling — non-JSON
+// VAL-ENG-WORK-009: `opencode run` emits natural language, not a JSON handoff,
+// so non-JSON output falls back to a prose handoff (the full output becomes the
+// summary) rather than erroring. This keeps real worker runs usable end-to-end.
 func TestParseHandoffNonJSON(t *testing.T) {
-	_, err := parseHandoff("this is not json at all")
-	if err == nil {
-		t.Fatal("parseHandoff() should return error for non-JSON input")
+	const output = "this is not json at all"
+	handoff, err := parseHandoff(output)
+	if err != nil {
+		t.Fatalf("parseHandoff() should fall back for non-JSON input, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not JSON") {
-		t.Fatalf("parseHandoff() error should mention 'not JSON', got: %v", err)
+	if handoff == nil || handoff.SalientSummary != output {
+		t.Fatalf("parseHandoff() should use full output as summary, got: %+v", handoff)
 	}
 }
 
 func TestParseHandoffInvalidJSON(t *testing.T) {
-	_, err := parseHandoff(`{"salientSummary": incomplete`)
-	if err == nil {
-		t.Fatal("parseHandoff() should return error for invalid JSON")
+	const output = `{"salientSummary": incomplete`
+	handoff, err := parseHandoff(output)
+	if err != nil {
+		t.Fatalf("parseHandoff() should fall back for invalid JSON, got error: %v", err)
+	}
+	if handoff == nil || handoff.SalientSummary != output {
+		t.Fatalf("parseHandoff() should use full output as summary, got: %+v", handoff)
 	}
 }
 
 func TestParseHandoffMissingRequiredFields(t *testing.T) {
-	// JSON but with empty required fields
+	// Valid JSON but with empty required fields: falls back to using the full
+	// output as the summary instead of erroring.
 	missingFields := `{"salientSummary": "", "whatWasImplemented": "", "verification": {"commandsRun": []}, "tests": {"added": [], "coverage": ""}, "discoveredIssues": []}`
-	_, err := parseHandoff(missingFields)
-	if err == nil {
-		t.Fatal("parseHandoff() should return error when required fields are missing")
+	handoff, err := parseHandoff(missingFields)
+	if err != nil {
+		t.Fatalf("parseHandoff() should fall back when required fields are empty, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "required") {
-		t.Fatalf("parseHandoff() error should mention 'required', got: %v", err)
+	if handoff == nil || handoff.SalientSummary != missingFields {
+		t.Fatalf("parseHandoff() should use full output as summary, got: %+v", handoff)
 	}
 }
 
@@ -753,7 +761,9 @@ func TestExecuteFeatureNonZeroExit(t *testing.T) {
 	}
 }
 
-// ExecuteFeature with invalid handoff (non-JSON output)
+// ExecuteFeature with non-JSON output and exit code 0. Because `opencode run`
+// returns natural language, prose output on a clean exit is treated as a
+// successful prose handoff and the feature completes.
 func TestExecuteFeatureInvalidHandoff(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
@@ -761,22 +771,25 @@ func TestExecuteFeatureInvalidHandoff(t *testing.T) {
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
-	// Fake opencode that outputs non-JSON
+	// Fake opencode that outputs non-JSON prose and exits 0
 	fakeDir := fakeOpencodeWithOutput(t,
 		[]string{"Some build output", "More output"},
 		"this is not json",
 	)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	_, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
-	if err == nil {
-		t.Fatal("ExecuteFeature should return error for invalid handoff")
+	handoff, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
+	if err != nil {
+		t.Fatalf("ExecuteFeature should accept prose output on clean exit, got: %v", err)
+	}
+	if handoff == nil || handoff.SalientSummary == "" {
+		t.Fatalf("expected prose handoff with non-empty summary, got: %+v", handoff)
 	}
 
-	// Feature should be failed
+	// Feature should be completed
 	feat, _ := GetFeatureByID(mission, mission.Features[0].ID)
-	if feat.Status != FeatureFailed {
-		t.Fatalf("feature should be failed after invalid handoff, got %s", feat.Status)
+	if feat.Status != FeatureCompleted {
+		t.Fatalf("feature should be completed after prose handoff, got %s", feat.Status)
 	}
 }
 

@@ -133,12 +133,14 @@ func TestListMissionsEmpty(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 	}
 
-	var missions []interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&missions); err != nil {
+	var body struct {
+		Missions []interface{} `json:"missions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(missions) != 0 {
-		t.Errorf("expected empty list, got %d items", len(missions))
+	if len(body.Missions) != 0 {
+		t.Errorf("expected empty list, got %d items", len(body.Missions))
 	}
 }
 
@@ -156,15 +158,17 @@ func TestListMissionsPopulated(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 	}
 
-	var missions []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&missions); err != nil {
+	var body struct {
+		Missions []map[string]interface{} `json:"missions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(missions) != 1 {
-		t.Fatalf("expected 1 mission, got %d", len(missions))
+	if len(body.Missions) != 1 {
+		t.Fatalf("expected 1 mission, got %d", len(body.Missions))
 	}
 
-	m := missions[0]
+	m := body.Missions[0]
 	if m["id"] != "mission-1" {
 		t.Errorf("expected id 'mission-1', got %q", m["id"])
 	}
@@ -208,16 +212,18 @@ func TestListMissionsSortedByCreatedAt(t *testing.T) {
 	resp := mustGet(t, server.URL+"/api/missions")
 	defer resp.Body.Close()
 
-	var missions []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&missions); err != nil {
+	var body struct {
+		Missions []map[string]interface{} `json:"missions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(missions) != 2 {
-		t.Fatalf("expected 2 missions, got %d", len(missions))
+	if len(body.Missions) != 2 {
+		t.Fatalf("expected 2 missions, got %d", len(body.Missions))
 	}
-	if missions[0]["id"] != "new" {
-		t.Errorf("expected newest first, got %q", missions[0]["id"])
+	if body.Missions[0]["id"] != "new" {
+		t.Errorf("expected newest first, got %q", body.Missions[0]["id"])
 	}
 }
 
@@ -232,16 +238,18 @@ func TestListMissionsFilterByStatus(t *testing.T) {
 	resp := mustGet(t, server.URL+"/api/missions?status=active")
 	defer resp.Body.Close()
 
-	var missions []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&missions); err != nil {
+	var body struct {
+		Missions []map[string]interface{} `json:"missions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode missions: %v", err)
 	}
 
-	if len(missions) != 1 {
-		t.Fatalf("expected 1 active mission, got %d", len(missions))
+	if len(body.Missions) != 1 {
+		t.Fatalf("expected 1 active mission, got %d", len(body.Missions))
 	}
-	if missions[0]["id"] != "active-1" {
-		t.Errorf("expected 'active-1', got %q", missions[0]["id"])
+	if body.Missions[0]["id"] != "active-1" {
+		t.Errorf("expected 'active-1', got %q", body.Missions[0]["id"])
 	}
 }
 

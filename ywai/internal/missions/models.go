@@ -249,6 +249,59 @@ type Issue struct {
 	SuggestedFix string `json:"suggestedFix,omitempty"`
 }
 
+// ─── Mission Artifact Types (Factory.ai Alignment) ───────────────────────
+
+// ValidationContract represents the validation contract with behavioral assertions.
+type ValidationContract struct {
+	Assertions []ContractAssertion `json:"assertions"`
+}
+
+// ContractAssertion represents a single behavioral assertion in the validation contract.
+type ContractAssertion struct {
+	ID          string   `json:"id"`          // e.g., VAL-AUTH-001
+	Title       string   `json:"title"`       // Short description
+	Description string   `json:"description"` // Behavioral description
+	Tool        string   `json:"tool"`        // e.g., agent-browser, tuistory, curl
+	Evidence    []string `json:"evidence"`    // Required evidence types
+	Area        string   `json:"area"`        // e.g., Authentication, Cross-Area
+}
+
+// ServicesManifest represents the services.yaml manifest.
+type ServicesManifest struct {
+	Commands map[string]string      `json:"commands"` // Named command shortcuts
+	Services map[string]ServiceDef `json:"services"` // Service definitions
+}
+
+// ServiceDef defines a long-running service.
+type ServiceDef struct {
+	Start       string   `json:"start"`       // Start command
+	Stop        string   `json:"stop"`        // Stop command
+	Healthcheck string   `json:"healthcheck"` // Health check command
+	Port        int      `json:"port"`        // Port this service uses
+	DependsOn   []string `json:"depends_on"`  // Services that must run first
+}
+
+// Skill represents a worker skill definition from SKILL.md.
+type Skill struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	RequiredSkills []string `json:"requiredSkills,omitempty"`
+	RequiredTools   []string `json:"requiredTools,omitempty"`
+	WorkProcedure   string   `json:"workProcedure"`
+	ExampleHandoff  string   `json:"exampleHandoff"`
+	ReturnConditions string   `json:"returnConditions"`
+}
+
+// MissionArtifacts represents all Factory.ai mission artifacts.
+type MissionArtifacts struct {
+	Architecture        string            `json:"architecture"`        // architecture.md content
+	ValidationContract *ValidationContract `json:"validationContract"` // Parsed from validation-contract.md
+	ServicesManifest   *ServicesManifest  `json:"servicesManifest"`   // Parsed from services.yaml
+	AGENTSMD           string            `json:"agentsMD"`           // AGENTS.md content
+	Library            map[string]string `json:"library"`            // library/ files
+	Skills             map[string]*Skill `json:"skills"`             // skills/ files
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 func copyStrings(src []string) []string {

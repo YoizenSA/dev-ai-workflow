@@ -1,0 +1,21 @@
+{
+  "name": "Test Mission",
+  "description": "Test mission to verify Factory.ai alignment",
+  "milestones": [
+    {
+      "name": "setup",
+      "description": "Initial setup"
+    }
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "Create a simple test file",
+      "skillName": "implementation",
+      "milestone": "setup",
+      "preconditions": [],
+      "expectedBehavior": ["Test file exists"],
+      "fulfills": ["VAL-CORE-001", "VAL-CROSS-001"]
+    }
+  ]
+}

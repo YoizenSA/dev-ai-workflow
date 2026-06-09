@@ -35,7 +35,10 @@ Subcommands:
   show               Show mission detail
   resume             Resume a paused mission
   cancel             Cancel a mission
-  serve              Start the Mission Control Web UI server`,
+  serve              Start the Mission Control Web UI server
+  validate-contract  Check validation contract coverage
+  show-contract      Show validation contract
+  show-architecture  Show architecture document`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown subcommand %q for missions", args[0])
@@ -55,6 +58,9 @@ Subcommands:
 	missionsCmd.AddCommand(newResumeCmd())
 	missionsCmd.AddCommand(newCancelCmd())
 	missionsCmd.AddCommand(newServeCmd())
+	missionsCmd.AddCommand(newValidateContractCmd())
+	missionsCmd.AddCommand(newShowContractCmd())
+	missionsCmd.AddCommand(newShowArchitectureCmd())
 
 	parent.AddCommand(missionsCmd)
 }
@@ -518,4 +524,121 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// ─── Validate Contract Command ───────────────────────────────────────────────
+
+func newValidateContractCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "validate-contract <mission-id>",
+		Short: "Check validation contract coverage",
+		Long:  "Verify that every assertion in the validation contract is claimed by exactly one feature.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runValidateContract,
+	}
+	return cmd
+}
+
+func runValidateContract(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	mission, err := store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("failed to load mission %q: %w", missionID, err)
+	}
+
+	if err := missions.CheckValidationContractCoverage(store, mission); err != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "Coverage check FAILED: %v\n", err)
+		return err
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Coverage check PASSED: all assertions are claimed by features.\n")
+	return nil
+}
+
+// ─── Show Contract Command ───────────────────────────────────────────────────
+
+func newShowContractCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show-contract <mission-id>",
+		Short: "Show validation contract",
+		Long:  "Display the validation contract for a mission with all assertions.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runShowContract,
+	}
+	return cmd
+}
+
+func runShowContract(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	missionDir := store.MissionDir(missionID)
+	parser := missions.NewContractParser(missionDir)
+	contract, err := parser.LoadContract()
+	if err != nil {
+		return fmt.Errorf("failed to load validation contract: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Validation Contract for mission %s\n\n", missionID)
+	
+	// Group by area
+	areas := make(map[string][]missions.ContractAssertion)
+	for _, assertion := range contract.Assertions {
+		areas[assertion.Area] = append(areas[assertion.Area], assertion)
+	}
+	
+	for area, assertions := range areas {
+		fmt.Fprintf(cmd.OutOrStdout(), "## %s\n", area)
+		for _, assertion := range assertions {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", assertion.ID, assertion.Title)
+			fmt.Fprintf(cmd.OutOrStdout(),    "    Tool: %s\n", assertion.Tool)
+			fmt.Fprintf(cmd.OutOrStdout(),    "    Evidence: %v\n", assertion.Evidence)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "")
+	}
+	
+	return nil
+}
+
+// ─── Show Architecture Command ────────────────────────────────────────────────
+
+func newShowArchitectureCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show-architecture <mission-id>",
+		Short: "Show architecture document",
+		Long:  "Display the architecture.md document for a mission.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runShowArchitecture,
+	}
+	return cmd
+}
+
+func runShowArchitecture(cmd *cobra.Command, args []string) error {
+	missionID := args[0]
+
+	store, err := openStore()
+	if err != nil {
+		return fmt.Errorf("failed to open missions store: %w", err)
+	}
+
+	missionDir := store.MissionDir(missionID)
+	archPath := missionDir + "/architecture.md"
+	
+	content, err := os.ReadFile(archPath)
+	if err != nil {
+		return fmt.Errorf("failed to read architecture.md: %w", err)
+	}
+	
+	fmt.Fprint(cmd.OutOrStdout(), string(content))
+	return nil
 }

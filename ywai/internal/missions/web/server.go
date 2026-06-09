@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 const DefaultPort = 5769
@@ -47,7 +48,14 @@ func New(port int, store *missions.MissionsStore) *Server {
 	}
 
 	mux := http.NewServeMux()
-	h := &Handlers{store: store, projectStore: projectStore, hub: s.hub, startTime: s.startedAt}
+	oc := opencode.DefaultClient(context.Background())
+	h := &Handlers{
+		store:          store,
+		projectStore:   projectStore,
+		hub:            s.hub,
+		startTime:      s.startedAt,
+		opencodeClient: oc,
+	}
 
 	// API routes
 	mux.HandleFunc("GET /api/health", h.HealthCheck)
@@ -60,6 +68,10 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux.HandleFunc("POST /api/missions/{id}/resume", h.ResumeMission)
 	mux.HandleFunc("POST /api/missions/{id}/cancel", h.CancelMission)
 	mux.HandleFunc("POST /api/missions/{id}/features/{featureId}/retry", h.RetryFeature)
+	
+	// Mission artifacts
+	mux.HandleFunc("GET /api/missions/{id}/artifacts/{type}", h.GetMissionArtifact)
+	mux.HandleFunc("POST /api/missions/{id}/validate-contract", h.ValidateContract)
 
 	// Mission creation + execution
 	mux.HandleFunc("POST /api/missions", h.CreateMission)
@@ -77,6 +89,7 @@ func New(port int, store *missions.MissionsStore) *Server {
 	// OpenCode config
 	mux.HandleFunc("GET /api/opencode/models", h.ListModels)
 	mux.HandleFunc("GET /api/opencode/agents", h.ListAgents)
+	mux.HandleFunc("GET /api/opencode/status", h.OpenCodeStatus)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.HandleWebSocket)

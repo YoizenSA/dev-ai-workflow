@@ -6,12 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,10 +25,11 @@ var upgrader = websocket.Upgrader{
 
 // Handlers holds references to the store, project store, and hub for HTTP handlers.
 type Handlers struct {
-	store        *missions.MissionsStore
-	projectStore *missions.ProjectStore
-	hub          *Hub
-	startTime    time.Time
+	store          *missions.MissionsStore
+	projectStore   *missions.ProjectStore
+	hub            *Hub
+	startTime      time.Time
+	opencodeClient opencode.Client
 }
 
 // ─── Health Check ──────────────────────────────────────────────────────────
@@ -58,68 +59,82 @@ func (h *Handlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // ListModels returns available opencode models from config.
 func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
-	home, _ := os.UserHomeDir()
-	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	data, err := os.ReadFile(configPath)
+	ctx := r.Context()
+	models, err := h.opencodeClient.ListModels(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"models": []string{}})
 		return
 	}
 
-	var config struct {
-		Model string `json:"model"`
-	}
-	json.Unmarshal(data, &config)
-
-	models := []string{}
-	if config.Model != "" {
-		models = append(models, config.Model)
-	}
-	// Add common alternatives
-	for _, m := range []string{
-		"openai/gpt-4o", "openai/gpt-4o-mini", "openai/o3-mini",
-		"anthropic/claude-sonnet-4", "anthropic/claude-haiku-4-5",
-		"google/gemini-2.5-flash", "google/gemini-2.5-pro",
-		"deepseek/deepseek-v4-flash", "deepseek/deepseek-v4",
-		"xiaomi-token-plan-sgp/deepseek-v4-flash",
-		"xiaomi-token-plan-sgp/deepseek-v4",
-		"xiaomi-token-plan-sgp/gpt-4o",
-	} {
-		if m != config.Model {
-			models = append(models, m)
+	// Get connected providers from opencode status
+	status, err := h.opencodeClient.Status(ctx)
+	connectedProviders := make(map[string]bool)
+	if err == nil && status.ConnectedProviders != nil {
+		for _, p := range status.ConnectedProviders {
+			connectedProviders[p] = true
 		}
 	}
 
+	// Group models by provider and filter by connected providers
+	modelsByProvider := make(map[string][]map[string]interface{})
+	for _, m := range models {
+		// Only include models from connected providers
+		if m.Provider != "" && !connectedProviders[m.Provider] {
+			continue
+		}
+		provider := m.Provider
+		if provider == "" {
+			provider = "default"
+		}
+		modelsByProvider[provider] = append(modelsByProvider[provider], map[string]interface{}{
+			"id":       m.ID,
+			"name":     m.Name,
+			"provider": m.Provider,
+		})
+	}
+
+	var defaultModel string
+	if len(models) > 0 {
+		defaultModel = models[0].ID
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"models":  models,
-		"default": config.Model,
+		"modelsByProvider": modelsByProvider,
+		"default":          defaultModel,
 	})
 }
 
 // ListAgents returns available opencode agent profiles.
 func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
-	home, _ := os.UserHomeDir()
-	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
-
-	entries, err := os.ReadDir(agentsDir)
+	ctx := r.Context()
+	agents, err := h.opencodeClient.ListAgents(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"agents": []string{}})
 		return
 	}
 
-	var agents []string
-	for _, e := range entries {
-		if !e.IsDir() && (strings.HasSuffix(e.Name(), ".md") || strings.HasSuffix(e.Name(), ".txt") || strings.HasSuffix(e.Name(), ".json")) {
-			name := strings.TrimSuffix(e.Name(), ".md")
-			name = strings.TrimSuffix(name, ".txt")
-			name = strings.TrimSuffix(name, ".json")
-			agents = append(agents, name)
-		}
+	ids := make([]string, len(agents))
+	for i, a := range agents {
+		ids[i] = a.ID
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"agents": agents,
+		"agents": ids,
 	})
+}
+
+// OpenCodeStatus returns the opencode server connection status.
+func (h *Handlers) OpenCodeStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	status, err := h.opencodeClient.Status(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"connected": false,
+			"error":     err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 // ─── Missions ──────────────────────────────────────────────────────────────
@@ -773,6 +788,77 @@ func (h *Handlers) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "deleted"})
+}
+
+// ─── Mission Artifacts ───────────────────────────────────────────────────────
+
+// GetMissionArtifact returns a mission artifact file content.
+func (h *Handlers) GetMissionArtifact(w http.ResponseWriter, r *http.Request) {
+	missionID := r.PathValue("id")
+	artifactType := r.PathValue("type")
+	
+	if missionID == "" || artifactType == "" {
+		writeError(w, http.StatusBadRequest, "mission ID and artifact type are required")
+		return
+	}
+	
+	missionDir := h.store.MissionDir(missionID)
+	var filePath string
+	
+	switch artifactType {
+	case "architecture":
+		filePath = missionDir + "/architecture.md"
+	case "validation-contract":
+		filePath = missionDir + "/validation-contract.md"
+	case "validation-state":
+		filePath = missionDir + "/validation-state.json"
+	case "services":
+		filePath = missionDir + "/services.yaml"
+	case "agents":
+		filePath = missionDir + "/AGENTS.md"
+	case "mission":
+		filePath = missionDir + "/mission.md"
+	default:
+		writeError(w, http.StatusBadRequest, "unknown artifact type")
+		return
+	}
+	
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write(content)
+}
+
+// ValidateContract checks validation contract coverage for a mission.
+func (h *Handlers) ValidateContract(w http.ResponseWriter, r *http.Request) {
+	missionID := r.PathValue("id")
+	
+	if missionID == "" {
+		writeError(w, http.StatusBadRequest, "mission ID is required")
+		return
+	}
+	
+	mission, err := h.store.LoadMission(missionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "mission not found")
+		return
+	}
+	
+	if err := missions.CheckValidationContractCoverage(h.store, mission); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"valid":  false,
+			"error":  err.Error(),
+		})
+		return
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"valid": true,
+	})
 }
 
 // ─── WebSocket ─────────────────────────────────────────────────────────────

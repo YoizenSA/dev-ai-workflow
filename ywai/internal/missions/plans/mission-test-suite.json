@@ -1,0 +1,185 @@
+{
+  "name": "missions-test-suite",
+  "description": "Build comprehensive validation contracts and testing infrastructure for the missions planning system, covering model integrity, plan structural validation, cross-feature assertion ownership, and full lifecycle end-to-end flows",
+  "project": "ywai",
+  "milestones": [
+    {
+      "name": "model-validation",
+      "description": "Validation contracts established for all mission data models — Mission, Feature, Milestone, and ValidationContract are tested for serialization, defaults, and edge cases"
+    },
+    {
+      "name": "plan-validation",
+      "description": "Planning validation engine verifies milestone references, feature dependency resolution, and assertion ID uniqueness; rejections are granular and actionable"
+    },
+    {
+      "name": "infra-boundaries",
+      "description": "Infrastructure boundary validation detects port conflicts, resolves service dependencies, and enforces off-limits resource policies"
+    },
+    {
+      "name": "test-foundations",
+      "description": "Test helpers, builder factories, and golden file infrastructure are reusable across the test suite, reducing boilerplate and improving assertion clarity"
+    },
+    {
+      "name": "end-to-end",
+      "description": "Full lifecycle flow from mission creation through validation and persistence is verified, including error paths and recovery"
+    }
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "Implement validation contract model with assertion types, coverage metrics, and JSON round-trip serialization tests",
+      "skillName": "implementation",
+      "milestone": "model-validation",
+      "preconditions": [],
+      "expectedBehavior": [
+        "ValidationContract marshals/unmarshals JSON without field loss",
+        "Assertion struct rejects empty ID and empty description",
+        "Coverage metric defaults to zero when omitted",
+        "Multiple validation contracts can be collected into a ValidationSummary"
+      ],
+      "fulfills": ["VAL-MODEL-001", "VAL-MODEL-002", "VAL-MODEL-003"]
+    },
+    {
+      "id": "feat-2",
+      "description": "Implement Mission struct validation: required name, non-empty milestones, features reference existing milestones, unique feature IDs",
+      "skillName": "implementation",
+      "milestone": "model-validation",
+      "preconditions": ["feat-1"],
+      "expectedBehavior": [
+        "Mission with empty name returns validation error",
+        "Duplicate feature ID across features returns validation error",
+        "Feature referencing nonexistent milestone returns validation error with milestone name",
+        "Valid mission with 3+ milestones and 5+ features passes validation"
+      ],
+      "fulfills": ["VAL-MODEL-004", "VAL-MODEL-005", "VAL-MODEL-006"]
+    },
+    {
+      "id": "feat-3",
+      "description": "Implement Feature validation: required ID and description, milestone must exist in parent mission, preconditions reference existing feature IDs, circular dependency detection",
+      "skillName": "implementation",
+      "milestone": "model-validation",
+      "preconditions": ["feat-2"],
+      "expectedBehavior": [
+        "Feature with missing ID fails validation",
+        "Circular precondition chain (feat-A → feat-B → feat-A) returns cycle error",
+        "Precondition referencing nonexistent feature returns targeted error",
+        "Feature with valid preconditions resolves into topological order"
+      ],
+      "fulfills": ["VAL-MODEL-007", "VAL-MODEL-008", "VAL-MODEL-009"]
+    },
+    {
+      "id": "feat-4",
+      "description": "Implement assertion ID uniqueness validation across all features in a mission plan — each VAL-AREA-XXX assertion ID must be claimed by exactly one feature",
+      "skillName": "implementation",
+      "milestone": "plan-validation",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Duplicate assertion ID across two features returns error with both feature IDs",
+        "Unclaimed assertion ID (in milestones but no feature) produces warning, not error",
+        "All assertion IDs in plan are claimed by exactly one feature after validation",
+        "Validation contract with assertion IDs can be cross-referenced against feature claims"
+      ],
+      "fulfills": ["VAL-PLAN-001", "VAL-PLAN-002", "VAL-PLAN-003"]
+    },
+    {
+      "id": "feat-5",
+      "description": "Implement skill name validation — skillName must be one of the allowed values (implementation, qa, devops, documentation, architecture)",
+      "skillName": "implementation",
+      "milestone": "plan-validation",
+      "preconditions": ["feat-4"],
+      "expectedBehavior": [
+        "Feature with 'implementation' skillName passes validation",
+        "Feature with invalid skillName returns error listing allowed values",
+        "Empty skillName defaults to 'implementation'",
+        "Documentation skills can only be assigned to documentation-type features"
+      ],
+      "fulfills": ["VAL-PLAN-004", "VAL-PLAN-005", "VAL-PLAN-006"]
+    },
+    {
+      "id": "feat-6",
+      "description": "Implement infrastructure boundary validation — service port conflict detection, off-limits resource enforcement, and dependency graph validation",
+      "skillName": "implementation",
+      "milestone": "infra-boundaries",
+      "preconditions": ["feat-5"],
+      "expectedBehavior": [
+        "Two services with same port return port conflict error with both service names",
+        "Service referencing off-limits port range (system < 1024) returns error",
+        "Service with unresolvable dependency returns error",
+        "Valid infrastructure plan with non-conflicting ports passes validation"
+      ],
+      "fulfills": ["VAL-INFRA-001", "VAL-INFRA-002", "VAL-INFRA-003", "VAL-INFRA-004"]
+    },
+    {
+      "id": "feat-7",
+      "description": "Build test factory/builder helpers for Mission, Feature, Milestone, and ValidationContract to reduce test boilerplate",
+      "skillName": "qa",
+      "milestone": "test-foundations",
+      "preconditions": ["feat-1"],
+      "expectedBehavior": [
+        "NewTestMission() returns valid mission with sensible defaults",
+        "NewTestFeature() auto-generates unique ID and references a valid milestone",
+        "Builder pattern supports override of any field",
+        "Helpers set up store with temp directory and return cleanup function"
+      ],
+      "fulfills": ["VAL-TEST-001", "VAL-TEST-002", "VAL-TEST-003"]
+    },
+    {
+      "id": "feat-8",
+      "description": "Implement golden file testing pattern for mission plan JSON output — generate golden files and provide update command",
+      "skillName": "qa",
+      "milestone": "test-foundations",
+      "preconditions": ["feat-7"],
+      "expectedBehavior": [
+        "Golden file test compares plan JSON output byte-for-byte against stored golden",
+        "Update flag (-update) rewrites golden files when plan output changes intentionally",
+        "Missing golden file causes clear error mentioning -update flag",
+        "Golden files are stored alongside tests in testdata/ directory"
+      ],
+      "fulfills": ["VAL-TEST-004", "VAL-TEST-005", "VAL-TEST-006"]
+    },
+    {
+      "id": "feat-9",
+      "description": "Implement skip-condition test flag for unimplemented features — tests that verify future behavior skip with clear message instead of failing",
+      "skillName": "qa",
+      "milestone": "test-foundations",
+      "preconditions": ["feat-8"],
+      "expectedBehavior": [
+        "Tests guarded by feature flag conditionally skip with t.Skip()",
+        "Skip message includes feature ID and expected milestone",
+        "Test runner reports skipped tests distinctly from passed/failed",
+        "Feature flags are centralized in a single location for toggling"
+      ],
+      "fulfills": ["VAL-TEST-007", "VAL-TEST-008"]
+    },
+    {
+      "id": "feat-10",
+      "description": "Implement end-to-end test for full mission lifecycle: create → validate → persist → retrieve → validate again",
+      "skillName": "qa",
+      "milestone": "end-to-end",
+      "preconditions": ["feat-6", "feat-9"],
+      "expectedBehavior": [
+        "CreateMission with valid plan returns mission with generated ID and timestamp",
+        "GetMission retrieves exactly what was created (deep equality)",
+        "CreateMission with invalid plan returns validation error, no persistence",
+        "UpdateMission preserves feature IDs and milestone references",
+        "DeleteMission removes mission and subsequent Get returns not-found error",
+        "Full round-trip plan survives JSON marshal/unmarshal without data loss"
+      ],
+      "fulfills": ["VAL-FLOW-001", "VAL-FLOW-002", "VAL-FLOW-003", "VAL-FLOW-004", "VAL-FLOW-005", "VAL-FLOW-006"]
+    },
+    {
+      "id": "feat-11",
+      "description": "Implement recovery and error handling tests: partial writes, corrupted data, concurrent access",
+      "skillName": "qa",
+      "milestone": "end-to-end",
+      "preconditions": ["feat-10"],
+      "expectedBehavior": [
+        "Corrupted mission file returns deserialization error with file path",
+        "Concurrent create and read of 10 missions completes without data race",
+        "Store with missing base directory auto-creates it on first write",
+        "Recovery from partial write leaves store in consistent state"
+      ],
+      "fulfills": ["VAL-FLOW-007", "VAL-FLOW-008", "VAL-FLOW-009"]
+    }
+  ]
+}

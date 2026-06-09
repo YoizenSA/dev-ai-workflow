@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"strings"
 	"sync"
 	"time"
@@ -87,8 +89,9 @@ func (h *Hub) Unregister(c *Client) {
 
 // Handlers holds references to the store and hub for HTTP handlers.
 type Handlers struct {
-	store *Store
-	hub   *Hub
+	store          *Store
+	hub            *Hub
+	opencodeClient opencode.Client
 }
 
 var upgrader = websocket.Upgrader{
@@ -834,12 +837,13 @@ func (h *Handlers) PutOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/config/agents
 func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
-	dir, err := agentsDir()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	if h.opencodeClient == nil {
+		writeJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
-	entries, err := os.ReadDir(dir)
+
+	ctx := r.Context()
+	agents, err := h.opencodeClient.ListAgents(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusOK, []interface{}{})
 		return
@@ -851,28 +855,11 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 		Mode string            `json:"mode,omitempty"`
 		Perm map[string]string `json:"permission,omitempty"`
 	}
-	var agents []agentInfo
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			info, _ := e.Info()
-			name := strings.TrimSuffix(e.Name(), ".md")
-			ai := agentInfo{Name: name, Size: info.Size()}
-
-			// Read frontmatter to extract mode and permissions
-			if data, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
-				fm, _ := parseFrontmatter(string(data))
-				if mode := extractModeFromFrontmatter(fm); mode != "" {
-					ai.Mode = mode
-				}
-				if perms := extractPermissionsFromFrontmatter(fm); len(perms) > 0 {
-					ai.Perm = perms
-				}
-			}
-
-			agents = append(agents, ai)
-		}
+	result := make([]agentInfo, len(agents))
+	for i, a := range agents {
+		result[i] = agentInfo{Name: a.ID, Size: 0}
 	}
-	writeJSON(w, http.StatusOK, agents)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // GET /api/config/agents/{name}

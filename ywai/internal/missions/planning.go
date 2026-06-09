@@ -101,10 +101,28 @@ func GeneratePlan(goal string, clarifications []QAPair) *PlanMission {
 // GeneratePlanWithOpencode spawns opencode to generate a plan from a goal.
 // Falls back to GeneratePlan if opencode is unavailable or fails.
 func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, model, agent string) *PlanMission {
+	// applyModelAgent ensures the selected model/agent are persisted on the plan
+	// so they flow through approval into the mission and reach the workers.
+	applyModelAgent := func(p *PlanMission) *PlanMission {
+		if p == nil {
+			return nil
+		}
+		if model != "" {
+			p.Model = model
+		}
+		if agent != "" {
+			p.Agent = agent
+		}
+		if project != "" {
+			p.Project = project
+		}
+		return p
+	}
+
 	opencodePath, err := DetectOpencode()
 	if err != nil {
 		log.Printf("opencode not available, falling back to local planning: %v", err)
-		return GeneratePlan(goal, clarifications)
+		return applyModelAgent(GeneratePlan(goal, clarifications))
 	}
 
 	// Build the prompt for opencode
@@ -131,28 +149,31 @@ func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, mod
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("opencode plan generation failed: %v, falling back to local planning", err)
-		return GeneratePlan(goal, clarifications)
+		return applyModelAgent(GeneratePlan(goal, clarifications))
 	}
 
 	// Try to parse the output as JSON plan
 	plan, parseErr := parsePlanFromOutput(string(output))
 	if parseErr != nil {
 		log.Printf("parse opencode output: %v, falling back to local planning", parseErr)
-		return GeneratePlan(goal, clarifications)
+		return applyModelAgent(GeneratePlan(goal, clarifications))
 	}
 
-	// Set project if provided
-	if project != "" {
-		plan.Project = project
-	}
-
-	return plan
+	return applyModelAgent(plan)
 }
 
 // buildPlanPrompt creates the prompt for opencode to generate a plan.
 func buildPlanPrompt(goal string, clarifications []QAPair, project string) string {
 	var sb strings.Builder
-	sb.WriteString("You are a technical architect. Generate a development plan for the following goal.\n\n")
+	sb.WriteString("You are a technical architect following Factory.ai mission planning methodology. Generate a development plan for the following goal.\n\n")
+	sb.WriteString("## Planning Phases (Factory.ai Methodology)\n")
+	sb.WriteString("1. Understand & Plan - Deeply understand requirements, investigate codebase, identify unknowns\n")
+	sb.WriteString("2. Architectural Design & Decomposition - Define system components, responsibilities, interactions\n")
+	sb.WriteString("3. Infrastructure & Boundaries - Check existing services, define port ranges, identify off-limits resources\n")
+	sb.WriteString("4. Testing & Validation Strategy - Determine testing infrastructure, user testing surface\n")
+	sb.WriteString("5. Identify & Confirm Milestones - Get explicit user agreement on milestone boundaries\n")
+	sb.WriteString("6. Create Mission Proposal - Generate the plan with features and assertions\n\n")
+	
 	sb.WriteString("## Goal\n")
 	sb.WriteString(goal)
 	sb.WriteString("\n\n")
@@ -186,17 +207,21 @@ func buildPlanPrompt(goal string, clarifications []QAPair, project string) strin
       "milestone": "milestone-name",
       "preconditions": [],
       "expectedBehavior": ["assertion 1"],
-      "fulfills": ["requirement reference"]
+      "fulfills": ["VAL-AREA-001"]
     }
   ]
 }
 
-IMPORTANT RULES:
+IMPORTANT RULES (Factory.ai Alignment):
 - Each feature must have a unique id (feat-1, feat-2, etc.)
 - Each feature must reference a milestone that exists
 - preconditions is a list of feature IDs that must be done first
 - Valid skillName values: implementation, qa, devops, documentation, architecture. Default to 'implementation' for coding tasks.
 - expectedBehavior is a list of verifiable assertions
+- fulfills MUST reference validation contract assertion IDs with format VAL-AREA-XXX (e.g., VAL-AUTH-001, VAL-CROSS-002)
+- Each assertion ID should be claimed by exactly ONE feature across the entire plan
+- Milestones should represent testable, coherent states that leave the product in a working condition
+- Consider infrastructure needs (services, ports, dependencies) when designing features
 - Features should be small and focused (one feature = one logical change)
 - Order features by dependency (prerequisites first)
 `)
@@ -732,7 +757,7 @@ func regeneratePlan(prevPlan *PlanMission, feedback string, clarifications []QAP
 // ─── Mission Lifecycle ─────────────────────────────────────────────────────
 
 // CreateMissionFromPlan creates a new Mission from a PlanMission in "planning"
-// state and persists it to the store.
+// state and persists it to the store. Also creates Factory.ai mission artifacts.
 func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, error) {
 	if err := ValidatePlan(plan); err != nil {
 		return nil, err
@@ -780,6 +805,14 @@ func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, e
 
 	if err := store.CreateMission(mission); err != nil {
 		return nil, fmt.Errorf("save mission: %w", err)
+	}
+
+	// Create Factory.ai mission artifacts
+	missionDir := store.MissionDir(missionID)
+	artifactCreator := NewArtifactCreator(missionDir, store)
+	if err := artifactCreator.CreateAllArtifacts(mission); err != nil {
+		// Log error but don't fail mission creation - artifacts can be created later
+		log.Printf("Warning: failed to create mission artifacts: %v", err)
 	}
 
 	return mission, nil

@@ -1,0 +1,108 @@
+{
+  "name": "mission-execution-engine",
+  "description": "Add mission plan execution, real-time progress tracking, report generation, and execution history to the missions system",
+  "project": "ywai",
+  "milestones": [
+    {
+      "name": "mission-executor",
+      "description": "Core execution engine that runs features with dependency ordering and pushes real-time status via WebSocket"
+    },
+    {
+      "name": "mission-reporting",
+      "description": "Structured mission reports with pass/fail assertions, duration, and web UI for execution view"
+    },
+    {
+      "name": "execution-persistence",
+      "description": "Persistent execution history store with replay and cross-session audit trail"
+    }
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "FeatureRunner that executes a single feature: runs its expectedBehavior assertions, tracks pass/fail count, duration, and logs per-assertion results with timestamps",
+      "skillName": "implementation",
+      "milestone": "mission-executor",
+      "preconditions": [],
+      "expectedBehavior": [
+        "FeatureRunner.Execute runs all expectedBehavior assertions for a given feature",
+        "Each assertion result records pass/fail, actual output, and duration",
+        "FeatureRunner respects a configurable timeout per feature",
+        "FeatureRunner emits status change events that the WebSocket hub can broadcast"
+      ],
+      "fulfills": ["VAL-EXEC-001", "VAL-EXEC-002", "VAL-EXEC-003", "VAL-EXEC-004"]
+    },
+    {
+      "id": "feat-2",
+      "description": "MissionOrchestrator that executes an entire PlanMission: resolves feature dependency order, runs features via FeatureRunner with parallel execution where possible, and updates mission-level status",
+      "skillName": "implementation",
+      "milestone": "mission-executor",
+      "preconditions": ["feat-1"],
+      "expectedBehavior": [
+        "MissionOrchestrator.Execute resolves a DAG of feature dependencies and runs them in topological order",
+        "Features with no interdependencies execute in parallel",
+        "A failed feature blocks dependents and marks them as blocked",
+        "Mission-level status transitions through running -> completed/failed as features complete",
+        "Orchestrator emits mission_status_changed events via WebSocket hub for each transition"
+      ],
+      "fulfills": ["VAL-EXEC-005", "VAL-EXEC-006", "VAL-EXEC-007", "VAL-EXEC-008", "VAL-EXEC-009"]
+    },
+    {
+      "id": "feat-3",
+      "description": "Add GET /api/execute endpoint and WebSocket event types (feature_execution_update, mission_execution_update) with payloads for assertion results and progress. Update app.js dashboard to show a live execution view with per-feature progress bars and assertion status",
+      "skillName": "implementation",
+      "milestone": "mission-reporting",
+      "preconditions": ["feat-2"],
+      "expectedBehavior": [
+        "POST /api/missions/{id}/execute triggers MissionOrchestrator.Execute in a goroutine and returns 202 Accepted",
+        "WebSocket broadcasts feature_execution_update with featureId, assertionResults, progress percentage",
+        "Dashboard UI shows an execution view with real-time per-feature status and assertion pass/fail indicators",
+        "Execution view updates without page reload using WebSocket events"
+      ],
+      "fulfills": ["VAL-EXEC-010", "VAL-EXEC-011", "VAL-EXEC-012", "VAL-EXEC-013"]
+    },
+    {
+      "id": "feat-4",
+      "description": "MissionReportGenerator that produces a structured report after execution: overall pass/fail, per-feature summary, per-assertion detail, total duration, and timestamps. Add GET /api/missions/{id}/reports/{reportId} endpoint and reusable UI component to render reports",
+      "skillName": "implementation",
+      "milestone": "mission-reporting",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "MissionReportGenerator produces a MissionReport with overall verdict, feature summaries, and assertion-level details",
+        "Report includes start/end timestamps and total duration for the mission and each feature",
+        "GET /api/missions/{id}/reports returns list of reports for a mission",
+        "GET /api/missions/{id}/reports/{reportId} returns a single report as JSON",
+        "Dashboard has a Reports tab showing all reports with pass/fail summary and drill-down"
+      ],
+      "fulfills": ["VAL-EXEC-014", "VAL-EXEC-015", "VAL-EXEC-016", "VAL-EXEC-017", "VAL-EXEC-018"]
+    },
+    {
+      "id": "feat-5",
+      "description": "ExecutionStore that persists MissionReport to the missions store directory with JSON encoding. Add listing and retrieval by mission ID and execution timestamp. The store auto-creates its base directory on first write and handles concurrent writes safely",
+      "skillName": "implementation",
+      "milestone": "execution-persistence",
+      "preconditions": ["feat-4"],
+      "expectedBehavior": [
+        "ExecutionStore.Save persists a MissionReport to disk as JSON under <store-dir>/executions/<missionId>/<timestamp>.json",
+        "ExecutionStore.ListByMission returns all execution reports for a mission sorted by timestamp descending",
+        "ExecutionStore.Get returns a single execution report by mission ID and execution timestamp",
+        "Base directory is auto-created on first write if it does not exist",
+        "Concurrent saves to the same mission do not corrupt data (mutex-protected)"
+      ],
+      "fulfills": ["VAL-EXEC-019", "VAL-EXEC-020", "VAL-EXEC-021", "VAL-EXEC-022", "VAL-EXEC-023"]
+    },
+    {
+      "id": "feat-6",
+      "description": "CLI command ywai mission execute <name> that loads a plan, runs it via the orchestrator, and prints the report to stdout. Include --watch flag for live terminal updates",
+      "skillName": "implementation",
+      "milestone": "execution-persistence",
+      "preconditions": ["feat-5"],
+      "expectedBehavior": [
+        "ywai mission execute <name> loads the plan, runs execution, prints summary report to stdout",
+        "ywai mission execute <name> --watch shows live progress with terminal spinner or progress bar",
+        "Command exits with code 0 on full success, 1 on any assertion failure",
+        "Help text is accessible via ywai mission execute --help"
+      ],
+      "fulfills": ["VAL-EXEC-024", "VAL-EXEC-025", "VAL-EXEC-026", "VAL-EXEC-027"]
+    }
+  ]
+}

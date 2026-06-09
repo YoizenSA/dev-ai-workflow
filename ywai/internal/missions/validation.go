@@ -368,9 +368,14 @@ func (vp *ValidationPipeline) RunUserTesting(ctx context.Context, mission *Missi
 	var assertions []ValidationAssertion
 	now := time.Now().UTC()
 
+	// Load validation contract if it exists to get assertion details
+	missionDir := vp.store.MissionDir(mission.ID)
+	contractParser := NewContractParser(missionDir)
+	contract, _ := contractParser.LoadContract()
+
 	for _, f := range features {
 		for _, fulfillsID := range f.Fulfills {
-			a := vp.testAssertion(fulfillsID, f, now)
+			a := vp.testAssertion(fulfillsID, f, now, contract)
 			assertions = append(assertions, a)
 		}
 	}
@@ -381,10 +386,19 @@ func (vp *ValidationPipeline) RunUserTesting(ctx context.Context, mission *Missi
 }
 
 // testAssertion checks a single assertion ID and returns its result.
-func (vp *ValidationPipeline) testAssertion(assertionID string, feature Feature, now time.Time) ValidationAssertion {
+func (vp *ValidationPipeline) testAssertion(assertionID string, feature Feature, now time.Time, contract *ValidationContract) ValidationAssertion {
 	a := ValidationAssertion{
 		ID:    assertionID,
 		RunAt: now,
+	}
+
+	// Try to get assertion details from contract
+	if contract != nil {
+		if contractAssertion := contract.GetAssertionByID(assertionID); contractAssertion != nil {
+			a.Description = contractAssertion.Description
+			a.Tool = contractAssertion.Tool
+			a.Surface = inferSurfaceFromTool(contractAssertion.Tool)
+		}
 	}
 
 	// Engine-level VAL-ENG-VAL assertions
@@ -397,12 +411,38 @@ func (vp *ValidationPipeline) testAssertion(assertionID string, feature Feature,
 		return vp.testCrossAssertion(assertionID, feature, now)
 	}
 
+	// If we have contract details but no specific test, mark as pending
+	if a.Description != "" {
+		a.Status = ValidationPending
+		return a
+	}
+
 	// Unknown assertions — mark as pending
-	a.Description = fmt.Sprintf("Assertion %s requires external tooling", assertionID)
+	if a.Description == "" {
+		a.Description = fmt.Sprintf("Assertion %s requires external tooling", assertionID)
+	}
 	a.Status = ValidationPending
-	a.Surface = "engine"
-	a.Tool = "auto-detect"
+	if a.Surface == "" {
+		a.Surface = "engine"
+	}
+	if a.Tool == "" {
+		a.Tool = "auto-detect"
+	}
 	return a
+}
+
+// inferSurfaceFromTool infers the validation surface from the tool name.
+func inferSurfaceFromTool(tool string) string {
+	switch tool {
+	case "agent-browser":
+		return "web"
+	case "tuistory":
+		return "tui"
+	case "bash", "curl":
+		return "cli"
+	default:
+		return "engine"
+	}
 }
 
 func (vp *ValidationPipeline) testVALENGVALAssertion(assertionID string, feature Feature, now time.Time) ValidationAssertion {
@@ -535,6 +575,22 @@ func (vp *ValidationPipeline) persistResults(missionID, milestoneName string, re
 
 	existingState.UpdatedAt = time.Now().UTC()
 	return vp.store.SaveValidationState(missionID, existingState)
+}
+
+// CheckValidationContractCoverage verifies that every assertion in the validation
+// contract is claimed by exactly one feature. Returns an error if coverage is incomplete.
+func CheckValidationContractCoverage(store *MissionsStore, mission *Mission) error {
+	missionDir := store.MissionDir(mission.ID)
+	contractParser := NewContractParser(missionDir)
+	
+	contract, err := contractParser.LoadContract()
+	if err != nil {
+		// If contract doesn't exist yet, skip coverage check
+		// This is expected during initial planning
+		return nil
+	}
+	
+	return contractParser.CheckCoverage(contract, mission.Features)
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────

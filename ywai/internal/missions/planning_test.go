@@ -21,6 +21,15 @@ func newTestStoreForPlanning(t *testing.T) (*MissionsStore, string) {
 	return store, dir
 }
 
+// forceLocalPlanning points PATH at an empty temp dir so DetectOpencode fails
+// and planning falls back to the deterministic local generator. Without this,
+// tests that exercise the interactive dialog would spawn the real opencode
+// binary when it happens to be installed, making them slow or hang on stdin.
+func forceLocalPlanning(t *testing.T) {
+	t.Helper()
+	t.Setenv("PATH", t.TempDir())
+}
+
 // ─── Plan Generation Tests (VAL-ENG-PLAN-002, VAL-ENG-PLAN-004) ──────────
 
 func TestGeneratePlanFromGoal(t *testing.T) {
@@ -217,6 +226,7 @@ func TestApprovePlanTransitionsToActive(t *testing.T) {
 
 // VAL-ENG-PLAN-006: Empty goal re-prompts, doesn't proceed.
 func TestEmptyGoalReturnsError(t *testing.T) {
+	forceLocalPlanning(t)
 	plan := GeneratePlan("", nil)
 	if plan != nil {
 		t.Error("expected nil plan for empty goal")
@@ -506,6 +516,7 @@ func TestPlanFromFileEmptyFile(t *testing.T) {
 // ─── Interactive Planning Dialog (VAL-ENG-PLAN-001) ────────────────────────
 
 func TestInteractivePlanningAsksForGoal(t *testing.T) {
+	forceLocalPlanning(t)
 	var stdin bytes.Buffer
 	var stdout bytes.Buffer
 
@@ -537,6 +548,7 @@ func TestInteractivePlanningAsksForGoal(t *testing.T) {
 }
 
 func TestInteractivePlanningRejectionThenApproval(t *testing.T) {
+	forceLocalPlanning(t)
 	var stdin bytes.Buffer
 	var stdout bytes.Buffer
 
@@ -568,6 +580,7 @@ func TestInteractivePlanningRejectionThenApproval(t *testing.T) {
 }
 
 func TestInteractivePlanningRejectsInvalidInput(t *testing.T) {
+	forceLocalPlanning(t)
 	var stdin bytes.Buffer
 	var stdout bytes.Buffer
 
@@ -615,6 +628,7 @@ func TestGeneratePlanConsistency(t *testing.T) {
 }
 
 func TestInteractivePlanningEmptyGoalRePrompt(t *testing.T) {
+	forceLocalPlanning(t)
 	var stdin bytes.Buffer
 	var stdout bytes.Buffer
 
@@ -679,6 +693,7 @@ func TestCreateMissionFromPlanStoresFeaturesJSON(t *testing.T) {
 
 // Test that a rejected plan can be regenerated with modified scope.
 func TestPlanRejectionAndRegeneration(t *testing.T) {
+	forceLocalPlanning(t)
 	store, _ := newTestStoreForPlanning(t)
 
 	plan := GeneratePlan("Build a chat application", nil)
@@ -719,6 +734,7 @@ func TestPlanRejectionAndRegeneration(t *testing.T) {
 // ─── Coverage: integration via missions.go ─────────────────────────────────
 
 func TestStartInteractivePlanning(t *testing.T) {
+	forceLocalPlanning(t)
 	var stdin bytes.Buffer
 	var stdout bytes.Buffer
 

@@ -6,12 +6,14 @@ const state = {
   currentProject: null,
   currentMission: null,
   currentMissionFeatures: [],
-  currentMissionLogs: [],
+  currentMissionLogs: {},
   proposedPlan: null,
   missionGoals: {},
   filters: { status: 'all' },
   ws: null,
-  wsReconnectTimer: null
+  wsReconnectTimer: null,
+  modelsByProvider: {},
+  expandedFeatures: new Set()
 };
 
 /* ─── DOM shortcuts ─── */
@@ -52,6 +54,46 @@ function toast(msg, type = 'info') {
 function countMissions(projectName) {
     if (!state.missions || !Array.isArray(state.missions)) return 0;
     return state.missions.filter(m => m.project === projectName).length;
+}
+
+/* ─── Model filter helper ─── */
+function filterModels(searchTerm) {
+  const select = $('mission-model');
+  if (!select || !state.modelsByProvider) return;
+
+  const lowerSearch = searchTerm.toLowerCase();
+  const currentValue = select.value;
+
+  // Clear existing options
+  select.innerHTML = '<option value="">Default</option>';
+
+  // Filter and rebuild options
+  Object.keys(state.modelsByProvider).sort().forEach(provider => {
+    const group = document.createElement('optgroup');
+    group.label = provider;
+    let hasVisibleModels = false;
+
+    state.modelsByProvider[provider].forEach(m => {
+      const modelName = (m.name || m.id).toLowerCase();
+      const modelId = m.id.toLowerCase();
+      if (lowerSearch === '' || modelName.includes(lowerSearch) || modelId.includes(lowerSearch)) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name || m.id;
+        group.appendChild(opt);
+        hasVisibleModels = true;
+      }
+    });
+
+    if (hasVisibleModels) {
+      select.appendChild(group);
+    }
+  });
+
+  // Restore selection if still valid
+  if (currentValue && Array.from(select.options).some(opt => opt.value === currentValue)) {
+    select.value = currentValue;
+  }
 }
 
 /* ─── Modal ─── */
@@ -184,6 +226,7 @@ function handleWsEvent(msg) {
       }
       // If feature is expanded, clear stale logs when going to in_progress
       if (status === 'in_progress') {
+        document.getElementById('start-banner')?.remove();
         const logContainer = document.getElementById(`logs-${CSS.escape(featureId)}`);
         if (logContainer && logContainer.querySelector('.log-entry')) {
           logContainer.innerHTML = '';
@@ -209,7 +252,7 @@ function handleWsEvent(msg) {
         logContainer.scrollTop = logContainer.scrollHeight;
       }
       // Store in state for persistence (used when re-expanding)
-      if (!state.currentMissionLogs) state.currentMissionLogs = {};
+      if (!state.currentMissionLogs || Array.isArray(state.currentMissionLogs)) state.currentMissionLogs = {};
       if (!state.currentMissionLogs[featureId]) state.currentMissionLogs[featureId] = [];
       state.currentMissionLogs[featureId].push({ message: line, timestamp: msg.timestamp || Date.now(), level: 'info' });
     }
@@ -276,11 +319,26 @@ async function loadMission(missionId, silent = false) {
   }
 }
 
+// parseLogContent turns the server's raw log "content" string into an array
+// of { message, level, timestamp } entries the UI can render and filter.
+function parseLogContent(content) {
+  if (!content || typeof content !== 'string') return [];
+  return content.split('\n').filter(line => line.length > 0).map(line => {
+    let level = 'info';
+    const lower = line.toLowerCase();
+    if (line.startsWith('[stderr]') || lower.includes('error') || lower.includes('failed')) level = 'error';
+    else if (lower.includes('warn')) level = 'warn';
+    return { message: line, level, timestamp: '' };
+  });
+}
+
 async function loadMissionLogs(missionId, featureId) {
+  if (!featureId) return;
   try {
-    const url = `/api/missions/${missionId}/logs` + (featureId ? `?featureId=${featureId}` : '');
-    const data = await apiFetch(url);
-    state.currentMissionLogs = data.logs || data || [];
+    const data = await apiFetch(`/api/missions/${missionId}/features/${featureId}/logs`);
+    const logs = parseLogContent(data.content);
+    if (!state.currentMissionLogs || Array.isArray(state.currentMissionLogs)) state.currentMissionLogs = {};
+    state.currentMissionLogs[featureId] = logs;
   } catch { /* silent */ }
 }
 
@@ -635,6 +693,7 @@ function renderNewMission(projectName) {
         <div style="display:flex;gap:8px;margin-top:8px;">
           <div style="flex:1;">
             <label class="form-label" for="mission-model">Model</label>
+            <input type="text" id="model-search" class="form-input" placeholder="Search models..." style="margin-bottom:4px;" oninput="filterModels(this.value)">
             <select id="mission-model" class="form-input">
               <option value="">Default</option>
             </select>
@@ -657,6 +716,45 @@ function renderNewMission(projectName) {
       <div id="plan-error" class="error-state hidden"></div>
     </div>
   `;
+
+  // Populate model/agent dropdowns from opencode config
+  setTimeout(() => {
+    apiFetch('/api/opencode/models').then(data => {
+      const select = $('mission-model');
+      if (select && data.modelsByProvider) {
+        // Store the original data for filtering
+        state.modelsByProvider = data.modelsByProvider;
+        // Group models by provider using optgroups
+        Object.keys(data.modelsByProvider).sort().forEach(provider => {
+          const group = document.createElement('optgroup');
+          group.label = provider;
+          data.modelsByProvider[provider].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name || m.id;
+            group.appendChild(opt);
+          });
+          select.appendChild(group);
+        });
+      }
+    }).catch(() => {});
+
+    apiFetch('/api/opencode/agents').then(data => {
+      const select = $('mission-agent');
+      if (select && data.agents) {
+        data.agents.forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a;
+          opt.textContent = a;
+          select.appendChild(opt);
+        });
+        // Set orchestrator as default agent
+        if (data.agents.includes('orchestrator')) {
+          select.value = 'orchestrator';
+        }
+      }
+    }).catch(() => {});
+  }, 50); // small delay to ensure DOM is ready
 }
 
 async function generatePlan(projectName) {
@@ -700,79 +798,102 @@ async function generatePlan(projectName) {
   }
 }
 
-/* ─── Plan Review View ─── */
-function renderPlanReview() {
-  const plan = state.proposedPlan;
-  const container = $(`view-plan-review`);
+/* ─── Plan Review View (editable prompt editor) ─── */
 
-  if (!plan) {
+// Normalize the proposed plan into a canonical editable shape so the editor
+// always has the same field names regardless of how the AI returned it.
+function normalizePlan(raw) {
+  const plan = raw || {};
+  const milestones = (plan.milestones || plan.phases || []).map(m => ({
+    name: m.name || '',
+    description: m.description || ''
+  }));
+  const features = (plan.features || []).map((f, i) => ({
+    id: f.id || `feat-${i + 1}`,
+    description: f.description || f.title || '',
+    skillName: f.skillName || f.skill || '',
+    milestone: f.milestone || '',
+    preconditions: f.preconditions || f.dependencies || [],
+    expectedBehavior: Array.isArray(f.expectedBehavior)
+      ? f.expectedBehavior
+      : (f.expectedBehavior ? [f.expectedBehavior] : (f.assertions || (f.validation ? [f.validation] : []))),
+    fulfills: f.fulfills || []
+  }));
+  return {
+    name: plan.name || plan.mission_name || 'Mission Plan',
+    description: plan.description || '',
+    project: plan.project || state.currentProject?.name || '',
+    model: plan.model || state.missionModel || '',
+    agent: plan.agent || state.missionAgent || '',
+    milestones,
+    features
+  };
+}
+
+function renderPlanReview() {
+  if (!state.proposedPlan) {
     navigate('new-mission', { projectName: state.currentProject?.name || '' });
     return;
   }
 
-  const milestones = plan.milestones || plan.phases || [];
-  const features = plan.features || [];
+  // Always work against a normalized, canonical plan object.
+  const plan = normalizePlan(state.proposedPlan);
+  state.proposedPlan = plan;
+  const container = $(`view-plan-review`);
+
+  const milestoneOptions = (selected) =>
+    `<option value=""${!selected ? ' selected' : ''}>— none —</option>` +
+    plan.milestones.map(m =>
+      `<option value="${esc(m.name)}"${m.name === selected ? ' selected' : ''}>${esc(m.name || 'Untitled')}</option>`
+    ).join('');
 
   container.innerHTML = `
-    <a class="back-link" onclick="navigate('new-mission',{projectName:'${esc(state.currentProject?.name || '')}'})">← Back to Goal</a>
+    <a class="back-link" onclick="navigate('new-mission',{projectName:'${esc(plan.project)}'})">← Back to Goal</a>
 
     <div class="steps">
-      <div class="step completed">
-        <span class="step-number">✓</span>
-        <span>Define Goal</span>
-      </div>
+      <div class="step completed"><span class="step-number">✓</span><span>Define Goal</span></div>
       <div class="step-line completed"></div>
-      <div class="step active">
-        <span class="step-number">2</span>
-        <span>Review Plan</span>
-      </div>
+      <div class="step active"><span class="step-number">2</span><span>Review &amp; Edit Plan</span></div>
       <div class="step-line"></div>
-      <div class="step">
-        <span class="step-number">3</span>
-        <span>Approve</span>
+      <div class="step"><span class="step-number">3</span><span>Approve</span></div>
+    </div>
+
+    <div class="plan-editor">
+      <div class="plan-editor-hint">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Edita los prompts del plan antes de aprobar. Cada feature es una tarjeta editable.
+      </div>
+
+      <div class="plan-edit-card plan-edit-meta">
+        <label class="form-label">Mission name</label>
+        <input type="text" class="form-input" id="plan-name" value="${esc(plan.name)}" placeholder="Mission name">
+        <label class="form-label" style="margin-top:12px;">Description</label>
+        <textarea class="form-textarea" id="plan-description" rows="2" placeholder="What is this mission about?">${esc(plan.description)}</textarea>
+      </div>
+
+      <div class="plan-section">
+        <div class="plan-section-head">
+          <h3>Milestones</h3>
+          <button class="btn btn-sm btn-ghost" onclick="addPlanMilestone()">+ Milestone</button>
+        </div>
+        <div id="plan-milestones">
+          ${plan.milestones.map((ms, i) => renderMilestoneEditor(ms, i)).join('') || `<p class="plan-empty">No milestones. Add one to group features.</p>`}
+        </div>
+      </div>
+
+      <div class="plan-section">
+        <div class="plan-section-head">
+          <h3>Features &amp; Prompts</h3>
+          <button class="btn btn-sm btn-ghost" onclick="addPlanFeature()">+ Feature</button>
+        </div>
+        <div id="plan-features">
+          ${plan.features.map((f, i) => renderFeatureEditor(f, i, milestoneOptions)).join('') || `<p class="plan-empty">No features yet. Add one to define work.</p>`}
+        </div>
       </div>
     </div>
 
-    <div class="plan-name">${esc(plan.name || plan.mission_name || 'Mission Plan')}</div>
-    ${plan.description ? `<p class="plan-description" style="margin-top:8px;margin-bottom:24px;">${esc(plan.description)}</p>` : ''}
-
-    ${milestones.length ? `
-    <div class="plan-section">
-      <h3>Milestones</h3>
-      ${milestones.map((ms, i) => `
-        <div class="plan-milestone">
-          <h4>${esc(ms.name || `Milestone ${i + 1}`)}</h4>
-          ${ms.description ? `<div class="plan-milestone-desc">${esc(ms.description)}</div>` : ''}
-          ${ms.tasks || ms.features ? (ms.tasks || ms.features).map(f => `
-            <div class="plan-feature">
-              <div class="plan-feature-header">
-                <span class="plan-feature-id">${esc(f.id || f.name || '')}</span>
-                <span class="plan-feature-desc">${esc(f.description || f.title || '')}</span>
-              </div>
-              ${(f.preconditions || f.dependencies || []).length ? `
-                <div class="plan-feature-meta">Depends on: ${(f.preconditions || f.dependencies || []).join(', ')}</div>
-              ` : ''}
-              ${f.expectedBehavior || f.assertions || f.validation ? `
-                <div class="plan-feature-meta">Expected: ${esc(f.expectedBehavior || f.assertions || f.validation || '')}</div>
-              ` : ''}
-            </div>`).join('') : ''}
-        </div>`).join('')}
-    </div>` : ''}
-
-    ${features.length ? `
-    <div class="plan-section">
-      <h3>Features</h3>
-      ${features.map(f => `
-        <div class="plan-feature">
-          <div class="plan-feature-header">
-            <span class="plan-feature-id">${esc(f.id || '')}</span>
-            <span class="plan-feature-desc">${esc(f.description || f.title || '')}</span>
-          </div>
-        </div>`).join('')}
-    </div>` : ''}
-
     <div class="plan-actions">
-      <button class="btn btn-ghost" onclick="navigate('new-mission',{projectName:'${esc(state.currentProject?.name || '')}'})">Reject</button>
+      <button class="btn btn-ghost" onclick="navigate('new-mission',{projectName:'${esc(plan.project)}'})">Reject</button>
       <button class="btn btn-success" onclick="approvePlan()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
         Approve Plan
@@ -782,10 +903,117 @@ function renderPlanReview() {
   `;
 }
 
+function renderMilestoneEditor(ms, i) {
+  return `
+    <div class="plan-edit-card plan-edit-milestone" data-ms-index="${i}">
+      <div class="plan-edit-card-head">
+        <span class="plan-edit-badge">M${i + 1}</span>
+        <input type="text" class="form-input ms-name" value="${esc(ms.name)}" placeholder="Milestone name">
+        <button class="btn-icon-danger" title="Remove milestone" onclick="removePlanMilestone(${i})">✕</button>
+      </div>
+      <textarea class="form-textarea ms-description" rows="2" placeholder="Milestone goal / description">${esc(ms.description)}</textarea>
+    </div>`;
+}
+
+function renderFeatureEditor(f, i, milestoneOptions) {
+  return `
+    <div class="plan-edit-card plan-edit-feature" data-feat-index="${i}" data-fulfills='${esc(JSON.stringify(f.fulfills || []))}'>
+      <div class="plan-edit-card-head">
+        <input type="text" class="form-input feat-id" value="${esc(f.id)}" placeholder="feat-id" style="max-width:160px;font-family:var(--font-mono);">
+        <select class="form-input feat-milestone" title="Milestone">${milestoneOptions(f.milestone)}</select>
+        <button class="btn-icon-danger" title="Remove feature" onclick="removePlanFeature(${i})">✕</button>
+      </div>
+      <label class="form-label">Prompt / Description</label>
+      <textarea class="form-textarea feat-description" rows="3" placeholder="Describe what to build...">${esc(f.description)}</textarea>
+      <div class="plan-edit-grid">
+        <div>
+          <label class="form-label">Skill</label>
+          <input type="text" class="form-input feat-skill" value="${esc(f.skillName)}" placeholder="implementation">
+        </div>
+        <div>
+          <label class="form-label">Preconditions <span class="form-hint">(comma-separated feature ids)</span></label>
+          <input type="text" class="form-input feat-preconditions" value="${esc((f.preconditions || []).join(', '))}" placeholder="feat-1, feat-2">
+        </div>
+      </div>
+      <label class="form-label">Expected behavior <span class="form-hint">(one assertion per line)</span></label>
+      <textarea class="form-textarea feat-expected" rows="3" placeholder="One assertion per line...">${esc((f.expectedBehavior || []).join('\n'))}</textarea>
+    </div>`;
+}
+
+// Read the current DOM editor state back into a canonical plan object.
+function collectEditedPlan() {
+  const splitLines = (s) => s.split('\n').map(x => x.trim()).filter(Boolean);
+  const splitCommas = (s) => s.split(',').map(x => x.trim()).filter(Boolean);
+
+  const milestones = Array.from(document.querySelectorAll('.plan-edit-milestone')).map(el => ({
+    name: el.querySelector('.ms-name')?.value.trim() || '',
+    description: el.querySelector('.ms-description')?.value.trim() || ''
+  }));
+
+  const features = Array.from(document.querySelectorAll('.plan-edit-feature')).map((el, i) => {
+    let fulfills = [];
+    try { fulfills = JSON.parse(el.getAttribute('data-fulfills') || '[]'); } catch { fulfills = []; }
+    return {
+      id: el.querySelector('.feat-id')?.value.trim() || `feat-${i + 1}`,
+      description: el.querySelector('.feat-description')?.value.trim() || '',
+      skillName: el.querySelector('.feat-skill')?.value.trim() || '',
+      milestone: el.querySelector('.feat-milestone')?.value || '',
+      preconditions: splitCommas(el.querySelector('.feat-preconditions')?.value || ''),
+      expectedBehavior: splitLines(el.querySelector('.feat-expected')?.value || ''),
+      fulfills
+    };
+  });
+
+  const plan = {
+    ...state.proposedPlan,
+    name: $('plan-name')?.value.trim() || 'Mission Plan',
+    description: $('plan-description')?.value.trim() || '',
+    project: state.proposedPlan?.project || state.currentProject?.name || '',
+    milestones,
+    features
+  };
+
+  state.proposedPlan = plan;
+  sessionStorage.setItem('proposedPlan', JSON.stringify(plan));
+  return plan;
+}
+
+function addPlanMilestone() {
+  collectEditedPlan();
+  state.proposedPlan.milestones.push({ name: '', description: '' });
+  renderPlanReview();
+}
+
+function removePlanMilestone(i) {
+  collectEditedPlan();
+  state.proposedPlan.milestones.splice(i, 1);
+  renderPlanReview();
+}
+
+function addPlanFeature() {
+  collectEditedPlan();
+  const n = state.proposedPlan.features.length + 1;
+  state.proposedPlan.features.push({
+    id: `feat-${n}`, description: '', skillName: 'implementation',
+    milestone: '', preconditions: [], expectedBehavior: [], fulfills: []
+  });
+  renderPlanReview();
+}
+
+function removePlanFeature(i) {
+  collectEditedPlan();
+  state.proposedPlan.features.splice(i, 1);
+  renderPlanReview();
+}
+
 async function approvePlan() {
-  const plan = state.proposedPlan;
+  const plan = collectEditedPlan();
   if (!plan) {
     toast('No plan to approve', 'error');
+    return;
+  }
+  if (!plan.features.length) {
+    toast('Add at least one feature before approving', 'error');
     return;
   }
 
@@ -798,9 +1026,11 @@ async function approvePlan() {
       body: JSON.stringify({ plan })
     });
     const mission = data.mission || data;
-    toast('Plan approved!', 'success');
+    toast('Plan approved! Click Run to start execution.', 'success');
     sessionStorage.removeItem('proposedPlan');
+    state.proposedPlan = null;
     state.currentMission = mission;
+    state.justApprovedMissionId = mission.id;
     navigate('mission-detail', { missionId: mission.id });
   } catch (e) {
     toast('Failed to approve plan: ' + e.message, 'error');
@@ -829,6 +1059,11 @@ async function renderMissionDetail(missionId) {
     return;
   }
 
+  // Ensure mission ID is set in state for feature log loading
+  if (!state.currentMission.id) {
+    state.currentMission.id = missionId;
+  }
+
   const st = (mission.status || 'pending').toLowerCase().replace(/\s+/g, '_');
   const features = state.currentMissionFeatures || [];
   const milestones = mission.milestones || [];
@@ -843,6 +1078,14 @@ async function renderMissionDetail(missionId) {
   const showPause = st === 'running' || st === 'in_progress';
   const showResume = st === 'paused';
   const showCancel = st === 'running' || st === 'in_progress' || st === 'paused';
+
+  // Show a "next step" banner when the mission is ready but hasn't started yet,
+  // so it's clear that approving a plan does NOT auto-run execution.
+  const notStarted = features.length > 0 && features.every(f => {
+    const s = (f.status || 'pending').toLowerCase().replace(/\s+/g, '_');
+    return s === 'pending' || s === '';
+  });
+  const showStartBanner = showRun && notStarted;
 
   container.innerHTML = `
     <a class="back-link" onclick="navigate('missions')">← All Missions</a>
@@ -868,6 +1111,21 @@ async function renderMissionDetail(missionId) {
       </div>
     </div>
 
+    ${showStartBanner ? `
+    <div class="start-banner" id="start-banner">
+      <div class="start-banner-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+      </div>
+      <div class="start-banner-body">
+        <strong>Plan aprobado.</strong> La misión está lista pero todavía no se ejecutó.
+        Revisá las ${features.length} features abajo y hacé clic en <em>Run mission</em> para iniciar la ejecución.
+      </div>
+      <button class="btn btn-success" onclick="runMission('${esc(mission.id)}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+        Run mission
+      </button>
+    </div>` : ''}
+
     ${milestones.length ? `
     <div class="milestones-section">
       <h3>Milestones <span style="font-size:13px;font-weight:400;color:var(--text-muted);">${completedFeatures}/${totalFeatures} features</span></h3>
@@ -886,6 +1144,21 @@ async function renderMissionDetail(missionId) {
       </div>
     </div>
   `;
+
+  // Restore expanded features after re-render
+  if (state.expandedFeatures && state.expandedFeatures.size > 0) {
+    const missionId = state.currentMission?.id;
+    state.expandedFeatures.forEach(fid => {
+      const row = document.querySelector(`.feature-row[data-feature-id="${fid}"]`);
+      if (row) {
+        row.classList.add('expanded');
+        const logsContainer = document.getElementById(`logs-${fid}`);
+        if (logsContainer && missionId) {
+          loadFeatureLogs(missionId, fid, logsContainer);
+        }
+      }
+    });
+  }
 }
 
 function renderFeatureRow(f, idx) {
@@ -893,7 +1166,7 @@ function renderFeatureRow(f, idx) {
   const canRetry = fst === 'failed';
   const hasDetails = f.preconditions?.length || f.expectedBehavior || f.handoff;
   return `
-    <div class="feature-row" data-feature-id="${esc(f.id || f.feature_id || idx)}">
+    <div class="feature-row${state.expandedFeatures?.has(f.id || f.feature_id || idx) ? ' expanded' : ''}" data-feature-id="${esc(f.id || f.feature_id || idx)}">
       <div class="feature-row-header">
         <span class="feature-id">${esc(f.id || f.feature_id || `F${idx + 1}`)}</span>
         <span class="feature-desc">${esc(f.description || f.title || '')}</span>
@@ -931,41 +1204,57 @@ function renderFeatureRow(f, idx) {
 }
 
 /* ─── Feature interactions ─── */
-function toggleFeature(header) {
+async function toggleFeature(header) {
   const row = header.closest('.feature-row');
   if (!row) return;
   const wasExpanded = row.classList.contains('expanded');
+  const fid = row.dataset.featureId;
 
   // Close others
   $$('.feature-row.expanded').forEach(r => {
-    if (r !== row) r.classList.remove('expanded');
+    if (r !== row) {
+      r.classList.remove('expanded');
+      const otherId = r.dataset.featureId;
+      if (otherId && state.expandedFeatures) {
+        state.expandedFeatures.delete(otherId);
+      }
+    }
   });
 
   if (!wasExpanded) {
     row.classList.add('expanded');
+    // Track expanded feature
+    if (!state.expandedFeatures) state.expandedFeatures = new Set();
+    state.expandedFeatures.add(fid);
     // Load logs for this feature
-    const fid = row.dataset.featureId;
     const missionId = state.currentMission?.id;
     if (missionId && fid) {
       const logsContainer = document.getElementById(`logs-${fid}`);
       if (logsContainer) {
-        loadFeatureLogs(missionId, fid, logsContainer);
+        await loadFeatureLogs(missionId, fid, logsContainer);
       }
     }
   } else {
     row.classList.remove('expanded');
+    if (state.expandedFeatures) {
+      state.expandedFeatures.delete(fid);
+    }
   }
 }
 
+// Expose toggleFeature to window for debugging
+window.toggleFeature = toggleFeature;
+
 async function loadFeatureLogs(missionId, featureId, container) {
   try {
-    const data = await apiFetch(`/api/missions/${missionId}/logs?featureId=${featureId}`);
-    const logs = data.logs || data || [];
-    if (!Array.isArray(logs) || !logs.length) {
+    const data = await apiFetch(`/api/missions/${missionId}/features/${featureId}/logs`);
+    const logs = parseLogContent(data.content);
+    if (!logs.length) {
       container.innerHTML = '<div class="logs-empty">No logs available</div>';
       return;
     }
-    state.currentMissionLogs = logs;
+    if (!state.currentMissionLogs || Array.isArray(state.currentMissionLogs)) state.currentMissionLogs = {};
+    state.currentMissionLogs[featureId] = logs;
     container.innerHTML = logs.map(l => {
       const ts = l.timestamp || l.time || l.ts || '';
       const level = (l.level || 'info').toLowerCase();
@@ -988,7 +1277,8 @@ function filterLogs(btn, featureId) {
   const container = document.getElementById(`logs-${featureId}`);
   if (!container) return;
 
-  const logs = state.currentMissionLogs || [];
+  const all = state.currentMissionLogs || {};
+  const logs = Array.isArray(all) ? all : (all[featureId] || []);
   const filtered = level === 'all' ? logs : logs.filter(l => (l.level || 'info').toLowerCase() === level);
 
   if (!filtered.length) {
@@ -1042,41 +1332,22 @@ function updateMissionActions(missionId, status) {
   const actionsContainer = document.querySelector('.detail-actions');
   if (!actionsContainer) return;
   const st = (status || '').toLowerCase().replace(/\s+/g, '_');
-  const showRun = st === 'pending' || st === 'draft';
+  const showRun = st === 'pending' || st === 'draft' || st === 'cancelled' || st === 'active' || st === 'planning';
   const showPause = st === 'running' || st === 'in_progress';
   const showResume = st === 'paused';
   const showCancel = st === 'running' || st === 'in_progress' || st === 'paused';
+
+  // Once execution starts (or mission is no longer in a "ready" state),
+  // hide the post-approval start banner.
+  if (!showRun || showPause) {
+    document.getElementById('start-banner')?.remove();
+  }
   actionsContainer.innerHTML = `
         ${showRun ? `<button class="btn btn-success" onclick="runMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg> Run</button>` : ''}
         ${showPause ? `<button class="btn btn-ghost" onclick="pauseMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause</button>` : ''}
         ${showResume ? `<button class="btn btn-success" onclick="resumeMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg> Resume</button>` : ''}
         ${showCancel ? `<button class="btn btn-ghost btn-danger" onclick="cancelMission('${esc(missionId)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel</button>` : ''}
   `;
-
-  // Load model/agent options from API
-  apiFetch('/api/opencode/models').then(data => {
-    const select = $('mission-model');
-    if (select && data.models) {
-      data.models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = m;
-        select.appendChild(opt);
-      });
-    }
-  }).catch(() => {});
-
-  apiFetch('/api/opencode/agents').then(data => {
-    const select = $('mission-agent');
-    if (select && data.agents) {
-      data.agents.forEach(a => {
-        const opt = document.createElement('option');
-        opt.value = a;
-        opt.textContent = a;
-        select.appendChild(opt);
-      });
-    }
-  }).catch(() => {});
 }
 
 async function retryFeature(featureId) {

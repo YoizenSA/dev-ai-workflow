@@ -87,17 +87,24 @@ func (e *Engine) RunMission(missionID string) error {
 	e.cancelFn = cancel
 	e.mu.Unlock()
 
+	// Load mission
+	mission, err := e.store.LoadMission(missionID)
+	if err != nil {
+		return fmt.Errorf("load mission: %w", err)
+	}
+
+	// Check validation contract coverage before running
+	// Log warning but don't fail execution for incomplete contracts
+	if err := CheckValidationContractCoverage(e.store, mission); err != nil {
+		log.Printf("validation contract coverage check warning: %v", err)
+	}
+
 	defer func() {
 		e.mu.Lock()
 		e.activeMissionID = ""
 		e.cancelFn = nil
 		e.mu.Unlock()
 	}()
-
-	mission, err := e.store.LoadMission(missionID)
-	if err != nil {
-		return fmt.Errorf("load mission: %w", err)
-	}
 
 	// Transition to active if still in planning
 	if mission.Status == MissionPlanning {

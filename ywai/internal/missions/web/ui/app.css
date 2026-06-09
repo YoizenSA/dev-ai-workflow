@@ -807,6 +807,163 @@ a:hover { text-decoration: underline; }
   margin-top: 24px;
 }
 
+/* ─── Plan Editor (editable prompts) ─── */
+.plan-editor {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.plan-editor-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 20px;
+}
+
+.plan-editor-hint svg { color: var(--accent-cyan); flex-shrink: 0; }
+
+.plan-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.plan-section-head h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.plan-edit-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 14px;
+  transition: border-color 0.15s;
+}
+
+.plan-edit-card:hover { border-color: var(--border-light); }
+.plan-edit-meta { margin-bottom: 24px; }
+
+.plan-edit-feature { border-left: 3px solid var(--accent-purple); }
+.plan-edit-milestone { border-left: 3px solid var(--accent-cyan); }
+
+.plan-edit-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.plan-edit-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.plan-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+@media (max-width: 600px) {
+  .plan-edit-grid { grid-template-columns: 1fr; }
+}
+
+.plan-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 16px;
+  text-align: center;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.form-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn-icon-danger {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.btn-icon-danger:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(244, 67, 54, 0.1);
+}
+
+/* ─── Post-approval start banner ─── */
+.start-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(90deg, rgba(76, 175, 80, 0.12), rgba(0, 188, 212, 0.06));
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.start-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(76, 175, 80, 0.18);
+  color: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.start-banner-body {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.start-banner-body strong { color: var(--text-primary); }
+.start-banner-body em { color: var(--accent-green); font-style: normal; font-weight: 600; }
+.start-banner .btn { flex-shrink: 0; }
+
 .spinner {
   display: inline-block;
   width: 16px;

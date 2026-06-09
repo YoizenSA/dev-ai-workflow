@@ -110,8 +110,10 @@ func DetectOpencode() (string, error) {
 //
 // The context directory includes:
 //   - feature.md: Feature description and expected behaviors
-//   - mission.md: Mission overview and context
-//   - AGENTS.md: Worker constraints and handoff format specification
+//   - mission.md: Mission overview and context (from mission directory if exists)
+//   - AGENTS.md: Worker constraints and handoff format specification (from mission directory if exists)
+//   - SKILL.md: The specific skill for this worker type (from mission directory if exists)
+//   - services.yaml: Services manifest (from mission directory if exists)
 func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature) (string, error) {
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("ywai-worker-%s-%s-*", mission.ID, feature.ID))
 	if err != nil {
@@ -140,20 +142,39 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature) (str
 		return "", fmt.Errorf("write feature.md: %w", err)
 	}
 
-	// Write mission.md
-	missionMD := fmt.Sprintf("# %s\n\n%s\n\nMission ID: %s\nStatus: %s\n",
-		mission.Name, mission.Name, mission.ID, mission.Status)
-	// Add milestone descriptions
-	for _, ms := range mission.Milestones {
-		missionMD += fmt.Sprintf("\n## Milestone: %s\n%s\n", ms.Name, ms.Description)
-	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "mission.md"), []byte(missionMD), 0644); err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("write mission.md: %w", err)
+	// Load mission.md from mission directory if it exists, otherwise create basic one
+	missionDir := wm.store.MissionDir(mission.ID)
+	missionMDPath := filepath.Join(missionDir, "mission.md")
+	if missionMDContent, err := os.ReadFile(missionMDPath); err == nil {
+		// Use existing mission.md
+		if err := os.WriteFile(filepath.Join(tmpDir, "mission.md"), missionMDContent, 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write mission.md: %w", err)
+		}
+	} else {
+		// Create basic mission.md
+		missionMD := fmt.Sprintf("# %s\n\n%s\n\nMission ID: %s\nStatus: %s\n",
+			mission.Name, mission.Name, mission.ID, mission.Status)
+		for _, ms := range mission.Milestones {
+			missionMD += fmt.Sprintf("\n## Milestone: %s\n%s\n", ms.Name, ms.Description)
+		}
+		if err := os.WriteFile(filepath.Join(tmpDir, "mission.md"), []byte(missionMD), 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write mission.md: %w", err)
+		}
 	}
 
-	// Write AGENTS.md with worker instructions and handoff format
-	agentsMD := `# Worker Instructions
+	// Load AGENTS.md from mission directory if it exists, otherwise create basic one
+	agentsMDPath := filepath.Join(missionDir, "AGENTS.md")
+	if agentsMDContent, err := os.ReadFile(agentsMDPath); err == nil {
+		// Use existing AGENTS.md
+		if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), agentsMDContent, 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write AGENTS.md: %w", err)
+		}
+	} else {
+		// Create basic AGENTS.md
+		agentsMD := `# Worker Instructions
 
 You are a worker in the ywai Missions system. Your task is to implement the feature described in feature.md.
 
@@ -184,9 +205,115 @@ The final line of stdout MUST be a single JSON object with the following structu
   "discoveredIssues": []
 }
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("write AGENTS.md: %w", err)
+		if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write AGENTS.md: %w", err)
+		}
+	}
+
+	// Load SKILL.md for this worker type if it exists
+	skillLoader := NewSkillLoader(missionDir)
+	if skill, err := skillLoader.LoadSkill(feature.SkillName); err == nil {
+		// Write the skill content to SKILL.md in temp dir
+		skillPath := filepath.Join(tmpDir, "SKILL.md")
+		skillContent := fmt.Sprintf(`---
+name: %s
+description: %s
+---
+
+# %s
+
+## Required Skills and Tools
+`, skill.Name, skill.Description, skill.Name)
+		
+		if len(skill.RequiredSkills) > 0 {
+			skillContent += "**Skills:**\n"
+			for _, s := range skill.RequiredSkills {
+				skillContent += fmt.Sprintf("- %s\n", s)
+			}
+		}
+		
+		if len(skill.RequiredTools) > 0 {
+			skillContent += "\n**Tools:**\n"
+			for _, t := range skill.RequiredTools {
+				skillContent += fmt.Sprintf("- %s\n", t)
+			}
+		}
+		
+		skillContent += fmt.Sprintf(`
+## Work Procedure
+
+%s
+
+## Example Handoff
+
+%s
+
+## When to Return to Orchestrator
+
+%s
+`, skill.WorkProcedure, skill.ExampleHandoff, skill.ReturnConditions)
+		
+		if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write SKILL.md: %w", err)
+		}
+	} else {
+		// Use default skill if custom skill not found
+		if defaultSkill, err := GetDefaultSkill(feature.SkillName); err == nil {
+			skillPath := filepath.Join(tmpDir, "SKILL.md")
+			skillContent := fmt.Sprintf(`---
+name: %s
+description: %s
+---
+
+# %s
+
+## Required Skills and Tools
+`, defaultSkill.Name, defaultSkill.Description, defaultSkill.Name)
+			
+			if len(defaultSkill.RequiredSkills) > 0 {
+				skillContent += "**Skills:**\n"
+				for _, s := range defaultSkill.RequiredSkills {
+					skillContent += fmt.Sprintf("- %s\n", s)
+				}
+			}
+			
+			if len(defaultSkill.RequiredTools) > 0 {
+				skillContent += "\n**Tools:**\n"
+				for _, t := range defaultSkill.RequiredTools {
+					skillContent += fmt.Sprintf("- %s\n", t)
+				}
+			}
+			
+			skillContent += fmt.Sprintf(`
+## Work Procedure
+
+%s
+
+## Example Handoff
+
+%s
+
+## When to Return to Orchestrator
+
+%s
+`, defaultSkill.WorkProcedure, defaultSkill.ExampleHandoff, defaultSkill.ReturnConditions)
+			
+			if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+				os.RemoveAll(tmpDir)
+				return "", fmt.Errorf("write default SKILL.md: %w", err)
+			}
+		}
+	}
+
+	// Copy services.yaml if it exists
+	servicesPath := filepath.Join(missionDir, "services.yaml")
+	if servicesContent, err := os.ReadFile(servicesPath); err == nil {
+		if err := os.WriteFile(filepath.Join(tmpDir, "services.yaml"), servicesContent, 0644); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("write services.yaml: %w", err)
+		}
 	}
 
 	// Create the mission's worker artifacts directory for logs

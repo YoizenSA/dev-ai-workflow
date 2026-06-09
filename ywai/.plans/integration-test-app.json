@@ -1,0 +1,387 @@
+{
+  "name": "integration-test-app",
+  "description": "Build a comprehensive integration test application that exercises ywai's CLI, install workflow, agent detection, kanban, and missions subsystems end-to-end as a standalone binary",
+  "project": "ywai",
+  "milestones": [
+    {
+      "name": "test-runner",
+      "description": "Integration test application binary with CLI entry point, configurable test runner, pass/fail reporting, and build integration into dev.sh"
+    },
+    {
+      "name": "cli-tests",
+      "description": "Integration tests for all CLI commands: version, help, install, update, skills, agents, doctor — verifying correct exit codes, output format, and error messages"
+    },
+    {
+      "name": "install-tests",
+      "description": "Integration tests for install/update/skill-registry workflows covering dry-run, presets (full-gentleman, ecosystem-only, minimal), agent targeting, and scope (global, workspace)"
+    },
+    {
+      "name": "agent-tests",
+      "description": "Integration tests for agent detection across all 15 supported agents, verifying binary path discovery, agent ID matching, and configuration loading"
+    },
+    {
+      "name": "kanban-tests",
+      "description": "Integration tests for the kanban subsystem: session lifecycle, delegation creation, board operations, activities, dependency graph, and pending decisions resolution"
+    },
+    {
+      "name": "missions-tests",
+      "description": "Integration tests for the missions subsystem: planning lifecycle (explore → propose → spec → design → tasks → apply → verify → archive), store persistence, recovery, and validation"
+    }
+  ],
+  "features": [
+    {
+      "id": "feat-1",
+      "description": "Create integration test app binary at cmd/integration-test/ with CLI entry point accepting --suite, --filter, --verbose flags",
+      "skillName": "implementation",
+      "milestone": "test-runner",
+      "preconditions": [],
+      "expectedBehavior": [
+        "Integration test binary builds with `go build ./cmd/integration-test`",
+        "Binary accepts --help flag and prints usage",
+        "Binary accepts --suite flag to select test suites",
+        "Binary accepts --filter flag to run specific tests by name",
+        "Binary exits 0 on all tests pass, non-zero on failures"
+      ],
+      "fulfills": ["VAL-RUN-001"]
+    },
+    {
+      "id": "feat-2",
+      "description": "Implement test runner with suite registration, individual test registration, pass/fail counters, and TAP or JUnit-compatible output",
+      "skillName": "implementation",
+      "milestone": "test-runner",
+      "preconditions": ["feat-1"],
+      "expectedBehavior": [
+        "Test suites can be registered with a name and teardown",
+        "Individual tests can be registered with a name and function",
+        "Runner returns test count, passed count, failed count",
+        "Runner supports JUnit XML output for CI integration",
+        "Runner supports verbose mode showing each test name as it executes"
+      ],
+      "fulfills": ["VAL-RUN-002", "VAL-RUN-003"]
+    },
+    {
+      "id": "feat-3",
+      "description": "Add reusable test helpers: buildYwaiBinary, runYwai, withTempDir, withFakeAgent, withFakeGentleAI — ported and expanded from e2e/helper_test.go",
+      "skillName": "implementation",
+      "milestone": "test-runner",
+      "preconditions": ["feat-2"],
+      "expectedBehavior": [
+        "buildYwaiBinary compiles ywai and returns path to binary",
+        "runYwai executes command and returns stdout, stderr, exit code",
+        "withTempDir creates and cleans up temp directory",
+        "withFakeAgent creates mock agent binary in PATH",
+        "withFakeGentleAI creates mock gentle-ai binary and config"
+      ],
+      "fulfills": ["VAL-RUN-004"]
+    },
+    {
+      "id": "feat-4",
+      "description": "Add dev.sh integration-test subcommand that builds and runs the integration test app, wiring into the existing dev workflow",
+      "skillName": "devops",
+      "milestone": "test-runner",
+      "preconditions": ["feat-1", "feat-3"],
+      "expectedBehavior": [
+        "`bash scripts/dev.sh integration-test` builds and runs all integration tests",
+        "Non-zero exit when any test fails",
+        "Output includes suite name, test count, and pass/fail summary"
+      ],
+      "fulfills": ["VAL-RUN-005"]
+    },
+    {
+      "id": "feat-5",
+      "description": "Implement CLI version command integration test verifying --version flag output and formatting",
+      "skillName": "implementation",
+      "milestone": "cli-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test builds ywai binary and runs `ywai --version`",
+        "Output contains version string (semver format)",
+        "Output does not contain error messages",
+        "Command exits with code 0"
+      ],
+      "fulfills": ["VAL-CLI-001"]
+    },
+    {
+      "id": "feat-6",
+      "description": "Implement CLI help command integration test verifying --help flag output across all subcommands",
+      "skillName": "implementation",
+      "milestone": "cli-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test builds ywai binary and runs `ywai --help`",
+        "Output lists all available commands (install, update, skills, agents, doctor, skill-registry)",
+        "Output contains usage information",
+        "Command exits with code 0"
+      ],
+      "fulfills": ["VAL-CLI-002"]
+    },
+    {
+      "id": "feat-7",
+      "description": "Implement CLI install command smoke test verifying --dry-run flag works without gentle-ai installed",
+      "skillName": "implementation",
+      "milestone": "cli-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test withFakeAgent and runs `ywai install --dry-run`",
+        "Output indicates dry-run mode",
+        "Command exits with code 0",
+        "No actual files are modified"
+      ],
+      "fulfills": ["VAL-CLI-003"]
+    },
+    {
+      "id": "feat-8",
+      "description": "Implement CLI doctor and skills commands integration test verifying output structure",
+      "skillName": "implementation",
+      "milestone": "cli-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test runs `ywai doctor --dry-run` and verifies health check output",
+        "Test runs `ywai skills` and verifies skill listing format",
+        "Skills output includes 'Total:' count",
+        "Commands exit with code 0"
+      ],
+      "fulfills": ["VAL-CLI-004"]
+    },
+    {
+      "id": "feat-9",
+      "description": "Implement integration test for unknown/malformed CLI commands verifying error handling",
+      "skillName": "implementation",
+      "milestone": "cli-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Running `ywai unknown-command` exits with non-zero code",
+        "Output contains error message indicating unknown command",
+        "Running `ywai --invalid-flag` exits with non-zero code"
+      ],
+      "fulfills": ["VAL-CLI-005"]
+    },
+    {
+      "id": "feat-10",
+      "description": "Implement install dry-run integration test for all preset options (full-gentleman, ecosystem-only, minimal, custom)",
+      "skillName": "implementation",
+      "milestone": "install-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test `ywai install --dry-run --preset full-gentleman` outputs expected install steps",
+        "Test `ywai install --dry-run --preset ecosystem-only` outputs expected install steps",
+        "Test `ywai install --dry-run --preset minimal` outputs expected install steps",
+        "No actual writes occur for any preset in dry-run mode"
+      ],
+      "fulfills": ["VAL-INST-001"]
+    },
+    {
+      "id": "feat-11",
+      "description": "Implement install integration test with --agent flag targeting supported agents",
+      "skillName": "implementation",
+      "milestone": "install-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test `ywai install --dry-run --agent opencode` includes opencode-specific setup",
+        "Test `ywai install --dry-run --agent claude-code` includes claude-code-specific setup",
+        "Test uses withFakeAgent to simulate agent presence",
+        "Output references the specified agent"
+      ],
+      "fulfills": ["VAL-INST-002"]
+    },
+    {
+      "id": "feat-12",
+      "description": "Implement install integration test for scope handling (global vs workspace) and SDD mode flags",
+      "skillName": "implementation",
+      "milestone": "install-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test `ywai install --dry-run --scope global` uses global paths",
+        "Test `ywai install --dry-run --scope workspace` uses local project paths",
+        "Test `ywai install --dry-run --sdd-mode single` includes single-mode setup",
+        "Test `ywai install --dry-run --sdd-mode multi` includes multi-mode setup"
+      ],
+      "fulfills": ["VAL-INST-003"]
+    },
+    {
+      "id": "feat-13",
+      "description": "Implement update integration test verifying update --dry-run output with sync, permission, and theme flags",
+      "skillName": "implementation",
+      "milestone": "install-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test `ywai update --dry-run` outputs expected update steps",
+        "Test `ywai update --dry-run --strict-tdd` includes TDD mode configuration",
+        "Test `ywai update --dry-run --include-permissions` references permissions sync"
+      ],
+      "fulfills": ["VAL-INST-004"]
+    },
+    {
+      "id": "feat-14",
+      "description": "Implement skill-registry integration test verifying refresh with --cwd flag",
+      "skillName": "implementation",
+      "milestone": "install-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Test `ywai skill-registry --dry-run --cwd /tmp` runs without error",
+        "Test `ywai skill-registry --cwd /tmp` exits with code 0 (with fake gentle-ai)"
+      ],
+      "fulfills": ["VAL-INST-005"]
+    },
+    {
+      "id": "feat-15",
+      "description": "Implement integration test for detecting all 15 supported agent binaries",
+      "skillName": "implementation",
+      "milestone": "agent-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "withFakeAgent creates mock agent binaries with specific names",
+        "`ywai agents` lists detected agents",
+        "Detected agent IDs match the created mock binaries",
+        "Non-existent agent binaries are not listed"
+      ],
+      "fulfills": ["VAL-AGNT-001"]
+    },
+    {
+      "id": "feat-16",
+      "description": "Implement integration test for agent detection edge cases: multiple agents, config-dir agents, and graceful handling of missing agents",
+      "skillName": "implementation",
+      "milestone": "agent-tests",
+      "preconditions": ["feat-3", "feat-15"],
+      "expectedBehavior": [
+        "Multiple concurrent agent binaries are all detected",
+        "Config-dir-based agents (antigravity, trae-ide, windsurf) are detected via config paths",
+        "Running `ywai agents` with no agents outputs appropriate message",
+        "Invalid/non-existent agent binary in PATH is handled without crash"
+      ],
+      "fulfills": ["VAL-AGNT-002"]
+    },
+    {
+      "id": "feat-17",
+      "description": "Implement kanban session lifecycle integration test: create, list, delete sessions across multiple test projects",
+      "skillName": "implementation",
+      "milestone": "kanban-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Creating a kanban session returns a valid session ID",
+        "Listing sessions returns the created session",
+        "Sessions are grouped by project",
+        "Deleting a session removes it from listings",
+        "Deleting a session also removes all its delegations"
+      ],
+      "fulfills": ["VAL-KNB-001"]
+    },
+    {
+      "id": "feat-18",
+      "description": "Implement kanban delegation lifecycle integration test: create, update column/status, and remove delegations",
+      "skillName": "implementation",
+      "milestone": "kanban-tests",
+      "preconditions": ["feat-3", "feat-17"],
+      "expectedBehavior": [
+        "Creating a delegation under a session links it to the session",
+        "Updating delegation column moves card visually",
+        "Updating delegation status transitions through pending/running/review/done",
+        "Board view shows delegations in correct columns"
+      ],
+      "fulfills": ["VAL-KNB-002"]
+    },
+    {
+      "id": "feat-19",
+      "description": "Implement kanban dependency graph integration test: add dependencies between delegations and verify graph output",
+      "skillName": "implementation",
+      "milestone": "kanban-tests",
+      "preconditions": ["feat-3", "feat-17", "feat-18"],
+      "expectedBehavior": [
+        "Dependencies between delegations are stored and retrievable",
+        "Dependency graph returns nodes and edges",
+        "Blocked delegations are reflected in the graph structure"
+      ],
+      "fulfills": ["VAL-KNB-003"]
+    },
+    {
+      "id": "feat-20",
+      "description": "Implement kanban activities and pending decisions integration test: add/resolve activities, decisions, blockers",
+      "skillName": "implementation",
+      "milestone": "kanban-tests",
+      "preconditions": ["feat-3", "feat-17", "feat-18"],
+      "expectedBehavior": [
+        "Adding a progress activity returns a valid activity ID",
+        "Adding a decision activity appears in pending decisions",
+        "Adding a blocker activity appears in pending decisions",
+        "Resolving a decision removes it from pending decisions",
+        "Activity timeline for a delegation shows all activities in order"
+      ],
+      "fulfills": ["VAL-KNB-004"]
+    },
+    {
+      "id": "feat-21",
+      "description": "Implement missions planning lifecycle integration test: full explore → propose → spec → design → tasks → apply → verify → archive sequence",
+      "skillName": "implementation",
+      "milestone": "missions-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Exploring a plan idea creates exploration artifacts with questions and answers",
+        "Proposing creates a structured change proposal with intent and scope",
+        "Specifying creates delta specs with requirements and scenarios",
+        "Designing creates technical design with architecture approach",
+        "Task planning breaks down into implementation tasks with preconditions",
+        "Applying creates feature files matching the task descriptions",
+        "Verifying executes tests and reports pass/fail against specs",
+        "Archiving syncs delta specs to mark completion"
+      ],
+      "fulfills": ["VAL-MSN-001"]
+    },
+    {
+      "id": "feat-22",
+      "description": "Implement missions store persistence integration test: create, list, get, and recover mission plans across sessions",
+      "skillName": "implementation",
+      "milestone": "missions-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "Creating a plan persists it to disk in the store directory",
+        "Listing plans returns all stored plans",
+        "Getting a plan by name returns the correct plan",
+        "After simulated crash/restart, plans are recoverable from disk",
+        "Corrupted plan files are handled without crashing the store"
+      ],
+      "fulfills": ["VAL-MSN-002"]
+    },
+    {
+      "id": "feat-23",
+      "description": "Implement missions validation integration test: plan validation rules, missing fields, and constraint checking",
+      "skillName": "implementation",
+      "milestone": "missions-tests",
+      "preconditions": ["feat-3"],
+      "expectedBehavior": [
+        "A plan with missing required fields fails validation with descriptive errors",
+        "A plan with circular dependency references fails validation",
+        "A plan with duplicate feature IDs fails validation",
+        "A valid plan passes all validation checks without errors"
+      ],
+      "fulfills": ["VAL-MSN-003"]
+    },
+    {
+      "id": "feat-24",
+      "description": "Implement cross-cutting integration test: full agent detection → mission creation → kanban delegation pipeline",
+      "skillName": "implementation",
+      "milestone": "missions-tests",
+      "preconditions": ["feat-3", "feat-15", "feat-17", "feat-21"],
+      "expectedBehavior": [
+        "Detected agents can be assigned as mission plan participants",
+        "Mission tasks can be delegated to kanban as tracked work items",
+        "Kanban delegation status reflects mission task completion state",
+        "End-to-end flow completes without errors across subsystem boundaries"
+      ],
+      "fulfills": ["VAL-CROSS-001"]
+    },
+    {
+      "id": "feat-25",
+      "description": "Implement recovery and error handling integration test: corrupted data, missing dependencies, permission errors",
+      "skillName": "implementation",
+      "milestone": "missions-tests",
+      "preconditions": ["feat-3", "feat-22"],
+      "expectedBehavior": [
+        "Missing kanban data directory auto-creates on first operation",
+        "Recovery from partially written mission plan succeeds",
+        "Permission-denied errors on store directory produce meaningful error messages",
+        "Timeout handling for long-running operations with configurable duration"
+      ],
+      "fulfills": ["VAL-CROSS-002"]
+    }
+  ]
+}

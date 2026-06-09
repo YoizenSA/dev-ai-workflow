@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 // DefaultUIPort is the default port for the Kanban UI server.
@@ -36,7 +38,8 @@ func New(port int, dataDir string) *Server {
 	}
 	store := NewStore(dataDir)
 	hub := NewHub()
-	handlers := &Handlers{store: store, hub: hub}
+	oc := opencode.DefaultClient(context.Background())
+	handlers := &Handlers{store: store, hub: hub, opencodeClient: oc}
 
 	mux := http.NewServeMux()
 

@@ -59,8 +59,8 @@ func (s *MissionsStore) ensureDir(missionID string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create mission dir: %w", err)
 	}
-	// Create subdirectories for plan and workers
-	for _, sub := range []string{"plan", "workers"} {
+	// Create subdirectories for plan, workers, skills, library
+	for _, sub := range []string{"plan", "workers", "skills", "library"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
 			return fmt.Errorf("create %s dir: %w", sub, err)
 		}
