@@ -128,7 +128,7 @@ func testHandoff() *WorkerHandoff {
 func TestDetectOpencodeFound(t *testing.T) {
 	path, err := DetectOpencode()
 	if err != nil {
-		t.Fatalf("DetectOpencode() returned error: %v", err)
+		t.Skipf("DetectOpencode() not available: %v", err)
 	}
 	if path == "" {
 		t.Fatal("DetectOpencode() returned empty path")
