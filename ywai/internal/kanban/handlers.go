@@ -13,12 +13,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/gorilla/websocket"
 )
 
@@ -354,10 +354,22 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validColumns := map[string]bool{"backlog": true, "ready": true, "in_progress": true, "review": true, "done": true}
-	if req.Column != nil && *req.Column != "" && !validColumns[*req.Column] {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid column"})
-		return
+	// Map kanban status to FSM and validate transition
+	if req.Status != nil && *req.Status != "" {
+		fsmStatus := MapKanbanStatusToFSM(*req.Status)
+		s := string(fsmStatus)
+		req.Status = &s // store will receive FSM value
+
+		// Load current delegation to get current FSM status
+		if cur, ok := h.store.GetDelegation(id); ok {
+			if err := missions.IsValidTransition(
+				missions.MissionStatus(cur.Status),
+				fsmStatus,
+			); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+		}
 	}
 
 	d, err := h.store.UpdateDelegation(id, req.Status, req.Column, req.HandoffPreview, req.Blocker)
@@ -367,8 +379,8 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 	}
 	h.broadcastUpdate("delegation.status_changed", d)
 
-	// Auto-unblock dependent delegations when this one moves to done
-	if req.Status != nil && *req.Status == "done" {
+	// Auto-unblock dependent delegations when this one moves to completed (FSM)
+	if req.Status != nil && *req.Status == string(missions.MissionCompleted) {
 		unblockedIDs := h.store.AutoUnblock(id)
 		for _, uid := range unblockedIDs {
 			if ud, ok := h.store.GetDelegation(uid); ok {

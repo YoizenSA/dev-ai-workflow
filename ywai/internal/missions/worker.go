@@ -46,6 +46,7 @@ const (
 type WorkerConfig struct {
 	Timeout    time.Duration
 	MaxRetries int
+	AgentsDir  string // path to agents/core directory for stable instructions caching
 }
 
 // DefaultWorkerConfig returns a WorkerConfig with sensible defaults.
@@ -90,6 +91,21 @@ func (wm *WorkerManager) SetLogBroadcast(fn LogBroadcastFunc) {
 	if fn != nil {
 		wm.logBroadcast = fn
 	}
+}
+
+// buildStableInstructions reads the agent's AGENT.md for stable instruction caching.
+// Returns empty string if the agent type or agents directory is not configured
+// (graceful degradation — caller falls back to volatile-only content).
+func (wm *WorkerManager) buildStableInstructions(agentType string) string {
+	if agentType == "" || wm.config.AgentsDir == "" {
+		return ""
+	}
+	path := filepath.Join(wm.config.AgentsDir, agentType, "AGENT.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // ─── opencode Detection ────────────────────────────────────────────────────
@@ -173,39 +189,44 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature) (str
 			return "", fmt.Errorf("write AGENTS.md: %w", err)
 		}
 	} else {
-		// Create basic AGENTS.md
-		agentsMD := `# Worker Instructions
+		// Build AGENTS.md with stable-first structure for LLM caching.
+		// STABLE PART FIRST (byte-identical per agent type → cached by LLM provider).
+		var agentsMD strings.Builder
 
-You are a worker in the ywai Missions system. Your task is to implement the feature described in feature.md.
+		stableInstructions := wm.buildStableInstructions(mission.Agent)
+		if stableInstructions != "" {
+			agentsMD.WriteString(stableInstructions)
+			agentsMD.WriteString("\n\n---\n\n## Current Task\n\n")
+		}
 
-## Context
-- feature.md: The feature you need to implement
-- mission.md: Mission overview
+		// VOLATILE PART (changes every invocation)
+		agentsMD.WriteString(fmt.Sprintf("Goal: %s\n", mission.Name))
+		agentsMD.WriteString("\n## Context\n")
+		agentsMD.WriteString("- feature.md: The feature you need to implement\n")
+		agentsMD.WriteString("- mission.md: Mission overview\n")
+		agentsMD.WriteString("\n## Rules\n")
+		agentsMD.WriteString("1. Follow existing codebase patterns\n")
+		agentsMD.WriteString("2. Run tests before completing your work\n")
+		agentsMD.WriteString("3. Return a structured handoff JSON as the LAST line of stdout\n")
+		agentsMD.WriteString("\n## Handoff Format\n")
+		agentsMD.WriteString("The final line of stdout MUST be a single JSON object with the following structure:\n")
+		agentsMD.WriteString("{\n")
+		agentsMD.WriteString("  \"salientSummary\": \"1-4 sentence summary of what was accomplished\",\n")
+		agentsMD.WriteString("  \"whatWasImplemented\": \"Detailed description of what was implemented\",\n")
+		agentsMD.WriteString("  \"whatWasLeftUndone\": \"What was left incomplete (empty string if complete)\",\n")
+		agentsMD.WriteString("  \"verification\": {\n")
+		agentsMD.WriteString("    \"commandsRun\": [\n")
+		agentsMD.WriteString("      {\"command\": \"command that was run\", \"exitCode\": 0, \"observation\": \"what happened\"}\n")
+		agentsMD.WriteString("    ]\n")
+		agentsMD.WriteString("  },\n")
+		agentsMD.WriteString("  \"tests\": {\n")
+		agentsMD.WriteString("    \"added\": [{\"file\": \"path/to/test\", \"cases\": [{\"name\": \"TestName\", \"verifies\": \"what it verifies\"}]}],\n")
+		agentsMD.WriteString("    \"coverage\": \"summary of coverage\"\n")
+		agentsMD.WriteString("  },\n")
+		agentsMD.WriteString("  \"discoveredIssues\": []\n")
+		agentsMD.WriteString("}\n")
 
-## Rules
-1. Follow existing codebase patterns
-2. Run tests before completing your work
-3. Return a structured handoff JSON as the LAST line of stdout
-
-## Handoff Format
-The final line of stdout MUST be a single JSON object with the following structure:
-{
-  "salientSummary": "1-4 sentence summary of what was accomplished",
-  "whatWasImplemented": "Detailed description of what was implemented",
-  "whatWasLeftUndone": "What was left incomplete (empty string if complete)",
-  "verification": {
-    "commandsRun": [
-      {"command": "command that was run", "exitCode": 0, "observation": "what happened"}
-    ]
-  },
-  "tests": {
-    "added": [{"file": "path/to/test", "cases": [{"name": "TestName", "verifies": "what it verifies"}]}],
-    "coverage": "summary of coverage"
-  },
-  "discoveredIssues": []
-}
-`
-		if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte(agentsMD.String()), 0644); err != nil {
 			os.RemoveAll(tmpDir)
 			return "", fmt.Errorf("write AGENTS.md: %w", err)
 		}

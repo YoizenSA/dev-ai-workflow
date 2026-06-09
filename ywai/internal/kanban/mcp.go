@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 )
 
 // --- MCP Protocol Types ---
@@ -591,12 +593,34 @@ func (m *MCPAdapter) callUpdateDelegation(args json.RawMessage) (*ToolsCallResul
 		return nil, err
 	}
 
+	// Fetch current delegation to get its current FSM status for transition validation
+	var curStatus string
+	if req.Status != "" {
+		getBody, getErr := m.doRequest("GET", fmt.Sprintf("/api/delegations/%s", req.ID), nil)
+		if getErr == nil {
+			var cur Delegation
+			if json.Unmarshal(getBody, &cur) == nil {
+				curStatus = cur.Status
+			}
+		}
+	}
+
 	bodyMap := make(map[string]string)
 	if req.Column != "" {
 		bodyMap["column"] = req.Column
 	}
 	if req.Status != "" {
-		bodyMap["status"] = req.Status
+		// Map kanban status to FSM and validate the transition
+		fsmStatus := MapKanbanStatusToFSM(req.Status)
+		if curStatus != "" {
+			if err := missions.IsValidTransition(
+				missions.MissionStatus(curStatus),
+				fsmStatus,
+			); err != nil {
+				return nil, fmt.Errorf("invalid status transition: %w", err)
+			}
+		}
+		bodyMap["status"] = string(fsmStatus)
 	}
 	if req.HandoffPreview != "" {
 		bodyMap["handoff_preview"] = req.HandoffPreview

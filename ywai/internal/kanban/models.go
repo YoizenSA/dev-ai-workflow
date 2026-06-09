@@ -3,6 +3,8 @@ package kanban
 import (
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 )
 
 // Session represents a working session in the Kanban board.
@@ -48,6 +50,83 @@ type Delegation struct {
 	Blocker        string     `json:"blocker,omitempty"`
 	PendingAction  bool       `json:"pending_action,omitempty"`
 	LatestActivity string     `json:"latest_activity,omitempty"`
+}
+
+// DerivedColumn returns the kanban column derived from the delegated FSM status.
+func (d *Delegation) DerivedColumn() string {
+	return MapFSMToKanbanColumn(missions.MissionStatus(d.Status))
+}
+
+// DerivedStatus returns the kanban-equivalent status for the stored FSM status.
+// This is useful for display/backward-compat when consuming delegation JSON.
+func (d *Delegation) DerivedStatus() string {
+	return MapFSMToKanbanStatus(missions.MissionStatus(d.Status))
+}
+
+// MapKanbanStatusToFSM converts a kanban delegation status to engine MissionStatus.
+func MapKanbanStatusToFSM(status string) missions.MissionStatus {
+	switch status {
+	case "pending":
+		return missions.MissionPending
+	case "running":
+		return missions.MissionActive
+	case "review":
+		return missions.MissionValidating
+	case "changes":
+		return missions.MissionPaused
+	case "blocked":
+		return missions.MissionPaused
+	case "done":
+		return missions.MissionCompleted
+	default:
+		return missions.MissionPending
+	}
+}
+
+// MapFSMToKanbanColumn derives the kanban column from an engine MissionStatus.
+func MapFSMToKanbanColumn(status missions.MissionStatus) string {
+	switch status {
+	case missions.MissionPending, missions.MissionPlanning:
+		return "backlog"
+	case missions.MissionActive:
+		return "in_progress"
+	case missions.MissionPaused:
+		return "blocked"
+	case missions.MissionValidating:
+		return "review"
+	case missions.MissionCompleted:
+		return "done"
+	case missions.MissionFailed:
+		return "blocked"
+	case missions.MissionCancelled:
+		return "backlog"
+	default:
+		return "backlog"
+	}
+}
+
+// MapFSMToKanbanStatus converts an engine MissionStatus back to the kanban delegation status.
+func MapFSMToKanbanStatus(status missions.MissionStatus) string {
+	switch status {
+	case missions.MissionPending:
+		return "pending"
+	case missions.MissionPlanning:
+		return "pending"
+	case missions.MissionActive:
+		return "running"
+	case missions.MissionPaused:
+		return "blocked"
+	case missions.MissionValidating:
+		return "review"
+	case missions.MissionCompleted:
+		return "done"
+	case missions.MissionFailed:
+		return "blocked"
+	case missions.MissionCancelled:
+		return "pending"
+	default:
+		return "pending"
+	}
 }
 
 // ActivityType categorizes agent activity events.

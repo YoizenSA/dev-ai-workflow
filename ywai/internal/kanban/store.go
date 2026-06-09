@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 )
 
 // Store is a thread-safe in-memory store for sessions and delegations.
@@ -270,13 +272,14 @@ func (s *Store) CreateDelegation(sessionID, agent, taskSummary string, deps []st
 		deps = []string{}
 	}
 
+	fsmStatus := missions.MissionPending
 	d := &Delegation{
 		ID:           newID(),
 		SessionID:    sessionID,
 		Agent:        agent,
 		TaskSummary:  taskSummary,
-		Status:       "pending",
-		Column:       "backlog",
+		Status:       string(fsmStatus),
+		Column:       MapFSMToKanbanColumn(fsmStatus),
 		Dependencies: deps,
 		CreatedAt:    time.Now(),
 	}
@@ -347,14 +350,17 @@ func (s *Store) UpdateDelegation(id string, status, column, handoffPreview, bloc
 
 	if status != nil {
 		d.Status = *status
-		if *status == "running" && d.StartedAt == nil {
+		fsmStatus := missions.MissionStatus(*status)
+		if fsmStatus == missions.MissionActive && d.StartedAt == nil {
 			d.StartedAt = &now
 		}
-		if *status == "done" && d.CompletedAt == nil {
+		if fsmStatus == missions.MissionCompleted && d.CompletedAt == nil {
 			d.CompletedAt = &now
 		}
-	}
-	if column != nil {
+		// Column is derived from Status, not independently set.
+		d.Column = MapFSMToKanbanColumn(fsmStatus)
+	} else if column != nil {
+		// Accept explicit column only when status is not being changed.
 		d.Column = *column
 	}
 	if handoffPreview != nil {
@@ -387,7 +393,7 @@ func (s *Store) BoardView(sessionID string) (*BoardView, error) {
 
 	for _, d := range s.delegations {
 		if d.SessionID == sessionID {
-			col := d.Column
+			col := d.DerivedColumn()
 			if _, ok := columns[col]; !ok {
 				col = "backlog"
 			}
@@ -630,19 +636,20 @@ func (s *Store) AutoUnblock(delegationID string) []string {
 			continue
 		}
 
-		// Check if ALL dependencies are done
+		// Check if ALL dependencies are done (using FSM status)
 		allDone := true
 		for _, dep := range d.Dependencies {
 			depD, ok := s.delegations[dep]
-			if !ok || depD.Status != "done" {
+			if !ok || missions.MissionStatus(depD.Status) != missions.MissionCompleted {
 				allDone = false
 				break
 			}
 		}
 
-		if allDone && (d.Column == "backlog" || d.Status == "blocked") {
-			d.Column = "ready"
-			d.Status = "pending"
+		if allDone && (d.Column == "backlog" || missions.MissionStatus(d.Status) == missions.MissionPaused) {
+			fsmStatus := missions.MissionPending
+			d.Column = MapFSMToKanbanColumn(fsmStatus)
+			d.Status = string(fsmStatus)
 			d.Blocker = ""
 			unblocked = append(unblocked, d.ID)
 		}

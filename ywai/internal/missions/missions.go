@@ -2,12 +2,15 @@ package missions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/events"
 )
 
 // DefaultBaseDir is the default directory for all mission data.
@@ -23,6 +26,8 @@ type EngineConfig struct {
 	WorkerTimeout   time.Duration
 	MaxRetries      int
 	Validation      ValidationConfig
+	EventStore      events.Store  // optional event sourcing; nil = no events emitted
+	AgentsDir       string        // path to agents/core directory for stable instructions caching
 }
 
 // DefaultEngineConfig returns sensible defaults.
@@ -49,6 +54,76 @@ type Engine struct {
 	cancelFn     context.CancelFunc
 }
 
+// validMissionTransitions defines allowed FSM state transitions for missions.
+var validMissionTransitions = map[MissionStatus][]MissionStatus{
+	MissionPending:    {},
+	MissionPlanning:   {MissionActive},
+	MissionActive:     {MissionPaused, MissionCompleted, MissionFailed, MissionCancelled, MissionValidating},
+	MissionPaused:     {MissionActive, MissionCancelled},
+	MissionFailed:     {MissionPlanning},
+	MissionCancelled:  {},
+	MissionCompleted:  {},
+	MissionValidating: {MissionCompleted, MissionFailed, MissionActive},
+}
+
+// ValidateTransition checks if a mission state transition is valid per the FSM.
+func (e *Engine) ValidateTransition(current, next MissionStatus) error {
+	return IsValidTransition(current, next)
+}
+
+// IsValidTransition is a standalone validation function that checks
+// if a mission state transition is valid per the FSM rules.
+// Unlike ValidateTransition, it does not require an Engine instance.
+func IsValidTransition(current, next MissionStatus) error {
+	allowed, ok := validMissionTransitions[current]
+	if !ok {
+		return fmt.Errorf("unknown current mission state: %s", current)
+	}
+	for _, a := range allowed {
+		if a == next {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid mission transition: %s → %s (allowed from %s: %v)",
+		current, next, current, allowed)
+}
+
+// emitEvent writes an event to the configured event store (if any).
+// It is a no-op when EventStore is nil.
+func (e *Engine) emitEvent(sessionID, missionID string, eventType events.EventType, data interface{}) {
+	if e.config.EventStore == nil {
+		return
+	}
+
+	seq, err := e.config.EventStore.LastSequence(sessionID)
+	if err != nil {
+		log.Printf("event sourcing: failed to get last sequence: %v", err)
+		return
+	}
+
+	var dataBytes []byte
+	if data != nil {
+		dataBytes, err = json.Marshal(data)
+		if err != nil {
+			log.Printf("event sourcing: failed to marshal event data: %v", err)
+			return
+		}
+	}
+
+	event := events.Event{
+		ID:        fmt.Sprintf("%s-%d", missionID, seq+1),
+		SessionID: sessionID,
+		MissionID: missionID,
+		Type:      eventType,
+		Data:      dataBytes,
+		Sequence:  seq + 1,
+		Timestamp: time.Now(),
+	}
+	if err := e.config.EventStore.Append(event); err != nil {
+		log.Printf("event sourcing: failed to append event: %v", err)
+	}
+}
+
 // NewEngine creates a new mission orchestration engine.
 func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFunc) *Engine {
 	if broadcast == nil {
@@ -60,7 +135,7 @@ func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFun
 		val:       NewValidationPipeline(store, config.Validation),
 		broadcast: broadcast,
 	}
-	e.workers = NewWorkerManager(store, WorkerConfig{Timeout: config.WorkerTimeout, MaxRetries: config.MaxRetries})
+	e.workers = NewWorkerManager(store, WorkerConfig{Timeout: config.WorkerTimeout, MaxRetries: config.MaxRetries, AgentsDir: config.AgentsDir})
 	e.workers.SetLogBroadcast(func(missionID, featureID, line string) {
 		e.broadcast("log_update", map[string]interface{}{
 			"missionId": missionID,
@@ -93,6 +168,8 @@ func (e *Engine) RunMission(missionID string) error {
 		return fmt.Errorf("load mission: %w", err)
 	}
 
+	e.emitEvent(mission.ID, mission.ID, events.EventMissionCreated, nil)
+
 	// Check validation contract coverage before running
 	// Log warning but don't fail execution for incomplete contracts
 	if err := CheckValidationContractCoverage(e.store, mission); err != nil {
@@ -112,11 +189,15 @@ func (e *Engine) RunMission(missionID string) error {
 		if err != nil {
 			return fmt.Errorf("transition to active: %w", err)
 		}
+		if err := e.ValidateTransition(mission.Status, newStatus); err != nil {
+			return fmt.Errorf("mission %s: %w", missionID, err)
+		}
 		mission.Status = newStatus
 		mission.UpdatedAt = time.Now()
 		if err := e.store.SaveMission(mission); err != nil {
 			return fmt.Errorf("save mission: %w", err)
 		}
+		e.emitEvent(mission.ID, mission.ID, events.EventMissionStarted, nil)
 	}
 
 	// Recover any in-progress features from a previous crash
@@ -155,6 +236,7 @@ func (e *Engine) RunMission(missionID string) error {
 
 		// Check if mission was paused or cancelled
 		if mission.Status == MissionPaused {
+			e.emitEvent(mission.ID, mission.ID, events.EventMissionPaused, nil)
 			e.broadcast("mission_status_changed", map[string]interface{}{
 				"id":     mission.ID,
 				"status": mission.Status,
@@ -163,6 +245,7 @@ func (e *Engine) RunMission(missionID string) error {
 			return nil // caller should check status and wait
 		}
 		if mission.Status == MissionCancelled {
+			e.emitEvent(mission.ID, mission.ID, events.EventMissionCancelled, nil)
 			e.broadcast("mission_status_changed", map[string]interface{}{
 				"id":     mission.ID,
 				"status": mission.Status,
@@ -246,9 +329,15 @@ func (e *Engine) RunMission(missionID string) error {
 
 			newStatus, tErr := TransitionMissionStatus(mission.Status, MissionValidating)
 			if tErr == nil {
+				if err := e.ValidateTransition(mission.Status, newStatus); err != nil {
+					return fmt.Errorf("mission %s: %w", missionID, err)
+				}
 				mission.Status = newStatus
 				mission.UpdatedAt = time.Now()
 				_ = e.store.SaveMission(mission)
+				e.emitEvent(mission.ID, mission.ID, events.EventMissionValidated, map[string]string{
+					"milestone": ms.Name,
+				})
 			}
 
 			e.broadcast("mission_status_changed", map[string]interface{}{
@@ -287,18 +376,26 @@ func (e *Engine) RunMission(missionID string) error {
 	if allDone {
 		newStatus, tErr := TransitionMissionStatus(mission.Status, MissionCompleted)
 		if tErr == nil {
+			if err := e.ValidateTransition(mission.Status, newStatus); err != nil {
+				return fmt.Errorf("mission %s: %w", missionID, err)
+			}
 			mission.Status = newStatus
 			now := time.Now()
 			mission.CompletedAt = &now
 			mission.UpdatedAt = now
 			_ = e.store.SaveMission(mission)
+			e.emitEvent(mission.ID, mission.ID, events.EventMissionCompleted, nil)
 		}
 	} else {
 		newStatus, tErr := TransitionMissionStatus(mission.Status, MissionFailed)
 		if tErr == nil {
+			if err := e.ValidateTransition(mission.Status, newStatus); err != nil {
+				return fmt.Errorf("mission %s: %w", missionID, err)
+			}
 			mission.Status = newStatus
 			mission.UpdatedAt = time.Now()
 			_ = e.store.SaveMission(mission)
+			e.emitEvent(mission.ID, mission.ID, events.EventMissionFailed, nil)
 		}
 	}
 
