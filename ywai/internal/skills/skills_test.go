@@ -19,12 +19,12 @@ func TestSkillsSourceDirPrefersRepoWhenAvailable(t *testing.T) {
 	t.Cleanup(func() { config.SetRepoRoot("") })
 	config.SetRepoRoot(repo)
 
-	repoSkillDir := filepath.Join(repo, "skills", "react-19")
+	repoSkillDir := filepath.Join(repo, "skills", "yz-ui")
 	if err := os.MkdirAll(repoSkillDir, 0o755); err != nil {
 		t.Fatalf("create repo skill dir: %v", err)
 	}
 
-	dataSkillDir := filepath.Join(config.DataSkillsDir(), "react-19")
+	dataSkillDir := filepath.Join(config.DataSkillsDir(), "yz-ui")
 	if err := os.MkdirAll(dataSkillDir, 0o755); err != nil {
 		t.Fatalf("create data skill dir: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestSkillsSourceDirFallsBackToRepoWhenCacheEmpty(t *testing.T) {
 	config.SetRepoRoot(repo)
 
 	repoSkillsDir := filepath.Join(repo, "skills")
-	if err := os.MkdirAll(filepath.Join(repoSkillsDir, "react-19"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repoSkillsDir, "yz-ui"), 0o755); err != nil {
 		t.Fatalf("create repo skill dir: %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	config.ResetConfig()
 
 	repoSkillsDir := filepath.Join(repo, "skills")
-	writeSkill(t, repoSkillsDir, "react-19", true)
+	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
 	writeSkill(t, repoSkillsDir, "judgment-day", false)
@@ -81,11 +81,11 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 		t.Fatalf("CopyTo() error = %v", err)
 	}
 
-	if _, err := os.Lstat(filepath.Join(agentSkillsDir, "react-19")); err != nil {
-		t.Fatalf("react-19 should be copied: %v", err)
+	if _, err := os.Lstat(filepath.Join(agentSkillsDir, "yz-ui")); err != nil {
+		t.Fatalf("yz-ui should be copied: %v", err)
 	}
-	if IsLinkOrJunction(filepath.Join(agentSkillsDir, "react-19")) {
-		t.Fatal("react-19 should be a real directory, not a link/junction")
+	if IsLinkOrJunction(filepath.Join(agentSkillsDir, "yz-ui")) {
+		t.Fatal("yz-ui should be a real directory, not a link/junction")
 	}
 	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
 		if _, err := os.Lstat(filepath.Join(agentSkillsDir, name)); !os.IsNotExist(err) {
@@ -108,7 +108,6 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	config.ResetConfig()
 
 	repoSkillsDir := filepath.Join(repo, "skills")
-	writeSkill(t, repoSkillsDir, "react-19", true)
 	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
@@ -119,9 +118,6 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 		t.Fatalf("ListAvailable() error = %v", err)
 	}
 
-	if !slices.Contains(got, "react-19") {
-		t.Fatalf("ListAvailable() = %v, want react-19", got)
-	}
 	if !slices.Contains(got, "yz-ui") {
 		t.Fatalf("ListAvailable() = %v, want yz-ui", got)
 	}
@@ -150,7 +146,7 @@ func TestRemoveStaleYwaiSkillLinksRemovesOnlyYwaiSourceLinks(t *testing.T) {
 	config.ResetConfig()
 
 	repoSkillsDir := filepath.Join(repo, "skills")
-	writeSkill(t, repoSkillsDir, "react-19", true)
+	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 
 	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
