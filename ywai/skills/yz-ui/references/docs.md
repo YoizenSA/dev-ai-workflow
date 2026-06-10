@@ -1,67 +1,39 @@
-## Referencias a Recursos Yoizen UI
+## Recursos del Skill yz-ui
 
-Esta carpeta contiene links a la documentación y recursos reales del proyecto Yoizen UI.
+El skill es autocontenido y agnóstico de proyecto: las normas del `SKILL.md` aplican a **todo frontend Yoizen**, existente o nuevo. No depende de ningún repo de referencia.
 
-### Archivos de Configuración
-
-| Recurso | Ubicación | Descripción |
-|---------|-----------|-------------|
-| Tailwind Config | `services/yoizen-ui/tailwind.config.js` | Configuración completa de tema |
-| Estilos Base | `services/yoizen-ui/src/index.css` | CSS variables y utilidades |
-| PostCSS Config | `services/yoizen-ui/postcss.config.js` | Configuración PostCSS |
-| Vite Config | `services/yoizen-ui/vite.config.ts` | Configuración bundler |
-
-### Componentes de Referencia
-
-| Componente | Ubicación | Patrones Demostrados |
-|------------|-----------|---------------------|
-| Layout | `services/yoizen-ui/src/components/layout/Layout.tsx` | Estructura sidebar + main |
-| Sidebar | `services/yoizen-ui/src/components/layout/Sidebar.tsx` | Navegación, estados activos |
-| Button | `services/yoizen-ui/src/components/common/Button.tsx` | Variantes, iconos, loading |
-| Card | `services/yoizen-ui/src/components/common/Card.tsx` | Bordes, sombras, padding |
-| Input | `services/yoizen-ui/src/components/common/Input.tsx` | Estados, validación, focus |
-| Modal | `services/yoizen-ui/src/components/common/Modal.tsx` | Overlays, animaciones |
-| HealthStatus | `services/yoizen-ui/src/components/dashboard/HealthStatus.tsx` | Badges, colores estado |
-| StatsCards | `services/yoizen-ui/src/components/dashboard/StatsCards.tsx` | Grids, métricas |
-
-### Assets Visuales
+### Assets
 
 | Asset | Ubicación | Uso |
 |-------|-----------|-----|
-| Logo Principal | `services/yoizen-ui/public/logo.svg` | Header, branding |
-| Logo Negativo | `services/yoizen-ui/public/logo-negativo.svg` | Dark backgrounds |
-| Logo con Slogan | `services/yoizen-ui/public/logo-sec-slogan.svg` | Landing pages |
-| Icono | `services/yoizen-ui/public/icon.svg` | Favicon, avatares |
-| Logo Footer | `services/yoizen-ui/public/logo-footer.svg` | Optimizado footer |
+| Logo Principal | `assets/logo.svg` | Header, branding |
+| Logo Negativo | `assets/logo-negativo.svg` / `assets/logo-negative.svg` | Fondos oscuros |
+| Logo con Slogan | `assets/logo-sec-slogan.svg` | Landing pages |
+| Icono | `assets/icon.svg` | Favicon, avatares |
+| Logo Footer | `assets/logo-footer.svg` | Optimizado footer |
+| Logo Dorso | `assets/logo-dorso-maneas.svg` | Variante especial |
+| Snippets CSS | `assets/css-snippets.css` | Implementaciones completas listas para copiar |
+| Template Angular | `assets/component-template.ts` | Componente standalone con signals y OnPush |
+| Schema de tema | `assets/tailwind-theme-schema.json` | Estructura de tokens para Tailwind |
 
-### Hooks y Utilidades
+### Contenido de `css-snippets.css`
 
-| Utilidad | Ubicación | Propósito |
-|----------|-----------|-----------|
-| useJobs | `services/yoizen-ui/src/hooks/useJobs.ts` | Data fetching pattern |
-| useAiAssist | `services/yoizen-ui/src/hooks/useAiAssist.ts` | AI drawer state |
-| api.ts | `services/yoizen-ui/src/services/api.ts` | API client configuration |
+- Gradientes de marca (fondo y texto) y grid pattern técnico
+- Utilidades de color con CSS variables
+- Componentes comunes: card, sidebar, input, botón primario
+- Alertas semánticas (info/success/warning/error)
+- Scrollbar personalizado (Webkit + Firefox)
+- Animaciones: fade-in, pulse sutil
+- Utilidades de layout: container, grid responsive, flex, truncate
+- **Glass panel** (tema oscuro)
+- **Icon button** (botón circular solo-icono)
+- **Spinner / loading inline**
+- **Pill badges semánticos**
+- **Sistema de toasts completo** (stack, animaciones enter/exit/progress, variantes semánticas, responsive, `prefers-reduced-motion`)
 
-### Tipos TypeScript
+### Cómo aplicar el skill a un proyecto
 
-| Tipo | Ubicación | Entidades |
-|------|-----------|-----------|
-| Agent | `services/yoizen-ui/src/types/agent.ts` | Estructura agente |
-| Job | `services/yoizen-ui/src/types/jobs.ts` | Tipos de jobs |
-| Health | `services/yoizen-ui/src/types/health.ts` | Estados de salud |
-| Webchat | `services/yoizen-ui/src/types/webchat.ts` | Mensajes conversación |
-
-### Paginas Completas (Ejemplos de Layout)
-
-| Pagina | Ubicacion | Features |
-|--------|-----------|----------|
-| Dashboard | `services/yoizen-ui/src/pages/Dashboard.tsx` | Grid layout, widgets |
-| Agents | `services/yoizen-ui/src/pages/Agents.tsx` | Listas, filtros, acciones |
-| Agent Detail | `services/yoizen-ui/src/pages/AgentDetail.tsx` | Formularios, tabs |
-| Jobs | `services/yoizen-ui/src/pages/Jobs.tsx` | Tablas, paginación |
-| Settings | `services/yoizen-ui/src/pages/Settings.tsx` | Paneles, configuración |
-| Demo | `services/yoizen-ui/src/pages/Demo.tsx` | Component showcase |
-
----
-
-**Nota**: Todas las rutas son relativas desde la raiz del workspace.
+1. Verificar Angular en el último major estable (`ng version`) — actualizar si no
+2. Detectar el enfoque de estilos (CSS puro con tokens vs Tailwind 4)
+3. Proyecto nuevo: copiar los tokens del tema elegido (claro u oscuro glass) del `SKILL.md`
+4. Proyecto existente: correr el **Visual Correction Checklist** del `SKILL.md`, corrigiendo primero a nivel tokens y después por componente
