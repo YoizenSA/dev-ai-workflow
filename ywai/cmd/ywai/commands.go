@@ -43,6 +43,7 @@ var installCmd = &cobra.Command{
 		var globalOnly bool
 		var preset, scope, sddMode, persona string
 		var groupFilter agentprofiles.GroupFilter
+		overwriteAgents := true
 
 		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
 			if !isInteractiveTerminal() {
@@ -63,6 +64,7 @@ var installCmd = &cobra.Command{
 			installMCP = result.MCP
 			installADO = result.ADO
 			globalOnly = result.GlobalOnly
+			overwriteAgents = result.OverwriteAgents
 			preset = result.Preset
 			scope = result.Scope
 			sddMode = result.SDDMode
@@ -96,7 +98,14 @@ var installCmd = &cobra.Command{
 			installADO = getBoolFlag(cmd, "ado")
 		}
 
-		executeInstall(installOpts, installMCP, globalOnly, installADO, groupFilter)
+		if !tuiFlag {
+			fmt.Print("  Overwrite existing agent profiles? [Y/n] ")
+			var response string
+			fmt.Scanln(&response)
+			overwriteAgents = response != "n" && response != "N"
+		}
+
+		executeInstall(installOpts, installMCP, globalOnly, installADO, groupFilter, overwriteAgents)
 	},
 }
 

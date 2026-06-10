@@ -419,7 +419,7 @@ func TestInstallOpenCodeMarkdown(t *testing.T) {
 		},
 	}
 
-	if err := InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles, false); err != nil {
 		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
 	}
 
@@ -462,7 +462,7 @@ func TestInstallOpenCodeMarkdownSkipsExisting(t *testing.T) {
 		},
 	}
 
-	if err := InstallOpenCodeMarkdown(agentsDir, profiles); err != nil {
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles, false); err != nil {
 		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
 	}
 
@@ -477,6 +477,49 @@ func TestInstallOpenCodeMarkdownSkipsExisting(t *testing.T) {
 	}
 	if strings.Contains(content, "New description") {
 		t.Error("existing file should not contain new content")
+	}
+}
+
+func TestInstallOpenCodeMarkdownOverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+
+	// Create an existing dev.md
+	existingPath := filepath.Join(agentsDir, "dev.md")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existingPath, []byte("---\ndescription: Keep me\n---\n\n# Keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "New description",
+			Prompt:      "# New\n\nShould overwrite",
+			Permission:  map[string]string{"read": "allow"},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles, true); err != nil {
+		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
+	}
+
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if strings.Contains(content, "Keep me") {
+		t.Error("existing file should be overwritten")
+	}
+	if !strings.Contains(content, "New description") {
+		t.Error("overwritten file should contain new content")
+	}
+	if !strings.Contains(content, "Should overwrite") {
+		t.Error("overwritten file should contain new prompt")
 	}
 }
 

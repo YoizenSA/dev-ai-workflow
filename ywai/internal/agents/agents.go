@@ -485,7 +485,8 @@ func AgentsSourceDir() string {
 
 // InstallOpenCodeMarkdown writes agent profiles as .md files to ~/.config/opencode/agents/.
 // This is the native OpenCode format and takes precedence over JSON configuration.
-func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile) error {
+// When overwrite is true, existing files are overwritten.
+func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return fmt.Errorf("create dir %s: %w", agentsDir, err)
 	}
@@ -494,9 +495,10 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile)
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
 
-		// Skip if already exists
-		if _, err := os.Stat(targetPath); err == nil {
-			continue
+		if !overwrite {
+			if _, err := os.Stat(targetPath); err == nil {
+				continue
+			}
 		}
 
 		// Build OpenCode-style markdown with YAML frontmatter

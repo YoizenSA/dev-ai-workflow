@@ -159,15 +159,16 @@ type agentOption struct {
 
 // TUIResult holds all configuration choices made in the TUI.
 type TUIResult struct {
-	Agent       string
-	MCP         bool
-	ADO         bool
-	GlobalOnly  bool
-	Preset      string
-	Scope       string
-	SDDMode     string
-	Persona     string
-	GroupFilter agents.GroupFilter
+	Agent           string
+	MCP             bool
+	ADO             bool
+	GlobalOnly      bool
+	OverwriteAgents bool
+	Preset          string
+	Scope           string
+	SDDMode         string
+	Persona         string
+	GroupFilter     agents.GroupFilter
 }
 
 // InstallStep tracks a single installation phase.
@@ -205,6 +206,9 @@ type Model struct {
 	installMicrosoftLearnMCP bool
 	installADO               bool
 	mcpCursor                int // 0 = MCP, 1 = ADO
+
+	// Overwrite existing profiles
+	overwriteAgents bool
 
 	// Agent groups selection
 	availableGroups  []agents.GroupDefinition
@@ -267,6 +271,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		personaIdx:               personaIdx,
 		installMicrosoftLearnMCP: defaults.MCP,
 		installADO:               defaults.ADO,
+		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
 			{Name: "Check gentle-ai", Status: "pending"},
@@ -591,6 +596,8 @@ func (m *Model) cycleOption(dir int) {
 		m.sddModeIdx = (m.sddModeIdx + dir + len(sddModeChoices)) % len(sddModeChoices)
 	case 4:
 		m.personaIdx = (m.personaIdx + dir + len(personaChoices)) % len(personaChoices)
+	case 5:
+		m.overwriteAgents = !m.overwriteAgents
 	}
 }
 
@@ -877,12 +884,18 @@ func (m *Model) viewOptions() string {
 		globalLabel = "yes"
 	}
 
+	overwriteLabel := "no"
+	if m.overwriteAgents {
+		overwriteLabel = "yes"
+	}
+
 	rows := []optionRow{
 		{"Preset", presetChoices[m.presetIdx]},
 		{"Scope", scopeChoices[m.scopeIdx]},
 		{"Global only", globalLabel},
 		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
 		{"Persona", personaChoices[m.personaIdx]},
+		{"Overwrite agents", overwriteLabel},
 	}
 
 	maxLabel := 0
@@ -1087,6 +1100,11 @@ func (m *Model) viewConfirm() string {
 		globalLabel = "yes"
 	}
 
+	overwriteLabel := "no"
+	if m.overwriteAgents {
+		overwriteLabel = "yes"
+	}
+
 	rows := [][2]string{
 		{"Agent", agentLabel},
 		{"Preset", presetChoices[m.presetIdx]},
@@ -1094,6 +1112,7 @@ func (m *Model) viewConfirm() string {
 		{"Global only", globalLabel},
 		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
 		{"Persona", personaChoices[m.personaIdx]},
+		{"Overwrite agents", overwriteLabel},
 		{"Skills", "all extra skills"},
 	}
 
@@ -1265,15 +1284,16 @@ func (m *Model) Result() TUIResult {
 		return TUIResult{}
 	}
 	return TUIResult{
-		Agent:       m.selectedAgent,
-		MCP:         m.installMicrosoftLearnMCP,
-		ADO:         m.installADO,
-		GlobalOnly:  m.globalOnly,
-		Preset:      presetChoices[m.presetIdx],
-		Scope:       scopeChoices[m.scopeIdx],
-		SDDMode:     sddModeChoices[m.sddModeIdx],
-		Persona:     personaChoices[m.personaIdx],
-		GroupFilter: m.GroupFilter(),
+		Agent:           m.selectedAgent,
+		MCP:             m.installMicrosoftLearnMCP,
+		ADO:             m.installADO,
+		GlobalOnly:      m.globalOnly,
+		OverwriteAgents: m.overwriteAgents,
+		Preset:          presetChoices[m.presetIdx],
+		Scope:           scopeChoices[m.scopeIdx],
+		SDDMode:         sddModeChoices[m.sddModeIdx],
+		Persona:         personaChoices[m.personaIdx],
+		GroupFilter:     m.GroupFilter(),
 	}
 }
 
