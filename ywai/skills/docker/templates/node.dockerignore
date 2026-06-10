@@ -1,0 +1,24 @@
+# Copy as .dockerignore next to the Dockerfile (Node backend or SPA).
+.git
+.gitignore
+.vscode
+node_modules
+dist
+coverage
+.angular
+*.log
+Dockerfile
+.dockerignore
+README.md
+**/*.spec.ts
+**/*.test.ts
+
+# Secrets — never in the build context
+.env
+.env.*
+.npmrc
+secrets
+*.pem
+*.key
+*.crt
+*.cert

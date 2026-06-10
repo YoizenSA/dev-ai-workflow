@@ -1,0 +1,23 @@
+# Copy as .dockerignore next to the Dockerfile (.NET service).
+.git
+.gitignore
+.vs
+.vscode
+**/bin
+**/obj
+TestResults
+*.log
+Dockerfile
+.dockerignore
+README.md
+
+# Secrets — never in the build context
+.env
+.env.*
+secrets
+appsettings.*.local.json
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
