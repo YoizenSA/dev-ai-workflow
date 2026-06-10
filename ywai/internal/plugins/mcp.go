@@ -47,18 +47,12 @@ func InstallKanbanMCP(configPath, agentName string) error {
 			mcp = map[string]any{}
 			root[key] = mcp
 		}
-		servers, _ := mcp["servers"].(map[string]any)
-		if servers == nil {
-			servers = map[string]any{}
-			mcp["servers"] = servers
-		}
-		if _, exists := servers["ywai-kanban"]; !exists {
-			servers["ywai-kanban"] = map[string]any{
+		if _, exists := mcp["ywai-kanban"]; !exists {
+			mcp["ywai-kanban"] = map[string]any{
 				"type":    "local",
 				"command": []any{"ywai", "daemon", "--mcp"},
 				"enabled": true,
 			}
-			mcp["servers"] = servers
 			root[key] = mcp
 		}
 	}
@@ -100,18 +94,12 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 			mcp = map[string]any{}
 			root[key] = mcp
 		}
-		servers, _ := mcp["servers"].(map[string]any)
-		if servers == nil {
-			servers = map[string]any{}
-			mcp["servers"] = servers
-		}
-		if _, exists := servers["microsoft-learn"]; !exists {
-			servers["microsoft-learn"] = map[string]any{
+		if _, exists := mcp["microsoft-learn"]; !exists {
+			mcp["microsoft-learn"] = map[string]any{
 				"type":    "remote",
 				"url":     "https://learn.microsoft.com/api/mcp",
 				"enabled": true,
 			}
-			mcp["servers"] = servers
 			root[key] = mcp
 		}
 	}
