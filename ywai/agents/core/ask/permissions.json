@@ -20,5 +20,5 @@
   "edit": "deny",
   "write": "deny",
   "bash": "deny",
-  "delegate": "deny"
+  "delegate": "ask"
 }

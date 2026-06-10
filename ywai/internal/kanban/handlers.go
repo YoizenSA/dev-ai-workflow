@@ -756,44 +756,7 @@ func skillsDir() (string, error) {
 	return filepath.Join(home, ".config", "opencode", "skills"), nil
 }
 
-// removeAgentFromJSON removes an agent from opencode.json if it exists there.
-// Used to clean up duplicates when the agent also exists in markdown.
-func removeAgentFromJSON(agentName string) {
-	path, err := opencodeConfigPath()
-	if err != nil {
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
-		return
-	}
-	agentRaw, ok := config["agent"]
-	if !ok {
-		return
-	}
-	var agents map[string]json.RawMessage
-	if err := json.Unmarshal(agentRaw, &agents); err != nil {
-		return
-	}
-	if _, exists := agents[agentName]; !exists {
-		return
-	}
-	delete(agents, agentName)
-	if len(agents) == 0 {
-		delete(config, "agent")
-	} else {
-		agentsJSON, _ := json.Marshal(agents)
-		config["agent"] = agentsJSON
-	}
-	_ = os.WriteFile(path+".bak", data, 0644)
-	pretty, _ := json.MarshalIndent(config, "", "  ")
-	_ = os.WriteFile(path, pretty, 0644)
-	log.Printf("Removed duplicate agent %s from opencode.json (exists in markdown)", agentName)
-}
+
 
 // GET /api/config/opencode
 func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
@@ -1123,8 +1086,7 @@ var ValidPermissionValues = map[string]bool{
 }
 
 // PUT /api/config/agents/{name}/permissions
-// Writes permissions to markdown frontmatter.
-// If agent exists in both JSON and markdown, removes from JSON (markdown wins).
+// Writes permissions to opencode.json (primary) and markdown frontmatter (backward compat).
 func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -1167,28 +1129,57 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if agent exists in markdown — if so, remove duplicate from JSON
-	mdPath := readAgentMarkdownPath(name)
-	if mdPath != "" {
-		removeAgentFromJSON(name)
+	found := false
+
+	// Write to opencode.json (primary source for GetAgentPermissions)
+	if path, err := opencodeConfigPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var config map[string]json.RawMessage
+			if err := json.Unmarshal(data, &config); err == nil {
+				var agents map[string]json.RawMessage
+				if agentRaw, ok := config["agent"]; ok {
+					if err := json.Unmarshal(agentRaw, &agents); err == nil {
+						if existingRaw, exists := agents[name]; exists {
+							var agentCfg map[string]json.RawMessage
+							if err := json.Unmarshal(existingRaw, &agentCfg); err == nil {
+								permJSON, _ := json.Marshal(body)
+								agentCfg["permission"] = permJSON
+								agentJSON, _ := json.Marshal(agentCfg)
+								agents[name] = agentJSON
+								agentsJSON, _ := json.Marshal(agents)
+								config["agent"] = agentsJSON
+
+								pretty, _ := json.MarshalIndent(config, "", "  ")
+								_ = os.WriteFile(path+".bak", data, 0644)
+								if err := os.WriteFile(path, pretty, 0644); err == nil {
+									found = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// Write to markdown frontmatter
-	if mdPath == "" {
+	// Also update markdown if it exists (backward compat)
+	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
+		found = true
+		mdContent, err := os.ReadFile(mdPath)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		updated := updatePermissionsInFrontmatter(string(mdContent), body)
+		_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+		if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
-		return
-	}
-
-	mdContent, err := os.ReadFile(mdPath)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	updated := updatePermissionsInFrontmatter(string(mdContent), body)
-	_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
-	if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 

@@ -17,5 +17,5 @@
   "bash": "deny",
   "websearch": "deny",
   "webfetch": "deny",
-  "delegate": "deny"
+  "delegate": "ask"
 }

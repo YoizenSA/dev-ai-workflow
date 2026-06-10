@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -145,7 +147,7 @@ func downloadAndReplace(version string) (string, error) {
 		return "", fmt.Errorf("cannot backup old binary: %w", err)
 	}
 
-	if err := os.Rename(binaryPath, exe); err != nil {
+	if err := replaceBinary(binaryPath, exe); err != nil {
 		os.Rename(bakPath, exe)
 		return "", fmt.Errorf("cannot replace binary: %w", err)
 	}
@@ -153,6 +155,45 @@ func downloadAndReplace(version string) (string, error) {
 	os.Remove(bakPath)
 
 	return version, nil
+}
+
+// replaceBinary replaces src with dst, attempting an atomic rename first.
+// If the rename fails due to a cross-device link (different filesystems),
+// it falls back to copying the file contents and removing the source.
+func replaceBinary(src, dst string) error {
+	// Try atomic rename first (same filesystem).
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	} else if !errors.Is(err, syscall.EXDEV) {
+		return err
+	}
+
+	// Cross-device link: copy file contents, set permissions, remove source.
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return fmt.Errorf("copy binary: %w", err)
+	}
+
+	if err := os.Chmod(dst, 0o755); err != nil {
+		return fmt.Errorf("set permissions: %w", err)
+	}
+
+	if err := os.Remove(src); err != nil {
+		return fmt.Errorf("remove source: %w", err)
+	}
+
+	return nil
 }
 
 func downloadFile(url, dest string) error {
