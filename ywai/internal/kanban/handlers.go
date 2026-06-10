@@ -1076,6 +1076,40 @@ var ValidPermissionKeys = map[string]bool{
 	"intercom": true,
 	"ado":      true,
 	"mcp":      true,
+
+	// Engram memory tools (from engram plugin)
+	"mem_capture_passive":     true,
+	"mem_compare":             true,
+	"mem_context":             true,
+	"mem_current_project":     true,
+	"mem_delete":              true,
+	"mem_doctor":              true,
+	"mem_get_observation":     true,
+	"mem_judge":               true,
+	"mem_save":                true,
+	"mem_save_prompt":         true,
+	"mem_search":              true,
+	"mem_session_end":         true,
+	"mem_session_start":       true,
+	"mem_session_summary":     true,
+	"mem_stats":               true,
+	"mem_suggest_topic_key":   true,
+	"mem_timeline":            true,
+	"mem_update":              true,
+
+	// Kanban MCP tools (from ywai-kanban MCP server)
+	"kanban_add_activity":            true,
+	"kanban_create_delegation":       true,
+	"kanban_create_session":          true,
+	"kanban_delete_session":          true,
+	"kanban_get_activities":          true,
+	"kanban_get_board":               true,
+	"kanban_get_graph":               true,
+	"kanban_get_pending_decisions":   true,
+	"kanban_get_ui_url":              true,
+	"kanban_list_sessions":           true,
+	"kanban_resolve_activity":        true,
+	"kanban_update_delegation":       true,
 }
 
 // ValidPermissionValues are the only accepted permission values.
@@ -1102,24 +1136,12 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate permission keys and values
-	var invalidKeys []string
+	// Validate permission values only (keys are dynamic — anyone can add custom tools)
 	var invalidValues []string
 	for k, v := range body {
-		if !ValidPermissionKeys[k] {
-			invalidKeys = append(invalidKeys, k)
-		}
 		if !ValidPermissionValues[v] {
 			invalidValues = append(invalidValues, fmt.Sprintf("%s=%q", k, v))
 		}
-	}
-	if len(invalidKeys) > 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"error":   "invalid permission key(s)",
-			"invalid": invalidKeys,
-			"valid":   sortedPermissionKeys(),
-		})
-		return
 	}
 	if len(invalidValues) > 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{

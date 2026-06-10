@@ -25,6 +25,10 @@ type UserConfig struct {
 	// Whether to use TUI by default
 	DefaultTUI bool `yaml:"default_tui,omitempty"`
 	
+	// Agents is an explicit list of agents ywai should manage.
+	// When non-empty, ywai will only operate on these agents instead of auto-detecting.
+	Agents []string `yaml:"agents,omitempty"`
+	
 	// Whether to install MCP by default for opencode
 	DefaultMCP bool `yaml:"default_mcp,omitempty"`
 	

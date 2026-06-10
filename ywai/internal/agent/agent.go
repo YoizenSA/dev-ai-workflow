@@ -312,3 +312,32 @@ func AvailableNames() []string {
 		"openclaw", "trae-ide", "pi",
 	}
 }
+
+// Resolve returns agents based on user config or auto-detection.
+// If the user has configured specific agents in ~/.ywai/config.yaml,
+// only those agents are returned. Otherwise, falls back to Detect().
+func Resolve() []Agent {
+	cfg, err := config.LoadConfig()
+	if err == nil && len(cfg.Agents) > 0 {
+		return filterByConfig(cfg.Agents)
+	}
+	return Detect()
+}
+
+// filterByConfig filters the detected agents to only include those
+// explicitly configured by the user.
+func filterByConfig(names []string) []Agent {
+	all := Detect()
+	nameSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		nameSet[strings.TrimSpace(n)] = true
+	}
+
+	var filtered []Agent
+	for _, a := range all {
+		if nameSet[a.Name] {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered
+}

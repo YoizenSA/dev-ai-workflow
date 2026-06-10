@@ -1,17 +1,13 @@
 package config
 
-import (
-	"os"
-)
+import "os"
 
 func AvailableSkills() []string {
-	dir := DataSkillsDir()
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(DataSkillsDir())
 	if err != nil {
 		return nil
 	}
-
-	skills := make([]string, 0, len(entries))
+	var skills []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			skills = append(skills, entry.Name())

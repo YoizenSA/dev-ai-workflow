@@ -17,18 +17,18 @@ This project uses a feature branch workflow with specific naming conventions for
 
 ### Feature Branches
 
-Create feature branches from `develop` or `main`:
+Create feature branches from `dev` or `main`:
 
 ```bash
 # Create feature branch from develop
-git checkout develop
-git pull origin develop
-git checkout -b feature/user-authentication
+git checkout dev
+git pull origin dev
+git checkout -b feature/NY/142-user-authentication
 
 # Create feature branch from main
 git checkout main
 git pull origin main
-git checkout -b feature/dashboard-updates
+git checkout -b feature/NY/56-dashboard-updates
 ```
 
 ### Bugfix Branches
@@ -39,26 +39,26 @@ Create bugfix branches for critical fixes:
 # Create bugfix branch
 git checkout develop
 git pull origin develop
-git checkout -b bugfix/login-timeout
+git checkout -b fix/NY/87-login-timeout
 
 # Create hotfix branch for production issue
 git checkout main
 git pull origin main
-git checkout -b hotfix/security-patch
+git checkout -b hotfix/NY/45-security-patch
 ```
 
 ## Branch Naming Conventions
 
 ### Feature Branches
 
-Pattern: `feature/{description}`
+Pattern: `feature/INICIALES/{ticketnumber}-{description}`
 
 ```
 ✅ Good Examples:
-feature/user-authentication
-feature/dashboard-updates
-feature/agent-execution-metrics
-feature/analytics-reports
+feature/NY/142-user-authentication
+feature/NY/56-dashboard-updates
+feature/NY/203-agent-execution-metrics
+feature/NY/78-analytics-reports
 
 ❌ Bad Examples:
 new-feature
@@ -69,14 +69,14 @@ feat-user-auth
 
 ### Bugfix Branches
 
-Pattern: `bugfix/{description}` or `hotfix/{description}`
+Pattern: `fix/INICIALES/{ticketnumber}-{description}` (or `hotfix/INICIALES/{ticketnumber}-{description}` for production)
 
 ```
 ✅ Good Examples:
-bugfix/login-timeout
-bugfix/memory-leak
-hotfix/security-patch
-hotfix/critical-fix
+fix/NY/87-login-timeout
+fix/NY/112-memory-leak
+hotfix/NY/45-security-patch
+hotfix/NY/33-critical-fix
 
 ❌ Bad Examples:
 fix
@@ -110,7 +110,7 @@ git checkout develop
 git pull origin develop
 
 # Create feature branch
-git checkout -b feature/user-authentication
+git checkout -b feature/NY/142-user-authentication
 ```
 
 ### 2. Work on Feature
@@ -139,7 +139,7 @@ git merge origin/develop
 
 ```bash
 # Push to remote
-git push origin feature/user-authentication
+git push origin feature/NY/142-user-authentication
 ```
 
 ### 5. Create Pull Request
@@ -147,7 +147,7 @@ git push origin feature/user-authentication
 ```bash
 # Create PR from feature to develop
 # Use GitHub UI or GitHub CLI:
-gh pr create --base develop --head feature/user-authentication
+gh pr create --base develop --head feature/NY/142-user-authentication
 ```
 
 ### 6. Merge to Develop
@@ -162,10 +162,10 @@ gh pr create --base develop --head feature/user-authentication
 
 ```bash
 # Delete local branch
-git branch -d feature/user-authentication
+git branch -d feature/NY/142-user-authentication
 
 # Delete remote branch
-git push origin --delete feature/user-authentication
+git push origin --delete feature/NY/142-user-authentication
 ```
 
 ## Workflow: Bugfix
@@ -176,15 +176,15 @@ git push origin --delete feature/user-authentication
 # Create bugfix from develop
 git checkout develop
 git pull origin develop
-git checkout -b bugfix/login-timeout
+git checkout -b fix/NY/87-login-timeout
 
 # Fix the bug
 git add .
 git commit -m "fix(api): resolve login timeout issue"
 
 # Push and create PR
-git push origin bugfix/login-timeout
-gh pr create --base develop --head bugfix/login-timeout
+git push origin fix/NY/87-login-timeout
+gh pr create --base develop --head fix/NY/87-login-timeout
 ```
 
 ### For Bugs in Production (Hotfix)
@@ -193,15 +193,15 @@ gh pr create --base develop --head bugfix/login-timeout
 # Create hotfix from main
 git checkout main
 git pull origin main
-git checkout -b hotfix/security-patch
+git checkout -b hotfix/NY/45-security-patch
 
 # Fix the bug
 git add .
 git commit -m "fix(security): patch vulnerability"
 
 # Push and create PR to main
-git push origin hotfix/security-patch
-gh pr create --base main --head hotfix/security-patch
+git push origin hotfix/NY/45-security-patch
+gh pr create --base main --head hotfix/NY/45-security-patch
 
 # Also merge to develop after fix
 ```
@@ -290,13 +290,13 @@ git branch
 git branch -r
 
 # Create new branch
-git checkout -b feature/new-feature
+git checkout -b feature/NY/142-new-feature
 
 # Delete local branch
-git branch -d feature/new-feature
+git branch -d feature/NY/142-new-feature
 
 # Delete remote branch
-git push origin --delete feature/new-feature
+git push origin --delete feature/NY/142-new-feature
 
 # Rename branch
 git branch -m old-name new-name
@@ -322,13 +322,13 @@ git rebase origin/develop
 
 ```bash
 # Merge branch into current
-git merge feature/new-feature
+git merge feature/NY/142-new-feature
 
 # Squash merge (single commit)
-git merge --squash feature/new-feature
+git merge --squash feature/NY/142-new-feature
 
 # Merge with no fast-forward
-git merge --no-ff feature/new-feature
+git merge --no-ff feature/NY/142-new-feature
 ```
 
 ### Divergence
@@ -338,10 +338,10 @@ git merge --no-ff feature/new-feature
 git status
 
 # See commits unique to branch
-git log develop..feature/new-feature
+git log develop..feature/NY/142-new-feature
 
 # See commits unique to develop
-git log feature/new-feature..develop
+git log feature/NY/142-new-feature..develop
 ```
 
 ## Best Practices
@@ -367,7 +367,7 @@ git branch -a
 git branch -a | grep feature/
 
 # List bugfix branches
-git branch -a | grep bugfix/
+git branch -a | grep -E "^(fix|hotfix)/"
 
 # List remote branches
 git branch -r
@@ -379,7 +379,7 @@ git branch --merged
 git branch --no-merged
 
 # View commit history of branch
-git log feature/new-feature --oneline -10
+git log feature/NY/142-new-feature --oneline -10
 ```
 
 ## Troubleshooting
@@ -388,7 +388,7 @@ git log feature/new-feature --oneline -10
 
 ```bash
 # When merging and conflicts occur:
-git merge feature/new-feature
+git merge feature/NY/142-new-feature
 
 # Resolve conflicts manually in files
 git add resolved-file.ts

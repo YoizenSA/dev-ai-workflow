@@ -128,7 +128,7 @@ var updateCmd = &cobra.Command{
 			}
 		}
 
-		agents := agent.Detect()
+		agents := agent.Resolve()
 
 		fmt.Println("\n[3/7] Re-seeding skills cache...")
 		reseedData()
@@ -184,11 +184,9 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n[6/7] Re-applying ywai overrides...")
-		agentDirs := overrides.AgentSkillsDirs()
-		for name, dir := range agentDirs {
-			if _, err := os.Stat(dir); err == nil {
-				agentDirs[name] = dir
-			}
+		agentDirs := make(map[string]string, len(agents))
+		for _, a := range agents {
+			agentDirs[a.Name] = a.SkillsDir
 		}
 		if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
 			warn("failed to apply overrides: %v", err)
@@ -210,7 +208,7 @@ var agentsCmd = &cobra.Command{
 	Use:   "agents",
 	Short: "List detected AI agents",
 	Run: func(cmd *cobra.Command, args []string) {
-		detected := agent.Detect()
+		detected := agent.Resolve()
 		if len(detected) == 0 {
 			fmt.Println("No agents detected.")
 			fmt.Println("\nSupported agents:")
@@ -387,6 +385,16 @@ var configSetCmd = &cobra.Command{
 			}
 		case "log_level":
 			cfg.LogLevel = value
+		case "agents":
+			// Parse comma-separated agent names
+			var agents []string
+			for _, a := range strings.Split(value, ",") {
+				trimmed := strings.TrimSpace(a)
+				if trimmed != "" {
+					agents = append(agents, trimmed)
+				}
+			}
+			cfg.Agents = agents
 		default:
 			fmt.Fprintf(os.Stderr, "Error: unknown key %q\n", key)
 			os.Exit(1)
@@ -440,7 +448,7 @@ var statusCmd = &cobra.Command{
 
 		// Detected agents
 		fmt.Println("\n=== Detected Agents ===")
-		agents := agent.Detect()
+		agents := agent.Resolve()
 		if len(agents) == 0 {
 			fmt.Println("No agents detected")
 		} else {

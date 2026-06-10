@@ -97,7 +97,7 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 		return []agent.Agent{*a}
 	}
 
-	agents := agent.Detect()
+	agents := agent.Resolve()
 	if len(agents) == 0 {
 		fmt.Fprintln(os.Stderr, "Error: no supported agents detected in PATH.")
 		fmt.Fprintln(os.Stderr, "Supported: opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex")
@@ -163,7 +163,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		}
 		agents = []agent.Agent{*a}
 	} else {
-		agents = agent.Detect()
+		agents = agent.Resolve()
 		if len(agents) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
 			return

@@ -292,9 +292,9 @@ git commit -m "feat(agents): add agent tools configuration
 - Add custom description support"
 
 # Push to remote
-git push origin feature/agent-tools
+git push origin feature/NY/142-agent-tools
 
-# Create PR from feature/agent-tools to main
+# Create PR from feature/NY/142-agent-tools to main
 ```
 
 ### Bug Fix
@@ -313,7 +313,7 @@ git commit -m "fix(webapi): handle missing agent ID
 Fixes #456"
 
 # Push
-git push origin fix/missing-agent-id
+git push origin fix/NY/456-missing-agent-id
 ```
 
 ### Breaking Change
@@ -389,7 +389,7 @@ git push origin main --tags
 **Solution**:
 ```bash
 # Start merge
-git merge feature/branch
+git merge feature/NY/142-feature-branch
 
 # Resolve conflicts in conflicted files
 # Edit and save files
