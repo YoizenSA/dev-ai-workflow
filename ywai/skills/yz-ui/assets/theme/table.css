@@ -1,0 +1,53 @@
+/* ============================================================
+   table.css · dark glass data tables
+   ============================================================ */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-md); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+
+.data-table thead th {
+  text-align: left; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--panel-border);
+  white-space: nowrap; position: sticky; top: 0;
+  background: rgba(24, 28, 40, 0.60); backdrop-filter: blur(8px);
+}
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--text); }
+.data-table th.num, .data-table td.cell-num { text-align: right; }
+
+.data-table tbody td {
+  padding: 0.72rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  color: var(--text-soft); white-space: nowrap; vertical-align: middle;
+}
+.data-table tbody tr { transition: background 120ms ease; }
+.data-table tbody tr:hover { background: var(--surface-soft); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr.clickable { cursor: pointer; }
+
+.cell-strong { color: var(--text); font-weight: 600; }
+.cell-mono   { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.cell-muted  { color: var(--text-muted); }
+.cell-num    { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-actions { width: 1%; }
+
+/* Row actions revealed on hover */
+.row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity 140ms ease; }
+.data-table tbody tr:hover .row-actions,
+.data-table tbody tr:focus-within .row-actions { opacity: 1; }
+.icon-act {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; color: var(--text-muted);
+  cursor: pointer; transition: all 130ms ease;
+}
+.icon-act:hover { background: var(--surface-hover); color: var(--text); }
+.icon-act.danger:hover { background: var(--danger-soft); color: #fca5a5; }
+
+/* Pagination footer */
+.table-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.7rem 1rem; border-top: 1px solid var(--panel-border);
+  font-size: 0.8rem; color: var(--text-muted); flex-wrap: wrap; gap: var(--space-3);
+}
+.pager { display: flex; align-items: center; gap: 0.5rem; }

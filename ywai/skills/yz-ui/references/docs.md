@@ -1,39 +1,32 @@
-## Recursos del Skill yz-ui
+# Referencias · yz-ui (Dark Glass theme)
 
-El skill es autocontenido y agnóstico de proyecto: las normas del `SKILL.md` aplican a **todo frontend Yoizen**, existente o nuevo. No depende de ningún repo de referencia.
+## Theme bundle (dentro de este skill)
 
-### Assets
+Copiable a cualquier proyecto. Tokens en `palette.css`; los componentes consumen `var(--*)` únicamente.
 
-| Asset | Ubicación | Uso |
-|-------|-----------|-----|
-| Logo Principal | `assets/logo.svg` | Header, branding |
-| Logo Negativo | `assets/logo-negativo.svg` / `assets/logo-negative.svg` | Fondos oscuros |
-| Logo con Slogan | `assets/logo-sec-slogan.svg` | Landing pages |
-| Icono | `assets/icon.svg` | Favicon, avatares |
-| Logo Footer | `assets/logo-footer.svg` | Optimizado footer |
-| Logo Dorso | `assets/logo-dorso-maneas.svg` | Variante especial |
-| Snippets CSS | `assets/css-snippets.css` | Implementaciones completas listas para copiar |
-| Template Angular | `assets/component-template.ts` | Componente standalone con signals y OnPush |
-| Schema de tema | `assets/tailwind-theme-schema.json` | Estructura de tokens para Tailwind |
+| Archivo | Contenido |
+|---------|-----------|
+| `assets/theme/index.css` | Entry point (`@import` de todo) + layout helpers (`.stack`, `.row`, `.grid-2`, `.tnum`…) |
+| `assets/theme/palette.css` | **Design tokens** — única fuente de verdad de color/spacing/radius/sombras/gradientes |
+| `assets/theme/base.css` | Reset, fondo ambiente (3 radial glows), tipografía, scrollbar, focus ring, `.glass`, `.grad-text` |
+| `assets/theme/buttons.css` | `.btn` pill variants con lift + glow |
+| `assets/theme/forms.css` | `.field`, `.input/.select/.textarea`, search, segmented toggle, switch, tabs, date nativo tematizado |
+| `assets/theme/table.css` | `.data-table` con header sticky blureado, row-actions on hover, paginación |
+| `assets/theme/modal.css` | `.overlay` + `.modal` glass, `.form-grid`, action popup |
+| `assets/theme/components.css` | Pills, tags, KPI cards, page header, alerts, progress, empty state, toasts, `.yd-select`/`.yd-date` + calendario |
+| `assets/theme/shell.css` | App shell (sidebar colapsable + topbar + content), login split-screen, responsive |
 
-### Contenido de `css-snippets.css`
+## Componentes de referencia (Angular standalone)
 
-- Gradientes de marca (fondo y texto) y grid pattern técnico
-- Utilidades de color con CSS variables
-- Componentes comunes: card, sidebar, input, botón primario
-- Alertas semánticas (info/success/warning/error)
-- Scrollbar personalizado (Webkit + Firefox)
-- Animaciones: fade-in, pulse sutil
-- Utilidades de layout: container, grid responsive, flex, truncate
-- **Glass panel** (tema oscuro)
-- **Icon button** (botón circular solo-icono)
-- **Spinner / loading inline**
-- **Pill badges semánticos**
-- **Sistema de toasts completo** (stack, animaciones enter/exit/progress, variantes semánticas, responsive, `prefers-reduced-motion`)
+| Componente | Ubicación | Qué demuestra |
+|------------|-----------|---------------|
+| YdSelect | `assets/angular/yd-select.component.ts` | Dropdown custom tematizado (reemplaza `<select>` nativo) |
+| YdDate | `assets/angular/yd-date.component.ts` | Date picker custom con calendario `.yd-cal*` |
 
-### Cómo aplicar el skill a un proyecto
+## Implementación de referencia completa
 
-1. Verificar Angular en el último major estable (`ng version`) — actualizar si no
-2. Detectar el enfoque de estilos (CSS puro con tokens vs Tailwind 4)
-3. Proyecto nuevo: copiar los tokens del tema elegido (claro u oscuro glass) del `SKILL.md`
-4. Proyecto existente: correr el **Visual Correction Checklist** del `SKILL.md`, corrigiendo primero a nivel tokens y después por componente
+`/home/umarino/Descargas/yDeploy/ydeploy-angular` — app Angular completa que usa este sistema (dashboard, tablas, modales, login, settings). Consultar sus `features/` para ver patrones de página completos.
+
+## Assets visuales
+
+En `assets/` de este skill: `logo.svg`, `logo-sec-slogan.svg`, `logo-negativo.svg`, `logo-negative.svg`, `logo-footer.svg`, `logo-dorso-maneas.svg`, `icon.svg`.
