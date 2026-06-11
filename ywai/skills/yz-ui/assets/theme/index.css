@@ -1,0 +1,25 @@
+/* ============================================================
+   styles.css · global stylesheet entry (pure-CSS + tokens)
+   Imported once by Angular (angular.json "styles").
+   Tokens live ONLY in palette.css. Components consume var(--*).
+   ============================================================ */
+@import "./palette.css";
+@import "./base.css";
+@import "./buttons.css";
+@import "./forms.css";
+@import "./table.css";
+@import "./modal.css";
+@import "./components.css";
+@import "./shell.css";
+
+/* Layout helpers */
+.stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.row { display: flex; align-items: center; gap: var(--space-3); }
+.row.wrap { flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+.grid-equal { align-items: stretch; }
+.grid-equal > .card { display: flex; flex-direction: column; }
+.grid-equal > .card > .table-wrap { flex: 1; }
+.spacer { flex: 1; }
+.muted { color: var(--text-muted); }
+.soft { color: var(--text-soft); }
