@@ -131,7 +131,6 @@ func (s *Server) Start() error {
 
 	// Capture the actual port (useful when port 0 is used)
 	s.port = ln.Addr().(*net.TCPAddr).Port
-	log.Printf("ywai Kanban server running on http://localhost:%d", s.port)
 
 	// Signal that port is ready (for async starts)
 	if s.portReady != nil {
@@ -163,6 +162,17 @@ func (s *Server) Port() int {
 func (s *Server) WaitForPort() int {
 	<-s.portReady
 	return s.port
+}
+
+// HTTPHandler returns the HTTP handler for the kanban server.
+// This allows the server to be mounted in other muxes.
+func (s *Server) HTTPHandler() http.Handler {
+	return s.mux
+}
+
+// Hub returns the WebSocket hub for the kanban server.
+func (s *Server) Hub() *Hub {
+	return s.hub
 }
 
 var (

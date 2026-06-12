@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 // ─── Errors ────────────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ type LogBroadcastFunc func(missionID, featureID, line string)
 type WorkerManager struct {
 	store        *MissionsStore
 	config       WorkerConfig
+	client       opencode.Client // optional: when set and reachable, uses API instead of CLI
 	cmdCreator   func(ctx context.Context, name string, args ...string) *exec.Cmd
 	logBroadcast LogBroadcastFunc
 }
@@ -84,6 +87,13 @@ func NewWorkerManager(store *MissionsStore, config WorkerConfig) *WorkerManager 
 		cmdCreator:   exec.CommandContext,
 		logBroadcast: func(string, string, string) {},
 	}
+}
+
+// SetClient sets the opencode client for API-based execution.
+// When set and the server is reachable, ExecuteFeature uses the session API
+// instead of spawning CLI subprocesses.
+func (wm *WorkerManager) SetClient(client opencode.Client) {
+	wm.client = client
 }
 
 // SetLogBroadcast sets the log broadcast callback for streaming logs to UIs.
@@ -601,7 +611,7 @@ func parseHandoff(output string) (*WorkerHandoff, error) {
 //  9. Completes or fails the feature based on result
 //
 // Returns the parsed WorkerHandoff on success, or an error describing the failure.
-func (wm *WorkerManager) ExecuteFeature(mission *Mission, featureID string) (*WorkerHandoff, error) {
+func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*WorkerHandoff, error) {
 	if mission == nil {
 		return nil, ErrInvalidMission
 	}
@@ -697,4 +707,168 @@ func (wm *WorkerManager) ExecuteFeature(mission *Mission, featureID string) (*Wo
 	}
 
 	return result.Handoff, nil
+}
+
+// ─── API-Based Execution ──────────────────────────────────────────────────
+
+// canUseAPI checks whether the opencode server is reachable for session-based execution.
+func (wm *WorkerManager) canUseAPI() bool {
+	if wm.client == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	status, err := wm.client.Status(ctx)
+	if err != nil {
+		return false
+	}
+	return status.Connected && status.Source == "server"
+}
+
+// ExecuteFeature runs the full worker lifecycle for a feature.
+// It first tries the opencode session API (if the server is reachable),
+// falling back to CLI-based execution via `opencode run`.
+func (wm *WorkerManager) ExecuteFeature(mission *Mission, featureID string) (*WorkerHandoff, error) {
+	if mission == nil {
+		return nil, ErrInvalidMission
+	}
+
+	if wm.canUseAPI() {
+		handoff, err := wm.executeViaAPI(mission, featureID)
+		if err != nil {
+			// If the API fails with sessions unavailable, fall back to CLI.
+			if errors.Is(err, opencode.ErrSessionsUnavailable) {
+				return wm.ExecuteViaCLI(mission, featureID)
+			}
+			return nil, err
+		}
+		return handoff, nil
+	}
+
+	return wm.ExecuteViaCLI(mission, featureID)
+}
+
+// executeViaAPI runs a feature by creating an opencode session, sending the task
+// as a prompt, waiting for completion, and extracting the handoff from the response.
+func (wm *WorkerManager) executeViaAPI(mission *Mission, featureID string) (*WorkerHandoff, error) {
+	feat, err := GetFeatureByID(mission, featureID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check retries
+	if feat.RetryCount >= wm.config.MaxRetries {
+		FailFeature(wm.store, mission, featureID)
+		return nil, fmt.Errorf("%w: feature %q retried %d/%d times",
+			ErrMaxRetries, featureID, feat.RetryCount, wm.config.MaxRetries)
+	}
+
+	// Transition feature to in_progress
+	if _, err := StartFeature(wm.store, mission, featureID); err != nil {
+		return nil, fmt.Errorf("start feature: %w", err)
+	}
+	feat, _ = GetFeatureByID(mission, featureID)
+
+	// Build the task description (same as CLI mode)
+	taskDesc := fmt.Sprintf("Feature: %s\n%s", feat.ID, feat.Description)
+	if len(feat.ExpectedBehavior) > 0 {
+		taskDesc += "\n\nExpected behavior:\n"
+		for _, exp := range feat.ExpectedBehavior {
+			taskDesc += "- " + exp + "\n"
+		}
+	}
+
+	// Create session
+	ctx, cancel := context.WithTimeout(context.Background(), wm.config.Timeout)
+	defer cancel()
+
+	sessions := wm.client.Sessions()
+	session, err := sessions.Create(ctx, opencode.SessionCreateOpts{
+		Title: fmt.Sprintf("%s/%s", mission.ID, feat.ID),
+		Agent: mission.Agent,
+		Model: parseModelString(mission.Model),
+	})
+	if err != nil {
+		FailFeature(wm.store, mission, featureID)
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+
+	// Clean up session when done
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_ = sessions.Delete(cleanupCtx, session.ID)
+	}()
+
+	// Send prompt
+	_, err = sessions.Prompt(ctx, session.ID, opencode.PromptInput{
+		Text:     taskDesc,
+		Delivery: "immediate",
+	})
+	if err != nil {
+		FailFeature(wm.store, mission, featureID)
+		return nil, fmt.Errorf("send prompt: %w", err)
+	}
+
+	// Wait for completion (blocks until the session finishes or context times out)
+	if err := sessions.Wait(ctx, session.ID); err != nil {
+		FailFeature(wm.store, mission, featureID)
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ErrWorkerTimeout
+		}
+		return nil, fmt.Errorf("wait for session: %w", err)
+	}
+
+	// Get messages to extract the handoff
+	messages, err := sessions.Messages(ctx, session.ID)
+	if err != nil {
+		FailFeature(wm.store, mission, featureID)
+		return nil, fmt.Errorf("get messages: %w", err)
+	}
+
+	// Find the last assistant message and try to parse a handoff from it
+	handoff := extractHandoffFromMessages(messages)
+	if handoff == nil {
+		FailFeature(wm.store, mission, featureID)
+		return nil, ErrEmptyHandoff
+	}
+
+	// Complete the feature
+	if _, err := CompleteFeature(wm.store, mission, featureID); err != nil {
+		return nil, fmt.Errorf("complete feature: %w", err)
+	}
+
+	return handoff, nil
+}
+
+// extractHandoffFromMessages searches assistant messages for a WorkerHandoff JSON.
+func extractHandoffFromMessages(messages []opencode.Message) *WorkerHandoff {
+	// Walk messages in reverse to find the last assistant message with a handoff.
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role != "assistant" {
+			continue
+		}
+		handoff, err := parseHandoff(msg.Text)
+		if err == nil && handoff != nil {
+			return handoff
+		}
+	}
+	return nil
+}
+
+// parseModelString converts a model string like "provider/model" into a ModelInput.
+// Returns nil if the string is empty or cannot be parsed.
+func parseModelString(modelStr string) *opencode.ModelInput {
+	if modelStr == "" {
+		return nil
+	}
+	parts := strings.SplitN(modelStr, "/", 2)
+	if len(parts) == 2 {
+		return &opencode.ModelInput{
+			ProviderID: parts[0],
+			ID:         parts[1],
+		}
+	}
+	return &opencode.ModelInput{ID: modelStr}
 }

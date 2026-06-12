@@ -116,3 +116,8 @@ func (c *LocalClient) Status(_ context.Context) (ClientStatus, error) {
 	}
 	return ClientStatus{Connected: false}, nil
 }
+
+// Sessions returns a stub that always errors — local config does not support sessions.
+func (c *LocalClient) Sessions() SessionAPI {
+	return &localSessionAPI{}
+}

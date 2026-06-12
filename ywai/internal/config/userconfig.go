@@ -12,41 +12,59 @@ import (
 type UserConfig struct {
 	// Default preset for installations
 	DefaultPreset string `yaml:"default_preset,omitempty"`
-	
+
 	// Default SDD mode
 	DefaultSDDMode string `yaml:"default_sdd_mode,omitempty"`
-	
+
 	// Default persona
 	DefaultPersona string `yaml:"default_persona,omitempty"`
-	
+
 	// Default scope (global or workspace)
 	DefaultScope string `yaml:"default_scope,omitempty"`
-	
+
 	// Whether to use TUI by default
 	DefaultTUI bool `yaml:"default_tui,omitempty"`
-	
+
 	// Agents is an explicit list of agents ywai should manage.
 	// When non-empty, ywai will only operate on these agents instead of auto-detecting.
 	Agents []string `yaml:"agents,omitempty"`
-	
+
 	// Whether to install MCP by default for opencode
 	DefaultMCP bool `yaml:"default_mcp,omitempty"`
-	
+
 	// Whether to use colored output
 	ColoredOutput *bool `yaml:"colored_output,omitempty"`
-	
+
 	// Log level (debug, info, warn, error)
 	LogLevel string `yaml:"log_level,omitempty"`
-	
+
 	// Custom agent profiles directory
 	CustomAgentsDir string `yaml:"custom_agents_dir,omitempty"`
-	
+
 	// Custom skills directory
 	CustomSkillsDir string `yaml:"custom_skills_dir,omitempty"`
 
 	// TokenBank proxy configuration
 	TokenBankURL    string `yaml:"tokenbank_url,omitempty"`
 	TokenBankAPIKey string `yaml:"tokenbank_api_key,omitempty"`
+
+	// Server configuration
+	Server ServerConfig `yaml:"server,omitempty"`
+}
+
+// ServerConfig contains configuration for the unified server
+type ServerConfig struct {
+	// Port for the unified server (default 5768)
+	Port int `yaml:"port,omitempty"`
+
+	// Whether to run in background mode
+	Background bool `yaml:"background,omitempty"`
+
+	// Whether to start MCP adapter
+	MCP bool `yaml:"mcp,omitempty"`
+
+	// Whether to configure autostart
+	Autostart bool `yaml:"autostart,omitempty"`
 }
 
 // ConfigPath returns the path to the user config file

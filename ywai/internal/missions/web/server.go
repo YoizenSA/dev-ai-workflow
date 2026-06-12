@@ -135,7 +135,6 @@ func (s *Server) Start() error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Missions Web UI running on http://localhost:%d", s.port)
 	if err := s.httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -164,6 +163,11 @@ func (s *Server) Port() int {
 func (s *Server) WaitForPort() int {
 	<-s.portReady
 	return s.Port()
+}
+
+// Hub returns the WebSocket hub for the missions server.
+func (s *Server) Hub() *Hub {
+	return s.hub
 }
 
 // GetServerState returns a snapshot of server state for health checks.

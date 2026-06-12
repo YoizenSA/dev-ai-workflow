@@ -14,6 +14,7 @@ const defaultTimeout = 3 * time.Second
 type ServerClient struct {
 	baseURL    string
 	httpClient *http.Client
+	sessions   *serverSessionAPI
 }
 
 // NewServerClient creates a ServerClient targeting the given base URL
@@ -287,4 +288,12 @@ func (c *ServerClient) getConnectedProviders(ctx context.Context) []string {
 	}
 
 	return provResp.Connected
+}
+
+// Sessions returns the session management API backed by the opencode HTTP server.
+func (c *ServerClient) Sessions() SessionAPI {
+	if c.sessions == nil {
+		c.sessions = newServerSessionAPI(c.baseURL)
+	}
+	return c.sessions
 }

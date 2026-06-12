@@ -491,8 +491,8 @@ func runCancel(cmd *cobra.Command, args []string) error {
 func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Start the Mission Control Web UI server",
-		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).",
+		Short: "Start the Mission Control Web UI server (deprecated: use 'ywai serve' instead)",
+		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).\n\nDEPRECATED: Use 'ywai serve' instead to run the unified server.",
 		RunE:  runServe,
 	}
 
@@ -501,6 +501,7 @@ func newServeCmd() *cobra.Command {
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
+	fmt.Fprintln(os.Stderr, "Warning: 'ywai missions serve' is deprecated. Use 'ywai serve' instead.")
 	port, _ := cmd.Flags().GetInt("port")
 
 	store, err := openStore()
