@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
@@ -17,6 +17,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/unified"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -32,6 +33,7 @@ var installCmd = &cobra.Command{
 		tuiFlag, _ := cmd.Flags().GetBool("tui")
 		mcpFlag, _ := cmd.Flags().GetBool("mcp")
 		globalFlag, _ := cmd.Flags().GetBool("global")
+		autostartFlag, _ := cmd.Flags().GetBool("autostart")
 
 		agents := detectAgents(cmd)
 		if agents == nil {
@@ -106,6 +108,16 @@ var installCmd = &cobra.Command{
 		}
 
 		executeInstall(installOpts, installMCP, globalOnly, installADO, groupFilter, overwriteAgents)
+
+		// Configure autostart if requested
+		if autostartFlag && !dryRun {
+			fmt.Println("\n[4/4] Configuring autostart...")
+			if err := configureAutostart(); err != nil {
+				fmt.Printf("  Warning: failed to configure autostart: %v\n", err)
+			} else {
+				fmt.Println("  Autostart configured successfully")
+			}
+		}
 	},
 }
 
@@ -331,6 +343,14 @@ var configGetCmd = &cobra.Command{
 			value = cfg.ColoredOutput
 		case "log_level":
 			value = cfg.LogLevel
+		case "server.port":
+			value = cfg.Server.Port
+		case "server.background":
+			value = cfg.Server.Background
+		case "server.mcp":
+			value = cfg.Server.MCP
+		case "server.autostart":
+			value = cfg.Server.Autostart
 		default:
 			fmt.Fprintf(os.Stderr, "Error: unknown key %q\n", key)
 			os.Exit(1)
@@ -404,6 +424,40 @@ var configSetCmd = &cobra.Command{
 				}
 			}
 			cfg.Agents = agents
+		case "server.port":
+			var port int
+			if _, err := fmt.Sscanf(value, "%d", &port); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: port must be a number\n")
+				os.Exit(1)
+			}
+			cfg.Server.Port = port
+		case "server.background":
+			if value == "true" {
+				cfg.Server.Background = true
+			} else if value == "false" {
+				cfg.Server.Background = false
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
+				os.Exit(1)
+			}
+		case "server.mcp":
+			if value == "true" {
+				cfg.Server.MCP = true
+			} else if value == "false" {
+				cfg.Server.MCP = false
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
+				os.Exit(1)
+			}
+		case "server.autostart":
+			if value == "true" {
+				cfg.Server.Autostart = true
+			} else if value == "false" {
+				cfg.Server.Autostart = false
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
+				os.Exit(1)
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "Error: unknown key %q\n", key)
 			os.Exit(1)
@@ -520,11 +574,12 @@ var groupsCmd = &cobra.Command{
 	},
 }
 
-// daemonCmd starts the Kanban UI server.
+// daemonCmd starts the Kanban UI server (deprecated: use 'ywai serve' instead).
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
-	Short: "Start the Kanban UI server",
+	Short: "Start the Kanban UI server (deprecated: use 'ywai serve' instead)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintln(os.Stderr, "Warning: 'ywai daemon' is deprecated. Use 'ywai serve' instead.")
 		mcpMode, _ := cmd.Flags().GetBool("mcp")
 		if mcpMode {
 			// Run as MCP adapter (stdio JSON-RPC)
@@ -535,13 +590,59 @@ var daemonCmd = &cobra.Command{
 
 	// Normal HTTP server mode with auto-start and port resolution
 	port, _ := cmd.Flags().GetInt("port")
-	s, err := kanban.GetOrStart(port)
+	_, err := kanban.GetOrStart(port)
 	if err != nil {
 		return err
 	}
-	log.Printf("ywai Kanban server running on http://localhost:%d", s.Port())
 	// Block forever (server runs in background from GetOrStart)
 	select {}
+	},
+}
+
+// serveCmd starts the unified ywai server (Kanban + Missions).
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the unified ywai server (Kanban + Missions)",
+	Long:  "Start the unified ywai server combining Kanban and Missions on a single port.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		port, _ := cmd.Flags().GetInt("port")
+		background, _ := cmd.Flags().GetBool("background")
+		noMCP, _ := cmd.Flags().GetBool("no-mcp")
+		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
+
+		if mcpOnly {
+			// Run as MCP adapter only (stdio JSON-RPC)
+			adapter := kanban.NewMCPAdapter()
+			adapter.Run()
+			return nil
+		}
+
+		// Start unified server
+		s, err := unified.GetOrStart(port)
+		if err != nil {
+			return fmt.Errorf("failed to start unified server: %w", err)
+		}
+
+		// Start MCP adapter in background if not disabled
+		if !noMCP {
+			go func() {
+				adapter := kanban.NewMCPAdapter()
+				adapter.Run()
+			}()
+		}
+
+		if background {
+			// Detach from terminal
+			fmt.Printf("Server running in background on port %d\n", s.Port())
+			fmt.Printf("Unified UI: http://localhost:%d/ui\n", s.Port())
+			fmt.Printf("Health check: http://localhost:%d/health\n", s.Port())
+			fmt.Printf("Kanban UI: http://localhost:%d/\n", s.Port())
+			fmt.Printf("Missions UI: http://localhost:%d/missions/\n", s.Port())
+			return nil
+		}
+
+		// Block forever
+		select {}
 	},
 }
 
@@ -683,15 +784,29 @@ func maskKey(key string) string {
 	return key[:4] + strings.Repeat("*", len(key)-4)
 }
 
+// configureAutostart sets up the unified server to start automatically on system boot.
+func configureAutostart() error {
+	if err := autostart.Configure(); err != nil {
+		return fmt.Errorf("failed to configure autostart: %w", err)
+	}
+	return nil
+}
+
 func init() {
 	cli.RegisterCommands(rootCmd)
 
 	daemonCmd.Flags().Bool("mcp", false, "Run as MCP stdio adapter")
 	daemonCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
+	serveCmd.Flags().IntP("port", "p", 5768, "Port for unified server")
+	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
+	serveCmd.Flags().Bool("no-mcp", false, "Don't start MCP adapter")
+	serveCmd.Flags().Bool("mcp-only", false, "Run as MCP adapter only (stdio, no HTTP)")
+
 	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
 	rootCmd.AddCommand(daemonCmd)
+	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(uiCmd)
 
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
@@ -703,6 +818,7 @@ func init() {
 	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
 	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
+	installCmd.Flags().Bool("autostart", false, "Configure unified server to start automatically on system boot")
 	installCmd.Flags().Bool("ado", false, "Install Azure DevOps plugin (opencode + pi)")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
