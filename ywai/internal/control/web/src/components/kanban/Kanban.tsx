@@ -87,7 +87,7 @@ export default function Kanban() {
     [],
   )
 
-  useWebSocket('/ws', handleWSMessage)
+  useWebSocket('/api/events', handleWSMessage)
 
   useEffect(() => {
     fetchSessions()

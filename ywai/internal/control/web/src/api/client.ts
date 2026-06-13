@@ -102,7 +102,10 @@ export const kanbanApi = {
 
 export const missionsApi = {
   // Missions
-  listMissions: () => request<Mission[]>('/missions/api/missions'),
+  listMissions: () =>
+    request<{ missions: Mission[] }>('/missions/api/missions').then(
+      (r) => r.missions,
+    ),
   getMission: (id: string) =>
     request<Mission>(`/missions/api/missions/${id}`),
   createMission: (data: { name: string; project?: string }) =>
@@ -125,7 +128,10 @@ export const missionsApi = {
     request<void>(`/missions/api/missions/${id}/cancel`, { method: 'POST' }),
 
   // Projects
-  listProjects: () => request<Project[]>('/missions/api/projects'),
+  listProjects: () =>
+    request<{ projects: Project[] }>('/missions/api/projects').then(
+      (r) => r.projects,
+    ),
   createProject: (name: string, path: string) =>
     request<Project>('/missions/api/projects', {
       method: 'POST',

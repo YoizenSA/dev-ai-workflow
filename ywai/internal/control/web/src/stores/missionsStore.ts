@@ -97,7 +97,8 @@ export const useMissionsStore = create<MissionsState>((set, get) => ({
   handleWSMessage: (msg: WSMessage) => {
     switch (msg.type) {
       case 'initial_state': {
-        const missions = (msg.payload as Mission[]) ?? []
+        const payload = msg.payload
+        const missions = Array.isArray(payload) ? (payload as Mission[]) : []
         set({ missions })
         break
       }

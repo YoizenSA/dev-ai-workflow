@@ -31,10 +31,10 @@ function MissionRow({ mission }: { mission: Mission }) {
     useMissionsStore()
 
   const isActive = selectedMission?.id === mission.id
-  const completedFeatures = mission.features.filter(
+  const completedFeatures = (mission.features ?? []).filter(
     (f) => f.status === 'completed',
   ).length
-  const totalFeatures = mission.features.length
+  const totalFeatures = mission.features?.length ?? mission.featureCount ?? 0
   const progress =
     totalFeatures > 0 ? Math.round((completedFeatures / totalFeatures) * 100) : 0
 
@@ -202,7 +202,7 @@ export default function Missions() {
               </h2>
               <div className="card">
                 <div className="card-body">
-                  {selectedMission.features.length > 0 ? (
+                  {selectedMission.features && selectedMission.features.length > 0 ? (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>

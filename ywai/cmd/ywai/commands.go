@@ -634,7 +634,7 @@ var serveCmd = &cobra.Command{
 		if background {
 			// Detach from terminal
 			fmt.Printf("Server running in background on port %d\n", s.Port())
-			fmt.Printf("Control UI: http://localhost:%d/ui\n", s.Port())
+			fmt.Printf("Control UI: http://localhost:%d/\n", s.Port())
 			fmt.Printf("Health check: http://localhost:%d/health\n", s.Port())
 			fmt.Printf("Kanban UI: http://localhost:%d/\n", s.Port())
 			fmt.Printf("Missions UI: http://localhost:%d/missions/\n", s.Port())

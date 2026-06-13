@@ -9,9 +9,9 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const location = useLocation()
-  const sessionCount = useKanbanStore((s) => s.sessions.filter((sess) => sess.status === 'active').length)
+  const sessionCount = useKanbanStore((s) => (s.sessions ?? []).filter((sess) => sess.status === 'active').length)
   const activeMissions = useMissionsStore(
-    (s) => s.missions.filter((m) => !['completed', 'cancelled', 'failed'].includes(m.status)).length,
+    (s) => (Array.isArray(s.missions) ? s.missions : []).filter((m) => !['completed', 'cancelled', 'failed'].includes(m.status)).length,
   )
 
   return (

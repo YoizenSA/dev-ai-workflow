@@ -73,7 +73,7 @@ func New(port int) (*Server, error) {
 	return s, nil
 }
 
-// buildRoutes registers all API routes and serves the React SPA.
+// buildRoutes registers all routes: explicit APIs first, then SPA catch-all.
 func (s *Server) buildRoutes() {
 	s.mux = http.NewServeMux()
 
@@ -81,42 +81,15 @@ func (s *Server) buildRoutes() {
 	s.mux.HandleFunc("GET /health", s.healthHandler)
 
 	// ─── Kanban API ──────────────────────────────────────────────
-	s.mux.HandleFunc("/api/sessions", s.kanbanHandler)
-	s.mux.HandleFunc("/api/sessions/{id}", s.kanbanHandler)
-	s.mux.HandleFunc("/api/sessions/{id}/board", s.kanbanHandler)
-	s.mux.HandleFunc("/api/sessions/{id}/graph", s.kanbanHandler)
-	s.mux.HandleFunc("/api/sessions/{id}/decisions", s.kanbanHandler)
-	s.mux.HandleFunc("/api/delegations", s.kanbanHandler)
-	s.mux.HandleFunc("/api/delegations/{id}", s.kanbanHandler)
-	s.mux.HandleFunc("/api/delegations/{id}/activities", s.kanbanHandler)
-	s.mux.HandleFunc("/api/delegations/{id}/activities/{actId}", s.kanbanHandler)
-	s.mux.HandleFunc("/api/config/{section}", s.kanbanHandler)
-	s.mux.HandleFunc("/api/config/{section}/{name}", s.kanbanHandler)
-
-	// Kanban WebSocket
-	s.mux.HandleFunc("/ws", s.kanbanHandler)
+	s.mux.HandleFunc("/api/", s.kanbanHandler)
 
 	// ─── Missions API ────────────────────────────────────────────
 	s.mux.HandleFunc("/missions/api/", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions/{id}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions/{id}/{action}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions/{id}/features/{featureId}/{action}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions/{id}/artifacts/{type}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/missions/{id}/{action}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/projects", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/projects/{name}", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/fs/browse", s.missionsHandler)
-	s.mux.HandleFunc("/missions/api/opencode/", s.missionsHandler)
-
-	// Missions WebSocket
 	s.mux.HandleFunc("/missions/ws", s.missionsHandler)
 
 	// ─── React SPA ──────────────────────────────────────────────
-	s.mux.HandleFunc("/ui/", s.serveUIAsset)
-	s.mux.HandleFunc("/ui", s.serveSPAIndex)
-	// SPA fallback for client-side routing under /ui/*
-	s.mux.HandleFunc("/ui/{path...}", s.serveUIAsset)
+	// Everything else (/, /missions, /settings, /app.js, etc.)
+	s.mux.HandleFunc("/", s.serveSPA)
 }
 
 // kanbanHandler forwards requests to the kanban HTTP handler.
@@ -142,11 +115,52 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		s.startedAt.Format(time.RFC3339))
 }
 
+// serveSPA serves all non-API requests: static assets or SPA index.html.
+func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	// Root or known SPA routes → index.html
+	if path == "/" || path == "/missions" || path == "/settings" {
+		s.serveSPAIndex(w, r)
+		return
+	}
+
+	// Static assets: files with extensions
+	if strings.Contains(path, ".") {
+		assetPath := strings.TrimPrefix(path, "/")
+		contentType := guessContentType(assetPath)
+		w.Header().Set("Content-Type", contentType)
+
+		// Try embedded first
+		if embeddedUI != nil {
+			uiFS := embeddedUI()
+			content, err := fs.ReadFile(uiFS, assetPath)
+			if err == nil {
+				w.Write(content)
+				return
+			}
+		}
+
+		// Fallback to filesystem (dev mode)
+		fullPath := filepath.Join("internal", "control", "web", "dist", assetPath)
+		content, err := os.ReadFile(fullPath)
+		if err == nil {
+			w.Write(content)
+			return
+		}
+
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	// Everything else → SPA fallback (client-side routing)
+	s.serveSPAIndex(w, r)
+}
+
 // serveSPAIndex serves the React SPA index.html.
 func (s *Server) serveSPAIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	// Try embedded first
 	if embeddedUI != nil {
 		uiFS := embeddedUI()
 		content, err := fs.ReadFile(uiFS, "index.html")
@@ -156,48 +170,10 @@ func (s *Server) serveSPAIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fallback to filesystem (dev mode)
 	fullPath := filepath.Join("internal", "control", "web", "dist", "index.html")
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		http.Error(w, "UI not found", http.StatusNotFound)
-		return
-	}
-	w.Write(content)
-}
-
-// serveUIAsset serves static assets from the embedded UI or filesystem.
-func (s *Server) serveUIAsset(w http.ResponseWriter, r *http.Request) {
-	// Normalize path: strip /ui/ prefix
-	assetPath := strings.TrimPrefix(r.URL.Path, "/ui/")
-	if assetPath == "" {
-		s.serveSPAIndex(w, r)
-		return
-	}
-
-	contentType := guessContentType(assetPath)
-	w.Header().Set("Content-Type", contentType)
-
-	// Try embedded first
-	if embeddedUI != nil {
-		uiFS := embeddedUI()
-		content, err := fs.ReadFile(uiFS, assetPath)
-		if err == nil {
-			w.Write(content)
-			return
-		}
-	}
-
-	// Fallback to filesystem (dev mode)
-	fullPath := filepath.Join("internal", "control", "web", "dist", assetPath)
-	content, err := os.ReadFile(fullPath)
-	if err != nil {
-		// SPA fallback: serve index.html for unknown routes (client-side routing)
-		if strings.Contains(assetPath, ".") == false {
-			s.serveSPAIndex(w, r)
-			return
-		}
-		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
 	w.Write(content)

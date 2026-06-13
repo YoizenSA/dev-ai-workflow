@@ -132,8 +132,10 @@ export interface Mission {
   createdAt: string
   updatedAt: string
   completedAt?: string | null
-  features: Feature[]
-  milestones: Milestone[]
+  features?: Feature[] // undefined in list view, present in detail
+  milestones?: Milestone[] // undefined in list view
+  featureCount?: number
+  milestoneCount?: number
   model?: string
   agent?: string
 }
