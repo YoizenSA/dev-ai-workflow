@@ -7,7 +7,7 @@ import (
 	"io/fs"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/unified"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 )
 
 //go:embed all:embedded_data
@@ -33,5 +33,5 @@ func init() {
 	config.RegisterEmbeddedProviders(skillsFS)
 	config.RegisterEmbeddedAgents(agentsFS)
 	config.RegisterEmbeddedDefaults(defaultsFS)
-	unified.RegisterEmbeddedUI(uiFS)
+	control.RegisterEmbeddedUI(uiFS)
 }

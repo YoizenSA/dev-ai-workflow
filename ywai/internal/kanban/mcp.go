@@ -91,14 +91,14 @@ type MCPAdapter struct {
 	client *http.Client
 }
 
-// NewMCPAdapter creates a new MCP adapter, using the unified server if available,
+// NewMCPAdapter creates a new MCP adapter, using the control server if available,
 // otherwise falling back to the singleton kanban server.
 func NewMCPAdapter() *MCPAdapter {
-	// First, check if unified server is running
+	// First, check if control server is running
 	if port := serverutil.GetRunningPort(); port != 0 {
 		client := &http.Client{Timeout: 2 * time.Second}
 		return &MCPAdapter{
-			server: nil, // No kanban server needed when using unified
+			server: nil, // No kanban server needed when using control
 			port:   port,
 			client: client,
 		}

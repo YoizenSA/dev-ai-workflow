@@ -52,9 +52,9 @@ type UserConfig struct {
 	Server ServerConfig `yaml:"server,omitempty"`
 }
 
-// ServerConfig contains configuration for the unified server
+// ServerConfig contains configuration for the control server
 type ServerConfig struct {
-	// Port for the unified server (default 5768)
+	// Port for the control server (default 5768)
 	Port int `yaml:"port,omitempty"`
 
 	// Whether to run in background mode

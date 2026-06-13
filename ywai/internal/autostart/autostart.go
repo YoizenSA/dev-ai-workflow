@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-// Configure sets up the unified server to start automatically on system boot.
+// Configure sets up the control server to start automatically on system boot.
 func Configure() error {
 	switch runtime.GOOS {
 	case "linux":

@@ -492,7 +492,7 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the Mission Control Web UI server (deprecated: use 'ywai serve' instead)",
-		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).\n\nDEPRECATED: Use 'ywai serve' instead to run the unified server.",
+		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).\n\nDEPRECATED: Use 'ywai serve' instead to run the control server.",
 		RunE:  runServe,
 	}
 
