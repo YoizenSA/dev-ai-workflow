@@ -1,0 +1,44 @@
+:root {
+  /* ywai Kanban Color System */
+  --bg-primary: #090b11;
+  --bg-secondary: #0f121d;
+  --bg-card: rgba(22, 26, 45, 0.65);
+  --bg-card-hover: rgba(28, 33, 56, 0.85);
+  --bg-column: rgba(14, 17, 30, 0.8);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --text-primary: #f1f3f9;
+  --text-secondary: #a3a8c3;
+  --text-muted: #646a8a;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(99, 102, 241, 0.4);
+  --accent: #5e60f0;
+  --accent-hover: #7b7dfb;
+  --accent-glow: rgba(94, 96, 240, 0.25);
+  --danger: #ff4757;
+  --danger-hover: #ff6b81;
+  --danger-glow: rgba(255, 71, 87, 0.2);
+  --success: #2ed573;
+  --success-hover: #26af5f;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  background: var(--bg-primary);
+  background-image:
+    radial-gradient(at 0% 0%, rgba(94, 96, 240, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 71, 87, 0.03) 0px, transparent 50%);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
