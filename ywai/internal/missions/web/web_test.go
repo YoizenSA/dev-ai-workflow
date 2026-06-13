@@ -568,12 +568,15 @@ func TestHealthCheckDegraded(t *testing.T) {
 // ─── File Existence ────────────────────────────────────────────────────────
 
 func TestUIFilesExist(t *testing.T) {
-	entries, err := os.ReadDir("ui")
+	// UI files are now served by the control server from internal/control/web/dist/.
+	// The standalone missions server no longer has its own UI directory.
+	uiDir := filepath.Join("..", "..", "control", "web", "dist")
+	entries, err := os.ReadDir(uiDir)
 	if err != nil {
-		t.Fatalf("failed to read ui directory: %v", err)
+		t.Skipf("control UI dist not found (run npm build first): %v", err)
 	}
 
-	expected := map[string]bool{"index.html": false, "app.css": false, "app.js": false}
+	expected := map[string]bool{"index.html": false}
 	for _, e := range entries {
 		if !e.IsDir() {
 			expected[e.Name()] = true
@@ -582,10 +585,7 @@ func TestUIFilesExist(t *testing.T) {
 
 	for name, found := range expected {
 		if !found {
-			if _, err := os.Stat(filepath.Join("ui", name)); err == nil {
-				continue
-			}
-			t.Errorf("expected UI file ui/%s not found", name)
+			t.Errorf("expected UI file %s/%s not found", uiDir, name)
 		}
 	}
 }

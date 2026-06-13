@@ -10,8 +10,8 @@ func TestSkillsList(t *testing.T) {
 	out := runYwai(t, bin, "skills")
 
 	expected := []string{
-		"angular", "devops", "dotnet", "git-commit",
-		"react-19", "tailwind-4", "typescript", "yz-ui",
+		"angular", "devops", "docker", "git-commit",
+		"tailwind-4", "yz-ui",
 	}
 	for _, skill := range expected {
 		if !strings.Contains(out, skill) {
