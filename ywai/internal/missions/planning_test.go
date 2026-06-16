@@ -822,7 +822,7 @@ func TestRefineGoalWithOpencode_FallbackToLocal(t *testing.T) {
 func TestRefineGoalWithOpencode_ExtraContext(t *testing.T) {
 	prompt := buildRefinePrompt("build a CLI tool", "uses Python 3.12")
 
-	if !strings.Contains(prompt, "Additional context: uses Python 3.12") {
+	if !strings.Contains(prompt, "uses Python 3.12") {
 		t.Errorf("prompt should include the extra context, got:\n%s", prompt)
 	}
 	if !strings.Contains(prompt, "build a CLI tool") {
@@ -847,6 +847,43 @@ func TestLocalRefineGoal_Shape(t *testing.T) {
 	}
 	if !strings.Contains(refined, "add dark mode") {
 		t.Errorf("localRefineGoal did not embed the goal text")
+	}
+}
+
+func TestStripOpencodeNoise(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "status line with dot separator",
+			input: "> orchestrator · mimo-v2.5-pro\n\n## Goal\nBuild a CLI",
+			want:  "## Goal\nBuild a CLI",
+		},
+		{
+			name:  "ANSI codes",
+			input: "\x1b[0m\x1b[32m## Goal\x1b[0m\nBuild a CLI",
+			want:  "## Goal\nBuild a CLI",
+		},
+		{
+			name:  "clean output passes through",
+			input: "## Goal\nBuild a CLI\n\n## Scope\n- Feature 1",
+			want:  "## Goal\nBuild a CLI\n\n## Scope\n- Feature 1",
+		},
+		{
+			name:  "status line without angle bracket",
+			input: "build · mimo-v2.5-pro\n\n## Goal\nTest",
+			want:  "## Goal\nTest",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripOpencodeNoise(tt.input)
+			if got != tt.want {
+				t.Errorf("stripOpencodeNoise() =\n%s\nwant:\n%s", got, tt.want)
+			}
+		})
 	}
 }
 

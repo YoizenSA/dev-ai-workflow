@@ -210,7 +210,7 @@ func RefineGoalWithOpencode(goal, extraContext, model, agent string) string {
 
 	prompt := buildRefinePrompt(goal, extraContext)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	// Build args with optional --model and --agent (mirrors GeneratePlanWithOpencode).
@@ -224,20 +224,42 @@ func RefineGoalWithOpencode(goal, extraContext, model, agent string) string {
 	args = append(args, prompt)
 
 	cmd := exec.CommandContext(ctx, opencodePath, args...)
-	cmd.Stderr = os.Stderr
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
 
 	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("opencode goal refinement failed: %v, using local refinement", err)
+		log.Printf("opencode goal refinement failed (agent=%s, model=%s): %v\nstderr: %s", agent, model, err, stderrBuf.String())
 		return localRefineGoal(goal)
 	}
 
 	refined := strings.TrimSpace(string(output))
 	if refined == "" {
-		log.Printf("opencode goal refinement returned empty output, using local refinement")
+		log.Printf("opencode goal refinement returned empty output (agent=%s, model=%s)\nstderr: %s", agent, model, stderrBuf.String())
+		return localRefineGoal(goal)
+	}
+
+	// Strip opencode status lines (e.g. "> orchestrator · mimo-v2.5-pro")
+	// and ANSI escape codes that get mixed into stdout.
+	refined = stripOpencodeNoise(refined)
+	if refined == "" {
+		log.Printf("opencode goal refinement was empty after stripping noise")
 		return localRefineGoal(goal)
 	}
 	return refined
+}
+
+var (
+	ansiRE       = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	opencodeLineRE = regexp.MustCompile(`(?m)^>?\s*\w+\s*·\s*\S+\s*$`)
+)
+
+// stripOpencodeNoise removes ANSI escape codes and opencode status lines
+// (e.g. "> orchestrator · mimo-v2.5-pro") from command output.
+func stripOpencodeNoise(s string) string {
+	s = ansiRE.ReplaceAllString(s, "")
+	s = opencodeLineRE.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
 }
 
 // planningAgentDefault returns the agent configured for the planning role,
@@ -254,26 +276,38 @@ func planningAgentDefault() string {
 
 // buildRefinePrompt constructs the prompt sent to opencode to refine a goal.
 func buildRefinePrompt(goal, extraContext string) string {
-	prompt := fmt.Sprintf(`Given this goal: %s
+	prompt := fmt.Sprintf(`You are a senior product engineer. Analyze this mission goal and produce a concrete, actionable refinement.
 
-Refine it into a structured mission goal. Return markdown with these sections:
+User's goal: %s
+
+Think step by step BEFORE writing the output:
+1. What is the user actually trying to build or achieve?
+2. What technologies, frameworks, or tools are likely involved?
+3. What are the key deliverables?
+4. What are realistic acceptance criteria that prove "done"?
+5. What should be explicitly OUT of scope to keep the mission focused?
+
+Then return ONLY this markdown (no preamble, no explanation):
 
 ## Goal
-[Clear, actionable goal statement]
+[One clear sentence — what specifically will be built or changed]
 
 ## Scope
-- [What is included]
+- [Concrete deliverable 1 — name the feature/component/system]
+- [Concrete deliverable 2]
+- [Concrete deliverable 3 if applicable]
 
 ## Out of Scope
-- [What is explicitly excluded]
+- [Specific thing that's related but deferred — be explicit, not generic]
+- [Another explicit exclusion]
 
 ## Acceptance Criteria
-- [Measurable criteria for completion]
-
-Keep it concise and practical. Do not include any preamble or explanation — output ONLY the markdown.`, goal)
+- [Specific, testable criterion — e.g. "user can do X and sees Y"]
+- [Another specific criterion]
+- [Another if applicable]`, goal)
 
 	if extraContext != "" {
-		prompt = fmt.Sprintf("Additional context: %s\n\n%s", extraContext, prompt)
+		prompt = fmt.Sprintf("Additional context about the project or codebase:\n%s\n\n%s", extraContext, prompt)
 	}
 	return prompt
 }
