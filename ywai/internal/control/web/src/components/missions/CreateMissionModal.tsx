@@ -53,6 +53,9 @@ interface WizardState {
 	plannerAgent: string;
 	workerAgent: string;
 	models: ModelInfo[];
+	// Model ids/names recommended in dropdowns, derived from configured role
+	// defaults (never hardcoded).
+	recommendedModels: string[];
 	agents: string[];
 	modelsError: string | null;
 	agentsError: string | null;
@@ -132,6 +135,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 		planModel: "",
 		planRefineModel: "",
 		workerModel: "",
+		recommendedModels: [],
 		maxParallel: 3,
 		plannerAgent: "",
 		workerAgent: "",
@@ -171,14 +175,21 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 				if (modelsRes) {
 					const allModels = Object.values(modelsRes.modelsByProvider).flat();
 					// Prefer the configured planning role's primary model; otherwise
-					// fall back to a large-context model that fits opencode prompts.
-					const bigContextPreference = ["deepseek-v4-flash-free", "nemotron-3-ultra-free", "mimo-v2.5-free", "qwen3.5-9b"];
-					const preferred = allModels.find((m) => bigContextPreference.includes(m.name) || bigContextPreference.includes(m.id));
-					const fallback = preferred?.id || modelsRes.default || (allModels[0]?.id ?? "");
+					// fall back to the backend's default model. No hardcoded ids.
+					const fallback = modelsRes.default || (allModels[0]?.id ?? "");
 					const planningModel = planning.model || fallback;
 					const workerModel = dev.model || fallback;
+					// Recommended set = every model/fallback configured across roles.
+					const recommendedModels = Array.from(
+						new Set(
+							Object.values(roleDefaults)
+								.flatMap((rd) => [rd?.model, ...(rd?.fallbacks ?? [])])
+								.filter((m): m is string => !!m),
+						),
+					);
 					update({
 						models: allModels,
+						recommendedModels,
 						goalRefineModel: planningModel,
 						planModel: planningModel,
 						planRefineModel: planningModel,
@@ -926,6 +937,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 						disabled={!state.goal.trim() || state.refining || state.submitting || !state.selectedProject}
 						onClick={handleAutoRun}
 						data-tip="Plan, approve and run autonomously — skip the review step"
+						data-tip-pos="left"
 						style={{ marginLeft: "auto" }}
 					>
 						{state.submitting ? (
@@ -1038,6 +1050,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							label="Goal refinement"
 							value={state.goalRefineModel}
 							models={state.models}
+							recommended={state.recommendedModels}
 							onChange={(v) => update({ goalRefineModel: v })}
 						/>
 						<ModelCombobox
@@ -1045,6 +1058,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							label="Plan generation"
 							value={state.planModel}
 							models={state.models}
+							recommended={state.recommendedModels}
 							onChange={(v) => update({ planModel: v })}
 						/>
 						<ModelCombobox
@@ -1052,6 +1066,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							label="Plan refinement"
 							value={state.planRefineModel}
 							models={state.models}
+							recommended={state.recommendedModels}
 							onChange={(v) => update({ planRefineModel: v })}
 						/>
 						<ModelCombobox
@@ -1059,6 +1074,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							label="Worker execution"
 							value={state.workerModel}
 							models={state.models}
+							recommended={state.recommendedModels}
 							onChange={(v) => update({ workerModel: v })}
 						/>
 					</div>

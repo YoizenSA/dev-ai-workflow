@@ -87,6 +87,7 @@ func (h *Handlers) RefineGoal(w http.ResponseWriter, r *http.Request) {
 		Goal    string `json:"goal"`
 		Context string `json:"context,omitempty"`
 		Model   string `json:"model,omitempty"`
+		Agent   string `json:"agent,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -99,7 +100,7 @@ func (h *Handlers) RefineGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refined := missions.RefineGoalWithOpencode(req.Goal, req.Context, req.Model)
+	refined := missions.RefineGoalWithOpencode(req.Goal, req.Context, req.Model, req.Agent)
 	if refined == "" {
 		writeError(w, http.StatusInternalServerError, "no response from AI")
 		return

@@ -1,0 +1,55 @@
+{
+  "defaults": {
+    "agent": "dev"
+  },
+  "roles": {
+    "planning": {
+      "agent": "orchestrator",
+      "model": "opencode/mimo-v2.5-pro",
+      "fallbacks": ["opencode/glm-5.1"],
+      "skills": ["planner"]
+    },
+    "architect": {
+      "agent": "architect",
+      "model": "opencode/glm-5.1",
+      "fallbacks": ["opencode/mimo-v2.5-pro"],
+      "skills": ["architect-worker"]
+    },
+    "dev": {
+      "agent": "dev",
+      "model": "opencode/kimi-k2.7-code",
+      "fallbacks": ["opencode/deepseek-v4-pro"],
+      "skills": ["implementation", "git-commit"]
+    },
+    "frontend": {
+      "agent": "dev",
+      "model": "opencode/kimi-k2.7-code",
+      "fallbacks": ["opencode/mimo-v2.5-pro"],
+      "skills": ["frontend-worker", "angular/core", "angular/architecture", "angular/forms", "tailwind-4", "yz-ui"]
+    },
+    "backend": {
+      "agent": "dev",
+      "model": "opencode/deepseek-v4-flash",
+      "fallbacks": ["opencode/kimi-k2.7-code"],
+      "skills": ["backend-worker", "docker"]
+    },
+    "qa": {
+      "agent": "qa",
+      "model": "opencode/qwen3.7-plus",
+      "fallbacks": ["opencode/minimax-m2.5"],
+      "skills": ["qa-worker"]
+    },
+    "reviewer": {
+      "agent": "reviewer",
+      "model": "opencode/kimi-k2.7-code",
+      "fallbacks": ["opencode/glm-5.1"],
+      "skills": ["reviewer-worker"]
+    },
+    "devops": {
+      "agent": "devops",
+      "model": "opencode/deepseek-v4-flash",
+      "fallbacks": ["opencode/mimo-v2.5"],
+      "skills": ["devops-worker", "docker", "devops"]
+    }
+  }
+}

@@ -18,6 +18,8 @@ const MaxFallbackChainLen = 3
 // fall back to the generic implementation skill.
 func RoleToSkillName(role string) string {
 	switch role {
+	case config.RoleArchitect:
+		return "architect-worker"
 	case config.RoleDev:
 		return "implementation"
 	case config.RoleFrontend:
@@ -41,6 +43,8 @@ func RoleToSkillName(role string) string {
 // persisted before the Role field existed still resolve to a sensible role.
 func SkillNameToRole(skillName string) string {
 	switch skillName {
+	case "architect-worker":
+		return config.RoleArchitect
 	case "frontend-worker":
 		return config.RoleFrontend
 	case "backend-worker":

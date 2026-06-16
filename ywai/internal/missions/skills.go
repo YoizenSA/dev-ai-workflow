@@ -161,17 +161,35 @@ func (sl *SkillLoader) LoadAllSkills() (map[string]*Skill, error) {
 // binary). It is the third resolution tier after per-mission and default
 // skills. Returns empty string when the directory cannot be located.
 func globalSkillsSourceDir() string {
-	// 1. Repo checkout: walk up from the store base to find ywai/skills.
-	//    The missions base dir lives under ~/.local/share/ywai/missions, so
-	//    look relative to the executable / known locations instead.
-	for _, candidate := range []string{
-		os.Getenv("YWAI_SKILLS_DIR"),
-		filepath.Join(os.Getenv("HOME"), ".ywai", "skills"),
-	} {
-		if candidate != "" {
-			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-				return candidate
+	// 1. Explicit override.
+	if dir := os.Getenv("YWAI_SKILLS_DIR"); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	// 2. Repo checkout: walk up from the working directory to the ywai module
+	//    root (the dir holding go.mod) and use its skills/ directory. This wins
+	//    over the seeded home copy so dev runs and tests pick up edited skills
+	//    without re-seeding ~/.ywai/skills.
+	if wd, err := os.Getwd(); err == nil {
+		for dir := wd; ; {
+			if fi, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && !fi.IsDir() {
+				skillsDir := filepath.Join(dir, "skills")
+				if di, err := os.Stat(skillsDir); err == nil && di.IsDir() {
+					return skillsDir
+				}
 			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	// 3. Installed binary: skills seeded into the user data dir.
+	if home := filepath.Join(os.Getenv("HOME"), ".ywai", "skills"); home != "" {
+		if info, err := os.Stat(home); err == nil && info.IsDir() {
+			return home
 		}
 	}
 	return ""
@@ -180,12 +198,16 @@ func globalSkillsSourceDir() string {
 // ResolveSkillContent resolves a skill name to its renderable markdown body,
 // in priority order:
 //  1. per-mission skill: {missionDir}/skills/{name}/SKILL.md (raw file)
-//  2. default skill: GetDefaultSkill(name) → formatted body
-//  3. global skill: {globalSkillsSourceDir}/{name}/SKILL.md (raw file)
+//  2. global skill: {globalSkillsSourceDir}/{name}/SKILL.md (raw file)
+//  3. default skill: GetDefaultSkill(name) → formatted body
+//
+// The raw-file tiers win so the authored content (full tech-skill guides like
+// docker/angular and worker skills alike) is injected verbatim. GetDefaultSkill
+// is only a last-resort generic fallback for names that have no file, since it
+// re-renders through formatSkillBody and would otherwise strip authored content.
 //
 // Returns the skill name and its markdown body, or empty strings when nothing
-// resolves. The raw-file tiers return the file verbatim so custom/global skills
-// keep their authored formatting.
+// resolves.
 func ResolveSkillContent(missionDir, name string) (resolvedName, body string) {
 	if name == "" {
 		return "", ""
@@ -197,16 +219,16 @@ func ResolveSkillContent(missionDir, name string) (resolvedName, body string) {
 		return name, string(data)
 	}
 
-	// Tier 2: default skill template.
-	if def, err := GetDefaultSkill(name); err == nil && def != nil {
-		return name, formatSkillBody(def)
-	}
-
-	// Tier 3: global skill.
+	// Tier 2: global SKILL.md (raw, full authored content).
 	if gdir := globalSkillsSourceDir(); gdir != "" {
 		if data, err := os.ReadFile(filepath.Join(gdir, name, "SKILL.md")); err == nil {
 			return name, string(data)
 		}
+	}
+
+	// Tier 3: generic default template for names without a file.
+	if def, err := GetDefaultSkill(name); err == nil && def != nil {
+		return name, formatSkillBody(def)
 	}
 
 	return "", ""
@@ -264,177 +286,36 @@ func formatSkillBody(s *Skill) string {
 	return b.String()
 }
 
-// GetDefaultSkill returns a default skill template for a worker type.
-// Used when no custom skill exists in the mission directory.
+// GetDefaultSkill returns the skill for a worker type. The canonical worker
+// skills live as editable SKILL.md files under the bundled skills directory
+// (see globalSkillsSourceDir) — the same place tech skills like yz-ui live.
+// When no file resolves, a generic implementation skill is returned so worker
+// execution always has a usable procedure.
 func GetDefaultSkill(workerType string) (*Skill, error) {
-	// Default skill templates for common worker types
-	switch workerType {
-	case "backend-worker", "implementation":
-		return &Skill{
-			Name:          "backend-worker",
-			Description:   "Backend implementation worker",
-			RequiredTools: []string{"go test", "git"},
-			WorkProcedure: `1. Read the feature description and expected behavior
-2. Write failing tests first (TDD)
-3. Implement the feature to make tests pass
-4. Run tests and verify they pass
-5. Manually verify the implementation
-6. Return a structured handoff`,
-			ExampleHandoff: `{
-  "salientSummary": "Implemented GET /api/users endpoint with pagination",
-  "whatWasImplemented": "Created users controller with list endpoint supporting cursor-based pagination and filtering",
-  "whatWasLeftUndone": "",
-  "verification": {
-    "commandsRun": [
-      {"command": "go test ./internal/users/...", "exitCode": 0, "observation": "All tests passed"}
-    ]
-  },
-  "tests": {
-    "added": [{"file": "internal/users/users_test.go", "cases": [{"name": "TestListUsers", "verifies": "Returns paginated user list"}]}],
-    "coverage": "85%"
-  },
-  "discoveredIssues": []
-}`,
-			ReturnConditions: "Return to orchestrator if: requirements are ambiguous, existing bugs affect this feature, or you cannot complete within mission boundaries",
-		}, nil
-	case "frontend-worker":
-		return &Skill{
-			Name:          "frontend-worker",
-			Description:   "Frontend implementation worker",
-			RequiredTools: []string{"npm test", "git"},
-			WorkProcedure: `1. Read the feature description and expected behavior
-2. Write failing tests first (TDD)
-3. Implement the feature to make tests pass
-4. Run tests and verify they pass
-5. Manually verify the implementation in browser
-6. Return a structured handoff`,
-			ExampleHandoff: `{
-  "salientSummary": "Implemented user profile page with edit form",
-  "whatWasImplemented": "Created UserProfile component with form validation and API integration",
-  "whatWasLeftUndone": "",
-  "verification": {
-    "commandsRun": [
-      {"command": "npm test -- UserProfile.test.tsx", "exitCode": 0, "observation": "All tests passed"}
-    ]
-  },
-  "tests": {
-    "added": [{"file": "src/components/UserProfile.test.tsx", "cases": [{"name": "testRendersProfile", "verifies": "Component renders user data"}]}],
-    "coverage": "80%"
-  },
-  "discoveredIssues": []
-}`,
-			ReturnConditions: "Return to orchestrator if: requirements are ambiguous, existing bugs affect this feature, or you cannot complete within mission boundaries",
-		}, nil
-	case "qa-worker":
-		return &Skill{
-			Name:          "qa-worker",
-			Description:   "QA and testing worker",
-			RequiredTools: []string{"go test", "npm test"},
-			WorkProcedure: `1. Read the feature description and expected behavior
-2. Review existing test coverage
-3. Write comprehensive tests for the feature
-4. Run tests and verify they pass
-5. Check for edge cases and error conditions
-6. Return a structured handoff`,
-			ExampleHandoff: `{
-  "salientSummary": "Added comprehensive test coverage for authentication module",
-  "whatWasImplemented": "Added unit tests for login, logout, and token refresh flows",
-  "whatWasLeftUndone": "",
-  "verification": {
-    "commandsRun": [
-      {"command": "go test ./internal/auth/... -cover", "exitCode": 0, "observation": "Coverage increased from 60% to 90%"}
-    ]
-  },
-  "tests": {
-    "added": [{"file": "internal/auth/auth_test.go", "cases": [{"name": "TestLoginSuccess", "verifies": "Valid credentials return token"}]}],
-    "coverage": "90%"
-  },
-  "discoveredIssues": []
-}`,
-			ReturnConditions: "Return to orchestrator if: test infrastructure is missing, or you cannot write meaningful tests",
-		}, nil
-	case "reviewer-worker":
-		return &Skill{
-			Name:          "reviewer-worker",
-			Description:   "Code review worker — audits diffs and reports findings without editing code",
-			RequiredTools: []string{"git", "gh"},
-			WorkProcedure: `1. Read the feature description and the diff produced by upstream workers
-2. Audit for correctness, security, performance, readability, and project conventions
-3. Cross-check tests cover the behavior described
-4. Do NOT modify source code; report findings in the handoff
-5. Return a structured handoff with severity-labelled issues`,
-			ExampleHandoff: `{
-  "salientSummary": "Reviewed auth refactor — found 2 issues, recommended changes",
-  "whatWasImplemented": "Code review only; no source changes",
-  "whatWasLeftUndone": "",
-  "verification": {"commandsRun": [{"command": "git diff main...HEAD", "exitCode": 0, "observation": "Inspected diff"}]},
-  "tests": {"added": [], "coverage": "N/A"},
-  "discoveredIssues": [
-    {"severity": "blocking", "description": "JWT secret read from env without validation", "suggestedFix": "Add startup check that secret is non-empty"},
-    {"severity": "suggestion", "description": "Missing test for token expiry path"}
-  ]
-}`,
-			ReturnConditions: "Return to orchestrator if: the diff is too large to audit in one pass, or upstream context is missing",
-		}, nil
-	case "planner":
-		return &Skill{
-			Name:          "planner",
-			Description:   "Mission planner — breaks goals into milestones, features, and validation contracts",
-			RequiredTools: []string{"opencode"},
-			WorkProcedure: `1. Read the mission goal and any clarifications
-2. Decompose into milestones and features with explicit preconditions and expected behavior
-3. Assign a role (planning, dev, frontend, backend, qa, reviewer, devops) per feature
-4. Emit the plan JSON matching the documented contract
-5. Return a structured handoff`,
-			ExampleHandoff: `{
-  "salientSummary": "Drafted plan with 3 milestones and 7 features",
-  "whatWasImplemented": "Plan JSON written to disk",
-  "whatWasLeftUndone": "",
-  "verification": {"commandsRun": []},
-  "tests": {"added": [], "coverage": "N/A"},
-  "discoveredIssues": []
-}`,
-			ReturnConditions: "Return to orchestrator if: the goal is too ambiguous to plan or required context is missing",
-		}, nil
-	case "devops-worker":
-		return &Skill{
-			Name:          "devops-worker",
-			Description:   "DevOps and infrastructure worker",
-			RequiredTools: []string{"docker", "kubectl", "helm"},
-			WorkProcedure: `1. Read the feature description and expected behavior
-2. Implement infrastructure changes (Docker, K8s, CI/CD)
-3. Test the infrastructure locally
-4. Verify services start and healthcheck passes
-5. Return a structured handoff`,
-			ExampleHandoff: `{
-  "salientSummary": "Added Docker configuration for API service",
-  "whatWasImplemented": "Created Dockerfile and docker-compose configuration for API service",
-  "whatWasLeftUndone": "",
-  "verification": {
-    "commandsRun": [
-      {"command": "docker compose up -d api", "exitCode": 0, "observation": "Service started successfully"},
-      {"command": "curl -sf http://localhost:3100/health", "exitCode": 0, "observation": "Healthcheck passed"}
-    ]
-  },
-  "tests": {
-    "added": [],
-    "coverage": "N/A"
-  },
-  "discoveredIssues": []
-}`,
-			ReturnConditions: "Return to orchestrator if: infrastructure requirements are unclear, or you cannot complete within mission boundaries",
-		}, nil
-	default:
-		// Return a generic implementation skill as fallback
-		return &Skill{
-			Name:          workerType,
-			Description:   "Generic implementation worker",
-			RequiredTools: []string{"git"},
-			WorkProcedure: `1. Read the feature description and expected behavior
+	if gdir := globalSkillsSourceDir(); gdir != "" {
+		path := filepath.Join(gdir, workerType, "SKILL.md")
+		if data, err := os.ReadFile(path); err == nil {
+			if skill, perr := (&SkillLoader{}).parseSkill(data); perr == nil && skill.Name != "" {
+				return skill, nil
+			}
+		}
+	}
+	return genericWorkerSkill(workerType), nil
+}
+
+// genericWorkerSkill is the last-resort skill used when no SKILL.md file exists
+// for a worker type. It keeps Name set to the requested type so callers that
+// classify by name keep working.
+func genericWorkerSkill(workerType string) *Skill {
+	return &Skill{
+		Name:          workerType,
+		Description:   "Generic implementation worker",
+		RequiredTools: []string{"git"},
+		WorkProcedure: `1. Read the feature description and expected behavior
 2. Implement the feature
 3. Test the implementation
 4. Return a structured handoff`,
-			ExampleHandoff: `{
+		ExampleHandoff: `{
   "salientSummary": "Implemented feature as described",
   "whatWasImplemented": "Feature implementation completed",
   "whatWasLeftUndone": "",
@@ -447,7 +328,6 @@ func GetDefaultSkill(workerType string) (*Skill, error) {
   },
   "discoveredIssues": []
 }`,
-			ReturnConditions: "Return to orchestrator if: requirements are ambiguous or you cannot complete the work",
-		}, nil
+		ReturnConditions: "Return to orchestrator if: requirements are ambiguous or you cannot complete the work",
 	}
 }

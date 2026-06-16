@@ -7,18 +7,12 @@ interface Props {
 	value: string;
 	models: ModelInfo[];
 	onChange: (value: string) => void;
+	// Model ids/names to surface under a "Recommended" group. Provided by the
+	// caller (e.g. derived from the configured role defaults) — never hardcoded.
+	recommended?: string[];
 }
 
-const RECOMMENDED = [
-	"deepseek-v4-flash-free",
-	"mimo-v2.5-free",
-	"nemotron-3-ultra-free",
-	"claude-haiku-4.5",
-	"gpt-5.4-mini",
-	"qwen3.5-9b",
-];
-
-export default function ModelCombobox({ id, label, value, models, onChange }: Props) {
+export default function ModelCombobox({ id, label, value, models, onChange, recommended = [] }: Props) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [searchText, setSearchText] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -36,12 +30,10 @@ export default function ModelCombobox({ id, label, value, models, onChange }: Pr
 						m.id.toLowerCase().includes(searchText.toLowerCase()),
 				);
 
-	const recommendedModels = filteredModels.filter((m) =>
-		RECOMMENDED.some((r) => m.id.includes(r) || m.name.includes(r)),
-	);
-	const otherModels = filteredModels.filter((m) =>
-		!RECOMMENDED.some((r) => m.id.includes(r) || m.name.includes(r)),
-	);
+	const isRecommended = (m: ModelInfo) =>
+		recommended.some((r) => m.id.includes(r) || m.name.includes(r));
+	const recommendedModels = filteredModels.filter(isRecommended);
+	const otherModels = filteredModels.filter((m) => !isRecommended(m));
 
 	const modelsByProvider = otherModels.reduce<Record<string, ModelInfo[]>>((acc, m) => {
 		const key = m.provider || "default";

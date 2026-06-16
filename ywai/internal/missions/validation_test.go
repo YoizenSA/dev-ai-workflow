@@ -3,7 +3,6 @@ package missions
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -102,15 +101,7 @@ func TestScrutinyValidatorSpawnsReviewer(t *testing.T) {
 	store, dir := validationTestStore(t)
 	defer os.RemoveAll(dir)
 
-	// Create a temp bin dir and a fake opencode script
-	binDir, err := os.MkdirTemp("", "ywai-test-bin-*")
-	if err != nil {
-		t.Fatalf("create bin dir: %v", err)
-	}
-	defer os.RemoveAll(binDir)
-
-	fakeOpencodePath := binDir + "/opencode"
-
+	// Create a fake opencode that emits the scrutiny review result.
 	scrutinyOutput := ScrutinyResult{
 		Issues: []Issue{
 			{Severity: "blocking", Description: "Security vulnerability in input validation"},
@@ -121,19 +112,8 @@ func TestScrutinyValidatorSpawnsReviewer(t *testing.T) {
 	}
 	outputJSON, _ := json.Marshal(scrutinyOutput)
 
-	script := fmt.Sprintf(`#!/bin/sh
-cat << 'REVIEW_EOF'
-%s
-REVIEW_EOF
-`, string(outputJSON))
-	if err := os.WriteFile(fakeOpencodePath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake opencode script: %v", err)
-	}
-
-	// Add binDir to PATH so LookPath("opencode") finds it
-	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
-	defer os.Setenv("PATH", origPath)
+	binDir := writeFakeOpencodeBin(t, fakeOpencodeSpec{Stdout: string(outputJSON) + "\n"})
+	prependPathDir(t, binDir)
 
 	pipeline := NewValidationPipeline(store, DefaultValidationConfig())
 
@@ -911,14 +891,7 @@ func TestValidateMilestoneFailedTransition(t *testing.T) {
 	store, dir := validationTestStore(t)
 	defer os.RemoveAll(dir)
 
-	// Use a fake opencode that returns blocking issues via scrutiny
-	binDir, err := os.MkdirTemp("", "ywai-test-reject-*")
-	if err != nil {
-		t.Fatalf("create bin dir: %v", err)
-	}
-	defer os.RemoveAll(binDir)
-
-	fakeOpencodePath := binDir + "/opencode"
+	// Use a fake opencode that returns blocking issues via scrutiny.
 	scrutinyOutput := ScrutinyResult{
 		Issues: []Issue{
 			{Severity: "blocking", Description: "Critical security vulnerability found"},
@@ -926,14 +899,8 @@ func TestValidateMilestoneFailedTransition(t *testing.T) {
 		Summary: "Review found 1 blocking issue",
 	}
 	outputJSON, _ := json.Marshal(scrutinyOutput)
-	script := fmt.Sprintf("#!/bin/sh\ncat << 'EOF'\n%s\nEOF\n", string(outputJSON))
-	if err := os.WriteFile(fakeOpencodePath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake opencode: %v", err)
-	}
-
-	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
-	defer os.Setenv("PATH", origPath)
+	binDir := writeFakeOpencodeBin(t, fakeOpencodeSpec{Stdout: string(outputJSON) + "\n"})
+	prependPathDir(t, binDir)
 
 	now := time.Now().UTC()
 	mission := &Mission{

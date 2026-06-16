@@ -799,7 +799,7 @@ func TestGeneratePlanWithTechnologies(t *testing.T) {
 func TestRefineGoalWithOpencode_FallbackToLocal(t *testing.T) {
 	forceLocalPlanning(t)
 
-	refined := RefineGoalWithOpencode("build a REST API", "", "")
+	refined := RefineGoalWithOpencode("build a REST API", "", "", "")
 	if refined == "" {
 		t.Fatal("expected non-empty refined goal, got empty string")
 	}

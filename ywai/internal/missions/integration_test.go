@@ -64,78 +64,33 @@ func integrationTestMission(id, milestone string, featureIDs ...string) *Mission
 // script that outputs the given handoff JSON and returns the directory path.
 func setupFakeOpencode(t *testing.T, handoffJSON string) string {
 	t.Helper()
-	binDir, err := os.MkdirTemp("", "ywai-fake-opencode-*")
-	if err != nil {
-		t.Fatalf("create fake opencode bin dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(binDir) })
-
-	script := fmt.Sprintf(`#!/bin/sh
-cat << 'EOF'
-%s
-EOF
-`, handoffJSON)
-	binPath := filepath.Join(binDir, "opencode")
-	if err := os.WriteFile(binPath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake opencode: %v", err)
-	}
-
-	prev := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
-
+	binDir := writeFakeOpencodeBin(t, fakeOpencodeSpec{Stdout: handoffJSON + "\n"})
+	prependPathDir(t, binDir)
 	return binDir
 }
 
 // setupFakeOpencodeWithDelay creates a fake opencode that sleeps before outputting.
 func setupFakeOpencodeWithDelay(t *testing.T, delaySecs int, handoffJSON string) string {
 	t.Helper()
-	binDir, err := os.MkdirTemp("", "ywai-fake-opencode-delay-*")
-	if err != nil {
-		t.Fatalf("create fake opencode bin dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(binDir) })
-
-	script := fmt.Sprintf(`#!/bin/sh
-sleep %d
-cat << 'EOF'
-%s
-EOF
-`, delaySecs, handoffJSON)
-	binPath := filepath.Join(binDir, "opencode")
-	if err := os.WriteFile(binPath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake opencode with delay: %v", err)
-	}
-
-	prev := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
-
+	binDir := writeFakeOpencodeBin(t, fakeOpencodeSpec{DelaySec: delaySecs, Stdout: handoffJSON + "\n"})
+	prependPathDir(t, binDir)
 	return binDir
 }
 
 // setupFakeOpencodeExitCode creates a fake opencode that exits with given code.
 func setupFakeOpencodeExitCode(t *testing.T, exitCode int) string {
 	t.Helper()
-	binDir, err := os.MkdirTemp("", "ywai-fake-opencode-exit-*")
-	if err != nil {
-		t.Fatalf("create fake opencode bin dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(binDir) })
+	binDir := writeFakeOpencodeBin(t, fakeOpencodeSpec{ExitCode: exitCode})
+	prependPathDir(t, binDir)
+	return binDir
+}
 
-	script := fmt.Sprintf(`#!/bin/sh
-exit %d
-`, exitCode)
-	binPath := filepath.Join(binDir, "opencode")
-	if err := os.WriteFile(binPath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake opencode with exit code: %v", err)
-	}
-
+// prependPathDir puts dir at the front of PATH for the duration of the test.
+func prependPathDir(t *testing.T, dir string) {
+	t.Helper()
 	prev := os.Getenv("PATH")
 	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
-
-	return binDir
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+prev)
 }
 
 // testHandoffJSON returns a valid handoff JSON string for testing.

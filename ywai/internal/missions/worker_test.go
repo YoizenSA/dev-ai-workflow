@@ -11,20 +11,6 @@ import (
 
 // ─── Test Helpers ──────────────────────────────────────────────────────────
 
-// writeFakeOpencode creates a temporary shell script that acts as a fake
-// opencode binary. Returns the directory containing the script so the caller
-// can prepend it to PATH.
-func writeFakeOpencode(t *testing.T, scriptContent string) string {
-	t.Helper()
-	dir := t.TempDir()
-	script := filepath.Join(dir, "opencode")
-	// #nosec G306 -- test script must be executable
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n"+scriptContent+"\n"), 0755); err != nil {
-		t.Fatalf("write fake opencode: %v", err)
-	}
-	return dir
-}
-
 // fakeOpencodeValidHandoff creates a fake opencode that outputs a valid handoff JSON.
 func fakeOpencodeValidHandoff(t *testing.T, handoff *WorkerHandoff) string {
 	t.Helper()
@@ -32,71 +18,41 @@ func fakeOpencodeValidHandoff(t *testing.T, handoff *WorkerHandoff) string {
 	if err != nil {
 		t.Fatalf("marshal handoff: %v", err)
 	}
-	return writeFakeOpencode(t, `echo '`+string(data)+`'`)
+	return writeFakeOpencodeBin(t, fakeOpencodeSpec{Stdout: string(data) + "\n"})
 }
 
 // fakeOpencodeWithOutput creates a fake opencode that outputs arbitrary text
 // followed by the given handoff JSON on the last line.
 func fakeOpencodeWithOutput(t *testing.T, lines []string, handoffJSON string) string {
 	t.Helper()
-	script := ""
+	var b strings.Builder
 	for _, line := range lines {
-		script += "echo '" + line + "'\n"
+		b.WriteString(line)
+		b.WriteByte('\n')
 	}
 	if handoffJSON != "" {
-		script += "echo '" + handoffJSON + "'\n"
+		b.WriteString(handoffJSON)
+		b.WriteByte('\n')
 	}
-	return writeFakeOpencode(t, script)
+	return writeFakeOpencodeBin(t, fakeOpencodeSpec{Stdout: b.String()})
 }
 
 // fakeOpencodeExitCode creates a fake opencode that exits with the given code.
 func fakeOpencodeExitCode(t *testing.T, exitCode int) string {
 	t.Helper()
-	return writeFakeOpencode(t, "exit "+itoa(exitCode))
+	return writeFakeOpencodeBin(t, fakeOpencodeSpec{ExitCode: exitCode})
 }
 
 // fakeOpencodeSleepThenHandoff creates a fake opencode that sleeps then outputs handoff.
 func fakeOpencodeSleepThenHandoff(t *testing.T, sleepSecs int, handoffJSON string) string {
 	t.Helper()
-	return writeFakeOpencode(t, "sleep "+itoa(sleepSecs)+"\necho '"+handoffJSON+"'")
+	return writeFakeOpencodeBin(t, fakeOpencodeSpec{DelaySec: sleepSecs, Stdout: handoffJSON + "\n"})
 }
 
 // fakeOpencodeSleepForever creates a fake opencode that sleeps forever.
 func fakeOpencodeSleepForever(t *testing.T) string {
 	t.Helper()
-	return writeFakeOpencode(t, "while true; do sleep 1; done")
-}
-
-func itoa(n int) string {
-	return strings.TrimSpace(strings.Replace(
-		strings.Replace(
-			strings.Replace(
-				func() string { b := make([]byte, 4); return string(itoaHelper(b, n)) }(),
-				"\x00", "", -1),
-			"\n", "", -1),
-		"\r", "", -1))
-}
-
-func itoaHelper(buf []byte, n int) []byte {
-	if n == 0 {
-		return []byte{'0'}
-	}
-	negative := false
-	if n < 0 {
-		negative = true
-		n = -n
-	}
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if negative {
-		i--
-		buf[i] = '-'
-	}
-	return buf[i:]
+	return writeFakeOpencodeBin(t, fakeOpencodeSpec{Hang: true})
 }
 
 // testHandoff returns a valid WorkerHandoff for testing.

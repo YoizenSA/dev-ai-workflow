@@ -67,9 +67,11 @@ func TestResolveExecution_InferRoleFromSkillName(t *testing.T) {
 	if model == "" {
 		t.Fatalf("expected SkillNameToRole inference to populate frontend model")
 	}
-	// Frontend uses sonnet as primary in seed.
-	if !contains(model, "sonnet") {
-		t.Fatalf("expected sonnet-class model for frontend role, got %q", model)
+	// Inference must resolve to the frontend role's seeded primary model,
+	// whatever it is configured to be (no hardcoded provider coupling).
+	wantModel := cfg.GetRoleDefault(config.RoleFrontend).Model
+	if model != wantModel {
+		t.Fatalf("expected frontend seed model %q, got %q", wantModel, model)
 	}
 }
 

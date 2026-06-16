@@ -11,6 +11,7 @@ import (
 // Role identifiers for mission execution defaults.
 const (
 	RolePlanning  = "planning"
+	RoleArchitect = "architect"
 	RoleQA        = "qa"
 	RoleReviewer  = "reviewer"
 	RoleDev       = "dev"
@@ -20,8 +21,9 @@ const (
 )
 
 // CanonicalRoles is the ordered set of supported role identifiers.
+// Ordered roughly by delivery phase: plan → design → implement → verify → ship.
 var CanonicalRoles = []string{
-	RolePlanning, RoleDev, RoleFrontend, RoleBackend, RoleQA, RoleReviewer, RoleDevops,
+	RolePlanning, RoleArchitect, RoleDev, RoleFrontend, RoleBackend, RoleQA, RoleReviewer, RoleDevops,
 }
 
 // RoleDefault captures the default agent/model/skills assigned to a role.
@@ -158,60 +160,6 @@ func DefaultConfig() *UserConfig {
 		ColoredOutput:  func() *bool { b := true; return &b }(),
 		LogLevel:       "info",
 		RoleDefaults:   DefaultRoleDefaults(),
-	}
-}
-
-// DefaultRoleDefaults returns the canonical seeded role defaults.
-// Models reference providers known to opencode; the user can override every field.
-func DefaultRoleDefaults() RoleDefaults {
-	const (
-		opus   = "anthropic/claude-opus-4-7"
-		sonnet = "anthropic/claude-sonnet-4-6"
-		haiku  = "anthropic/claude-haiku-4-5"
-	)
-	return RoleDefaults{
-		RolePlanning: {
-			Agent:     "orchestrator",
-			Model:     opus,
-			Fallbacks: []string{sonnet},
-			Skills:    []string{"planner"},
-		},
-		RoleDev: {
-			Agent:     "orchestrator",
-			Model:     sonnet,
-			Fallbacks: []string{haiku},
-			Skills:    []string{"implementation"},
-		},
-		RoleFrontend: {
-			Agent:     "orchestrator",
-			Model:     sonnet,
-			Fallbacks: []string{haiku},
-			Skills:    []string{"frontend-worker"},
-		},
-		RoleBackend: {
-			Agent:     "orchestrator",
-			Model:     sonnet,
-			Fallbacks: []string{haiku},
-			Skills:    []string{"backend-worker"},
-		},
-		RoleQA: {
-			Agent:     "orchestrator",
-			Model:     haiku,
-			Fallbacks: []string{sonnet},
-			Skills:    []string{"qa-worker"},
-		},
-		RoleReviewer: {
-			Agent:     "orchestrator",
-			Model:     opus,
-			Fallbacks: []string{sonnet},
-			Skills:    []string{"reviewer-worker"},
-		},
-		RoleDevops: {
-			Agent:     "orchestrator",
-			Model:     sonnet,
-			Fallbacks: []string{haiku},
-			Skills:    []string{"devops-worker"},
-		},
 	}
 }
 

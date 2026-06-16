@@ -195,11 +195,17 @@ func GeneratePlanWithRepo(goal string, clarifications []QAPair, project, model, 
 //
 // If opencode is unavailable or fails, it falls back to a locally-built
 // refinement so the user still gets something useful.
-func RefineGoalWithOpencode(goal, extraContext, model string) string {
+func RefineGoalWithOpencode(goal, extraContext, model, agent string) string {
 	opencodePath, err := DetectOpencode()
 	if err != nil {
 		log.Printf("opencode not available, using local goal refinement: %v", err)
 		return localRefineGoal(goal)
+	}
+
+	// Refinement is a planning task, so default to the planning role's agent
+	// instead of letting opencode fall back to its generic "build" agent.
+	if agent == "" {
+		agent = planningAgentDefault()
 	}
 
 	prompt := buildRefinePrompt(goal, extraContext)
@@ -207,10 +213,13 @@ func RefineGoalWithOpencode(goal, extraContext, model string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	// Build args with optional --model (mirrors GeneratePlanWithOpencode).
+	// Build args with optional --model and --agent (mirrors GeneratePlanWithOpencode).
 	args := []string{"run"}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if agent != "" {
+		args = append(args, "--agent", agent)
 	}
 	args = append(args, prompt)
 
@@ -229,6 +238,18 @@ func RefineGoalWithOpencode(goal, extraContext, model string) string {
 		return localRefineGoal(goal)
 	}
 	return refined
+}
+
+// planningAgentDefault returns the agent configured for the planning role,
+// falling back to "orchestrator" when config is unavailable or unset. This
+// keeps goal refinement on the planning agent rather than opencode's default.
+func planningAgentDefault() string {
+	if cfg, _ := config.LoadConfig(); cfg != nil {
+		if a := cfg.GetRoleDefault(config.RolePlanning).Agent; a != "" {
+			return a
+		}
+	}
+	return "orchestrator"
 }
 
 // buildRefinePrompt constructs the prompt sent to opencode to refine a goal.
@@ -342,8 +363,8 @@ IMPORTANT RULES (Factory.ai Alignment):
 - Each feature must have a unique id (feat-1, feat-2, etc.)
 - Each feature must reference a milestone that exists
 - preconditions is a list of feature IDs that must be done first
-- Valid role values: planning, dev, frontend, backend, qa, reviewer, devops. Pick the one that best matches the work the feature implies.
-- skillName is optional; if omitted it is derived from role (frontend → frontend-worker, backend → backend-worker, qa → qa-worker, devops → devops-worker, reviewer → reviewer-worker, planning → planner, dev → implementation).
+- Valid role values: planning, architect, dev, frontend, backend, qa, reviewer, devops. Pick the one that best matches the work the feature implies. Use "architect" for upfront design work — choosing patterns, system structure, interfaces, and trade-offs — that should land before implementation features.
+- skillName is optional; if omitted it is derived from role (architect → architect-worker, frontend → frontend-worker, backend → backend-worker, qa → qa-worker, devops → devops-worker, reviewer → reviewer-worker, planning → planner, dev → implementation).
 - expectedBehavior is a list of verifiable assertions
 - fulfills MUST reference validation contract assertion IDs with format VAL-AREA-XXX (e.g., VAL-AUTH-001, VAL-CROSS-002)
 - Each assertion ID should be claimed by exactly ONE feature across the entire plan
@@ -510,6 +531,8 @@ func detectRole(desc string, hints generationHint) string {
 	}
 
 	switch {
+	case strings.Contains(lower, "architecture") || strings.Contains(lower, "design pattern") || strings.Contains(lower, "system design") || strings.Contains(lower, "design the"):
+		return config.RoleArchitect
 	case strings.Contains(lower, "review") || strings.Contains(lower, "audit"):
 		return config.RoleReviewer
 	case strings.Contains(lower, "test") || strings.Contains(lower, "qa") || strings.Contains(lower, "coverage"):
@@ -1156,6 +1179,8 @@ func workerTypeForFeature(feature PlanFeature) string {
 	}
 
 	switch {
+	case strings.Contains(lower, "architecture") || strings.Contains(lower, "design pattern") || strings.Contains(lower, "system design") || strings.Contains(lower, "design the"):
+		return "architect-worker"
 	case strings.Contains(lower, "api") || strings.Contains(lower, "handler") || strings.Contains(lower, "endpoint") || strings.Contains(lower, "route"):
 		return "backend-worker"
 	case strings.Contains(lower, "component") || strings.Contains(lower, "ui") || strings.Contains(lower, "css") || strings.Contains(lower, "style") || strings.Contains(lower, "frontend"):
