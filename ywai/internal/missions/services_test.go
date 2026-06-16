@@ -131,12 +131,12 @@ func TestServicesManifest_GetStartupOrder(t *testing.T) {
 	}
 
 	order := manifest.GetStartupOrder()
-	
+
 	// postgres should come before api, api before web
 	postgresIdx := -1
 	apiIdx := -1
 	webIdx := -1
-	
+
 	for i, name := range order {
 		if name == "postgres" {
 			postgresIdx = i
@@ -148,11 +148,11 @@ func TestServicesManifest_GetStartupOrder(t *testing.T) {
 			webIdx = i
 		}
 	}
-	
+
 	if postgresIdx < 0 || apiIdx < 0 || webIdx < 0 {
 		t.Error("not all services found in startup order")
 	}
-	
+
 	if postgresIdx > apiIdx {
 		t.Error("postgres should start before api")
 	}
@@ -177,16 +177,16 @@ func TestServicesManifest_CheckPortConflicts(t *testing.T) {
 	}
 
 	conflicts := manifest.CheckPortConflicts()
-	
+
 	if len(conflicts) != 1 {
 		t.Errorf("expected 1 conflict, got %d", len(conflicts))
 	}
-	
+
 	services, ok := conflicts[3100]
 	if !ok {
 		t.Error("expected conflict on port 3100")
 	}
-	
+
 	if len(services) != 2 {
 		t.Errorf("expected 2 services conflicting on port 3100, got %d", len(services))
 	}

@@ -151,9 +151,7 @@ When you finish, end your response with this standard handoff so the orchestrato
 After architecture decisions, the primary agent should invoke `@dev` for implementation.
 For CI/CD and infrastructure decisions, the primary agent should invoke `@devops`.
 
-## Kanban Reporting
-
-When you complete your task and provide your handoff, include a **Kanban status update** in your handoff:
+When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
 
 ```
 ## Kanban Update
@@ -161,5 +159,3 @@ When you complete your task and provide your handoff, include a **Kanban status 
 - **Column**: review (ready for reviewer)
 - **Summary**: Designed auth service architecture with ADR
 ```
-
-The orchestrator will use this to update your card on the Kanban board.

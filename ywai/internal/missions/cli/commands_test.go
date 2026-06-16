@@ -700,3 +700,82 @@ func TestTruncate(t *testing.T) {
 		}
 	}
 }
+
+// ─── Auto command: engine config from flags ─────────────────────────────────
+
+// autoFlags mirrors the flags exposed by `missions auto`.
+type autoFlags = autoCmdFlags
+
+// TestEngineConfigFromFlagsDefaults verifies the zero-value config matches the
+// engine defaults (sequential, default timeout/retries, clean streak enabled).
+func TestEngineConfigFromFlagsDefaults(t *testing.T) {
+	cfg := engineConfigFromFlags(autoCmdFlags{})
+
+	if cfg.MaxParallel != 1 {
+		t.Errorf("default MaxParallel = %d, want 1", cfg.MaxParallel)
+	}
+	if cfg.MaxRetries != missions.DefaultMaxRetries {
+		t.Errorf("default MaxRetries = %d, want %d", cfg.MaxRetries, missions.DefaultMaxRetries)
+	}
+	if cfg.WorkerTimeout != missions.DefaultWorkerTimeout {
+		t.Errorf("default WorkerTimeout = %v, want %v", cfg.WorkerTimeout, missions.DefaultWorkerTimeout)
+	}
+	if cfg.VerifyCleanStreak != 1 {
+		t.Errorf("default VerifyCleanStreak = %d, want 1", cfg.VerifyCleanStreak)
+	}
+}
+
+// TestEngineConfigFromFlagsApplied verifies each flag is wired into the config.
+func TestEngineConfigFromFlagsApplied(t *testing.T) {
+	flags := autoCmdFlags{
+		Timeout:        90 * time.Minute,
+		MaxRetries:     5,
+		MaxParallel:    3,
+		CleanStreak:    2,
+	}
+	cfg := engineConfigFromFlags(flags)
+
+	if cfg.WorkerTimeout != 90*time.Minute {
+		t.Errorf("WorkerTimeout = %v, want 90m", cfg.WorkerTimeout)
+	}
+	if cfg.MaxRetries != 5 {
+		t.Errorf("MaxRetries = %d, want 5", cfg.MaxRetries)
+	}
+	if cfg.MaxParallel != 3 {
+		t.Errorf("MaxParallel = %d, want 3", cfg.MaxParallel)
+	}
+	if cfg.VerifyCleanStreak != 2 {
+		t.Errorf("VerifyCleanStreak = %d, want 2", cfg.VerifyCleanStreak)
+	}
+}
+
+// TestEngineConfigFromFlagsClampsZeroTimeout verifies a zero timeout falls back
+// to the default rather than producing an unbounded worker.
+func TestEngineConfigFromFlagsClampsZeroTimeout(t *testing.T) {
+	cfg := engineConfigFromFlags(autoCmdFlags{Timeout: 0})
+	if cfg.WorkerTimeout != missions.DefaultWorkerTimeout {
+		t.Errorf("zero timeout should fall back to default, got %v", cfg.WorkerTimeout)
+	}
+}
+
+// TestAutoCmdFlagsExposed verifies the `auto` command registers all tuning flags.
+func TestAutoCmdFlagsExposed(t *testing.T) {
+	root := &cobra.Command{Use: "ywai"}
+	RegisterCommands(root)
+
+	missionsCmd, _, err := root.Find([]string{"missions"})
+	if err != nil {
+		t.Fatalf("find missions: %v", err)
+	}
+	autoCmd, _, err := missionsCmd.Find([]string{"auto"})
+	if err != nil {
+		t.Fatalf("find auto: %v", err)
+	}
+
+	expectedFlags := []string{"timeout", "max-retries", "max-parallel", "clean-streak", "base", "project", "model", "agent", "yes"}
+	for _, name := range expectedFlags {
+		if autoCmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected flag --%s on auto command, not found", name)
+		}
+	}
+}

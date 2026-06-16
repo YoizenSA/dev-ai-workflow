@@ -1,0 +1,328 @@
+/* ============================================================
+   components.css · pills, tags, KPI, cards, page header,
+   alerts, progress, spinner, empty state, toasts
+   ============================================================ */
+
+/* ---- Semantic pill badges with status dot ---- */
+.pill {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 650; letter-spacing: 0.03em;
+  padding: 0.22rem 0.6rem 0.22rem 0.5rem; border-radius: 999px;
+  text-transform: uppercase; border: 1px solid transparent; white-space: nowrap;
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.pill-success { background: var(--success-soft); color: var(--tint-success); border-color: var(--success-border); }
+.pill-success .dot { background: var(--success); }
+.pill-info    { background: var(--info-soft);    color: var(--tint-info); border-color: var(--info-border); }
+.pill-info .dot    { background: var(--info); }
+.pill-primary { background: rgba(var(--yz-primary-2-rgb),0.20); color: var(--tint-purple); border-color: rgba(var(--purple-bright-rgb),0.42); }
+.pill-primary .dot { background: var(--tint-purple-dot); }
+.pill-accent  { background: rgba(var(--yz-accent-rgb),0.15); color: var(--tint-accent); border-color: rgba(var(--yz-accent-rgb),0.42); }
+.pill-accent .dot  { background: var(--yz-accent); }
+.pill-danger  { background: var(--danger-soft);  color: var(--tint-danger); border-color: var(--danger-border); }
+.pill-danger .dot  { background: var(--danger); }
+.pill-warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-border); }
+.pill-warning .dot { background: var(--warning); }
+.pill-muted   { background: var(--surface-soft); color: var(--text-muted); border-color: var(--panel-border); }
+.pill-muted .dot   { background: var(--text-muted); }
+.pill-running .dot { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ---- Product / version tags ---- */
+.tag {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.74rem; font-weight: 600; padding: 0.16rem 0.5rem; border-radius: 6px;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--text-soft);
+  font-family: var(--font-mono);
+}
+.tag.primary { background: rgba(var(--yz-primary-1-rgb),0.16); color: var(--tint-info); border-color: var(--info-border); }
+
+/* ---- Glass card ---- */
+.card {
+  border-radius: var(--radius-lg); border: 1px solid var(--panel-border);
+  background: linear-gradient(155deg, rgba(var(--surf-1-rgb),0.78), rgba(var(--surf-3-rgb),0.84));
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.card-pad { padding: var(--space-6); }
+
+/* ---- Page header ---- */
+.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
+.page-heading { display: flex; flex-direction: column; gap: 0.3rem; }
+.page-eyebrow {
+  font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--yz-accent); font-weight: 700;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+:root[data-theme="light"] .page-eyebrow { color: var(--tint-accent); }
+.page-title { font-size: clamp(1.5rem, 2.4vw, 2rem); font-weight: 700; }
+.page-subtitle { color: var(--text-muted); font-size: 0.95rem; }
+.page-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
+/* ---- Section header with accent tick ---- */
+.section-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: var(--space-3); }
+.section-tick { width: 3px; height: 18px; border-radius: 99px; flex-shrink: 0; background: var(--yz-primary-1); box-shadow: 0 0 8px rgba(var(--yz-primary-1-rgb),0.5); }
+.section-title { font-size: var(--text-lg); font-weight: 650; }
+
+/* ---- KPI cards ---- */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.kpi {
+  position: relative; padding: var(--space-5); border-radius: var(--radius-lg);
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(155deg, rgba(var(--surf-1-rgb),0.78), rgba(var(--surf-3-rgb),0.84));
+  backdrop-filter: blur(18px); overflow: hidden;
+  transition: transform var(--t-base) ease, border-color var(--t-base) ease;
+}
+.kpi:hover { transform: translateY(-2px); border-color: var(--panel-border-strong); }
+.kpi::after {
+  content: ""; position: absolute; inset: 0 auto auto 0; width: 150px; height: 130px;
+  background: radial-gradient(circle at top left, var(--kpi-glow, rgba(var(--yz-primary-1-rgb),0.35)), transparent 70%);
+  /* Glow intensity flips softer on light (see SKILL.md light-theme rule #9). */
+  opacity: var(--kpi-glow-opacity, 1);
+  pointer-events: none;
+}
+.kpi-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); position: relative; z-index: 1; }
+.kpi-icon {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--kpi-icon-bg, rgba(var(--yz-primary-1-rgb),0.16));
+  color: var(--kpi-icon-color, var(--tint-primary)); border: 1px solid var(--panel-border);
+}
+.kpi-icon lucide-icon, .kpi-icon svg { width: 20px; height: 20px; }
+.kpi-delta {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.78rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 99px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); position: relative; z-index: 1;
+}
+.kpi-delta lucide-icon, .kpi-delta svg { width: 13px; height: 13px; }
+.kpi-delta.up   { color: var(--tint-success); background: rgba(var(--surf-success-rgb), 0.82); border: 1px solid var(--success-border); }
+.kpi-delta.down { color: var(--tint-danger); background: rgba(var(--surf-danger-rgb), 0.82); border: 1px solid var(--danger-border); }
+.kpi-delta.flat { color: var(--text-soft); background: rgba(var(--surf-flat-rgb), 0.82); border: 1px solid var(--panel-border-strong); }
+.kpi-value { font-size: var(--text-3xl); font-weight: 720; letter-spacing: -0.02em; line-height: 1; position: relative; z-index: 1; }
+.kpi-label { color: var(--text-muted); font-size: 0.86rem; margin-top: 0.4rem; position: relative; z-index: 1; }
+
+/* ---- Alerts ---- */
+.alert {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.8rem 1rem; border-radius: var(--radius-sm);
+  font-size: 0.86rem; border: 1px solid transparent;
+}
+.alert lucide-icon, .alert svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+.alert-success { background: var(--success-soft); border-color: var(--success-border); color: var(--tint-success); }
+.alert-warning { background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning); }
+.alert-danger  { background: var(--danger-soft);  border-color: var(--danger-border);  color: var(--tint-danger); }
+.alert-info    { background: var(--info-soft);    border-color: var(--info-border);    color: var(--tint-info); }
+
+/* Inline "code chip" for the name of the object an alert/confirm refers to.
+   A bare mono name inside a coloured alert inherits the alert's hue and blends
+   into the prose; this lifts it onto a solid surface so it reads as a discrete
+   token. Fully token-driven → contrasts in both themes (dark chip/light text on
+   dark, light chip/dark text on light). text-transform:none so it survives an
+   uppercase label context. */
+.del-name {
+  display: inline-block; vertical-align: baseline; white-space: nowrap;
+  padding: 0.04em 0.42em; margin: 0 0.06em; border-radius: 6px;
+  background: var(--surface-strong); border: 1px solid var(--panel-border-strong);
+  color: var(--text); font-family: var(--font-mono); font-weight: 650;
+  font-size: 0.88em; letter-spacing: -0.01em; text-transform: none;
+}
+
+/* ---- Progress / spinner ---- */
+.progress-track { height: 6px; border-radius: 99px; background: var(--surface-soft); overflow: hidden; }
+.progress-fill  { height: 100%; border-radius: 99px; background: var(--grad-brand); transition: width 0.5s ease; }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-inline { display: flex; align-items: center; gap: 0.6rem; color: var(--text-muted); font-size: var(--text-base); padding: var(--space-4); }
+
+/* ---- Skeleton loaders (show these while data loads, not an empty state) ---- */
+.skeleton { position: relative; overflow: hidden; background: var(--surface-soft); border-radius: 6px; }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--surface-hover), transparent);
+  transform: translateX(-100%); animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skel-shimmer { 100% { transform: translateX(100%); } }
+.skel-line { display: block; height: 0.82rem; }
+.skel-line.sm { height: 0.62rem; }
+.skel-tr td { padding: 0.85rem 1rem; }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+
+/* ---- Empty state ---- */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-8); text-align: center; color: var(--text-muted); }
+.empty-icon {
+  width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--text-faint);
+}
+.empty-icon lucide-icon, .empty-icon svg { width: 26px; height: 26px; }
+.empty-title { color: var(--text); font-weight: 600; font-size: 0.98rem; }
+.empty-desc { font-size: 0.88rem; max-width: 36ch; }
+
+/* ---- Toasts ---- */
+.toast-stack { position: fixed; bottom: var(--space-6); right: var(--space-6); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--space-3); }
+.toast {
+  display: flex; align-items: center; gap: 0.7rem; min-width: 300px; max-width: 400px;
+  padding: 0.85rem 1rem; border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(160deg, rgba(var(--surf-1-rgb),0.97), rgba(var(--surf-2-rgb),0.98));
+  box-shadow: var(--shadow-glass); position: relative; overflow: hidden;
+  animation: toastIn 0.44s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes toastIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+.toast-ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; }
+.toast-ico lucide-icon, .toast-ico svg { width: 17px; height: 17px; }
+.toast.success .toast-ico { background: var(--success-soft); color: var(--success); }
+.toast.error   .toast-ico { background: var(--danger-soft);  color: var(--danger); }
+.toast.info    .toast-ico { background: var(--info-soft);    color: var(--info); }
+.toast-msg { font-size: 0.88rem; color: var(--text); }
+.toast-bar { position: absolute; left: 0; bottom: 0; height: 2.5px; background: var(--grad-brand); animation: toastBar 3.2s linear forwards; }
+@keyframes toastBar { from { width: 100%; } to { width: 0%; } }
+@media (prefers-reduced-motion: reduce) { .toast, .toast-bar { animation: none; } }
+
+/* ---- Code chip ---- */
+.code-chip { font-family: var(--font-mono); font-size: 0.78rem; background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--tint-info); padding: 0.12rem 0.45rem; border-radius: 6px; }
+
+/* ---- Diff box (modal git diff) ---- */
+.diff-box {
+  margin: 0; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.7;
+  background: rgba(var(--surf-9-rgb), 0.6); border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm); padding: 0.8rem 1rem; overflow-x: auto; white-space: pre;
+}
+.diff-box .d-add { color: var(--tint-success); display: block; background: rgba(var(--success-rgb),0.08); }
+.diff-box .d-rm  { color: var(--tint-danger); display: block; background: rgba(var(--danger-rgb),0.08); }
+.diff-box .d-ctx { color: var(--text-muted); display: block; }
+
+/* ---- Key/value rows (detail modals) ---- */
+.kv { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 0.5rem 0; border-bottom: 1px solid rgba(var(--slate-rgb),0.08); }
+.kv:last-child { border-bottom: none; }
+.kv-k { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.kv-v { font-size: 0.9rem; color: var(--text); }
+
+/* ---- Card footer link CTA ---- */
+.card-foot { padding: var(--space-3) var(--space-5); border-top: 1px solid var(--panel-border); margin-top: auto; }
+.link-cta {
+  display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; cursor: pointer;
+  color: var(--info); font-size: 0.82rem; font-weight: 600; font-family: inherit; padding: 0;
+  transition: color 130ms ease;
+}
+.link-cta:hover { color: var(--tint-info); }
+
+/* ============================================================
+   Themed custom controls — select dropdown + date picker
+   (native <select>/<input type=date> can't be styled to match)
+   ============================================================ */
+.yd-select, .yd-date { position: relative; width: 100%; }
+.yd-select-trigger, .yd-date-trigger {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  background: var(--input-bg); border: 1px solid var(--panel-border);
+  color: var(--text); border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem 0.55rem 0.8rem; font-size: 0.9rem; font-family: inherit;
+  cursor: pointer; text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.yd-select-trigger:hover, .yd-date-trigger:hover { border-color: var(--panel-border-strong); }
+.yd-select.open .yd-select-trigger, .yd-date.open .yd-date-trigger {
+  border-color: rgba(var(--info-rgb),0.6); background: rgba(var(--surf-input-rgb),0.85);
+}
+.yd-select-trigger > svg, .yd-date-trigger > svg { margin-left: auto; color: var(--text-faint); flex-shrink: 0; transition: transform 160ms ease; }
+.yd-select.open .yd-select-trigger > svg { transform: rotate(180deg); }
+.yd-select-label, .yd-date-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yd-date-label.muted { color: var(--text-faint); }
+
+.yd-pop {
+  position: fixed; z-index: var(--z-dropdown); padding: 6px;
+  border-radius: var(--radius-md); border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(165deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
+  box-shadow: var(--shadow-glass); animation: popIn 0.14s ease;
+}
+/* Angular components dock the popup under the trigger (absolute), and the ydAnchored
+   directive flips/clamps it against the viewport so it never sticks to the window edge. */
+.yd-menu-docked { position: absolute; top: calc(100% + 6px); left: 0; min-width: 100%; }
+/* Flip: ydAnchored adds .yd-menu-up when there's no room below but there is above. */
+.yd-menu-docked.yd-menu-up { top: auto; bottom: calc(100% + 6px); }
+/* The calendar has a FIXED width — it must NOT inherit min-width:100% (meant for
+   selects matching their trigger). In a full-width date field (e.g. a modal) that
+   stretches it and, with aspect-ratio cells, blows the height up. */
+.yd-cal.yd-menu-docked { min-width: 0; }
+/* --yd-pop-maxh is set by ydAnchored to keep a margin off the viewport/modal edge; the list scrolls. */
+.yd-select-menu { max-height: var(--yd-pop-maxh, 264px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.yd-select-opt {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; text-align: left;
+  padding: 0.45rem 0.6rem; border-radius: var(--radius-sm); border: none; cursor: pointer;
+  background: transparent; color: var(--text-soft); font-size: 0.88rem; font-family: inherit;
+  transition: background 120ms ease, color 120ms ease;
+}
+.yd-select-opt:hover { background: var(--surface-hover); color: var(--text); }
+.yd-select-opt.sel { background: rgba(var(--yz-primary-1-rgb),0.16); color: var(--tint-primary-4); font-weight: 600; }
+
+/* Calendar */
+.yd-cal { width: 282px; }
+.yd-cal-head { display: flex; align-items: center; justify-content: space-between; padding: 0.3rem 0.3rem 0.55rem; }
+.yd-cal-title { font-weight: 650; font-size: 0.9rem; text-transform: capitalize; }
+.yd-cal-nav { display: flex; gap: 4px; }
+.yd-cal-nav button { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--text-soft); cursor: pointer; transition: all 120ms ease; }
+.yd-cal-nav button:hover { background: var(--surface-hover); color: var(--text); }
+.yd-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.yd-cal-dow { text-align: center; font-size: 0.64rem; color: var(--text-faint); font-weight: 700; padding: 0.2rem 0 0.35rem; }
+/* Fixed cell height (not aspect-ratio) keeps the calendar compact, so it leaves
+   margin off the window edge when opened inside a modal. */
+.yd-cal-day { height: 32px; display: grid; place-items: center; border-radius: 8px; border: none; cursor: pointer; background: transparent; color: var(--text-soft); font-size: 0.82rem; font-family: inherit; font-variant-numeric: tabular-nums; transition: background 120ms ease; }
+.yd-cal-day:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.yd-cal-day:disabled { color: var(--text-faint); opacity: 0.35; cursor: default; }
+.yd-cal-day.today { box-shadow: inset 0 0 0 1px var(--panel-border-strong); }
+/* Selected day is a SOLID brand gradient → white text is correct in both themes. */
+.yd-cal-day.sel { background: var(--grad-brand); color: #fff; font-weight: 700; box-shadow: 0 6px 16px rgba(var(--yz-primary-1-rgb),0.3); }
+.yd-cal-foot { display: flex; justify-content: space-between; padding: 0.5rem 0.3rem 0.15rem; margin-top: 0.3rem; border-top: 1px solid var(--panel-border); }
+.yd-cal-foot button { background: none; border: none; color: var(--info); font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0.25rem; }
+.yd-cal-foot button:hover { color: var(--tint-info); }
+
+/* ---- Tooltip temático (atributo data-tip) ----
+   Reemplaza al title nativo manteniendo la estética glass.
+   Uso: data-tip="texto" (Angular: [attr.data-tip]="expr ?? null"; null = sin tooltip).
+   Nota: el contenedor con overflow (p.ej. .table-wrap) recorta el tooltip;
+   si la tabla ya no scrollea, poné overflow: visible en ese wrapper. */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+  background: linear-gradient(160deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
+  color: var(--text-soft); border: 1px solid var(--panel-border-strong);
+  border-radius: 8px; padding: 0.4rem 0.7rem;
+  font-size: 0.76rem; font-weight: 500; font-family: var(--font-sans, inherit);
+  letter-spacing: normal; text-transform: none; white-space: normal; width: max-content;
+  max-width: 360px; overflow-wrap: anywhere;
+  box-shadow: var(--shadow-glass); pointer-events: none; z-index: var(--z-dropdown);
+}
+[data-tip]:hover::before {
+  content: ""; position: absolute; bottom: calc(100% + 5px); left: 50%;
+  transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px;
+  background: rgba(var(--surf-10-rgb),0.98);
+  border-right: 1px solid var(--panel-border-strong); border-bottom: 1px solid var(--panel-border-strong);
+  pointer-events: none; z-index: calc(var(--z-dropdown) + 1);
+}
+[data-tip=""]::after, [data-tip=""]::before { display: none; }
+
+/* Variante lateral: data-tip-pos="right" (sidebars colapsadas, rails). */
+[data-tip][data-tip-pos="right"]:hover::after {
+  bottom: auto; left: calc(100% + 9px); top: 50%; transform: translateY(-50%);
+}
+[data-tip][data-tip-pos="right"]:hover::before {
+  bottom: auto; left: calc(100% + 5px); top: 50%;
+  transform: translateY(-50%) rotate(135deg);
+}
+
+/* Trigger deshabilitado del select temático */
+.yd-select-trigger:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Placeholder del select temático (sin selección) */
+.yd-select-label.is-ph { color: var(--text-faint); }
+
+/* Variante lateral izquierda + automática en celdas de acciones:
+   un tooltip centrado en la última columna desborda el contenedor con
+   overflow y dispara scroll horizontal. */
+[data-tip][data-tip-pos="left"]:hover::after,
+.row-actions [data-tip]:hover::after {
+  bottom: auto; left: auto; right: calc(100% + 9px); top: 50%; transform: translateY(-50%);
+}
+[data-tip][data-tip-pos="left"]:hover::before,
+.row-actions [data-tip]:hover::before {
+  bottom: auto; left: auto; right: calc(100% + 5px); top: 50%;
+  transform: translateY(-50%) rotate(-45deg);
+}

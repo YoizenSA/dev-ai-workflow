@@ -11,7 +11,7 @@ import (
 // ─── Errors ────────────────────────────────────────────────────────────────
 
 var (
-	ErrContractNotFound    = fmt.Errorf("validation contract not found")
+	ErrContractNotFound   = fmt.Errorf("validation contract not found")
 	ErrInvalidContract    = fmt.Errorf("invalid validation contract")
 	ErrCoverageIncomplete = fmt.Errorf("validation contract coverage incomplete")
 )
@@ -31,7 +31,7 @@ func NewContractParser(missionDir string) *ContractParser {
 // LoadContract loads and parses the validation contract from validation-contract.md.
 func (cp *ContractParser) LoadContract() (*ValidationContract, error) {
 	contractPath := filepath.Join(cp.missionDir, "validation-contract.md")
-	
+
 	content, err := os.ReadFile(contractPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -39,26 +39,26 @@ func (cp *ContractParser) LoadContract() (*ValidationContract, error) {
 		}
 		return nil, fmt.Errorf("read contract file: %w", err)
 	}
-	
+
 	return cp.parseContract(content)
 }
 
 // parseContract parses validation-contract.md content into a ValidationContract.
 func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, error) {
 	lines := strings.Split(string(content), "\n")
-	
+
 	contract := &ValidationContract{}
 	var currentArea string
 	var assertion ContractAssertion
 	var descBuilder strings.Builder
-	
+
 	// Regex to match assertion headers: ### VAL-XXX-001: Title
 	assertionRegex := regexp.MustCompile(`^###\s+(VAL-[A-Z0-9]+-\d+):\s*(.+)`)
 	areaRegex := regexp.MustCompile(`^##\s+(.+)`)
-	
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Match area headers (## Area Name)
 		if areaMatches := areaRegex.FindStringSubmatch(trimmed); len(areaMatches) > 1 {
 			currentArea = strings.TrimSpace(areaMatches[1])
@@ -67,7 +67,7 @@ func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, er
 			currentArea = strings.TrimSpace(currentArea)
 			continue
 		}
-		
+
 		// Match assertion headers (### VAL-XXX-001: Title)
 		if matches := assertionRegex.FindStringSubmatch(trimmed); len(matches) > 2 {
 			// Save previous assertion if exists
@@ -76,7 +76,7 @@ func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, er
 				assertion.Area = currentArea
 				contract.Assertions = append(contract.Assertions, assertion)
 			}
-			
+
 			// Start new assertion
 			assertion = ContractAssertion{
 				ID:    matches[1],
@@ -86,7 +86,7 @@ func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, er
 			descBuilder.Reset()
 			continue
 		}
-		
+
 		// Parse assertion fields
 		if assertion.ID != "" {
 			if strings.HasPrefix(trimmed, "Tool:") {
@@ -109,18 +109,18 @@ func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, er
 			}
 		}
 	}
-	
+
 	// Save last assertion
 	if assertion.ID != "" {
 		assertion.Description = strings.TrimSpace(descBuilder.String())
 		assertion.Area = currentArea
 		contract.Assertions = append(contract.Assertions, assertion)
 	}
-	
+
 	if len(contract.Assertions) == 0 {
 		return nil, fmt.Errorf("%w: no assertions found", ErrInvalidContract)
 	}
-	
+
 	return contract, nil
 }
 
@@ -129,13 +129,13 @@ func (cp *ContractParser) parseContract(content []byte) (*ValidationContract, er
 func (cp *ContractParser) CheckCoverage(contract *ValidationContract, features []Feature) error {
 	// Build map of claimed assertions
 	claimed := make(map[string]int) // assertion ID -> count
-	
+
 	for _, feat := range features {
 		for _, fulfills := range feat.Fulfills {
 			claimed[fulfills]++
 		}
 	}
-	
+
 	// Check for unclaimed assertions
 	var unclaimed []string
 	for _, assertion := range contract.Assertions {
@@ -143,12 +143,12 @@ func (cp *ContractParser) CheckCoverage(contract *ValidationContract, features [
 			unclaimed = append(unclaimed, assertion.ID)
 		}
 	}
-	
+
 	if len(unclaimed) > 0 {
-		return fmt.Errorf("%w: %d assertions not claimed by any feature: %v", 
+		return fmt.Errorf("%w: %d assertions not claimed by any feature: %v",
 			ErrCoverageIncomplete, len(unclaimed), unclaimed)
 	}
-	
+
 	// Check for over-claimed assertions (claimed by multiple features)
 	var overclaimed []string
 	for id, count := range claimed {
@@ -156,12 +156,12 @@ func (cp *ContractParser) CheckCoverage(contract *ValidationContract, features [
 			overclaimed = append(overclaimed, fmt.Sprintf("%s (%d times)", id, count))
 		}
 	}
-	
+
 	if len(overclaimed) > 0 {
-		return fmt.Errorf("%w: %d assertions claimed by multiple features: %v", 
+		return fmt.Errorf("%w: %d assertions claimed by multiple features: %v",
 			ErrInvalidContract, len(overclaimed), overclaimed)
 	}
-	
+
 	return nil
 }
 

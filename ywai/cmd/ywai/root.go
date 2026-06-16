@@ -325,6 +325,14 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			if promptsDir != "" {
 				agentprofiles.InstallVSCode(promptsDir, profiles)
 			}
+
+		case "pi":
+			agentsDir := filepath.Join(home, ".pi", "agent", "agents")
+			if err := agentprofiles.InstallPi(agentsDir, profiles, overwriteAgents); err != nil {
+				fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
+			}
 		}
 	}
 }

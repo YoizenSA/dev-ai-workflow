@@ -6,8 +6,6 @@ description: >
   Trigger: Questions, research, explanations, "what is", "how does", "why".
 role: ask
 mode: all
-permission:
-  delegate: ask
 ---
 
 # Ask Agent

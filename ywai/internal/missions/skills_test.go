@@ -93,7 +93,7 @@ func TestSkillLoader_SkillNotFound(t *testing.T) {
 func TestGetDefaultSkill(t *testing.T) {
 	// Test default skills for common worker types
 	testCases := []string{"backend-worker", "frontend-worker", "qa-worker", "devops-worker"}
-	
+
 	for _, workerType := range testCases {
 		skill, err := GetDefaultSkill(workerType)
 		if err != nil {
@@ -107,7 +107,7 @@ func TestGetDefaultSkill(t *testing.T) {
 			t.Errorf("expected work procedure for %s, got empty", workerType)
 		}
 	}
-	
+
 	// Test fallback for unknown worker type
 	skill, err := GetDefaultSkill("unknown-worker")
 	if err != nil {

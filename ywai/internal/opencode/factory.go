@@ -3,14 +3,20 @@ package opencode
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 )
 
 const defaultProbeTimeout = 2 * time.Second
 
 // DefaultClient tries the server first; falls back to local config.
+// Set OPENCODE_URL env var to override the default server URL.
 func DefaultClient(ctx context.Context) Client {
-	serverClient := NewServerClient("http://127.0.0.1:4096")
+	url := os.Getenv("OPENCODE_URL")
+	if url == "" {
+		url = "http://127.0.0.1:4096"
+	}
+	serverClient := NewServerClient(url)
 	status, err := serverClient.Status(ctx)
 	if err == nil && status.Connected {
 		return serverClient

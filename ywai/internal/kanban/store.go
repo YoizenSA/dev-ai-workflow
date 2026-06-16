@@ -393,7 +393,10 @@ func (s *Store) BoardView(sessionID string) (*BoardView, error) {
 
 	for _, d := range s.delegations {
 		if d.SessionID == sessionID {
-			col := d.DerivedColumn()
+			col := d.Column
+			if col == "" {
+				col = d.DerivedColumn()
+			}
 			if _, ok := columns[col]; !ok {
 				col = "backlog"
 			}

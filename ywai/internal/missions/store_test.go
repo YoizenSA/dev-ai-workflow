@@ -1,6 +1,7 @@
 package missions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,8 +166,11 @@ func TestFeaturePersistenceAcrossRestart(t *testing.T) {
 	}
 
 	// Update feature status
+	if err := s1.UpdateFeatureStatus("persist-test", "feat-1", FeatureInProgress); err != nil {
+		t.Fatalf("UpdateFeatureStatus to in_progress: %v", err)
+	}
 	if err := s1.UpdateFeatureStatus("persist-test", "feat-1", FeatureCompleted); err != nil {
-		t.Fatalf("UpdateFeatureStatus: %v", err)
+		t.Fatalf("UpdateFeatureStatus to completed: %v", err)
 	}
 
 	// Simulate restart: create a new store instance pointing to the same dir
@@ -199,8 +203,8 @@ func TestStoreDirectoryStructure(t *testing.T) {
 
 	// Check mandatory files and directories
 	checks := []struct {
-		path     string
-		isDir    bool
+		path  string
+		isDir bool
 	}{
 		{filepath.Join(missionDir, "mission.json"), false},
 		{filepath.Join(missionDir, "plan"), true},
@@ -234,15 +238,30 @@ func TestConcurrentWrites(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	errs := make(chan error, 20)
+	errs := make(chan error, 10)
 
-	// Perform concurrent updates to feature statuses
+	// Add more features for concurrent access
+	for i := 2; i <= 10; i++ {
+		m.Features = append(m.Features, Feature{
+			ID:          fmt.Sprintf("feat-%d", i),
+			Description: fmt.Sprintf("Feature %d", i),
+			Status:      FeaturePending,
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+		})
+	}
+	if err := s.SaveMission(m); err != nil {
+		t.Fatalf("SaveMission after adding features: %v", err)
+	}
+
+	// Concurrently update 10 different features to test lock integrity
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			// Each goroutine updates the feature status
-			if err := s.UpdateFeatureStatus("concurrent-test", "feat-1", FeatureCompleted); err != nil {
+			featID := fmt.Sprintf("feat-%d", n+1)
+			// Each goroutine updates a different feature to test concurrent writes
+			if err := s.UpdateFeatureStatus("concurrent-test", featID, FeatureInProgress); err != nil {
 				errs <- err
 				return
 			}
@@ -256,7 +275,7 @@ func TestConcurrentWrites(t *testing.T) {
 				errs <- ErrFeatureNotFound
 				return
 			}
-			_ = m2.Features[0].Status // just verify we can read
+			_ = m2.Features[n].Status // just verify we can read
 		}(i)
 	}
 
@@ -776,8 +795,11 @@ func TestUpdateFeatureStatus(t *testing.T) {
 		t.Fatalf("CreateMission: %v", err)
 	}
 
+	if err := s.UpdateFeatureStatus("update-status-test", "feat-1", FeatureInProgress); err != nil {
+		t.Fatalf("UpdateFeatureStatus to in_progress: %v", err)
+	}
 	if err := s.UpdateFeatureStatus("update-status-test", "feat-1", FeatureCompleted); err != nil {
-		t.Fatalf("UpdateFeatureStatus: %v", err)
+		t.Fatalf("UpdateFeatureStatus to completed: %v", err)
 	}
 
 	f, err := s.GetFeature("update-status-test", "feat-1")

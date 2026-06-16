@@ -16,6 +16,11 @@ var (
 // missionTransitions defines all valid mission state transitions.
 // Key = current status, Value = set of allowed target statuses.
 var missionTransitions = map[MissionStatus]map[MissionStatus]bool{
+	MissionPending: {
+		MissionPlanning:  true,
+		MissionActive:    true,
+		MissionCancelled: true,
+	},
 	MissionPlanning: {
 		MissionActive: true,
 	},

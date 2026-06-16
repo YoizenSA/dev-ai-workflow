@@ -1,0 +1,87 @@
+/* ============================================================
+   table.css · dark glass data tables
+   ============================================================ */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-md); }
+.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+
+.data-table thead th {
+  text-align: left; font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--panel-border-strong);
+  white-space: nowrap; position: sticky; top: 0;
+  background: var(--table-head-bg); backdrop-filter: blur(8px);
+}
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--text); }
+.data-table th.num, .data-table td.cell-num { text-align: right; }
+/* Columnas de pills/tags: header y contenido centrados */
+.data-table th.col-c, .data-table td.col-c { text-align: center; }
+
+.data-table tbody td {
+  padding: 0.72rem 1rem;
+  border-bottom: 1px solid rgba(var(--slate-rgb), 0.11);
+  color: var(--text-soft); white-space: nowrap; vertical-align: middle;
+}
+.data-table tbody tr { transition: background var(--t-fast) ease; }
+.data-table tbody tr:hover { background: var(--surface-soft); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr.clickable { cursor: pointer; }
+
+.cell-strong { color: var(--text); font-weight: 600; }
+.cell-mono   { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.cell-muted  { color: var(--text-muted); }
+.cell-num    { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-actions { width: 1%; }
+/* Identificadores largos: elipsis en un span interno (nunca en el td) + tooltip con el valor completo */
+.id-trunc {
+  display: inline-block; max-width: 260px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
+}
+
+/* Row actions revealed on hover */
+.row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity var(--t-base) ease; }
+.data-table tbody tr:hover .row-actions,
+.data-table tbody tr:focus-within .row-actions { opacity: 1; }
+.icon-act {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; color: var(--text-muted);
+  cursor: pointer; transition: all var(--t-fast) ease;
+}
+.icon-act:hover { background: var(--surface-hover); color: var(--text); }
+.icon-act.danger:hover { background: var(--danger-soft); color: var(--tint-danger); }
+
+/* Pagination footer */
+.table-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  /* Mismo padding horizontal que th/td: el contador queda alineado con la 1ª columna. */
+  padding: 0.7rem 1rem; border-top: 1px solid var(--panel-border);
+  font-size: var(--text-sm); color: var(--text-muted); flex-wrap: wrap; gap: var(--space-3);
+}
+.table-foot > span:first-child { font-variant-numeric: tabular-nums; }
+.pager { display: flex; align-items: center; gap: 0.5rem; }
+
+/* ============================================================
+   Reusable table primitives (define ONCE here, never per-feature).
+   - Responsive column hiding: drop low-priority columns before the
+     wrapper has to scroll. Put the class on BOTH the th and the td.
+     Keep a never-hidden core (identifier + status + actions).
+   - Truncation: .cell-trunc goes on an inner <span>, NEVER on the td
+     (a block td leaves table layout and misaligns the row border).
+     Pair with a length-gated data-tip for the full value.
+   - .col-fit / .col-total: fit-to-content, centered columns (pills,
+     tags, small counts) so they don't eat row width.
+   ============================================================ */
+@media (max-width: 1300px) { .col-hide-lg { display: none; } }
+@media (max-width: 1040px) { .col-hide-md { display: none; } }
+
+.cell-trunc { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Stacked cell: a primary line + a muted sub-line (e.g. value + branch/error). */
+.cell-stack { display: flex; flex-direction: column; gap: 2px; }
+.cell-sub { font-size: var(--text-xs); color: var(--text-faint); }
+.cell-sub.err { color: var(--tint-danger); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.cell-sub.branch { color: var(--tint-info); }
+
+/* Fit-to-content centered columns (pills/tags/short counts). */
+.data-table th.col-fit, .data-table td.col-fit { width: 1%; white-space: nowrap; text-align: center; }
+.data-table th.col-total, .data-table td.col-total { width: 84px; min-width: 84px; text-align: center; }

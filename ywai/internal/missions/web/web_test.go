@@ -1,16 +1,21 @@
 package web
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 func setupTestStore(t *testing.T) *missions.MissionsStore {
@@ -568,12 +573,15 @@ func TestHealthCheckDegraded(t *testing.T) {
 // ─── File Existence ────────────────────────────────────────────────────────
 
 func TestUIFilesExist(t *testing.T) {
-	entries, err := os.ReadDir("ui")
+	// UI files are now served by the control server from internal/control/web/dist/.
+	// The standalone missions server no longer has its own UI directory.
+	uiDir := filepath.Join("..", "..", "control", "web", "dist")
+	entries, err := os.ReadDir(uiDir)
 	if err != nil {
-		t.Fatalf("failed to read ui directory: %v", err)
+		t.Skipf("control UI dist not found (run npm build first): %v", err)
 	}
 
-	expected := map[string]bool{"index.html": false, "app.css": false, "app.js": false}
+	expected := map[string]bool{"index.html": false}
 	for _, e := range entries {
 		if !e.IsDir() {
 			expected[e.Name()] = true
@@ -582,10 +590,7 @@ func TestUIFilesExist(t *testing.T) {
 
 	for name, found := range expected {
 		if !found {
-			if _, err := os.Stat(filepath.Join("ui", name)); err == nil {
-				continue
-			}
-			t.Errorf("expected UI file ui/%s not found", name)
+			t.Errorf("expected UI file %s/%s not found", uiDir, name)
 		}
 	}
 }
@@ -759,6 +764,362 @@ func TestMethodNotAllowedReturnsJSON(t *testing.T) {
 	} else if errMsg != "method not allowed" {
 		t.Errorf("expected error message 'method not allowed', got %q", errMsg)
 	}
+}
+
+// TestGetMissionArtifactReport verifies that the report artifact is served.
+// The handler must resolve "report" to report/REPORT.md and return its content.
+func TestGetMissionArtifactReport(t *testing.T) {
+	store := setupTestStore(t)
+	mission := createTestMission(t, store, "rpt-mission", "Report Mission", missions.MissionCompleted)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	// Write a REPORT.md the way GenerateMissionReport does.
+	reportDir := filepath.Join(store.MissionDir(mission.ID), "report")
+	if err := os.MkdirAll(reportDir, 0755); err != nil {
+		t.Fatalf("mkdir report dir: %v", err)
+	}
+	reportContent := "# Mission Report: Report Mission\n\nGenerated evidence here.\n"
+	if err := os.WriteFile(filepath.Join(reportDir, "REPORT.md"), []byte(reportContent), 0644); err != nil {
+		t.Fatalf("write REPORT.md: %v", err)
+	}
+
+	resp := mustGet(t, server.URL+"/api/missions/"+mission.ID+"/artifacts/report")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(body) != reportContent {
+		t.Errorf("expected report content %q, got %q", reportContent, string(body))
+	}
+}
+
+// TestGetMissionArtifactReportNotFound verifies a 404 when no report exists.
+func TestGetMissionArtifactReportNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	mission := createTestMission(t, store, "rpt-empty", "Empty Mission", missions.MissionCompleted)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/missions/"+mission.ID+"/artifacts/report")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+// mustPostJSON issues a POST request with a JSON body and returns the response.
+func mustPostJSON(t *testing.T, url string, body interface{}) *http.Response {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		t.Fatalf("encode body: %v", err)
+	}
+	resp, err := http.Post(url, "application/json", &buf)
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+// newTestServerWithHandlers builds a test server from a configured Handlers,
+// so tests can inject custom planner/engineRunner hooks.
+func newTestServerWithHandlers(t *testing.T, h *Handlers) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	registerRoutes(mux, h)
+	return httptest.NewServer(validateMissionIDMiddleware(mux))
+}
+
+// ─── Auto Mission Endpoint (POST /api/missions/auto) ───────────────────────
+
+// TestAutoMissionEmptyGoalRejected verifies the one-shot auto endpoint rejects
+// an empty goal with 400. This is the deterministic validation guard.
+func TestAutoMissionEmptyGoalRejected(t *testing.T) {
+	store := setupTestStore(t)
+	server := newTestServer(t, store)
+	defer server.Close()
+
+	resp := mustPostJSON(t, server.URL+"/api/missions/auto", map[string]string{
+		"goal": "  ",
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty goal, got %d", resp.StatusCode)
+	}
+}
+
+// TestAutoMissionPlansAndStarts verifies the one-shot flow: a valid goal is
+// planned (via injected planner), a mission is created in active state, the
+// engine runner is invoked once, and the response carries the missionId.
+func TestAutoMissionPlansAndStarts(t *testing.T) {
+	store := setupTestStore(t)
+
+	// Inject a deterministic planner that returns a minimal valid plan.
+	fakePlan := &missions.PlanMission{
+		Name:        "Auto Mission",
+		Description: "from goal",
+		Project:     "demo",
+		Milestones:  []missions.PlanMilestone{{Name: "m1", Description: "milestone one"}},
+		Features: []missions.PlanFeature{
+			{ID: "feat-1", Description: "do thing", SkillName: "implementation", Milestone: "m1"},
+		},
+	}
+	plannerCalled := false
+	engineCalled := false
+
+	h := &Handlers{
+		store:           store,
+		projectStore:    mustProjectStore(t, store),
+		hub:             NewHub(),
+		startTime:       time.Now(),
+		opencodeClient:  &fakeOpencodeClient{},
+		runningMissions: make(map[string]struct{}),
+		planner: func(goal, project, model, agent string) *missions.PlanMission {
+			plannerCalled = true
+			return fakePlan
+		},
+		engineRunner: func(missionID string) error {
+			engineCalled = true
+			return nil
+		},
+	}
+	server := newTestServerWithHandlers(t, h)
+	defer server.Close()
+
+	resp := mustPostJSON(t, server.URL+"/api/missions/auto", map[string]interface{}{
+		"goal":         "Add a health endpoint",
+		"project":      "demo",
+		"autoApprove":  true,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	missionID, _ := body["missionId"].(string)
+	if missionID == "" {
+		t.Fatal("expected non-empty missionId in response")
+	}
+	if status, _ := body["status"].(string); status != "started" {
+		t.Errorf("expected status 'started', got %q", status)
+	}
+	if !plannerCalled {
+		t.Error("expected injected planner to be called")
+	}
+	if !engineCalled {
+		t.Error("expected engine runner to be invoked")
+	}
+
+	// Mission must exist in the store and be active.
+	m, err := store.LoadMission(missionID)
+	if err != nil {
+		t.Fatalf("load created mission: %v", err)
+	}
+	if m.Status != missions.MissionActive {
+		t.Errorf("expected mission active, got %q", m.Status)
+	}
+}
+
+// TestAutoMissionPlanGenerationFails verifies a 502 when the planner returns nil.
+func TestAutoMissionPlanGenerationFails(t *testing.T) {
+	store := setupTestStore(t)
+	h := &Handlers{
+		store:           store,
+		projectStore:    mustProjectStore(t, store),
+		hub:             NewHub(),
+		startTime:       time.Now(),
+		opencodeClient:  &fakeOpencodeClient{},
+		runningMissions: make(map[string]struct{}),
+		planner: func(goal, project, model, agent string) *missions.PlanMission {
+			return nil // simulate plan failure
+		},
+		engineRunner: func(missionID string) error { return nil },
+	}
+	server := newTestServerWithHandlers(t, h)
+	defer server.Close()
+
+	resp := mustPostJSON(t, server.URL+"/api/missions/auto", map[string]string{
+		"goal": "some goal",
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502 when planner returns nil, got %d", resp.StatusCode)
+	}
+}
+
+// fakeOpencodeClient is a minimal opencode.Client stub for tests.
+type fakeOpencodeClient struct{}
+
+func (f *fakeOpencodeClient) Status(ctx context.Context) (opencode.ClientStatus, error) {
+	return opencode.ClientStatus{Connected: false, Source: "local"}, nil
+}
+func (f *fakeOpencodeClient) ListModels(ctx context.Context) ([]opencode.ModelInfo, error) {
+	return nil, nil
+}
+func (f *fakeOpencodeClient) ListAgents(ctx context.Context) ([]opencode.AgentInfo, error) {
+	return nil, nil
+}
+func (f *fakeOpencodeClient) Sessions() opencode.SessionAPI { return nil }
+
+// mustProjectStore builds a ProjectStore from the store base dir, failing the test on error.
+func mustProjectStore(t *testing.T, store *missions.MissionsStore) *missions.ProjectStore {
+	t.Helper()
+	ps, err := missions.NewProjectStore(store.BaseDir())
+	if err != nil {
+		t.Fatalf("create project store: %v", err)
+	}
+	return ps
+}
+
+// ─── Project git-info / init-git endpoints ─────────────────────────────────
+
+// TestGetProjectGitInfo verifies the git-info endpoint returns IsGitRepo +
+// current branch + branches for a registered project that is a real git repo.
+func TestGetProjectGitInfo(t *testing.T) {
+	store := setupTestStore(t)
+	ps := mustProjectStore(t, store)
+
+	// Create a real git repo in a temp dir and register it as a project.
+	repoDir := t.TempDir()
+	initGitRepoAt(t, repoDir)
+	proj, err := ps.Create("demo", repoDir, "")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	_ = proj
+
+	h := &Handlers{
+		store:           store,
+		projectStore:    ps,
+		hub:             NewHub(),
+		startTime:       time.Now(),
+		opencodeClient:  &fakeOpencodeClient{},
+		runningMissions: make(map[string]struct{}),
+	}
+	server := newTestServerWithHandlers(t, h)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/projects/demo/git-info")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var info missions.GitInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode git-info: %v", err)
+	}
+	if !info.IsGitRepo {
+		t.Error("expected IsGitRepo=true")
+	}
+	if info.CurrentBranch == "" {
+		t.Error("expected non-empty current branch")
+	}
+}
+
+// TestGetProjectGitInfoOnNonGitRepo verifies the endpoint reports IsGitRepo=false
+// (not an error) so the UI can offer git init.
+func TestGetProjectGitInfoOnNonGitRepo(t *testing.T) {
+	store := setupTestStore(t)
+	ps := mustProjectStore(t, store)
+
+	plainDir := t.TempDir() // no git
+	if _, err := ps.Create("plain", plainDir, ""); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	h := &Handlers{
+		store:           store,
+		projectStore:    ps,
+		hub:             NewHub(),
+		startTime:       time.Now(),
+		opencodeClient:  &fakeOpencodeClient{},
+		runningMissions: make(map[string]struct{}),
+	}
+	server := newTestServerWithHandlers(t, h)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/projects/plain/git-info")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var info missions.GitInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if info.IsGitRepo {
+		t.Error("expected IsGitRepo=false for plain dir")
+	}
+}
+
+// TestInitProjectGit verifies POST init-git turns a non-git project into a git repo.
+func TestInitProjectGit(t *testing.T) {
+	store := setupTestStore(t)
+	ps := mustProjectStore(t, store)
+
+	plainDir := t.TempDir()
+	if _, err := ps.Create("fresh", plainDir, ""); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	h := &Handlers{
+		store:           store,
+		projectStore:    ps,
+		hub:             NewHub(),
+		startTime:       time.Now(),
+		opencodeClient:  &fakeOpencodeClient{},
+		runningMissions: make(map[string]struct{}),
+	}
+	server := newTestServerWithHandlers(t, h)
+	defer server.Close()
+
+	resp := mustPost(t, server.URL+"/api/projects/fresh/init-git")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Verify it is now a git repo.
+	wm := missions.NewWorkspaceManager(plainDir)
+	if err := wm.ValidateGitRepo(); err != nil {
+		t.Errorf("expected valid git repo after init-git, got: %v", err)
+	}
+}
+
+// initGitRepoAt creates a minimal git repo at dir with one commit.
+func initGitRepoAt(t *testing.T, dir string) {
+	t.Helper()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("init\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	run("add", ".")
+	run("commit", "-m", "initial")
 }
 
 func TestMethodNotAllowedReturnsJSONForAllEndpoints(t *testing.T) {

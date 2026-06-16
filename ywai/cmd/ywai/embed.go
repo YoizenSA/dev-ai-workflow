@@ -7,6 +7,7 @@ import (
 	"io/fs"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 )
 
 //go:embed all:embedded_data
@@ -25,7 +26,12 @@ func init() {
 		sub, _ := fs.Sub(embeddedFS, "embedded_data")
 		return sub
 	}
+	uiFS := func() fs.FS {
+		sub, _ := fs.Sub(embeddedFS, "embedded_data/ui")
+		return sub
+	}
 	config.RegisterEmbeddedProviders(skillsFS)
 	config.RegisterEmbeddedAgents(agentsFS)
 	config.RegisterEmbeddedDefaults(defaultsFS)
+	control.RegisterEmbeddedUI(uiFS)
 }

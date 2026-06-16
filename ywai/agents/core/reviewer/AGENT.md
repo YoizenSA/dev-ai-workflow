@@ -126,9 +126,7 @@ When you finish, end your response with this standard handoff so the orchestrato
 
 After review, the primary agent should invoke the appropriate subagent for follow-up work.
 
-## Kanban Reporting
-
-When you approve or request changes, include a **Kanban status update** in your verdict:
+When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your verdict:
 
 **Approve:**
 ```

@@ -13,10 +13,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/gorilla/websocket"
@@ -563,6 +565,101 @@ func parseFrontmatter(content string) (frontmatter string, body string) {
 	return fm, body
 }
 
+// extractFrontmatterField extracts a simple scalar field from YAML frontmatter.
+// Handles both inline (key: value) and block (key:\n  value) formats.
+func extractFrontmatterField(data []byte, fieldName string) string {
+	content := string(data)
+	if !strings.HasPrefix(content, "---") {
+		return ""
+	}
+	end := strings.Index(content[3:], "---")
+	if end == -1 {
+		return ""
+	}
+	fm := content[3 : end+3]
+
+	// Try simple key: value first
+	pattern := fieldName + ":"
+	for _, line := range strings.Split(fm, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, pattern) {
+			val := strings.TrimSpace(trimmed[len(pattern):])
+			if val != "" && !strings.HasPrefix(val, "\n") {
+				return val
+			}
+		}
+	}
+	return ""
+}
+
+// detectAgentTeam scans ywai/agents/{team}/ directories to find which team
+// an agent belongs to. Falls back to the "group" frontmatter field.
+func detectAgentTeam(agentName string, agentData []byte) string {
+	// Try ywai/agents/{team}/ directory structure first
+	ywaiAgentsDir := findYwaiAgentsDir()
+	if ywaiAgentsDir != "" {
+		entries, err := os.ReadDir(ywaiAgentsDir)
+		if err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				teamDir := filepath.Join(ywaiAgentsDir, entry.Name())
+				// Check if agent exists in this team directory
+				// Agents can be in team/{agent-name}/AGENT.md or team/{agent-name}.md
+				if _, err := os.Stat(filepath.Join(teamDir, agentName, "AGENT.md")); err == nil {
+					return entry.Name()
+				}
+				if _, err := os.Stat(filepath.Join(teamDir, agentName+".md")); err == nil {
+					return entry.Name()
+				}
+			}
+		}
+	}
+	// Fall back to frontmatter "group" field
+	return extractFrontmatterField(agentData, "group")
+}
+
+// findYwaiAgentsDir searches for the ywai/agents/ directory.
+func findYwaiAgentsDir() string {
+	// Try relative to current working directory
+	cwd, err := os.Getwd()
+	if err == nil {
+		dir := cwd
+		for i := 0; i < 8; i++ {
+			candidate := filepath.Join(dir, "ywai", "agents")
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
+			if filepath.Base(dir) == "agents" {
+				if _, err := os.Stat(filepath.Join(dir, "core")); err == nil {
+					return dir
+				}
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	// Try GOPATH/src/github.com/Yoizen/dev-ai-workflow/ywai/agents
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		candidate := filepath.Join(gopath, "src", "github.com", "Yoizen", "dev-ai-workflow", "ywai", "agents")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	// Try ~/Documents/GitHub/dev-ai-workflow/ywai/agents
+	if home, err := os.UserHomeDir(); err == nil {
+		candidate := filepath.Join(home, "Documents", "GitHub", "dev-ai-workflow", "ywai", "agents")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // extractPermissionsFromFrontmatter parses permissions from YAML frontmatter.
 // Supports both formats:
 //   - New: permission:\n  read: allow\n  edit: deny\n ...
@@ -756,8 +853,6 @@ func skillsDir() (string, error) {
 	return filepath.Join(home, ".config", "opencode", "skills"), nil
 }
 
-
-
 // GET /api/config/opencode
 func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 	path, err := opencodeConfigPath()
@@ -775,33 +870,44 @@ func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // PUT /api/config/opencode
+//
+// Body is treated as a sparse JSON patch: every top-level key present in the
+// body replaces the matching key in opencode.json, while any key not in the
+// body is preserved. This protects the file from clients that render only a
+// subset of fields (e.g. the Settings UI which exposes 5 keys but the file
+// also holds provider configs, mcp, etc.).
 func (h *Handlers) PutOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
 
-	var body json.RawMessage
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	var patch map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "expected JSON object: " + err.Error()})
 		return
 	}
 
-	// Validate the JSON is an object/map, not an array or primitive
-	if len(body) > 0 && body[0] != '{' {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "expected JSON object"})
-		return
-	}
-
-	// Backup existing config
 	path, err := opencodeConfigPath()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if existing, err := os.ReadFile(path); err == nil {
+
+	// Load existing config (if any) into a top-level map and merge patch over it.
+	existing, _ := os.ReadFile(path)
+	merged := map[string]json.RawMessage{}
+	if len(existing) > 0 {
+		// Preserve the existing file on disk as a .bak before mutating it.
 		_ = os.WriteFile(path+".bak", existing, 0644)
+		_ = json.Unmarshal(existing, &merged)
+	}
+	for k, v := range patch {
+		merged[k] = v
 	}
 
-	// Write new config
-	pretty, _ := json.MarshalIndent(body, "", "  ")
+	pretty, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	if err := os.WriteFile(path, pretty, 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -812,29 +918,70 @@ func (h *Handlers) PutOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/config/agents
 func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
-	if h.opencodeClient == nil {
-		writeJSON(w, http.StatusOK, []interface{}{})
-		return
-	}
-
-	ctx := r.Context()
-	agents, err := h.opencodeClient.ListAgents(ctx)
-	if err != nil {
-		writeJSON(w, http.StatusOK, []interface{}{})
-		return
-	}
-
 	type agentInfo struct {
-		Name string            `json:"name"`
-		Size int64             `json:"size"`
-		Mode string            `json:"mode,omitempty"`
-		Perm map[string]string `json:"permission,omitempty"`
+		Name  string `json:"name"`
+		Size  int64  `json:"size"`
+		Mode  string `json:"mode,omitempty"`
+		Group string `json:"group,omitempty"`
 	}
-	result := make([]agentInfo, len(agents))
-	for i, a := range agents {
-		result[i] = agentInfo{Name: a.ID, Size: 0}
+
+	seen := make(map[string]bool)
+	var agents []agentInfo
+	agentsDirPath, _ := agentsDir()
+
+	// 1. Read agents from opencode.json config
+	configPath, err := opencodeConfigPath()
+	if err == nil {
+		data, readErr := os.ReadFile(configPath)
+		if readErr == nil {
+			var cfg struct {
+				Agent map[string]json.RawMessage `json:"agent"`
+			}
+			if json.Unmarshal(data, &cfg) == nil && cfg.Agent != nil {
+				for name, raw := range cfg.Agent {
+					var a struct {
+						Mode string `json:"mode"`
+					}
+					json.Unmarshal(raw, &a)
+					info := agentInfo{Name: name, Mode: a.Mode}
+					info.Group = resolveTeam(name, agentsDirPath)
+					agents = append(agents, info)
+					seen[name] = true
+				}
+			}
+		}
 	}
-	writeJSON(w, http.StatusOK, result)
+
+	// 2. Also scan agents directory for agents not in config
+	if agentsDirPath != "" {
+		entries, _ := os.ReadDir(agentsDirPath)
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+				name := strings.TrimSuffix(e.Name(), ".md")
+				if !seen[name] {
+					info := agentInfo{Name: name}
+					info.Group = resolveTeam(name, agentsDirPath)
+					agents = append(agents, info)
+					seen[name] = true
+				}
+			}
+		}
+	}
+
+	sort.Slice(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })
+	writeJSON(w, http.StatusOK, agents)
+}
+
+// resolveTeam detects the team for an agent.
+func resolveTeam(agentName, agentsDirPath string) string {
+	if agentsDirPath == "" {
+		return ""
+	}
+	path := filepath.Join(agentsDirPath, agentName+".md")
+	if mdData, err := os.ReadFile(path); err == nil {
+		return detectAgentTeam(agentName, mdData)
+	}
+	return ""
 }
 
 // GET /api/config/agents/{name}
@@ -899,7 +1046,20 @@ func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+	// The permission: block is owned by PutAgentPermissions, not this handler.
+	// Re-apply the on-disk permissions onto the incoming content so a stale
+	// frontmatter coming from the client cannot overwrite toggles made via the
+	// permissions API in between load and save.
+	finalContent := body.Content
+	if existing, err := os.ReadFile(path); err == nil {
+		fm, _ := parseFrontmatter(string(existing))
+		currentPerms := extractPermissionsFromFrontmatter(fm)
+		if len(currentPerms) > 0 {
+			finalContent = updatePermissionsInFrontmatter(body.Content, currentPerms)
+		}
+	}
+
+	if err := os.WriteFile(path, []byte(finalContent), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1078,38 +1238,38 @@ var ValidPermissionKeys = map[string]bool{
 	"mcp":      true,
 
 	// Engram memory tools (from engram plugin)
-	"mem_capture_passive":     true,
-	"mem_compare":             true,
-	"mem_context":             true,
-	"mem_current_project":     true,
-	"mem_delete":              true,
-	"mem_doctor":              true,
-	"mem_get_observation":     true,
-	"mem_judge":               true,
-	"mem_save":                true,
-	"mem_save_prompt":         true,
-	"mem_search":              true,
-	"mem_session_end":         true,
-	"mem_session_start":       true,
-	"mem_session_summary":     true,
-	"mem_stats":               true,
-	"mem_suggest_topic_key":   true,
-	"mem_timeline":            true,
-	"mem_update":              true,
+	"mem_capture_passive":   true,
+	"mem_compare":           true,
+	"mem_context":           true,
+	"mem_current_project":   true,
+	"mem_delete":            true,
+	"mem_doctor":            true,
+	"mem_get_observation":   true,
+	"mem_judge":             true,
+	"mem_save":              true,
+	"mem_save_prompt":       true,
+	"mem_search":            true,
+	"mem_session_end":       true,
+	"mem_session_start":     true,
+	"mem_session_summary":   true,
+	"mem_stats":             true,
+	"mem_suggest_topic_key": true,
+	"mem_timeline":          true,
+	"mem_update":            true,
 
 	// Kanban MCP tools (from ywai-kanban MCP server)
-	"kanban_add_activity":            true,
-	"kanban_create_delegation":       true,
-	"kanban_create_session":          true,
-	"kanban_delete_session":          true,
-	"kanban_get_activities":          true,
-	"kanban_get_board":               true,
-	"kanban_get_graph":               true,
-	"kanban_get_pending_decisions":   true,
-	"kanban_get_ui_url":              true,
-	"kanban_list_sessions":           true,
-	"kanban_resolve_activity":        true,
-	"kanban_update_delegation":       true,
+	"kanban_add_activity":          true,
+	"kanban_create_delegation":     true,
+	"kanban_create_session":        true,
+	"kanban_delete_session":        true,
+	"kanban_get_activities":        true,
+	"kanban_get_board":             true,
+	"kanban_get_graph":             true,
+	"kanban_get_pending_decisions": true,
+	"kanban_get_ui_url":            true,
+	"kanban_list_sessions":         true,
+	"kanban_resolve_activity":      true,
+	"kanban_update_delegation":     true,
 }
 
 // ValidPermissionValues are the only accepted permission values.
@@ -1208,6 +1368,11 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, body)
 }
 
+type MCPToolGroup struct {
+	Tools   []string `json:"tools"`
+	Enabled bool     `json:"enabled"`
+}
+
 // GET /api/config/tools
 func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 	path, err := opencodeConfigPath()
@@ -1266,7 +1431,8 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MCP discovery — best effort for HTTP/SSE MCPs
-	mcpTools := map[string][]string{}
+	// Include disabled MCPs so the UI can show them as inactive.
+	mcpTools := map[string]MCPToolGroup{}
 	var mcpServers map[string]json.RawMessage
 	if mcpRaw, ok := config["mcp"]; ok {
 		_ = json.Unmarshal(mcpRaw, &mcpServers)
@@ -1275,13 +1441,17 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(serverRaw, &server); err != nil {
 				continue
 			}
-			// Skip disabled MCPs
-			if disabled, ok := server["disabled"].(bool); ok && disabled {
-				continue
+			disabled := false
+			if d, ok := server["disabled"].(bool); ok {
+				disabled = d
+			}
+			// "enabled: false" is equivalent to "disabled: true"
+			if e, ok := server["enabled"].(bool); ok && !e {
+				disabled = true
 			}
 
 			// Discover tools based on server type
-			var tools []string
+			tools := []string{}
 
 			// Try HTTP/SSE discovery first (remote servers)
 			if urlStr, ok := server["url"].(string); ok && urlStr != "" {
@@ -1324,11 +1494,9 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if len(tools) > 0 {
-				mcpTools[name] = tools
-				for _, t := range tools {
-					toolSet[t] = true
-				}
+			mcpTools[name] = MCPToolGroup{Tools: tools, Enabled: !disabled}
+			for _, t := range tools {
+				toolSet[t] = true
 			}
 		}
 	}
@@ -1388,7 +1556,7 @@ func discoverMCPTools(urlStr string) ([]string, error) {
 		return nil, err
 	}
 
-	var names []string
+	names := []string{}
 	for _, t := range rpcResp.Result.Tools {
 		if t.Name != "" {
 			names = append(names, t.Name)
@@ -1542,46 +1710,45 @@ func readJSONRPCResponse(reader *bufio.Reader) (map[string]interface{}, error) {
 // discoverPluginTools parses plugin source code to find tool registrations.
 // Looks for patterns like: toolName: tool({ ... }) or "toolName": tool({ ... })
 func discoverPluginTools(pluginDir string) []string {
-	var tools []string
+	toolSet := map[string]bool{}
 
-	// Find the main dist/index.js file
-	indexPath := filepath.Join(pluginDir, "dist", "index.js")
-	if _, err := os.Stat(indexPath); err != nil {
-		// Try root index.js
-		indexPath = filepath.Join(pluginDir, "index.js")
-		if _, err := os.Stat(indexPath); err != nil {
-			return tools
+	// Possible plugin entry files. Pi-style plugins expose tools in pi-entry.js.
+	candidates := []string{
+		filepath.Join(pluginDir, "dist", "index.js"),
+		filepath.Join(pluginDir, "dist", "pi-entry.js"),
+		filepath.Join(pluginDir, "index.js"),
+		filepath.Join(pluginDir, "pi-entry.js"),
+	}
+
+	for _, path := range candidates {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
 		}
-	}
+		content := string(data)
 
-	data, err := os.ReadFile(indexPath)
-	if err != nil {
-		return tools
-	}
-
-	content := string(data)
-
-	// Pattern 1: toolName: tool({ ... }) — look for tool keys before `: tool(`
-	// This matches lines like: ado_prs: tool({ or "ado_prs": tool({
-	toolPattern := regexp.MustCompile(`(?:"|')?([a-z][a-z0-9_]*)(?:"|')?:\s*tool\s*\(`)
-	for _, match := range toolPattern.FindAllStringSubmatch(content, -1) {
-		if len(match) > 1 && match[1] != "" {
-			tools = append(tools, match[1])
+		// Pattern 1: toolName: tool({ ... }) — look for tool keys before `: tool(`
+		toolPattern := regexp.MustCompile(`(?:"|')?([a-z][a-z0-9_]*)(?:"|')?:\s*tool\s*\(`)
+		for _, match := range toolPattern.FindAllStringSubmatch(content, -1) {
+			if len(match) > 1 && match[1] != "" {
+				toolSet[match[1]] = true
+			}
 		}
-	}
 
-	// Pattern 2: look for tool name in description patterns
-	// Some plugins register tools differently
-	if len(tools) == 0 {
-		// Fallback: look for patterns like name: "toolname" in tool definitions
+		// Pattern 2: name: "toolname" in tool definitions
 		namePattern := regexp.MustCompile(`name\s*:\s*["']([a-z][a-z0-9_]*)["']`)
 		for _, match := range namePattern.FindAllStringSubmatch(content, -1) {
 			if len(match) > 1 && match[1] != "" {
-				tools = append(tools, match[1])
+				toolSet[match[1]] = true
 			}
 		}
 	}
 
+	var tools []string
+	for t := range toolSet {
+		tools = append(tools, t)
+	}
+	sortStrings(tools)
 	return tools
 }
 
@@ -1620,14 +1787,29 @@ func discoverAllPluginTools() map[string][]string {
 					continue
 				}
 				pluginPath := filepath.Join(packagesDir, entry.Name(), scopeEntry.Name())
-				// Check for node_modules/@scope/package/dist or node_modules/@scope/package
-				nmPath := filepath.Join(pluginPath, "node_modules", entry.Name(), scopeEntry.Name())
-				tools := discoverPluginTools(nmPath)
+				// Package dir may include a version suffix (e.g. opencode-ado@0.4.4).
+				// The actual installed package lives under node_modules/@scope/package
+				// without the version suffix, so try both forms.
+				scopeName := entry.Name()
+				pkgName := scopeEntry.Name()
+				pkgBase := pkgName
+				if idx := strings.LastIndex(pkgName, "@"); idx > 0 {
+					pkgBase = pkgName[:idx]
+				}
+				// Try node_modules/@scope/package (no version suffix)
+				nmPathBase := filepath.Join(pluginPath, "node_modules", scopeName, pkgBase)
+				tools := discoverPluginTools(nmPathBase)
+				// Fallback: node_modules/@scope/package@version
+				if len(tools) == 0 {
+					nmPathVersioned := filepath.Join(pluginPath, "node_modules", scopeName, pkgName)
+					tools = discoverPluginTools(nmPathVersioned)
+				}
+				// Fallback: plugin root itself
 				if len(tools) == 0 {
 					tools = discoverPluginTools(pluginPath)
 				}
 				if len(tools) > 0 {
-					pluginName := entry.Name() + "/" + scopeEntry.Name()
+					pluginName := scopeName + "/" + pkgBase
 					result[pluginName] = tools
 				}
 			}
@@ -1726,6 +1908,58 @@ func (h *Handlers) GetSkill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"name": name, "content": string(data)})
+}
+
+// PUT /api/config/skills/{name} - update a skill file
+func (h *Handlers) PutSkill(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid skill name"})
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	skillsDirPath, err := skillsDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	skillDir := filepath.Join(skillsDirPath, name)
+	absPath, err := filepath.Abs(skillDir)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	baseDir, err := filepath.Abs(skillsDirPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+		return
+	}
+
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	path := filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 // DELETE /api/config/skills/{name}
@@ -1886,6 +2120,63 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
+// DELETE /api/config/mcp/{name} - delete an MCP server
+func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid mcp name"})
+		return
+	}
+
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	mcpRaw, ok := config["mcp"]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no mcp section"})
+		return
+	}
+
+	var mcpSection map[string]json.RawMessage
+	if err := json.Unmarshal(mcpRaw, &mcpSection); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if _, ok := mcpSection[name]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
+		return
+	}
+
+	delete(mcpSection, name)
+
+	mcpJSON, _ := json.Marshal(mcpSection)
+	config["mcp"] = mcpJSON
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // GET /api/config/providers - list all providers
 func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
 	path, err := opencodeConfigPath()
@@ -2033,4 +2324,84 @@ func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ─── User Config (Role Defaults) ──────────────────────────────────────────
+
+// GetUserConfig returns the full UserConfig as JSON.
+// GET /api/config/user
+func (h *Handlers) GetUserConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Ensure RoleDefaults is materialized so the frontend sees seed values for
+	// roles the user hasn't customised.
+	if cfg.RoleDefaults == nil {
+		cfg.RoleDefaults = userconfig.DefaultRoleDefaults()
+	} else {
+		seeds := userconfig.DefaultRoleDefaults()
+		for _, role := range userconfig.CanonicalRoles {
+			if _, ok := cfg.RoleDefaults[role]; !ok {
+				cfg.RoleDefaults[role] = seeds[role]
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// PutUserConfig accepts a partial JSON body and merges it over the existing
+// user config, then saves to disk.
+// PUT /api/config/user
+func (h *Handlers) PutUserConfig(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Decode into a sparse map so absent fields don't overwrite existing config.
+	var patch map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+
+	// Generic field merge: re-marshal cfg, overlay patch, unmarshal back.
+	// Keeps unknown-to-server fields intact and avoids hand-listing every key.
+	base, _ := json.Marshal(cfg)
+	var merged map[string]json.RawMessage
+	_ = json.Unmarshal(base, &merged)
+	for k, v := range patch {
+		merged[k] = v
+	}
+	blob, _ := json.Marshal(merged)
+	if err := json.Unmarshal(blob, cfg); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "merge failed: " + err.Error()})
+		return
+	}
+
+	if err := userconfig.SaveConfig(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// GetRoleDefaults returns just the role_defaults block (a flattened view of
+// what the New Mission modal needs to pre-populate its selectors).
+// GET /api/config/user/role-defaults
+func (h *Handlers) GetRoleDefaults(w http.ResponseWriter, r *http.Request) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out := userconfig.RoleDefaults{}
+	for _, role := range userconfig.CanonicalRoles {
+		out[role] = cfg.GetRoleDefault(role)
+	}
+	writeJSON(w, http.StatusOK, out)
 }

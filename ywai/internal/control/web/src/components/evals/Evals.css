@@ -1,0 +1,201 @@
+/* Evals Dashboard — yz-ui aligned */
+
+.eval-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Summary KPIs use the global .kpi-grid + .kpi from components.css.
+   Override only the card-specific label/value sizing. */
+.eval-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Run ID column — monospace accent */
+.eval-run-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--tint-info);
+}
+
+/* Mode badge — uses pill pattern */
+.eval-mode-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.eval-mode-badge.coder_only {
+  background: rgba(var(--yz-primary-2-rgb), 0.15);
+  color: var(--tint-purple);
+}
+
+.eval-mode-badge.full_mission {
+  background: var(--success-soft);
+  color: var(--tint-success);
+}
+
+/* Detail card */
+.eval-detail {
+  background: linear-gradient(155deg, rgba(var(--surf-1-rgb),0.78), rgba(var(--surf-3-rgb),0.84));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.eval-detail h3 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xl);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.eval-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Tasks table inside detail — uses global .data-table */
+.eval-tasks-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.eval-tasks-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--panel-border-strong);
+}
+
+.eval-tasks-table td {
+  padding: 0.5rem 0.75rem;
+  font-size: var(--text-sm);
+  color: var(--text-soft);
+  border-bottom: 1px solid rgba(var(--slate-rgb), 0.10);
+}
+
+.eval-error {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--tint-danger);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Empty state code block */
+.empty-state code {
+  display: inline-block;
+  margin-top: var(--space-3);
+  padding: 0.4rem 0.8rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--tint-info);
+}
+
+/* Loading / error states — use yz-ui loading-inline and alert */
+.eval-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  padding: var(--space-6);
+}
+
+/* ─── Memory Recall Eval ───────────────────────────────────────────────── */
+
+.recall-eval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.recall-eval-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recall-eval-form-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.recall-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.recall-field-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.recall-eval-explainer {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.recall-eval-explainer code {
+  font-family: var(--font-mono);
+  background: var(--surface-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.recall-summary {
+  font-size: 0.8rem;
+}
+
+.recall-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.recall-section-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recall-prompt-cell {
+  max-width: 460px;
+}
+
+.recall-prompt-cell .ellipsis,
+.recall-prompt-cell .ellipsis-2 {
+  font-size: 0.85rem;
+}

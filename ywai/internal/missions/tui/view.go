@@ -174,7 +174,7 @@ var (
 			Width(44)
 
 	confirmTextStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15"))
+				Foreground(lipgloss.Color("15"))
 
 	// ── Small Terminal Warning ──────────────────────────────────────
 	warningStyle = lipgloss.NewStyle().
@@ -458,7 +458,7 @@ func (m Model) renderMissionSummary(width int) string {
 func (m Model) renderFeatureInfo(feature *missions.Feature, width int) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("  %s\n\n", infoKeyStyle.Render("Feature:"))+"   "+infoValStyle.Render(feature.ID)+"\n")
+	b.WriteString(fmt.Sprintf("  %s\n\n", infoKeyStyle.Render("Feature:")) + "   " + infoValStyle.Render(feature.ID) + "\n")
 
 	if feature.Description != "" {
 		b.WriteString(fmt.Sprintf("  %s\n   %s\n", infoKeyStyle.Render("Description:"), truncate(feature.Description, width-5)))

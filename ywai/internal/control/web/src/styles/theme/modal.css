@@ -1,0 +1,101 @@
+/* ============================================================
+   modal.css · glass modal + overlay + action popup
+   ============================================================ */
+.overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  background: rgba(var(--black-rgb), 0.55); backdrop-filter: blur(6px);
+  /* Centrado: los dropdowns anclados (YdAnchoredDirective) clampan contra el
+     modal, así que no hace falta anclar arriba. `safe` evita recortar el tope
+     de un modal más alto que la ventana; el overlay scrollea. */
+  display: grid; justify-items: center; align-items: safe center;
+  padding: var(--space-5); overflow-y: auto;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: 100%; max-width: var(--modal-w, 540px); max-height: 90vh; overflow-y: auto;
+  border-radius: var(--radius-xl); border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(165deg, rgba(var(--surf-5-rgb),0.96), rgba(var(--surf-6-rgb),0.98));
+  box-shadow: var(--shadow-glass);
+  animation: modalIn 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modalIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-6) var(--space-6) var(--space-3); }
+.modal-title { font-size: var(--text-xl); font-weight: 680; }
+.modal-subtitle { font-size: 0.88rem; color: var(--text-muted); margin-top: 0.25rem; }
+.modal-close {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--text-muted);
+  transition: all 140ms ease;
+}
+.modal-close:hover { background: var(--surface-hover); color: var(--text); }
+.modal-body { padding: var(--space-3) var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.modal-foot { display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6) var(--space-6); }
+.modal-foot.split { justify-content: space-between; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.form-grid .span-2 { grid-column: 1 / -1; }
+.modal-label { font-size: 0.78rem; font-weight: 600; color: var(--text-soft); margin-bottom: 0.35rem; display: block; }
+
+/* Action popup (row context menu) */
+.action-popup {
+  position: fixed; z-index: var(--z-popover); display: flex; flex-direction: column; gap: 4px;
+  padding: 6px; border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(165deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
+  box-shadow: var(--shadow-glass); min-width: 170px;
+  animation: popIn 0.16s ease;
+}
+@keyframes popIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.popup-item {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem 0.7rem; border-radius: var(--radius-sm);
+  font-size: 0.86rem; font-weight: 550; cursor: pointer;
+  background: transparent; border: none; color: var(--text-soft); text-align: left; width: 100%;
+  transition: background 120ms ease, color 120ms ease;
+}
+.popup-item:hover { background: var(--surface-hover); color: var(--text); }
+.popup-item.danger:hover { background: var(--danger-soft); color: var(--tint-danger); }
+
+/* ============================================================
+   Responsive — full-screen on mobile
+   ============================================================ */
+@media (max-width: 600px) {
+  .overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+  .modal {
+    max-width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+  .modal-head {
+    padding: var(--space-4);
+  }
+  .modal-body {
+    padding: var(--space-3) var(--space-4);
+  }
+  .modal-foot {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    flex-direction: column-reverse;
+  }
+  .modal-foot .btn {
+    width: 100%;
+  }
+  .modal-foot .row {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid .span-2 {
+    grid-column: 1;
+  }
+}

@@ -53,6 +53,45 @@ func TestLocalClient_ListAgents_Empty(t *testing.T) {
 	}
 }
 
+// TestLocalClient_ListAgents_FromConfig verifies agents are read from the
+// "agent" section of opencode.json (the modern opencode layout), not just from
+// files in a directory.
+func TestLocalClient_ListAgents_FromConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	config := `{
+		"agent": {
+			"build": {"description": "build agent"},
+			"ask": {"description": "ask agent"},
+			"gentle-orchestrator": {"description": "orchestrator"}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Use a non-existent agents dir to prove the config is the source, not files.
+	c := NewLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	ctx := context.Background()
+	agents, err := c.ListAgents(ctx)
+	if err != nil {
+		t.Fatalf("ListAgents() should not error: %v", err)
+	}
+	if len(agents) != 3 {
+		t.Fatalf("Expected 3 agents from config, got %d: %v", len(agents), agentIDs(agents))
+	}
+
+	got := make(map[string]bool)
+	for _, a := range agents {
+		got[a.ID] = true
+	}
+	for _, expected := range []string{"build", "ask", "gentle-orchestrator"} {
+		if !got[expected] {
+			t.Errorf("expected agent %q not found in %v", expected, agentIDs(agents))
+		}
+	}
+}
+
 func TestLocalClient_ListAgents(t *testing.T) {
 	dir := t.TempDir()
 	// Create some agent markdown files
@@ -191,4 +230,28 @@ func modelIDs(models []ModelInfo) []string {
 		ids[i] = m.ID
 	}
 	return ids
+}
+
+// TestParseCLIModels verifies parsing of 'opencode models' output.
+func TestParseCLIModels(t *testing.T) {
+	output := "opencode/deepseek-v4-flash-free\nlocal-fable5/gemma-4-e4b-it\nbare-model\n\nopencode/deepseek-v4-flash-free\n"
+	models := parseCLIModels(output)
+
+	if len(models) != 3 {
+		t.Fatalf("expected 3 models (deduped), got %d: %v", len(models), modelIDs(models))
+	}
+
+	// Sorted alphabetically by ID.
+	if models[0].ID != "bare-model" {
+		t.Errorf("expected first model 'bare-model', got %q", models[0].ID)
+	}
+	// Provider and name split correctly.
+	deepseek := models[2]
+	if deepseek.ID != "opencode/deepseek-v4-flash-free" || deepseek.Provider != "opencode" || deepseek.Name != "deepseek-v4-flash-free" {
+		t.Errorf("unexpected deepseek entry: %+v", deepseek)
+	}
+	// Bare model has empty provider.
+	if models[0].Provider != "" {
+		t.Errorf("bare model should have empty provider, got %q", models[0].Provider)
+	}
 }

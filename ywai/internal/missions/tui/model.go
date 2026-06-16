@@ -72,17 +72,17 @@ type LogEntry struct {
 
 // treeItem represents a single visible row in the feature tree.
 type treeItem struct {
-	indent    int              // indentation level (0 = milestone, 1 = feature)
-	label     string           // display text
-	isMilestone bool           // true if this is a milestone row
-	isFeature   bool           // true if this is a feature row
-	feature     *missions.Feature // feature pointer (nil for milestones)
-	milestoneIdx int           // index into mission.Milestones (for milestone rows)
-	milestoneName string       // milestone name
-	expanded    bool           // true if milestone is expanded
-	hasChildren bool           // true if milestone has features
-	featureCount int           // total features in this milestone
-	completedCount int         // completed features in this milestone
+	indent         int               // indentation level (0 = milestone, 1 = feature)
+	label          string            // display text
+	isMilestone    bool              // true if this is a milestone row
+	isFeature      bool              // true if this is a feature row
+	feature        *missions.Feature // feature pointer (nil for milestones)
+	milestoneIdx   int               // index into mission.Milestones (for milestone rows)
+	milestoneName  string            // milestone name
+	expanded       bool              // true if milestone is expanded
+	hasChildren    bool              // true if milestone has features
+	featureCount   int               // total features in this milestone
+	completedCount int               // completed features in this milestone
 }
 
 // ─── Messages ──────────────────────────────────────────────────────────────
@@ -143,12 +143,12 @@ type Model struct {
 	focus  FocusPanel // which panel has keyboard focus
 
 	// Log state (per selected feature)
-	currentLogFeature string   // feature ID whose log is currently displayed
+	currentLogFeature string     // feature ID whose log is currently displayed
 	logLines          []LogEntry // parsed log lines for the current feature
 	logFilter         LogFilter
 	logAutoScroll     bool
-	logScrollOffset   int   // scroll offset for log view (0 = newest)
-	logPollIdx        int   // counter for log polling
+	logScrollOffset   int // scroll offset for log view (0 = newest)
+	logPollIdx        int // counter for log polling
 
 	// Feature animation state (for in-progress spinners)
 	animTick int
@@ -868,15 +868,15 @@ func statusIcon(status missions.FeatureStatus) string {
 func statusColor(status missions.FeatureStatus) string {
 	switch status {
 	case missions.FeaturePending:
-		return "240"    // grey
+		return "240" // grey
 	case missions.FeatureInProgress:
-		return "39"     // blue
+		return "39" // blue
 	case missions.FeatureCompleted:
-		return "76"     // green
+		return "76" // green
 	case missions.FeatureFailed:
-		return "196"    // red
+		return "196" // red
 	case missions.FeatureCancelled:
-		return "208"    // orange
+		return "208" // orange
 	default:
 		return "240"
 	}
@@ -990,5 +990,3 @@ func (m Model) filteredLogLines() []LogEntry {
 	}
 	return result
 }
-
-

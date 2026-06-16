@@ -10,7 +10,8 @@
         "architect",
         "reviewer",
         "devops",
-        "finder"
+        "finder",
+        "memory"
       ]
     },
     "social-refactor": {

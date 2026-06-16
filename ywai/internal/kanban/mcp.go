@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 )
 
 // --- MCP Protocol Types ---
@@ -90,9 +91,21 @@ type MCPAdapter struct {
 	client *http.Client
 }
 
-// NewMCPAdapter creates a new MCP adapter, using the singleton kanban server.
+// NewMCPAdapter creates a new MCP adapter, using the control server if available,
+// otherwise falling back to the singleton kanban server.
 func NewMCPAdapter() *MCPAdapter {
-	s, err := GetOrStart(DefaultUIPort) // Get or start singleton server on UI port
+	// First, check if control server is running
+	if port := serverutil.GetRunningPort(); port != 0 {
+		client := &http.Client{Timeout: 2 * time.Second}
+		return &MCPAdapter{
+			server: nil, // No kanban server needed when using control
+			port:   port,
+			client: client,
+		}
+	}
+
+	// Fallback: start standalone kanban server
+	s, err := GetOrStart(DefaultUIPort)
 	if err != nil {
 		log.Fatalf("kanban: failed to start server: %v", err)
 	}

@@ -73,13 +73,15 @@ func StartFeature(store *MissionsStore, mission *Mission, featureID string) (*Fe
 		return nil, err
 	}
 
+	// Use granular update to avoid lost-update with stale mission snapshots
+	if err := store.UpdateFeatureStatus(mission.ID, featureID, newStatus); err != nil {
+		return nil, fmt.Errorf("persist start feature: %w", err)
+	}
+
+	// Update local snapshot for caller use
 	feat.Status = newStatus
 	feat.UpdatedAt = time.Now().UTC()
 	mission.UpdatedAt = feat.UpdatedAt
-
-	if err := store.SaveMission(mission); err != nil {
-		return nil, fmt.Errorf("persist start feature: %w", err)
-	}
 
 	return feat, nil
 }
@@ -101,22 +103,25 @@ func CompleteFeature(store *MissionsStore, mission *Mission, featureID string) (
 		return nil, err
 	}
 
+	// Use granular update to avoid lost-update with stale mission snapshots
+	if err := store.UpdateFeatureStatus(mission.ID, featureID, newStatus); err != nil {
+		return nil, fmt.Errorf("persist complete feature: %w", err)
+	}
+
+	// Update local snapshot for caller use
 	now := time.Now().UTC()
 	feat.Status = newStatus
 	feat.CompletedAt = &now
 	feat.UpdatedAt = now
 	mission.UpdatedAt = now
 
-	if err := store.SaveMission(mission); err != nil {
-		return nil, fmt.Errorf("persist complete feature: %w", err)
-	}
-
 	return feat, nil
 }
 
 // FailFeature transitions a feature from in_progress to failed.
 // Increments the RetryCount and persists the change.
-func FailFeature(store *MissionsStore, mission *Mission, featureID string) (*Feature, error) {
+// If lastError is provided, it is persisted on the feature for self-correction feedback.
+func FailFeature(store *MissionsStore, mission *Mission, featureID string, lastError ...string) (*Feature, error) {
 	if mission == nil {
 		return nil, ErrInvalidMission
 	}
@@ -131,15 +136,21 @@ func FailFeature(store *MissionsStore, mission *Mission, featureID string) (*Fea
 		return nil, err
 	}
 
-	now := time.Now().UTC()
-	feat.Status = newStatus
-	feat.RetryCount++
-	feat.UpdatedAt = now
-	mission.UpdatedAt = now
-
-	if err := store.SaveMission(mission); err != nil {
+	// Use granular update to avoid lost-update with stale mission snapshots.
+	// UpdateFeatureStatus handles RetryCount increment atomically inside the lock.
+	if err := store.UpdateFeatureStatus(mission.ID, featureID, newStatus, lastError...); err != nil {
 		return nil, fmt.Errorf("persist fail feature: %w", err)
 	}
+
+	// Update local snapshot status (RetryCount is managed atomically in the store).
+	// The snapshot may lag on RetryCount, but callers of FailFeature don't consume it.
+	now := time.Now().UTC()
+	feat.Status = newStatus
+	if len(lastError) > 0 {
+		feat.LastError = lastError[0]
+	}
+	feat.UpdatedAt = now
+	mission.UpdatedAt = now
 
 	return feat, nil
 }
@@ -161,14 +172,16 @@ func CancelFeature(store *MissionsStore, mission *Mission, featureID string) (*F
 		return nil, err
 	}
 
+	// Use granular update to avoid lost-update with stale mission snapshots
+	if err := store.UpdateFeatureStatus(mission.ID, featureID, newStatus); err != nil {
+		return nil, fmt.Errorf("persist cancel feature: %w", err)
+	}
+
+	// Update local snapshot for caller use
 	now := time.Now().UTC()
 	feat.Status = newStatus
 	feat.UpdatedAt = now
 	mission.UpdatedAt = now
-
-	if err := store.SaveMission(mission); err != nil {
-		return nil, fmt.Errorf("persist cancel feature: %w", err)
-	}
 
 	return feat, nil
 }
@@ -273,14 +286,16 @@ func RequeueFeature(store *MissionsStore, mission *Mission, featureID string) (*
 		return nil, err
 	}
 
+	// Use granular update to avoid lost-update with stale mission snapshots
+	if err := store.UpdateFeatureStatus(mission.ID, featureID, newStatus); err != nil {
+		return nil, fmt.Errorf("persist requeue feature: %w", err)
+	}
+
+	// Update local snapshot for caller use
 	now := time.Now().UTC()
 	feat.Status = newStatus
 	feat.UpdatedAt = now
 	mission.UpdatedAt = now
-
-	if err := store.SaveMission(mission); err != nil {
-		return nil, fmt.Errorf("persist requeue feature: %w", err)
-	}
 
 	return feat, nil
 }

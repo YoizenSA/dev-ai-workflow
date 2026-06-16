@@ -263,16 +263,21 @@ func TestFailFeature(t *testing.T) {
 		t.Fatalf("create mission: %v", err)
 	}
 
-	feat, err := FailFeature(store, m, "feat-1")
-	if err != nil {
+	if _, err := FailFeature(store, m, "feat-1"); err != nil {
 		t.Fatalf("fail feature: %v", err)
 	}
+	// Verify status from snapshot (updated by FailFeature)
+	feat, _ := GetFeatureByID(m, "feat-1")
 	if feat.Status != FeatureFailed {
 		t.Fatalf("expected failed, got %s", feat.Status)
 	}
-	// Retry count should be incremented
-	if feat.RetryCount != 1 {
-		t.Fatalf("expected retry count 1, got %d", feat.RetryCount)
+	// Verify RetryCount from store (source of truth)
+	storeFeat, err := store.GetFeature("fail-feat-1", "feat-1")
+	if err != nil {
+		t.Fatalf("GetFeature: %v", err)
+	}
+	if storeFeat.RetryCount != 1 {
+		t.Fatalf("expected retry count 1, got %d", storeFeat.RetryCount)
 	}
 }
 
@@ -288,9 +293,13 @@ func TestFailFeatureIncrementsRetryCount(t *testing.T) {
 		t.Fatalf("create mission: %v", err)
 	}
 
-	feat, err := FailFeature(store, m, "feat-1")
-	if err != nil {
+	if _, err := FailFeature(store, m, "feat-1"); err != nil {
 		t.Fatalf("fail feature: %v", err)
+	}
+	// Verify RetryCount from store (source of truth), not snapshot
+	feat, err := store.GetFeature("fail-feat-2", "feat-1")
+	if err != nil {
+		t.Fatalf("GetFeature: %v", err)
 	}
 	if feat.RetryCount != 3 {
 		t.Fatalf("expected retry count 3, got %d", feat.RetryCount)

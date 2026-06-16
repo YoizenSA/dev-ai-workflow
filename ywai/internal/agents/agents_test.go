@@ -1097,3 +1097,181 @@ func TestListGroups_MissingFile(t *testing.T) {
 		t.Fatal("ListGroups() expected error for missing groups.json")
 	}
 }
+
+func TestPiToolsString(t *testing.T) {
+	tests := []struct {
+		name  string
+		perms map[string]string
+		want  string
+	}{
+		{
+			name:  "all allowed",
+			perms: map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow", "glob": "allow", "grep": "allow", "webfetch": "allow", "websearch": "allow"},
+			want:  "read, edit, write, bash, glob, grep, webfetch, websearch",
+		},
+		{
+			name:  "some allowed some denied",
+			perms: map[string]string{"read": "allow", "edit": "deny", "write": "deny", "bash": "allow", "glob": "allow", "grep": "allow", "webfetch": "deny"},
+			want:  "read, bash, glob, grep",
+		},
+		{
+			name:  "ask included",
+			perms: map[string]string{"read": "ask", "bash": "allow", "glob": "allow", "grep": "allow"},
+			want:  "read, bash, glob, grep",
+		},
+		{
+			name:  "read-only",
+			perms: map[string]string{"read": "allow"},
+			want:  "read",
+		},
+		{
+			name:  "empty fallback",
+			perms: map[string]string{},
+			want:  "read, glob, grep",
+		},
+		{
+			name:  "lowercase output",
+			perms: map[string]string{"read": "allow", "glob": "allow", "grep": "allow"},
+			want:  "read, glob, grep",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := piToolsString(tt.perms); got != tt.want {
+				t.Errorf("piToolsString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInstallPi(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "pi", "agent", "agents")
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "Developer agent",
+			Prompt:      "# Dev\n\nBody.",
+			Permission:  map[string]string{"read": "allow", "edit": "allow", "bash": "allow"},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallPi(agentsDir, profiles, false); err != nil {
+		t.Fatalf("InstallPi() error = %v", err)
+	}
+
+	devPath := filepath.Join(agentsDir, "dev.md")
+	data, err := os.ReadFile(devPath)
+	if err != nil {
+		t.Fatalf("failed to read dev.md: %v", err)
+	}
+
+	content := string(data)
+
+	// Frontmatter: lowercase name, description, tools
+	if !strings.Contains(content, "name: dev") {
+		t.Error("PI markdown should contain name: dev")
+	}
+	if !strings.Contains(content, "description: >") || !strings.Contains(content, "Developer agent") {
+		t.Error("PI markdown should contain a folded-block description")
+	}
+	if !strings.Contains(content, "tools: read, edit, bash") {
+		t.Errorf("PI markdown should contain lowercase tools, got content:\n%s", content)
+	}
+
+	// No mode: or permission: block
+	if strings.Contains(content, "mode:") {
+		t.Error("PI markdown should NOT contain mode:")
+	}
+	if strings.Contains(content, "permission:") {
+		t.Error("PI markdown should NOT contain permission:")
+	}
+
+	// Body present
+	if !strings.Contains(content, "# Dev") {
+		t.Error("PI markdown should contain prompt body")
+	}
+}
+
+func TestInstallPiSkipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	existingPath := filepath.Join(agentsDir, "dev.md")
+	if err := os.WriteFile(existingPath, []byte("---\nname: dev\ndescription: Old\ntools: read\n---\n\nKeep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "New description",
+			Prompt:      "Should not overwrite",
+			Permission:  map[string]string{"read": "allow"},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallPi(agentsDir, profiles, false); err != nil {
+		t.Fatalf("InstallPi() error = %v", err)
+	}
+
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Keep me") {
+		t.Error("existing file should not be overwritten")
+	}
+	if strings.Contains(content, "New description") {
+		t.Error("existing file should not contain new content")
+	}
+}
+
+func TestInstallPiOverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	existingPath := filepath.Join(agentsDir, "dev.md")
+	if err := os.WriteFile(existingPath, []byte("---\nname: dev\ndescription: Old\ntools: read\n---\n\nKeep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "New description",
+			Prompt:      "Should overwrite",
+			Permission:  map[string]string{"read": "allow", "edit": "allow"},
+			Mode:        "subagent",
+		},
+	}
+
+	if err := InstallPi(agentsDir, profiles, true); err != nil {
+		t.Fatalf("InstallPi() error = %v", err)
+	}
+
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if strings.Contains(content, "Keep me") {
+		t.Error("existing file should be overwritten")
+	}
+	if !strings.Contains(content, "New description") {
+		t.Error("overwritten file should contain new content")
+	}
+	if !strings.Contains(content, "Should overwrite") {
+		t.Error("overwritten file should contain new prompt")
+	}
+}

@@ -1,0 +1,770 @@
+/* =========================================================
+   Settings — page layout, section cards, agents sidebar,
+   skills grid, MCP servers, presets, permissions, tools
+   ========================================================= */
+
+/* --- Page layout --- */
+.settings-page {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: var(--space-6) var(--space-4);
+	/* Stable width across tabs so switching never shifts the layout. */
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.settings-page > * + * {
+	margin-top: var(--space-6);
+}
+
+/* Lock a minimum height so short tabs (e.g. General) don't make the page
+   reflow when the user clicks to a content-rich tab like Skills/Tools. */
+.settings-page .tab-content {
+	min-height: 70vh;
+}
+
+/* --- Tabs override (segmented control) --- */
+.settings-page .tabs {
+	gap: var(--space-1);
+	border-bottom: none;
+	padding: var(--space-1);
+	margin-bottom: var(--space-8);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	overflow-x: auto;
+}
+
+.settings-page .tab {
+	padding: var(--space-2) var(--space-4);
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	border-radius: var(--radius-sm);
+	position: relative;
+	white-space: nowrap;
+	transition: color 0.2s, background 0.2s;
+}
+
+.settings-page .tab:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.settings-page .tab.active {
+	color: var(--text);
+	background: color-mix(in srgb, var(--yz-accent) 18%, transparent);
+	font-weight: 600;
+}
+
+.settings-page .tab.active::after {
+	display: none;
+}
+
+/* --- Section cards --- */
+.settings-section {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	overflow: hidden;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-section:hover {
+	border-color: var(--panel-border-strong);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.settings-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-4) var(--space-5);
+	background: var(--surface-soft);
+	border-bottom: 1px solid var(--panel-border);
+}
+
+.settings-section-header h2 {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--text);
+	margin: 0;
+}
+
+.settings-section-body {
+	padding: var(--space-5);
+}
+
+/* --- Item rows --- */
+.settings-item {
+	border-bottom: 1px solid var(--panel-border);
+	padding: var(--space-4) 0;
+}
+
+.settings-item:last-child {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+.settings-item:first-child {
+	padding-top: 0;
+}
+
+.settings-item-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.settings-item-header {
+	flex: 1;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+}
+
+.settings-chevron {
+	transition: transform 0.2s ease;
+	margin-right: var(--space-2);
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.settings-chevron.open {
+	transform: rotate(90deg);
+	color: var(--text-soft);
+}
+
+.settings-item-desc {
+	font-size: 0.78rem;
+	margin-left: var(--space-2);
+	color: var(--text-muted);
+}
+
+/* --- Form grid --- */
+.form-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--space-4);
+}
+
+.form-grid .span-2 {
+	grid-column: span 2;
+}
+
+/* --- Field hints --- */
+.field-hint {
+	display: block;
+	font-size: 0.78rem;
+	color: var(--text-muted);
+	margin-top: var(--space-1);
+	line-height: 1.4;
+}
+
+/* --- Interactive card hover --- */
+.card-pad > .tools-section {
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	padding: var(--space-4);
+	margin-bottom: var(--space-3);
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-pad > .tools-section:hover {
+	border-color: rgba(255, 255, 255, 0.12);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Agents layout --- */
+.agents-layout {
+	display: flex;
+	gap: var(--space-5);
+	min-height: 500px;
+}
+
+.agents-sidebar {
+	width: 280px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-3);
+}
+
+.agents-sidebar-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.agents-sidebar-header input {
+	flex: 1;
+}
+
+.agents-list {
+	flex: 1;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.agents-list .tools-section + .tools-section {
+	margin-top: var(--space-3);
+}
+
+.agents-group-header {
+	display: flex;
+	align-items: center;
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--yz-accent);
+	padding: var(--space-2) var(--space-3) var(--space-1);
+}
+
+.agent-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	width: 100%;
+	text-align: left;
+	background: transparent;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s, border-color 0.15s;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	border: 1px solid transparent;
+}
+
+.agent-item:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.agent-item.active {
+	background: var(--surface-hover);
+	color: var(--text);
+	border-color: var(--yz-accent);
+	font-weight: 500;
+}
+
+.agent-item-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	flex-shrink: 0;
+	transition: background 0.15s;
+}
+
+.agent-item:hover .agent-item-dot {
+	background: var(--text-muted);
+}
+
+.agent-item.active .agent-item-dot {
+	background: var(--yz-accent);
+	box-shadow: 0 0 8px var(--yz-accent);
+}
+
+/* --- Agents main panel --- */
+.agents-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.agent-detail-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.agent-detail-title {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.agent-detail-subtitle {
+	display: block;
+	margin-top: var(--space-1);
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+}
+
+.prompt-editor-section .settings-section-body {
+	padding: 0;
+}
+
+.prompt-editor-body {
+	padding: var(--space-4);
+}
+
+.prompt-editor-body .prompt-textarea {
+	min-height: 240px;
+}
+
+.prompt-textarea {
+	width: 100%;
+	min-height: 300px;
+	font-family: var(--font-mono);
+	font-size: 0.82rem;
+	line-height: 1.6;
+	padding: var(--space-4);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	color: var(--text);
+	resize: vertical;
+	transition: border-color 0.2s;
+}
+
+.prompt-textarea:focus {
+	outline: none;
+	border-color: var(--yz-accent);
+	box-shadow: 0 0 0 3px rgba(255, 100, 33, 0.15);
+}
+
+/* --- Skills grid --- */
+.skills-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: var(--space-4);
+}
+
+.skill-card {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+	cursor: pointer;
+	/* Uniform card height so the grid doesn't jagged when one description
+	   wraps to 4 lines and another to 1. */
+	min-height: 180px;
+	display: flex;
+	flex-direction: column;
+}
+
+.skill-card:hover {
+	border-color: var(--panel-border-strong);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	transform: translateY(-2px);
+}
+
+/* Enabled marker — keep it subtle. The previous accent-orange outline on every
+   card turned the page into a wall of orange when most skills are enabled. */
+.skill-card.enabled {
+	border-color: rgba(52, 211, 153, 0.35);
+}
+
+.skill-card-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	margin-bottom: var(--space-2);
+}
+
+.skill-card-desc {
+	font-size: 0.82rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+	margin-bottom: var(--space-3);
+}
+
+.skill-card-paths {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+}
+
+.skill-card-name {
+	font-size: 1rem;
+	font-weight: 700;
+	color: var(--text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+	min-width: 0;
+}
+
+.skill-card-actions {
+	display: flex;
+	gap: var(--space-1);
+	justify-content: flex-end;
+	margin-top: auto; /* push to bottom so cards align even with short descriptions */
+	padding-top: var(--space-2);
+}
+
+.skill-card-content {
+	margin-top: var(--space-3);
+	border-top: 1px solid var(--panel-border);
+	padding-top: var(--space-3);
+}
+
+.skill-edit-textarea {
+	width: 100%;
+	resize: vertical;
+}
+
+.skill-edit-actions {
+	display: flex;
+	gap: var(--space-2);
+	margin-top: var(--space-2);
+}
+
+/* --- MCP Servers --- */
+.mcp-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+	gap: var(--space-4);
+}
+
+.mcp-card {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mcp-card:hover {
+	border-color: var(--panel-border-strong);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mcp-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-3);
+}
+
+.mcp-card-header h3 {
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.mcp-command-desc {
+	margin: var(--space-1) 0 0;
+	font-size: 0.82rem;
+	font-family: var(--font-mono);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+
+.mcp-actions-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+/* --- Plugin Providers --- */
+.providers-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+	gap: var(--space-4);
+}
+
+.provider-card {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.provider-card:hover {
+	border-color: var(--panel-border-strong);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.provider-header-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.provider-url-desc {
+	margin: var(--space-1) 0 0;
+	font-size: 0.82rem;
+	font-family: var(--font-mono);
+	color: var(--text-muted);
+}
+
+/* --- Presets grid --- */
+.presets-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: var(--space-4);
+}
+
+.preset-card {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-5);
+	transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+	cursor: pointer;
+}
+
+.preset-card:hover {
+	border-color: var(--yz-accent);
+	box-shadow: 0 4px 16px rgba(255, 100, 33, 0.15);
+	transform: translateY(-2px);
+}
+
+.preset-card.active {
+	border-color: var(--yz-accent);
+	box-shadow: 0 0 0 1px var(--yz-accent);
+}
+
+.preset-card h3 {
+	margin: 0 0 var(--space-2);
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.preset-card p {
+	margin: 0;
+	font-size: 0.82rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+/* --- Permissions --- */
+.permissions-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: var(--space-2);
+}
+
+.permissions-helper {
+	font-size: 0.78rem;
+	color: var(--text-muted);
+	font-weight: 400;
+}
+
+.perm-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-2) var(--space-3);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	font-size: 0.82rem;
+	transition: background 0.15s, border-color 0.15s;
+}
+
+.perm-toggle:hover {
+	background: var(--surface-hover);
+}
+
+.perm-toggle.allow {
+	border-color: var(--success);
+	background: rgba(34, 197, 94, 0.08);
+}
+
+.perm-toggle.deny {
+	border-color: var(--danger);
+	background: rgba(239, 68, 68, 0.08);
+}
+
+.perm-name {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	color: var(--text);
+}
+
+.perm-badge {
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	padding: 2px 6px;
+	border-radius: var(--radius-sm);
+}
+
+.perm-badge.allow {
+	background: var(--success-soft);
+	color: var(--success);
+}
+
+.perm-badge.deny {
+	background: var(--danger-soft);
+	color: var(--tint-danger);
+}
+
+/* --- Tools grid --- */
+.tools-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: var(--space-4);
+}
+
+.tool-card {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.tool-card:hover {
+	border-color: var(--panel-border-strong);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tool-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-3);
+}
+
+.tool-card-header h3 {
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+}
+
+.tool-card-desc {
+	font-size: 0.82rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+	margin-bottom: var(--space-3);
+}
+
+.tools-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+}
+
+.tools-pill {
+	font-size: 0.72rem;
+	padding: 2px 8px;
+}
+
+/* --- Settings code block --- */
+.settings-code {
+	font-family: var(--font-mono);
+	font-size: 0.8rem;
+	background: var(--surface-soft);
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius-md);
+	overflow-x: auto;
+	max-height: 280px;
+	overflow-y: auto;
+	color: var(--text-muted);
+	border: 1px solid var(--panel-border);
+	line-height: 1.6;
+}
+
+.settings-code::-webkit-scrollbar,
+.prompt-textarea::-webkit-scrollbar {
+	height: 6px;
+	width: 6px;
+}
+
+.settings-code::-webkit-scrollbar-track,
+.prompt-textarea::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.settings-code::-webkit-scrollbar-thumb,
+.prompt-textarea::-webkit-scrollbar-thumb {
+	background: rgba(148, 163, 184, 0.25);
+	border-radius: 3px;
+}
+
+.settings-code::-webkit-scrollbar-thumb:hover,
+.prompt-textarea::-webkit-scrollbar-thumb:hover {
+	background: rgba(148, 163, 184, 0.45);
+}
+
+/* --- Empty states --- */
+.empty-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-8) var(--space-4);
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.empty-state svg {
+	opacity: 0.4;
+	margin-bottom: var(--space-4);
+}
+
+.empty-state p {
+	font-size: 0.9rem;
+	margin: 0;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+	.settings-page {
+		padding: var(--space-4) var(--space-3);
+	}
+
+	.settings-item-row {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-2);
+	}
+
+	.form-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.form-grid .span-2 {
+		grid-column: 1;
+	}
+
+	.presets-grid,
+	.skills-grid,
+	.mcp-grid,
+	.providers-grid,
+	.tools-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.agents-layout {
+		flex-direction: column;
+	}
+
+	.agents-sidebar {
+		width: 100%;
+	}
+
+	.permissions-grid {
+		grid-template-columns: 1fr;
+	}
+}

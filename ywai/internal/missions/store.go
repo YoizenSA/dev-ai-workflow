@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,19 +15,19 @@ import (
 // ─── Errors ────────────────────────────────────────────────────────────────
 
 var (
-	ErrMissionNotFound   = errors.New("mission not found")
-	ErrFeatureNotFound   = errors.New("feature not found")
-	ErrCorruptFile       = errors.New("corrupt mission file")
-	ErrInvalidMission    = errors.New("invalid mission data")
-	ErrInvalidPlan       = errors.New("invalid plan")
-	ErrDuplicateFeature  = errors.New("duplicate feature id")
+	ErrMissionNotFound  = errors.New("mission not found")
+	ErrFeatureNotFound  = errors.New("feature not found")
+	ErrCorruptFile      = errors.New("corrupt mission file")
+	ErrInvalidMission   = errors.New("invalid mission data")
+	ErrInvalidPlan      = errors.New("invalid plan")
+	ErrDuplicateFeature = errors.New("duplicate feature id")
 )
 
 // MissionsStore provides thread-safe JSON persistence for mission data.
 // Each mission lives in its own subdirectory under the base data directory.
 type MissionsStore struct {
-	mu       sync.RWMutex
-	baseDir  string
+	mu      sync.RWMutex
+	baseDir string
 }
 
 // NewMissionsStore creates a new store rooted at baseDir (e.g.
@@ -176,7 +177,7 @@ func (s *MissionsStore) ListMissions() ([]*Mission, error) {
 		}
 		m, err := s.readMissionLocked(entry.Name())
 		if err != nil {
-			// Skip corrupt missions silently, or log? Let's skip for robustness.
+			log.Printf("skipping corrupt mission %q: %v", entry.Name(), err)
 			continue
 		}
 		missions = append(missions, m)
@@ -230,7 +231,7 @@ func (s *MissionsStore) MissionExists(missionID string) (bool, error) {
 
 // UpdateFeatureStatus updates a single feature's status inside a mission.
 // It loads the mission, modifies the feature in memory, and saves atomically.
-func (s *MissionsStore) UpdateFeatureStatus(missionID, featureID string, status FeatureStatus) error {
+func (s *MissionsStore) UpdateFeatureStatus(missionID, featureID string, status FeatureStatus, lastError ...string) error {
 	if err := ValidateMissionID(missionID); err != nil {
 		return err
 	}
@@ -247,10 +248,23 @@ func (s *MissionsStore) UpdateFeatureStatus(missionID, featureID string, status 
 	found := false
 	for i := range m.Features {
 		if m.Features[i].ID == featureID {
+			// Validate FSM transition before applying
+			if _, err := TransitionFeatureStatus(m.Features[i].Status, status); err != nil {
+				return err
+			}
 			m.Features[i].Status = status
 			m.Features[i].UpdatedAt = now
 			if status == FeatureCompleted || status == FeatureFailed || status == FeatureCancelled {
 				m.Features[i].CompletedAt = &now
+			}
+			if status == FeatureCompleted {
+				m.Features[i].LastError = "" // M5: clear on completion
+			}
+			if status == FeatureFailed {
+				m.Features[i].RetryCount++
+			}
+			if len(lastError) > 0 {
+				m.Features[i].LastError = lastError[0]
 			}
 			found = true
 			break

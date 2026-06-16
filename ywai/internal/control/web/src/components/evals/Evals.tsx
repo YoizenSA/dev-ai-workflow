@@ -1,0 +1,259 @@
+import { useState, useEffect } from "react";
+import MemoryRecallEval from "./MemoryRecallEval";
+import "./Evals.css";
+
+type EvalKind = "tasks" | "recall";
+
+interface TaskResult {
+  taskId: string;
+  passed: boolean;
+  mode: string;
+  model: string;
+  agent: string;
+  duration: number;
+  tokens: number;
+  cost: number;
+  error: string;
+  output: string;
+}
+
+interface RunSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  avgDuration: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+interface EvalRun {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  status: string;
+  mode: string;
+  model: string;
+  agent: string;
+  results: TaskResult[];
+  summary: RunSummary;
+}
+
+export default function Evals() {
+  const [kind, setKind] = useState<EvalKind>("tasks");
+  const [runs, setRuns] = useState<EvalRun[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedRun, setSelectedRun] = useState<EvalRun | null>(null);
+
+  useEffect(() => {
+    if (kind === "tasks") fetchRuns();
+  }, [kind]);
+
+  async function fetchRuns() {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/evals/runs");
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      setRuns(data.runs ?? []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatDuration(ns: number) {
+    const ms = ns / 1_000_000;
+    if (ms < 1000) return `${ms.toFixed(0)}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  function passRateColor(rate: number): string {
+    if (rate >= 0.8) return "var(--tint-success)";
+    if (rate >= 0.5) return "var(--warning)";
+    return "var(--tint-danger)";
+  }
+
+  const latest = runs[0];
+
+  return (
+    <>
+      <header className="page-header">
+        <div className="page-heading">
+          <span className="page-eyebrow">Benchmarks</span>
+          <h1 className="page-title">Evals</h1>
+          <p className="page-subtitle">
+            {kind === "tasks"
+              ? "Agent performance benchmarks"
+              : "Memory retrieval quality"}
+          </p>
+        </div>
+      </header>
+
+      <div className="tabs">
+        <button
+          className={`tab${kind === "tasks" ? " active" : ""}`}
+          onClick={() => setKind("tasks")}
+        >
+          Task runs
+        </button>
+        <button
+          className={`tab${kind === "recall" ? " active" : ""}`}
+          onClick={() => setKind("recall")}
+        >
+          Memory recall
+        </button>
+      </div>
+
+      {kind === "recall" ? (
+        <MemoryRecallEval />
+      ) : loading ? (
+        <div className="loading-inline">
+          <span className="spinner" />
+          Loading eval runs…
+        </div>
+      ) : error ? (
+        <div className="alert alert-danger">Error: {error}</div>
+      ) : runs.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+          </div>
+          <p className="empty-title">No eval runs yet</p>
+          <p className="empty-desc">Run <code>ywai eval run</code> to get started</p>
+        </div>
+      ) : (
+        <div className="eval-runs-list">
+          {/* KPI summary cards */}
+          <div className="kpi-grid">
+            <div className="kpi">
+              <div className="kpi-top">
+                <div className="kpi-icon" style={{ '--kpi-icon-bg': 'rgba(var(--info-rgb), 0.16)', '--kpi-icon-color': 'var(--tint-info)' } as React.CSSProperties}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+              </div>
+              <div className="kpi-value tnum">{runs.length}</div>
+              <div className="kpi-label">Total Runs</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-top">
+                <div className="kpi-icon" style={{ '--kpi-icon-bg': 'var(--success-soft)', '--kpi-icon-color': 'var(--tint-success)' } as React.CSSProperties}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+              <div className="kpi-value tnum" style={{ color: passRateColor(latest?.summary.passRate ?? 0) }}>
+                {((latest?.summary.passRate ?? 0) * 100).toFixed(0)}%
+              </div>
+              <div className="kpi-label">Latest Pass Rate</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-top">
+                <div className="kpi-icon" style={{ '--kpi-icon-bg': 'rgba(var(--yz-primary-2-rgb), 0.16)', '--kpi-icon-color': 'var(--tint-purple)' } as React.CSSProperties}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+              </div>
+              <div className="kpi-value" style={{ fontSize: 'var(--text-lg)' }}>
+                {latest?.model || "(default)"}
+              </div>
+              <div className="kpi-label">Latest Model</div>
+            </div>
+          </div>
+
+          {/* Runs table */}
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Run ID</th>
+                  <th>Mode</th>
+                  <th>Model</th>
+                  <th>Pass Rate</th>
+                  <th>Tasks</th>
+                  <th>Duration</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <tr
+                    key={run.id}
+                    className={`clickable ${selectedRun?.id === run.id ? "selected" : ""}`}
+                    onClick={() =>
+                      setSelectedRun(selectedRun?.id === run.id ? null : run)
+                    }
+                    style={selectedRun?.id === run.id ? { background: 'var(--surface-hover)' } : undefined}
+                  >
+                    <td className="cell-mono eval-run-id">{run.id}</td>
+                    <td>
+                      <span className={`eval-mode-badge ${run.mode}`}>
+                        {run.mode}
+                      </span>
+                    </td>
+                    <td>{run.model || "(default)"}</td>
+                    <td>
+                      <span
+                        className="tnum"
+                        style={{
+                          color: passRateColor(run.summary.passRate),
+                          fontWeight: 600,
+                        }}
+                      >
+                        {(run.summary.passRate * 100).toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="tnum">
+                      {run.summary.passed}/{run.summary.total}
+                    </td>
+                    <td className="tnum">{formatDuration(run.summary.avgDuration)}</td>
+                    <td className="cell-muted">
+                      {new Date(run.startedAt).toLocaleDateString()}{" "}
+                      {new Date(run.startedAt).toLocaleTimeString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Detail view */}
+          {selectedRun && (
+            <div className="eval-detail">
+              <h3>Run Details: <span className="mono" style={{ color: 'var(--tint-info)' }}>{selectedRun.id}</span></h3>
+              <div className="eval-detail-meta">
+                <span>Mode: <strong style={{ color: 'var(--text)' }}>{selectedRun.mode}</strong></span>
+                <span>Model: <strong style={{ color: 'var(--text)' }}>{selectedRun.model || "(default)"}</strong></span>
+                <span>Agent: <strong style={{ color: 'var(--text)' }}>{selectedRun.agent || "(default)"}</strong></span>
+                <span>Tokens: <strong className="tnum" style={{ color: 'var(--text)' }}>{selectedRun.summary.totalTokens.toLocaleString()}</strong></span>
+                <span>Cost: <strong className="tnum" style={{ color: 'var(--text)' }}>${selectedRun.summary.totalCost.toFixed(4)}</strong></span>
+              </div>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}></th>
+                      <th>Task</th>
+                      <th>Duration</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedRun.results.map((r) => (
+                      <tr key={r.taskId}>
+                        <td>{r.passed ? "✅" : "❌"}</td>
+                        <td className="cell-mono">{r.taskId}</td>
+                        <td className="tnum">{formatDuration(r.duration)}</td>
+                        <td className="eval-error">{r.error || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}

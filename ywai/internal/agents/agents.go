@@ -364,6 +364,72 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	return nil
 }
 
+// piToolsString renders the enabled tools from a parsed profile as a
+// lowercase comma-separated list of PI.dev-style tool names, in stable order.
+func piToolsString(perms map[string]string) string {
+	order := []struct{ oc, pi string}{
+		{"read", "read"},
+		{"edit", "edit"},
+		{"write", "write"},
+		{"bash", "bash"},
+		{"glob", "glob"},
+		{"grep", "grep"},
+		{"webfetch", "webfetch"},
+		{"websearch", "websearch"},
+	}
+
+	var names []string
+	for _, t := range order {
+		if v, ok := perms[t.oc]; ok && (v == "allow" || v == "ask") {
+			names = append(names, t.pi)
+		}
+	}
+	if len(names) == 0 {
+		return "read, glob, grep"
+	}
+	return strings.Join(names, ", ")
+}
+
+// InstallPi writes agent .md files to ~/.pi/agent/agents/.
+// Frontmatter uses PI.dev format: lowercase name/description/tools, no mode/permission.
+// Respects overwrite: when false, skips existing files (same as InstallOpenCodeMarkdown).
+func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		return fmt.Errorf("create dir %s: %w", agentsDir, err)
+	}
+
+	installed := 0
+	for name, profile := range profiles {
+		targetPath := filepath.Join(agentsDir, name+".md")
+
+		if !overwrite {
+			if _, err := os.Stat(targetPath); err == nil {
+				continue
+			}
+		}
+
+		toolsStr := piToolsString(profile.Permission)
+		prompt := stripFrontmatter(profile.Prompt)
+
+		// Use a folded block scalar for the description (same as InstallClaude):
+		// descriptions can contain ": " and literal quotes (e.g. `Trigger: "build X"`),
+		// which break an inline YAML scalar. The folded block keeps them safe.
+		content := fmt.Sprintf("---\nname: %s\ndescription: >\n  %s\ntools: %s\n---\n\n%s",
+			name, profile.Description, toolsStr, prompt)
+
+		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
+			continue
+		}
+		installed++
+	}
+
+	if installed > 0 {
+		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
+	}
+	return nil
+}
+
 // InstallCursor writes agent .md files to ~/.cursor/agents/.
 func InstallCursor(agentsDir string, profiles map[string]AgentProfile) error {
 	return InstallClaude(agentsDir, profiles) // same format

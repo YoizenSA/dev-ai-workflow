@@ -55,45 +55,35 @@ phase as it completes.
 
 ## Delegation Mechanics
 
-You have two delegation tools. **Both accept any agent** (`architect`, `dev`, `qa`, `reviewer`, `devops`) and take a full prompt (the brief below). The `prompt` must be written in English.
+### Delegation Capability Model
 
-### `task` vs `delegate`
+The orchestrator delegates using abstract capabilities — described by **what they do**, not platform-specific tool names:
 
-| Tool | Behavior | Use when |
-|---|---|---|
-| **`task(prompt, agent)`** | **Synchronous** — blocks until the subagent finishes, returns its handoff inline. | You need the result before continuing. This is the **default** for the sequential spine. |
-| **`delegate(prompt, agent)`** | **Asynchronous** — returns an ID immediately, runs in the background, persists to disk. | Parallel/independent workstreams (fan-out) or research you can run while doing other work. |
-| **`delegation_read(id)`** | Read a finished delegation's output by ID. | After you get a `<task-notification>` for an async `delegate`. |
-| **`delegation_list()`** | List delegations (running + completed). | Recovery only (e.g. after compaction). **Do not use it to check completion.** |
+| Capability | What it does |
+|---|---|
+| sync-delegate | Run a subagent synchronously, block until handoff returned |
+| async-delegate | Launch a subagent in background, collect result when notified |
+| read-async-result | Read the output of a completed async delegation |
+| ask-user | Ask the user a branching decision (scope, approach, priority) |
+| track-plan | Create, update, and reorder a task plan / checklist |
+| track-board | Update a visual board with delegation status (when available) |
 
-### Sequential spine → use `task` (sync)
+### Platform Adapters
 
-Each phase needs the previous handoff before continuing, so call `task` and read the returned handoff inline:
+Each capability maps to host-specific tools. Use the mapped tool, or fall back to `@mention`:
 
-```
-1. task(agent="architect", prompt=<brief>)   → returns architect handoff
-2. task(agent="qa",  prompt=<brief+context>)  → returns qa handoff
-3. task(agent="dev", prompt=<brief+context>)  → returns dev handoff
-4. task(agent="reviewer", prompt=<brief>)     → returns review verdict
-```
+| Capability | OpenCode | Claude Code | PI.dev | Fallback |
+|---|---|---|---|---|
+| sync-delegate | `task` | `Agent`/`Task` | subagent task | `@mention` inline |
+| async-delegate | `delegate` | `Agent` (background) | subagent (background) | sequential `@mention` |
+| read-async-result | `delegation_read` | task result / `SendMessage` | subagent result | — |
+| ask-user | `question` | `AskUserQuestion` | ask inline | ask inline |
+| track-plan | `todowrite` | `TaskCreate`/`Update` | todo / inline | inline checklist |
 
-### Async delegation → use `delegate` (notification model)
+On OpenCode, use `task` for sync phases and `delegate` for fan-out. On other hosts, use the mapped tool or the fallback.
 
-For fan-out or background research:
-
-```
-1. delegate(agent="dev", prompt=<brief A>)    → returns id "calm-blue-otter"
-2. delegate(agent="dev", prompt=<brief B>)    → returns id "swift-green-hawk"
-3. keep doing productive work — DO NOT poll
-4. a <task-notification> arrives per delegation when it completes
-5. delegation_read("calm-blue-otter")         → read handoff
-6. delegation_read("swift-green-hawk")         → read handoff
-```
-
-**Never poll `delegation_list` to check completion** — you are notified automatically; polling wastes tokens.
-
-### Caveats (async `delegate`)
-- Async delegations run in **isolated sessions**. Writes by `@dev`/`@devops` there are **not tracked by OpenCode's undo/branching**. Prefer `task` (sync) for write-heavy phases when you want changes in the normal session.
+### Caveats (async delegation)
+- Async delegations run in **isolated sessions**. Writes by `@dev`/`@devops` there are **not tracked by OpenCode's undo/branching** or equivalent host undo. Prefer sync for write-heavy phases.
 - A delegated subagent **cannot delegate further** (anti-recursion). Keep briefs self-contained.
 
 ### Other agents (claude-code, cursor, vscode, …)
@@ -130,7 +120,9 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 - Cap concurrency to what's useful (typically 2-4 slices); more adds merge cost.
 - If a slice comes back `blocked`/`needs-decision`, resolve it before integrating dependents.
 - Prefer sequential when in doubt — correctness over speed.
-## Kanban Tracking
+## Kanban Tracking (when `ywai-kanban` MCP is available)
+
+> ⚠️ This section only applies when the `ywai-kanban` MCP tool is available. If it's not configured, the Delegation Brief and plan tracking are sufficient.
 
 The orchestrator maintains a visual Kanban board tracking all delegations. This board is automatically updated via the `ywai-kanban` MCP server.
 

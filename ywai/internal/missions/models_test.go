@@ -73,15 +73,15 @@ func TestMissionJSONRoundTrip(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:              "feat-1",
-				Description:     "First feature",
-				Status:          FeaturePending,
-				Milestone:       "core-engine",
-				Preconditions:   []string{},
+				ID:               "feat-1",
+				Description:      "First feature",
+				Status:           FeaturePending,
+				Milestone:        "core-engine",
+				Preconditions:    []string{},
 				ExpectedBehavior: []string{"works"},
-				Fulfills:        []string{"VAL-001"},
-				CreatedAt:       now,
-				UpdatedAt:       now,
+				Fulfills:         []string{"VAL-001"},
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			},
 		},
 		Milestones: []Milestone{
@@ -125,17 +125,17 @@ func TestMissionJSONRoundTrip(t *testing.T) {
 func TestFeatureClone(t *testing.T) {
 	now := time.Now()
 	f := &Feature{
-		ID:              "feat-1",
-		Description:     "Original",
-		Status:          FeatureInProgress,
-		SkillName:       "backend-worker",
-		Milestone:       "core-engine",
-		Preconditions:   []string{"pre-1"},
+		ID:               "feat-1",
+		Description:      "Original",
+		Status:           FeatureInProgress,
+		SkillName:        "backend-worker",
+		Milestone:        "core-engine",
+		Preconditions:    []string{"pre-1"},
 		ExpectedBehavior: []string{"works"},
-		Fulfills:        []string{"VAL-001"},
+		Fulfills:         []string{"VAL-001"},
 		WorkerSessionIDs: []string{"sess-1"},
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	cp := f.Clone()

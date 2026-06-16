@@ -77,12 +77,11 @@ graph TD
 - Each subagent ends with a `## Handoff (report back to @orchestrator)` block.
 - The `sub-agent-statusline` plugin (installed automatically with `ywai install`) gives real-time visibility into running/completed/failed subagents, elapsed time, and token/context usage.
 
-On opencode the orchestrator delegates with two tools from the `background-agents`
-plugin: synchronous **`task`** for the sequential spine (each phase needs the
-previous handoff) and asynchronous **`delegate`** for fan-out / parallel work
-(read results with `delegation_read` when a `<task-notification>` arrives — never
-poll). It asks branching decisions with `question` and tracks the plan with
-`todowrite`. On other agents it falls back to `@mention` routing.
+The orchestrator uses a **capability model** with per-platform adapters. On opencode
+it delegates via `task` (sync) and `delegate` (async), asks decisions with `question`,
+and tracks plans with `todowrite`. On Claude Code it uses `Agent`/`Task` and
+`TaskCreate`/`Update`. On PI.dev it uses subagent tools. All hosts fall back to
+`@mention` routing when the native tool is unavailable.
 
 ## Config Format
 
@@ -146,9 +145,19 @@ ywai install --agent opencode --profile dev
 cat ywai/agents/dev/AGENT.md
 ```
 
+## Platform Compatibility
+
+| Platform | Path | Frontmatter Shape | Status |
+|---|---|---|---|
+| OpenCode | `~/.config/opencode/agents/*.md` | `description`, `mode`, `permission:` block | ✅ Full support |
+| Claude Code | `~/.claude/agents/*.md` | `name`, `description`, `tools:` (PascalCase) | ✅ Full support |
+| PI.dev | `~/.pi/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) | ✅ Full support |
+| Cursor | `~/.cursor/agents/*.md` | (same as Claude) | ✅ Full support |
+| VS Code Copilot | `~/.config/Code/User/prompts/*.instructions.md` | `name`, `description`, `applyTo` | ✅ Full support |
+
 ## Philosophy
 
 - **Focused**: Each agent has a clear, narrow role
 - **Opinionated**: Strong defaults that work out of the box
 - **Composable**: Agents can reference skills for domain-specific knowledge
-- **Portable**: Works across opencode, claude-code, cursor, windsurf, etc.
+- **Portable**: Works across opencode, claude-code, cursor, windsurf, PI.dev, etc.

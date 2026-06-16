@@ -418,8 +418,8 @@ func (s *MissionsStore) RecordWorkerStart(mission *Mission, featureID string, se
 	}
 	feat.CurrentWorkerSessionID = &sessionID
 	feat.UpdatedAt = now
-	sessionIDCopy := sessionID
-	feat.CompletedWorkerSessionID = &sessionIDCopy
+	// NOTE: CompletedWorkerSessionID is set separately when the worker finishes,
+	// not at start (previous code had a copy-paste bug setting it here).
 	mission.UpdatedAt = now
 
 	return s.SaveMission(mission)

@@ -109,6 +109,7 @@ func TestServerClient_ListModels_V1(t *testing.T) {
 	defer srv.Close()
 
 	c := NewServerClient(srv.URL)
+	c.useCLI = false
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -141,6 +142,7 @@ func TestServerClient_ListModels_V2(t *testing.T) {
 	defer srv.Close()
 
 	c := NewServerClient(srv.URL)
+	c.useCLI = false
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {

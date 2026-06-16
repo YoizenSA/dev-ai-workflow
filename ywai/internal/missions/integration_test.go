@@ -235,7 +235,7 @@ func TestE2EMilestoneTransitionsToValidating(t *testing.T) {
 	}
 
 	engine := &Engine{
-		store:  store,
+		store: store,
 		config: EngineConfig{
 			WorkerTimeout: 10 * time.Second,
 			MaxRetries:    1,
@@ -307,16 +307,16 @@ func TestE2EValidationProducesStateFile(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Test feature for validation",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Test feature for validation",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Does something"},
-				Fulfills:   []string{"VAL-ENG-TEST-001"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
-				CompletedAt: &now,
+				Fulfills:         []string{"VAL-ENG-TEST-001"},
+				CreatedAt:        now,
+				UpdatedAt:        now,
+				CompletedAt:      &now,
 			},
 		},
 		Milestones: []Milestone{
@@ -472,14 +472,14 @@ func TestConsistencyWorkerLifecycleInStore(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Worker lifecycle test",
-				Status:      FeatureInProgress,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Worker lifecycle test",
+				Status:           FeatureInProgress,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			},
 		},
 		Milestones: []Milestone{
@@ -580,8 +580,8 @@ func TestConsistencyValidationStateAppendOnly(t *testing.T) {
 				Milestone:   "core",
 				SkillName:   "backend-worker",
 				Fulfills:    []string{"VAL-ENG-VAL-001"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:   now,
+				UpdatedAt:   now,
 				CompletedAt: &now,
 			},
 		},
@@ -643,7 +643,7 @@ func TestConsistencyValidationStateAppendOnly(t *testing.T) {
 	hasResults := false
 	for _, a := range vs.Assertions {
 		hasResults = true
-		if a.Status != ValidationPassed && a.Status != ValidationFailed {
+		if a.Status != ValidationPassed && a.Status != ValidationFailed && a.Status != ValidationPending {
 			t.Errorf("assertion %q has unexpected status %q", a.ID, a.Status)
 		}
 	}
@@ -741,25 +741,25 @@ func TestCrashResumeRestoresExactState(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-completed",
-				Description: "Already completed feature",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-completed",
+				Description:      "Already completed feature",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
-				CompletedAt: &now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
+				CompletedAt:      &now,
 			},
 			{
-				ID:          "feat-crashed",
-				Description: "Crashed in-progress feature",
-				Status:      FeatureInProgress,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-crashed",
+				Description:      "Crashed in-progress feature",
+				Status:           FeatureInProgress,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			},
 		},
 		Milestones: []Milestone{
@@ -869,25 +869,25 @@ func TestRetryResetsToPending(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Failed feature to retry",
-				Status:      FeatureFailed,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
-				RetryCount:  1,
+				ID:               "feat-1",
+				Description:      "Failed feature to retry",
+				Status:           FeatureFailed,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
+				RetryCount:       1,
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			},
 			{
-				ID:          "feat-2",
-				Description: "Pending feature",
-				Status:      FeaturePending,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-2",
+				Description:      "Pending feature",
+				Status:           FeaturePending,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			},
 		},
 		Milestones: []Milestone{
@@ -948,13 +948,13 @@ func TestRetryWorkerReSpawnedWithIdenticalContext(t *testing.T) {
 		t.Fatalf("GetFeatureByID: %v", err)
 	}
 
-	ctxDir1, err := wm.PrepareContext(mission, feat)
+	ctxDir1, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("first PrepareContext: %v", err)
 	}
 	defer os.RemoveAll(ctxDir1)
 
-	ctxDir2, err := wm.PrepareContext(mission, feat)
+	ctxDir2, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("second PrepareContext: %v", err)
 	}
@@ -1016,9 +1016,10 @@ func TestRetryCounterVisible(t *testing.T) {
 		t.Fatalf("FailFeature: %v", err)
 	}
 
-	feat, _ = GetFeatureByID(mission, "feat-1")
-	if feat.RetryCount != 1 {
-		t.Errorf("retry count after first fail: got %d, want 1", feat.RetryCount)
+	if f, e := store.GetFeature("retry-counter", "feat-1"); e != nil {
+		t.Fatalf("GetFeature after fail: %v", e)
+	} else if f.RetryCount != 1 {
+		t.Errorf("retry count after first fail: got %d, want 1", f.RetryCount)
 	}
 
 	// Requeue triggers StartFeature which resets retry count behavior
@@ -1036,9 +1037,10 @@ func TestRetryCounterVisible(t *testing.T) {
 		t.Fatalf("FailFeature #3: %v", err)
 	}
 
-	feat, _ = GetFeatureByID(mission, "feat-1")
-	if feat.RetryCount != 3 {
-		t.Errorf("retry count after 3 fails: got %d, want 3", feat.RetryCount)
+	if f, e := store.GetFeature("retry-counter", "feat-1"); e != nil {
+		t.Fatalf("GetFeature after 3 fails: %v", e)
+	} else if f.RetryCount != 3 {
+		t.Errorf("retry count after 3 fails: got %d, want 3", f.RetryCount)
 	}
 }
 
@@ -1118,15 +1120,15 @@ func TestValidationAutoTriggersOnMilestoneComplete(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Only feature in milestone",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Only feature in milestone",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
-				CompletedAt: &now,
+				CreatedAt:        now,
+				UpdatedAt:        now,
+				CompletedAt:      &now,
 			},
 		},
 		Milestones: []Milestone{
@@ -1210,18 +1212,18 @@ func TestValidationUserTestingExecutesAssertions(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Feature with assertions",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Feature with assertions",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Does something useful"},
 				Fulfills: []string{
 					"VAL-ENG-VAL-001",
 					"VAL-ENG-VAL-002",
 				},
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt:   now,
+				UpdatedAt:   now,
 				CompletedAt: &now,
 			},
 		},
@@ -1260,7 +1262,7 @@ func TestValidationUserTestingExecutesAssertions(t *testing.T) {
 	for _, a := range vs.Assertions {
 		if strings.Contains(a.ID, "VAL-ENG") {
 			hasUserTestingAssertion = true
-			if a.Status != ValidationPassed && a.Status != ValidationFailed {
+			if a.Status != ValidationPassed && a.Status != ValidationFailed && a.Status != ValidationPending {
 				t.Errorf("assertion %q status: got %q, expected passed or failed", a.ID, a.Status)
 			}
 		}
@@ -1293,16 +1295,16 @@ func TestValidationFailedCreatesFixFeatures(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Feature with issues",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Feature with issues",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Works"},
-				Fulfills:    []string{"VAL-ENG-VAL-001"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
-				CompletedAt: &now,
+				Fulfills:         []string{"VAL-ENG-VAL-001"},
+				CreatedAt:        now,
+				UpdatedAt:        now,
+				CompletedAt:      &now,
 			},
 		},
 		Milestones: []Milestone{
@@ -1353,16 +1355,16 @@ func TestValidationSurvivesCrashIntegration(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:          "feat-1",
-				Description: "Test feature",
-				Status:      FeatureCompleted,
-				Milestone:   "core",
-				SkillName:   "backend-worker",
+				ID:               "feat-1",
+				Description:      "Test feature",
+				Status:           FeatureCompleted,
+				Milestone:        "core",
+				SkillName:        "backend-worker",
 				ExpectedBehavior: []string{"Does something useful"},
-				Fulfills:    []string{"VAL-ENG-VAL-001"},
-				CreatedAt:  now,
-				UpdatedAt:  now,
-				CompletedAt: &now,
+				Fulfills:         []string{"VAL-ENG-VAL-001"},
+				CreatedAt:        now,
+				UpdatedAt:        now,
+				CompletedAt:      &now,
 			},
 		},
 		Milestones: []Milestone{

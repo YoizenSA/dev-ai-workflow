@@ -7,9 +7,6 @@ description: >
   "what files contain", "show me the structure of".
 role: explorer
 mode: all
-tools: [Read, Glob, Grep, WebSearch, CodeSearch]
-permission:
-  delegate: ask
 ---
 
 # Finder Agent

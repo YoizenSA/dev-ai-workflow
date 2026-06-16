@@ -10,12 +10,12 @@ import (
 )
 
 const (
-	wsWriteWait      = 10 * time.Second
-	wsPongWait       = 60 * time.Second
-	wsPingPeriod     = (wsPongWait * 9) / 10
-	maxMessageSize   = 4096
-	closeNormal      = 1000
-	closeShutdown    = 1001
+	wsWriteWait    = 10 * time.Second
+	wsPongWait     = 60 * time.Second
+	wsPingPeriod   = (wsPongWait * 9) / 10
+	maxMessageSize = 4096
+	closeNormal    = 1000
+	closeShutdown  = 1001
 )
 
 // Client represents a single WebSocket connection.
@@ -103,12 +103,12 @@ func NewHub() *Hub {
 		broadcast: make(chan []byte, 256),
 		done:      make(chan struct{}),
 	}
-	go h.run()
+	go h.Run()
 	return h
 }
 
-// run starts the hub's event loop.
-func (h *Hub) run() {
+// Run starts the hub's event loop.
+func (h *Hub) Run() {
 	for {
 		select {
 		case msg := <-h.broadcast:

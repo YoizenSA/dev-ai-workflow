@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/engram"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
@@ -28,6 +29,8 @@ type Server struct {
 	portReady chan struct{}
 	startedAt time.Time
 	mu        sync.Mutex
+	handlers  *Handlers
+	eventSink func(evtType string, payload interface{})
 }
 
 // New creates a new Missions Web UI server.
@@ -50,13 +53,33 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux := http.NewServeMux()
 	oc := opencode.DefaultClient(context.Background())
 	h := &Handlers{
-		store:          store,
-		projectStore:   projectStore,
-		hub:            s.hub,
-		startTime:      s.startedAt,
-		opencodeClient: oc,
+		store:           store,
+		projectStore:    projectStore,
+		hub:             s.hub,
+		startTime:       s.startedAt,
+		opencodeClient:  oc,
+		runningMissions: make(map[string]struct{}),
 	}
+	// Engram memory client + consolidation manager (in-memory runs).
+	engramClient := engram.DefaultClient()
+	h.consolidations = NewConsolidationManager(
+		engramClient,
+		func() opencode.SessionAPI { return h.opencodeClient.Sessions() },
+		func(et string, payload any) { s.hub.BroadcastEvent(et, payload) },
+	)
+	h.engramClient = engramClient
+	s.handlers = h
 
+	registerRoutes(mux, h)
+
+	s.mux = mux
+	return s
+}
+
+// registerRoutes wires all HTTP routes onto the given mux using the handlers.
+// Extracted from New() so tests can build a server from a custom Handlers
+// (e.g. with injected planner/engineRunner) without duplicating the route table.
+func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	// API routes
 	mux.HandleFunc("GET /api/health", h.HealthCheck)
 	mux.HandleFunc("GET /api/missions", h.ListMissions)
@@ -67,8 +90,9 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux.HandleFunc("POST /api/missions/{id}/pause", h.PauseMission)
 	mux.HandleFunc("POST /api/missions/{id}/resume", h.ResumeMission)
 	mux.HandleFunc("POST /api/missions/{id}/cancel", h.CancelMission)
+	mux.HandleFunc("DELETE /api/missions/{id}", h.DeleteMission)
 	mux.HandleFunc("POST /api/missions/{id}/features/{featureId}/retry", h.RetryFeature)
-	
+
 	// Mission artifacts
 	mux.HandleFunc("GET /api/missions/{id}/artifacts/{type}", h.GetMissionArtifact)
 	mux.HandleFunc("POST /api/missions/{id}/validate-contract", h.ValidateContract)
@@ -77,28 +101,63 @@ func New(port int, store *missions.MissionsStore) *Server {
 	mux.HandleFunc("POST /api/missions", h.CreateMission)
 	mux.HandleFunc("POST /api/missions/approve", h.ApprovePlan)
 	mux.HandleFunc("POST /api/missions/{id}/run", h.RunMission)
+	mux.HandleFunc("POST /api/missions/auto", h.AutoMission)
 
 	// Project routes
 	mux.HandleFunc("GET /api/projects", h.ListProjects)
 	mux.HandleFunc("POST /api/projects", h.CreateProject)
 	mux.HandleFunc("DELETE /api/projects/{name}", h.DeleteProject)
+	mux.HandleFunc("GET /api/projects/{name}/git-info", h.GetProjectGitInfo)
+	mux.HandleFunc("POST /api/projects/{name}/init-git", h.InitProjectGit)
 
 	// Filesystem browser
 	mux.HandleFunc("GET /api/fs/browse", h.BrowseFS)
+	mux.HandleFunc("POST /api/fs/mkdir", h.MkdirFS)
 
 	// OpenCode config
 	mux.HandleFunc("GET /api/opencode/models", h.ListModels)
 	mux.HandleFunc("GET /api/opencode/agents", h.ListAgents)
 	mux.HandleFunc("GET /api/opencode/status", h.OpenCodeStatus)
+	mux.HandleFunc("POST /api/opencode/start", h.StartOpencode)
+
+	// Engram memory API
+	mux.HandleFunc("GET /api/engram/status", h.EngramStatus)
+	mux.HandleFunc("GET /api/engram/observations", h.ListObservations)
+	mux.HandleFunc("GET /api/engram/observations/{id}", h.GetObservation)
+	mux.HandleFunc("PATCH /api/engram/observations/{id}", h.UpdateObservation)
+	mux.HandleFunc("DELETE /api/engram/observations/{id}", h.DeleteObservation)
+	mux.HandleFunc("POST /api/engram/save", h.SaveObservation)
+	mux.HandleFunc("GET /api/engram/search", h.SearchObservations)
+	mux.HandleFunc("GET /api/engram/stats", h.EngramStats)
+	mux.HandleFunc("GET /api/engram/sessions", h.ListEngramSessions)
+	mux.HandleFunc("DELETE /api/engram/sessions/{id}", h.DeleteEngramSession)
+	mux.HandleFunc("GET /api/engram/prompts", h.ListEngramPrompts)
+	mux.HandleFunc("DELETE /api/engram/prompts/{id}", h.DeleteEngramPrompt)
+	mux.HandleFunc("GET /api/engram/timeline", h.EngramTimeline)
+	mux.HandleFunc("GET /api/engram/context", h.EngramContext)
+	mux.HandleFunc("PUT /api/engram/context", h.UpdateEngramContext)
+	mux.HandleFunc("GET /api/engram/export", h.ExportEngram)
+	mux.HandleFunc("POST /api/engram/import", h.ImportEngram)
+	mux.HandleFunc("POST /api/engram/projects/merge", h.MergeEngramProjects)
+	mux.HandleFunc("POST /api/engram/memory-evals", h.RunMemoryEval)
+
+	// Consolidations
+	mux.HandleFunc("POST /api/engram/consolidations", h.StartConsolidation)
+	mux.HandleFunc("GET /api/engram/consolidations/{id}", h.GetConsolidation)
+	mux.HandleFunc("POST /api/engram/consolidations/{id}/apply", h.ApplyConsolidation)
+	mux.HandleFunc("POST /api/engram/consolidations/{id}/discard", h.DiscardConsolidation)
+
+	// Engram WebSocket
+	mux.HandleFunc("GET /engram/ws", h.HandleEngramWebSocket)
+
+	// AI refinement
+	mux.HandleFunc("POST /api/refine", h.RefineGoal)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.HandleWebSocket)
 
 	// UI
 	mux.Handle("GET /", uiHandler())
-
-	s.mux = mux
-	return s
 }
 
 // Handler returns the full middleware-wrapped handler for testing.
@@ -111,6 +170,16 @@ func (s *Server) Handler() http.Handler {
 	handler = json405Middleware(handler)
 	handler = recoveryMiddleware(handler)
 	return handler
+}
+
+// SetEventSink sets an optional callback for mission events (e.g., kanban projection).
+func (s *Server) SetEventSink(fn func(evtType string, payload interface{})) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.eventSink = fn
+	if s.handlers != nil {
+		s.handlers.eventSink = fn
+	}
 }
 
 // Start starts the HTTP server on the configured port.
@@ -135,7 +204,6 @@ func (s *Server) Start() error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Missions Web UI running on http://localhost:%d", s.port)
 	if err := s.httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -164,6 +232,11 @@ func (s *Server) Port() int {
 func (s *Server) WaitForPort() int {
 	<-s.portReady
 	return s.Port()
+}
+
+// Hub returns the WebSocket hub for the missions server.
+func (s *Server) Hub() *Hub {
+	return s.hub
 }
 
 // GetServerState returns a snapshot of server state for health checks.

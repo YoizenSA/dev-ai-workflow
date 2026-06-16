@@ -1,0 +1,252 @@
+/* ============================================================
+   yz-ui · Design Tokens (Dark Glass theme)
+   Single source of truth for color, spacing, radius, shadows.
+   Components consume var(--*) ONLY — never raw hex.
+
+   Light theme: the :root[data-theme="light"] block at the end
+   redefines tokens. Because every color flows from a token (and
+   translucent ones from RGB-channel tokens), the whole app
+   re-skins from one place.
+   ============================================================ */
+:root {
+  /* ---- Brand palette (institutional, exact hexes) ---- */
+  --yz-primary-1: #1a66ff;  /* Primary Blue   */
+  --yz-primary-2: #4a3abf;  /* Secondary Purple */
+  --yz-accent:    #fd6421;  /* Accent Orange  */
+  --yz-yellow:    #fdbd27;  /* Yellow         */
+  --yz-dark:      #272a35;  /* Dark surface   */
+  --yz-dark-soft: #1d2029;
+  --yz-navy:      #00183f;  /* Dark Navy      */
+  --yz-navy-deep: #00122d;  /* Darker Navy    */
+  --yz-light:     #ffffff;
+
+  /* ---- Brand / semantic as RGB channels (enable rgba(var(--x-rgb), a)) ---- */
+  --yz-primary-1-rgb: 26, 102, 255;
+  --yz-primary-2-rgb: 74, 58, 191;
+  --yz-accent-rgb:    253, 100, 33;
+  --yz-yellow-rgb:    253, 189, 39;
+  --info-rgb:         96, 165, 250;
+  --success-rgb:      16, 185, 129;
+  --success-bright-rgb: 52, 211, 153;
+  --danger-rgb:       220, 38, 38;
+  --danger-bright-rgb: 248, 113, 113;
+  --slate-rgb:        148, 163, 184;  /* borders / dividers */
+  --purple-bright-rgb: 139, 123, 255;
+  --white-rgb:        255, 255, 255;   /* flips in light theme */
+  --black-rgb:        0, 0, 0;         /* flips in light theme */
+
+  /* ---- Surfaces ---- */
+  --surface:             rgba(30, 35, 48, 0.72);
+  --surface-strong:      rgba(22, 26, 38, 0.92);
+  --surface-soft:        rgba(var(--white-rgb), 0.04);
+  --surface-hover:       rgba(var(--white-rgb), 0.07);
+  --panel-border:        rgba(var(--slate-rgb), 0.18);
+  --panel-border-strong: rgba(var(--slate-rgb), 0.32);
+  --table-head-bg:       rgba(var(--surf-12-rgb), 0.60);  /* separates header from body */
+  --input-bg:            rgba(var(--surf-4-rgb), 0.60);   /* field fill */
+
+  /* ---- Glass surface channels (dark stack; flipped for light theme) ---- */
+  --surf-1-rgb: 38, 44, 60;   --surf-2-rgb: 22, 26, 38;
+  --surf-3-rgb: 20, 24, 36;   --surf-4-rgb: 15, 18, 28;
+  --surf-5-rgb: 34, 39, 54;   --surf-6-rgb: 19, 23, 34;
+  --surf-7-rgb: 16, 19, 30;   --surf-8-rgb: 8, 11, 22;
+  --surf-9-rgb: 10, 13, 22;   --surf-10-rgb: 27, 32, 45;
+  --surf-11-rgb: 24, 28, 42;  --surf-12-rgb: 24, 28, 40;
+  --surf-success-rgb: 11, 38, 30;
+  --surf-danger-rgb:  46, 18, 18;
+  --surf-flat-rgb:    20, 24, 34;
+  --surf-input-rgb:   13, 16, 24;
+  --option-bg:        #1b1f2b;
+
+  /* ---- Text hierarchy ---- */
+  --text:       #f3f5fb;
+  --text-soft:  #c4cbdd;
+  --text-muted: #8b93ab;
+  --text-faint: #7a8298;   /* lifted to ~AA on dark surfaces, still below muted */
+
+  /* ---- Semantic ---- */
+  --success:        #34d399;
+  --success-soft:   rgba(var(--success-rgb), 0.12);
+  --success-border: rgba(var(--success-bright-rgb), 0.30);
+  --danger:         #f87171;
+  --danger-soft:    rgba(var(--danger-rgb), 0.12);
+  --danger-border:  rgba(var(--danger-bright-rgb), 0.30);
+  --danger-strong:   #ef4444;
+  --danger-strong-2: #dc2626;
+  --warning:        #e9c468;
+  --warning-soft:   rgba(var(--yz-yellow-rgb), 0.12);
+  --warning-border: rgba(251, 191, 36, 0.30);
+  --info:           #60a5fa;
+  --info-soft:      rgba(var(--yz-primary-1-rgb), 0.12);
+  --info-border:    rgba(var(--info-rgb), 0.30);
+
+  /* ---- Semantic text tints (bright pastels for text on glass) ---- */
+  --tint-primary:   #79a9ff;
+  --tint-primary-2: #cbe0ff;
+  --tint-primary-3: #9cc2ff;
+  --tint-primary-4: #cfe0ff;
+  --tint-primary-5: #8fb0e8;
+  --tint-primary-glow-rgb: 110, 163, 255;
+  --tint-purple:    #c4b5fd;
+  --tint-purple-dot: #a78bfa;
+  --tint-accent:    #fdba74;
+  --tint-success:   #6cc8a1;
+  --tint-danger:    #fca5a5;
+  --tint-danger-2:  #fecaca;
+  --tint-info:      #93c5fd;
+  --tint-yellow:    var(--yz-yellow);  /* brand yellow as text/icon (flips dark on light) */
+  --tint-on-light:  #1f2433;
+  --nav-active-text: var(--yz-light);  /* active sidebar item label */
+
+  /* ---- Radii ---- */
+  --radius-sm: 0.55rem;
+  --radius-md: 0.85rem;
+  --radius-lg: 1.15rem;
+  --radius-xl: 1.6rem;
+
+  /* ---- Spacing scale ---- */
+  --space-1: 0.25rem;  --space-2: 0.5rem;  --space-3: 0.75rem;
+  --space-4: 1rem;     --space-5: 1.25rem; --space-6: 1.5rem;
+  --space-8: 2rem;     --space-10: 2.75rem;
+
+  /* ---- Shadows ---- */
+  --shadow-glass: 0 24px 60px rgba(5, 9, 20, 0.55);
+  /* Contained button glow — present on dark, not neon. */
+  --shadow-lift:  0 6px 18px rgba(var(--yz-primary-1-rgb), 0.20);
+  --focus-ring:   0 0 0 3px rgba(var(--yz-primary-1-rgb), 0.42);
+
+  /* ---- Gradient shortcuts ---- */
+  --grad-brand:  linear-gradient(135deg, var(--yz-primary-1), var(--yz-primary-2));
+  /* Primary button fill — a deep indigo (not the raw neon brand gradient) so it
+     stays sober in both themes. Same value light + dark for consistency. */
+  --btn-primary-bg: linear-gradient(135deg, #2a4cae, #372a8c);
+  /* Solid danger button — a confident red with presence, not neon #ef4444. */
+  --btn-danger-bg: linear-gradient(135deg, #cf4242, #a52121);
+  --grad-accent: linear-gradient(135deg, var(--yz-accent), #df4f12);
+  --grad-full:   linear-gradient(90deg, #1a66ff 0%, #4a3abf 55%, #fd6421 100%);
+  --grad-text:   linear-gradient(95deg, #6ea3ff 0%, #b3a6ff 46%, #ff9e6b 100%);
+
+  /* ---- Layout ---- */
+  --sidebar-w:          264px;
+  --sidebar-w-collapsed: 78px;
+
+  /* ---- Typography ---- */
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+
+  /* ---- Type scale (modular ~1.12; components consume these, not raw rem) ---- */
+  --text-2xs:  0.6875rem;  /* 11px — micro-labels, counts, eyebrows on chips */
+  --text-xs:   0.75rem;    /* 12px — section eyebrows, badges, help, table th */
+  --text-sm:   0.8125rem;  /* 13px — secondary text, chips, pills, subs */
+  --text-base: 0.875rem;   /* 14px — body, table cells, inputs, buttons */
+  --text-md:   0.9375rem;  /* 15px — emphasized body, card subtitles */
+  --text-lg:   1.0625rem;  /* 17px — section titles */
+  --text-xl:   1.3125rem;  /* 21px — card / modal titles */
+  --text-2xl:  1.625rem;   /* 26px — page titles (also clamp-able) */
+  --text-3xl:  2rem;       /* 32px — hero numbers / KPI values */
+
+  /* ---- Motion (consume these instead of ad-hoc ms) ---- */
+  --t-fast: 120ms;
+  --t-base: 150ms;
+  --t-slow: 260ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- Z-index scale (one source of truth for stacking) ---- */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-drawer: 30;
+  --z-fab: 40;
+  --z-overlay: 60;
+  --z-popover: 70;
+  --z-dropdown: 80;
+  --z-toast: 90;
+
+  /* ---- Misc ---- */
+  --disabled-opacity: 0.5;
+}
+
+/* ============================================================
+   LIGHT THEME — set <html data-theme="light">. Only the tokens
+   that must change are redefined; everything else cascades.
+   Key inversions: surfaces dark→light (near-flat gradients),
+   text tints pastel→saturated-dark, glows/shadows softened,
+   wordmark gradient luminous→institutional, white/black flipped.
+   ============================================================ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --yz-dark:      #d7dde9;   /* deeper grey base so white cards lift off it */
+  --yz-dark-soft: #ccd4e2;
+
+  /* Text: dark on light */
+  --text:       #1a1f2e;
+  --text-soft:  #3b4458;
+  --text-muted: #5a6377;
+  --text-faint: #6b7488;   /* darkened to ~AA on white, still above muted */
+
+  /* Overlays flip: "light" translucents now darken; borders get visible */
+  --white-rgb: 15, 23, 42;
+  --slate-rgb: 71, 85, 105;
+  --panel-border:        rgba(var(--slate-rgb), 0.20);  /* a touch more defined contour */
+  --panel-border-strong: rgba(var(--slate-rgb), 0.34);
+
+  /* Semantic bg + border with more punch — a translucent tint reads paler on
+     white than on dark, so light needs higher alpha to feel as alive. */
+  --success-soft:   rgba(var(--success-rgb), 0.34);
+  --success-border: rgba(var(--success-rgb), 0.72);
+  --danger-soft:    rgba(var(--danger-rgb), 0.16);
+  --danger-border:  rgba(var(--danger-rgb), 0.48);
+  --warning-soft:   rgba(var(--yz-yellow-rgb), 0.30);
+  --warning-border: rgba(217, 119, 6, 0.58);
+  --info-soft:      rgba(var(--yz-primary-1-rgb), 0.16);
+  --info-border:    rgba(var(--yz-primary-1-rgb), 0.48);
+
+  /* Surfaces: light translucent */
+  --surface:        rgba(255, 255, 255, 0.86);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+  --table-head-bg:  #e9edf4;   /* solid light-grey header, distinct from white rows */
+  --input-bg:       #eef2f8;   /* subtle grey fill so fields read as a "well" on white cards */
+
+  /* Glass channels → light, near-flat gradients (depth comes from shadow) */
+  --surf-1-rgb: 255, 255, 255;   --surf-2-rgb: 255, 255, 255;
+  --surf-3-rgb: 245, 247, 251;   --surf-4-rgb: 255, 255, 255;
+  --surf-5-rgb: 252, 253, 255;   --surf-6-rgb: 248, 250, 253;
+  --surf-7-rgb: 255, 255, 255;   --surf-8-rgb: 240, 243, 249;
+  --surf-9-rgb: 244, 247, 251;   --surf-10-rgb: 250, 251, 254;
+  --surf-11-rgb: 252, 253, 255;  --surf-12-rgb: 250, 251, 254;
+  --surf-success-rgb: 219, 245, 235;
+  --surf-danger-rgb:  254, 235, 235;
+  --surf-flat-rgb:    238, 242, 248;
+  --surf-input-rgb:   248, 250, 253;
+  --option-bg: #ffffff;
+
+  /* Tints: saturated-dark of each hue (legible on light) */
+  --tint-primary:   #1d4ed8;
+  --tint-primary-2: #2563eb;
+  --tint-primary-3: #2563eb;
+  --tint-primary-4: #1e40af;
+  --tint-primary-5: #1e3a8a;
+  --tint-primary-glow-rgb: 37, 99, 235;
+  --tint-purple:    #6d28d9;
+  --tint-purple-dot: #7c3aed;
+  --tint-accent:    #c2410c;
+  --tint-success:   #047857;
+  --tint-danger:    #b91c1c;
+  --tint-danger-2:  #dc2626;
+  --tint-info:      #1d4ed8;
+  --nav-active-text: #5b21b6;   /* dark purple label on the pale active gradient */
+
+  /* Yellow hues need a dark text/icon on light (the bright yellow vanishes) */
+  --warning: #b45309;
+  --tint-yellow: #b45309;
+
+  /* Wordmark: institutional saturated gradient reads on light */
+  --grad-text: var(--grad-full);
+
+  /* Material layered shadow: a tight contact shadow + a soft ambient one
+     gives cards a real "lift" off the grey base (depth without dark glow). */
+  --shadow-glass: 0 1px 3px rgba(15, 23, 42, 0.07), 0 10px 28px rgba(15, 23, 42, 0.10);
+  /* Neutral material shadow for primary/accent buttons (no neon colour halo). */
+  --shadow-lift:  0 1px 2px rgba(15, 23, 42, 0.12), 0 6px 16px rgba(15, 23, 42, 0.14);
+  --focus-ring:   0 0 0 3px rgba(var(--yz-primary-1-rgb), 0.30);
+}

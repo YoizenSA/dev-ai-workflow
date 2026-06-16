@@ -556,10 +556,10 @@ func TestInteractivePlanningRejectionThenApproval(t *testing.T) {
 
 	// Simulate user: goal + skip clarifying questions + approve
 	stdin.WriteString("Build a test\n")
-	stdin.WriteString("\n") // skip clarifying q1
-	stdin.WriteString("\n") // skip clarifying q2
-	stdin.WriteString("\n") // skip project
-	stdin.WriteString("y\n")                   // approve
+	stdin.WriteString("\n")  // skip clarifying q1
+	stdin.WriteString("\n")  // skip clarifying q2
+	stdin.WriteString("\n")  // skip project
+	stdin.WriteString("y\n") // approve
 
 	mission, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
@@ -588,10 +588,10 @@ func TestInteractivePlanningRejectsInvalidInput(t *testing.T) {
 
 	// Goal, skip clarifying, invalid approval, then valid approval
 	stdin.WriteString("Build a test\n")
-	stdin.WriteString("\n") // skip clarifying q1
-	stdin.WriteString("\n") // skip clarifying q2
-	stdin.WriteString("\n") // skip project
-	stdin.WriteString("maybe\n")  // invalid
+	stdin.WriteString("\n")      // skip clarifying q1
+	stdin.WriteString("\n")      // skip clarifying q2
+	stdin.WriteString("\n")      // skip project
+	stdin.WriteString("maybe\n") // invalid
 	stdin.WriteString("y\n")
 	_, err := RunInteractivePlanning(store, &stdin, &stdout, "")
 	if err != nil {
@@ -788,5 +788,182 @@ func TestGeneratePlanWithTechnologies(t *testing.T) {
 	}
 	if !hasFrontend {
 		t.Log("Note: no frontend-worker detected (may fall back to backend-worker)")
+	}
+}
+
+// ─── Goal Refinement Tests ───────────────────────────────────────────────────
+
+// TestRefineGoalWithOpencode_FallbackToLocal verifies that when opencode is not
+// on PATH, refinement falls back to the local deterministic generator and still
+// returns a structured markdown response.
+func TestRefineGoalWithOpencode_FallbackToLocal(t *testing.T) {
+	forceLocalPlanning(t)
+
+	refined := RefineGoalWithOpencode("build a REST API", "", "")
+	if refined == "" {
+		t.Fatal("expected non-empty refined goal, got empty string")
+	}
+
+	// The local fallback must produce the structured sections the UI renders.
+	required := []string{"## Goal", "## Scope", "## Out of Scope", "## Acceptance Criteria"}
+	for _, section := range required {
+		if !strings.Contains(refined, section) {
+			t.Errorf("refined goal missing section %q\noutput:\n%s", section, refined)
+		}
+	}
+	// The original goal text should appear somewhere in the refinement.
+	if !strings.Contains(refined, "build a REST API") {
+		t.Errorf("refined goal does not mention the original goal")
+	}
+}
+
+// TestRefineGoalWithOpencode_ExtraContext verifies the context parameter flows
+// into the prompt builder (does not spawn opencode — uses the builder directly).
+func TestRefineGoalWithOpencode_ExtraContext(t *testing.T) {
+	prompt := buildRefinePrompt("build a CLI tool", "uses Python 3.12")
+
+	if !strings.Contains(prompt, "Additional context: uses Python 3.12") {
+		t.Errorf("prompt should include the extra context, got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "build a CLI tool") {
+		t.Errorf("prompt should include the goal, got:\n%s", prompt)
+	}
+	// Empty context must not inject the header.
+	promptNoCtx := buildRefinePrompt("build a CLI tool", "")
+	if strings.Contains(promptNoCtx, "Additional context:") {
+		t.Errorf("prompt should not include context header when context is empty")
+	}
+}
+
+// TestLocalRefineGoal_Shape verifies the fallback generator produces a stable,
+// well-formed markdown document with all four sections.
+func TestLocalRefineGoal_Shape(t *testing.T) {
+	refined := localRefineGoal("add dark mode")
+
+	for _, section := range []string{"## Goal", "## Scope", "## Out of Scope", "## Acceptance Criteria"} {
+		if !strings.Contains(refined, section) {
+			t.Errorf("localRefineGoal missing %q", section)
+		}
+	}
+	if !strings.Contains(refined, "add dark mode") {
+		t.Errorf("localRefineGoal did not embed the goal text")
+	}
+}
+
+// ─── DesignWorkerSystem (Droid-aligned SKILL.md) ───────────────────────────
+
+// designWorkerTestPlan builds a plan with features exercising multiple worker
+// types (backend, frontend, qa) so DesignWorkerSystem has something to classify.
+func designWorkerTestPlan() *PlanMission {
+	return &PlanMission{
+		Name:        "design-test",
+		Description: "test",
+		Milestones:  []PlanMilestone{{Name: "m1", Description: "m1"}},
+		Features: []PlanFeature{
+			{ID: "f-api", Description: "Add a REST API endpoint", SkillName: "backend-worker", Milestone: "m1", Role: "backend"},
+			{ID: "f-ui", Description: "Build a login component", SkillName: "frontend-worker", Milestone: "m1", Role: "frontend"},
+			{ID: "f-qa", Description: "Write test coverage for auth", SkillName: "qa-worker", Milestone: "m1", Role: "qa"},
+		},
+	}
+}
+
+// TestDesignWorkerSystemGeneratesDroidFormat verifies each generated SKILL.md
+// contains the four Droid-required sections plus valid frontmatter.
+func TestDesignWorkerSystemGeneratesDroidFormat(t *testing.T) {
+	store, _ := newTestStoreForPlanning(t)
+	plan := designWorkerTestPlan()
+	mission := &Mission{
+		ID:          "dws-mission",
+		Name:        plan.Name,
+		Status:      MissionPlanning,
+		Features:    []Feature{{ID: "f-api", Status: FeaturePending, Milestone: "m1"}, {ID: "f-ui", Status: FeaturePending, Milestone: "m1"}, {ID: "f-qa", Status: FeaturePending, Milestone: "m1"}},
+		Milestones:  []Milestone{{Name: "m1"}},
+	}
+	if err := store.CreateMission(mission); err != nil {
+		t.Fatalf("CreateMission: %v", err)
+	}
+	missionDir := store.MissionDir(mission.ID)
+
+	if err := DesignWorkerSystem(plan, mission, missionDir, "", ""); err != nil {
+		t.Fatalf("DesignWorkerSystem: %v", err)
+	}
+
+	// Collect generated skill dirs.
+	entries, err := os.ReadDir(filepath.Join(missionDir, "skills"))
+	if err != nil {
+		t.Fatalf("read skills dir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least one generated skill dir")
+	}
+
+	for _, e := range entries {
+		skillPath := filepath.Join(missionDir, "skills", e.Name(), "SKILL.md")
+		data, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("read %s SKILL.md: %v", e.Name(), err)
+		}
+		content := string(data)
+
+		// Droid-required structure.
+		requiredSections := []string{
+			"---", // frontmatter
+			"name:",
+			"description:",
+			"## Required Skills and Tools",
+			"## Work Procedure",
+			"## Example Handoff",
+			"## When to Return to Orchestrator",
+		}
+		for _, sec := range requiredSections {
+			if !strings.Contains(content, sec) {
+				t.Errorf("%s/SKILL.md missing required section %q\n--- content ---\n%s", e.Name(), sec, content)
+			}
+		}
+
+		// Example Handoff must be valid JSON (Droid: defines upper bound of effort).
+		if idx := strings.Index(content, "## Example Handoff"); idx >= 0 {
+			handoffPart := content[idx:]
+			// Find the first { ... } block in the handoff section.
+			start := strings.Index(handoffPart, "{")
+			end := strings.LastIndex(handoffPart, "}")
+			if start < 0 || end < 0 || end <= start {
+				t.Errorf("%s/SKILL.md Example Handoff has no JSON object", e.Name())
+			} else {
+				jsonStr := handoffPart[start : end+1]
+				var parsed map[string]interface{}
+				if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+					t.Errorf("%s/SKILL.md Example Handoff JSON invalid: %v\njson: %s", e.Name(), err, jsonStr)
+				}
+			}
+		}
+	}
+}
+
+// TestDesignWorkerSystemClassifierMapsToCanonicalNames verifies the classifier
+// maps api/ui/db/tests/infra keys to canonical worker names that GetDefaultSkill
+// knows (backend-worker, frontend-worker, qa-worker, devops-worker).
+func TestDesignWorkerSystemClassifierMapsToCanonicalNames(t *testing.T) {
+	store, _ := newTestStoreForPlanning(t)
+	plan := designWorkerTestPlan()
+	mission := &Mission{
+		ID:         "dws-classify",
+		Name:       plan.Name,
+		Status:     MissionPlanning,
+		Features:   []Feature{{ID: "f-api", Status: FeaturePending, Milestone: "m1"}, {ID: "f-ui", Status: FeaturePending, Milestone: "m1"}, {ID: "f-qa", Status: FeaturePending, Milestone: "m1"}},
+		Milestones: []Milestone{{Name: "m1"}},
+	}
+	store.CreateMission(mission)
+	missionDir := store.MissionDir(mission.ID)
+
+	if err := DesignWorkerSystem(plan, mission, missionDir, "", ""); err != nil {
+		t.Fatalf("DesignWorkerSystem: %v", err)
+	}
+
+	// Each feature's SkillName must be a canonical name GetDefaultSkill recognizes.
+	for _, f := range mission.Features {
+		if _, err := GetDefaultSkill(f.SkillName); err != nil {
+			t.Errorf("feature %s SkillName=%q is not a canonical worker name (GetDefaultSkill failed)", f.ID, f.SkillName)
+		}
 	}
 }

@@ -1,0 +1,120 @@
+/* ============================================================
+   forms.css · dark inputs, labels, fields, search, toggles, tabs
+   ============================================================ */
+.field { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+.field-label {
+  font-size: var(--text-xs); font-weight: 700; color: var(--text-muted);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.field-help { font-size: var(--text-xs); color: var(--text-faint); }
+.field-help.error { color: var(--danger); }
+
+/* Instrucción "escribí X para confirmar": case normal (no el uppercase tenue
+   del field-label) para que el chip del nombre no se aplane. */
+.confirm-label {
+  display: block; margin-bottom: 0.45rem;
+  font-size: var(--text-sm); font-weight: 500; color: var(--text-soft);
+}
+
+.input, .select, .textarea {
+  appearance: none; width: 100%;
+  background: var(--input-bg); border: 1px solid var(--panel-border);
+  color: var(--text); border-radius: var(--radius-sm);
+  padding: 0.55rem 0.8rem; font-size: var(--text-base); font-family: inherit;
+  transition: border-color var(--t-base) ease, background var(--t-base) ease, box-shadow var(--t-base) ease;
+}
+.textarea { resize: vertical; line-height: 1.5; }
+/* Hide the browser's ugly grey resize grip — the corner stays clean and
+   vertical resize still works by dragging the bottom edge. */
+textarea::-webkit-resizer { background: transparent; }
+.input::placeholder, .textarea::placeholder { color: var(--text-faint); }
+.input:hover, .select:hover, .textarea:hover { border-color: var(--panel-border-strong); }
+.input:focus, .select:focus, .textarea:focus {
+  border-color: rgba(var(--info-rgb), 0.60); background: rgba(var(--surf-4-rgb), 0.85);
+}
+.input.invalid, .select.invalid, .textarea.invalid { border-color: var(--danger-border); }
+.input.mono, .textarea.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+.select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.7rem center;
+  padding-right: 2.1rem; cursor: pointer;
+}
+.select:hover { background-color: rgba(var(--surf-3-rgb), 0.7); }
+/* Style the native option list as far as engines allow */
+.select option { background: var(--option-bg); color: var(--text); }
+
+/* Date / time inputs — keep the glass field look, recolor the native picker */
+.input[type="date"], .input[type="datetime-local"], .input[type="time"] { cursor: pointer; color-scheme: dark; }
+.input::-webkit-calendar-picker-indicator {
+  width: 16px; height: 16px; cursor: pointer; opacity: 0.55;
+  /* tint the picker glyph to the brand blue, brighten on hover */
+  filter: invert(58%) sepia(64%) saturate(2600%) hue-rotate(206deg) brightness(101%) contrast(101%);
+  transition: opacity var(--t-base) ease;
+}
+.input::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+.input::-webkit-datetime-edit { color: var(--text); }
+.input::-webkit-datetime-edit-fields-wrapper { color: var(--text); }
+.input::-webkit-datetime-edit-text { color: var(--text-faint); padding: 0 1px; }
+
+/* Search input with leading icon */
+.search-field { position: relative; flex: 1; min-width: 220px; }
+.search-field > lucide-icon, .search-field > svg, .search-field .icon-inner {
+  position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; color: var(--text-faint); pointer-events: none;
+}
+.search-field .input { padding-left: 2.1rem; }
+
+/* Filter bar */
+.filters { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
+
+/* Segmented toggle */
+.toggle-seg {
+  display: inline-flex; padding: 3px; border-radius: 99px;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); gap: 2px;
+}
+.seg-btn {
+  padding: 0.4rem 0.9rem; border-radius: 99px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  font-size: var(--text-sm); font-weight: 600; font-family: inherit;
+  transition: all var(--t-base) ease;
+}
+.seg-btn.active { background: var(--grad-brand); color: var(--yz-light); box-shadow: 0 6px 16px rgba(var(--yz-primary-1-rgb),0.30); }
+
+/* Switch (status toggle) */
+.switch { position: relative; display: inline-flex; width: 38px; height: 21px; flex-shrink: 0; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch .track {
+  width: 100%; height: 100%; border-radius: 99px; background: rgba(var(--slate-rgb),0.32);
+  transition: background var(--t-base) ease;
+}
+.switch .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px;
+  border-radius: 50%; background: var(--yz-light); transition: transform var(--t-base) ease;
+}
+.switch input:checked + .track { background: var(--success); }
+.switch input:checked + .track::after { transform: translateX(17px); }
+.switch input:disabled + .track { opacity: 0.5; cursor: not-allowed; }
+
+/* Underline tabs */
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--panel-border); }
+.tab {
+  padding: 0.6rem 1rem; font-size: var(--text-xs); font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color var(--t-base) ease, border-color var(--t-base) ease, background var(--t-base) ease;
+}
+.tab:hover { color: var(--text); background: var(--surface-soft); }
+/* Activo: texto claro + subrayado brillante + fondo sutil — el azul primario
+   puro se funde con el fondo oscuro. */
+.tab.active {
+  color: var(--tint-primary); border-bottom-color: var(--tint-primary);
+  background: linear-gradient(180deg, rgba(var(--yz-primary-1-rgb),0.16), rgba(var(--yz-primary-1-rgb),0.04));
+}
+
+/* Filtro en línea: etiqueta al lado del control (selects/fechas de toolbars). */
+.filter-inline { display: flex; align-items: center; gap: 0.55rem; }
+.filter-inline .field-label { margin: 0; white-space: nowrap; }
+.filter-inline yd-select, .filter-inline yd-date { display: block; width: max-content; }
+.filter-inline .yd-select-trigger { width: max-content; min-width: 0; gap: 0.45rem; padding-right: 0.7rem; }

@@ -74,7 +74,6 @@ func TestValidatePlanInvalidReturnsError(t *testing.T) {
 	}
 }
 
-
 func TestPlanFromFileMissingFile(t *testing.T) {
 	store, dir := recoveryTestStore(t)
 	defer os.RemoveAll(dir)
@@ -206,8 +205,8 @@ func TestAtomicWriteEmptyData(t *testing.T) {
 
 func TestValidateMissionIDRejectsPathTraversal(t *testing.T) {
 	tests := []struct {
-		id      string
-		valid   bool
+		id    string
+		valid bool
 	}{
 		{"normal-id", true},
 		{"mission-123", true},

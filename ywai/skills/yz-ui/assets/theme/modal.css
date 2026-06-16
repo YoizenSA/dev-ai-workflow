@@ -1,0 +1,77 @@
+/* ============================================================
+   modal.css · glass modal + overlay + action popup
+   ============================================================ */
+.overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  /* Fixed dark scrim in both themes (surf-8 flips light → wouldn't dim). */
+  background: rgba(var(--black-rgb), 0.55); backdrop-filter: blur(6px);
+  /* Centrado vertical. Los dropdowns (yd-select / yd-date) ya no chocan con el
+     borde porque YdAnchoredDirective hace flip/clamp contra el viewport, así que
+     no hace falta anclar arriba (eso dejaba el modal flotando muy alto). `safe`
+     evita recortar el tope si un modal alto supera la altura de la ventana. */
+  display: grid; justify-items: center; align-items: safe center;
+  padding: var(--space-6) var(--space-5);
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease;
+}
+/* Modales con calendario (yd-date es un popover alto): anclar arriba para darle
+   aire debajo y que abra hacia abajo en vez de «mirar para arriba». El select,
+   más bajo, no lo necesita; por eso sólo cuando hay yd-date. */
+.overlay:has(yd-date) { align-items: start; padding-top: clamp(var(--space-6), 8vh, 72px); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: 100%; max-width: var(--modal-w, 540px); max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-xl); border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(165deg, rgba(var(--surf-5-rgb),0.96), rgba(var(--surf-6-rgb),0.98));
+  box-shadow: var(--shadow-glass);
+  animation: modalIn 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* El scroll vive en el body (head/foot fijos) y queda dentro del borde redondeado */
+.modal > form { display: flex; flex-direction: column; min-height: 0; }
+.modal-head, .modal-foot { flex-shrink: 0; }
+/* Modales con dropdowns anclados (yd-select / yd-date): no recortar el popover */
+.modal-popovers, .modal-popovers .modal-body { overflow: visible; }
+@keyframes modalIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-6) var(--space-6) var(--space-3); }
+.modal-title { font-size: var(--text-xl); font-weight: 680; }
+.modal-subtitle { font-size: var(--text-base); color: var(--text-muted); margin-top: 0.25rem; }
+.modal-close {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); color: var(--text-muted);
+  transition: all var(--t-base) ease;
+}
+.modal-close:hover { background: var(--surface-hover); color: var(--text); }
+/* lucide-icon es inline: sin esto la X queda descentrada */
+.modal-close lucide-icon { display: inline-flex; align-items: center; justify-content: center; }
+.modal-close svg { display: block; }
+.modal-body { padding: var(--space-3) var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); overflow-y: auto; min-height: 0; }
+.modal-foot { display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6) var(--space-6); }
+.modal-foot.split { justify-content: space-between; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.form-grid .span-2 { grid-column: 1 / -1; }
+.modal-label { font-size: var(--text-xs); font-weight: 600; color: var(--text-soft); margin-bottom: 0.35rem; display: block; }
+
+/* Action popup (row context menu) */
+.action-popup {
+  position: fixed; z-index: var(--z-popover); display: flex; flex-direction: column; gap: 4px;
+  padding: 6px; border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border-strong);
+  background: linear-gradient(165deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
+  box-shadow: var(--shadow-glass); min-width: 170px;
+  animation: popIn 0.16s ease;
+}
+@keyframes popIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.popup-item {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem 0.7rem; border-radius: var(--radius-sm);
+  font-size: var(--text-base); font-weight: 550; cursor: pointer;
+  background: transparent; border: none; color: var(--text-soft); text-align: left; width: 100%;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.popup-item:hover { background: var(--surface-hover); color: var(--text); }
+.popup-item.danger:hover { background: var(--danger-soft); color: var(--tint-danger); }

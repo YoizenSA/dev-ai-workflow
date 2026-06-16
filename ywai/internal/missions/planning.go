@@ -12,9 +12,13 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 // ─── Errors ────────────────────────────────────────────────────────────────
@@ -100,9 +104,28 @@ func GeneratePlan(goal string, clarifications []QAPair) *PlanMission {
 
 // GeneratePlanWithOpencode spawns opencode to generate a plan from a goal.
 // Falls back to GeneratePlan if opencode is unavailable or fails.
+//
+// User-configured role defaults are loaded and applied per feature, so each
+// feature carries the right Role/Model/Agent/Fallbacks for the worker stage.
 func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, model, agent string) *PlanMission {
+	return GeneratePlanWithRepo(goal, clarifications, project, model, agent, "")
+}
+
+// GeneratePlanWithRepo is the repo-aware variant of GeneratePlanWithOpencode.
+// When repoPath is non-empty, the planner prompt instructs opencode to read the
+// actual codebase and ground the plan in real patterns. Used by the auto path
+// (PlanAndApprove) where there's no interactive investigation step.
+func GeneratePlanWithRepo(goal string, clarifications []QAPair, project, model, agent, repoPath string) *PlanMission {
+	cfg, _ := config.LoadConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	hints := extractHints(goal, clarifications)
+
 	// applyModelAgent ensures the selected model/agent are persisted on the plan
 	// so they flow through approval into the mission and reach the workers.
+	// Role defaults are then applied per feature so individual workers can use
+	// role-specific models even when the mission has no global override.
 	applyModelAgent := func(p *PlanMission) *PlanMission {
 		if p == nil {
 			return nil
@@ -116,6 +139,7 @@ func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, mod
 		if project != "" {
 			p.Project = project
 		}
+		applyRoleDefaults(p.Features, hints, cfg)
 		return p
 	}
 
@@ -126,7 +150,7 @@ func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, mod
 	}
 
 	// Build the prompt for opencode
-	prompt := buildPlanPrompt(goal, clarifications, project)
+	prompt := buildPlanPromptWithRepo(goal, clarifications, project, repoPath)
 
 	// Spawn opencode with the prompt as a task argument
 	// opencode run "..." processes a task non-interactively and exits
@@ -162,8 +186,105 @@ func GeneratePlanWithOpencode(goal string, clarifications []QAPair, project, mod
 	return applyModelAgent(plan)
 }
 
+// RefineGoalWithOpencode uses the opencode CLI (not the HTTP server, which has
+// known issues processing prompts via REST) to refine a user goal into a
+// structured mission description. Returns the refined markdown text.
+//
+// model optionally overrides the opencode default model — important when the
+// default has too little context for the refinement prompt.
+//
+// If opencode is unavailable or fails, it falls back to a locally-built
+// refinement so the user still gets something useful.
+func RefineGoalWithOpencode(goal, extraContext, model string) string {
+	opencodePath, err := DetectOpencode()
+	if err != nil {
+		log.Printf("opencode not available, using local goal refinement: %v", err)
+		return localRefineGoal(goal)
+	}
+
+	prompt := buildRefinePrompt(goal, extraContext)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Build args with optional --model (mirrors GeneratePlanWithOpencode).
+	args := []string{"run"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	args = append(args, prompt)
+
+	cmd := exec.CommandContext(ctx, opencodePath, args...)
+	cmd.Stderr = os.Stderr
+
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("opencode goal refinement failed: %v, using local refinement", err)
+		return localRefineGoal(goal)
+	}
+
+	refined := strings.TrimSpace(string(output))
+	if refined == "" {
+		log.Printf("opencode goal refinement returned empty output, using local refinement")
+		return localRefineGoal(goal)
+	}
+	return refined
+}
+
+// buildRefinePrompt constructs the prompt sent to opencode to refine a goal.
+func buildRefinePrompt(goal, extraContext string) string {
+	prompt := fmt.Sprintf(`Given this goal: %s
+
+Refine it into a structured mission goal. Return markdown with these sections:
+
+## Goal
+[Clear, actionable goal statement]
+
+## Scope
+- [What is included]
+
+## Out of Scope
+- [What is explicitly excluded]
+
+## Acceptance Criteria
+- [Measurable criteria for completion]
+
+Keep it concise and practical. Do not include any preamble or explanation — output ONLY the markdown.`, goal)
+
+	if extraContext != "" {
+		prompt = fmt.Sprintf("Additional context: %s\n\n%s", extraContext, prompt)
+	}
+	return prompt
+}
+
+// localRefineGoal produces a structured refinement without calling opencode,
+// used as a fallback when the CLI is unavailable or fails.
+func localRefineGoal(goal string) string {
+	return fmt.Sprintf(`## Goal
+%s
+
+## Scope
+- Core implementation of the described feature
+- Basic tests covering the main behavior
+
+## Out of Scope
+- Advanced edge cases (can be added in follow-up missions)
+- Performance optimization
+
+## Acceptance Criteria
+- The feature works as described in the goal
+- Tests pass for the implemented behavior`, goal)
+}
+
 // buildPlanPrompt creates the prompt for opencode to generate a plan.
 func buildPlanPrompt(goal string, clarifications []QAPair, project string) string {
+	return buildPlanPromptWithRepo(goal, clarifications, project, "")
+}
+
+// buildPlanPromptWithRepo is the repo-aware variant. When repoPath is non-empty,
+// the prompt instructs opencode to read the actual codebase and ground the plan
+// in real patterns/conventions (Droid-aligned one-shot investigation).
+func buildPlanPromptWithRepo(goal string, clarifications []QAPair, project, repoPath string) string {
 	var sb strings.Builder
 	sb.WriteString("You are a technical architect following Factory.ai mission planning methodology. Generate a development plan for the following goal.\n\n")
 	sb.WriteString("## Planning Phases (Factory.ai Methodology)\n")
@@ -173,10 +294,15 @@ func buildPlanPrompt(goal string, clarifications []QAPair, project string) strin
 	sb.WriteString("4. Testing & Validation Strategy - Determine testing infrastructure, user testing surface\n")
 	sb.WriteString("5. Identify & Confirm Milestones - Get explicit user agreement on milestone boundaries\n")
 	sb.WriteString("6. Create Mission Proposal - Generate the plan with features and assertions\n\n")
-	
+
 	sb.WriteString("## Goal\n")
 	sb.WriteString(goal)
 	sb.WriteString("\n\n")
+
+	if repoPath != "" {
+		sb.WriteString("## Repository (READ THIS FIRST)\n")
+		sb.WriteString(fmt.Sprintf("The code is at `%s`. Read the README, directory structure, configs, and key source files before planning. Ground every feature in real existing patterns, conventions, and dependencies you find there. Do not invent components that already exist.\n\n", repoPath))
+	}
 
 	if len(clarifications) > 0 {
 		sb.WriteString("## Clarifications\n")
@@ -191,7 +317,6 @@ func buildPlanPrompt(goal string, clarifications []QAPair, project string) strin
 	}
 
 	sb.WriteString(`Output ONLY a valid JSON object with this exact structure (no markdown, no code fences, no explanations):
-
 {
   "name": "short mission name",
   "description": "brief description of what this mission accomplishes",
@@ -203,6 +328,7 @@ func buildPlanPrompt(goal string, clarifications []QAPair, project string) strin
     {
       "id": "feat-1",
       "description": "concrete description",
+      "role": "dev",
       "skillName": "implementation",
       "milestone": "milestone-name",
       "preconditions": [],
@@ -216,7 +342,8 @@ IMPORTANT RULES (Factory.ai Alignment):
 - Each feature must have a unique id (feat-1, feat-2, etc.)
 - Each feature must reference a milestone that exists
 - preconditions is a list of feature IDs that must be done first
-- Valid skillName values: implementation, qa, devops, documentation, architecture. Default to 'implementation' for coding tasks.
+- Valid role values: planning, dev, frontend, backend, qa, reviewer, devops. Pick the one that best matches the work the feature implies.
+- skillName is optional; if omitted it is derived from role (frontend → frontend-worker, backend → backend-worker, qa → qa-worker, devops → devops-worker, reviewer → reviewer-worker, planning → planner, dev → implementation).
 - expectedBehavior is a list of verifiable assertions
 - fulfills MUST reference validation contract assertion IDs with format VAL-AREA-XXX (e.g., VAL-AUTH-001, VAL-CROSS-002)
 - Each assertion ID should be claimed by exactly ONE feature across the entire plan
@@ -262,7 +389,9 @@ func parsePlanFromOutput(output string) (*PlanMission, error) {
 		return nil, errors.New("plan missing features")
 	}
 
-	// Set default skillName for features missing it
+	// Set default skillName for features missing it. Role/Model/Agent/Fallbacks
+	// are populated downstream by applyRoleDefaults so user-configured role
+	// defaults always win over the planner's bare output.
 	for i := range plan.Features {
 		if plan.Features[i].SkillName == "" {
 			plan.Features[i].SkillName = "implementation"
@@ -285,13 +414,15 @@ func generateFeatures(goal string, milestones []PlanMilestone, hints generationH
 			featID := fmt.Sprintf("feat-%s-%d", ms.Name, fi+1)
 			desc := deriveFeatureDescription(goal, ms, fi, featCount, hints)
 
-			// Pick a plausible skill name based on description keywords
-			skill := detectSkill(desc, hints)
+			// Pick a role first, then derive the canonical worker skill name.
+			role := detectRole(desc, hints)
+			skill := RoleToSkillName(role)
 
 			feat := PlanFeature{
 				ID:          featID,
 				Description: desc,
 				SkillName:   skill,
+				Role:        role,
 				Milestone:   ms.Name,
 				Expected:    deriveExpectedBehaviors(desc),
 			}
@@ -357,37 +488,71 @@ func deriveExpectedBehaviors(description string) []string {
 	}
 }
 
-// detectSkill picks a plausible worker skill name based on description.
-func detectSkill(desc string, hints generationHint) string {
+// detectRole picks a plausible execution role based on description keywords
+// and the parsed technology hints. Returned roles match config.Role* constants.
+func detectRole(desc string, hints generationHint) string {
 	lower := strings.ToLower(desc)
 
-	// Check tech hints first
 	for _, tech := range hints.Technologies {
 		t := strings.ToLower(tech)
 		switch {
-		case strings.Contains(t, "react") || strings.Contains(t, "frontend"):
-			return "frontend-worker"
-		case strings.Contains(t, "go") || strings.Contains(t, "golang") || strings.Contains(t, "backend"):
-			return "backend-worker"
+		case strings.Contains(t, "react") || strings.Contains(t, "frontend") || strings.Contains(t, "ui"):
+			return config.RoleFrontend
+		case strings.Contains(t, "go") || strings.Contains(t, "golang") || strings.Contains(t, "backend") || strings.Contains(t, "api"):
+			return config.RoleBackend
 		case strings.Contains(t, "test") || strings.Contains(t, "qa"):
-			return "qa-worker"
-		case strings.Contains(t, "infra") || strings.Contains(t, "devops"):
-			return "devops-worker"
+			return config.RoleQA
+		case strings.Contains(t, "infra") || strings.Contains(t, "devops") || strings.Contains(t, "deploy"):
+			return config.RoleDevops
+		case strings.Contains(t, "review") || strings.Contains(t, "audit"):
+			return config.RoleReviewer
 		}
 	}
 
-	// Guess from description keywords
 	switch {
-	case strings.Contains(lower, "test") || strings.Contains(lower, "qa"):
-		return "qa-worker"
-	case strings.Contains(lower, "ui") || strings.Contains(lower, "frontend") || strings.Contains(lower, "web"):
-		return "frontend-worker"
-	case strings.Contains(lower, "api") || strings.Contains(lower, "backend") || strings.Contains(lower, "server"):
-		return "backend-worker"
-	case strings.Contains(lower, "infra") || strings.Contains(lower, "deploy") || strings.Contains(lower, "ci"):
-		return "devops-worker"
+	case strings.Contains(lower, "review") || strings.Contains(lower, "audit"):
+		return config.RoleReviewer
+	case strings.Contains(lower, "test") || strings.Contains(lower, "qa") || strings.Contains(lower, "coverage"):
+		return config.RoleQA
+	case strings.Contains(lower, "ui") || strings.Contains(lower, "frontend") || strings.Contains(lower, "web") || strings.Contains(lower, "component"):
+		return config.RoleFrontend
+	case strings.Contains(lower, "api") || strings.Contains(lower, "backend") || strings.Contains(lower, "server") || strings.Contains(lower, "endpoint"):
+		return config.RoleBackend
+	case strings.Contains(lower, "infra") || strings.Contains(lower, "deploy") || strings.Contains(lower, "ci") || strings.Contains(lower, "docker") || strings.Contains(lower, "kubernetes"):
+		return config.RoleDevops
 	default:
-		return "backend-worker"
+		return config.RoleDev
+	}
+}
+
+// detectSkill picks a plausible worker skill name based on description.
+// Kept as a thin wrapper over detectRole + RoleToSkillName for backward
+// compatibility with existing callers.
+func detectSkill(desc string, hints generationHint) string {
+	return RoleToSkillName(detectRole(desc, hints))
+}
+
+// applyRoleDefaults populates Role/Model/Agent/Fallbacks on each plan feature
+// from the user's role defaults. Pre-existing values on the feature are kept
+// (so an LLM-emitted plan can pin specific models).
+func applyRoleDefaults(features []PlanFeature, hints generationHint, cfg *config.UserConfig) {
+	for i := range features {
+		if features[i].Role == "" {
+			features[i].Role = detectRole(features[i].Description, hints)
+		}
+		if features[i].SkillName == "" {
+			features[i].SkillName = RoleToSkillName(features[i].Role)
+		}
+		rd := cfg.GetRoleDefault(features[i].Role)
+		if features[i].Model == "" {
+			features[i].Model = rd.Model
+		}
+		if features[i].Agent == "" {
+			features[i].Agent = rd.Agent
+		}
+		if len(features[i].Fallbacks) == 0 && len(rd.Fallbacks) > 0 {
+			features[i].Fallbacks = append([]string{}, rd.Fallbacks...)
+		}
 	}
 }
 
@@ -499,13 +664,13 @@ func ValidatePlan(plan *PlanMission) error {
 //
 // The dialog loop:
 //
-//	1. Prompt for goal
-//	2. Validate goal (not empty)
-//	3. Generate plan
-//	4. Show plan summary
-//	5. Ask for approval (y/n)
-//	6. On "y": save mission, approve (→ active), return mission
-//	7. On "n": ask for feedback, regenerate, go to 4
+//  1. Prompt for goal
+//  2. Validate goal (not empty)
+//  3. Generate plan
+//  4. Show plan summary
+//  5. Ask for approval (y/n)
+//  6. On "y": save mission, approve (→ active), return mission
+//  7. On "n": ask for feedback, regenerate, go to 4
 func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, project string) (*Mission, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -589,7 +754,150 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, proj
 	}
 }
 
-// promptGoal prompts the user for a mission goal, re-prompting on empty input.
+// RunInteractivePlanningWithClient is the opencode-client-aware variant of
+// RunInteractivePlanning. When the client supports the Sessions API (opencode
+// server reachable), it drives an iterative Droid-style flow:
+//
+//  1. Investigate the codebase (PlannerSession.Investigate)
+//  2. Surface unknowns to the user, replacing the hardcoded clarifying questions
+//  3. Propose architecture (PlannerSession.ProposeArchitecture)
+//  4. Generate features (PlannerSession.GenerateFeatures)
+//  5. Confirm milestones via the existing showPlan/promptApproval loop
+//
+// When the client is nil or doesn't support sessions, it falls back to the
+// original one-shot GeneratePlanWithOpencode path (delegates to
+// RunInteractivePlanning), preserving existing behaviour.
+func RunInteractivePlanningWithClient(store *MissionsStore, r io.Reader, w io.Writer, project string, client opencode.Client, repoPath string) (*Mission, error) {
+	// Fallback path: no client or no sessions support → original one-shot flow.
+	if client == nil {
+		return RunInteractivePlanning(store, r, w, project)
+	}
+	ps := NewPlannerSession(client, "", "")
+	if !ps.CanUseSessions() {
+		return RunInteractivePlanning(store, r, w, project)
+	}
+	defer ps.Close()
+
+	scanner := bufio.NewScanner(r)
+	fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
+	fmt.Fprintf(w, "║   ywai Missions — Iterative Planning (Droid) ║\n")
+	fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
+
+	goal, err := promptGoal(scanner, w)
+	if err != nil {
+		return nil, err
+	}
+	if project == "" {
+		project = promptProject(scanner, w)
+	}
+
+	// Stage 1: investigate the codebase.
+	fmt.Fprintf(w, "\n🔍 Investigating codebase at %s...\n", repoPath)
+	unknowns, invErr := ps.Investigate(context.Background(), goal, repoPath)
+	if invErr != nil {
+		fmt.Fprintf(w, "⚠ Investigation failed (%v) — falling back to one-shot planning.\n", invErr)
+		return RunInteractivePlanning(store, r, w, project)
+	}
+	if strings.TrimSpace(unknowns) != "" {
+		fmt.Fprintf(w, "\n%s\n", unknowns)
+	}
+
+	// Surface unknowns as clarifying questions so the user can answer them.
+	clarifications := askClarifyingQuestions(scanner, w)
+
+	// Stage 2: propose architecture.
+	fmt.Fprintf(w, "\n🏗️  Proposing architecture...\n")
+	arch, archErr := ps.ProposeArchitecture(context.Background())
+	if archErr != nil {
+		fmt.Fprintf(w, "⚠ Architecture proposal failed (%v) — falling back to one-shot planning.\n", archErr)
+		return RunInteractivePlanning(store, r, w, project)
+	}
+	if strings.TrimSpace(arch) != "" {
+		fmt.Fprintf(w, "\n%s\n", arch)
+		if approved, _ := promptApproval(scanner, w); !approved {
+			fmt.Fprintf(w, "\nArchitecture rejected. Falling back to one-shot planning.\n")
+			return RunInteractivePlanning(store, r, w, project)
+		}
+	}
+
+	// Stage 3: generate features from confirmed milestones.
+	// We don't have explicit milestone confirmation separate from the plan
+	// approval loop, so we pass the milestones the planner proposes.
+	plan, genErr := ps.GenerateFeatures(context.Background(), nil)
+	if genErr != nil || plan == nil {
+		fmt.Fprintf(w, "⚠ Feature generation failed (%v) — falling back to one-shot planning.\n", genErr)
+		return RunInteractivePlanning(store, r, w, project)
+	}
+
+	// Apply role defaults (model/agent/fallbacks) so workers resolve correctly.
+	cfg, _ := config.LoadConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	hints := extractHints(goal, clarifications)
+	applyRoleDefaults(plan.Features, hints, cfg)
+	if project != "" {
+		plan.Project = project
+	}
+
+	mission, err := CreateMissionFromPlan(store, plan)
+	if err != nil {
+		return nil, fmt.Errorf("create mission from plan: %w", err)
+	}
+
+	// Plan review/approval loop (reuses existing show/prompt/approve machinery).
+	for {
+		showPlan(w, plan)
+		approved, err := promptApproval(scanner, w)
+		if err != nil {
+			_ = store.DeleteMission(mission.ID)
+			return nil, err
+		}
+		if approved {
+			if err := ApprovePlan(store, mission); err != nil {
+				return nil, fmt.Errorf("approve plan: %w", err)
+			}
+			fmt.Fprintf(w, "\n✓ Mission %q approved and active!\n", mission.Name)
+			return mission, nil
+		}
+		// Rejected: collect feedback and regenerate via a follow-up on the same session.
+		feedback, err := promptFeedback(scanner, w)
+		if err != nil {
+			_ = store.DeleteMission(mission.ID)
+			return nil, err
+		}
+		if feedback != "" {
+			clarifications = append(clarifications, QAPair{Question: "User feedback", Answer: feedback})
+		}
+		newPlan, regenErr := ps.GenerateFeatures(context.Background(), milestoneNames(plan))
+		if regenErr != nil || newPlan == nil {
+			// Regeneration via session failed; fall back to local string manipulation.
+			newPlan = regeneratePlan(plan, feedback, clarifications)
+		} else {
+			applyRoleDefaults(newPlan.Features, hints, cfg)
+			if project != "" {
+				newPlan.Project = project
+			}
+		}
+		plan = newPlan
+		mission, err = updateMissionFromPlan(store, mission, plan)
+		if err != nil {
+			return nil, fmt.Errorf("update mission with regenerated plan: %w", err)
+		}
+	}
+}
+
+// milestoneNames returns the list of milestone names from a plan.
+func milestoneNames(plan *PlanMission) []string {
+	if plan == nil {
+		return nil
+	}
+	out := make([]string, 0, len(plan.Milestones))
+	for _, m := range plan.Milestones {
+		out = append(out, m.Name)
+	}
+	return out
+}
 func promptGoal(scanner *bufio.Scanner, w io.Writer) (string, error) {
 	for {
 		fmt.Fprintf(w, "\nWhat would you like to build?\n")
@@ -712,15 +1020,23 @@ func regeneratePlan(prevPlan *PlanMission, feedback string, clarifications []QAP
 			// Add an extra feature to the last milestone
 			if len(prevPlan.Features) > 0 {
 				lastMS := prevPlan.Milestones[len(prevPlan.Milestones)-1]
+				hints := extractHints(feedback, clarifications)
+				role := detectRole(feedback, hints)
 				newFeat := PlanFeature{
 					ID:          fmt.Sprintf("feat-%s-%d", lastMS.Name, len(prevPlan.Features)+1),
 					Description: feedback,
-					SkillName:   detectSkill(feedback, extractHints(feedback, clarifications)),
+					SkillName:   RoleToSkillName(role),
+					Role:        role,
 					Milestone:   lastMS.Name,
 					Expected:    []string{fmt.Sprintf("%s is implemented", feedback)},
 				}
 				newPlan.Features = append([]PlanFeature{}, prevPlan.Features...)
 				newPlan.Features = append(newPlan.Features, newFeat)
+				cfg, _ := config.LoadConfig()
+				if cfg == nil {
+					cfg = config.DefaultConfig()
+				}
+				applyRoleDefaults(newPlan.Features, hints, cfg)
 				return newPlan
 			}
 		}
@@ -777,30 +1093,35 @@ func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, e
 	features := make([]Feature, len(plan.Features))
 	for i, pf := range plan.Features {
 		features[i] = Feature{
-			ID:              pf.ID,
-			Description:     pf.Description,
-			Status:          FeaturePending,
-			SkillName:       pf.SkillName,
-			Milestone:       pf.Milestone,
-			Preconditions:   copyStrings(pf.Preconditions),
+			ID:               pf.ID,
+			Description:      pf.Description,
+			Status:           FeaturePending,
+			SkillName:        pf.SkillName,
+			Milestone:        pf.Milestone,
+			Preconditions:    copyStrings(pf.Preconditions),
 			ExpectedBehavior: copyStrings(pf.Expected),
-			Fulfills:        copyStrings(pf.Fulfills),
-			CreatedAt:       now,
-			UpdatedAt:       now,
+			Fulfills:         copyStrings(pf.Fulfills),
+			Role:             pf.Role,
+			Model:            pf.Model,
+			Agent:            pf.Agent,
+			Fallbacks:        copyStrings(pf.Fallbacks),
+			CreatedAt:        now,
+			UpdatedAt:        now,
 		}
 	}
 
 	mission := &Mission{
-		ID:         missionID,
-		Name:       plan.Name,
-		Project:    plan.Project,
-		Status:     MissionPlanning,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		Features:   features,
-		Milestones: milestones,
-		Model:      plan.Model,
-		Agent:      plan.Agent,
+		ID:             missionID,
+		Name:           plan.Name,
+		Project:        plan.Project,
+		Status:         MissionPlanning,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		Features:       features,
+		Milestones:     milestones,
+		Model:          plan.Model,
+		Agent:          plan.Agent,
+		ExecutionAgent: plan.Agent,
 	}
 
 	if err := store.CreateMission(mission); err != nil {
@@ -815,7 +1136,183 @@ func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, e
 		log.Printf("Warning: failed to create mission artifacts: %v", err)
 	}
 
+	// Design worker system based on feature classification
+	if err := DesignWorkerSystem(plan, mission, missionDir, plan.Model, plan.Agent); err != nil {
+		// Log but don't fail — worker skills can be generated later
+		log.Printf("Warning: failed to design worker system: %v", err)
+	}
+
 	return mission, nil
+}
+
+// workerTypeForFeature classifies a feature into a canonical worker skill
+// name by keyword matching. Returns a name that GetDefaultSkill recognizes
+// (backend-worker, frontend-worker, qa-worker, devops-worker, implementation).
+func workerTypeForFeature(feature PlanFeature) string {
+	lower := strings.ToLower(feature.Description) + " " + strings.ToLower(feature.ID)
+	// Also check Expected behavior text
+	for _, e := range feature.Expected {
+		lower += " " + strings.ToLower(e)
+	}
+
+	switch {
+	case strings.Contains(lower, "api") || strings.Contains(lower, "handler") || strings.Contains(lower, "endpoint") || strings.Contains(lower, "route"):
+		return "backend-worker"
+	case strings.Contains(lower, "component") || strings.Contains(lower, "ui") || strings.Contains(lower, "css") || strings.Contains(lower, "style") || strings.Contains(lower, "frontend"):
+		return "frontend-worker"
+	case strings.Contains(lower, "migration") || strings.Contains(lower, "schema") || strings.Contains(lower, "query") || strings.Contains(lower, "sql") || strings.Contains(lower, "database"):
+		return "backend-worker"
+	case strings.Contains(lower, "test") || strings.Contains(lower, "spec") || strings.Contains(lower, "coverage"):
+		return "qa-worker"
+	case strings.Contains(lower, "docker") || strings.Contains(lower, "ci") || strings.Contains(lower, "deploy") || strings.Contains(lower, "infra") || strings.Contains(lower, "kubernetes"):
+		return "devops-worker"
+	default:
+		return "implementation"
+	}
+}
+
+// DesignWorkerSystem classifies features into worker types, writes Droid-format
+// SKILL.md files (Required Skills/Tools, Work Procedure, Example Handoff, When
+// to Return), and updates mission.WorkerTypes and mission.Features[].SkillName.
+//
+// Each generated skill reuses GetDefaultSkill's content (which already matches
+// the Droid SKILL.md structure) so workers get a realistic quality bar instead
+// of a generic 5-step checklist.
+func DesignWorkerSystem(plan *PlanMission, mission *Mission, missionDir, model, agent string) error {
+	// Classify features into worker skill names (canonical).
+	typeFeatures := make(map[string][]PlanFeature)
+	for _, feat := range plan.Features {
+		wt := workerTypeForFeature(feat)
+		// Honor an explicit role-derived SkillName from the plan when present
+		// (applyRoleDefaults already set canonical names); only classify when blank.
+		if feat.SkillName != "" {
+			wt = feat.SkillName
+		}
+		typeFeatures[wt] = append(typeFeatures[wt], feat)
+	}
+
+	var workerTypes []WorkerType
+	for wtName, features := range typeFeatures {
+		// Resolve the skill content: prefer GetDefaultSkill (canonical format),
+		// fall back to a generated generic skill.
+		var skill *Skill
+		if def, err := GetDefaultSkill(wtName); err == nil {
+			skill = def
+		} else {
+			skill = genericSkillForWorkerType(wtName)
+		}
+
+		// Enrich Required Skills/Tools with role-configured skills so the
+		// generated SKILL.md advertises the full kit the worker should load.
+		enrichSkillWithRoleSkills(skill, features)
+
+		// Render the SKILL.md body in Droid format.
+		skillContent := formatSkillBody(skill)
+
+		// Write skill file.
+		skillDir := filepath.Join(missionDir, "skills", wtName)
+		if err := os.MkdirAll(skillDir, 0755); err != nil {
+			return fmt.Errorf("create skill dir %s: %w", skillDir, err)
+		}
+		skillPath := filepath.Join(skillDir, "SKILL.md")
+		if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+			return fmt.Errorf("write skill %s: %w", skillPath, err)
+		}
+
+		workerTypes = append(workerTypes, WorkerType{
+			Name:        wtName,
+			Description: skill.Description,
+			SkillPath:   skillPath,
+		})
+
+		// Set SkillName for each mission feature mapped to this worker type.
+		for _, feat := range features {
+			for j := range mission.Features {
+				if mission.Features[j].ID == feat.ID {
+					mission.Features[j].SkillName = wtName
+					break
+				}
+			}
+		}
+	}
+
+	mission.WorkerTypes = workerTypes
+	log.Printf("Designed %d worker types for %d features", len(workerTypes), len(plan.Features))
+	return nil
+}
+
+// genericSkillForWorkerType builds a minimal Droid-format skill for a worker
+// type that GetDefaultSkill doesn't know. Used as a last-resort fallback.
+func genericSkillForWorkerType(wtName string) *Skill {
+	return &Skill{
+		Name:          wtName,
+		Description:   "Implementation worker for " + wtName,
+		RequiredTools: []string{"git"},
+		WorkProcedure: "1. Read the feature description and expected behavior\n2. Write failing tests first (TDD)\n3. Implement the feature to make tests pass\n4. Run tests and verify they pass\n5. Manually verify the implementation\n6. Return a structured handoff",
+		ExampleHandoff: `{
+  "salientSummary": "Implemented the feature as described",
+  "whatWasImplemented": "Feature implementation completed",
+  "whatWasLeftUndone": "",
+  "verification": {
+    "commandsRun": [
+      {"command": "go test ./...", "exitCode": 0, "observation": "All tests passed"}
+    ]
+  },
+  "tests": {
+    "added": [],
+    "coverage": "N/A"
+  },
+  "discoveredIssues": []
+}`,
+		ReturnConditions: "Return to orchestrator if: requirements are ambiguous, existing bugs affect this feature, or you cannot complete within mission boundaries",
+	}
+}
+
+// enrichSkillWithRoleSkills merges role-configured skills (RoleDefault.Skills)
+// from the user config into a skill's RequiredSkills list so the generated
+// SKILL.md advertises the full skill kit. Dedupes against existing entries.
+func enrichSkillWithRoleSkills(skill *Skill, features []PlanFeature) {
+	cfg, _ := config.LoadConfig()
+	if cfg == nil || len(features) == 0 {
+		return
+	}
+	// Collect roles referenced by these features.
+	roles := map[string]bool{}
+	for _, f := range features {
+		if f.Role != "" {
+			roles[f.Role] = true
+		}
+	}
+	existing := map[string]bool{}
+	for _, s := range skill.RequiredSkills {
+		existing[s] = true
+	}
+	for role := range roles {
+		for _, s := range cfg.GetRoleDefault(role).Skills {
+			if s != "" && !existing[s] {
+				existing[s] = true
+				skill.RequiredSkills = append(skill.RequiredSkills, s)
+			}
+		}
+	}
+}
+
+// workerTypeDescription returns a human-readable description for a worker type key.
+func workerTypeDescription(wt string) string {
+	switch wt {
+	case "api":
+		return "API and Backend Developer"
+	case "ui":
+		return "UI and Frontend Developer"
+	case "db":
+		return "Database and Data Layer Developer"
+	case "tests":
+		return "Test Engineer"
+	case "infra":
+		return "Infrastructure and DevOps Engineer"
+	default:
+		return "Implementation Developer"
+	}
 }
 
 // updateMissionFromPlan updates an existing mission with a new plan,
@@ -920,6 +1417,48 @@ func PlanFromFile(store *MissionsStore, filePath string) (*Mission, error) {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+// AutoPlanOpts configures the automatic plan-and-approve flow (FASE 2).
+type AutoPlanOpts struct {
+	Project     string
+	Model       string
+	Agent       string
+	BaseRef     string
+	AutoApprove bool
+	// RepoPath is the resolved filesystem path of the project repo. When set,
+	// the planner prompt tells opencode to read the repo and ground the plan in
+	// the real codebase (Droid-aligned investigation in one-shot for auto mode).
+	RepoPath string
+}
+
+// PlanAndApprove generates a plan from a goal, creates the mission, and
+// optionally approves it — all without interactive prompts.
+//
+// When AutoPlanOpts.RepoPath is set (or can be resolved from the project name
+// via a RepoResolver), the planner prompt is enriched to read the real codebase,
+// giving Droid-style grounding in one shot (auto mode skips the interactive
+// milestone confirmation the interactive path does).
+func PlanAndApprove(store *MissionsStore, goal string, opts AutoPlanOpts) (*Mission, error) {
+	repoPath := opts.RepoPath
+	plan := GeneratePlanWithRepo(goal, nil, opts.Project, opts.Model, opts.Agent, repoPath)
+	if plan == nil {
+		return nil, fmt.Errorf("plan generation returned nil")
+	}
+
+	mission, err := CreateMissionFromPlan(store, plan)
+	if err != nil {
+		return nil, fmt.Errorf("create mission from plan: %w", err)
+	}
+
+	if opts.AutoApprove {
+		if err := ApprovePlan(store, mission); err != nil {
+			_ = store.DeleteMission(mission.ID)
+			return nil, fmt.Errorf("approve plan: %w", err)
+		}
+	}
+
+	return mission, nil
+}
 
 // generateMissionID creates a short, unique mission ID using crypto/rand.
 func generateMissionID() string {

@@ -1075,9 +1075,9 @@ func TestTruncate(t *testing.T) {
 		maxLen  int
 		wantLen int
 	}{
-		{"short", 10, 5},          // no truncation needed
+		{"short", 10, 5}, // no truncation needed
 		{"a very long string that needs truncation", 20, 20},
-		{"exactly 10", 11, 10},    // fits
+		{"exactly 10", 11, 10}, // fits
 	}
 
 	for _, tt := range tests {
@@ -1317,9 +1317,9 @@ func TestSpinnerAnimation(t *testing.T) {
 // TestColorFunctions verifies status color helpers.
 func TestColorFunctions(t *testing.T) {
 	tests := []struct {
-		status      missions.FeatureStatus
-		wantColor   string
-		wantName    string
+		status    missions.FeatureStatus
+		wantColor string
+		wantName  string
 	}{
 		{missions.FeaturePending, "240", "grey"},
 		{missions.FeatureInProgress, "39", "blue"},

@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -60,7 +62,9 @@ Subcommands:
 	missionsCmd.AddCommand(newServeCmd())
 	missionsCmd.AddCommand(newValidateContractCmd())
 	missionsCmd.AddCommand(newShowContractCmd())
+	missionsCmd.AddCommand(newAutoCmd())
 	missionsCmd.AddCommand(newShowArchitectureCmd())
+	missionsCmd.AddCommand(newProjectCmd())
 
 	parent.AddCommand(missionsCmd)
 }
@@ -127,6 +131,231 @@ func featureStatusIcon(status string) string {
 
 // ─── Start Command ─────────────────────────────────────────────────────────
 
+// autoCmdFlags holds the flags exposed by `missions auto`. It is a plain struct
+// so engineConfigFromFlags can be unit-tested without a cobra.Command.
+type autoCmdFlags struct {
+	Project     string
+	Model       string
+	Agent       string
+	AutoApprove bool
+	BaseRef     string
+	Timeout     time.Duration
+	MaxRetries  int
+	MaxParallel int
+	CleanStreak int
+}
+
+// engineConfigFromFlags builds an EngineConfig from the auto command's flags.
+// Zero-value flags fall back to engine defaults. This is a pure function so it
+// can be unit-tested directly without spinning up a cobra command or a store.
+func engineConfigFromFlags(f autoCmdFlags) missions.EngineConfig {
+	cfg := missions.DefaultEngineConfig()
+
+	// Timeout: only override when explicitly set (a zero duration would create
+	// an unbounded worker, which is almost never what the user wants).
+	if f.Timeout > 0 {
+		cfg.WorkerTimeout = f.Timeout
+	}
+	if f.MaxRetries > 0 {
+		cfg.MaxRetries = f.MaxRetries
+	}
+	if f.MaxParallel > 0 {
+		cfg.MaxParallel = f.MaxParallel
+	}
+	if f.CleanStreak > 0 {
+		cfg.VerifyCleanStreak = f.CleanStreak
+	}
+	if f.BaseRef != "" {
+		cfg.BaseRef = f.BaseRef
+	}
+	return cfg
+}
+
+func newAutoCmd() *cobra.Command {
+	var f autoCmdFlags
+
+	cmd := &cobra.Command{
+		Use:   "auto \"<goal>\" --project <name> [--model <model>] [--agent <agent>] [--yes]",
+		Short: "Autonomous mission: plan + approve + run in one shot",
+		Long: `Run a fully autonomous mission: generate a plan from the goal, create the mission,
+approve it, and start running — all without interactive prompts.
+
+Requires --project to resolve the repo path for worktree-based execution.
+Use --yes to auto-approve the plan without confirmation.
+
+Example:
+  ywai missions auto "Add a /health endpoint that returns 200 OK" --project myapp --yes`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			goal := args[0]
+
+			store, err := openStore()
+			if err != nil {
+				return fmt.Errorf("open missions store: %w", err)
+			}
+
+			if !f.AutoApprove && isInteractiveTerminal() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Goal: %s\n", goal)
+				fmt.Fprintf(cmd.OutOrStdout(), "Project: %s\n\n", f.Project)
+				fmt.Fprintf(cmd.OutOrStdout(), "Press Enter to generate the plan, or Ctrl+C to cancel...")
+				fmt.Scanln()
+			}
+
+			opts := missions.AutoPlanOpts{
+				Project:     f.Project,
+				Model:       f.Model,
+				Agent:       f.Agent,
+				AutoApprove: f.AutoApprove,
+				RepoPath:    resolveProjectPath(store, f.Project),
+			}
+
+			mission, err := missions.PlanAndApprove(store, goal, opts)
+			if err != nil {
+				return fmt.Errorf("plan and approve: %w", err)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) created with %d features.\n", mission.Name, mission.ID, len(mission.Features))
+
+			if f.AutoApprove {
+				// Start running the mission immediately.
+				fmt.Fprintf(cmd.OutOrStdout(), "Starting mission...\n")
+				config := engineConfigFromFlags(f)
+				if f.Project != "" {
+					if pStore, pErr := missions.NewProjectStore(store.BaseDir()); pErr == nil {
+						config.RepoResolver = missions.NewProjectRepoResolver(pStore)
+					} else {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: could not load projects: %v\n", pErr)
+					}
+				}
+				engine := missions.NewEngine(store, config, nil)
+				if err := engine.RunMission(mission.ID); err != nil {
+					return fmt.Errorf("run mission: %w", err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Mission %q completed.\n", mission.ID)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Run 'ywai missions run %s' to start execution.\n", mission.ID)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&f.Project, "project", "p", "", "Project name (required)")
+	cmd.Flags().StringVar(&f.Model, "model", "", "Model override (e.g. gpt-4o)")
+	cmd.Flags().StringVar(&f.Agent, "agent", "", "Agent override")
+	cmd.Flags().BoolVarP(&f.AutoApprove, "yes", "y", false, "Auto-approve plan without confirmation")
+	cmd.Flags().StringVar(&f.BaseRef, "base", "", "Git ref to branch worktrees from (default: HEAD)")
+	cmd.Flags().DurationVar(&f.Timeout, "timeout", 0, "Per-feature worker timeout (default: 30m)")
+	cmd.Flags().IntVar(&f.MaxRetries, "max-retries", 0, "Max retries per failed feature (default: 3)")
+	cmd.Flags().IntVar(&f.MaxParallel, "max-parallel", 1, "Max features running concurrently (default: 1)")
+	cmd.Flags().IntVar(&f.CleanStreak, "clean-streak", 0, "Consecutive clean verify runs required per feature (default: 1)")
+	cmd.MarkFlagRequired("project")
+
+	return cmd
+}
+
+// ─── Project Command ───────────────────────────────────────────────────────
+
+func newProjectCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "project",
+		Short: "Manage registered projects",
+		Long: `Register and manage projects for autonomous mission execution.
+
+A registered project maps a short name to a repository path on disk.
+The path is used to create git worktrees during autonomous runs.
+
+Subcommands:
+  add   Register a project
+  list  List all registered projects
+  rm    Remove a registered project`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(newProjectAddCmd())
+	cmd.AddCommand(newProjectListCmd())
+	cmd.AddCommand(newProjectRmCmd())
+	return cmd
+}
+
+func newProjectAddCmd() *cobra.Command {
+	var description string
+	cmd := &cobra.Command{
+		Use:   "add <name> <path>",
+		Short: "Register a project",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := openStore()
+			if err != nil {
+				return err
+			}
+			pStore, err := missions.NewProjectStore(store.BaseDir())
+			if err != nil {
+				return fmt.Errorf("open project store: %w", err)
+			}
+			p, err := pStore.Create(args[0], args[1], description)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Project %q registered at %s\n", p.Name, p.Path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&description, "description", "d", "", "Optional description")
+	return cmd
+}
+
+func newProjectListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List registered projects",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := openStore()
+			if err != nil {
+				return err
+			}
+			pStore, err := missions.NewProjectStore(store.BaseDir())
+			if err != nil {
+				return fmt.Errorf("open project store: %w", err)
+			}
+			projects := pStore.List()
+			if len(projects) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No projects registered.")
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%-20s %s\n", "NAME", "PATH")
+			for _, p := range projects {
+				fmt.Fprintf(cmd.OutOrStdout(), "%-20s %s\n", p.Name, p.Path)
+			}
+			return nil
+		},
+	}
+}
+
+func newProjectRmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rm <name>",
+		Short: "Remove a registered project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := openStore()
+			if err != nil {
+				return err
+			}
+			pStore, err := missions.NewProjectStore(store.BaseDir())
+			if err != nil {
+				return fmt.Errorf("open project store: %w", err)
+			}
+			if err := pStore.Delete(args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Project %q removed.\n", args[0])
+			return nil
+		},
+	}
+}
+
 func newStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start [--file plan.json]",
@@ -177,7 +406,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("interactive mode requires a terminal; use --file to start from a plan file")
 	}
 
-	mission, err := missions.StartInteractivePlanningWithProject(store, project)
+	// Try the iterative (Droid-style) flow when opencode is reachable; fall
+	// back transparently to the one-shot planner inside the function.
+	repoPath := resolveProjectPath(store, project)
+	client := opencodeClient()
+	mission, err := missions.RunInteractivePlanningWithClient(store, os.Stdin, cmd.OutOrStdout(), project, client, repoPath)
 	if err != nil {
 		return fmt.Errorf("planning failed: %w", err)
 	}
@@ -491,8 +724,8 @@ func runCancel(cmd *cobra.Command, args []string) error {
 func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Start the Mission Control Web UI server",
-		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).",
+		Short: "Start the Mission Control Web UI server (deprecated: use 'ywai serve' instead)",
+		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).\n\nDEPRECATED: Use 'ywai serve' instead to run the control server.",
 		RunE:  runServe,
 	}
 
@@ -501,6 +734,7 @@ func newServeCmd() *cobra.Command {
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
+	fmt.Fprintln(os.Stderr, "Warning: 'ywai missions serve' is deprecated. Use 'ywai serve' instead.")
 	port, _ := cmd.Flags().GetInt("port")
 
 	store, err := openStore()
@@ -590,23 +824,23 @@ func runShowContract(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Validation Contract for mission %s\n\n", missionID)
-	
+
 	// Group by area
 	areas := make(map[string][]missions.ContractAssertion)
 	for _, assertion := range contract.Assertions {
 		areas[assertion.Area] = append(areas[assertion.Area], assertion)
 	}
-	
+
 	for area, assertions := range areas {
 		fmt.Fprintf(cmd.OutOrStdout(), "## %s\n", area)
 		for _, assertion := range assertions {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", assertion.ID, assertion.Title)
-			fmt.Fprintf(cmd.OutOrStdout(),    "    Tool: %s\n", assertion.Tool)
-			fmt.Fprintf(cmd.OutOrStdout(),    "    Evidence: %v\n", assertion.Evidence)
+			fmt.Fprintf(cmd.OutOrStdout(), "    Tool: %s\n", assertion.Tool)
+			fmt.Fprintf(cmd.OutOrStdout(), "    Evidence: %v\n", assertion.Evidence)
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "")
 	}
-	
+
 	return nil
 }
 
@@ -633,12 +867,38 @@ func runShowArchitecture(cmd *cobra.Command, args []string) error {
 
 	missionDir := store.MissionDir(missionID)
 	archPath := missionDir + "/architecture.md"
-	
+
 	content, err := os.ReadFile(archPath)
 	if err != nil {
 		return fmt.Errorf("failed to read architecture.md: %w", err)
 	}
-	
+
 	fmt.Fprint(cmd.OutOrStdout(), string(content))
 	return nil
+}
+
+// ─── Planner wiring helpers ────────────────────────────────────────────────
+
+// opencodeClient returns the default opencode client (server if reachable,
+// local stub otherwise). Used to drive the iterative planner.
+func opencodeClient() opencode.Client {
+	return opencode.DefaultClient(context.Background())
+}
+
+// resolveProjectPath resolves a project name to its filesystem path via the
+// project store. Returns empty string when the project isn't registered (the
+// planner then runs without repo grounding).
+func resolveProjectPath(store *missions.MissionsStore, projectName string) string {
+	if projectName == "" {
+		return ""
+	}
+	pStore, err := missions.NewProjectStore(store.BaseDir())
+	if err != nil {
+		return ""
+	}
+	proj, err := pStore.Get(projectName)
+	if err != nil {
+		return ""
+	}
+	return proj.Path
 }

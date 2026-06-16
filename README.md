@@ -51,6 +51,9 @@ ywai skills                   # List extra skills
 | `ywai config` | Manage ywai configuration |
 | `ywai doctor` | Run gentle-ai health check |
 | `ywai skill-registry` | Refresh the project skill registry |
+| `ywai serve` | Start the Control UI server (Kanban + Missions on port 5768) |
+| `ywai ui` | Open Control UI in the default browser |
+| `ywai daemon` | **Deprecated** — use `ywai serve` instead |
 
 ### Install flags
 
@@ -59,6 +62,7 @@ ywai skills                   # List extra skills
 | `--type, -t` | Project type (react, nest, dotnet, etc.) |
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
+| `--autostart` | Configure control server to start automatically on system boot |
 
 ### Configuration
 
@@ -80,6 +84,65 @@ Available configuration options:
 - `default_mcp`: Install MCP by default for opencode (true/false)
 - `colored_output`: Use colored output (true/false)
 - `log_level`: Logging level (debug, info, warn, error)
+- `server.port`: Default port for the control server (number, default `5768`)
+- `server.background`: Run server in background by default (true/false)
+- `server.mcp`: Start MCP adapter by default (true/false)
+- `server.autostart`: Configure autostart on system boot (true/false)
+
+---
+
+## Control UI
+
+`ywai serve` unifica Kanban + Missions en un solo servidor web con una SPA (React + Vite). Incluye autostart vía systemd/launchd, health checks, y un adaptador MCP opcional.
+
+### Quick start
+
+```bash
+# Start the server (blocking, foreground)
+ywai serve
+
+# Start in background
+ywai serve --background
+
+# Open in browser (once the server is running)
+ywai ui
+
+# Configure autostart on boot (macOS launchd / Linux systemd)
+ywai install --autostart
+```
+
+### ywai serve flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port, -p` | `5768` | Port for the control server |
+| `--background, -b` | `false` | Run in background (detach from terminal) |
+| `--no-mcp` | `false` | Don't start the MCP adapter |
+| `--mcp-only` | `false` | Run as MCP adapter only (stdio JSON-RPC, no HTTP) |
+
+### What you get
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:5768/` | Kanban board — track delegations, sessions, and activities |
+| `http://localhost:5768/missions/` | Missions dashboard — plan and monitor multi-feature projects |
+| `http://localhost:5768/health` | Health check endpoint |
+| `http://localhost:5768/memories/` | Engram memory management — search, edit, consolidate, timeline |
+
+### Autostart
+
+| OS | Mechanism | File |
+|----|-----------|------|
+| macOS | launchd | `~/Library/LaunchAgents/com.ywai.server.plist` |
+| Linux | systemd | `~/.config/systemd/user/ywai-server.service` |
+| Windows | Registry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
+
+Check status: `ywai config get server.autostart`
+
+### Deprecated
+
+- `ywai daemon` → use `ywai serve` instead
+- `ywai missions serve` → use `ywai serve` instead (both Kanban and Missions are served on the same port)
 
 ---
 
@@ -97,7 +160,6 @@ Available configuration options:
 | `ywai missions show <id>` | Show detailed mission information |
 | `ywai missions resume <id>` | Resume a paused mission |
 | `ywai missions cancel <id>` | Cancel a mission |
-| `ywai missions serve` | Start the Mission Control Web UI on port 5769 |
 
 ### Architecture
 

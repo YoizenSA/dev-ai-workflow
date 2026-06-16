@@ -1,39 +1,48 @@
-## Recursos del Skill yz-ui
+# Referencias · yz-ui (Dark Glass theme)
 
-El skill es autocontenido y agnóstico de proyecto: las normas del `SKILL.md` aplican a **todo frontend Yoizen**, existente o nuevo. No depende de ningún repo de referencia.
+Índice de recursos del skill. `SKILL.md` es la doctrina central (siempre se
+lee); las guías profundas de abajo se cargan **on demand** según la tarea.
 
-### Assets
+## Guías profundas (cargar según la tarea)
 
-| Asset | Ubicación | Uso |
-|-------|-----------|-----|
-| Logo Principal | `assets/logo.svg` | Header, branding |
-| Logo Negativo | `assets/logo-negativo.svg` / `assets/logo-negative.svg` | Fondos oscuros |
-| Logo con Slogan | `assets/logo-sec-slogan.svg` | Landing pages |
-| Icono | `assets/icon.svg` | Favicon, avatares |
-| Logo Footer | `assets/logo-footer.svg` | Optimizado footer |
-| Logo Dorso | `assets/logo-dorso-maneas.svg` | Variante especial |
-| Snippets CSS | `assets/css-snippets.css` | Implementaciones completas listas para copiar |
-| Template Angular | `assets/component-template.ts` | Componente standalone con signals y OnPush |
-| Schema de tema | `assets/tailwind-theme-schema.json` | Estructura de tokens para Tailwind |
+| Archivo | Cuándo leerlo |
+|---------|---------------|
+| `references/theming.md` | Tema claro (las inversiones que importan) + bootstrap del toggle (pre-paint, reveal con View Transitions) + fuentes variables |
+| `references/tables.md` | Tablas, listas, dashboards, paginación server-side, catálogos agrupados, filtrado por deep-link, mapeo valor→variante de pill |
+| `references/forms-modals.md` | Tooltips `data-tip`, `yd-select`/`yd-date` dentro de modales (trampas modal-popovers / flip-clamp / propagación), modales de confirmación/borrado |
+| `references/performance.md` | Zoneless/OnPush/signals, rutas lazy, skeletons, a11y, costo de `backdrop-filter` |
 
-### Contenido de `css-snippets.css`
+## Theme bundle (dentro de este skill)
 
-- Gradientes de marca (fondo y texto) y grid pattern técnico
-- Utilidades de color con CSS variables
-- Componentes comunes: card, sidebar, input, botón primario
-- Alertas semánticas (info/success/warning/error)
-- Scrollbar personalizado (Webkit + Firefox)
-- Animaciones: fade-in, pulse sutil
-- Utilidades de layout: container, grid responsive, flex, truncate
-- **Glass panel** (tema oscuro)
-- **Icon button** (botón circular solo-icono)
-- **Spinner / loading inline**
-- **Pill badges semánticos**
-- **Sistema de toasts completo** (stack, animaciones enter/exit/progress, variantes semánticas, responsive, `prefers-reduced-motion`)
+Copiable a cualquier proyecto. Tokens en `palette.css`; los componentes consumen `var(--*)` únicamente.
 
-### Cómo aplicar el skill a un proyecto
+| Archivo | Contenido |
+|---------|-----------|
+| `assets/theme/index.css` | Entry point (`@import` de todo) + layout helpers (`.stack`, `.row`, `.grid-2`, `.tnum`…) |
+| `assets/theme/palette.css` | **Design tokens** — única fuente de verdad de color/spacing/radius/sombras/gradientes + bloque del tema claro |
+| `assets/theme/base.css` | Reset, fondo ambiente (3 radial glows + alfas de glow del tema claro), tipografía, scrollbar, focus ring, `.glass`, `.grad-text`, reveal de tema |
+| `assets/theme/buttons.css` | `.btn` pill variants con lift + glow |
+| `assets/theme/forms.css` | `.field`, `.input/.select/.textarea`, search, segmented toggle, switch, tabs, `.filter-inline`, date nativo tematizado |
+| `assets/theme/table.css` | `.data-table` con header sticky blureado, row-actions on hover, paginación + primitivas reutilizables (`.col-hide-*`, `.cell-trunc`, `.cell-stack`, `.cell-sub`, `.col-fit`, `.id-trunc`) |
+| `assets/theme/modal.css` | `.overlay` + `.modal` glass (flex column con head/foot fijos), `.modal-popovers`, `.form-grid`, action popup |
+| `assets/theme/components.css` | Pills, tags, KPI cards (`.kpi`/`.kpi-compact`), page header, alerts, progress, spinner, skeleton, empty state (`.mini-empty`), toasts, `.del-name`, tooltips `data-tip`, `.yd-select`/`.yd-date` + calendario + buscador |
+| `assets/theme/shell.css` | App shell (sidebar colapsable + topbar + content), login split-screen, responsive |
 
-1. Verificar Angular en el último major estable (`ng version`) — actualizar si no
-2. Detectar el enfoque de estilos (CSS puro con tokens vs Tailwind 4)
-3. Proyecto nuevo: copiar los tokens del tema elegido (claro u oscuro glass) del `SKILL.md`
-4. Proyecto existente: correr el **Visual Correction Checklist** del `SKILL.md`, corrigiendo primero a nivel tokens y después por componente
+## Componentes de referencia (Angular standalone)
+
+| Archivo | Qué demuestra |
+|---------|---------------|
+| `assets/angular/yd-select.component.ts` | Dropdown custom tematizado (reemplaza `<select>`), con buscador automático (>7 opciones) y prefijo de label para filtros |
+| `assets/angular/yd-date.component.ts` | Date picker custom con calendario `.yd-cal*` |
+| `assets/angular/yd-anchored.directive.ts` | Posiciona el popover docked: flip + clamp contra el viewport |
+| `assets/angular/popover.service.ts` | Coordina popovers (sólo uno abierto a la vez) — dependencia de `yd-select`/`yd-date` |
+| `assets/angular/theme.service.ts` | Toggle dark⇄light con reveal circular (View Transitions API), persistencia y degradación |
+
+## Template de componente (React)
+
+`assets/component-template.tsx` — ejemplo que consume las **clases y tokens** del
+sistema (`.card`, `.btn`, `var(--*)`), no utilidades Tailwind ad-hoc.
+
+## Assets visuales
+
+En `assets/` de este skill: `logo.svg`, `logo-sec-slogan.svg`, `logo-negativo.svg`, `logo-negative.svg`, `logo-footer.svg`, `logo-dorso-maneas.svg`, `icon.svg`.

@@ -165,7 +165,7 @@ func TestPrepareContextCreatesDirectory(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext() returned error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext() returned error: %v", err)
 	}
@@ -218,6 +218,110 @@ func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 	}
 	if !strings.Contains(content, feat.Description) {
 		t.Fatalf("feature.md should contain feature description")
+	}
+}
+
+// TestPrepareContextInjectsRoleSkills verifies that the role's configured
+// skills (RoleDefault.Skills) are injected into feature.md so the worker
+// actually sees them. The feature's Role must drive which skills appear.
+func TestPrepareContextInjectsRoleSkills(t *testing.T) {
+	store, _ := newTestStore(t)
+	now := time.Now().Round(time.Second)
+	mission := &Mission{
+		ID:        "skill-mission",
+		Name:      "Skill Mission",
+		Status:    MissionPending,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Features: []Feature{
+			{
+				ID:        "feat-qa",
+				Description: "QA feature",
+				Status:    FeaturePending,
+				Role:      "qa", // RoleQA → Skills: ["qa-worker"] per DefaultRoleDefaults
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+		},
+	}
+	store.CreateMission(mission)
+
+	wm := NewWorkerManager(store, DefaultWorkerConfig())
+	feat := &mission.Features[0]
+
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
+	if err != nil {
+		t.Fatalf("PrepareContext: %v", err)
+	}
+	defer os.RemoveAll(ctxDir)
+
+	data, err := os.ReadFile(filepath.Join(ctxDir, "feature.md"))
+	if err != nil {
+		t.Fatalf("read feature.md: %v", err)
+	}
+	content := string(data)
+
+	// The QA role's seeded skills include "qa-worker". feature.md must surface
+	// the skill content (its work procedure) so the worker knows how to work.
+	if !strings.Contains(content, "qa-worker") && !strings.Contains(strings.ToLower(content), "qa") {
+		t.Errorf("feature.md should inject the QA role's skill content; got:\n%s", content)
+	}
+	// The injected skill should bring its work procedure, not just the name.
+	if !strings.Contains(content, "Skill") && !strings.Contains(content, "skill") {
+		t.Errorf("feature.md should have a Skills section; got:\n%s", content)
+	}
+}
+
+// TestPrepareContextInjectsSkillsFromMissionDir verifies that a per-mission
+// SKILL.md takes precedence over the default/global skill when present.
+func TestPrepareContextInjectsSkillsFromMissionDir(t *testing.T) {
+	store, _ := newTestStore(t)
+	now := time.Now().Round(time.Second)
+	mission := &Mission{
+		ID:        "msn-skilldir",
+		Name:      "Mission Skill Dir",
+		Status:    MissionPending,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Features: []Feature{
+			{
+				ID:          "feat-1",
+				Description: "Feature 1",
+				Status:      FeaturePending,
+				SkillName:   "custom-worker",
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			},
+		},
+	}
+	store.CreateMission(mission)
+
+	// Write a per-mission SKILL.md for custom-worker.
+	skillDir := filepath.Join(store.MissionDir(mission.ID), "skills", "custom-worker")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatalf("mkdir skill dir: %v", err)
+	}
+	customSkill := "---\nname: custom-worker\ndescription: A custom mission skill\n---\n\n# Custom Worker\n\n## Work Procedure\n\nDo the custom thing.\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(customSkill), 0644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	wm := NewWorkerManager(store, DefaultWorkerConfig())
+	feat := &mission.Features[0]
+
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
+	if err != nil {
+		t.Fatalf("PrepareContext: %v", err)
+	}
+	defer os.RemoveAll(ctxDir)
+
+	data, err := os.ReadFile(filepath.Join(ctxDir, "feature.md"))
+	if err != nil {
+		t.Fatalf("read feature.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "custom-worker") {
+		t.Errorf("feature.md should reference the custom-worker skill from missionDir; got:\n%s", content)
 	}
 }
 
@@ -347,7 +451,7 @@ func TestSpawnWorkerWithValidHandoff(t *testing.T) {
 	feat := &mission.Features[0]
 
 	// Create context dir
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -358,7 +462,7 @@ func TestSpawnWorkerWithValidHandoff(t *testing.T) {
 	fakeDir := fakeOpencodeValidHandoff(t, h)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -390,7 +494,7 @@ func TestWorkerStdoutStreamedAndPersisted(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -405,7 +509,7 @@ func TestWorkerStdoutStreamedAndPersisted(t *testing.T) {
 	)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -450,7 +554,7 @@ func TestWorkerNonZeroExit(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -460,7 +564,7 @@ func TestWorkerNonZeroExit(t *testing.T) {
 	fakeDir := fakeOpencodeExitCode(t, 1)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -505,7 +609,7 @@ func TestWorkerTimeout(t *testing.T) {
 	wm := NewWorkerManager(store, config)
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -515,7 +619,7 @@ func TestWorkerTimeout(t *testing.T) {
 	fakeDir := fakeOpencodeSleepForever(t)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -549,7 +653,7 @@ func TestWorkerCancellation(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -559,7 +663,7 @@ func TestWorkerCancellation(t *testing.T) {
 	fakeDir := fakeOpencodeSleepForever(t)
 	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -602,7 +706,7 @@ func TestContextDirCleanedAfterSuccess(t *testing.T) {
 	// actually call opencode but records whether cleanup happened.
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -620,7 +724,7 @@ func TestContextDirCleanedAfterSuccess(t *testing.T) {
 	// Start the feature so ExecuteFeature can work
 	StartFeature(wm.store, mission, feat.ID)
 
-	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir)
+	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
 		t.Fatalf("SpawnWorker: %v", err)
 	}
@@ -650,7 +754,7 @@ func TestContextDirCleanedOnError(t *testing.T) {
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
 
-	ctxDir, err := wm.PrepareContext(mission, feat)
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("PrepareContext: %v", err)
 	}
@@ -866,13 +970,13 @@ func TestContextDirUniquePerWorker(t *testing.T) {
 	feat1 := &mission.Features[0]
 	feat2 := &mission.Features[1]
 
-	ctxDir1, err := wm.PrepareContext(mission, feat1)
+	ctxDir1, err := wm.PrepareContext(mission, feat1, "")
 	if err != nil {
 		t.Fatalf("PrepareContext feat1: %v", err)
 	}
 	defer os.RemoveAll(ctxDir1)
 
-	ctxDir2, err := wm.PrepareContext(mission, feat2)
+	ctxDir2, err := wm.PrepareContext(mission, feat2, "")
 	if err != nil {
 		t.Fatalf("PrepareContext feat2: %v", err)
 	}
@@ -941,13 +1045,13 @@ func TestWorkersIsolatedContexts(t *testing.T) {
 	feat1 := &mission.Features[0]
 	feat2 := &mission.Features[1]
 
-	ctxDir1, err := wm.PrepareContext(mission, feat1)
+	ctxDir1, err := wm.PrepareContext(mission, feat1, "")
 	if err != nil {
 		t.Fatalf("PrepareContext feat1: %v", err)
 	}
 	defer os.RemoveAll(ctxDir1)
 
-	ctxDir2, err := wm.PrepareContext(mission, feat2)
+	ctxDir2, err := wm.PrepareContext(mission, feat2, "")
 	if err != nil {
 		t.Fatalf("PrepareContext feat2: %v", err)
 	}

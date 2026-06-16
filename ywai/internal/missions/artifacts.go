@@ -37,42 +37,42 @@ func (ac *ArtifactCreator) CreateAllArtifacts(mission *Mission) error {
 		ac.missionDir + "/library",
 		ac.missionDir + "/workers",
 	}
-	
+
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("%w: create directory %s: %v", ErrArtifactCreation, dir, err)
 		}
 	}
-	
+
 	// Create each artifact
 	if err := ac.CreateArchitectureMD(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateValidationContract(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateValidationState(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateServicesYAML(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateAGENTSMD(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateMissionMD(mission); err != nil {
 		return err
 	}
-	
+
 	if err := ac.CreateDefaultSkills(mission); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -94,7 +94,7 @@ This document describes the architecture for the mission: ` + mission.Name + `
 	for _, ms := range mission.Milestones {
 		content += fmt.Sprintf("### %s\n%s\n\n", ms.Name, ms.Description)
 	}
-	
+
 	content += `## Components
 
 (TODO: Add component descriptions during planning phase)
@@ -107,12 +107,12 @@ This document describes the architecture for the mission: ` + mission.Name + `
 
 (TODO: Add technology details during planning phase)
 `
-	
+
 	path := filepath.Join(ac.missionDir, "architecture.md")
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("%w: write architecture.md: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -144,11 +144,11 @@ All features integrate correctly with each other.
 Tool: engine
 Evidence: integration tests, feature dependencies
 `
-	
+
 	if err := os.WriteFile(ac.missionDir+"/validation-contract.md", []byte(content), 0644); err != nil {
 		return fmt.Errorf("%w: write validation-contract.md: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -161,12 +161,12 @@ func (ac *ArtifactCreator) CreateValidationState(mission *Mission) error {
 		// If contract doesn't exist yet, create empty state
 		contract = &ValidationContract{}
 	}
-	
+
 	state := ValidationState{
 		Assertions: make([]ValidationAssertion, 0, len(contract.Assertions)),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
-	
+
 	// Initialize all assertions as pending
 	for _, assertion := range contract.Assertions {
 		state.Assertions = append(state.Assertions, ValidationAssertion{
@@ -174,11 +174,11 @@ func (ac *ArtifactCreator) CreateValidationState(mission *Mission) error {
 			Status: ValidationPending,
 		})
 	}
-	
+
 	if err := ac.store.SaveValidationState(mission.ID, &state); err != nil {
 		return fmt.Errorf("%w: save validation-state.json: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -204,11 +204,11 @@ services:
   #   port: 3100
   #   depends_on: []
 `
-	
+
 	if err := os.WriteFile(ac.missionDir+"/services.yaml", []byte(content), 0644); err != nil {
 		return fmt.Errorf("%w: write services.yaml: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -257,11 +257,11 @@ Instructions for validators from the orchestrator/user. Validators must follow t
 
 (TODO: Add specific testing guidance during planning phase)
 `
-	
+
 	if err := os.WriteFile(ac.missionDir+"/AGENTS.md", []byte(content), 0644); err != nil {
 		return fmt.Errorf("%w: write AGENTS.md: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -285,7 +285,7 @@ func (ac *ArtifactCreator) CreateMissionMD(mission *Mission) error {
 	for _, ms := range mission.Milestones {
 		content += fmt.Sprintf("#### %s\n%s\n\n", ms.Name, ms.Description)
 	}
-	
+
 	content += `## Environment Setup
 
 (TODO: Add environment setup details during planning phase)
@@ -310,11 +310,11 @@ func (ac *ArtifactCreator) CreateMissionMD(mission *Mission) error {
 
 (TODO: Add non-functional requirements during planning phase)
 `
-	
+
 	if err := os.WriteFile(ac.missionDir+"/mission.md", []byte(content), 0644); err != nil {
 		return fmt.Errorf("%w: write mission.md: %v", ErrArtifactCreation, err)
 	}
-	
+
 	return nil
 }
 
@@ -327,21 +327,21 @@ func (ac *ArtifactCreator) CreateDefaultSkills(mission *Mission) error {
 			skillTypes[feat.SkillName] = true
 		}
 	}
-	
+
 	// Create skill directory and SKILL.md for each type
 	for skillType := range skillTypes {
 		skillDir := ac.missionDir + "/skills/" + skillType
 		if err := os.MkdirAll(skillDir, 0755); err != nil {
 			return fmt.Errorf("%w: create skill directory %s: %v", ErrArtifactCreation, skillDir, err)
 		}
-		
+
 		// Get default skill template
 		skill, err := GetDefaultSkill(skillType)
 		if err != nil {
 			// Use generic skill if default not found
 			skill, _ = GetDefaultSkill("implementation")
 		}
-		
+
 		// Write SKILL.md
 		skillContent := fmt.Sprintf(`---
 name: %s
@@ -355,21 +355,21 @@ NOTE: Startup and cleanup are handled by mission-worker-base. This skill defines
 ## Required Skills and Tools
 
 `, skill.Name, skill.Description, skill.Name)
-		
+
 		if len(skill.RequiredSkills) > 0 {
 			skillContent += "**Skills:**\n"
 			for _, s := range skill.RequiredSkills {
 				skillContent += fmt.Sprintf("- %s\n", s)
 			}
 		}
-		
+
 		if len(skill.RequiredTools) > 0 {
 			skillContent += "\n**Tools:**\n"
 			for _, t := range skill.RequiredTools {
 				skillContent += fmt.Sprintf("- %s\n", t)
 			}
 		}
-		
+
 		skillContent += fmt.Sprintf(`
 ## Work Procedure
 
@@ -383,12 +383,12 @@ NOTE: Startup and cleanup are handled by mission-worker-base. This skill defines
 
 %s
 `, skill.WorkProcedure, skill.ExampleHandoff, skill.ReturnConditions)
-		
+
 		skillPath := skillDir + "/SKILL.md"
 		if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
 			return fmt.Errorf("%w: write SKILL.md for %s: %v", ErrArtifactCreation, skillType, err)
 		}
 	}
-	
+
 	return nil
 }

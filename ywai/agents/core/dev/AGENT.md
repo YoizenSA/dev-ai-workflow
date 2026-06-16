@@ -95,9 +95,7 @@ When you finish, end your response with this standard handoff so the orchestrato
 If the user asks about architecture, the primary agent should invoke `@architect`.
 After implementation, the primary agent may invoke `@reviewer` for code review.
 
-## Kanban Reporting
-
-When you complete your task and provide your handoff, include a **Kanban status update** in your handoff:
+When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
 
 ```
 ## Kanban Update
@@ -105,5 +103,3 @@ When you complete your task and provide your handoff, include a **Kanban status 
 - **Column**: review (ready for reviewer)
 - **Summary**: Implemented JWT middleware with tests passing
 ```
-
-The orchestrator will use this to update your card on the Kanban board.

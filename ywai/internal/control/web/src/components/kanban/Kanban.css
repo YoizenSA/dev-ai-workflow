@@ -1,0 +1,786 @@
+/* Kanban.css — board layout + delegation cards using yz-ui tokens */
+
+/* ─── Kanban Page ─────────────────────────────────────────────────────── */
+
+.kanban,
+.kanban-page {
+	padding: 0;
+	max-width: 1600px;
+	margin: 0 auto;
+	width: 100%;
+	display: flex;
+	flex-direction: row;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* ─── Board Grid ──────────────────────────────────────────────────────── */
+
+.board {
+	display: grid;
+	/* minmax(0, 1fr) keeps every column the SAME width regardless of card
+	   content — without it a wide expanded card forces its column wider and
+	   shrinks the others (the layout-shift-on-click bug). Columns keep the
+	   default stretch so all five stay equal height (the prolijo look). */
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--space-4);
+	min-height: 400px;
+}
+
+/* ─── Column ──────────────────────────────────────────────────────────── */
+
+.kanban-column {
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	/* min-width: 0 lets the column shrink to its grid track instead of growing
+	   to fit a wide child; overflow:hidden + the card constraints below stop an
+	   expanded card from bleeding into the next column. */
+	min-width: 0;
+	overflow: hidden;
+	transition:
+		background 150ms ease,
+		border-color 150ms ease,
+		box-shadow 150ms ease;
+}
+
+.kanban-column.drag-over {
+	background: rgba(26, 102, 255, 0.08);
+	border: 2px dashed rgba(96, 165, 250, 0.5);
+	padding: calc(var(--space-4) - 1px);
+	box-shadow: 0 0 20px rgba(26, 102, 255, 0.15);
+}
+
+.kanban-column-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding-bottom: var(--space-3);
+	border-bottom: 2px solid var(--panel-border);
+}
+
+.kanban-column-title {
+	margin: 0;
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.kanban-column-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 22px;
+	height: 22px;
+	padding: 0 6px;
+	background: var(--surface-hover);
+	border-radius: 999px;
+	font-size: 0.72rem;
+	font-weight: 700;
+	color: var(--text-soft);
+	transition: background 0.15s, color 0.15s;
+}
+
+/* Column-specific accent colors for count badges */
+.kanban-column[data-column="queued"] .kanban-column-count {
+	background: var(--info-soft);
+	color: var(--tint-info);
+}
+
+.kanban-column[data-column="in_progress"] .kanban-column-count {
+	background: var(--warning-soft);
+	color: var(--warning);
+}
+
+.kanban-column[data-column="review"] .kanban-column-count {
+	background: rgba(var(--yz-primary-2-rgb), 0.15);
+	color: var(--tint-purple);
+}
+
+.kanban-column[data-column="done"] .kanban-column-count {
+	background: var(--success-soft);
+	color: var(--tint-success);
+}
+
+.kanban-column-cards {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+
+.kanban-column-empty {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-6) 0;
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	font-style: italic;
+}
+
+/* ─── Delegation Card (glass) ─────────────────────────────────────────── */
+
+.delegation-card {
+	background: linear-gradient(
+		155deg,
+		rgba(38, 44, 60, 0.82),
+		rgba(20, 24, 36, 0.88)
+	);
+	backdrop-filter: blur(18px);
+	-webkit-backdrop-filter: blur(18px);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	padding: var(--space-3);
+	cursor: grab;
+	transition:
+		box-shadow 200ms ease,
+		transform 200ms ease,
+		border-color 200ms ease;
+	user-select: none;
+	/* Never exceed the column width — the card and its content stay inside
+	   their track even when expanded. */
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+.delegation-card:hover {
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+	border-color: var(--panel-border-strong);
+	transform: translateY(-2px);
+}
+
+.delegation-card.dragging {
+	opacity: 0.5;
+	transform: rotate(2deg) scale(1.02);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.delegation-card.expanded {
+	border-color: var(--yz-accent);
+	box-shadow: 0 0 0 1px var(--yz-accent), 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* Card header: clickable region that toggles expansion. Pill + chevron sit on
+   their own row above the title so the title gets the full card width and
+   wraps by word, not by character. */
+.delegation-header {
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.delegation-header-top {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.delegation-agent-pill {
+	font-size: 0.68rem;
+	padding: 2px 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	flex-shrink: 0;
+}
+
+.delegation-chevron {
+	margin-left: auto;
+	color: var(--text-faint);
+	transition: transform 0.2s ease;
+	flex-shrink: 0;
+}
+
+.delegation-chevron.open {
+	transform: rotate(180deg);
+}
+
+/* Task summary — uses the full card width, wraps by word */
+.delegation-summary {
+	margin: 0;
+	font-size: 0.875rem;
+	line-height: 1.45;
+	color: var(--text);
+	font-weight: 500;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+	overflow: hidden;
+	word-break: normal;
+	overflow-wrap: break-word;
+}
+
+.delegation-card.expanded .delegation-summary {
+	-webkit-line-clamp: unset;
+	line-clamp: unset;
+	overflow: visible;
+}
+
+/* Preview line when collapsed */
+.delegation-handoff {
+	margin-top: var(--space-2);
+	padding-top: var(--space-2);
+	border-top: 1px solid var(--panel-border);
+}
+
+.delegation-handoff-text {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+/* Blocker badge */
+.delegation-blocker {
+	margin-top: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	background: var(--danger-soft);
+	border-radius: var(--radius-md);
+	border-left: 3px solid var(--danger);
+}
+
+.delegation-blocker-text {
+	font-size: 0.75rem;
+	color: var(--danger);
+}
+
+/* ─── Expanded details ────────────────────────────────────────────────── */
+
+.delegation-details {
+	margin-top: var(--space-3);
+	padding-top: var(--space-3);
+	border-top: 1px solid var(--panel-border);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.delegation-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.72rem;
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+}
+
+.delegation-meta-id {
+	color: var(--text-soft);
+}
+
+.delegation-meta-sep {
+	color: var(--text-faint);
+}
+
+.delegation-meta-status {
+	text-transform: capitalize;
+}
+
+.activity-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.activity-title {
+	margin: 0;
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--text-muted);
+}
+
+.activity-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.activity-empty {
+	font-size: 0.78rem;
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.activity-item {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	background: var(--surface-soft);
+	border-radius: var(--radius-md);
+	font-size: 0.8rem;
+	line-height: 1.45;
+}
+
+.activity-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.activity-text {
+	color: var(--text-soft);
+	overflow-wrap: anywhere;
+}
+
+.activity-type-pill,
+.activity-resolution-pill {
+	font-size: 0.62rem;
+	padding: 1px 6px;
+	align-self: flex-start;
+}
+
+.activity-actions {
+	display: flex;
+	gap: var(--space-1);
+	margin-top: var(--space-1);
+}
+
+.delegation-move-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.activity-type-tag {
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	padding: 2px 8px;
+	border-radius: var(--radius-sm);
+	flex-shrink: 0;
+}
+
+.activity-tool_use .activity-type-tag {
+	background: var(--info-soft);
+	color: var(--tint-info);
+}
+
+.activity-text .activity-type-tag {
+	background: var(--surface-hover);
+	color: var(--text-muted);
+}
+
+.activity-error .activity-type-tag {
+	background: var(--danger-soft);
+	color: var(--tint-danger);
+}
+
+.activity-result .activity-type-tag {
+	background: var(--success-soft);
+	color: var(--tint-success);
+}
+
+.activity-question .activity-type-tag {
+	background: var(--warning-soft);
+	color: var(--warning);
+}
+
+.activity-blocked .activity-type-tag {
+	background: var(--danger-soft);
+	color: var(--tint-danger);
+}
+
+.activity-progress .activity-type-tag {
+	background: var(--info-soft);
+	color: var(--tint-info);
+}
+
+/* ─── Quick move buttons ──────────────────────────────────────────────── */
+
+.quick-move-btn {
+	font-size: 0.7rem;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+	white-space: nowrap;
+	line-height: 1.4;
+}
+
+.quick-move-btn:hover {
+	background: var(--yz-accent);
+	color: var(--text);
+	border-color: var(--yz-accent);
+	transform: translateY(-1px);
+}
+
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+
+
+
+/* ─── Session Sidebar ────────────────────────────────────── */
+
+.sessions-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--panel-border);
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.sessions-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.sessions-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sessions-sidebar-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-faint);
+  background: var(--surface);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.sessions-sidebar-new {
+  padding: var(--space-1) var(--space-2);
+  min-width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sessions-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+/* ─── Project Group ──────────────────────────────────────── */
+
+.project-group {
+  margin-bottom: var(--space-1);
+}
+
+.project-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s, color 0.12s;
+}
+
+.project-group-header:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.project-group-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  transform: rotate(0deg);
+}
+
+.project-group-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.project-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-group-count {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+/* ─── Session Item ───────────────────────────────────────── */
+
+.project-group-items {
+  padding-left: var(--space-2);
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-2);
+  margin-bottom: 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.session-item:hover {
+  background: var(--surface-hover);
+}
+
+.session-item.active {
+  background: var(--surface);
+  border-left-color: var(--yz-accent);
+}
+
+.session-item.archived {
+  opacity: 0.6;
+}
+
+.session-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.session-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.session-item-dot.dot-active {
+	background: var(--success);
+	box-shadow: 0 0 6px rgba(var(--success-rgb), 0.4);
+}
+
+.session-item-dot.dot-closed {
+  background: var(--text-faint);
+}
+
+.session-item-goal {
+  font-size: 0.8125rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.session-item.active .session-item-goal {
+  font-weight: 600;
+}
+
+/* ─── Session Actions ────────────────────────────────────── */
+
+.session-item-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.session-item:hover .session-item-actions {
+  opacity: 1;
+}
+
+.session-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s, color 0.12s;
+}
+
+.session-action-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.session-action-btn.danger:hover {
+	color: var(--danger);
+	background: var(--danger-soft);
+}
+
+/* ─── Archived Section ───────────────────────────────────── */
+
+.archived-section {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--panel-border);
+}
+
+.archived-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.archived-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+/* ─── Empty State ────────────────────────────────────────── */
+
+.sessions-sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-3);
+  text-align: center;
+}
+
+.sessions-sidebar-empty-text {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.sessions-sidebar-empty-hint {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+/* ─── Kanban Main Area ───────────────────────────────────── */
+
+.kanban-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-6) var(--space-4);
+}
+
+.kanban-main .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-title h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-title-project {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+/* ─── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .sessions-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+	.board {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 768px) {
+	.board {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 560px) {
+	.board {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* ─── Desktop: stable board height (no shift when switching sessions) ──── */
+
+@media (min-width: 1101px) {
+	.board {
+		flex: 1;
+		min-height: 0;
+		grid-auto-rows: minmax(0, 1fr);
+	}
+
+	.kanban-column {
+		min-height: 0;
+	}
+
+	.kanban-column-cards {
+		overflow-y: auto;
+		min-height: 0;
+	}
+}

@@ -79,13 +79,14 @@ type UserTestingResult struct {
 
 // ValidationReport aggregates results from both validators.
 type ValidationReport struct {
-	Milestone      string             `json:"milestone"`
-	Scrutiny       ScrutinyResult     `json:"scrutiny"`
-	UserTesting    UserTestingResult  `json:"userTesting"`
-	Passed         bool               `json:"passed"`
-	BlockingIssues int                `json:"blockingIssues"`
-	RunAt          time.Time          `json:"runAt"`
-	CompletedAt    *time.Time         `json:"completedAt,omitempty"`
+	Milestone      string                `json:"milestone"`
+	Scrutiny       ScrutinyResult        `json:"scrutiny"`
+	UserTesting    UserTestingResult     `json:"userTesting"`
+	Passed         bool                  `json:"passed"`
+	BlockingIssues int                   `json:"blockingIssues"`
+	VerifyEvidence []FeatureVerifyStatus `json:"verifyEvidence,omitempty"`
+	RunAt          time.Time             `json:"runAt"`
+	CompletedAt    *time.Time            `json:"completedAt,omitempty"`
 }
 
 // ─── Validation Pipeline ───────────────────────────────────────────────────
@@ -178,6 +179,32 @@ func (vp *ValidationPipeline) RunValidation(ctx context.Context, mission *Missio
 		}
 	}
 
+	// ─── Verify Evidence ──────────────────────────────────────────────────
+	var verifyEvidence []FeatureVerifyStatus
+	for _, f := range features {
+		if n := len(f.VerifyRuns); n > 0 && !f.VerifyRuns[n-1].Passed {
+			last := f.VerifyRuns[n-1]
+			failedCmd := ""
+			if len(last.Commands) > 0 {
+				failedCmd = last.Commands[0].Command
+			}
+			scrutinyResult.Issues = append(scrutinyResult.Issues, Issue{
+				Severity:    "blocking",
+				Description: fmt.Sprintf("verify failed for %s: %s", f.ID, failedCmd),
+			})
+			verifyEvidence = append(verifyEvidence, FeatureVerifyStatus{
+				FeatureID:     f.ID,
+				Passed:        false,
+				FailedCommand: failedCmd,
+			})
+		} else {
+			verifyEvidence = append(verifyEvidence, FeatureVerifyStatus{
+				FeatureID: f.ID,
+				Passed:    true,
+			})
+		}
+	}
+
 	// ─── Compile Report ─────────────────────────────────────────────────
 	blockingCount := 0
 	for _, issue := range scrutinyResult.Issues {
@@ -195,6 +222,7 @@ func (vp *ValidationPipeline) RunValidation(ctx context.Context, mission *Missio
 		UserTesting:    *userTestingResult,
 		Passed:         passed,
 		BlockingIssues: blockingCount,
+		VerifyEvidence: verifyEvidence,
 		RunAt:          now,
 		CompletedAt:    &now,
 	}
@@ -205,6 +233,7 @@ func (vp *ValidationPipeline) RunValidation(ctx context.Context, mission *Missio
 	}
 
 	// Create fix features for blocking issues (VAL-CROSS-VAL-06)
+	// Note: caller must persist the mission after this returns
 	if !passed {
 		vp.CreateFixFeatures(mission, milestoneName, scrutinyResult.Issues)
 	}
@@ -449,39 +478,33 @@ func (vp *ValidationPipeline) testVALENGVALAssertion(assertionID string, feature
 	a := ValidationAssertion{
 		ID:      assertionID,
 		Surface: "engine",
-		Tool:    "go test",
+		Tool:    "manual",
 		RunAt:   now,
 	}
 
+	// These assertions require external verification (reviewer agent, timing, etc.).
+	// Marked pending until actual verification infrastructure runs them.
 	switch assertionID {
 	case "VAL-ENG-VAL-001":
-		a.Description = "Scrutiny validator spawns reviewer agent"
-		a.Status = ValidationPassed
+		a.Description = "Scrutiny validator spawns reviewer agent (requires manual verification)"
 	case "VAL-ENG-VAL-002":
-		a.Description = "Review output includes severity levels"
-		a.Status = ValidationPassed
+		a.Description = "Review output includes severity levels (requires manual verification)"
 	case "VAL-ENG-VAL-003":
-		a.Description = "Behavioral assertions from contract are tested"
-		a.Status = ValidationPassed
+		a.Description = "Behavioral assertions from contract are tested (requires manual verification)"
 	case "VAL-ENG-VAL-004":
-		a.Description = "Results written to validation-state.json"
-		a.Status = ValidationPassed
+		a.Description = "Results written to validation-state.json (requires manual verification)"
 	case "VAL-ENG-VAL-005":
-		a.Description = "Blocking issues prevent milestone completion"
-		a.Status = ValidationPassed
+		a.Description = "Blocking issues prevent milestone completion (requires manual verification)"
 	case "VAL-ENG-VAL-006":
-		a.Description = "Empty milestone passes validation"
-		a.Status = ValidationPassed
+		a.Description = "Empty milestone passes validation (requires manual verification)"
 	case "VAL-ENG-VAL-007":
-		a.Description = "Validator timeout kills process"
-		a.Status = ValidationPassed
+		a.Description = "Validator timeout kills process (requires manual verification)"
 	case "VAL-ENG-VAL-008":
-		a.Description = "Validation re-run on fix features works"
-		a.Status = ValidationPassed
+		a.Description = "Validation re-run on fix features works (requires manual verification)"
 	default:
 		a.Description = fmt.Sprintf("Engine assertion: %s", assertionID)
-		a.Status = ValidationPending
 	}
+	a.Status = ValidationPending
 	return a
 }
 
@@ -489,33 +512,29 @@ func (vp *ValidationPipeline) testCrossAssertion(assertionID string, feature Fea
 	a := ValidationAssertion{
 		ID:      assertionID,
 		Surface: "engine",
-		Tool:    "go test",
+		Tool:    "manual",
 		RunAt:   now,
 	}
 
+	// These assertions require cross-cutting integration testing.
+	// Marked pending until actual verification infrastructure runs them.
 	switch assertionID {
 	case "VAL-CROSS-VAL-01":
-		a.Description = "Validation auto-triggers on milestone completion"
-		a.Status = ValidationPassed
+		a.Description = "Validation auto-triggers on milestone completion (requires manual verification)"
 	case "VAL-CROSS-VAL-02":
-		a.Description = "Scrutiny produces review output"
-		a.Status = ValidationPassed
+		a.Description = "Scrutiny produces review output (requires manual verification)"
 	case "VAL-CROSS-VAL-03":
-		a.Description = "User testing executes assertions"
-		a.Status = ValidationPassed
+		a.Description = "User testing executes assertions (requires manual verification)"
 	case "VAL-CROSS-VAL-06":
-		a.Description = "Failed validation creates fix features"
-		a.Status = ValidationPassed
+		a.Description = "Failed validation creates fix features (requires manual verification)"
 	case "VAL-CROSS-VAL-07":
-		a.Description = "Validation survives crash"
-		a.Status = ValidationPassed
+		a.Description = "Validation survives crash (requires manual verification)"
 	case "VAL-CROSS-CONSIST-05":
-		a.Description = "Validation state append-only"
-		a.Status = ValidationPassed
+		a.Description = "Validation state append-only (requires manual verification)"
 	default:
 		a.Description = fmt.Sprintf("Cross assertion: %s", assertionID)
-		a.Status = ValidationPending
 	}
+	a.Status = ValidationPending
 	return a
 }
 
@@ -582,14 +601,14 @@ func (vp *ValidationPipeline) persistResults(missionID, milestoneName string, re
 func CheckValidationContractCoverage(store *MissionsStore, mission *Mission) error {
 	missionDir := store.MissionDir(mission.ID)
 	contractParser := NewContractParser(missionDir)
-	
+
 	contract, err := contractParser.LoadContract()
 	if err != nil {
 		// If contract doesn't exist yet, skip coverage check
 		// This is expected during initial planning
 		return nil
 	}
-	
+
 	return contractParser.CheckCoverage(contract, mission.Features)
 }
 

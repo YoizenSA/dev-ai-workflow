@@ -1,0 +1,37 @@
+/* Layout.css — supplemental styles for React layout.
+   Core shell styles (app-shell, sidebar, nav, content, mobile-fab, scrim)
+   are in styles/theme/shell.css. This file only adds React-specific bits. */
+
+/* Brand icon inside brand-mark */
+.brand-mark span {
+	line-height: 1;
+}
+
+/* Grad-text helper for brand name (bright gradient on dark) */
+.grad-text {
+	background: var(--grad-text);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+	filter: drop-shadow(0 0 12px rgba(110, 163, 255, 0.25));
+}
+
+/* ── Sessions block embedded inside the main sidebar (Kanban only) ── */
+.sidebar-sessions {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	margin-top: var(--space-3);
+	border-top: 1px solid var(--panel-border);
+}
+
+/* Override the standalone Kanban sidebar styles so the embedded version
+   stretches to fill the parent sidebar instead of forcing 260px. */
+.sidebar-sessions .sessions-sidebar {
+	width: 100%;
+	flex: 1;
+	min-height: 0;
+	border-right: none;
+	background: transparent;
+}

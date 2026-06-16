@@ -22,48 +22,67 @@ const DefaultBaseDir = "~/.local/share/ywai/missions"
 type BroadcastFunc func(eventType string, payload interface{})
 
 // EngineConfig configures the mission engine.
+// RepoResolver resolves a project name to a filesystem path.
+type RepoResolver interface {
+	Resolve(projectName string) (repoPath string, err error)
+}
+
+// ProjectRepoResolver resolves using a ProjectStore.
+type ProjectRepoResolver struct {
+	store *ProjectStore
+}
+
+// NewProjectRepoResolver creates a ProjectRepoResolver.
+func NewProjectRepoResolver(store *ProjectStore) *ProjectRepoResolver {
+	return &ProjectRepoResolver{store: store}
+}
+
+// Resolve looks up the project by name and returns its path.
+func (r *ProjectRepoResolver) Resolve(projectName string) (string, error) {
+	proj, err := r.store.Get(projectName)
+	if err != nil {
+		return "", fmt.Errorf("resolve project %q: %w", projectName, err)
+	}
+	return proj.Path, nil
+}
+
 type EngineConfig struct {
-	WorkerTimeout   time.Duration
-	MaxRetries      int
-	Validation      ValidationConfig
-	EventStore      events.Store  // optional event sourcing; nil = no events emitted
-	AgentsDir       string        // path to agents/core directory for stable instructions caching
+	WorkerTimeout     time.Duration
+	MaxRetries        int
+	MaxParallel       int // default 1; >1 enables concurrent feature execution (FASE 6)
+	VerifyCleanStreak int // default 1; number of clean verify runs required per feature (FASE 5)
+	RepoResolver      RepoResolver
+	Validation        ValidationConfig
+	EventStore        events.Store // optional event sourcing; nil = no events emitted
+	AgentsDir         string       // path to agents/core directory for stable instructions caching
+	BaseRef           string       // git ref to branch feature worktrees from (default: repo HEAD)
 }
 
 // DefaultEngineConfig returns sensible defaults.
 func DefaultEngineConfig() EngineConfig {
 	return EngineConfig{
-		WorkerTimeout: DefaultWorkerTimeout,
-		MaxRetries:    DefaultMaxRetries,
-		Validation:    DefaultValidationConfig(),
+		WorkerTimeout:     DefaultWorkerTimeout,
+		MaxRetries:        DefaultMaxRetries,
+		MaxParallel:       1,
+		VerifyCleanStreak: 1,
+		Validation:        DefaultValidationConfig(),
 	}
 }
 
 // Engine is the high-level mission orchestrator that ties together the store,
 // worker manager, validation pipeline, and broadcast to UIs.
 type Engine struct {
-	store    *MissionsStore
-	config   EngineConfig
-	workers  *WorkerManager
-	val      *ValidationPipeline
-	broadcast BroadcastFunc
+	store        *MissionsStore
+	config       EngineConfig
+	workers      *WorkerManager
+	val          *ValidationPipeline
+	broadcast    BroadcastFunc
+	workspaceMgr *WorkspaceManager // set per mission run when RepoResolver is configured
 
 	// Active tracking
-	mu           sync.Mutex
+	mu              sync.Mutex
 	activeMissionID string
-	cancelFn     context.CancelFunc
-}
-
-// validMissionTransitions defines allowed FSM state transitions for missions.
-var validMissionTransitions = map[MissionStatus][]MissionStatus{
-	MissionPending:    {},
-	MissionPlanning:   {MissionActive},
-	MissionActive:     {MissionPaused, MissionCompleted, MissionFailed, MissionCancelled, MissionValidating},
-	MissionPaused:     {MissionActive, MissionCancelled},
-	MissionFailed:     {MissionPlanning},
-	MissionCancelled:  {},
-	MissionCompleted:  {},
-	MissionValidating: {MissionCompleted, MissionFailed, MissionActive},
+	cancelFn        context.CancelFunc
 }
 
 // ValidateTransition checks if a mission state transition is valid per the FSM.
@@ -74,22 +93,136 @@ func (e *Engine) ValidateTransition(current, next MissionStatus) error {
 // IsValidTransition is a standalone validation function that checks
 // if a mission state transition is valid per the FSM rules.
 // Unlike ValidateTransition, it does not require an Engine instance.
+// Uses TransitionMissionStatus from fsm.go as the single source of truth.
 func IsValidTransition(current, next MissionStatus) error {
-	allowed, ok := validMissionTransitions[current]
-	if !ok {
-		return fmt.Errorf("unknown current mission state: %s", current)
+	if IsValidMissionTransition(current, next) {
+		return nil
 	}
-	for _, a := range allowed {
-		if a == next {
-			return nil
-		}
-	}
-	return fmt.Errorf("invalid mission transition: %s → %s (allowed from %s: %v)",
-		current, next, current, allowed)
+	return fmt.Errorf("invalid mission transition: %s → %s", current, next)
 }
 
 // emitEvent writes an event to the configured event store (if any).
 // It is a no-op when EventStore is nil.
+// cleanupFeatureWorktree removes the worktree for a feature if workspace manager is active.
+func (e *Engine) cleanupFeatureWorktree(feature *Feature) {
+	if e.workspaceMgr != nil && feature.WorktreePath != "" {
+		if err := e.workspaceMgr.RemoveWorktree(feature.WorktreePath, feature.Branch); err != nil {
+			log.Printf("Warning: could not remove worktree for %s: %v", feature.ID, err)
+		}
+	}
+}
+
+// runFeaturesSequentially processes features one at a time in order (FASE 6 fallback).
+func (e *Engine) runFeaturesSequentially(ctx context.Context, mission *Mission) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ErrWorkerCancelled
+		default:
+		}
+
+		// Reload mission for latest state
+		mission, err := e.store.LoadMission(mission.ID)
+		if err != nil {
+			return err
+		}
+
+		// Check if mission was paused or cancelled
+		if mission.Status == MissionPaused || mission.Status == MissionCancelled {
+			return nil
+		}
+
+		// Get next pending feature
+		feature := NextPendingFeature(mission)
+		if feature == nil {
+			break // all features processed
+		}
+
+		e.broadcast("feature_status_changed", map[string]interface{}{
+			"missionId": mission.ID,
+			"featureId": feature.ID,
+			"status":    FeatureInProgress,
+			"action":    "start",
+		})
+
+		// Set up worktree if workspace manager is configured
+		if e.workspaceMgr != nil {
+			feature.WorktreePath = e.workspaceMgr.GetWorktreePath(mission.ID, feature.ID)
+			feature.Branch = e.workspaceMgr.BranchName(mission.ID, feature.ID)
+			if err := e.workspaceMgr.CreateWorktree(feature.WorktreePath, feature.Branch); err != nil {
+				log.Printf("Warning: could not create worktree for %s: %v — running in tempdir mode", feature.ID, err)
+				feature.WorktreePath = ""
+				feature.Branch = ""
+			}
+			_ = e.store.SaveMission(mission)
+		}
+
+		// Run the feature
+		log.Printf("Running feature: %s (%s)", feature.ID, feature.Description)
+		handoff, err := e.workers.ExecuteFeature(mission, feature.ID)
+		if err != nil {
+			log.Printf("Feature %s failed: %v", feature.ID, err)
+
+			e.cleanupFeatureWorktree(feature)
+
+			// Check for cancellation/timeout
+			if errors.Is(err, ErrWorkerCancelled) || errors.Is(err, ErrWorkerTimeout) {
+				e.broadcast("feature_status_changed", map[string]interface{}{
+					"missionId": mission.ID,
+					"featureId": feature.ID,
+					"status":    FeatureFailed,
+					"action":    "failed",
+					"error":     err.Error(),
+				})
+				return err
+			}
+
+			// Check if max retries reached
+			if errors.Is(err, ErrMaxRetries) {
+				e.broadcast("feature_status_changed", map[string]interface{}{
+					"missionId": mission.ID,
+					"featureId": feature.ID,
+					"status":    FeatureFailed,
+					"action":    "max_retries",
+					"error":     err.Error(),
+				})
+				return err
+			}
+
+			e.broadcast("feature_status_changed", map[string]interface{}{
+				"missionId": mission.ID,
+				"featureId": feature.ID,
+				"status":    FeatureFailed,
+				"action":    "failed",
+			})
+
+			// Don't fail the whole mission for a single feature failure
+			continue
+		}
+
+		if handoff != nil {
+			_ = e.store.RecordWorkerHandoff(mission.ID, feature.ID, handoff)
+		}
+
+		// Merge to integration branch if workspace manager is active
+		if e.workspaceMgr != nil {
+			if err := e.workspaceMgr.MergeToIntegration(mission.ID, feature.ID); err != nil {
+				log.Printf("Warning: could not merge %s to integration: %v", feature.ID, err)
+			}
+		}
+
+		e.cleanupFeatureWorktree(feature)
+
+		e.broadcast("feature_status_changed", map[string]interface{}{
+			"missionId": mission.ID,
+			"featureId": feature.ID,
+			"status":    FeatureCompleted,
+			"action":    "completed",
+		})
+	}
+	return nil
+}
+
 func (e *Engine) emitEvent(sessionID, missionID string, eventType events.EventType, data interface{}) {
 	if e.config.EventStore == nil {
 		return
@@ -135,7 +268,17 @@ func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFun
 		val:       NewValidationPipeline(store, config.Validation),
 		broadcast: broadcast,
 	}
-	e.workers = NewWorkerManager(store, WorkerConfig{Timeout: config.WorkerTimeout, MaxRetries: config.MaxRetries, AgentsDir: config.AgentsDir})
+	workerCfg := WorkerConfig{
+		Timeout:          config.WorkerTimeout,
+		MaxRetries:       config.MaxRetries,
+		AgentsDir:        config.AgentsDir,
+		VerifyCleanStreak: config.VerifyCleanStreak,
+	}
+	if config.VerifyCleanStreak > 0 {
+		// Enable verification when clean streak is configured
+		workerCfg.Verifier = NewCommandVerifier()
+	}
+	e.workers = NewWorkerManager(store, workerCfg)
 	e.workers.SetLogBroadcast(func(missionID, featureID, line string) {
 		e.broadcast("log_update", map[string]interface{}{
 			"missionId": missionID,
@@ -169,6 +312,18 @@ func (e *Engine) RunMission(missionID string) error {
 	}
 
 	e.emitEvent(mission.ID, mission.ID, events.EventMissionCreated, nil)
+
+	// Set up workspace manager if a RepoResolver is configured
+	if e.config.RepoResolver != nil && mission.Project != "" {
+		repoPath, err := e.config.RepoResolver.Resolve(mission.Project)
+		if err != nil {
+			log.Printf("Warning: could not resolve project %q: %v — running in tempdir mode", mission.Project, err)
+		} else {
+			wm := NewWorkspaceManager(repoPath)
+			wm.BaseRef = e.config.BaseRef
+			e.workspaceMgr = wm
+		}
+	}
 
 	// Check validation contract coverage before running
 	// Log warning but don't fail execution for incomplete contracts
@@ -220,109 +375,22 @@ func (e *Engine) RunMission(missionID string) error {
 		"action": "start",
 	})
 
-	// Process features
-	for {
-		select {
-		case <-ctx.Done():
-			return ErrWorkerCancelled
-		default:
-		}
-
-		// Reload mission for latest state
-		mission, err = e.store.LoadMission(missionID)
-		if err != nil {
+	// Process features — use concurrent scheduler if parallel, else sequential
+	if e.config.MaxParallel > 1 {
+		if err := e.RunFeaturesConcurrently(ctx, mission); err != nil {
 			return err
 		}
-
-		// Check if mission was paused or cancelled
-		if mission.Status == MissionPaused {
-			e.emitEvent(mission.ID, mission.ID, events.EventMissionPaused, nil)
-			e.broadcast("mission_status_changed", map[string]interface{}{
-				"id":     mission.ID,
-				"status": mission.Status,
-				"action": "paused",
-			})
-			return nil // caller should check status and wait
+	} else {
+		// Sequential processing (backward compatible)
+		if err := e.runFeaturesSequentially(ctx, mission); err != nil {
+			return err
 		}
-		if mission.Status == MissionCancelled {
-			e.emitEvent(mission.ID, mission.ID, events.EventMissionCancelled, nil)
-			e.broadcast("mission_status_changed", map[string]interface{}{
-				"id":     mission.ID,
-				"status": mission.Status,
-				"action": "cancelled",
-			})
-			return ErrWorkerCancelled
-		}
-
-		// Get next pending feature
-		feature := NextPendingFeature(mission)
-		if feature == nil {
-			break // all features processed
-		}
-
-		e.broadcast("feature_status_changed", map[string]interface{}{
-			"missionId": mission.ID,
-			"featureId": feature.ID,
-			"status":    FeatureInProgress,
-			"action":    "start",
-		})
-
-		// Run the feature
-		log.Printf("Running feature: %s (%s)", feature.ID, feature.Description)
-		handoff, err := e.workers.ExecuteFeature(mission, feature.ID)
-		if err != nil {
-			log.Printf("Feature %s failed: %v", feature.ID, err)
-
-			// Check for cancellation/timeout
-			if errors.Is(err, ErrWorkerCancelled) || errors.Is(err, ErrWorkerTimeout) {
-				e.broadcast("feature_status_changed", map[string]interface{}{
-					"missionId": mission.ID,
-					"featureId": feature.ID,
-					"status":    FeatureFailed,
-					"action":    "failed",
-					"error":     err.Error(),
-				})
-				return err
-			}
-
-			// Check if max retries reached
-			if errors.Is(err, ErrMaxRetries) {
-				e.broadcast("feature_status_changed", map[string]interface{}{
-					"missionId": mission.ID,
-					"featureId": feature.ID,
-					"status":    FeatureFailed,
-					"action":    "max_retries",
-					"error":     err.Error(),
-				})
-				return err
-			}
-
-			e.broadcast("feature_status_changed", map[string]interface{}{
-				"missionId": mission.ID,
-				"featureId": feature.ID,
-				"status":    FeatureFailed,
-				"action":    "failed",
-			})
-
-			// Don't fail the whole mission for a single feature failure
-			continue
-		}
-
-		if handoff != nil {
-			_ = e.store.RecordWorkerHandoff(mission.ID, feature.ID, handoff)
-		}
-
-		e.broadcast("feature_status_changed", map[string]interface{}{
-			"missionId": mission.ID,
-			"featureId": feature.ID,
-			"status":    FeatureCompleted,
-			"action":    "completed",
-		})
 	}
 
 	// Process milestone completion and validation
 	mission, _ = e.store.LoadMission(missionID)
-	for _, ms := range mission.Milestones {
+	for mi := range mission.Milestones {
+		ms := &mission.Milestones[mi]
 		completed, _ := CheckMilestoneCompletion(mission, ms.Name)
 		if completed {
 			log.Printf("Milestone %q complete – running validation", ms.Name)
@@ -361,11 +429,18 @@ func (e *Engine) RunMission(missionID string) error {
 			// Persist validation results
 			_ = e.val.PersistReport(mission.ID, ms.Name, report)
 
+			// Store the report on the milestone for report generation
+			ms.ValidationReports = append(ms.ValidationReports, report)
+
+			// Save mission to persist fix features and validation reports
+			// before the reload below discards in-memory changes
+			_ = e.store.SaveMission(mission)
+
 			e.broadcast("validation_complete", map[string]interface{}{
-				"missionId":  mission.ID,
-				"milestone":  ms.Name,
-				"passed":     report.Passed,
-				"report":     report,
+				"missionId": mission.ID,
+				"milestone": ms.Name,
+				"passed":    report.Passed,
+				"report":    report,
 			})
 		}
 	}
@@ -384,6 +459,10 @@ func (e *Engine) RunMission(missionID string) error {
 			mission.CompletedAt = &now
 			mission.UpdatedAt = now
 			_ = e.store.SaveMission(mission)
+			// Generate mission report (FASE 7)
+			if err := GenerateMissionReport(e.store, mission); err != nil {
+				log.Printf("Warning: could not generate mission report: %v", err)
+			}
 			e.emitEvent(mission.ID, mission.ID, events.EventMissionCompleted, nil)
 		}
 	} else {
@@ -445,7 +524,9 @@ func CancelMissionFromSurface(store *MissionsStore, missionID string) error {
 }
 
 // RetryFeatureFromSurface re-queues a failed feature from any surface.
-func RetryFeatureFromSurface(store *MissionsStore, missionID, featureID string) error {
+// If a broadcast function is provided, it emits a feature_status_changed event
+// so the kanban projector and other UI surfaces pick up the state change.
+func RetryFeatureFromSurface(store *MissionsStore, missionID, featureID string, broadcast ...BroadcastFunc) error {
 	mission, err := store.LoadMission(missionID)
 	if err != nil {
 		return err
@@ -461,7 +542,21 @@ func RetryFeatureFromSurface(store *MissionsStore, missionID, featureID string) 
 	}
 
 	_, err = RequeueFeature(store, mission, featureID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Emit event so UI surfaces pick up the state change
+	if len(broadcast) > 0 && broadcast[0] != nil {
+		broadcast[0]("feature_status_changed", map[string]interface{}{
+			"missionId": mission.ID,
+			"featureId": featureID,
+			"status":    FeaturePending,
+			"action":    "retry",
+		})
+	}
+
+	return nil
 }
 
 // ─── Store helpers for integration ─────────────────────────────────────────

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"time"
 )
 
@@ -14,6 +15,11 @@ const defaultTimeout = 3 * time.Second
 type ServerClient struct {
 	baseURL    string
 	httpClient *http.Client
+	sessions   *serverSessionAPI
+	// useCLI controls whether ListModels tries 'opencode models' first.
+	// True for production, false for unit tests so they can deterministically
+	// exercise the HTTP fallbacks.
+	useCLI bool
 }
 
 // NewServerClient creates a ServerClient targeting the given base URL
@@ -24,6 +30,7 @@ func NewServerClient(baseURL string) *ServerClient {
 		httpClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
+		useCLI: true,
 	}
 }
 
@@ -115,17 +122,24 @@ func (c *ServerClient) ListAgents(ctx context.Context) ([]AgentInfo, error) {
 	return agents, nil
 }
 
-// ListModels fetches models from the opencode server.
-// It tries GET /api/provider first (richer data), then falls back to
-// GET /provider if that fails.
+// ListModels returns every model the opencode runtime knows about.
+// It prefers the `opencode models` CLI, which enumerates all runtime models
+// (37+ in practice — connected providers, free models, etc.). The HTTP
+// /api/provider endpoint only returns the handful declared in opencode.json.
 func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
-	// Try /api/provider first for richer data.
+	if c.useCLI {
+		if out, err := exec.CommandContext(ctx, "opencode", "models").Output(); err == nil {
+			if models := parseCLIModels(string(out)); len(models) > 0 {
+				return models, nil
+			}
+		}
+	}
+
 	models, err := c.listModelsV2(ctx)
 	if err == nil {
 		return models, nil
 	}
 
-	// Fall back to /provider.
 	models, err = c.listModelsV1(ctx)
 	if err == nil {
 		return models, nil
@@ -287,4 +301,12 @@ func (c *ServerClient) getConnectedProviders(ctx context.Context) []string {
 	}
 
 	return provResp.Connected
+}
+
+// Sessions returns the session management API backed by the opencode HTTP server.
+func (c *ServerClient) Sessions() SessionAPI {
+	if c.sessions == nil {
+		c.sessions = newServerSessionAPI(c.baseURL)
+	}
+	return c.sessions
 }

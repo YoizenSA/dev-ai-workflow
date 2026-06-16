@@ -83,12 +83,17 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("GET /api/config/tools", handlers.ListTools)
 	mux.HandleFunc("GET /api/config/skills", handlers.ListSkills)
 	mux.HandleFunc("GET /api/config/skills/{name}", handlers.GetSkill)
+	mux.HandleFunc("PUT /api/config/skills/{name}", handlers.PutSkill)
 	mux.HandleFunc("DELETE /api/config/skills/{name}", handlers.DeleteSkill)
 	mux.HandleFunc("GET /api/config/mcp", handlers.ListMCP)
 	mux.HandleFunc("PUT /api/config/mcp/{name}", handlers.PutMCP)
+	mux.HandleFunc("DELETE /api/config/mcp/{name}", handlers.DeleteMCP)
 	mux.HandleFunc("GET /api/config/providers", handlers.ListProviders)
 	mux.HandleFunc("PUT /api/config/providers/{name}", handlers.PutProvider)
 	mux.HandleFunc("DELETE /api/config/providers/{name}", handlers.DeleteProvider)
+	mux.HandleFunc("GET /api/config/user", handlers.GetUserConfig)
+	mux.HandleFunc("PUT /api/config/user", handlers.PutUserConfig)
+	mux.HandleFunc("GET /api/config/user/role-defaults", handlers.GetRoleDefaults)
 
 	// UI (frontend)
 	mux.Handle("GET /", uiHandler())
@@ -131,7 +136,6 @@ func (s *Server) Start() error {
 
 	// Capture the actual port (useful when port 0 is used)
 	s.port = ln.Addr().(*net.TCPAddr).Port
-	log.Printf("ywai Kanban server running on http://localhost:%d", s.port)
 
 	// Signal that port is ready (for async starts)
 	if s.portReady != nil {
@@ -158,11 +162,27 @@ func (s *Server) Port() int {
 	return s.port
 }
 
+// Store returns the kanban Store, for use by other components.
+func (s *Server) Store() *Store {
+	return s.store
+}
+
 // WaitForPort blocks until the server has a port assigned (for async starts).
 // Returns the assigned port.
 func (s *Server) WaitForPort() int {
 	<-s.portReady
 	return s.port
+}
+
+// HTTPHandler returns the HTTP handler for the kanban server.
+// This allows the server to be mounted in other muxes.
+func (s *Server) HTTPHandler() http.Handler {
+	return s.mux
+}
+
+// Hub returns the WebSocket hub for the kanban server.
+func (s *Server) Hub() *Hub {
+	return s.hub
 }
 
 var (

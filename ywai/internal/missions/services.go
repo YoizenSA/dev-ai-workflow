@@ -30,7 +30,7 @@ func NewServicesParser(missionDir string) *ServicesParser {
 // LoadServices loads and parses the services manifest from services.yaml.
 func (sp *ServicesParser) LoadServices() (*ServicesManifest, error) {
 	servicesPath := filepath.Join(sp.missionDir, "services.yaml")
-	
+
 	content, err := os.ReadFile(servicesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -38,18 +38,18 @@ func (sp *ServicesParser) LoadServices() (*ServicesManifest, error) {
 		}
 		return nil, fmt.Errorf("read services file: %w", err)
 	}
-	
+
 	return sp.parseServices(content)
 }
 
 // parseServices parses services.yaml content into a ServicesManifest.
 func (sp *ServicesParser) parseServices(content []byte) (*ServicesManifest, error) {
 	var manifest ServicesManifest
-	
+
 	if err := yaml.Unmarshal(content, &manifest); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidServices, err)
 	}
-	
+
 	// Validate that commands and services maps are initialized
 	if manifest.Commands == nil {
 		manifest.Commands = make(map[string]string)
@@ -57,7 +57,7 @@ func (sp *ServicesParser) parseServices(content []byte) (*ServicesManifest, erro
 	if manifest.Services == nil {
 		manifest.Services = make(map[string]ServiceDef)
 	}
-	
+
 	return &manifest, nil
 }
 
@@ -91,44 +91,44 @@ func (sm *ServicesManifest) GetStartupOrder() []string {
 	// Simple topological sort based on depends_on
 	visited := make(map[string]bool)
 	order := []string{}
-	
+
 	var visit func(name string)
 	visit = func(name string) {
 		if visited[name] {
 			return
 		}
 		visited[name] = true
-		
+
 		svc, ok := sm.Services[name]
 		if !ok {
 			return
 		}
-		
+
 		// Visit dependencies first
 		for _, dep := range svc.DependsOn {
 			visit(dep)
 		}
-		
+
 		order = append(order, name)
 	}
-	
+
 	for name := range sm.Services {
 		visit(name)
 	}
-	
+
 	return order
 }
 
 // CheckPortConflicts checks if any services have conflicting port assignments.
 func (sm *ServicesManifest) CheckPortConflicts() map[int][]string {
 	portMap := make(map[int][]string)
-	
+
 	for name, svc := range sm.Services {
 		if svc.Port > 0 {
 			portMap[svc.Port] = append(portMap[svc.Port], name)
 		}
 	}
-	
+
 	// Filter to only conflicting ports
 	conflicts := make(map[int][]string)
 	for port, services := range portMap {
@@ -136,6 +136,6 @@ func (sm *ServicesManifest) CheckPortConflicts() map[int][]string {
 			conflicts[port] = services
 		}
 	}
-	
+
 	return conflicts
 }
