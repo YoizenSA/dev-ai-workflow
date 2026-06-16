@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
@@ -203,15 +202,16 @@ func TestPlannerSessionTimeout(t *testing.T) {
 	api := &fakeSessionAPI{responses: []string{"unknowns"}}
 	ps := &PlannerSession{client: &fakePlannerClient{sessions: api}, model: "m", agent: "a"}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-	defer cancel()
-	time.Sleep(2 * time.Nanosecond)
+	// Use an immediately-cancelled context instead of timing-dependent sleep.
+	// This avoids flakiness on slow CI runners (Windows).
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	_, err := ps.Investigate(ctx, "goal", "/repo")
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("expected DeadlineExceeded, got %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected Canceled, got %v", err)
 	}
 }

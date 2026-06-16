@@ -460,7 +460,7 @@ func TestSpawnWorkerWithValidHandoff(t *testing.T) {
 	// Set up fake opencode in PATH that returns valid handoff
 	h := testHandoff()
 	fakeDir := fakeOpencodeValidHandoff(t, h)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
@@ -507,7 +507,7 @@ func TestWorkerStdoutStreamedAndPersisted(t *testing.T) {
 		[]string{"Building...", "Running tests...", "All tests pass!"},
 		string(data),
 	)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
@@ -562,7 +562,7 @@ func TestWorkerNonZeroExit(t *testing.T) {
 
 	// Fake opencode that exits with code 1
 	fakeDir := fakeOpencodeExitCode(t, 1)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
@@ -617,7 +617,7 @@ func TestWorkerTimeout(t *testing.T) {
 
 	// Fake opencode that sleeps forever
 	fakeDir := fakeOpencodeSleepForever(t)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
@@ -661,7 +661,7 @@ func TestWorkerCancellation(t *testing.T) {
 
 	// Fake opencode that sleeps forever
 	fakeDir := fakeOpencodeSleepForever(t)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cancel, resultCh, err := wm.SpawnWorker(mission, feat, ctxDir, mission.Model, mission.ExecutionAgent)
 	if err != nil {
@@ -719,7 +719,7 @@ func TestContextDirCleanedAfterSuccess(t *testing.T) {
 	// Now simulate what SpawnWorker does with a fake opencode
 	h := testHandoff()
 	fakeDir := fakeOpencodeValidHandoff(t, h)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Start the feature so ExecuteFeature can work
 	StartFeature(wm.store, mission, feat.ID)
@@ -815,7 +815,7 @@ func TestExecuteFeatureSuccessPath(t *testing.T) {
 	// Set up fake opencode
 	h := testHandoff()
 	fakeDir := fakeOpencodeValidHandoff(t, h)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	handoff, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
 	if err != nil {
@@ -846,7 +846,7 @@ func TestExecuteFeatureNonZeroExit(t *testing.T) {
 
 	// Fake opencode that exits with code 1
 	fakeDir := fakeOpencodeExitCode(t, 1)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	_, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
 	if err == nil {
@@ -880,7 +880,7 @@ func TestExecuteFeatureInvalidHandoff(t *testing.T) {
 		[]string{"Some build output", "More output"},
 		"this is not json",
 	)
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	handoff, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
 	if err != nil {
@@ -907,7 +907,7 @@ func TestExecuteFeatureEmptyHandoff(t *testing.T) {
 
 	// Fake opencode that outputs nothing meaningful
 	fakeDir := fakeOpencodeWithOutput(t, []string{"", "  ", ""}, "")
-	t.Setenv("PATH", fakeDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	_, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
 	if err == nil {

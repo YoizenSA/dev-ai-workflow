@@ -82,7 +82,7 @@ EOF
 
 	prev := os.Getenv("PATH")
 	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+":"+prev)
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
 
 	return binDir
 }
@@ -109,7 +109,7 @@ EOF
 
 	prev := os.Getenv("PATH")
 	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+":"+prev)
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
 
 	return binDir
 }
@@ -133,7 +133,7 @@ exit %d
 
 	prev := os.Getenv("PATH")
 	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", binDir+":"+prev)
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+prev)
 
 	return binDir
 }

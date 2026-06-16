@@ -132,7 +132,7 @@ REVIEW_EOF
 
 	// Add binDir to PATH so LookPath("opencode") finds it
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, origPath))
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
 	defer os.Setenv("PATH", origPath)
 
 	pipeline := NewValidationPipeline(store, DefaultValidationConfig())
@@ -932,7 +932,7 @@ func TestValidateMilestoneFailedTransition(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, origPath))
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
 	defer os.Setenv("PATH", origPath)
 
 	now := time.Now().UTC()

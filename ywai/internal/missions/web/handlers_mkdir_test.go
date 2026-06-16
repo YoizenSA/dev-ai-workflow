@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,19 @@ import (
 	"strings"
 	"testing"
 )
+
+// mkdirBody builds a JSON request body for the mkdir endpoint.
+// Uses json.Marshal to properly escape backslashes on Windows.
+func mkdirBody(parentPath, name string) string {
+	b, err := json.Marshal(map[string]string{
+		"parentPath": parentPath,
+		"name":       name,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("mkdirBody: %v", err))
+	}
+	return string(b)
+}
 
 func TestMkdirFS(t *testing.T) {
 	parent := t.TempDir()
@@ -26,30 +40,30 @@ func TestMkdirFS(t *testing.T) {
 	}{
 		{
 			name:       "valid single segment",
-			body:       `{"parentPath":"` + parent + `","name":"newproj"}`,
+			body:       mkdirBody(parent, "newproj"),
 			wantStatus: http.StatusCreated,
 			wantDir:    filepath.Join(parent, "newproj"),
-			wantBody:   `"path":"` + filepath.Join(parent, "newproj") + `"`,
+			wantBody:   func() string { b, _ := json.Marshal(filepath.Join(parent, "newproj")); return `"path":` + string(b) }(),
 		},
 		{
 			name:       "empty name",
-			body:       `{"parentPath":"` + parent + `","name":"  "}`,
+			body:       mkdirBody(parent, "  "),
 			wantStatus: http.StatusBadRequest,
 			wantBody:   "folder name is required",
 		},
 		{
 			name:       "name with path separator is rejected",
-			body:       `{"parentPath":"` + parent + `","name":"a/b"}`,
+			body:       mkdirBody(parent, "a/b"),
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "dotdot as name rejected",
-			body:       `{"parentPath":"` + parent + `","name":".."}`,
+			body:       mkdirBody(parent, ".."),
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "already exists",
-			body:       `{"parentPath":"` + parent + `","name":"exists"}`,
+			body:       mkdirBody(parent, "exists"),
 			wantStatus: http.StatusConflict,
 			wantBody:   "already exists",
 			preCreate:  "exists",
