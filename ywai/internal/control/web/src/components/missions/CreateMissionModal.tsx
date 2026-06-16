@@ -909,44 +909,56 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 			</div>
 
 			{!state.goalAccepted && (
-				<div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-					<button
-						type="button"
-						className="btn btn-primary"
-						disabled={!state.goal.trim() || state.refining}
-						onClick={handleRefineWithAI}
-					>
-						{state.refining ? (
-							<><div className="spinner"></div> Refining…</>
-						) : (
-							"Refine with AI"
-						)}
-					</button>
-					<button
-						type="button"
-						className="btn btn-ghost"
-						disabled={!state.goal.trim() || state.refining}
-						onClick={handleSkipRefinement}
-						data-tip="Use the goal as written, without AI refinement"
-					>
-						Skip — use raw goal
-					</button>
-					<button
-						type="button"
-						className="btn btn-secondary"
-						disabled={!state.goal.trim() || state.refining || state.submitting || !state.selectedProject}
-						onClick={handleAutoRun}
-						data-tip="Plan, approve and run autonomously — skip the review step"
-						data-tip-pos="left"
-						style={{ marginLeft: "auto" }}
-					>
-						{state.submitting ? (
-							<><div className="spinner"></div> Starting…</>
-						) : (
-							"⚡ Auto-run"
-						)}
-					</button>
-				</div>
+				<>
+					<div className="field" style={{ marginTop: "var(--space-2)" }}>
+						<ModelCombobox
+							id="goal-refine-model-inline"
+							label="Refinement model"
+							value={state.goalRefineModel}
+							models={state.models}
+							recommended={state.recommendedModels}
+							onChange={(v) => update({ goalRefineModel: v })}
+						/>
+					</div>
+					<div className="row" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+						<button
+							type="button"
+							className="btn btn-primary"
+							disabled={!state.goal.trim() || state.refining}
+							onClick={handleRefineWithAI}
+						>
+							{state.refining ? (
+								<><div className="spinner"></div> Refining…</>
+							) : (
+								"Refine with AI"
+							)}
+						</button>
+						<button
+							type="button"
+							className="btn btn-ghost"
+							disabled={!state.goal.trim() || state.refining}
+							onClick={handleSkipRefinement}
+							data-tip="Use the goal as written, without AI refinement"
+						>
+							Skip — use raw goal
+						</button>
+						<button
+							type="button"
+							className="btn btn-secondary"
+							disabled={!state.goal.trim() || state.refining || state.submitting || !state.selectedProject}
+							onClick={handleAutoRun}
+							data-tip="Plan, approve and run autonomously — skip the review step"
+							data-tip-pos="left"
+							style={{ marginLeft: "auto" }}
+						>
+							{state.submitting ? (
+								<><div className="spinner"></div> Starting…</>
+							) : (
+								"⚡ Auto-run"
+							)}
+						</button>
+					</div>
+				</>
 			)}
 
 			{state.chatMessages.length > 0 && (
