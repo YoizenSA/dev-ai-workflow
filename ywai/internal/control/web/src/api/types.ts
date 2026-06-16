@@ -287,6 +287,7 @@ export interface OpenCodeConfig {
 
 export type RoleName =
   | 'planning'
+  | 'architect'
   | 'dev'
   | 'frontend'
   | 'backend'
@@ -296,6 +297,7 @@ export type RoleName =
 
 export const CANONICAL_ROLES: RoleName[] = [
   'planning',
+  'architect',
   'dev',
   'frontend',
   'backend',

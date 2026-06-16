@@ -13,6 +13,7 @@ import ModelCombobox from "../missions/ModelCombobox";
 
 const ROLE_LABELS: Record<RoleName, string> = {
 	planning: "Planning",
+	architect: "Architect",
 	dev: "Dev (generic)",
 	frontend: "Frontend",
 	backend: "Backend",
@@ -23,6 +24,7 @@ const ROLE_LABELS: Record<RoleName, string> = {
 
 const ROLE_HINTS: Record<RoleName, string> = {
 	planning: "Used to draft and refine the mission plan",
+	architect: "Upfront design — structure, patterns, interfaces, trade-offs",
 	dev: "Default for features without a more specific role",
 	frontend: "UI / components / browser-facing code",
 	backend: "Servers / APIs / data layer",
