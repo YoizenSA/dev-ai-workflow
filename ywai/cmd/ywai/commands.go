@@ -65,6 +65,45 @@ func daemonize() error {
 	return nil
 }
 
+// killPort kills any process listening on the given TCP port.
+// Uses lsof (macOS/Linux) or fuser (Linux) to find the PID, then kills it.
+func killPort(port int) error {
+	portStr := fmt.Sprintf(":%d", port)
+
+	// Try lsof -ti :<port> first (macOS + Linux)
+	cmd := exec.Command("lsof", "-ti", portStr)
+	out, err := cmd.Output()
+	if err == nil {
+		pidStr := strings.TrimSpace(string(out))
+		if pidStr != "" {
+			return exec.Command("kill", "-9", pidStr).Run()
+		}
+	}
+
+	// Fallback: fuser <port>/tcp (Linux)
+	cmd = exec.Command("fuser", fmt.Sprintf("%d/tcp", port))
+	out, err = cmd.Output()
+	if err != nil {
+		return fmt.Errorf("port %d is in use and no process could be killed", port)
+	}
+
+	pidStr := strings.TrimSpace(string(out))
+	pidStr = strings.TrimSuffix(pidStr, "\n")
+	if pidStr == "" {
+		return fmt.Errorf("port %d is in use and no process could be killed", port)
+	}
+
+	// fuser outputs PIDs space-separated
+	pids := strings.Fields(pidStr)
+	var lastErr error
+	for _, pid := range pids {
+		if e := exec.Command("kill", "-9", pid).Run(); e != nil {
+			lastErr = e
+		}
+	}
+	return lastErr
+}
+
 // startOpencodeServe starts the opencode HTTP server in background if not already running.
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
@@ -674,9 +713,18 @@ var serveCmd = &cobra.Command{
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 		noUpdate, _ := cmd.Flags().GetBool("no-update")
 
-		// Check if port is available before forking
+		// Check if port is available — kill any process using it
 		if ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
-			return fmt.Errorf("port %d is already in use: %w", port, err)
+			fmt.Fprintf(os.Stderr, "Port %d is in use, attempting to free it...\n", port)
+			if killErr := killPort(port); killErr != nil {
+				return fmt.Errorf("port %d is already in use and could not be freed: %w", port, err)
+			}
+			fmt.Fprintf(os.Stderr, "Freed port %d\n", port)
+			// Retry once after killing
+			if ln, err = net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
+				return fmt.Errorf("port %d is still in use after cleanup: %w", port, err)
+			}
+			ln.Close()
 		} else {
 			ln.Close()
 		}
