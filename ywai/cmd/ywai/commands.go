@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -22,6 +24,65 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
+
+// daemonize re-executes the current process without the -b flag and exits the parent.
+// This detaches the server from the terminal so it keeps running in background.
+func daemonize() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot find executable: %w", err)
+	}
+
+	// Remove -b/--background from args to avoid infinite recursion
+	args := make([]string, 0, len(os.Args)-1)
+	for _, a := range os.Args[1:] {
+		if a == "-b" || a == "--background" {
+			continue
+		}
+		args = append(args, a)
+	}
+
+	child, err := os.StartProcess(exe, append([]string{exe}, args...), &os.ProcAttr{
+		Dir:   ".",
+		Env:   os.Environ(),
+		Files: []*os.File{nil, os.Stdout, os.Stderr},
+		Sys:   &syscall.SysProcAttr{Setsid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to fork process: %w", err)
+	}
+
+	pidFile := filepath.Join(config.DataDir(), "serve.pid")
+	_ = os.MkdirAll(filepath.Dir(pidFile), 0o755)
+	_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", child.Pid)), 0o644)
+
+	fmt.Printf("Server started in background (PID %d)\n", child.Pid)
+	fmt.Printf("PID file: %s\n", pidFile)
+	_ = child.Release()
+	os.Exit(0)
+	return nil
+}
+
+// startOpencodeServe starts the opencode HTTP server in background if not already running.
+func startOpencodeServe() {
+	url := os.Getenv("OPENCODE_URL")
+	if url == "" {
+		url = "http://127.0.0.1:4096"
+	}
+	// Quick check: is it already running?
+	resp, err := http.Get(url + "/health")
+	if err == nil {
+		resp.Body.Close()
+		return // already running
+	}
+	cmd := exec.Command("opencode", "serve", "--port", "4096")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve: %v\n", err)
+		return
+	}
+	fmt.Printf("opencode server starting on %s (PID %d)\n", url, cmd.Process.Pid)
+}
 
 var installCmd = &cobra.Command{
 	Use:   "install",
@@ -610,8 +671,14 @@ var serveCmd = &cobra.Command{
 		noMCP, _ := cmd.Flags().GetBool("no-mcp")
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 
+		// Fork to background before doing any work
+		if background {
+			if err := daemonize(); err != nil {
+				return err
+			}
+		}
+
 		if mcpOnly {
-			// Run as MCP adapter only (stdio JSON-RPC)
 			adapter := kanban.NewMCPAdapter()
 			adapter.Run()
 			return nil
@@ -623,6 +690,9 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("failed to start control server: %w", err)
 		}
 
+		// Auto-start opencode serve if not already running
+		startOpencodeServe()
+
 		// Start MCP adapter in background if not disabled
 		if !noMCP {
 			go func() {
@@ -631,15 +701,11 @@ var serveCmd = &cobra.Command{
 			}()
 		}
 
-		if background {
-			// Detach from terminal
-			fmt.Printf("Server running in background on port %d\n", s.Port())
-			fmt.Printf("Control UI: http://localhost:%d/\n", s.Port())
-			fmt.Printf("Health check: http://localhost:%d/health\n", s.Port())
-			fmt.Printf("Kanban UI: http://localhost:%d/\n", s.Port())
-			fmt.Printf("Missions UI: http://localhost:%d/missions/\n", s.Port())
-			return nil
-		}
+		fmt.Printf("Server running on port %d\n", s.Port())
+		fmt.Printf("Control UI: http://localhost:%d/\n", s.Port())
+		fmt.Printf("Health check: http://localhost:%d/health\n", s.Port())
+		fmt.Printf("Kanban UI: http://localhost:%d/\n", s.Port())
+		fmt.Printf("Missions UI: http://localhost:%d/missions/\n", s.Port())
 
 		// Block forever
 		select {}
