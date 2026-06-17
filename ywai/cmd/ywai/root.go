@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -225,6 +226,11 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 
 		fmt.Println("\n[3.8/3] Removing deprecated opencode-quota plugin...")
 		removeQuotaForAgents(agents, opts.DryRun)
+
+		fmt.Println("\n[3.9/3] Setting default_agent...")
+		if err := setDefaultAgent("gentle-orchestrator", opts.DryRun); err != nil {
+			fmt.Printf("  Warning: failed to set default_agent: %v\n", err)
+		}
 	}
 
 	fmt.Println("\n=== Done! ===")
@@ -574,4 +580,44 @@ func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
 			fmt.Printf("  [%s] Removed opencode-quota plugin\n", a.Name)
 		}
 	}
+}
+
+func setDefaultAgent(agentName string, dryRun bool) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(home, ".config", "opencode", "opencode.json")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading opencode.json: %w", err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("parsing opencode.json: %w", err)
+	}
+
+	if _, ok := cfg["default_agent"]; ok {
+		fmt.Printf("  default_agent already set to %q\n", cfg["default_agent"])
+		return nil
+	}
+
+	cfg["default_agent"] = agentName
+	updated, err := json.MarshalIndent(cfg, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	if dryRun {
+		fmt.Printf("  Would set default_agent to %q\n", agentName)
+		return nil
+	}
+
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		return fmt.Errorf("writing opencode.json: %w", err)
+	}
+	fmt.Printf("  default_agent set to %q\n", agentName)
+	return nil
 }
