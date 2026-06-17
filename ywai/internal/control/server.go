@@ -41,6 +41,7 @@ type Server struct {
 	portReady chan struct{}
 	startedAt time.Time
 	mu        sync.Mutex
+	startErr  error
 }
 
 // New creates a new control server.
@@ -225,7 +226,9 @@ func (s *Server) Start() error {
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
 	if err != nil {
-		return fmt.Errorf("failed to listen on port %d: %w", s.port, err)
+		s.startErr = fmt.Errorf("failed to listen on port %d: %w", s.port, err)
+		close(s.portReady)
+		return s.startErr
 	}
 
 	s.httpSrv = &http.Server{Handler: s.mux}
@@ -280,6 +283,9 @@ func GetOrStart(port int) (*Server, error) {
 	}()
 
 	s.WaitForPort()
+	if s.startErr != nil {
+		return nil, s.startErr
+	}
 	defaultServer = s
 	return s, nil
 }

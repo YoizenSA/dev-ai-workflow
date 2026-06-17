@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -672,6 +673,13 @@ var serveCmd = &cobra.Command{
 		noMCP, _ := cmd.Flags().GetBool("no-mcp")
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 		noUpdate, _ := cmd.Flags().GetBool("no-update")
+
+		// Check if port is available before forking
+		if ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
+			return fmt.Errorf("port %d is already in use: %w", port, err)
+		} else {
+			ln.Close()
+		}
 
 		// Fork to background before doing any work
 		if background {
