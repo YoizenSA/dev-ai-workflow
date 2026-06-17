@@ -278,6 +278,7 @@ export interface ProviderInfo {
 export interface OpenCodeConfig {
   provider?: string
   model?: string
+  smallModel?: string
   agent?: string
   maxTokens?: number
   temperature?: number

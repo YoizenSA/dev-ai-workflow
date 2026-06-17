@@ -190,6 +190,7 @@ function GeneralTab() {
 			const toSave: Record<string, unknown> = {};
 			if (config.provider !== undefined) toSave.provider = config.provider;
 			if (config.model) toSave.model = config.model;
+			if (config.smallModel) toSave["small_model"] = config.smallModel;
 			if (config.agent !== undefined) toSave.agent = config.agent;
 			if (config.maxTokens !== undefined) toSave.maxTokens = config.maxTokens;
 			if (config.temperature !== undefined)
@@ -241,6 +242,19 @@ function GeneralTab() {
 						value={config.model ?? ""}
 						onChange={(e) => setConfig({ ...config, model: e.target.value })}
 						placeholder="e.g., gpt-4o"
+					/>
+				</div>
+				<div className="field">
+					<label className="field-label" htmlFor="cfg-small-model">
+						Small Model
+					</label>
+					<span className="field-hint">Cheaper model for lightweight tasks (title gen, etc.)</span>
+					<input
+						id="cfg-small-model"
+						className="input"
+						value={config.smallModel ?? ""}
+						onChange={(e) => setConfig({ ...config, smallModel: e.target.value })}
+						placeholder="e.g., anthropic/claude-haiku-4-5"
 					/>
 				</div>
 				<div className="field span-2">
