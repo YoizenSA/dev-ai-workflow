@@ -279,7 +279,7 @@ export interface OpenCodeConfig {
   provider?: string
   model?: string
   smallModel?: string
-  agent?: string
+  defaultAgent?: string
   maxTokens?: number
   temperature?: number
 }

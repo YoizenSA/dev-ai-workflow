@@ -191,7 +191,7 @@ function GeneralTab() {
 			if (config.provider !== undefined) toSave.provider = config.provider;
 			if (config.model) toSave.model = config.model;
 			if (config.smallModel) toSave["small_model"] = config.smallModel;
-			if (config.agent !== undefined) toSave.agent = config.agent;
+			if (config.defaultAgent) toSave["default_agent"] = config.defaultAgent;
 			if (config.maxTokens !== undefined) toSave.maxTokens = config.maxTokens;
 			if (config.temperature !== undefined)
 				toSave.temperature = config.temperature;
@@ -258,16 +258,16 @@ function GeneralTab() {
 					/>
 				</div>
 				<div className="field span-2">
-					<label className="field-label" htmlFor="cfg-agent">
+					<label className="field-label" htmlFor="cfg-default-agent">
 						Default Agent
 					</label>
 					<span className="field-hint">The default agent for new conversations</span>
 					<SearchSelect
-						id="cfg-agent"
-						value={readKey(config.agent)}
+						id="cfg-default-agent"
+						value={readKey(config.defaultAgent)}
 						options={agentList}
 						placeholder="e.g., orchestrator"
-						onChange={(v) => setConfig({ ...config, agent: v })}
+						onChange={(v) => setConfig({ ...config, defaultAgent: v })}
 					/>
 				</div>
 				<div className="field">
