@@ -20,6 +20,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -46,7 +47,7 @@ func daemonize() error {
 		Dir:   ".",
 		Env:   os.Environ(),
 		Files: []*os.File{nil, os.Stdout, os.Stderr},
-		Sys:   &syscall.SysProcAttr{Setsid: true},
+		Sys:   sysProcAttr(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to fork process: %w", err)
@@ -76,7 +77,7 @@ func startOpencodeServe() {
 		return // already running
 	}
 	cmd := exec.Command("opencode", "serve", "--port", "4096")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve: %v\n", err)
 		return
@@ -670,11 +671,26 @@ var serveCmd = &cobra.Command{
 		background, _ := cmd.Flags().GetBool("background")
 		noMCP, _ := cmd.Flags().GetBool("no-mcp")
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
+		noUpdate, _ := cmd.Flags().GetBool("no-update")
 
 		// Fork to background before doing any work
 		if background {
 			if err := daemonize(); err != nil {
 				return err
+			}
+		}
+
+		// Auto-update before starting (skip in MCP-only mode or if --no-update)
+		if !mcpOnly && !noUpdate {
+			if newVer, err := selfupdate.Run(version); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: auto-update failed: %v\n", err)
+			} else if newVer != "" {
+				// Binary was replaced — re-exec with the new version
+				exe, _ := os.Executable()
+				fmt.Printf("Updated %s → %s, restarting...\n", version, newVer)
+				if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
+					return fmt.Errorf("failed to re-exec after update: %w", err)
+				}
 			}
 		}
 
@@ -868,6 +884,7 @@ func init() {
 	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
 	serveCmd.Flags().Bool("no-mcp", false, "Don't start MCP adapter")
 	serveCmd.Flags().Bool("mcp-only", false, "Run as MCP adapter only (stdio, no HTTP)")
+	serveCmd.Flags().Bool("no-update", false, "Skip auto-update before starting")
 
 	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
