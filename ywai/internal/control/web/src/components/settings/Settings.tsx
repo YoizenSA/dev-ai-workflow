@@ -6,6 +6,7 @@ import type {
 	OpenCodeConfig as OpenCodeConfigType,
 } from "../../api/types";
 import RoleDefaultsTab from "./RoleDefaultsTab";
+import ReferencesTab from "./ReferencesTab";
 import SearchSelect from "../shared/SearchSelect";
 import "./Settings.css";
 
@@ -16,7 +17,8 @@ type Tab =
 	| "skills"
 	| "mcp"
 	| "providers"
-	| "tools";
+	| "tools"
+	| "references";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	{
@@ -89,6 +91,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 			</svg>
 		),
 	},
+	{
+		id: "references",
+		label: "References",
+		icon: (
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+				<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+				<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+			</svg>
+		),
+	},
 ];
 
 export default function Settings() {
@@ -127,6 +139,7 @@ export default function Settings() {
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
 				{activeTab === "tools" && <ToolsTab />}
+				{activeTab === "references" && <ReferencesTab />}
 			</div>
 		</div>
 	);

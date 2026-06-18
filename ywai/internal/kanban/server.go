@@ -95,6 +95,9 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("PUT /api/config/user", handlers.PutUserConfig)
 	mux.HandleFunc("GET /api/config/user/role-defaults", handlers.GetRoleDefaults)
 
+	// Native directory picker
+	mux.HandleFunc("POST /api/browse-directory", handlers.BrowseDirectory)
+
 	// UI (frontend)
 	mux.Handle("GET /", uiHandler())
 

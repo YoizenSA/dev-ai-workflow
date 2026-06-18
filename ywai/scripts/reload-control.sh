@@ -22,7 +22,7 @@ set -euo pipefail
 
 PORT="${PORT:-5768}"
 BIN="${BIN:-/tmp/ywai-test}"
-ARGS="${ARGS:---no-mcp}"
+ARGS="${ARGS:---no-mcp --no-update}"
 LOG="${LOG:-/tmp/ywai-test.log}"
 
 # ---------------------------------------------------------------------------

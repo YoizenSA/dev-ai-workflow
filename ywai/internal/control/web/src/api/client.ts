@@ -344,6 +344,10 @@ export const configApi = {
       body: JSON.stringify(data),
     }),
   getRoleDefaults: () => request<RoleDefaults>('/api/config/user/role-defaults'),
+
+  // Native directory picker
+  browseDirectory: () =>
+    request<{ path: string }>('/api/browse-directory', { method: 'POST' }),
 }
 
 // ─── Memories API ───────────────────────────────────────────────────────────

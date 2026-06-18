@@ -275,6 +275,14 @@ export interface ProviderInfo {
   options?: Record<string, unknown>
 }
 
+export interface Reference {
+  path?: string           // For local directories
+  repository?: string     // For git repos (owner/repo or URL)
+  branch?: string         // Optional branch for git repos
+  description?: string    // Description for agent context
+  hidden?: boolean        // Hide from autocomplete
+}
+
 export interface OpenCodeConfig {
   provider?: string
   model?: string
@@ -282,6 +290,7 @@ export interface OpenCodeConfig {
   defaultAgent?: string
   maxTokens?: number
   temperature?: number
+  references?: Record<string, Reference | string>
 }
 
 // ─── User Config (Role Defaults) ──────────────────────────────────────────

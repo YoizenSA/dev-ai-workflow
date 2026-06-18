@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -2404,4 +2405,60 @@ func (h *Handlers) GetRoleDefaults(w http.ResponseWriter, r *http.Request) {
 		out[role] = cfg.GetRoleDefault(role)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// BrowseDirectory opens a native OS directory picker dialog and returns the selected path.
+func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
+	var selectedPath string
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd := exec.Command("osascript", "-e", `tell application "System Events" to POSIX path of (choose folder)`)
+		out, e := cmd.Output()
+		if e != nil {
+			http.Error(w, "Directory selection cancelled", http.StatusNoContent)
+			return
+		}
+		selectedPath = strings.TrimSpace(string(out))
+	case "linux":
+		// Try zenity first, then kdialog
+		cmd := exec.Command("zenity", "--file-selection", "--directory", "--title=Select Reference Directory")
+		out, e := cmd.Output()
+		if e != nil {
+			cmd = exec.Command("kdialog", "--getexistingdirectory", "/")
+			out, e = cmd.Output()
+			if e != nil {
+				http.Error(w, "Directory selection cancelled (install zenity or kdialog)", http.StatusNoContent)
+				return
+			}
+		}
+		selectedPath = strings.TrimSpace(string(out))
+	case "windows":
+		cmd := exec.Command("powershell", "-Command", `
+			Add-Type -AssemblyName System.Windows.Forms
+			$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+			$dialog.Description = "Select Reference Directory"
+			$dialog.ShowNewFolderButton = $true
+			if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+				$dialog.SelectedPath
+			}
+		`)
+		out, e := cmd.Output()
+		if e != nil {
+			http.Error(w, "Directory selection cancelled", http.StatusNoContent)
+			return
+		}
+		selectedPath = strings.TrimSpace(string(out))
+	default:
+		http.Error(w, "Unsupported OS for directory picker", http.StatusBadRequest)
+		return
+	}
+
+	if selectedPath == "" {
+		http.Error(w, "No directory selected", http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
 }
