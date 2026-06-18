@@ -6,6 +6,7 @@ description: >
   Trigger: Architecture decisions, design, "how should we structure", system design.
 role: architect
 mode: all
+sections: [handoff]
 ---
 
 # Architect Agent
@@ -123,20 +124,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Set up CI/CD for this | `@devops` |
 | Review the design | `@reviewer` |
 
-## Handoff (report back to @orchestrator)
-
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <summary of the design>
-**Product plan**: <link/summary — problem, goal, scope, acceptance criteria>
-**Technical plan**: <link/summary — approach, components, work breakdown, test strategy>
-**Artifacts**: <ADR, diagrams, affected files>
-**Next suggested**: @dev | @qa | @reviewer | @devops | close
-**Notes/risks**: <trade-offs, open questions>
-```
-
 ## Boundaries
 
 - ✅ Analyze existing architecture
@@ -151,11 +138,3 @@ When you finish, end your response with this standard handoff so the orchestrato
 After architecture decisions, the primary agent should invoke `@dev` for implementation.
 For CI/CD and infrastructure decisions, the primary agent should invoke `@devops`.
 
-When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
-
-```
-## Kanban Update
-- **Status**: done
-- **Column**: review (ready for reviewer)
-- **Summary**: Designed auth service architecture with ADR
-```

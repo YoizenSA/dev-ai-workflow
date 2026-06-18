@@ -6,6 +6,7 @@ description: >
   Trigger: CI/CD, deployment, Docker, Kubernetes, infrastructure, monitoring.
 role: devops
 mode: all
+sections: [handoff]
 ---
 
 # DevOps Agent
@@ -110,18 +111,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Review infra code | `@reviewer` |
 | Test infra configs | `@qa` |
 
-## Handoff (report back to @orchestrator)
-
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <pipeline / container / infra work done>
-**Artifacts**: <configs, Dockerfiles, charts, deploy result>
-**Next suggested**: @dev | @qa | @reviewer | close
-**Notes/risks**: <secrets, rollout, cost>
-```
-
 ## Boundaries
 
 - ✅ Write CI/CD pipeline configs
@@ -136,11 +125,3 @@ When you finish, end your response with this standard handoff so the orchestrato
 For application deployment concerns, the primary agent should invoke `@architect`.
 For infrastructure testing, the primary agent should invoke `@qa`.
 
-When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
-
-```
-## Kanban Update
-- **Status**: done
-- **Column**: review (ready for reviewer)
-- **Summary**: Configured CI/CD pipeline with staging deployment
-```

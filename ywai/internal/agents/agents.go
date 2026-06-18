@@ -61,7 +61,7 @@ func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 			return nil
 		}
 
-		profile, err := loadProfile(path)
+		profile, err := loadProfile(path, sourceDir)
 		if err != nil {
 			fmt.Printf("  Warning: skip agent %s: %v\n", filepath.Base(path), err)
 			return nil
@@ -77,7 +77,7 @@ func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 	return profiles, nil
 }
 
-func loadProfile(dir string) (*AgentProfile, error) {
+func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 	name := filepath.Base(dir)
 
 	// Read AGENT.md
@@ -93,6 +93,8 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	if mode == "" {
 		mode = "primary"
 	}
+	_ = extractRole(prompt) // extracted for future use
+	sections := extractSections(prompt)
 	prompt = stripFrontmatter(prompt)
 
 	// Read permissions.json
@@ -118,7 +120,7 @@ func loadProfile(dir string) (*AgentProfile, error) {
 	return &AgentProfile{
 		Name:        name,
 		Description: description,
-		Prompt:      promptWithSkills(prompt, skills),
+		Prompt:      appendSections(promptWithSkills(prompt, skills), sections, sourceDir),
 		Permission:  perms,
 		Skills:      skills,
 		Mode:        mode,
@@ -137,6 +139,62 @@ func promptWithSkills(prompt string, skills []string) string {
 	b.WriteString("When relevant, invoke these ywai skills for domain-specific guidance:\n\n")
 	for _, s := range skills {
 		b.WriteString("- `" + s + "`\n")
+	}
+	return b.String()
+}
+
+// extractSections parses the `sections:` field from YAML frontmatter.
+// Returns a slice of section names (e.g. ["handoff", "kanban"]).
+func extractSections(prompt string) []string {
+	if !strings.HasPrefix(prompt, "---") {
+		return nil
+	}
+	end := strings.Index(prompt[3:], "---")
+	if end == -1 {
+		return nil
+	}
+	frontmatter := prompt[3 : end+3]
+	for _, line := range strings.Split(frontmatter, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "sections:") {
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "sections:"))
+			// Parse YAML array: [handoff, kanban]
+			value = strings.Trim(value, "[]")
+			if value == "" {
+				return nil
+			}
+			parts := strings.Split(value, ",")
+			var result []string
+			for _, p := range parts {
+				s := strings.TrimSpace(p)
+				if s != "" {
+					result = append(result, s)
+				}
+			}
+			return result
+		}
+	}
+	return nil
+}
+
+// appendSections resolves and appends shared section files from the
+// agents/sections/ directory. Each section is a .md file named after
+// the section (e.g. "handoff" -> sections/handoff.md).
+func appendSections(prompt string, sections []string, sourceDir string) string {
+	if len(sections) == 0 {
+		return prompt
+	}
+	sectionsDir := filepath.Join(sourceDir, "sections")
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(prompt, "\n"))
+	for _, s := range sections {
+		path := filepath.Join(sectionsDir, s+".md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // section not found, skip silently
+		}
+		b.WriteString("\n\n")
+		b.WriteString(strings.TrimSpace(string(data)))
 	}
 	return b.String()
 }
@@ -238,6 +296,25 @@ func extractMode(prompt string) string {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "mode:") {
 			return strings.TrimSpace(strings.TrimPrefix(trimmed, "mode:"))
+		}
+	}
+	return ""
+}
+
+// extractRole parses the `role:` field from YAML frontmatter.
+func extractRole(prompt string) string {
+	if !strings.HasPrefix(prompt, "---") {
+		return ""
+	}
+	end := strings.Index(prompt[3:], "---")
+	if end == -1 {
+		return ""
+	}
+	frontmatter := prompt[3 : end+3]
+	for _, line := range strings.Split(frontmatter, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "role:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "role:"))
 		}
 	}
 	return ""
@@ -367,7 +444,7 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 // piToolsString renders the enabled tools from a parsed profile as a
 // lowercase comma-separated list of PI.dev-style tool names, in stable order.
 func piToolsString(perms map[string]string) string {
-	order := []struct{ oc, pi string}{
+	order := []struct{ oc, pi string }{
 		{"read", "read"},
 		{"edit", "edit"},
 		{"write", "write"},

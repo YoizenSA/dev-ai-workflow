@@ -7,6 +7,7 @@ description: >
   "what files contain", "show me the structure of".
 role: explorer
 mode: all
+sections: [handoff]
 ---
 
 # Finder Agent
@@ -78,18 +79,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator` or other ag
 | Review the found code | `@reviewer` |
 | Write tests for found code | `@qa` |
 | CI/CD for found infra | `@devops` |
-
-## Handoff (report back to caller)
-
-When you finish your search, end your response with this standard handoff:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <summary of files found and key findings>
-**Artifacts**: <list of absolute file paths and line numbers>
-**Next suggested**: @dev | @architect | @reviewer | close
-**Notes/risks**: <follow-ups>
-```
 
 ## Boundaries
 

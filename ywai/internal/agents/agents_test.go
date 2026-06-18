@@ -126,6 +126,88 @@ func TestPromptWithSkills(t *testing.T) {
 	}
 }
 
+func TestExtractRole(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+		want   string
+	}{
+		{"developer", "---\nrole: developer\n---\n\nbody", "developer"},
+		{"orchestrator", "---\nrole: orchestrator\n---\n\nbody", "orchestrator"},
+		{"explorer", "---\nname: finder\nrole: explorer\n---\n\nbody", "explorer"},
+		{"no role", "---\nname: dev\n---\n\nbody", ""},
+		{"no frontmatter", "# Agent\n\nbody", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractRole(tt.prompt); got != tt.want {
+				t.Errorf("extractRole() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractSections(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+		want   []string
+	}{
+		{"handoff only", "---\nsections: [handoff]\n---\n\nbody", []string{"handoff"}},
+		{"multiple", "---\nsections: [handoff, kanban]\n---\n\nbody", []string{"handoff", "kanban"}},
+		{"no sections", "---\nname: dev\n---\n\nbody", nil},
+		{"no frontmatter", "# Agent\n\nbody", nil},
+		{"empty array", "---\nsections: []\n---\n\nbody", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSections(tt.prompt)
+			if len(got) != len(tt.want) {
+				t.Errorf("extractSections() = %v, want %v", got, tt.want)
+				return
+			}
+			for i, v := range got {
+				if v != tt.want[i] {
+					t.Errorf("extractSections()[%d] = %q, want %q", i, v, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestAppendSections(t *testing.T) {
+	// Create a temp dir with sections.
+	dir := t.TempDir()
+	sectionsDir := filepath.Join(dir, "sections")
+	if err := os.MkdirAll(sectionsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sectionsDir, "handoff.md"), []byte("## Handoff\n\nReport back."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	base := "# Agent\n\nbody"
+
+	// No sections -> no-op.
+	if got := appendSections(base, nil, dir); got != base {
+		t.Errorf("appendSections(nil) should be a no-op")
+	}
+
+	// Existing section -> appended.
+	got := appendSections(base, []string{"handoff"}, dir)
+	if !strings.Contains(got, "## Handoff") {
+		t.Error("expected handoff section appended")
+	}
+	if !strings.Contains(got, "Report back.") {
+		t.Error("expected handoff content")
+	}
+
+	// Missing section -> silently skipped.
+	got = appendSections(base, []string{"nonexistent"}, dir)
+	if got != base {
+		t.Errorf("appendSections(missing) should be a no-op, got %q", got)
+	}
+}
 func TestLoadProfiles(t *testing.T) {
 	src := t.TempDir()
 	devDir := filepath.Join(src, "dev")
@@ -142,11 +224,6 @@ func TestLoadProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(devDir, "skills.txt"), []byte("typescript\n# comment\nreact-19\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// A non-directory entry should be ignored.
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("ignore me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

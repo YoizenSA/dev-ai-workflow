@@ -6,6 +6,7 @@ description: >
   Trigger: Code review, "review this", PR feedback, quality audit.
 role: reviewer
 mode: all
+sections: [handoff]
 ---
 
 # Reviewer Agent
@@ -101,18 +102,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. After revi
 | Add missing tests | `@qa` |
 | Architecture concern | `@architect` |
 
-## Handoff (report back to @orchestrator)
-
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <review summary + verdict: approve / request-changes / block>
-**Artifacts**: <issues found by severity, files/lines>
-**Next suggested**: @dev | @qa | @architect | close
-**Notes/risks**: <must-fix vs nice-to-have>
-```
-
 ## Boundaries
 
 - ✅ Read and analyze code
@@ -126,20 +115,3 @@ When you finish, end your response with this standard handoff so the orchestrato
 
 After review, the primary agent should invoke the appropriate subagent for follow-up work.
 
-When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your verdict:
-
-**Approve:**
-```
-## Kanban Update
-- **Status**: done
-- **Column**: done
-- **Verdict**: approved
-```
-
-**Request changes:**
-```
-## Kanban Update
-- **Status**: changes
-- **Column**: backlog
-- **Verdict**: changes requested
-```

@@ -6,6 +6,7 @@ description: >
   Trigger: Implementation tasks, coding, debugging, "implement", "fix", "add feature".
 role: developer
 mode: all
+sections: [handoff]
 ---
 
 # Dev Agent
@@ -70,18 +71,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Write tests | `@qa` |
 | CI/CD, Docker, K8s | `@devops` |
 
-## Handoff (report back to @orchestrator)
-
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <summary of the implementation>
-**Artifacts**: <files changed, commands run, test/build result>
-**Next suggested**: @qa | @reviewer | @devops | close
-**Notes/risks**: <follow-ups, assumptions>
-```
-
 ## Boundaries
 
 - ✅ Read, write, and edit code
@@ -95,11 +84,3 @@ When you finish, end your response with this standard handoff so the orchestrato
 If the user asks about architecture, the primary agent should invoke `@architect`.
 After implementation, the primary agent may invoke `@reviewer` for code review.
 
-When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
-
-```
-## Kanban Update
-- **Status**: done
-- **Column**: review (ready for reviewer)
-- **Summary**: Implemented JWT middleware with tests passing
-```

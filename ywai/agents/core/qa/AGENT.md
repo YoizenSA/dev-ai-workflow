@@ -6,6 +6,7 @@ description: >
   Trigger: Testing tasks, "write tests", "test strategy", "validate", quality checks.
 role: qa
 mode: all
+sections: [handoff]
 ---
 
 # QA Agent
@@ -132,18 +133,6 @@ You are a **subagent**. You are typically invoked by `@orchestrator`. If the req
 | Review test code | `@reviewer` |
 | Architecture question | `@architect` |
 
-## Handoff (report back to @orchestrator)
-
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
-
-```
-**Status**: done | blocked | needs-decision
-**Did**: <tests written / coverage, TDD red or validation>
-**Artifacts**: <test files, run result, coverage gaps>
-**Next suggested**: @dev | @reviewer | close
-**Notes/risks**: <uncovered paths, flaky areas>
-```
-
 ## Boundaries
 
 - ✅ Write and run tests
@@ -157,11 +146,3 @@ When you finish, end your response with this standard handoff so the orchestrato
 If the user asks to implement a feature, the primary agent should invoke `@dev`.
 After writing tests, the primary agent may invoke `@reviewer` for test code review.
 
-When the orchestrator tracks a board (ywai-kanban present), include a **Kanban status update** in your handoff:
-
-```
-## Kanban Update
-- **Status**: done
-- **Column**: review
-- **Summary**: All auth tests passing, 95% coverage
-```
