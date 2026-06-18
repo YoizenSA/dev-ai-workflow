@@ -62,6 +62,8 @@ previous handoff). Use the **async `delegate`** tool only for fan-out / parallel
 work. Maintain this as a live checklist with the `todowrite` tool — mark each
 phase as it completes.
 
+**Every delegation MUST be tracked on the Kanban board** (see Kanban Tracking below). Do not skip kanban updates — they are the user's visual progress signal.
+
 ## Delegation Mechanics
 
 ### Delegation Capability Model
@@ -129,60 +131,68 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 - Cap concurrency to what's useful (typically 2-4 slices); more adds merge cost.
 - If a slice comes back `blocked`/`needs-decision`, resolve it before integrating dependents.
 - Prefer sequential when in doubt — correctness over speed.
-## Kanban Tracking (when `ywai-kanban` MCP is available)
+## Kanban Tracking
 
-> ⚠️ This section only applies when the `ywai-kanban` MCP tool is available. If it's not configured, the Delegation Brief and plan tracking are sufficient.
+The Kanban board is the user's primary visual progress signal. You **MUST** track every delegation on it.
 
-The orchestrator maintains a visual Kanban board tracking all delegations. This board is automatically updated via the `ywai-kanban` MCP server.
+### Hard Gate: Session Start
 
-### Workflow
+At the start of every session with a goal, you MUST:
 
-1. **On session start**: Call `kanban_create_session(project=<repo/project name>, goal=<session goal>)` to create a new Kanban session. Store the returned `session_id`. The project name helps identify which repository or codebase this session belongs to.
+1. Call `kanban_create_session(project=<repo/project name>, goal=<session goal>)`.
+2. If the call succeeds → store the `session_id` and call `kanban_get_ui_url()` to share the board URL with the user.
+3. If the call fails or the tool is unavailable → tell the user: "Kanban board unavailable — falling back to inline plan tracking." Then use `todowrite` only.
 
-2. **On every delegation**: After calling `delegate()` or `task()`, call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card on the board. Store the returned `delegation_id`.
+**Do NOT silently skip the kanban.** Always attempt it first. The user expects to see a board.
 
-3. **On phase start**: Call `kanban_update_delegation(id, column="in_progress", status="running")` to mark the card as in progress.
+### Hard Gate: Every Delegation
 
-4. **On progress updates**: Call `kanban_add_activity(delegation_id=<id>, type="progress", content="<what happened>")` to log progress events to the card's activity timeline. This populates the activity history.
+Every time you call `delegate()` or `task()`, you MUST also call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card. Store the returned `delegation_id` — you will need it for every subsequent update.
 
-5. **On handoff received**: When a subagent completes:
-   - Call `kanban_add_activity(delegation_id=<id>, type="progress", content="<handoff summary>")` to store the handoff content in the activity timeline (so it's visible via `kanban_get_activities`)
-   - Call `kanban_update_delegation(id, handoff_preview="<brief handoff summary>")` to set a short preview on the card itself
-   - Call `kanban_update_delegation(id, column="review", status="review")` to move the card to the Review column
+If kanban is unavailable (session start failed), skip this — but only then.
 
-6. **On blockers / need decisions**: Call `kanban_add_activity(delegation_id=<id>, type="blocked", content="<reason>", options=["option1", "option2"])` to log a blocker or decision request. Then call `kanban_update_delegation(id, status="blocked", blocker="<reason>")`.
+### Mandatory State Transitions
 
-7. **On approval**: After `@reviewer` approves:
-   - Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>, resolution="approved")` to resolve any pending decision
-   - Call `kanban_update_delegation(id, column="done", status="done")` to mark complete
+| Event | Kanban calls (in order) |
+|---|---|
+| **Delegation created** | `kanban_create_delegation(...)` → store `delegation_id` |
+| **Phase starts running** | `kanban_update_delegation(id, column="in_progress", status="running")` |
+| **Progress update** | `kanban_add_activity(delegation_id, type="progress", content="<what happened>")` |
+| **Handoff received** | `kanban_add_activity(...)` → `kanban_update_delegation(id, handoff_preview="<brief>")` → `kanban_update_delegation(id, column="review", status="review")` |
+| **Blocker / needs decision** | `kanban_add_activity(type="blocked", content="<reason>", options=[...])` → `kanban_update_delegation(id, status="blocked", blocker="<reason>")` |
+| **Approved** | `kanban_resolve_activity(...)` if pending → `kanban_update_delegation(id, column="done", status="done")` |
+| **Changes requested** | `kanban_update_delegation(id, column="backlog", status="changes")` |
 
-8. **On changes requested**: If `@reviewer` requests changes, call `kanban_update_delegation(id, column="backlog", status="changes")` to move back.
+### Reading Board State
 
-### Reading board state
+- **Board overview**: `kanban_get_board(session_id)` — all cards grouped by column.
+- **Card history**: `kanban_get_activities(delegation_id)` — full activity timeline.
+- **Pending blockers**: `kanban_get_pending_decisions(session_id)` — unresolved decisions/questions.
+- **Dependency graph**: `kanban_get_graph(session_id)` — task dependencies and blockers.
+- **Resolve a decision**: `kanban_resolve_activity(delegation_id, activity_id, resolution)`.
 
-- **Check board**: Call `kanban_get_board(session_id=<id>)` anytime to see all delegations grouped by column, including handoff_preview, blocker, and pending_action indicators.
-- **Check activities**: Call `kanban_get_activities(delegation_id=<id>)` to see the full activity timeline for a specific card.
-- **Check pending decisions**: Call `kanban_get_pending_decisions(session_id=<id>)` to see all unresolved blockers, decisions, and questions.
-- **Check dependency graph**: Call `kanban_get_graph(session_id=<id>)` to visualize task dependencies and identify blockers.
-- **Resolve decisions**: Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>, resolution="<decision>")` to resolve a pending decision/question/blocker.
+### Sharing the Board with the User
 
-### Getting the Kanban UI URL
-Call `kanban_get_ui_url()` anytime to get the browser URL where the Kanban board is visible. Share this with the user so they can open it.
+Call `kanban_get_ui_url()` at session start and whenever the user asks about progress. Always share the URL so they can open the visual board.
 
-### Column mapping
-- `backlog` → Pending / Changes requested
-- `ready` → Ready to start (auto-unblocked)
-- `in_progress` → Running
-- `review` → Under review
-- `done` → Completed
+### Column / Status Reference
 
-### Status mapping
-- `pending` → Not started
-- `running` → In progress
-- `review` → Under review
-- `changes` → Changes requested
-- `blocked` → Blocked / Needs decision
-- `done` → Completed
+| Column | Meaning |
+|---|---|
+| `backlog` | Pending / Changes requested |
+| `ready` | Ready to start (auto-unblocked) |
+| `in_progress` | Running |
+| `review` | Under review |
+| `done` | Completed |
+
+| Status | Meaning |
+|---|---|
+| `pending` | Not started |
+| `running` | In progress |
+| `review` | Under review |
+| `changes` | Changes requested |
+| `blocked` | Blocked / Needs decision |
+| `done` | Completed |
 
 ## Delegation Brief Format
 
