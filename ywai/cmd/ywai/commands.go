@@ -14,14 +14,14 @@ import (
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -661,7 +661,14 @@ var groupsCmd = &cobra.Command{
 				os.Exit(1)
 			}
 		}
-		names, err := agentprofiles.ListGroups(config.DataAgentsDir())
+		var names []string
+		var err error
+		// Try source dir first (has latest groups when running from source checkout),
+		// fall back to data dir (seeded/embedded).
+		names, err = agentprofiles.ListGroups(config.AgentsSourceDir())
+		if err != nil {
+			names, err = agentprofiles.ListGroups(config.DataAgentsDir())
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -690,14 +697,14 @@ var daemonCmd = &cobra.Command{
 			return nil
 		}
 
-	// Normal HTTP server mode with auto-start and port resolution
-	port, _ := cmd.Flags().GetInt("port")
-	_, err := kanban.GetOrStart(port)
-	if err != nil {
-		return err
-	}
-	// Block forever (server runs in background from GetOrStart)
-	select {}
+		// Normal HTTP server mode with auto-start and port resolution
+		port, _ := cmd.Flags().GetInt("port")
+		_, err := kanban.GetOrStart(port)
+		if err != nil {
+			return err
+		}
+		// Block forever (server runs in background from GetOrStart)
+		select {}
 	},
 }
 

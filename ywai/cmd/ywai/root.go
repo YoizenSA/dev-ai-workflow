@@ -240,16 +240,16 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 }
 
 func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofiles.GroupFilter, overwriteAgents bool) {
-	// Always read agent profiles from the seeded data dir (~/.ywai/agents).
-	// If it's empty, seed it from embedded data first.
-	if !config.IsDirPopulated(config.DataAgentsDir()) {
+	// Read agent profiles: prefer source dir (has latest groups.json when running
+	// from source checkout), fall back to seeded data dir.
+	sourceDir := config.AgentsSourceDir()
+	if !config.IsDirPopulated(sourceDir) {
 		if err := config.SeedAgentsFromEmbedded(); err != nil {
 			fmt.Printf("  Warning: no agent profiles available: %v\n", err)
 			return
 		}
+		sourceDir = config.DataAgentsDir()
 	}
-
-	sourceDir := config.DataAgentsDir()
 	var profiles map[string]agentprofiles.AgentProfile
 	var err error
 	if filter.AllGroups {

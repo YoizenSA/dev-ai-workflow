@@ -1304,8 +1304,12 @@ func (m *Model) Result() TUIResult {
 // Run starts the TUI and returns the result.
 func Run(detectedAgents []agent.Agent) (TUIResult, error) {
 	m := NewModel(detectedAgents)
-	if err := m.LoadGroups(config.DataAgentsDir()); err != nil {
-		// Non-fatal: groups.json might not exist, TUI still works without groups
+	// Try source dir first (has latest groups when running from source checkout),
+	// fall back to data dir (seeded/embedded).
+	if err := m.LoadGroups(config.AgentsSourceDir()); err != nil {
+		if err2 := m.LoadGroups(config.DataAgentsDir()); err2 != nil {
+			// Non-fatal: groups.json might not exist, TUI still works without groups
+		}
 	}
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 	final, err := p.Run()
