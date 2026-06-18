@@ -92,6 +92,12 @@ func (s *Server) buildRoutes() {
 	s.mux.HandleFunc("/missions/api/", s.missionsHandler)
 	s.mux.HandleFunc("/missions/ws", s.missionsHandler)
 
+	// ─── MCP Store API ──────────────────────────────────────────
+	s.registerMcpStoreRoutes()
+
+	// ─── ADO Config API ─────────────────────────────────────────
+	s.registerAdoConfigRoutes()
+
 	// ─── React SPA ──────────────────────────────────────────────
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)

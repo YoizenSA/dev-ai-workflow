@@ -8,6 +8,7 @@ import type {
 import RoleDefaultsTab from "./RoleDefaultsTab";
 import ReferencesTab from "./ReferencesTab";
 import SearchSelect from "../shared/SearchSelect";
+import Modal from "../shared/Modal";
 import "./Settings.css";
 
 type Tab =
@@ -805,11 +806,12 @@ function SkillsTab() {
 		{ name: string; hasSkillMD: boolean; description: string }[]
 	>([]);
 	const [loading, setLoading] = useState(true);
-	const [expanded, setExpanded] = useState<string | null>(null);
-	const [skillContent, setSkillContent] = useState<Record<string, string>>({});
-	const [editing, setEditing] = useState<string | null>(null);
-	const [editContent, setEditContent] = useState('');
-	const [savingSkill, setSavingSkill] = useState(false);
+	const [viewingSkill, setViewingSkill] = useState<string | null>(null);
+	const [editingSkill, setEditingSkill] = useState<string | null>(null);
+	const [skillContent, setSkillContent] = useState<string>('');
+	const [editContent, setEditContent] = useState<string>('');
+	const [saving, setSaving] = useState(false);
+	const [toast, setToast] = useState<string | null>(null);
 
 	useEffect(() => {
 		configApi
@@ -821,37 +823,42 @@ function SkillsTab() {
 			.catch(() => setLoading(false));
 	}, []);
 
-	const toggleSkill = async (name: string) => {
-		if (expanded === name) {
-			setExpanded(null);
-			setEditing(null);
-			return;
-		}
-		if (!skillContent[name]) {
-			try {
-				const detail = await configApi.getSkill(name);
-				setSkillContent((prev) => ({ ...prev, [name]: detail.content }));
-			} catch { /* ignore */ }
-		}
-		setExpanded(name);
-		setEditing(null);
+	const showToast = (message: string) => {
+		setToast(message);
+		setTimeout(() => setToast(null), 4000);
 	};
 
-	const startEditSkill = (name: string) => {
-		setEditing(name);
-		setEditContent(skillContent[name] ?? '');
-	};
-
-	const handleSaveSkill = async (name: string) => {
-		setSavingSkill(true);
+	const handleView = async (name: string) => {
 		try {
-			await configApi.updateSkill(name, editContent);
-			setSkillContent((prev) => ({ ...prev, [name]: editContent }));
-			setEditing(null);
+			const detail = await configApi.getSkill(name);
+			setSkillContent(detail.content);
+			setViewingSkill(name);
+		} catch (err) {
+			alert(`Error: ${err}`);
+		}
+	};
+
+	const handleEdit = async (name: string) => {
+		try {
+			const detail = await configApi.getSkill(name);
+			setEditContent(detail.content);
+			setEditingSkill(name);
+		} catch (err) {
+			alert(`Error: ${err}`);
+		}
+	};
+
+	const handleSave = async () => {
+		if (!editingSkill) return;
+		setSaving(true);
+		try {
+			await configApi.updateSkill(editingSkill, editContent);
+			setEditingSkill(null);
+			showToast(`Skill "${editingSkill}" saved successfully`);
 		} catch (err) {
 			alert(`Error: ${err}`);
 		} finally {
-			setSavingSkill(false);
+			setSaving(false);
 		}
 	};
 
@@ -878,73 +885,94 @@ function SkillsTab() {
 		<div>
 			{skills.length === 0 && <p className="muted">No skills found</p>}
 			<div className="skills-grid">
-				{skills.map((skill) => {
-					const isOpen = expanded === skill.name;
-					return (
-						<div
-							key={skill.name}
-							className={`skill-card${skill.hasSkillMD ? " enabled" : ""}`}
-						>
-							<div className="skill-card-top">
-								<span className="skill-card-name">{skill.name}</span>
-								{skill.hasSkillMD && (
-									<span className="pill pill-accent">Enabled</span>
-								)}
-							</div>
-							{skill.description && (
-								<p className="skill-card-desc">{skill.description}</p>
+				{skills.map((skill) => (
+					<div
+						key={skill.name}
+						className={`skill-card${skill.hasSkillMD ? " enabled" : ""}`}
+					>
+						<div className="skill-card-top">
+							<span className="skill-card-name">{skill.name}</span>
+							{skill.hasSkillMD && (
+								<span className="pill pill-accent">Enabled</span>
 							)}
-							<div className="skill-card-actions">
-								<button
-									className="btn btn-sm"
-									onClick={() => toggleSkill(skill.name)}
-								>
-									{isOpen ? "Close" : "View"}
-								</button>
-								<button
-									className="btn btn-sm"
-									onClick={() => startEditSkill(skill.name)}
-								>
-									Edit
-								</button>
-								<button
-									className="btn btn-sm btn-danger"
-									onClick={() => handleDelete(skill.name)}
-								>
-									Delete
-								</button>
-							</div>
-							{isOpen && editing === skill.name ? (
-								<div className="skill-card-content">
-									<textarea
-										className="input mono skill-edit-textarea"
-										rows={12}
-										value={editContent}
-										onChange={(e) => setEditContent(e.target.value)}
-									/>
-									<div className="skill-edit-actions">
-										<button className="btn btn-primary" onClick={() => handleSaveSkill(skill.name)} disabled={savingSkill}>
-											{savingSkill ? 'Saving...' : 'Save'}
-										</button>
-										<button className="btn" onClick={() => setEditing(null)}>Cancel</button>
-									</div>
-								</div>
-							) : isOpen && skillContent[skill.name] ? (
-								<div className="skill-card-content">
-									<pre className="settings-code">
-										{skillContent[skill.name].slice(0, 2000)}
-										{skillContent[skill.name].length > 2000 ? "…" : ""}
-									</pre>
-								</div>
-							) : null}
 						</div>
-					);
-				})}
+						{skill.description && (
+							<p className="skill-card-desc skill-card-desc-truncate">{skill.description}</p>
+						)}
+						<div className="skill-card-actions">
+							<button
+								className="btn btn-sm"
+								onClick={() => handleView(skill.name)}
+							>
+								View
+							</button>
+							<button
+								className="btn btn-sm"
+								onClick={() => handleEdit(skill.name)}
+							>
+								Edit
+							</button>
+							<button
+								className="btn btn-sm btn-danger"
+								onClick={() => handleDelete(skill.name)}
+							>
+								Delete
+							</button>
+						</div>
+					</div>
+				))}
 			</div>
+
+			{/* View Modal */}
+			{viewingSkill && (
+				<Modal open={true} onClose={() => setViewingSkill(null)} title={`View: ${viewingSkill}`}>
+					<div className="skill-modal-content">
+						<pre className="skill-code-block">{skillContent}</pre>
+					</div>
+				</Modal>
+			)}
+
+			{/* Edit Modal */}
+			{editingSkill && (
+				<Modal open={true} onClose={() => setEditingSkill(null)} title={`Edit: ${editingSkill}`}>
+					<div className="skill-modal-content">
+						<textarea
+							className="skill-edit-textarea"
+							value={editContent}
+							onChange={(e) => setEditContent(e.target.value)}
+							spellCheck={false}
+						/>
+						<div className="skill-modal-actions">
+							<button className="btn" onClick={() => setEditingSkill(null)}>Cancel</button>
+							<button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+								{saving ? 'Saving...' : 'Save'}
+							</button>
+						</div>
+					</div>
+				</Modal>
+			)}
+
+			{/* Toast */}
+			{toast && (
+				<div
+					className="alert alert-success"
+					style={{
+						position: "fixed",
+						bottom: "var(--space-4)",
+						right: "var(--space-4)",
+						zIndex: 1000,
+						animation: "fadeIn 0.3s ease",
+					}}
+				>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<polyline points="20 6 9 17 4 12" />
+					</svg>
+					{toast}
+				</div>
+			)}
 		</div>
 	);
 }
-
 // ─── MCP Tab ───────────────────────────────────────────────────────────────
 
 function MCPTab() {

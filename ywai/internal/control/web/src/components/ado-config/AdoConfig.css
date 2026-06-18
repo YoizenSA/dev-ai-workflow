@@ -1,0 +1,666 @@
+/* ─── ADO Config Page ─────────────────────────────────────────── */
+
+.ado-config {
+	max-width: 1100px;
+	margin: 0 auto;
+	padding: var(--space-6);
+}
+
+/* ─── Header ──────────────────────────────────────────────────── */
+
+.ado-config-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-6);
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+
+.ado-config-title-group {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.ado-config-title {
+	font-size: var(--font-size-2xl);
+	font-weight: 700;
+	color: var(--text-primary);
+	margin: 0;
+}
+
+.ado-config-status {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-full);
+	font-size: var(--font-size-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.ado-config-status.enabled {
+	background: var(--green-500);
+	color: white;
+}
+
+.ado-config-status.disabled {
+	background: var(--surface-dim);
+	color: var(--text-secondary);
+	border: 1px solid var(--border);
+}
+
+/* ─── Toggle ──────────────────────────────────────────────────── */
+
+.ado-config-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.ado-config-toggle-label {
+	font-size: var(--font-size-sm);
+	color: var(--text-secondary);
+}
+
+.toggle-switch {
+	position: relative;
+	display: inline-block;
+	width: 44px;
+	height: 24px;
+	cursor: pointer;
+}
+
+.toggle-switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+}
+
+.toggle-slider {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: var(--surface-dim);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.toggle-slider::before {
+	content: "";
+	position: absolute;
+	width: 18px;
+	height: 18px;
+	left: 2px;
+	top: 2px;
+	background: white;
+	border-radius: 50%;
+	transition: transform 0.2s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+	background: var(--success, #22c55e);
+	border-color: var(--success, #22c55e);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+	transform: translateX(20px);
+}
+
+/* ─── Default Profile Selector ────────────────────────────────── */
+
+.ado-config-default {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-4);
+	margin-bottom: var(--space-5);
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+}
+
+.ado-config-default-label {
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--text-primary);
+	white-space: nowrap;
+}
+
+.ado-config-default-select {
+	flex: 1;
+	padding: var(--space-2) var(--space-3);
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	color: var(--text-primary);
+	font-size: var(--font-size-sm);
+	outline: none;
+	transition: border-color 0.15s ease;
+}
+
+.ado-config-default-select:focus {
+	border-color: var(--blue-500, #3b82f6);
+}
+
+/* ─── Profiles Section ────────────────────────────────────────── */
+
+.ado-config-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-4);
+}
+
+.ado-config-section-title {
+	font-size: var(--font-size-lg);
+	font-weight: 600;
+	color: var(--text-primary);
+	margin: 0;
+}
+
+.ado-config-add-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-4);
+	background: var(--blue-500, #3b82f6);
+	color: white;
+	border: none;
+	border-radius: var(--radius-md);
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.ado-config-add-btn:hover {
+	background: var(--blue-600, #2563eb);
+}
+
+/* ─── Profile Cards ───────────────────────────────────────────── */
+
+.ado-config-profiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: var(--space-4);
+}
+
+.ado-config-card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-5);
+	transition: border-color 0.15s ease;
+}
+
+.ado-config-card:hover {
+	border-color: var(--blue-500, #3b82f6);
+}
+
+.ado-config-card.default {
+	border-color: var(--blue-500, #3b82f6);
+	border-width: 2px;
+}
+
+.ado-config-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-4);
+}
+
+.ado-config-card-name {
+	font-size: var(--font-size-lg);
+	font-weight: 700;
+	color: var(--text-primary);
+	margin: 0;
+}
+
+.ado-config-card-default-badge {
+	display: inline-flex;
+	padding: var(--space-1) var(--space-2);
+	background: var(--blue-500, #3b82f6);
+	color: white;
+	border-radius: var(--radius-full);
+	font-size: var(--font-size-xs);
+	font-weight: 600;
+}
+
+.ado-config-card-actions {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.ado-config-card-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: var(--font-size-xs);
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	background: var(--background);
+	color: var(--text-secondary);
+}
+
+.ado-config-card-btn:hover {
+	background: var(--surface-dim);
+	color: var(--text-primary);
+}
+
+.ado-config-card-btn.danger {
+	border-color: var(--red-500, #ef4444);
+	color: var(--red-500, #ef4444);
+}
+
+.ado-config-card-btn.danger:hover {
+	background: var(--red-500, #ef4444);
+	color: white;
+}
+
+/* ─── Card Fields ─────────────────────────────────────────────── */
+
+.ado-config-field {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-3);
+	margin-bottom: var(--space-3);
+}
+
+.ado-config-field-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 40px;
+	padding: var(--space-1) var(--space-2);
+	background: var(--surface-dim);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: var(--font-size-xs);
+	font-weight: 700;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.ado-config-field-value {
+	font-size: var(--font-size-sm);
+	color: var(--text-primary);
+	padding-top: 2px;
+	word-break: break-all;
+}
+
+/* ─── Repos Pills ─────────────────────────────────────────────── */
+
+.ado-config-repos {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-top: var(--space-1);
+}
+
+.ado-config-repo-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	background: var(--surface-dim);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-full);
+	font-size: var(--font-size-xs);
+	color: var(--text-primary);
+}
+
+.ado-config-repo-pill-remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: var(--space-1);
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: none;
+	background: transparent;
+	color: var(--text-secondary);
+	cursor: pointer;
+	font-size: 12px;
+	line-height: 1;
+	padding: 0;
+	transition: all 0.15s ease;
+}
+
+.ado-config-repo-pill-remove:hover {
+	background: var(--red-500, #ef4444);
+	color: white;
+}
+
+/* ─── Empty State ─────────────────────────────────────────────── */
+
+.ado-config-empty {
+	text-align: center;
+	padding: var(--space-10);
+	background: var(--surface);
+	border: 2px dashed var(--border);
+	border-radius: var(--radius-lg);
+}
+
+.ado-config-empty-title {
+	font-size: var(--font-size-lg);
+	font-weight: 600;
+	color: var(--text-primary);
+	margin: 0 0 var(--space-2);
+}
+
+.ado-config-empty-desc {
+	font-size: var(--font-size-sm);
+	color: var(--text-secondary);
+	margin: 0;
+}
+
+/* ─── Modal ───────────────────────────────────────────────────── */
+
+.ado-config-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+	padding: var(--space-4);
+}
+
+.ado-config-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	width: 100%;
+	max-width: 520px;
+	max-height: 90vh;
+	overflow-y: auto;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.ado-config-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-5);
+	border-bottom: 1px solid var(--border);
+}
+
+.ado-config-modal-title {
+	font-size: var(--font-size-lg);
+	font-weight: 700;
+	color: var(--text-primary);
+	margin: 0;
+}
+
+.ado-config-modal-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border: none;
+	background: transparent;
+	color: var(--text-secondary);
+	cursor: pointer;
+	border-radius: var(--radius-md);
+	font-size: 18px;
+	transition: all 0.15s ease;
+}
+
+.ado-config-modal-close:hover {
+	background: var(--surface-dim);
+	color: var(--text-primary);
+}
+
+.ado-config-modal-body {
+	padding: var(--space-5);
+}
+
+.ado-config-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-3);
+	padding: var(--space-4) var(--space-5);
+	border-top: 1px solid var(--border);
+}
+
+/* ─── Form ────────────────────────────────────────────────────── */
+
+.ado-config-form-group {
+	margin-bottom: var(--space-4);
+}
+
+.ado-config-form-label {
+	display: block;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-bottom: var(--space-2);
+}
+
+.ado-config-form-input {
+	width: 100%;
+	padding: var(--space-2) var(--space-3);
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	color: var(--text-primary);
+	font-size: var(--font-size-sm);
+	outline: none;
+	transition: border-color 0.15s ease;
+	box-sizing: border-box;
+}
+
+.ado-config-form-input:focus {
+	border-color: var(--blue-500, #3b82f6);
+}
+
+.ado-config-form-input:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.ado-config-form-hint {
+	font-size: var(--font-size-xs);
+	color: var(--text-secondary);
+	margin-top: var(--space-1);
+}
+
+/* ─── Tag Input ───────────────────────────────────────────────── */
+
+.ado-config-tag-input-wrapper {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	padding: var(--space-2);
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	min-height: 40px;
+	align-items: center;
+	cursor: text;
+}
+
+.ado-config-tag-input-wrapper:focus-within {
+	border-color: var(--blue-500, #3b82f6);
+}
+
+.ado-config-tag-input {
+	flex: 1;
+	min-width: 100px;
+	border: none;
+	background: transparent;
+	color: var(--text-primary);
+	font-size: var(--font-size-sm);
+	outline: none;
+	padding: var(--space-1);
+}
+
+/* ─── Action Message ──────────────────────────────────────────── */
+
+.ado-config-message {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	padding: var(--space-3) var(--space-4);
+	margin-bottom: var(--space-4);
+	font-size: var(--font-size-sm);
+	animation: ado-slide-in 0.3s ease;
+}
+
+.ado-config-message.success {
+	border-color: var(--green-500, #22c55e);
+	color: var(--green-500, #22c55e);
+}
+
+.ado-config-message.error {
+	border-color: var(--red-500, #ef4444);
+	color: var(--red-500, #ef4444);
+}
+
+@keyframes ado-slide-in {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ─── Modal Buttons ───────────────────────────────────────────── */
+
+.ado-config-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	background: var(--background);
+	color: var(--text-primary);
+}
+
+.ado-config-btn:hover {
+	background: var(--surface-dim);
+}
+
+.ado-config-btn.primary {
+	background: var(--success, #22c55e);
+	border-color: var(--success, #22c55e);
+	color: white;
+}
+
+.ado-config-btn.primary:hover {
+	background: var(--blue-600, #2563eb);
+}
+
+/* ─── Setup Guide ────────────────────────────────────────────── */
+
+.ado-setup-guide {
+	margin-top: 2rem;
+	border-top: 1px solid var(--border-color);
+	padding-top: 1rem;
+}
+
+.ado-setup-toggle {
+	background: none;
+	border: 1px solid var(--border-color);
+	color: var(--text-secondary);
+	padding: 0.5rem 1rem;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.85rem;
+}
+
+.ado-setup-toggle:hover {
+	background: var(--hover-bg);
+	color: var(--text-primary);
+}
+
+.ado-setup-content {
+	margin-top: 1rem;
+}
+
+.ado-setup-content h3 {
+	font-size: 1rem;
+	margin-bottom: 0.5rem;
+	color: var(--text-primary);
+}
+
+.ado-setup-content p {
+	font-size: 0.85rem;
+	color: var(--text-secondary);
+	margin-bottom: 1rem;
+}
+
+.ado-script-block {
+	margin-bottom: 1.5rem;
+}
+
+.ado-script-block h4 {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-bottom: 0.5rem;
+}
+
+.ado-script-block pre {
+	background: var(--bg-primary, #0d1117);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	padding: 1rem;
+	overflow-x: auto;
+	font-size: 0.8rem;
+	line-height: 1.5;
+}
+
+.ado-script-block code {
+	color: var(--text-primary);
+	font-family: 'JetBrains Mono', monospace;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+	.ado-config {
+		padding: var(--space-4);
+	}
+
+	.ado-config-header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.ado-config-profiles {
+		grid-template-columns: 1fr;
+	}
+
+	.ado-config-default {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.ado-config-default-select {
+		width: 100%;
+	}
+}

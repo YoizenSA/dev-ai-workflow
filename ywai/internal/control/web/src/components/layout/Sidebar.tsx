@@ -113,6 +113,20 @@ const NAV_ITEMS = [
 			</svg>
 		),
 	},
+	{
+		path: "/mcp-store",
+		label: "MCP Store",
+		icon: (
+			<span className="sidebar-icon-badge">MCP</span>
+		),
+	},
+	{
+		path: "/ado-config",
+		label: "Azure DevOps",
+		icon: (
+			<span className="sidebar-icon-badge">ADO</span>
+		),
+	},
 ];
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
@@ -138,8 +152,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
 			{/* Navigation */}
 			<nav className="nav">
-				<span className="nav-section-label">Navigation</span>
-				{NAV_ITEMS.map((item) => {
+				<span className="sidebar-section-label">CORE</span>
+				{NAV_ITEMS.slice(0, 5).map((item) => {
 					const isActive = location.pathname === item.path;
 					const badge =
 						item.path === "/"
@@ -158,6 +172,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 							{item.icon}
 							<span className="nav-label">{item.label}</span>
 							{badge > 0 && <span className="nav-badge">{badge}</span>}
+						</Link>
+					);
+				})}
+
+				<span className="sidebar-section-label">PLUGINS</span>
+				{NAV_ITEMS.slice(5).map((item) => {
+					const isActive = location.pathname === item.path;
+
+					return (
+						<Link
+							key={item.path}
+							to={item.path}
+							className={`nav-link${isActive ? " is-active" : ""}`}
+							onClick={onClose}
+						>
+							{item.icon}
+							<span className="nav-label">{item.label}</span>
 						</Link>
 					);
 				})}
