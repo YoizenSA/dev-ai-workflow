@@ -1,3 +1,8 @@
+---
+name: condition-based-waiting
+description: Anti-flaky test patterns using condition-based waiting instead of fixed timeouts. Trigger: flaky tests, waitForTimeout, race conditions, test stability, async waiting.
+---
+
 # Condition-Based Waiting
 
 Anti-flaky test patterns using condition-based waiting instead of fixed timeouts.
@@ -170,14 +175,6 @@ await page.locator('.open-window').click();
 const popup = await popupPromise;
 await popup.waitForLoadState();
 ```
-
-## Real-World Impact
-
-From debugging session (2025-10-03):
-- Fixed 15 flaky tests across 3 files
-- Pass rate: 60% → 100%
-- Execution time: 40% faster
-- No more race conditions
 
 ## Anti-Patterns to Avoid
 

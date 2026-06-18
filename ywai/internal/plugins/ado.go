@@ -53,6 +53,15 @@ func adoPATPath() string {
 	return filepath.Join(dir, "pat")
 }
 
+// opencodePluginConfigPath returns the path to ~/.config/opencode/ado-plugin.json.
+func opencodePluginConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "opencode", "ado-plugin.json")
+}
+
 func ADODefaultConfigExists() bool {
 	p := adoSharedConfigPath()
 	if p == "" {
@@ -366,44 +375,41 @@ func InstallADODefaultConfig(config ADOPluginConfig) error {
 	return nil
 }
 
-// InstallADOOpenCode adds the @nahuelcio/opencode-ado plugin to opencode.json (or .jsonc).
-func InstallADOOpenCode(configPath string, adoConfig ADOPluginConfig) error {
-	root, err := config.ReadJSONC(configPath)
+// InstallADOOpenCode writes the ADO plugin config to ~/.config/opencode/ado-plugin.json.
+// It does NOT modify opencode.json.
+func InstallADOOpenCode(adoConfig ADOPluginConfig) error {
+	configPath := opencodePluginConfigPath()
+	if configPath == "" {
+		return fmt.Errorf("cannot determine config directory")
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("failed to create config dir %s: %w", dir, err)
+	}
+
+	data, err := json.MarshalIndent(adoConfig, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
+	data = append(data, '\n')
 
-	pluginsRaw, ok := root["plugin"]
-	if !ok {
-		pluginsRaw = []any{}
-		root["plugin"] = pluginsRaw
-	}
-
-	plugins, ok := pluginsRaw.([]any)
-	if !ok {
-		plugins = []any{}
-		root["plugin"] = plugins
-	}
-
-	pluginName := "@nahuelcio/opencode-ado"
-
-	for i, p := range plugins {
-		if arr, ok := p.([]any); ok && len(arr) >= 1 {
-			if name, ok := arr[0].(string); ok && name == pluginName {
-				plugins[i] = []any{pluginName, adoConfig}
-				goto write
-			}
-		}
-	}
-
-	plugins = append(plugins, []any{pluginName, adoConfig})
-	root["plugin"] = plugins
-
-write:
-	if err := config.WriteJSONC(configPath, root); err != nil {
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
+	return nil
+}
+
+// RemoveADOOpenCode deletes ~/.config/opencode/ado-plugin.json.
+func RemoveADOOpenCode() error {
+	configPath := opencodePluginConfigPath()
+	if configPath == "" {
+		return nil
+	}
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove ADO plugin config: %w", err)
+	}
 	return nil
 }
 
@@ -459,8 +465,27 @@ func InstallADOPi(piSettingsPath string) error {
 	return nil
 }
 
-// ReadExistingADOConfig reads the existing shared ADO config if it exists.
+// ReadExistingADOConfig reads the ADO plugin config from ~/.config/opencode/ado-plugin.json.
+// Falls back to the shared config at ~/.azure-devops-cli/config.json and to legacy
+// plugin entries in opencode.json for backward compatibility.
 func ReadExistingADOConfig() (*ADOPluginConfig, error) {
+	// 1. Try new location: ~/.config/opencode/ado-plugin.json
+	pluginPath := opencodePluginConfigPath()
+	if pluginPath != "" {
+		if data, err := os.ReadFile(pluginPath); err == nil {
+			var config ADOPluginConfig
+			if err := json.Unmarshal(data, &config); err == nil {
+				return &config, nil
+			}
+		}
+	}
+
+	// 2. Try legacy opencode.json plugin block
+	if cfg := readAdoFromOpenCodeJSON(); cfg != nil {
+		return cfg, nil
+	}
+
+	// 3. Fall back to shared config: ~/.azure-devops-cli/config.json
 	configPath := adoSharedConfigPath()
 	if configPath == "" {
 		return nil, nil
@@ -493,4 +518,55 @@ func ReadExistingADOConfig() (*ADOPluginConfig, error) {
 	}
 
 	return &config, nil
+}
+
+// readAdoFromOpenCodeJSON extracts the ADO config from opencode.json's "plugin" array
+// for backward compatibility with installs that used the old plugin injection method.
+func readAdoFromOpenCodeJSON() *ADOPluginConfig {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return nil
+	}
+
+	pluginsRaw, ok := root["plugin"]
+	if !ok {
+		return nil
+	}
+
+	plugins, ok := pluginsRaw.([]any)
+	if !ok {
+		return nil
+	}
+
+	pluginName := "@nahuelcio/opencode-ado"
+	for _, p := range plugins {
+		arr, ok := p.([]any)
+		if !ok || len(arr) < 2 {
+			continue
+		}
+		name, ok := arr[0].(string)
+		if !ok || name != pluginName {
+			continue
+		}
+
+		adoJSON, err := json.Marshal(arr[1])
+		if err != nil {
+			continue
+		}
+
+		var cfg ADOPluginConfig
+		if err := json.Unmarshal(adoJSON, &cfg); err != nil {
+			continue
+		}
+
+		return &cfg
+	}
+
+	return nil
 }

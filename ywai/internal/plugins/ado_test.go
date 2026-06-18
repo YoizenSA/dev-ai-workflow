@@ -9,96 +9,50 @@ import (
 
 // ─── InstallADOOpenCode ───────────────────────────────────────────────────
 
-func TestInstallADOOpenCode_AddsPluginToEmptyConfig(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "opencode.json")
-
-	// Write minimal config
-	writeJSON(t, configPath, map[string]any{})
+func TestInstallADOOpenCode_WritesToPluginConfigFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	adoConfig := ADOPluginConfig{
 		DefaultProfile: "work",
 		Profiles: map[string]ADOProfile{
-			"work": {
-				Org:       "myorg",
-				PATEnvVar: "AZURE_DEVOPS_PAT",
-				Project:   "myproject",
-				Repos:     []string{"backend", "frontend"},
-			},
+			"work": {Org: "myorg", Project: "myproject"},
 		},
 	}
 
-	if err := InstallADOOpenCode(configPath, adoConfig); err != nil {
+	if err := InstallADOOpenCode(adoConfig); err != nil {
 		t.Fatalf("InstallADOOpenCode() error = %v", err)
 	}
 
-	var result map[string]any
-	readJSON(t, configPath, &result)
-
-	plugins := result["plugin"].([]any)
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	pluginPath := filepath.Join(home, ".config", "opencode", "ado-plugin.json")
+	data, err := os.ReadFile(pluginPath)
+	if err != nil {
+		t.Fatalf("failed to read ado-plugin.json: %v", err)
 	}
 
-	entry := plugins[0].([]any)
-	if entry[0] != "@nahuelcio/opencode-ado" {
-		t.Fatalf("plugin name = %q, want @nahuelcio/opencode-ado", entry[0])
+	var config ADOPluginConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("failed to unmarshal ado-plugin.json: %v", err)
 	}
 
-	config := entry[1].(map[string]any)
-	if config["defaultProfile"] != "work" {
-		t.Fatalf("defaultProfile = %v, want work", config["defaultProfile"])
+	if config.DefaultProfile != "work" {
+		t.Fatalf("defaultProfile = %q, want work", config.DefaultProfile)
 	}
-}
-
-func TestInstallADOOpenCode_UpdatesExistingPlugin(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "opencode.json")
-
-	// Write config with existing ADO plugin
-	writeJSON(t, configPath, map[string]any{
-		"plugin": []any{
-			[]any{"@nahuelcio/opencode-ado", map[string]any{
-				"defaultProfile": "old",
-				"profiles":       map[string]any{},
-			}},
-		},
-	})
-
-	newConfig := ADOPluginConfig{
-		DefaultProfile: "work",
-		Profiles: map[string]ADOProfile{
-			"work": {Org: "neworg", Project: "newproject"},
-		},
-	}
-
-	if err := InstallADOOpenCode(configPath, newConfig); err != nil {
-		t.Fatalf("InstallADOOpenCode() error = %v", err)
-	}
-
-	var result map[string]any
-	readJSON(t, configPath, &result)
-
-	plugins := result["plugin"].([]any)
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin (updated), got %d", len(plugins))
-	}
-
-	entry := plugins[0].([]any)
-	config := entry[1].(map[string]any)
-	if config["defaultProfile"] != "work" {
-		t.Fatalf("defaultProfile = %v, want work", config["defaultProfile"])
+	if config.Profiles["work"].Org != "myorg" {
+		t.Fatalf("org = %q, want myorg", config.Profiles["work"].Org)
 	}
 }
 
-func TestInstallADOOpenCode_PreservesOtherPlugins(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "opencode.json")
+func TestInstallADOOpenCode_DoesNotModifyOpenCodeJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	os.MkdirAll(filepath.Dir(configPath), 0o700)
 	writeJSON(t, configPath, map[string]any{
-		"plugin": []any{
-			[]any{"@other/plugin", map[string]any{}},
-		},
+		"theme": "dark",
 	})
 
 	adoConfig := ADOPluginConfig{
@@ -106,21 +60,205 @@ func TestInstallADOOpenCode_PreservesOtherPlugins(t *testing.T) {
 		Profiles:       map[string]ADOProfile{},
 	}
 
-	if err := InstallADOOpenCode(configPath, adoConfig); err != nil {
+	if err := InstallADOOpenCode(adoConfig); err != nil {
 		t.Fatalf("InstallADOOpenCode() error = %v", err)
 	}
 
 	var result map[string]any
 	readJSON(t, configPath, &result)
 
-	plugins := result["plugin"].([]any)
-	if len(plugins) != 2 {
-		t.Fatalf("expected 2 plugins, got %d", len(plugins))
+	if _, ok := result["plugin"]; ok {
+		t.Fatal("opencode.json should not have a \"plugin\" key")
+	}
+	if result["theme"] != "dark" {
+		t.Fatalf("opencode.json was modified: theme = %v", result["theme"])
+	}
+}
+
+func TestInstallADOOpenCode_OverwritesExistingPluginConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	adoConfig := ADOPluginConfig{
+		DefaultProfile: "old",
+		Profiles: map[string]ADOProfile{
+			"old": {Org: "oldorg"},
+		},
+	}
+	if err := InstallADOOpenCode(adoConfig); err != nil {
+		t.Fatalf("InstallADOOpenCode() error = %v", err)
 	}
 
-	// First plugin preserved
-	if plugins[0].([]any)[0] != "@other/plugin" {
-		t.Fatalf("first plugin = %v, want @other/plugin", plugins[0])
+	newConfig := ADOPluginConfig{
+		DefaultProfile: "work",
+		Profiles: map[string]ADOProfile{
+			"work": {Org: "neworg", Project: "newproject"},
+		},
+	}
+	if err := InstallADOOpenCode(newConfig); err != nil {
+		t.Fatalf("InstallADOOpenCode() error = %v", err)
+	}
+
+	pluginPath := filepath.Join(home, ".config", "opencode", "ado-plugin.json")
+	data, err := os.ReadFile(pluginPath)
+	if err != nil {
+		t.Fatalf("failed to read ado-plugin.json: %v", err)
+	}
+
+	var config ADOPluginConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("failed to unmarshal ado-plugin.json: %v", err)
+	}
+
+	if config.DefaultProfile != "work" {
+		t.Fatalf("defaultProfile = %q, want work", config.DefaultProfile)
+	}
+}
+
+// ─── RemoveADOOpenCode ─────────────────────────────────────────────────────
+
+func TestRemoveADOOpenCode_DeletesPluginConfigFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	adoConfig := ADOPluginConfig{
+		DefaultProfile: "work",
+		Profiles:       map[string]ADOProfile{},
+	}
+	if err := InstallADOOpenCode(adoConfig); err != nil {
+		t.Fatalf("InstallADOOpenCode() error = %v", err)
+	}
+
+	pluginPath := filepath.Join(home, ".config", "opencode", "ado-plugin.json")
+	if _, err := os.Stat(pluginPath); err != nil {
+		t.Fatalf("ado-plugin.json should exist: %v", err)
+	}
+
+	if err := RemoveADOOpenCode(); err != nil {
+		t.Fatalf("RemoveADOOpenCode() error = %v", err)
+	}
+
+	if _, err := os.Stat(pluginPath); !os.IsNotExist(err) {
+		t.Fatal("ado-plugin.json should have been deleted")
+	}
+}
+
+func TestRemoveADOOpenCode_NoOpWhenFileDoesNotExist(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := RemoveADOOpenCode(); err != nil {
+		t.Fatalf("RemoveADOOpenCode() should not error when file does not exist: %v", err)
+	}
+}
+
+// ─── ReadExistingADOConfig (new file) ──────────────────────────────────────
+
+func TestReadExistingADOConfig_ReadsFromPluginConfigFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	adoConfig := ADOPluginConfig{
+		DefaultProfile: "work",
+		Profiles: map[string]ADOProfile{
+			"work": {Org: "myorg", PATEnvVar: "MY_PAT", Project: "myproject"},
+		},
+	}
+	if err := InstallADOOpenCode(adoConfig); err != nil {
+		t.Fatalf("InstallADOOpenCode() error = %v", err)
+	}
+
+	config, err := ReadExistingADOConfig()
+	if err != nil {
+		t.Fatalf("ReadExistingADOConfig() error = %v", err)
+	}
+	if config == nil {
+		t.Fatal("expected config, got nil")
+	}
+	if config.DefaultProfile != "work" {
+		t.Fatalf("defaultProfile = %q, want work", config.DefaultProfile)
+	}
+	if config.Profiles["work"].Org != "myorg" {
+		t.Fatalf("org = %q, want myorg", config.Profiles["work"].Org)
+	}
+}
+
+func TestReadExistingADOConfig_ReadsFromLegacyOpenCodeJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// Simulate legacy opencode.json with plugin entry
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	os.MkdirAll(filepath.Dir(configPath), 0o700)
+	writeJSON(t, configPath, map[string]any{
+		"plugin": []any{
+			[]any{"@nahuelcio/opencode-ado", map[string]any{
+				"defaultProfile": "legacy",
+				"profiles": map[string]any{
+					"legacy": map[string]any{
+						"org":       "legacyorg",
+						"patEnvVar": "LEGACY_PAT",
+						"project":   "legacyproject",
+					},
+				},
+			}},
+		},
+	})
+
+	config, err := ReadExistingADOConfig()
+	if err != nil {
+		t.Fatalf("ReadExistingADOConfig() error = %v", err)
+	}
+	if config == nil {
+		t.Fatal("expected config from legacy opencode.json, got nil")
+	}
+	if config.DefaultProfile != "legacy" {
+		t.Fatalf("defaultProfile = %q, want legacy", config.DefaultProfile)
+	}
+}
+
+func TestReadExistingADOConfig_PrefersNewFileOverLegacy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// Write legacy opencode.json
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	os.MkdirAll(filepath.Dir(configPath), 0o700)
+	writeJSON(t, configPath, map[string]any{
+		"plugin": []any{
+			[]any{"@nahuelcio/opencode-ado", map[string]any{
+				"defaultProfile": "legacy",
+				"profiles":       map[string]any{},
+			}},
+		},
+	})
+
+	// Write new plugin config
+	newConfig := ADOPluginConfig{
+		DefaultProfile: "new",
+		Profiles: map[string]ADOProfile{
+			"new": {Org: "neworg"},
+		},
+	}
+	if err := InstallADOOpenCode(newConfig); err != nil {
+		t.Fatalf("InstallADOOpenCode() error = %v", err)
+	}
+
+	config, err := ReadExistingADOConfig()
+	if err != nil {
+		t.Fatalf("ReadExistingADOConfig() error = %v", err)
+	}
+	if config == nil {
+		t.Fatal("expected config, got nil")
+	}
+	if config.DefaultProfile != "new" {
+		t.Fatalf("defaultProfile = %q, want new (should prefer new file over legacy)", config.DefaultProfile)
 	}
 }
 

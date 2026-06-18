@@ -522,16 +522,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 			adoConfig = &plugins.ADOPluginConfig{}
 		}
 
-		// 3. Add to opencode.json
+		// 3. Add to opencode config
 		for _, a := range agents {
 			if a.Name != "opencode" && a.Name != "kilocode" {
 				continue
 			}
-			configPath, ok := agentSettingsPaths[a.Name]
-			if !ok || configPath == "" {
+			if _, ok := agentSettingsPaths[a.Name]; !ok {
 				continue
 			}
-			if err := plugins.InstallADOOpenCode(configPath, *adoConfig); err != nil {
+			if err := plugins.InstallADOOpenCode(*adoConfig); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install ADO plugin: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] ✓ Azure DevOps plugin installed\n", a.Name)
