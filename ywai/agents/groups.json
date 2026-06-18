@@ -27,6 +27,17 @@
     "experiment": {
       "description": "Experimental and temporary agents",
       "agents": []
+    },
+    "qa-automation": {
+      "description": "QA automation and testing agents for manual QA testers learning automation",
+      "agents": [
+        "qa-automation/qa-orchestrator",
+        "qa-automation/qa-analyst",
+        "qa-automation/qa-ask",
+        "qa-automation/qa-dev",
+        "qa-automation/qa-reviewer",
+        "qa-automation/qa-finder"
+      ]
     }
   }
 }

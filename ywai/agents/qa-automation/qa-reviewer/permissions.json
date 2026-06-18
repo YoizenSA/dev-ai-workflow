@@ -1,0 +1,16 @@
+{
+  "read": "allow",
+  "glob": "allow",
+  "grep": "allow",
+  "bash": "allow",
+  "task": "allow",
+  "question": "allow",
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow",
+  "webfetch": "deny",
+  "delegate": "deny",
+  "websearch": "deny"
+}
