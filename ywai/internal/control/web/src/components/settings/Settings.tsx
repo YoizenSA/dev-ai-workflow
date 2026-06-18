@@ -26,7 +26,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "general",
 		label: "General",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<circle cx="12" cy="12" r="3" />
 				<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
 			</svg>
@@ -36,7 +45,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "roles",
 		label: "Role Defaults",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
 				<circle cx="9" cy="7" r="4" />
 				<path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -48,7 +66,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "agents",
 		label: "Agents",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
 				<circle cx="12" cy="7" r="4" />
 			</svg>
@@ -58,7 +85,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "skills",
 		label: "Skills",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
 			</svg>
 		),
@@ -67,7 +103,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "mcp",
 		label: "MCP",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
 				<line x1="8" y1="21" x2="16" y2="21" />
 				<line x1="12" y1="17" x2="12" y2="21" />
@@ -78,7 +123,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "providers",
 		label: "Providers",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<path d="M22 12h-4l-3 9L9 3l-3 9H2" />
 			</svg>
 		),
@@ -87,7 +141,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "tools",
 		label: "Tools",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
 			</svg>
 		),
@@ -96,7 +159,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "references",
 		label: "References",
 		icon: (
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
 				<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
 				<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
 			</svg>
@@ -155,6 +227,12 @@ function GeneralTab() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
+	// AGENTS.md state
+	const [agentsMd, setAgentsMd] = useState<string>("");
+	const [agentsMdPath, setAgentsMdPath] = useState<string>("");
+	const [agentsMdLoading, setAgentsMdLoading] = useState(true);
+	const [agentsMdSaving, setAgentsMdSaving] = useState(false);
+	const [agentsMdMessage, setAgentsMdMessage] = useState<string | null>(null);
 
 	useEffect(() => {
 		// listProviders() only returns providers declared in opencode.json (3-ish).
@@ -173,12 +251,25 @@ function GeneralTab() {
 			const runtime = modelsRes
 				? Object.keys(modelsRes.modelsByProvider ?? {})
 				: [];
-			const union = Array.from(new Set([...declared, ...runtime])).sort((a, b) =>
-				a.localeCompare(b),
+			const union = Array.from(new Set([...declared, ...runtime])).sort(
+				(a, b) => a.localeCompare(b),
 			);
 			setProviderList(union);
 			setLoading(false);
 		});
+
+		// Load AGENTS.md
+		configApi
+			.getAgentsMd()
+			.then(({ path, content }) => {
+				setAgentsMd(content);
+				setAgentsMdPath(path);
+			})
+			.catch(() => {
+				setAgentsMd("");
+				setAgentsMdPath("");
+			})
+			.finally(() => setAgentsMdLoading(false));
 	}, []);
 
 	// Helper to read the current provider / agent identifier no matter whether
@@ -218,6 +309,20 @@ function GeneralTab() {
 		}
 	};
 
+	const handleAgentsMdSave = async () => {
+		if (!agentsMdPath) return;
+		setAgentsMdSaving(true);
+		setAgentsMdMessage(null);
+		try {
+			await configApi.saveAgentsMd(agentsMd);
+			setAgentsMdMessage("AGENTS.md saved successfully");
+		} catch (err) {
+			setAgentsMdMessage(`Error: ${err}`);
+		} finally {
+			setAgentsMdSaving(false);
+		}
+	};
+
 	if (loading) {
 		return (
 			<div className="loading-inline">
@@ -236,7 +341,9 @@ function GeneralTab() {
 					<label className="field-label" htmlFor="cfg-provider">
 						Provider
 					</label>
-					<span className="field-hint">The LLM provider for this configuration</span>
+					<span className="field-hint">
+						The LLM provider for this configuration
+					</span>
 					<SearchSelect
 						id="cfg-provider"
 						value={readKey(config.provider)}
@@ -262,12 +369,16 @@ function GeneralTab() {
 					<label className="field-label" htmlFor="cfg-small-model">
 						Small Model
 					</label>
-					<span className="field-hint">Cheaper model for lightweight tasks (title gen, etc.)</span>
+					<span className="field-hint">
+						Cheaper model for lightweight tasks (title gen, etc.)
+					</span>
 					<input
 						id="cfg-small-model"
 						className="input"
 						value={config.smallModel ?? ""}
-						onChange={(e) => setConfig({ ...config, smallModel: e.target.value })}
+						onChange={(e) =>
+							setConfig({ ...config, smallModel: e.target.value })
+						}
 						placeholder="e.g., anthropic/claude-haiku-4-5"
 					/>
 				</div>
@@ -275,7 +386,9 @@ function GeneralTab() {
 					<label className="field-label" htmlFor="cfg-default-agent">
 						Default Agent
 					</label>
-					<span className="field-hint">The default agent for new conversations</span>
+					<span className="field-hint">
+						The default agent for new conversations
+					</span>
 					<SearchSelect
 						id="cfg-default-agent"
 						value={readKey(config.defaultAgent)}
@@ -307,7 +420,9 @@ function GeneralTab() {
 					<label className="field-label" htmlFor="cfg-temp">
 						Temperature
 					</label>
-					<span className="field-hint">Controls randomness: 0=focused, 2=creative</span>
+					<span className="field-hint">
+						Controls randomness: 0=focused, 2=creative
+					</span>
 					<input
 						id="cfg-temp"
 						className="input"
@@ -351,6 +466,59 @@ function GeneralTab() {
 					"Save Changes"
 				)}
 			</button>
+
+			{/* ─── AGENTS.md Editor ────────────────────────────────────────── */}
+			<div className="card card-pad" style={{ marginTop: "2rem" }}>
+				<div className="card-header">
+					<h3>AGENTS.md</h3>
+					<span className="muted">{agentsMdPath || "Not found"}</span>
+				</div>
+				<p className="muted" style={{ marginBottom: "1rem" }}>
+					Edit the AGENTS.md file from the project root. This file contains
+					project-wide instructions for AI agents.
+				</p>
+				{agentsMdLoading ? (
+					<div className="loading-inline">
+						<div className="spinner"></div>
+						<span>Loading AGENTS.md…</span>
+					</div>
+				) : agentsMdPath ? (
+					<>
+						<textarea
+							className="input"
+							rows={20}
+							value={agentsMd}
+							onChange={(e) => setAgentsMd(e.target.value)}
+							placeholder="# AGENTS.md content..."
+							style={{ fontFamily: "monospace", resize: "vertical" }}
+						/>
+						{agentsMdMessage && (
+							<div
+								className={`alert ${agentsMdMessage.startsWith("Error") ? "alert-danger" : "alert-success"}`}
+							>
+								{agentsMdMessage}
+							</div>
+						)}
+						<button
+							className="btn btn-primary"
+							onClick={handleAgentsMdSave}
+							disabled={agentsMdSaving}
+							style={{ marginTop: "0.5rem" }}
+						>
+							{agentsMdSaving ? (
+								<>
+									<div className="spinner"></div>
+									Saving…
+								</>
+							) : (
+								"Save AGENTS.md"
+							)}
+						</button>
+					</>
+				) : (
+					<p className="muted">AGENTS.md not found in the project root.</p>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -384,7 +552,17 @@ function AgentsTab() {
 	useEffect(() => {
 		Promise.all([
 			configApi.listAgents(),
-			configApi.listTools().catch(() => ({ built_in: [] as string[], all: [] as string[], mcp_tools: {} as Record<string, { tools: string[]; enabled: boolean }>, plugin_tools: {} as Record<string, string[]> })),
+			configApi
+				.listTools()
+				.catch(() => ({
+					built_in: [] as string[],
+					all: [] as string[],
+					mcp_tools: {} as Record<
+						string,
+						{ tools: string[]; enabled: boolean }
+					>,
+					plugin_tools: {} as Record<string, string[]>,
+				})),
 		])
 			.then(([agentList, toolsRes]) => {
 				const list = agentList.map((a) => ({
@@ -473,7 +651,10 @@ function AgentsTab() {
 		const clean = name.trim().toLowerCase().replace(/\s+/g, "-");
 		setSaving(true);
 		try {
-			await configApi.createAgent(clean, `# ${clean}\n\nYou are a helpful assistant.`);
+			await configApi.createAgent(
+				clean,
+				`# ${clean}\n\nYou are a helpful assistant.`,
+			);
 			const detail = await configApi.getAgent(clean);
 			setAgents((prev) => [
 				...prev,
@@ -528,7 +709,13 @@ function AgentsTab() {
 		if (!grouped[team]) grouped[team] = [];
 		grouped[team].push(agent);
 	}
-	const teamOrder = ["core", "social-refactor", "experiment", "custom", "other"];
+	const teamOrder = [
+		"core",
+		"social-refactor",
+		"experiment",
+		"custom",
+		"other",
+	];
 	const sortedTeams = Object.keys(grouped).sort((a, b) => {
 		const ai = teamOrder.indexOf(a);
 		const bi = teamOrder.indexOf(b);
@@ -546,7 +733,7 @@ function AgentsTab() {
 	};
 
 	const selectedAgent = agents.find((a) => a.name === selected);
-	const currentPerms = selected ? permissions[selected] ?? {} : {};
+	const currentPerms = selected ? (permissions[selected] ?? {}) : {};
 
 	// --- Permission rendering (dynamic from API) ---
 	const togglePermission = async (agentName: string, tool: string) => {
@@ -564,7 +751,11 @@ function AgentsTab() {
 		}
 	};
 
-	const toggleGroupPermissions = async (agentName: string, tools: string[], allow: boolean) => {
+	const toggleGroupPermissions = async (
+		agentName: string,
+		tools: string[],
+		allow: boolean,
+	) => {
 		const perms = { ...(permissions[agentName] ?? {}) };
 		for (const tool of tools) {
 			perms[tool] = allow ? "allow" : "deny";
@@ -581,7 +772,11 @@ function AgentsTab() {
 		}
 	};
 
-	const renderPermissionGroup = (label: string, tools: string[] | null | undefined, disabledGroup = false) => {
+	const renderPermissionGroup = (
+		label: string,
+		tools: string[] | null | undefined,
+		disabledGroup = false,
+	) => {
 		if (!tools) return null;
 		const perms = permissions[selected!] ?? {};
 		const allowedCount = tools.filter((t) => perms[t] === "allow").length;
@@ -626,15 +821,29 @@ function AgentsTab() {
 					</h4>
 					<button
 						className={`pill ${allAllowed ? "pill-success" : "pill-muted"}`}
-						style={{ cursor: disabledGroup ? "not-allowed" : "pointer", fontSize: "0.68rem" }}
-						onClick={() => !disabledGroup && toggleGroupPermissions(selected!, tools, !allAllowed)}
+						style={{
+							cursor: disabledGroup ? "not-allowed" : "pointer",
+							fontSize: "0.68rem",
+						}}
+						onClick={() =>
+							!disabledGroup &&
+							toggleGroupPermissions(selected!, tools, !allAllowed)
+						}
 						disabled={savingPerms === selected || disabledGroup}
-						data-tip={disabledGroup ? "MCP disabled" : allAllowed ? "Deny all" : "Allow all"}
+						data-tip={
+							disabledGroup
+								? "MCP disabled"
+								: allAllowed
+									? "Deny all"
+									: "Allow all"
+						}
 					>
 						{allAllowed ? "Deny all" : "Allow all"}
 					</button>
 				</div>
-				<div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+				<div
+					style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}
+				>
 					{tools.map((tool) => {
 						const status = perms[tool] ?? "deny";
 						const isActive = status === "allow";
@@ -642,8 +851,13 @@ function AgentsTab() {
 							<button
 								key={tool}
 								className={`pill ${isActive ? "pill-success" : "pill-danger"}`}
-								style={{ cursor: disabledGroup ? "default" : "pointer", fontSize: "0.72rem" }}
-								onClick={() => !disabledGroup && togglePermission(selected!, tool)}
+								style={{
+									cursor: disabledGroup ? "default" : "pointer",
+									fontSize: "0.72rem",
+								}}
+								onClick={() =>
+									!disabledGroup && togglePermission(selected!, tool)
+								}
 								disabled={savingPerms === selected || disabledGroup}
 								data-tip={`${tool}: ${status}${disabledGroup ? " (MCP disabled)" : ""}`}
 							>
@@ -655,7 +869,7 @@ function AgentsTab() {
 				</div>
 			</div>
 		);
-	};;
+	};
 
 	return (
 		<div className="agents-layout">
@@ -711,9 +925,7 @@ function AgentsTab() {
 						{/* Agent header */}
 						<div className="agent-detail-header">
 							<div>
-								<h2 className="agent-detail-title">
-									{selectedAgent.name}
-								</h2>
+								<h2 className="agent-detail-title">{selectedAgent.name}</h2>
 								<span className="agent-detail-subtitle">
 									{selectedAgent.group || "other"} team
 								</span>
@@ -769,7 +981,11 @@ function AgentsTab() {
 								{renderPermissionGroup("Built-in Tools", toolsData.built_in)}
 								{/* MCP tools grouped by MCP name */}
 								{Object.entries(toolsData.mcp_tools).map(([name, group]) =>
-									renderPermissionGroup(`MCP: ${name}`, group.tools, !group.enabled),
+									renderPermissionGroup(
+										`MCP: ${name}`,
+										group.tools,
+										!group.enabled,
+									),
 								)}
 								{/* Plugin tools grouped by plugin name */}
 								{Object.entries(toolsData.plugin_tools).map(([name, tools]) =>
@@ -808,8 +1024,8 @@ function SkillsTab() {
 	const [loading, setLoading] = useState(true);
 	const [viewingSkill, setViewingSkill] = useState<string | null>(null);
 	const [editingSkill, setEditingSkill] = useState<string | null>(null);
-	const [skillContent, setSkillContent] = useState<string>('');
-	const [editContent, setEditContent] = useState<string>('');
+	const [skillContent, setSkillContent] = useState<string>("");
+	const [editContent, setEditContent] = useState<string>("");
 	const [saving, setSaving] = useState(false);
 	const [toast, setToast] = useState<string | null>(null);
 
@@ -897,7 +1113,9 @@ function SkillsTab() {
 							)}
 						</div>
 						{skill.description && (
-							<p className="skill-card-desc skill-card-desc-truncate">{skill.description}</p>
+							<p className="skill-card-desc skill-card-desc-truncate">
+								{skill.description}
+							</p>
 						)}
 						<div className="skill-card-actions">
 							<button
@@ -925,7 +1143,11 @@ function SkillsTab() {
 
 			{/* View Modal */}
 			{viewingSkill && (
-				<Modal open={true} onClose={() => setViewingSkill(null)} title={`View: ${viewingSkill}`}>
+				<Modal
+					open={true}
+					onClose={() => setViewingSkill(null)}
+					title={`View: ${viewingSkill}`}
+				>
 					<div className="skill-modal-content">
 						<pre className="skill-code-block">{skillContent}</pre>
 					</div>
@@ -934,7 +1156,11 @@ function SkillsTab() {
 
 			{/* Edit Modal */}
 			{editingSkill && (
-				<Modal open={true} onClose={() => setEditingSkill(null)} title={`Edit: ${editingSkill}`}>
+				<Modal
+					open={true}
+					onClose={() => setEditingSkill(null)}
+					title={`Edit: ${editingSkill}`}
+				>
 					<div className="skill-modal-content">
 						<textarea
 							className="skill-edit-textarea"
@@ -943,9 +1169,15 @@ function SkillsTab() {
 							spellCheck={false}
 						/>
 						<div className="skill-modal-actions">
-							<button className="btn" onClick={() => setEditingSkill(null)}>Cancel</button>
-							<button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-								{saving ? 'Saving...' : 'Save'}
+							<button className="btn" onClick={() => setEditingSkill(null)}>
+								Cancel
+							</button>
+							<button
+								className="btn btn-primary"
+								onClick={handleSave}
+								disabled={saving}
+							>
+								{saving ? "Saving..." : "Save"}
 							</button>
 						</div>
 					</div>
@@ -964,7 +1196,16 @@ function SkillsTab() {
 						animation: "fadeIn 0.3s ease",
 					}}
 				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
 						<polyline points="20 6 9 17 4 12" />
 					</svg>
 					{toast}
@@ -1368,9 +1609,7 @@ function ToolsTab() {
 					<div key={section.label} className="tools-section">
 						<h3 className="tools-section-title">
 							{section.icon} {section.label}
-							<span className="tools-section-count">
-								({toolsList.length})
-							</span>
+							<span className="tools-section-count">({toolsList.length})</span>
 						</h3>
 						<div className="tools-pills-container">
 							{toolsList.map((tool) => (

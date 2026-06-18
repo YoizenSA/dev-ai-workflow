@@ -98,6 +98,9 @@ func (s *Server) buildRoutes() {
 	// ─── ADO Config API ─────────────────────────────────────────
 	s.registerAdoConfigRoutes()
 
+	// ─── Agents.md API ──────────────────────────────────────────
+	s.registerAgentsMdRoutes()
+
 	// ─── React SPA ──────────────────────────────────────────────
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)
