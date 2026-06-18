@@ -1,7 +1,6 @@
 ---
 name: angular-performance
 description: Angular performance. Trigger: optimizing Angular apps, images, lazy loading.
-license: Apache-2.0
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

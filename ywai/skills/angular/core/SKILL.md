@@ -1,7 +1,6 @@
 ---
 name: angular-core
 description: Angular core patterns. Trigger: Angular components, signals, inject, zoneless.
-license: Apache-2.0
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 
