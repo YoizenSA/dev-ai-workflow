@@ -1175,6 +1175,74 @@ func TestListGroups_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadProfilesByGroup_NestedAgents(t *testing.T) {
+	// Reproduce bug: agents in subdirectories (like qa-automation/qa-orchestrator)
+	// must match the names referenced in groups.json (e.g. "qa-automation/qa-orchestrator").
+	dir := t.TempDir()
+
+	// Create core agents (flat structure)
+	writeAgentDir(t, dir, "orchestrator")
+	writeAgentDir(t, dir, "dev")
+
+	// Create nested agents (like qa-automation/)
+	nestedDir := filepath.Join(dir, "qa-automation")
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeAgentDir(t, nestedDir, "qa-orchestrator")
+	writeAgentDir(t, nestedDir, "qa-analyst")
+
+	writeGroupsJSON(t, dir, `{
+		"groups": {
+			"core": {
+				"description": "Core agents",
+				"agents": ["orchestrator", "dev"]
+			},
+			"qa-automation": {
+				"description": "QA automation agents",
+				"agents": ["qa-automation/qa-orchestrator", "qa-automation/qa-analyst"]
+			}
+		}
+	}`)
+
+	// Test 1: core only — nested agents should NOT be included
+	coreProfiles, err := LoadProfilesByGroup(dir, GroupFilter{})
+	if err != nil {
+		t.Fatalf("core-only: unexpected error: %v", err)
+	}
+	if len(coreProfiles) != 2 {
+		t.Errorf("core-only: expected 2 profiles, got %d: %v", len(coreProfiles), keys(coreProfiles))
+	}
+	for _, name := range []string{"orchestrator", "dev"} {
+		if _, ok := coreProfiles[name]; !ok {
+			t.Errorf("core-only: expected %q in profiles", name)
+		}
+	}
+
+	// Test 2: core + qa-automation — nested agents MUST be included
+	qaProfiles, err := LoadProfilesByGroup(dir, GroupFilter{Groups: []string{"qa-automation"}})
+	if err != nil {
+		t.Fatalf("with qa-automation: unexpected error: %v", err)
+	}
+	if len(qaProfiles) != 4 {
+		t.Errorf("with qa-automation: expected 4 profiles, got %d: %v", len(qaProfiles), keys(qaProfiles))
+	}
+	expected := []string{"orchestrator", "dev", "qa-automation/qa-orchestrator", "qa-automation/qa-analyst"}
+	for _, name := range expected {
+		if _, ok := qaProfiles[name]; !ok {
+			t.Errorf("with qa-automation: expected %q in profiles", name)
+		}
+	}
+}
+
+func keys[M ~map[string]V, V any](m M) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestPiToolsString(t *testing.T) {
 	tests := []struct {
 		name  string

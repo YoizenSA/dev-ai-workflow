@@ -78,7 +78,14 @@ func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 }
 
 func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
-	name := filepath.Base(dir)
+	// Use the relative path from sourceDir as the agent name.
+	// This ensures agents in subdirectories (e.g. qa-automation/qa-orchestrator)
+	// match the names referenced in groups.json.
+	rel, err := filepath.Rel(sourceDir, dir)
+	if err != nil {
+		rel = filepath.Base(dir)
+	}
+	name := filepath.ToSlash(rel)
 
 	// Read AGENT.md
 	agentFile := filepath.Join(dir, "AGENT.md")
@@ -417,6 +424,12 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
 
+		// Ensure parent directory exists for nested agent names (e.g. qa-automation/qa-orchestrator)
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
+			continue
+		}
+
 		// Skip if already exists
 		if _, err := os.Stat(targetPath); err == nil {
 			continue
@@ -479,6 +492,12 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
 
+		// Ensure parent directory exists for nested agent names
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
+			continue
+		}
+
 		if !overwrite {
 			if _, err := os.Stat(targetPath); err == nil {
 				continue
@@ -523,6 +542,12 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 	installed := 0
 	for name, profile := range profiles {
 		targetPath := filepath.Join(promptsDir, name+".instructions.md")
+
+		// Ensure parent directory exists for nested agent names
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
+			continue
+		}
 
 		// Skip if already exists
 		if _, err := os.Stat(targetPath); err == nil {
@@ -637,6 +662,12 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 	installed := 0
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
+
+		// Ensure parent directory exists for nested agent names
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
+			continue
+		}
 
 		if !overwrite {
 			if _, err := os.Stat(targetPath); err == nil {
