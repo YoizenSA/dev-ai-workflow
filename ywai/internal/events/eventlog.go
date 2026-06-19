@@ -21,13 +21,13 @@ const (
 
 // Event is a single entry in the append-only event log.
 type Event struct {
-	ID        string    `json:"id"`                 // unique identifier
-	SessionID string    `json:"session_id"`          // which session this belongs to
-	Type      EventType `json:"type"`                // event category
-	MissionID string    `json:"mission_id"`          // affected mission
-	Data      []byte    `json:"data,omitempty"`      // optional payload (JSON)
-	Sequence  int64     `json:"sequence"`            // monotonically increasing per session
-	Timestamp time.Time `json:"timestamp"`           // when the event occurred
+	ID        string    `json:"id"`             // unique identifier
+	SessionID string    `json:"session_id"`     // which session this belongs to
+	Type      EventType `json:"type"`           // event category
+	MissionID string    `json:"mission_id"`     // affected mission
+	Data      []byte    `json:"data,omitempty"` // optional payload (JSON)
+	Sequence  int64     `json:"sequence"`       // monotonically increasing per session
+	Timestamp time.Time `json:"timestamp"`      // when the event occurred
 }
 
 // Store is the interface for the append-only event log.

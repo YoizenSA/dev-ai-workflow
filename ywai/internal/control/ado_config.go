@@ -25,9 +25,9 @@ type AdoProfile struct {
 
 // AdoPluginConfig represents the full ADO plugin configuration.
 type AdoPluginConfig struct {
-	Enabled         bool                  `json:"enabled"`
-	DefaultProfile  string                `json:"defaultProfile"`
-	Profiles        map[string]AdoProfile `json:"profiles"`
+	Enabled        bool                  `json:"enabled"`
+	DefaultProfile string                `json:"defaultProfile"`
+	Profiles       map[string]AdoProfile `json:"profiles"`
 }
 
 // registerAdoConfigRoutes registers all ADO config API routes.
@@ -239,8 +239,8 @@ func (s *Server) handleAdoSaveConfig(w http.ResponseWriter, r *http.Request) {
 
 // adoProfileRequest is the POST/DELETE body for profile operations.
 type adoProfileRequest struct {
-	Name    string      `json:"name"`
-	Profile AdoProfile  `json:"profile"`
+	Name    string     `json:"name"`
+	Profile AdoProfile `json:"profile"`
 }
 
 // handleAdoAddProfile adds or updates a profile.

@@ -101,7 +101,7 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 		entry["tool_call"] = true
 		entry["attachment"] = true
 		entry["modalities"] = map[string]interface{}{
-			"input": []string{"text", "audio", "image", "video", "pdf"},
+			"input":  []string{"text", "audio", "image", "video", "pdf"},
 			"output": []string{"text"},
 		}
 	}

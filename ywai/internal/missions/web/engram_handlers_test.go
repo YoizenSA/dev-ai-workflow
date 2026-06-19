@@ -54,7 +54,7 @@ func TestHandler_EngramStatus_Connected(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	var body map[string]any
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	resp.Body.Close()
 	if body["connected"] != true {
 		t.Fatalf("expected connected=true, got %v", body["connected"])
@@ -68,7 +68,7 @@ func TestHandler_EngramStatus_NotConfigured(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	var body map[string]any
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	resp.Body.Close()
 	if body["connected"] != false {
 		t.Fatalf("expected connected=false, got %v", body["connected"])

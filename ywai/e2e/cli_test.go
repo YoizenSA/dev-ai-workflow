@@ -63,7 +63,6 @@ func TestInstallHelpWithErrorHandling(t *testing.T) {
 	}
 }
 
-
 func TestCrossPlatformPathHandling(t *testing.T) {
 	bin := buildBinary(t)
 

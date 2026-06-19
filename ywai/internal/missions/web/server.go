@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/engram"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 

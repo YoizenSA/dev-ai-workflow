@@ -109,20 +109,3 @@ func runYwaiAllowFail(t *testing.T, bin string, args ...string) (string, error) 
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
-
-// buildCmd creates a command with proper configuration for testing.
-func buildCmd(t *testing.T, bin string, args ...string) *exec.Cmd {
-	t.Helper()
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = repoRoot(t)
-	return cmd
-}
-
-// cleanupTempDir removes the temporary directory if it exists.
-// Used in test cleanup functions.
-func cleanupTempDir(t *testing.T, path string) {
-	t.Helper()
-	if err := os.RemoveAll(path); err != nil {
-		t.Logf("Warning: failed to clean up temp directory %s: %v", path, err)
-	}
-}

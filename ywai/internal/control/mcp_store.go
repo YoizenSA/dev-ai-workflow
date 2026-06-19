@@ -238,7 +238,6 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 	// Get catalog.
 	fullCatalog := getFullCatalog()
 
-
 	mcpConfig, err := readMcpConfig()
 	if err != nil {
 		log.Printf("mcp catalog: error reading config: %v", err)
@@ -269,9 +268,9 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 		source := "custom"
 		items[i] = McpCatalogItem{
 			McpCatalogEntry: entry,
-			Installed:        installed,
-			Enabled:          enabled,
-			Source:           source,
+			Installed:       installed,
+			Enabled:         enabled,
+			Source:          source,
 		}
 	}
 

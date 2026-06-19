@@ -19,7 +19,7 @@ func TestDefaultClient_ServerFirst(t *testing.T) {
 		// Return agents for ListAgents
 		if r.URL.Path == "/agent" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "server-agent"},
 			})
 			return

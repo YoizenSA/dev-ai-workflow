@@ -2,10 +2,8 @@ package missions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 	"strings"
 	"time"
 
@@ -238,47 +236,4 @@ func lastAssistantText(messages []opencode.Message) string {
 		}
 	}
 	return ""
-}
-
-// parseConfirmedMilestones extracts milestone names from a user-confirmed plan
-// markdown or comma/newline-separated list. Used to feed GenerateFeatures.
-func parseConfirmedMilestones(input string) []string {
-	if input == "" {
-		return nil
-	}
-	// Try JSON array first.
-	var arr []string
-	if err := json.Unmarshal([]byte(input), &arr); err == nil {
-		return arr
-	}
-	// Split on commas/newlines/bullets.
-	split := func(r rune) bool {
-		return r == ',' || r == '\n' || r == '-' || r == '*' || r == '•'
-	}
-	parts := strings.FieldsFunc(input, split)
-	var out []string
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
-// planJSONRegex extracts a JSON object from mixed markdown/text output.
-var planJSONRegex = regexp.MustCompile("(?s)\\{.*\\}")
-
-// parsePlanFromOutputReuse tries the existing parsePlanFromOutput first; if it
-// fails, it extracts the largest {...} block and retries. Kept as a thin alias
-// so planner_session_test can mock if needed.
-func parsePlanFromOutputReuse(output string) (*PlanMission, error) {
-	if p, err := parsePlanFromOutput(output); err == nil {
-		return p, nil
-	}
-	if m := planJSONRegex.FindString(output); m != "" {
-		return parsePlanFromOutput(m)
-	}
-	return nil, fmt.Errorf("no plan JSON found in output")
 }

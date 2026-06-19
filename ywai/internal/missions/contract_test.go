@@ -13,7 +13,7 @@ func TestContractParser_LoadContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a validation-contract.md file
 	contractContent := `# Validation Contract
@@ -85,7 +85,7 @@ func TestContractParser_ContractNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	parser := NewContractParser(tmpDir)
 	_, err = parser.LoadContract()
@@ -103,7 +103,7 @@ func TestContractParser_CheckCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a contract
 	contractContent := `# Validation Contract

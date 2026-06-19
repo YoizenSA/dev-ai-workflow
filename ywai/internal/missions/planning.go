@@ -250,7 +250,7 @@ func RefineGoalWithOpencode(goal, extraContext, model, agent string) string {
 }
 
 var (
-	ansiRE       = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	ansiRE         = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	opencodeLineRE = regexp.MustCompile(`(?m)^>?\s*\w+\s*·\s*\S+\s*$`)
 )
 
@@ -329,11 +329,6 @@ func localRefineGoal(goal string) string {
 ## Acceptance Criteria
 - The feature works as described in the goal
 - Tests pass for the implemented behavior`, goal)
-}
-
-// buildPlanPrompt creates the prompt for opencode to generate a plan.
-func buildPlanPrompt(goal string, clarifications []QAPair, project string) string {
-	return buildPlanPromptWithRepo(goal, clarifications, project, "")
 }
 
 // buildPlanPromptWithRepo is the repo-aware variant. When repoPath is non-empty,
@@ -582,13 +577,6 @@ func detectRole(desc string, hints generationHint) string {
 	}
 }
 
-// detectSkill picks a plausible worker skill name based on description.
-// Kept as a thin wrapper over detectRole + RoleToSkillName for backward
-// compatibility with existing callers.
-func detectSkill(desc string, hints generationHint) string {
-	return RoleToSkillName(detectRole(desc, hints))
-}
-
 // applyRoleDefaults populates Role/Model/Agent/Fallbacks on each plan feature
 // from the user's role defaults. Pre-existing values on the feature are kept
 // (so an LLM-emitted plan can pin specific models).
@@ -732,9 +720,9 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, proj
 	scanner := bufio.NewScanner(r)
 
 	// Write welcome banner
-	fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
-	fmt.Fprintf(w, "║        ywai Missions — Planning Phase       ║\n")
-	fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
+	_, _ = fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
+	_, _ = fmt.Fprintf(w, "║        ywai Missions — Planning Phase       ║\n")
+	_, _ = fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
 
 	// Step 1: Collect goal
 	goal, err := promptGoal(scanner, w)
@@ -780,7 +768,7 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, proj
 			if err := ApprovePlan(store, mission); err != nil {
 				return nil, fmt.Errorf("approve plan: %w", err)
 			}
-			fmt.Fprintf(w, "\n✓ Mission %q approved and active!\n", mission.Name)
+			_, _ = fmt.Fprintf(w, "\n✓ Mission %q approved and active!\n", mission.Name)
 			return mission, nil
 		}
 
@@ -836,9 +824,9 @@ func RunInteractivePlanningWithClient(store *MissionsStore, r io.Reader, w io.Wr
 	defer ps.Close()
 
 	scanner := bufio.NewScanner(r)
-	fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
-	fmt.Fprintf(w, "║   ywai Missions — Iterative Planning (Droid) ║\n")
-	fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
+	_, _ = fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
+	_, _ = fmt.Fprintf(w, "║   ywai Missions — Iterative Planning (Droid) ║\n")
+	_, _ = fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
 
 	goal, err := promptGoal(scanner, w)
 	if err != nil {
@@ -914,7 +902,7 @@ func RunInteractivePlanningWithClient(store *MissionsStore, r io.Reader, w io.Wr
 			if err := ApprovePlan(store, mission); err != nil {
 				return nil, fmt.Errorf("approve plan: %w", err)
 			}
-			fmt.Fprintf(w, "\n✓ Mission %q approved and active!\n", mission.Name)
+			_, _ = fmt.Fprintf(w, "\n✓ Mission %q approved and active!\n", mission.Name)
 			return mission, nil
 		}
 		// Rejected: collect feedback and regenerate via a follow-up on the same session.
@@ -1353,24 +1341,6 @@ func enrichSkillWithRoleSkills(skill *Skill, features []PlanFeature) {
 				skill.RequiredSkills = append(skill.RequiredSkills, s)
 			}
 		}
-	}
-}
-
-// workerTypeDescription returns a human-readable description for a worker type key.
-func workerTypeDescription(wt string) string {
-	switch wt {
-	case "api":
-		return "API and Backend Developer"
-	case "ui":
-		return "UI and Frontend Developer"
-	case "db":
-		return "Database and Data Layer Developer"
-	case "tests":
-		return "Test Engineer"
-	case "infra":
-		return "Infrastructure and DevOps Engineer"
-	default:
-		return "Implementation Developer"
 	}
 }
 

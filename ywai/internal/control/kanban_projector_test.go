@@ -249,8 +249,8 @@ func TestNormalizeAgent(t *testing.T) {
 		expected string
 	}{
 		{"api", "dev"},
-		{"api-worker", "dev"},   // DesignWorkerSystem appends "-worker"
-		{"tests-worker", "qa"},  // same suffix, different category
+		{"api-worker", "dev"},  // DesignWorkerSystem appends "-worker"
+		{"tests-worker", "qa"}, // same suffix, different category
 		{"tests", "qa"},
 		{"ui", "dev"},
 		{"devops", "devops"},

@@ -269,9 +269,9 @@ func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFun
 		broadcast: broadcast,
 	}
 	workerCfg := WorkerConfig{
-		Timeout:          config.WorkerTimeout,
-		MaxRetries:       config.MaxRetries,
-		AgentsDir:        config.AgentsDir,
+		Timeout:           config.WorkerTimeout,
+		MaxRetries:        config.MaxRetries,
+		AgentsDir:         config.AgentsDir,
 		VerifyCleanStreak: config.VerifyCleanStreak,
 	}
 	if config.VerifyCleanStreak > 0 {

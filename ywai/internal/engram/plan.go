@@ -12,10 +12,10 @@ type ConsolidationPlan struct {
 
 // PlanUpdate proposes modifying an existing observation.
 type PlanUpdate struct {
-	ObservationID string  `json:"observation_id"`
-	Reason        string  `json:"reason"`
-	NewContent    string  `json:"new_content,omitempty"`
-	NewScope      string  `json:"new_scope,omitempty"`
+	ObservationID string `json:"observation_id"`
+	Reason        string `json:"reason"`
+	NewContent    string `json:"new_content,omitempty"`
+	NewScope      string `json:"new_scope,omitempty"`
 }
 
 // PlanDelete proposes removing an observation (duplicate, obsolete).
@@ -26,8 +26,8 @@ type PlanDelete struct {
 
 // PlanSummary proposes creating a new summary/topic observation.
 type PlanSummary struct {
-	Type       string                 `json:"type"`
-	Content    string                 `json:"content"`
-	Scope      string                 `json:"scope"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Type     string                 `json:"type"`
+	Content  string                 `json:"content"`
+	Scope    string                 `json:"scope"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }

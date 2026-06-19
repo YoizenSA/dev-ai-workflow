@@ -183,7 +183,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 			uiFS := embeddedUI()
 			content, err := fs.ReadFile(uiFS, assetPath)
 			if err == nil {
-				w.Write(content)
+				_, _ = w.Write(content)
 				return
 			}
 		}
@@ -192,7 +192,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 		fullPath := filepath.Join("internal", "control", "web", "dist", assetPath)
 		content, err := os.ReadFile(fullPath)
 		if err == nil {
-			w.Write(content)
+			_, _ = w.Write(content)
 			return
 		}
 

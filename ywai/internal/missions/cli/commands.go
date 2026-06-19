@@ -195,7 +195,7 @@ Example:
 				fmt.Fprintf(cmd.OutOrStdout(), "Goal: %s\n", goal)
 				fmt.Fprintf(cmd.OutOrStdout(), "Project: %s\n\n", f.Project)
 				fmt.Fprintf(cmd.OutOrStdout(), "Press Enter to generate the plan, or Ctrl+C to cancel...")
-				fmt.Scanln()
+				_, _ = fmt.Scanln()
 			}
 
 			opts := missions.AutoPlanOpts{
@@ -246,7 +246,7 @@ Example:
 	cmd.Flags().IntVar(&f.MaxRetries, "max-retries", 0, "Max retries per failed feature (default: 3)")
 	cmd.Flags().IntVar(&f.MaxParallel, "max-parallel", 1, "Max features running concurrently (default: 1)")
 	cmd.Flags().IntVar(&f.CleanStreak, "clean-streak", 0, "Consecutive clean verify runs required per feature (default: 1)")
-	cmd.MarkFlagRequired("project")
+	_ = cmd.MarkFlagRequired("project")
 
 	return cmd
 }
@@ -318,7 +318,7 @@ func newProjectListCmd() *cobra.Command {
 			}
 			projects := pStore.List()
 			if len(projects) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No projects registered.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No projects registered.")
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%-20s %s\n", "NAME", "PATH")
@@ -459,8 +459,8 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(missionsList) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No missions found.")
-		fmt.Fprintln(cmd.OutOrStdout(), "Start one with: ywai missions start")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No missions found.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Start one with: ywai missions start")
 		return nil
 	}
 
@@ -470,7 +470,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-30s %-14s %-18s %s\n", "ID", "Name", "Status", "Created", "Features")
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 100))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 100))
 
 	for _, m := range missionsList {
 		if projectFilter != "" && m.Project != projectFilter {
@@ -839,7 +839,7 @@ func runShowArchitecture(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read architecture.md: %w", err)
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), string(content))
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), string(content))
 	return nil
 }
 

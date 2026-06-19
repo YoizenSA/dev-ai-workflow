@@ -18,8 +18,8 @@ type ModelInfo struct {
 
 // ClientStatus indicates connectivity state of a Client.
 type ClientStatus struct {
-	Connected           bool     `json:"connected"`
-	Source              string   `json:"source"` // "server" | "local"
-	Version             string   `json:"version,omitempty"`
-	ConnectedProviders  []string `json:"connectedProviders,omitempty"`
+	Connected          bool     `json:"connected"`
+	Source             string   `json:"source"` // "server" | "local"
+	Version            string   `json:"version,omitempty"`
+	ConnectedProviders []string `json:"connectedProviders,omitempty"`
 }

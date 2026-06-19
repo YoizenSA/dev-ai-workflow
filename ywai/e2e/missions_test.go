@@ -42,7 +42,7 @@ func postJSON(t *testing.T, url string, body interface{}) (int, map[string]inter
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	var parsed map[string]interface{}
 	_ = json.Unmarshal(raw, &parsed)
@@ -56,7 +56,7 @@ func getJSON(t *testing.T, url string) (int, map[string]interface{}) {
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	var parsed map[string]interface{}
 	_ = json.Unmarshal(raw, &parsed)

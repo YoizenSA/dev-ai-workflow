@@ -150,7 +150,7 @@ func TestNextPendingFeatureWithMixedStatuses(t *testing.T) {
 
 func TestStartFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("start-feat-1")
 	if err := store.CreateMission(m); err != nil {
@@ -186,7 +186,7 @@ func TestStartFeature(t *testing.T) {
 
 func TestStartFeatureNotFound(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("start-feat-2")
 	if err := store.CreateMission(m); err != nil {
@@ -201,7 +201,7 @@ func TestStartFeatureNotFound(t *testing.T) {
 
 func TestStartFeatureOnCompleted(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("start-feat-3")
 	m.Features[0].Status = FeatureCompleted
@@ -219,7 +219,7 @@ func TestStartFeatureOnCompleted(t *testing.T) {
 
 func TestCompleteFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("complete-feat-1")
 	m.Features[0].Status = FeatureInProgress
@@ -255,7 +255,7 @@ func TestCompleteFeature(t *testing.T) {
 // VAL-ENG-QUEUE-003: Worker failure transitions to failed state
 func TestFailFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("fail-feat-1")
 	m.Features[0].Status = FeatureInProgress
@@ -284,7 +284,7 @@ func TestFailFeature(t *testing.T) {
 // VAL-ENG-QUEUE-005: Failed features re-queued with retry count
 func TestFailFeatureIncrementsRetryCount(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("fail-feat-2")
 	m.Features[0].Status = FeatureInProgress
@@ -311,7 +311,7 @@ func TestFailFeatureIncrementsRetryCount(t *testing.T) {
 // VAL-ENG-QUEUE-004: Cancellation transitions to cancelled
 func TestCancelPendingFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-feat-1")
 	if err := store.CreateMission(m); err != nil {
@@ -329,7 +329,7 @@ func TestCancelPendingFeature(t *testing.T) {
 
 func TestCancelInProgressFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-feat-2")
 	m.Features[0].Status = FeatureInProgress
@@ -348,7 +348,7 @@ func TestCancelInProgressFeature(t *testing.T) {
 
 func TestCancelCompletedFeatureError(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-feat-3")
 	m.Features[0].Status = FeatureCompleted
@@ -367,7 +367,7 @@ func TestCancelCompletedFeatureError(t *testing.T) {
 // VAL-ENG-QUEUE-005: Failed features re-queued with retry count
 func TestRequeueFeature(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("requeue-1")
 	m.Features[0].Status = FeatureFailed
@@ -391,7 +391,7 @@ func TestRequeueFeature(t *testing.T) {
 
 func TestRequeueNonFailedFeatureError(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("requeue-2")
 	if err := store.CreateMission(m); err != nil {
@@ -594,7 +594,7 @@ func TestGetMilestoneStatusWithFailed(t *testing.T) {
 
 func TestProcessMilestoneAfterFeatureNoTransition(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("process-milestone-1")
 	m.Features[0].Status = FeatureCompleted
@@ -615,7 +615,7 @@ func TestProcessMilestoneAfterFeatureNoTransition(t *testing.T) {
 // VAL-ENG-QUEUE-006 + VAL-ENG-QUEUE-007: Milestone completion + validation injection
 func TestProcessMilestoneAfterFeatureTransitionsToValidating(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("process-milestone-2")
 	m.Features[0].Status = FeatureCompleted
@@ -641,7 +641,7 @@ func TestProcessMilestoneAfterFeatureTransitionsToValidating(t *testing.T) {
 // VAL-CROSS-E2E-03: Milestone auto-transitions to validating
 func TestProcessMilestoneLastFeatureTransitionsToValidating(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("process-milestone-3")
 	// All features completed except last one
@@ -670,7 +670,7 @@ func TestProcessMilestoneLastFeatureTransitionsToValidating(t *testing.T) {
 
 func TestProcessMilestoneStorePersistence(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("process-milestone-4")
 	m.Features[0].Status = FeatureCompleted
@@ -698,7 +698,7 @@ func TestProcessMilestoneStorePersistence(t *testing.T) {
 
 func TestCancelMissionActive(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-active")
 	m.Status = MissionActive
@@ -726,7 +726,7 @@ func TestCancelMissionActive(t *testing.T) {
 
 func TestCancelMissionAlreadyCancelled(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-already")
 	m.Status = MissionCancelled
@@ -744,7 +744,7 @@ func TestCancelMissionAlreadyCancelled(t *testing.T) {
 
 func TestCancelMissionCompletedError(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-completed")
 	m.Status = MissionCompleted
@@ -759,7 +759,7 @@ func TestCancelMissionCompletedError(t *testing.T) {
 
 func TestCancelMissionCancelsPendingFeatures(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("cancel-features")
 	m.Status = MissionActive
@@ -785,7 +785,7 @@ func TestCancelMissionCancelsPendingFeatures(t *testing.T) {
 
 func TestResumeMissionPaused(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("resume-paused")
 	m.Status = MissionPaused
@@ -813,7 +813,7 @@ func TestResumeMissionPaused(t *testing.T) {
 
 func TestResumeMissionActiveError(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("resume-active")
 	m.Status = MissionActive
@@ -828,7 +828,7 @@ func TestResumeMissionActiveError(t *testing.T) {
 
 func TestResumeMissionCompletedError(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("resume-completed")
 	m.Status = MissionCompleted
@@ -843,7 +843,7 @@ func TestResumeMissionCompletedError(t *testing.T) {
 
 func TestResumeMissionPreservesCompletedFeatures(t *testing.T) {
 	store, dir := newTestStore(t)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	m := testQueueMission("resume-preserve")
 	m.Status = MissionPaused

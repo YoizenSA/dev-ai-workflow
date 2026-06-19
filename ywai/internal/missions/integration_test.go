@@ -792,7 +792,7 @@ func TestCrashNoStaleLockFiles(t *testing.T) {
 	}
 
 	// Remove temp file
-	os.Remove(tmpFile)
+	_ = os.Remove(tmpFile)
 
 	// Verify no tmp files remain
 	dirEntries, err := os.ReadDir(filepath.Join(storeDir, "crash-cleanup"))
@@ -905,13 +905,13 @@ func TestRetryWorkerReSpawnedWithIdenticalContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first PrepareContext: %v", err)
 	}
-	defer os.RemoveAll(ctxDir1)
+	defer func() { _ = os.RemoveAll(ctxDir1) }()
 
 	ctxDir2, err := wm.PrepareContext(mission, feat, "")
 	if err != nil {
 		t.Fatalf("second PrepareContext: %v", err)
 	}
-	defer os.RemoveAll(ctxDir2)
+	defer func() { _ = os.RemoveAll(ctxDir2) }()
 
 	// Compare context files
 	files1, err := os.ReadDir(ctxDir1)

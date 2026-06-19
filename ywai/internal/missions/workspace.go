@@ -122,9 +122,9 @@ func (wm *WorkspaceManager) AllocatePortBlock() (base int, release func()) {
 // GitInfo describes the git state of a project's repo path. When IsGitRepo is
 // false, the other fields are empty and callers should offer to initialize git.
 type GitInfo struct {
-	IsGitRepo    bool     `json:"isGitRepo"`
-	CurrentBranch string  `json:"currentBranch,omitempty"`
-	Branches     []string `json:"branches,omitempty"`
+	IsGitRepo     bool     `json:"isGitRepo"`
+	CurrentBranch string   `json:"currentBranch,omitempty"`
+	Branches      []string `json:"branches,omitempty"`
 }
 
 // ValidateGitRepo returns nil when repoPath is a valid git repository, or an

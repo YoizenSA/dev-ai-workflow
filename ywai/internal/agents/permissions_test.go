@@ -212,7 +212,7 @@ func TestClassifyMCPTool_Unknown_DefaultsToAdmin(t *testing.T) {
 func TestMCPEnforce_PerToolOverrideBeatsCategory(t *testing.T) {
 	// mcp:write is deny, but tool is explicitly allowed
 	perms := map[string]string{
-		"mcp:write": "deny",
+		"mcp:write":  "deny",
 		"ado_review": "allow", // explicit override
 	}
 	if !MCPEnforce(perms, "ado_review") {
@@ -435,12 +435,12 @@ func TestMCPEnforce_AskAgentConfig(t *testing.T) {
 
 func TestParseMCPConfig_StandardKeys(t *testing.T) {
 	perms := map[string]string{
-		"read":       "allow",
-		"edit":       "deny",
-		"mcp":        "allow",
-		"mcp:read":   "allow",
-		"mcp:write":  "deny",
-		"mcp:admin":  "deny",
+		"read":      "allow",
+		"edit":      "deny",
+		"mcp":       "allow",
+		"mcp:read":  "allow",
+		"mcp:write": "deny",
+		"mcp:admin": "deny",
 	}
 	cfg := ParseMCPConfig(perms)
 
@@ -468,9 +468,9 @@ func TestParseMCPConfig_StandardKeys(t *testing.T) {
 
 func TestParseMCPConfig_ToolOverrides(t *testing.T) {
 	perms := map[string]string{
-		"mcp:write":          "deny",
-		"ado_review":         "allow",
-		"ado_profile_use":    "deny",
+		"mcp:write":       "deny",
+		"ado_review":      "allow",
+		"ado_profile_use": "deny",
 	}
 	cfg := ParseMCPConfig(perms)
 
@@ -549,8 +549,8 @@ func TestMCPEnforce_ToolOverrideWithCategoryKey(t *testing.T) {
 func TestMCPEnforce_ToolOverrideDenyWithCategoryAllow(t *testing.T) {
 	// Per-tool override says deny, but category says allow → override wins
 	perms := map[string]string{
-		"mcp:read":           "allow",
-		"codegraph_search":   "deny",
+		"mcp:read":         "allow",
+		"codegraph_search": "deny",
 	}
 	if MCPEnforce(perms, "codegraph_search") {
 		t.Error("MCPEnforce: explicit per-tool 'deny' should beat category 'allow'")

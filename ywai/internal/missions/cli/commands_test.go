@@ -690,9 +690,6 @@ func TestTruncate(t *testing.T) {
 
 // ─── Auto command: engine config from flags ─────────────────────────────────
 
-// autoFlags mirrors the flags exposed by `missions auto`.
-type autoFlags = autoCmdFlags
-
 // TestEngineConfigFromFlagsDefaults verifies the zero-value config matches the
 // engine defaults (sequential, default timeout/retries, clean streak enabled).
 func TestEngineConfigFromFlagsDefaults(t *testing.T) {
@@ -715,10 +712,10 @@ func TestEngineConfigFromFlagsDefaults(t *testing.T) {
 // TestEngineConfigFromFlagsApplied verifies each flag is wired into the config.
 func TestEngineConfigFromFlagsApplied(t *testing.T) {
 	flags := autoCmdFlags{
-		Timeout:        90 * time.Minute,
-		MaxRetries:     5,
-		MaxParallel:    3,
-		CleanStreak:    2,
+		Timeout:     90 * time.Minute,
+		MaxRetries:  5,
+		MaxParallel: 3,
+		CleanStreak: 2,
 	}
 	cfg := engineConfigFromFlags(flags)
 

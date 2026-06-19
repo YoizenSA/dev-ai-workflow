@@ -148,7 +148,6 @@ type Model struct {
 	logFilter         LogFilter
 	logAutoScroll     bool
 	logScrollOffset   int // scroll offset for log view (0 = newest)
-	logPollIdx        int // counter for log polling
 
 	// Feature animation state (for in-progress spinners)
 	animTick int
@@ -804,14 +803,6 @@ func (m Model) selectedFeature() *missions.Feature {
 		return nil
 	}
 	return m.items[m.cursor].feature
-}
-
-// selectedItem returns the tree item at the cursor position.
-func (m Model) selectedItem() *treeItem {
-	if m.cursor < 0 || m.cursor >= len(m.items) {
-		return nil
-	}
-	return &m.items[m.cursor]
 }
 
 // getFeaturesForMilestone returns all features belonging to a milestone.

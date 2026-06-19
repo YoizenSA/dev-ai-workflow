@@ -142,7 +142,7 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 			continue
 		}
 
-		skills.CopyTo(a.SkillsDir)
+		_ = skills.CopyTo(a.SkillsDir)
 		fmt.Printf("  [%s] Copied extra skills to %s\n", a.Name, a.SkillsDir)
 	}
 }
@@ -219,7 +219,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		installAgentProfiles(agents, opts.DryRun, groupFilter, overwriteAgents)
 
 		fmt.Println("\n[3.6/3] Applying ywai overrides...")
-		overrides.ApplyOpenSpecToSDDOverride(agentDirs)
+		_ = overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
 		fmt.Println("\n[3.7/3] Installing plugins...")
 		installPluginsForAgents(agents, opts.DryRun, installMCP, installADO)
@@ -320,16 +320,16 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 
 		case "claude-code":
 			agentsDir := filepath.Join(home, ".claude", "agents")
-			agentprofiles.InstallClaude(agentsDir, profiles)
+			_ = agentprofiles.InstallClaude(agentsDir, profiles)
 
 		case "cursor":
 			agentsDir := filepath.Join(home, ".cursor", "agents")
-			agentprofiles.InstallCursor(agentsDir, profiles)
+			_ = agentprofiles.InstallCursor(agentsDir, profiles)
 
 		case "vscode-copilot":
 			promptsDir := agentprofiles.VSCodePromptsDir()
 			if promptsDir != "" {
-				agentprofiles.InstallVSCode(promptsDir, profiles)
+				_ = agentprofiles.InstallVSCode(promptsDir, profiles)
 			}
 
 		case "pi":
@@ -341,22 +341,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			}
 		}
 	}
-}
-
-func ternary(cond bool, a, b string) string {
-	if cond {
-		return a
-	}
-	return b
-}
-
-func stringInSlice(s string, slice []string) bool {
-	for _, v := range slice {
-		if strings.EqualFold(v, s) {
-			return true
-		}
-	}
-	return false
 }
 
 func selfUpdate() {
@@ -440,17 +424,6 @@ func reseedData() {
 		} else {
 			fmt.Println("  Agent profiles re-seeded from embedded.")
 		}
-	}
-}
-
-func applyOverrides(agents []agent.Agent) {
-	agentDirs := make(map[string]string)
-	for _, a := range agents {
-		agentDirs[a.Name] = a.SkillsDir
-	}
-
-	if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
-		fmt.Printf("  Warning: failed to apply openspec→.sdd override: %v\n", err)
 	}
 }
 

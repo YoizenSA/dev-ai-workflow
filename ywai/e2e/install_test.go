@@ -18,9 +18,7 @@ func withFakeAgent(t *testing.T) {
 	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh"), 0o755); err != nil {
 		t.Fatalf("failed to create fake agent binary: %v", err)
 	}
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
-	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestInstallDryRunShowsAllSkills(t *testing.T) {
@@ -42,7 +40,6 @@ func TestInstallDryRunNoTypeShowsAllSkills(t *testing.T) {
 		t.Errorf("should not show skill filter when no type specified, got: %s", out)
 	}
 }
-
 
 func TestInstallHas3Steps(t *testing.T) {
 	withFakeAgent(t)

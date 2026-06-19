@@ -20,10 +20,7 @@ func TestAgentDetectionWithFakeBinary(t *testing.T) {
 		t.Fatalf("Failed to create fake binary: %v", err)
 	}
 
-	oldPath := os.Getenv("PATH")
-	newPath := tempDir + string(os.PathListSeparator) + oldPath
-	os.Setenv("PATH", newPath)
-	defer os.Setenv("PATH", oldPath)
+	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
@@ -35,9 +32,7 @@ func TestAgentDetectionWithFakeBinary(t *testing.T) {
 func TestAgentErrorHandling(t *testing.T) {
 	bin := buildBinary(t)
 
-	oldPath := os.Getenv("PATH")
-	os.Setenv("PATH", "")
-	defer os.Setenv("PATH", oldPath)
+	t.Setenv("PATH", "")
 
 	out, err := runYwaiAllowFail(t, bin, "install", "--dry-run")
 
@@ -77,12 +72,4 @@ func TestBinarySearch(t *testing.T) {
 			t.Error("expected error for non-existent binary")
 		}
 	})
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o755)
 }

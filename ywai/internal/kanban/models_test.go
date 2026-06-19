@@ -128,7 +128,7 @@ func TestActivityEvent_Options_OmitEmptySlice(t *testing.T) {
 	}
 	data, _ := json.Marshal(withNilOptions)
 	var rawNil map[string]interface{}
-	json.Unmarshal(data, &rawNil)
+	_ = json.Unmarshal(data, &rawNil)
 	if _, ok := rawNil["options"]; ok {
 		t.Error("nil options should be omitted from JSON")
 	}
@@ -144,7 +144,7 @@ func TestActivityEvent_Options_OmitEmptySlice(t *testing.T) {
 	}
 	data, _ = json.Marshal(withEmptySlice)
 	var rawSlice map[string]interface{}
-	json.Unmarshal(data, &rawSlice)
+	_ = json.Unmarshal(data, &rawSlice)
 	if _, ok := rawSlice["options"]; ok {
 		t.Error("empty slice options should be omitted from JSON due to omitempty tag")
 	}

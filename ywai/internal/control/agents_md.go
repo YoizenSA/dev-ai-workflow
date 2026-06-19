@@ -67,7 +67,7 @@ func (s *Server) handleAgentsMdSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Failed to read request body"}`, http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, `{"error": "Invalid JSON"}`, http.StatusBadRequest)

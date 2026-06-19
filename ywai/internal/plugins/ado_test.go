@@ -380,7 +380,9 @@ func TestInstallADODefaultConfig_MergesProfiles(t *testing.T) {
 
 	// Write initial config
 	configDir := filepath.Join(home, ".azure-devops-cli")
-	os.MkdirAll(configDir, 0o755)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	writeJSON(t, filepath.Join(configDir, "config.json"), map[string]any{
 		"ado": map[string]any{
 			"defaultProfile": "old",
@@ -442,7 +444,9 @@ func TestReadExistingADOConfig_ParsesConfig(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	configDir := filepath.Join(home, ".azure-devops-cli")
-	os.MkdirAll(configDir, 0o755)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	writeJSON(t, filepath.Join(configDir, "config.json"), map[string]any{
 		"ado": map[string]any{
 			"defaultProfile": "work",
@@ -493,8 +497,12 @@ func TestADODefaultConfigExists_TrueWhenConfigExists(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	configDir := filepath.Join(home, ".azure-devops-cli")
-	os.MkdirAll(configDir, 0o755)
-	os.WriteFile(filepath.Join(configDir, "config.json"), []byte("{}"), 0o644)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write config.json: %v", err)
+	}
 
 	if !ADODefaultConfigExists() {
 		t.Fatal("expected true when config.json exists")

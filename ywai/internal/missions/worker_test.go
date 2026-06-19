@@ -43,12 +43,6 @@ func fakeOpencodeExitCode(t *testing.T, exitCode int) string {
 	return writeFakeOpencodeBin(t, fakeOpencodeSpec{ExitCode: exitCode})
 }
 
-// fakeOpencodeSleepThenHandoff creates a fake opencode that sleeps then outputs handoff.
-func fakeOpencodeSleepThenHandoff(t *testing.T, sleepSecs int, handoffJSON string) string {
-	t.Helper()
-	return writeFakeOpencodeBin(t, fakeOpencodeSpec{DelaySec: sleepSecs, Stdout: handoffJSON + "\n"})
-}
-
 // fakeOpencodeSleepForever creates a fake opencode that sleeps forever.
 func fakeOpencodeSleepForever(t *testing.T) string {
 	t.Helper()
@@ -94,9 +88,7 @@ func TestDetectOpencodeFound(t *testing.T) {
 // VAL-ENG-ERR-001: Missing opencode binary returns descriptive error
 func TestDetectOpencodeMissing(t *testing.T) {
 	// Temporarily remove opencode from PATH
-	oldPath := os.Getenv("PATH")
 	t.Setenv("PATH", "/dev/null")
-	defer os.Setenv("PATH", oldPath)
 
 	path, err := DetectOpencode()
 	if err == nil {
@@ -116,7 +108,7 @@ func TestDetectOpencodeMissing(t *testing.T) {
 func TestPrepareContextCreatesDirectory(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -152,7 +144,7 @@ func TestPrepareContextCreatesDirectory(t *testing.T) {
 func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -191,16 +183,16 @@ func TestPrepareContextInjectsRoleSkills(t *testing.T) {
 		UpdatedAt: now,
 		Features: []Feature{
 			{
-				ID:        "feat-qa",
+				ID:          "feat-qa",
 				Description: "QA feature",
-				Status:    FeaturePending,
-				Role:      "qa", // RoleQA → Skills: ["qa-worker"] per DefaultRoleDefaults
-				CreatedAt: now,
-				UpdatedAt: now,
+				Status:      FeaturePending,
+				Role:        "qa", // RoleQA → Skills: ["qa-worker"] per DefaultRoleDefaults
+				CreatedAt:   now,
+				UpdatedAt:   now,
 			},
 		},
 	}
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -250,7 +242,7 @@ func TestPrepareContextInjectsSkillsFromMissionDir(t *testing.T) {
 			},
 		},
 	}
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	// Write a per-mission SKILL.md for custom-worker.
 	skillDir := filepath.Join(store.MissionDir(mission.ID), "skills", "custom-worker")
@@ -401,7 +393,7 @@ func TestParseHandoffMissingRequiredFields(t *testing.T) {
 func TestSpawnWorkerWithValidHandoff(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -445,7 +437,7 @@ func TestSpawnWorkerWithValidHandoff(t *testing.T) {
 func TestWorkerStdoutStreamedAndPersisted(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -505,7 +497,7 @@ func TestWorkerStdoutStreamedAndPersisted(t *testing.T) {
 func TestWorkerNonZeroExit(t *testing.T) {
 	store, dir := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -554,7 +546,7 @@ func TestWorkerTimeout(t *testing.T) {
 
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	// Use a very short timeout
 	config := WorkerConfig{
@@ -604,7 +596,7 @@ func TestWorkerCancellation(t *testing.T) {
 
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -653,7 +645,7 @@ func TestWorkerCancellation(t *testing.T) {
 func TestContextDirCleanedAfterSuccess(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -705,7 +697,7 @@ func TestContextDirCleanedAfterSuccess(t *testing.T) {
 func TestContextDirCleanedOnError(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	feat := &mission.Features[0]
@@ -731,7 +723,7 @@ func TestContextDirCleanedOnError(t *testing.T) {
 func TestExecuteFeatureMaxRetriesReached(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	// Set max retries to 0 so it always fails on retry check
 	config := WorkerConfig{
@@ -764,7 +756,7 @@ func TestExecuteFeatureMaxRetriesReached(t *testing.T) {
 func TestExecuteFeatureSuccessPath(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -796,7 +788,7 @@ func TestExecuteFeatureSuccessPath(t *testing.T) {
 func TestExecuteFeatureNonZeroExit(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -827,7 +819,7 @@ func TestExecuteFeatureNonZeroExit(t *testing.T) {
 func TestExecuteFeatureInvalidHandoff(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -857,7 +849,7 @@ func TestExecuteFeatureInvalidHandoff(t *testing.T) {
 func TestExecuteFeatureEmptyHandoff(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -881,14 +873,12 @@ func TestExecuteFeatureEmptyHandoff(t *testing.T) {
 func TestExecuteFeatureMissingOpencode(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
 	// Temporarily remove opencode from PATH
-	oldPath := os.Getenv("PATH")
 	t.Setenv("PATH", "/dev/null")
-	defer os.Setenv("PATH", oldPath)
 
 	_, err := wm.ExecuteFeature(mission, mission.Features[0].ID)
 	if err == nil {
@@ -918,7 +908,7 @@ func TestParseHandoffOnlyLastLineUsed(t *testing.T) {
 func TestContextDirUniquePerWorker(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testQueueMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 
@@ -979,7 +969,7 @@ func TestExecuteFeatureNilMission(t *testing.T) {
 func TestExecuteFeatureNonexistentFeature(t *testing.T) {
 	store, _ := newTestStore(t)
 	mission := testMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 	_, err := wm.ExecuteFeature(mission, "nonexistent-feature")
@@ -994,7 +984,7 @@ func TestWorkersIsolatedContexts(t *testing.T) {
 	// Two workers should have separate context directories
 	store, _ := newTestStore(t)
 	mission := testQueueMission("test-mission")
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 
 	wm := NewWorkerManager(store, DefaultWorkerConfig())
 

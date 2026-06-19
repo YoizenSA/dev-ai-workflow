@@ -210,11 +210,11 @@ func TestStore_GetActivities(t *testing.T) {
 
 	// Add activities in chronological order
 	a1 := &ActivityEvent{Type: ActivityProgress, Content: "First update"}
-	s.AddActivity(del.ID, a1)
+	_ = s.AddActivity(del.ID, a1)
 	a2 := &ActivityEvent{Type: ActivityDecision, Content: "Architecture decision", Options: []string{"yes", "no"}}
-	s.AddActivity(del.ID, a2)
+	_ = s.AddActivity(del.ID, a2)
 	a3 := &ActivityEvent{Type: ActivityQuestion, Content: "What database?", Options: []string{"pg", "mysql"}}
-	s.AddActivity(del.ID, a3)
+	_ = s.AddActivity(del.ID, a3)
 
 	activities, err = s.GetActivities(del.ID)
 	if err != nil {
@@ -396,14 +396,14 @@ func TestStore_GetPendingDecisions(t *testing.T) {
 	}
 
 	// Resolve the decision
-	s.ResolveActivity(del.ID, decision.ID, "go")
+	_, _ = s.ResolveActivity(del.ID, decision.ID, "go")
 	pending, _ = s.GetPendingDecisions(session.ID)
 	if len(pending) != 2 {
 		t.Errorf("expected 2 pending after resolving one, got %d", len(pending))
 	}
 
 	// Resolve the question
-	s.ResolveActivity(del.ID, question.ID, "A")
+	_, _ = s.ResolveActivity(del.ID, question.ID, "A")
 	pending, _ = s.GetPendingDecisions(session.ID)
 	if len(pending) != 1 {
 		t.Errorf("expected 1 pending after resolving two, got %d", len(pending))

@@ -896,9 +896,9 @@ func TestAutoMissionPlansAndStarts(t *testing.T) {
 	defer server.Close()
 
 	resp := mustPostJSON(t, server.URL+"/api/missions/auto", map[string]interface{}{
-		"goal":         "Add a health endpoint",
-		"project":      "demo",
-		"autoApprove":  true,
+		"goal":        "Add a health endpoint",
+		"project":     "demo",
+		"autoApprove": true,
 	})
 	defer resp.Body.Close()
 

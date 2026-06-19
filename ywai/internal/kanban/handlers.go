@@ -867,7 +867,7 @@ func (h *Handlers) GetOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // PUT /api/config/opencode
@@ -943,7 +943,7 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 					var a struct {
 						Mode string `json:"mode"`
 					}
-					json.Unmarshal(raw, &a)
+					_ = json.Unmarshal(raw, &a)
 					info := agentInfo{Name: name, Mode: a.Mode}
 					info.Group = resolveTeam(name, agentsDirPath)
 					agents = append(agents, info)
@@ -1619,9 +1619,9 @@ func discoverStdioMCPTools(command []string, env map[string]string) ([]string, e
 		return nil, fmt.Errorf("start: %w", err)
 	}
 	defer func() {
-		stdin.Close()
-		cmd.Process.Kill()
-		cmd.Wait()
+		_ = stdin.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
 	}()
 
 	reader := bufio.NewReader(stdout)
@@ -2473,5 +2473,5 @@ func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
+	_ = json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
 }

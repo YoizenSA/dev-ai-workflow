@@ -52,16 +52,16 @@ type rawAgent struct {
 
 // rawProvider is the shape of a provider inside GET /provider's "all" array.
 type rawProvider struct {
-	Name    string                 `json:"name"`
-	ID      string                 `json:"id"`
-	Type    string                 `json:"type"`
-	Models  map[string]interface{} `json:"models"`
+	Name   string                 `json:"name"`
+	ID     string                 `json:"id"`
+	Type   string                 `json:"type"`
+	Models map[string]interface{} `json:"models"`
 }
 
 type providerResponse struct {
-	All       []rawProvider       `json:"all"`
-	Default   map[string]string   `json:"default"`
-	Connected []string            `json:"connected"`
+	All       []rawProvider     `json:"all"`
+	Default   map[string]string `json:"default"`
+	Connected []string          `json:"connected"`
 }
 
 // rawProviderV2 is the shape from GET /api/provider.

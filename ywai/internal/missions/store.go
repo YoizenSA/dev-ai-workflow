@@ -69,12 +69,6 @@ func (s *MissionsStore) ensureDir(missionID string) error {
 	return nil
 }
 
-// ensureBaseDir creates the base missions directory if it doesn't exist.
-// Caller must NOT hold the lock.
-func (s *MissionsStore) ensureBaseDir() error {
-	return os.MkdirAll(s.baseDir, 0755)
-}
-
 // ─── Mission CRUD ──────────────────────────────────────────────────────────
 
 // CreateMission persists a new mission. If the mission has features, duplicate
@@ -421,7 +415,7 @@ func atomicWrite(path string, data []byte) error {
 	// Rename is atomic on the same filesystem (POSIX guarantee).
 	if err := os.Rename(tmpFile, path); err != nil {
 		// Try to clean up the temp file on error
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 

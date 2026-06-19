@@ -216,7 +216,7 @@ func TestSettingsPaths_WindsurfReturnsPathIfExists(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	mcpPath := filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")
-	os.MkdirAll(filepath.Dir(mcpPath), 0o755)
+	_ = os.MkdirAll(filepath.Dir(mcpPath), 0o755)
 	if err := os.WriteFile(mcpPath, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write mcp_config.json: %v", err)
 	}

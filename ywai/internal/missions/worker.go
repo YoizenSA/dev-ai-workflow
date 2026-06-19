@@ -38,9 +38,6 @@ const (
 
 	// DefaultMaxRetries is the default number of times a failed feature is retried.
 	DefaultMaxRetries = 3
-
-	// gracefulKillTimeout is the time to wait after SIGTERM before SIGKILL.
-	gracefulKillTimeout = 5 * time.Second
 )
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -608,7 +605,7 @@ func (wm *WorkerManager) streamOutput(
 		resultCh <- WorkerResult{Err: fmt.Errorf("create log file: %w", err)}
 		return
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	// Multi writer: log file + in-memory buffer for handoff parsing
 	var buf bytes.Buffer
@@ -624,7 +621,7 @@ func (wm *WorkerManager) streamOutput(
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
-			fmt.Fprintln(multiWriter, line)
+			_, _ = fmt.Fprintln(multiWriter, line)
 			wm.logBroadcast(mission.ID, feature.ID, line)
 		}
 		if err := scanner.Err(); err != nil {
@@ -637,7 +634,7 @@ func (wm *WorkerManager) streamOutput(
 	stderrScanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 	for stderrScanner.Scan() {
 		line := stderrScanner.Text()
-		fmt.Fprintln(multiWriter, line)
+		_, _ = fmt.Fprintln(multiWriter, line)
 		wm.logBroadcast(mission.ID, feature.ID, "[stderr] "+line)
 	}
 	if err := stderrScanner.Err(); err != nil {
@@ -798,14 +795,14 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 	// Check if max retries reached
 	if feat.RetryCount >= wm.config.MaxRetries {
 		// Mark as permanently failed
-		FailFeature(wm.store, mission, featureID)
+		_, _ = FailFeature(wm.store, mission, featureID)
 		return nil, fmt.Errorf("%w: feature %q retried %d/%d times",
 			ErrMaxRetries, featureID, feat.RetryCount, wm.config.MaxRetries)
 	}
 
 	// Validate opencode exists before doing any work
 	if _, err := DetectOpencode(); err != nil {
-		FailFeature(wm.store, mission, featureID)
+		_, _ = FailFeature(wm.store, mission, featureID)
 		return nil, err
 	}
 
@@ -820,7 +817,7 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 	// Prepare context directory
 	contextDir, err := wm.PrepareContext(mission, feat, feat.WorktreePath)
 	if err != nil {
-		FailFeature(wm.store, mission, featureID, fmt.Sprintf("prepare context: %s", err))
+		_, _ = FailFeature(wm.store, mission, featureID, fmt.Sprintf("prepare context: %s", err))
 		return nil, fmt.Errorf("prepare context: %w", err)
 	}
 	if contextDir != feat.WorktreePath {
@@ -874,7 +871,7 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 	}
 
 	if !spawnedOK {
-		FailFeature(wm.store, mission, featureID, fmt.Sprintf("spawn worker (model=%s): %s", lastAttempted, spawnErr))
+		_, _ = FailFeature(wm.store, mission, featureID, fmt.Sprintf("spawn worker (model=%s): %s", lastAttempted, spawnErr))
 		if errors.Is(spawnErr, ErrOpencodeNotFound) {
 			return nil, spawnErr
 		}
@@ -885,11 +882,11 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 	if result.Err != nil {
 		// Timeout or cancellation
 		if errors.Is(result.Err, ErrWorkerTimeout) {
-			FailFeature(wm.store, mission, featureID, "worker timeout")
+			_, _ = FailFeature(wm.store, mission, featureID, "worker timeout")
 			return nil, ErrWorkerTimeout
 		}
 		if errors.Is(result.Err, ErrWorkerCancelled) {
-			FailFeature(wm.store, mission, featureID, "worker cancelled")
+			_, _ = FailFeature(wm.store, mission, featureID, "worker cancelled")
 			return nil, ErrWorkerCancelled
 		}
 

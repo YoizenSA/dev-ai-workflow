@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	AppName        = "ywai"
-	GentleAIBin    = "gentle-ai"
-	SkillsDirName  = "skills"
-	AgentsDirName  = "agents"
+	AppName       = "ywai"
+	GentleAIBin   = "gentle-ai"
+	SkillsDirName = "skills"
+	AgentsDirName = "agents"
 )
 
 var repoRootOverride string

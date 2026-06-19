@@ -31,10 +31,10 @@ type MemoryEvalMiss struct {
 type MemoryEvalSample struct {
 	PromptID  int     `json:"prompt_id"`
 	SessionID string  `json:"session_id"`
-	Hit       bool    `json:"hit"`        // any result with prompt.session_id in top-k
-	HitRank   int     `json:"hit_rank"`   // 1-based rank of first hit, 0 if no hit
-	Precision float64 `json:"precision"`  // hits / k
-	Snippet   string  `json:"snippet"`    // first 80 chars of prompt
+	Hit       bool    `json:"hit"`       // any result with prompt.session_id in top-k
+	HitRank   int     `json:"hit_rank"`  // 1-based rank of first hit, 0 if no hit
+	Precision float64 `json:"precision"` // hits / k
+	Snippet   string  `json:"snippet"`   // first 80 chars of prompt
 }
 
 // MemoryEvalResult is the response of a recall-quality run.
@@ -43,14 +43,14 @@ type MemoryEvalResult struct {
 	DurationMS         int64              `json:"duration_ms"`
 	K                  int                `json:"k"`
 	Project            string             `json:"project,omitempty"`
-	TotalPrompts       int                `json:"total_prompts"`        // total prompts inspected
-	Evaluable          int                `json:"evaluable"`            // prompts whose session has at least one observation
-	Evaluated          int                `json:"evaluated"`            // = Evaluable (post-filter)
-	Skipped            int                `json:"skipped"`              // too short, no session_id, no obs for session, etc.
-	HitRate            float64            `json:"hit_rate"`             // any same-session hit in top-k
-	PrecisionAt        float64            `json:"precision_at_k"`       // mean precision@k (strict — same session_id)
-	MRR                float64            `json:"mrr"`                  // mean reciprocal rank of first strict hit
-	ProjectHitRate     float64            `json:"project_hit_rate"`     // any same-project hit in top-k (loose)
+	TotalPrompts       int                `json:"total_prompts"`    // total prompts inspected
+	Evaluable          int                `json:"evaluable"`        // prompts whose session has at least one observation
+	Evaluated          int                `json:"evaluated"`        // = Evaluable (post-filter)
+	Skipped            int                `json:"skipped"`          // too short, no session_id, no obs for session, etc.
+	HitRate            float64            `json:"hit_rate"`         // any same-session hit in top-k
+	PrecisionAt        float64            `json:"precision_at_k"`   // mean precision@k (strict — same session_id)
+	MRR                float64            `json:"mrr"`              // mean reciprocal rank of first strict hit
+	ProjectHitRate     float64            `json:"project_hit_rate"` // any same-project hit in top-k (loose)
 	ProjectPrecisionAt float64            `json:"project_precision_at_k"`
 	Samples            []MemoryEvalSample `json:"samples"`
 	Misses             []MemoryEvalMiss   `json:"misses"`
@@ -299,8 +299,9 @@ var stopWords = map[string]bool{
 // narrowest first. Engram's search ANDs terms with no operators, so a single
 // user verb (e.g. "review", "fix", "explain") that doesn't appear in any
 // observation zeros the match. We try:
-//   1. The top-3 longest tokens joined — narrow but maximally specific.
-//   2. Each of the top-3 tokens alone — broadens to single-word hits.
+//  1. The top-3 longest tokens joined — narrow but maximally specific.
+//  2. Each of the top-3 tokens alone — broadens to single-word hits.
+//
 // First non-empty hit list wins.
 func buildProgressiveQueries(text string) []string {
 	var tokens []string
@@ -326,15 +327,6 @@ func buildProgressiveQueries(text string) []string {
 		queries = append(queries, t)
 	}
 	return queries
-}
-
-// buildSearchQuery is kept for tests; returns the narrowest candidate.
-func buildSearchQuery(text string) string {
-	qs := buildProgressiveQueries(text)
-	if len(qs) == 0 {
-		return ""
-	}
-	return qs[0]
 }
 
 func isWordBreak(r rune) bool {

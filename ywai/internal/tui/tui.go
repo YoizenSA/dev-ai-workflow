@@ -27,9 +27,7 @@ var (
 	textSecondary  = lipgloss.Color("245")
 	textMuted      = lipgloss.Color("241")
 	borderColor    = lipgloss.Color("236")
-	surfaceColor   = lipgloss.Color("235")
 	textPrimary    = lipgloss.Color("255")
-	accentColor    = lipgloss.Color("141") // purple accent
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -37,23 +35,18 @@ var (
 // ──────────────────────────────────────────────────────────────────────────────
 
 var (
-	bannerStyle   = lipgloss.NewStyle().Foreground(primaryColor).Bold(true)
 	titleStyle    = lipgloss.NewStyle().Foreground(primaryColor).Bold(true).MarginBottom(1)
-	selStyle      = lipgloss.NewStyle().Foreground(secondaryColor).Bold(true).Background(surfaceColor).Padding(0, 1)
 	descStyle     = lipgloss.NewStyle().Foreground(textMuted)
 	infoStyle     = lipgloss.NewStyle().Foreground(tertiaryColor)
 	dimStyle      = lipgloss.NewStyle().Foreground(textMuted)
-	skillStyle    = lipgloss.NewStyle().Foreground(tertiaryColor)
 	okStyle       = lipgloss.NewStyle().Foreground(successColor)
 	activeStyle   = lipgloss.NewStyle().Foreground(secondaryColor).Bold(true)
 	pendingStyle  = lipgloss.NewStyle().Foreground(textMuted)
 	itemStyle     = lipgloss.NewStyle().Foreground(textPrimary)
 	subtitleStyle = lipgloss.NewStyle().Foreground(textSecondary)
 	monoStyle     = lipgloss.NewStyle().Foreground(secondaryColor)
-	captionStyle  = lipgloss.NewStyle().Foreground(textMuted)
 	helpStyle     = lipgloss.NewStyle().Foreground(textMuted).Italic(true)
 	warningStyle  = lipgloss.NewStyle().Foreground(warningColor).Bold(true)
-	accentStyle   = lipgloss.NewStyle().Foreground(accentColor)
 	checkStyle    = lipgloss.NewStyle().Foreground(successColor).Bold(true)
 	crossStyle    = lipgloss.NewStyle().Foreground(errorColor).Bold(true)
 
@@ -219,7 +212,6 @@ type Model struct {
 
 	// Progress state
 	installSteps []InstallStep
-	currentStep  int
 	installDone  bool
 	installError error
 	installAgent string

@@ -36,6 +36,6 @@ func ProbeServer(ctx context.Context, baseURL string) (bool, error) {
 	if err != nil {
 		return false, nil //nolint:nilerr // not reachable, not an error
 	}
-	resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK, nil
 }

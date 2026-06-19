@@ -40,12 +40,12 @@ type SessionAPI interface {
 
 // SessionCreateOpts configures session creation.
 type SessionCreateOpts struct {
-	Title     string        `json:"title,omitempty"`
-	Agent     string        `json:"agent,omitempty"`
-	Model     *ModelInput   `json:"model,omitempty"`
-	ParentID  string        `json:"parentID,omitempty"`
-	Directory string        `json:"directory,omitempty"`
-	Workspace string        `json:"workspace,omitempty"`
+	Title     string      `json:"title,omitempty"`
+	Agent     string      `json:"agent,omitempty"`
+	Model     *ModelInput `json:"model,omitempty"`
+	ParentID  string      `json:"parentID,omitempty"`
+	Directory string      `json:"directory,omitempty"`
+	Workspace string      `json:"workspace,omitempty"`
 }
 
 // ModelInput specifies which model a session should use.

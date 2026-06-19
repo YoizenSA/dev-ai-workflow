@@ -257,7 +257,7 @@ func (h *Handlers) ImportEngram(w http.ResponseWriter, r *http.Request) {
 	}
 	// Cap at 50 MiB to avoid runaway uploads.
 	body := http.MaxBytesReader(w, r.Body, 50<<20)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	data, err := io.ReadAll(body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to read body: "+err.Error())

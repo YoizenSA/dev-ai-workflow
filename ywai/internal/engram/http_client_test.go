@@ -149,7 +149,7 @@ func TestHTTPClient_Search(t *testing.T) {
 			t.Errorf("expected q=react, got %q", r.URL.Query().Get("q"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 			{"id": 50, "sync_id": "s1", "content": "react 19 stuff"},
 		})
 	}))

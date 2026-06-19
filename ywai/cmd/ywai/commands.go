@@ -287,7 +287,7 @@ var installCmd = &cobra.Command{
 		if !tuiFlag {
 			fmt.Print("  Overwrite existing agent profiles? [Y/n] ")
 			var response string
-			fmt.Scanln(&response)
+			_, _ = fmt.Scanln(&response)
 			overwriteAgents = response != "n" && response != "N"
 		}
 
@@ -852,9 +852,9 @@ var serveCmd = &cobra.Command{
 			if ln, err = net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
 				return fmt.Errorf("port %d is still in use after cleanup: %w", port, err)
 			}
-			ln.Close()
+			_ = ln.Close()
 		} else {
-			ln.Close()
+			_ = ln.Close()
 		}
 
 		// Fork to background before doing any work

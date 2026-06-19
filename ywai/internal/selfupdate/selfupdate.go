@@ -111,7 +111,7 @@ func downloadAndReplace(version string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, filepath.Base(asset))
 	if err := downloadFile(downloadURL, archivePath); err != nil {
@@ -212,7 +212,7 @@ func downloadFile(url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = io.Copy(f, resp.Body)
 	return err
@@ -248,7 +248,7 @@ func extractZip(src, dest string) error {
 		}
 
 		_, err = io.Copy(out, rc)
-		out.Close()
+		_ = out.Close()
 		_ = rc.Close()
 		if err != nil {
 			return err
@@ -262,7 +262,7 @@ func extractTarGz(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
@@ -296,10 +296,10 @@ func extractTarGz(src, dest string) error {
 		}
 
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close()
 			return err
 		}
-		out.Close()
+		_ = out.Close()
 
 		if err := os.Chmod(outPath, 0o755); err != nil {
 			return fmt.Errorf("chmod %s: %w", outPath, err)

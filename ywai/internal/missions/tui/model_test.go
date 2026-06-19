@@ -270,7 +270,7 @@ func TestNavigationOnEmptyTree(t *testing.T) {
 	mission, _ := store.LoadMission(missionID)
 	mission.Milestones = nil
 	mission.Features = nil
-	store.SaveMission(mission)
+	_ = store.SaveMission(mission)
 
 	m, _ := NewModel(store, missionID)
 
@@ -614,7 +614,7 @@ func TestPauseDisabledWhenAlreadyPaused(t *testing.T) {
 	store, missionID := newTestStore(t)
 	mission, _ := store.LoadMission(missionID)
 	mission.Status = missions.MissionPaused
-	store.SaveMission(mission)
+	_ = store.SaveMission(mission)
 
 	m, _ := NewModel(store, missionID)
 	if !m.paused {
@@ -669,7 +669,7 @@ func TestRetryShowsConfirmation(t *testing.T) {
 	store, missionID := newTestStore(t)
 	mission, _ := store.LoadMission(missionID)
 	mission.Features[0].Status = missions.FeatureFailed
-	store.SaveMission(mission)
+	_ = store.SaveMission(mission)
 
 	m, _ := NewModel(store, missionID)
 	m.toggleExpand()
@@ -1165,7 +1165,7 @@ func TestStoreUpdateRebuildsTree(t *testing.T) {
 	// Simulate store update with mission having feature status changes
 	mission, _ := store.LoadMission(missionID)
 	mission.Features[1].Status = missions.FeatureCompleted
-	store.SaveMission(mission)
+	_ = store.SaveMission(mission)
 
 	// Reload
 	reloaded, _ := store.LoadMission(missionID)

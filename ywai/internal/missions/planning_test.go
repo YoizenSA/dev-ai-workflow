@@ -467,7 +467,7 @@ func TestPlanFromFileMissingFields(t *testing.T) {
 	}
 	data, _ := json.Marshal(badPlan)
 	tmpFile := filepath.Join(t.TempDir(), "bad-plan.json")
-	os.WriteFile(tmpFile, data, 0644)
+	_ = os.WriteFile(tmpFile, data, 0644)
 
 	_, err := PlanFromFile(store, tmpFile)
 	if err == nil {
@@ -488,7 +488,7 @@ func TestPlanFromFileEmptyFeatures(t *testing.T) {
 
 	data, _ := json.Marshal(plan)
 	tmpFile := filepath.Join(t.TempDir(), "empty-features.json")
-	os.WriteFile(tmpFile, data, 0644)
+	_ = os.WriteFile(tmpFile, data, 0644)
 
 	mission, err := PlanFromFile(store, tmpFile)
 	if err != nil {
@@ -910,11 +910,11 @@ func TestDesignWorkerSystemGeneratesDroidFormat(t *testing.T) {
 	store, _ := newTestStoreForPlanning(t)
 	plan := designWorkerTestPlan()
 	mission := &Mission{
-		ID:          "dws-mission",
-		Name:        plan.Name,
-		Status:      MissionPlanning,
-		Features:    []Feature{{ID: "f-api", Status: FeaturePending, Milestone: "m1"}, {ID: "f-ui", Status: FeaturePending, Milestone: "m1"}, {ID: "f-qa", Status: FeaturePending, Milestone: "m1"}},
-		Milestones:  []Milestone{{Name: "m1"}},
+		ID:         "dws-mission",
+		Name:       plan.Name,
+		Status:     MissionPlanning,
+		Features:   []Feature{{ID: "f-api", Status: FeaturePending, Milestone: "m1"}, {ID: "f-ui", Status: FeaturePending, Milestone: "m1"}, {ID: "f-qa", Status: FeaturePending, Milestone: "m1"}},
+		Milestones: []Milestone{{Name: "m1"}},
 	}
 	if err := store.CreateMission(mission); err != nil {
 		t.Fatalf("CreateMission: %v", err)
@@ -990,7 +990,7 @@ func TestDesignWorkerSystemClassifierMapsToCanonicalNames(t *testing.T) {
 		Features:   []Feature{{ID: "f-api", Status: FeaturePending, Milestone: "m1"}, {ID: "f-ui", Status: FeaturePending, Milestone: "m1"}, {ID: "f-qa", Status: FeaturePending, Milestone: "m1"}},
 		Milestones: []Milestone{{Name: "m1"}},
 	}
-	store.CreateMission(mission)
+	_ = store.CreateMission(mission)
 	missionDir := store.MissionDir(mission.ID)
 
 	if err := DesignWorkerSystem(plan, mission, missionDir, "", ""); err != nil {

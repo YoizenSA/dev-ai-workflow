@@ -185,7 +185,7 @@ func TestHandlers_GetActivities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST activity failed: %v", err)
 	}
-	postResp.Body.Close()
+	_ = postResp.Body.Close()
 
 	// GET again — should have one activity
 	resp, err = http.Get(url)
@@ -241,7 +241,7 @@ func TestHandlers_ResolveActivity(t *testing.T) {
 		t.Fatalf("POST activity failed: %v", err)
 	}
 	var activity ActivityEvent
-	json.NewDecoder(resp.Body).Decode(&activity)
+	_ = json.NewDecoder(resp.Body).Decode(&activity)
 	resp.Body.Close()
 
 	// Test PATCH 200 — resolve the activity
@@ -265,7 +265,7 @@ func TestHandlers_ResolveActivity(t *testing.T) {
 	}
 
 	var resolved ActivityEvent
-	json.NewDecoder(resp.Body).Decode(&resolved)
+	_ = json.NewDecoder(resp.Body).Decode(&resolved)
 	if resolved.Resolution != "approve" {
 		t.Errorf("expected resolution 'approve', got '%s'", resolved.Resolution)
 	}
@@ -339,7 +339,7 @@ func TestHandlers_GetPendingDecisions(t *testing.T) {
 		"application/json",
 		bytes.NewReader(body),
 	)
-	postResp.Body.Close()
+	_ = postResp.Body.Close()
 
 	// Add a progress activity (should NOT appear in pending)
 	payload = map[string]interface{}{
@@ -352,7 +352,7 @@ func TestHandlers_GetPendingDecisions(t *testing.T) {
 		"application/json",
 		bytes.NewReader(body),
 	)
-	postResp.Body.Close()
+	_ = postResp.Body.Close()
 
 	// Test GET 200 — filtered results (only decision, not progress)
 	resp, err = http.Get(fmt.Sprintf("%s/api/sessions/%s/decisions", baseURL, sessionID))
@@ -473,7 +473,7 @@ func TestHandlers_ResolveActivity_Validation(t *testing.T) {
 		bytes.NewReader(body),
 	)
 	var activity ActivityEvent
-	json.NewDecoder(resp.Body).Decode(&activity)
+	_ = json.NewDecoder(resp.Body).Decode(&activity)
 	resp.Body.Close()
 
 	// Test PATCH 400 — missing resolution field

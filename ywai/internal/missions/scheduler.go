@@ -44,17 +44,6 @@ func FindRunnableFeatures(mission *Mission) []*Feature {
 	return runnable
 }
 
-// completedFeatureSet returns a set of completed feature IDs.
-func completedFeatureSet(mission *Mission) map[string]bool {
-	completed := make(map[string]bool)
-	for i := range mission.Features {
-		if mission.Features[i].Status == FeatureCompleted {
-			completed[mission.Features[i].ID] = true
-		}
-	}
-	return completed
-}
-
 // featureStatusMap returns a map of feature ID → status for the mission.
 func featureStatusMap(mission *Mission) map[string]FeatureStatus {
 	statuses := make(map[string]FeatureStatus)

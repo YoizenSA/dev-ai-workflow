@@ -16,8 +16,6 @@ import (
 
 var (
 	// ── Base ────────────────────────────────────────────────────────
-	baseStyle = lipgloss.NewStyle().
-			Padding(0, 1)
 
 	// ── Header ──────────────────────────────────────────────────────
 	headerStyle = lipgloss.NewStyle().
@@ -100,9 +98,6 @@ var (
 
 	statusItemStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252"))
-
-	statusKeyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244"))
 
 	// ── Badges ──────────────────────────────────────────────────────
 	pendingBadge = lipgloss.NewStyle().
@@ -303,7 +298,7 @@ func (m Model) renderTreePanel(width, height int) string {
 
 func (m Model) renderTreeItem(index int, item treeItem, maxWidth int) string {
 	indent := strings.Repeat("  ", item.indent)
-	prefix := "  "
+	var prefix string
 
 	if item.isMilestone {
 		// Aggregate status
@@ -751,42 +746,6 @@ func (m Model) renderWithOverlay(overlay string) string {
 		lipgloss.Center, lipgloss.Center,
 		overlay,
 	)
-}
-
-// renderMainView renders just the main layout without overlay for centering.
-func (m Model) renderMainView() string {
-	if m.windowTooSmall {
-		return m.renderSmallTerminalWarning()
-	}
-
-	headerHeight := 2
-	statusBarHeight := 1
-	availHeight := m.height - headerHeight - statusBarHeight
-	availWidth := m.width
-
-	header := m.renderHeader()
-	treeWidth := availWidth * 40 / 100
-	detailWidth := availWidth - treeWidth - 2
-	if treeWidth < 30 {
-		treeWidth = 30
-	}
-	if detailWidth < 40 {
-		detailWidth = 40
-	}
-	if treeWidth+detailWidth > availWidth {
-		detailWidth = availWidth - treeWidth
-	}
-	if detailWidth < 10 {
-		detailWidth = 10
-	}
-
-	treePanel := m.renderTreePanel(treeWidth, availHeight)
-	detailPanel := m.renderDetailPanel(detailWidth, availHeight)
-
-	content := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, "  ", detailPanel)
-	statusBar := m.renderStatusBar(availWidth)
-
-	return header + "\n" + content + "\n" + statusBar
 }
 
 // renderCenteredOverlay centers a dialog over the main content.
