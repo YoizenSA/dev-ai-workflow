@@ -149,7 +149,10 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updateAvail := current != latest && !strings.HasPrefix(current, "dev")
+	// Normalize away the leading "v" GitHub prepends to tags so "8.6.1" and
+	// "v8.6.1" compare as the same version (the update flow already does this).
+	latestNorm := strings.TrimPrefix(latest, "v")
+	updateAvail := current != latestNorm && !strings.HasPrefix(current, "dev")
 	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
 		current, latest, updateAvail)
 }

@@ -779,6 +779,7 @@ function AgentsTab() {
 	}
 	const teamOrder = [
 		"core",
+		"qa-automation",
 		"social-refactor",
 		"experiment",
 		"custom",
