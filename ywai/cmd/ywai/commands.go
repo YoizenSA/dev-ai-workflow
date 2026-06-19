@@ -885,6 +885,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		// Start control server
+		control.AppVersion = version
 		s, err := control.GetOrStart(port)
 		if err != nil {
 			return fmt.Errorf("failed to start control server: %w", err)

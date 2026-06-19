@@ -227,6 +227,12 @@ function GeneralTab() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
+	// Version state
+	const [versionInfo, setVersionInfo] = useState<{
+		current: string;
+		latest: string | null;
+		updateAvailable: boolean;
+	} | null>(null);
 	// AGENTS.md state
 	const [agentsMd, setAgentsMd] = useState<string>("");
 	const [agentsMdPath, setAgentsMdPath] = useState<string>("");
@@ -270,6 +276,12 @@ function GeneralTab() {
 				setAgentsMdPath("");
 			})
 			.finally(() => setAgentsMdLoading(false));
+
+		// Load version info
+		configApi
+			.getVersion()
+			.then((v) => setVersionInfo(v))
+			.catch(() => {});
 	}, []);
 
 	// Helper to read the current provider / agent identifier no matter whether
@@ -335,8 +347,63 @@ function GeneralTab() {
 	if (!config) return <p className="muted">No config available</p>;
 
 	return (
-		<div className="card card-pad">
-			<div className="form-grid">
+		<div>
+			{versionInfo && (
+				<div
+					className="card card-pad"
+					style={{
+						marginBottom: "1rem",
+						display: "flex",
+						alignItems: "center",
+						gap: "0.75rem",
+						background: versionInfo.updateAvailable
+							? "var(--color-warning-bg, #fef3c7)"
+							: undefined,
+						borderColor: versionInfo.updateAvailable
+							? "var(--color-warning-border, #f59e0b)"
+							: undefined,
+					}}
+				>
+					<span style={{ fontSize: "1.25rem" }}>
+						{versionInfo.updateAvailable ? "⬆️" : "✅"}
+					</span>
+					<div style={{ flex: 1 }}>
+						<strong>ywai {versionInfo.current}</strong>
+						{versionInfo.updateAvailable && versionInfo.latest && (
+							<span>
+								{" "}
+								→{" "}
+								<a
+									href={`https://github.com/YoizenSA/dev-ai-workflow/releases/tag/${versionInfo.latest}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									style={{ color: "var(--color-primary, #3b82f6)" }}
+								>
+									{versionInfo.latest}
+								</a>{" "}
+								available
+							</span>
+						)}
+						{!versionInfo.updateAvailable && (
+							<span className="muted"> — up to date</span>
+						)}
+					</div>
+					{versionInfo.updateAvailable && (
+						<code
+							style={{
+								fontSize: "0.8rem",
+								padding: "0.25rem 0.5rem",
+								borderRadius: "4px",
+								background: "var(--color-code-bg, #f1f5f9)",
+							}}
+						>
+							ywai update
+						</code>
+					)}
+				</div>
+			)}
+			<div className="card card-pad">
+				<div className="form-grid">
 				<div className="field">
 					<label className="field-label" htmlFor="cfg-provider">
 						Provider
@@ -518,6 +585,7 @@ function GeneralTab() {
 				) : (
 					<p className="muted">AGENTS.md not found in the project root.</p>
 				)}
+				</div>
 			</div>
 		</div>
 	);

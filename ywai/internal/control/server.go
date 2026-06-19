@@ -16,6 +16,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 )
 
 const DefaultPort = 5768
@@ -24,6 +25,9 @@ var (
 	embeddedUI      func() fs.FS
 	defaultServer   *Server
 	defaultServerMu sync.Mutex
+
+	// AppVersion is the ywai binary version, set by the CLI at startup.
+	AppVersion = "dev"
 )
 
 // RegisterEmbeddedUI registers the embedded UI filesystem.
@@ -85,6 +89,9 @@ func (s *Server) buildRoutes() {
 	// Health check
 	s.mux.HandleFunc("GET /health", s.healthHandler)
 
+	// Version check
+	s.mux.HandleFunc("GET /api/version", s.versionHandler)
+
 	// ─── Kanban API ──────────────────────────────────────────────
 	s.mux.HandleFunc("/api/", s.kanbanHandler)
 
@@ -127,6 +134,24 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"status":"ok","uptime":"%s","started":"%s"}`,
 		time.Since(s.startedAt).String(),
 		s.startedAt.Format(time.RFC3339))
+}
+
+// versionHandler returns the current and latest ywai version.
+func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	current := AppVersion
+	latest, err := selfupdate.LatestVersion()
+	if err != nil {
+		// Can't check — still return current version
+		fmt.Fprintf(w, `{"current":%q,"latest":null,"updateAvailable":false,"error":%q}`,
+			current, err.Error())
+		return
+	}
+
+	updateAvail := current != latest && current != "dev"
+	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
+		current, latest, updateAvail)
 }
 
 // serveSPA serves all non-API requests: static assets or SPA index.html.

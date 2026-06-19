@@ -262,6 +262,9 @@ export const missionsApi = {
 // ─── Config API ────────────────────────────────────────────────────────────
 
 export const configApi = {
+	// Version check
+	getVersion: () => request<{ current: string; latest: string | null; updateAvailable: boolean; error?: string }>("/api/version"),
+
 	// OpenCode general config
 	getConfig: () => request<OpenCodeConfig>("/api/config/opencode"),
 	updateConfig: (data: Partial<OpenCodeConfig>) =>
