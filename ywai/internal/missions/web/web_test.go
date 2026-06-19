@@ -875,6 +875,7 @@ func TestAutoMissionPlansAndStarts(t *testing.T) {
 	}
 	plannerCalled := false
 	engineCalled := false
+	engineCalledCh := make(chan struct{})
 
 	h := &Handlers{
 		store:           store,
@@ -889,6 +890,7 @@ func TestAutoMissionPlansAndStarts(t *testing.T) {
 		},
 		engineRunner: func(missionID string) error {
 			engineCalled = true
+			close(engineCalledCh)
 			return nil
 		},
 	}
@@ -921,6 +923,14 @@ func TestAutoMissionPlansAndStarts(t *testing.T) {
 	if !plannerCalled {
 		t.Error("expected injected planner to be called")
 	}
+
+	// Wait for the async engine runner to be invoked (it runs in a goroutine).
+	select {
+	case <-engineCalledCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for engine runner to be invoked")
+	}
+
 	if !engineCalled {
 		t.Error("expected engine runner to be invoked")
 	}
