@@ -57,20 +57,17 @@ Trabajo en curso sobre el branch `main`. Esto es lo que **falta cerrar** para qu
 - Todos los 34 símbolos unused eliminados
 - Imports limpios en planner_session.go
 
-### ✅ 3. Verificar que el CI quede verde — **BLOQUEADO POR GOFMT EN WINDOWS**
+### ✅ 3. Verificar que el CI quede verde — **COMPLETADO**
 **Local**: ✅
 - `go build ./...` → OK
 - `go vet ./...` → OK
 - `go test ./internal/... ./e2e/... ./cmd/...` → OK
 - `golangci-lint run --timeout 5m` → 0 issues
 
-**CI**: ❌ Failing por gofmt en Windows (test flaky arreglado, ahora problema de line endings)
-- Run ID 27851444926: Ubuntu y macOS pasan, Windows falla por gofmt
-- Error: `File is not properly formatted (gofmt)` en `internal/autostart/*.go`
-- Causa: Archivos Go con CRLF en lugar de LF (Windows CI espera LF)
-- **Solución**: Agregado `*.go text eol=lf` a `.gitattributes` para forzar LF en todos los archivos Go
-
-**Acción**: Commitear `.gitattributes` y verificar que CI pase en Windows.
+**CI**: ✅ Verde en todas las plataformas
+- Run ID 27852969967: Ubuntu ✓, macOS ✓, Windows ✓, build ✓
+- Arreglado test flaky `TestAutoMissionPlansAndStarts` (race condition con goroutine)
+- Arreglado gofmt en Windows (agregado `*.go text eol=lf` a `.gitattributes`)
 
 ### 4. Tag + release (opcional, si querés nueva versión)
 Pendiente: evaluar si estos fixes internos de CI/lint merecen release `v8.6.3`.
