@@ -20,6 +20,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 	"github.com/spf13/cobra"
@@ -313,6 +314,31 @@ var updateCmd = &cobra.Command{
 		}
 		if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
 			warn("failed to apply overrides: %v", err)
+		}
+
+		fmt.Println("\n[7/7] Restarting control server...")
+		if port := serverutil.GetRunningPort(); port > 0 {
+			fmt.Printf("  Stopping server on port %d...\n", port)
+			if err := killPort(port); err != nil {
+				warn("could not kill server on port %d: %v", port, err)
+			} else {
+				fmt.Println("  Server stopped.")
+			}
+		}
+		// Re-launch in background
+		exe, err := os.Executable()
+		if err != nil {
+			warn("could not find ywai binary: %v", err)
+		} else {
+			serveCmd := exec.Command(exe, "serve", "--background", "--no-update")
+			serveCmd.SysProcAttr = sysProcAttr()
+			serveCmd.Stdout = os.Stdout
+			serveCmd.Stderr = os.Stderr
+			if err := serveCmd.Start(); err != nil {
+				warn("could not restart server: %v", err)
+			} else {
+				fmt.Printf("  Server restarted in background (PID %d)\n", serveCmd.Process.Pid)
+			}
 		}
 
 		if len(warnings) > 0 {
