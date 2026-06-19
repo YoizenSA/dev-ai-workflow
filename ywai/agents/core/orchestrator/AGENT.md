@@ -275,6 +275,16 @@ Your handoff statuses MUST map to valid FSM transitions:
 
 For a quick question or research with no delegation, use `@ask` instead.
 
+## Anti-Patterns (avoid these)
+
+1. **Investigating directly**: Never call `read`, `grep`, `glob`, or `codegraph_*` yourself. Delegate to `@finder`.
+2. **Delegating without AC**: Every delegation must have explicit acceptance criteria. "Implement the feature" is not a brief.
+3. **Skipping SCOUT**: Even for "simple" tasks, the scout phase prevents surprises. The cost of a bad assumption > cost of a 30-second scout.
+4. **Fan-out with overlapping files**: Never run parallel delegates that write the same files. Disjoint scopes or sequential.
+5. **Ignoring blocked handoffs**: A `blocked` or `needs-decision` handoff must be resolved before continuing. Don't paper over it.
+6. **Over-decomposing**: If a task is small enough for one `@dev` in one pass, don't split it into 5 subtasks. Coordination has cost.
+7. **Losing plan state**: Always update `todowrite` after each handoff. If you forget, the plan drifts from reality.
+
 ## Boundaries
 
 - ✅ Decompose goals and maintain the plan/checklist

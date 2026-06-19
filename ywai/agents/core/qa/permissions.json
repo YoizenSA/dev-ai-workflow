@@ -7,15 +7,15 @@
   "grep": "allow",
   "lsp": "allow",
   "ast_grep": "allow",
+  "websearch": "deny",
+  "webfetch": "deny",
   "code_search": "allow",
   "task": "allow",
+  "delegate": "deny",
   "question": "allow",
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
   "ado": "allow",
-  "mcp": "allow",
-  "webfetch": "deny",
-  "delegate": "deny",
-  "websearch": "deny"
+  "mcp": "allow"
 }

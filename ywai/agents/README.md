@@ -14,6 +14,7 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 | `architect` | Architect | Design decisions, patterns, system design |
 | `reviewer` | Code Reviewer | PR reviews, code quality, security audits |
 | `devops` | DevOps Engineer | CI/CD, deployments, infrastructure, monitoring |
+| `memory` | Memory Specialist | Memory consolidation, deduplication, structured plans |
 
 ## Delegation Flow
 
@@ -95,6 +96,9 @@ agents/
 │   └── skills.txt      # Linked skills (optional)
 ├── dev/
 │   └── ...
+├── sections/
+│   ├── handoff.md          # Standard handoff format for subagents
+│   └── context-gathering.md # Context gathering protocol
 ```
 
 ### AGENT.md
@@ -112,7 +116,8 @@ mode: all
 
 ### permissions.json (optional)
 
-Configure which tools the agent can use. Valid values are `allow`, `ask`, or `deny`:
+Configure which tools the agent can use. Valid values are `allow`, `ask`, or `deny`.
+Keys follow a canonical order for consistency:
 
 ```json
 {
@@ -121,7 +126,20 @@ Configure which tools the agent can use. Valid values are `allow`, `ask`, or `de
   "write": "allow",
   "bash": "allow",
   "glob": "allow",
-  "grep": "allow"
+  "grep": "allow",
+  "lsp": "allow",
+  "ast_grep": "allow",
+  "websearch": "allow",
+  "webfetch": "allow",
+  "code_search": "allow",
+  "task": "allow",
+  "delegate": "allow",
+  "question": "allow",
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "ado": "allow",
+  "mcp": "allow"
 }
 ```
 

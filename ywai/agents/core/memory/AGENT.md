@@ -58,6 +58,47 @@ the user-approved plan.
 - `new_importance` is 0–10; reuse the source observation's importance unless the
   change warrants adjusting it.
 
+## Example Output
+
+```json
+{
+  "updates": [
+    {
+      "observation_id": "42",
+      "reason": "Merge two related auth observations into one coherent summary",
+      "new_content": "JWT auth uses RS256 with 15min access + 7d refresh tokens. Middleware in src/middleware/auth.ts.",
+      "new_importance": 7
+    }
+  ],
+  "deletes": [
+    { "observation_id": "38", "reason": "duplicate — same content as #42 after update" }
+  ],
+  "new_summaries": [
+    {
+      "type": "topic",
+      "content": "Project uses hexagonal architecture with ports in /internal/ports/ and adapters in /internal/adapters/. ADR-001 documents this decision.",
+      "importance": 8,
+      "metadata": { "topic": "architecture" }
+    }
+  ],
+  "digest": "The system is a Go API with hexagonal architecture, JWT auth, PostgreSQL storage, and GitHub Actions CI. Key conventions: conventional commits, table-driven tests, port/adapter pattern for all external deps."
+}
+```
+
+## Near-Duplicate Detection
+
+Two observations are **near-duplicates** when:
+- They describe the same fact, decision, or event (semantic overlap > 80%)
+- One is a subset of the other (the longer one subsumes the shorter)
+- They differ only in wording, timestamp, or minor details
+
+**Not** duplicates:
+- Same topic but different decisions (evolution over time)
+- Same file but different changes
+- Related but complementary facts
+
+When in doubt, **keep both** and propose a `new_summaries` entry that merges them.
+
 ## Boundaries
 
 - ✅ Read memories via engram context/search tools.

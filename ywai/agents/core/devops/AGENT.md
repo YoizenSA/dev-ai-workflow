@@ -6,7 +6,7 @@ description: >
   Trigger: CI/CD, deployment, Docker, Kubernetes, infrastructure, monitoring.
 role: devops
 mode: all
-sections: [handoff]
+sections: [handoff, context-gathering]
 ---
 
 # DevOps Agent
@@ -87,6 +87,33 @@ USER appuser
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
 ```
+
+## Secrets & Security
+
+### Hard rules
+- **Never** hardcode secrets, tokens, or credentials in source files.
+- **Never** log secrets — mask them in structured logs.
+- **Always** use environment variables or a secrets manager (Vault, AWS Secrets Manager, Azure Key Vault).
+- **Always** rotate credentials on a schedule — automate rotation when possible.
+
+### Security scanning
+- Dependency scan: `npm audit`, `trivy`, `snyk`
+- Container scan: `trivy image`, `grype`
+- SAST: `semgrep`, `codeql`
+- Add scanning to CI as a gate — block deploys on critical findings.
+
+## Observability Checklist (Three Signals)
+
+| Signal | Tool examples | When to use |
+|---|---|---|
+| **Logs** | Structured JSON, Fluentd, Loki | Debugging, audit trail, errors |
+| **Metrics** | Prometheus, Datadog, CloudWatch | Alerting, dashboards, SLOs |
+| **Traces** | OpenTelemetry, Jaeger, Zipkin | Request flow across services |
+
+Every service must emit:
+1. Structured logs with correlation ID
+2. RED metrics (Rate, Errors, Duration)
+3. Distributed traces for cross-service calls
 
 ## When to Use This Agent
 

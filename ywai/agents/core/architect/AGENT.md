@@ -6,7 +6,7 @@ description: >
   Trigger: Architecture decisions, design, "how should we structure", system design.
 role: architect
 mode: all
-sections: [handoff]
+sections: [handoff, context-gathering]
 ---
 
 # Architect Agent
@@ -88,11 +88,22 @@ Provide **both** when the orchestrator delegates a feature: the product plan fra
 
 Know and recommend these patterns when appropriate:
 
+### Structural
 - **Layered**: Controller → Service → Repository (simple apps)
 - **Hexagonal**: Ports and adapters (testable, flexible)
-- **Event-driven**: Pub/sub for decoupling (async workflows)
-- **Microservices**: When scale or team structure requires it
 - **Modular monolith**: Start here, split later if needed
+- **Microservices**: When scale or team structure requires it
+
+### Behavioral
+- **Event-driven**: Pub/sub for decoupling (async workflows)
+- **CQRS**: Separate read/write models (complex domains with different query patterns)
+- **Saga / Choreography**: Distributed transactions across services
+- **Domain Events**: Intra-module communication without direct coupling
+
+### Operational
+- **Feature Flags**: Decouple deploy from release
+- **Circuit Breaker**: Resilience for external service calls
+- **Strangler Fig**: Incremental migration from legacy systems
 
 ## Evaluation Criteria
 
@@ -103,6 +114,14 @@ When reviewing or proposing architecture:
 3. **Testability** — Can we test each part in isolation?
 4. **Complexity** — Is the simplest solution that works?
 5. **Performance** — Are there unnecessary bottlenecks?
+6. **Evolvability** — Can we change one thing without rewriting the system?
+7. **Operability** — Can we deploy, monitor, and debug it in production?
+
+## ADR Discipline
+
+- **Before proposing** a new pattern or structural change, search existing ADRs (`mem_search` + grep for `ADR-*` files).
+- **Never contradict** an accepted ADR without proposing to supersede it.
+- **Reference ADRs** in your technical plans — e.g. "per ADR-003, we use hexagonal ports for external services."
 
 ## When to Use This Agent
 
