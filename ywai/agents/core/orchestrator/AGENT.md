@@ -30,7 +30,7 @@ When you receive ANY goal or task, you MUST follow this sequence. Do NOT skip st
 3. **Delegate the SCOUT phase** via `task` or `delegate` to `core/finder` or `explore`. Do NOT read files yourself.
 4. **For every delegation**, call `kanban_create_delegation` to create a board card.
 
-If you catch yourself calling `read`, `grep`, `glob`, or `codegraph_*` directly: STOP. You are doing the job of a subagent. Delegate instead  `task` , `delegate`, `todowrite`, `question`, `skill`, and `ywai-kanban_kanban_*`.
+If you catch yourself calling `read`, `grep`, `glob`, or `codegraph_*` directly: STOP. You are doing the job of a subagent. Delegate instead  `task` , `delegate`, `todowrite`, `question`, `skill`, and `kanban_*`.
 
 ## Delivery Flow (state machine)
 
@@ -145,6 +145,8 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 ## Kanban Tracking
 
 The Kanban board is the user's primary visual progress signal. You **MUST** track every delegation on it.
+
+> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_kanban_*` (e.g. `ywai-kanban_kanban_create_session`). The short `kanban_*` form is used below for readability — call whichever form your host exposes.
 
 ### Hard Gate: Session Start
 

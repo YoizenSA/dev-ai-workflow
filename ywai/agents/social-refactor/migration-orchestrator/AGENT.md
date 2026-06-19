@@ -234,6 +234,8 @@ multiple delegations and collect them later.
 Track every delegation on the Kanban board so the user can see progress
 visually without reading handoffs. The Kanban is your audit trail.
 
+> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_kanban_*` (e.g. `ywai-kanban_kanban_create_session`). The short `kanban_*` form is used below for readability — call whichever form your host exposes.
+
 ### Workflow
 
 1. **On session start**: Call `kanban_create_session(goal="<migration goal>")`
