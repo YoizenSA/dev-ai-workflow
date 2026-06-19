@@ -75,7 +75,35 @@ func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 		return nil, fmt.Errorf("walk agents dir %s: %w", sourceDir, err)
 	}
 
+	// Assign groups from groups.json
+	assignGroups(sourceDir, profiles)
+
 	return profiles, nil
+}
+
+// assignGroups reads groups.json and sets the Group field on matching profiles.
+func assignGroups(sourceDir string, profiles map[string]AgentProfile) {
+	manifest, err := LoadGroupManifest(sourceDir)
+	if err != nil {
+		return // groups.json missing — leave Group empty
+	}
+
+	// Build lookup: try both full name ("core/orchestrator") and base name ("orchestrator")
+	profileByName := make(map[string]string) // name -> profile key in profiles map
+	for key := range profiles {
+		profileByName[key] = key
+		profileByName[filepath.Base(key)] = key
+	}
+
+	for groupName, def := range manifest.Groups {
+		for _, agentName := range def.Agents {
+			if key, ok := profileByName[agentName]; ok {
+				p := profiles[key]
+				p.Group = groupName
+				profiles[key] = p
+			}
+		}
+	}
 }
 
 func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
@@ -948,8 +976,12 @@ func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]Agent
 
 	result := make(map[string]AgentProfile)
 	for name, profile := range allProfiles {
+		// Match by full name ("core/orchestrator") or base name ("orchestrator")
 		if allowed[name] {
 			profile.Group = groupOf[name]
+			result[name] = profile
+		} else if base := filepath.Base(name); allowed[base] {
+			profile.Group = groupOf[base]
 			result[name] = profile
 		}
 	}
