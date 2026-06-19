@@ -266,7 +266,7 @@ func detectByConfigDir(name, skillsDir string) bool {
 		return false
 	}
 
-	createSkillsDir(skillsDir)
+	_ = createSkillsDir(skillsDir)
 	return true
 }
 

@@ -55,7 +55,7 @@ func TestHTTPClient_RecentObservations(t *testing.T) {
 			{"id": 2, "sync_id": "obs_2", "type": "observation", "content": "second"},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -73,7 +73,7 @@ func TestHTTPClient_RecentObservations_WrappedData(t *testing.T) {
 	// engram may wrap arrays in {"data": [...]}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]interface{}{{"id": 10, "sync_id": "w1", "content": "wrapped"}},
 		})
 	}))
@@ -95,9 +95,9 @@ func TestHTTPClient_Save(t *testing.T) {
 		if r.URL.Path != "/save" || r.Method != http.MethodPost {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"id": 99, "sync_id": "obs_new", "type": "save", "content": "captured",
 		})
 	}))

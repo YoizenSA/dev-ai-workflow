@@ -55,7 +55,7 @@ func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -89,7 +89,7 @@ func FetchConfig(baseURL, apiKey, target string) (*ConfigResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching config: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

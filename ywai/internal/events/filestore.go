@@ -41,7 +41,7 @@ func (fs *FileStore) Append(event Event) error {
 	if err != nil {
 		return fmt.Errorf("open event file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	line, err := json.Marshal(event)
 	if err != nil {
@@ -70,7 +70,7 @@ func (fs *FileStore) Replay(sessionID string) ([]Event, error) {
 		}
 		return nil, fmt.Errorf("open event file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var events []Event
 	scanner := bufio.NewScanner(f)

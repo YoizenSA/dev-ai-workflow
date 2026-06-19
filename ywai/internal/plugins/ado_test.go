@@ -50,7 +50,9 @@ func TestInstallADOOpenCode_DoesNotModifyOpenCodeJSON(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o700)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	writeJSON(t, configPath, map[string]any{
 		"theme": "dark",
 	})
@@ -194,7 +196,9 @@ func TestReadExistingADOConfig_ReadsFromLegacyOpenCodeJSON(t *testing.T) {
 
 	// Simulate legacy opencode.json with plugin entry
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o700)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	writeJSON(t, configPath, map[string]any{
 		"plugin": []any{
 			[]any{"@nahuelcio/opencode-ado", map[string]any{
@@ -229,7 +233,9 @@ func TestReadExistingADOConfig_PrefersNewFileOverLegacy(t *testing.T) {
 
 	// Write legacy opencode.json
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o700)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	writeJSON(t, configPath, map[string]any{
 		"plugin": []any{
 			[]any{"@nahuelcio/opencode-ado", map[string]any{

@@ -142,17 +142,17 @@ func downloadAndReplace(version string) (string, error) {
 	}
 
 	bakPath := exe + ".bak"
-	os.Remove(bakPath)
+	_ = os.Remove(bakPath)
 	if err := os.Rename(exe, bakPath); err != nil {
 		return "", fmt.Errorf("cannot backup old binary: %w", err)
 	}
 
 	if err := replaceBinary(binaryPath, exe); err != nil {
-		os.Rename(bakPath, exe)
+		_ = os.Rename(bakPath, exe)
 		return "", fmt.Errorf("cannot replace binary: %w", err)
 	}
 
-	os.Remove(bakPath)
+	_ = os.Remove(bakPath)
 
 	return version, nil
 }
@@ -173,13 +173,13 @@ func replaceBinary(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
 	if err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return fmt.Errorf("copy binary: %w", err)
@@ -223,7 +223,7 @@ func extractZip(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
@@ -243,13 +243,13 @@ func extractZip(src, dest string) error {
 		outPath := filepath.Join(dest, name)
 		out, err := os.Create(outPath)
 		if err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
 
 		_, err = io.Copy(out, rc)
 		out.Close()
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func extractTarGz(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -301,7 +301,9 @@ func extractTarGz(src, dest string) error {
 		}
 		out.Close()
 
-		os.Chmod(outPath, 0o755)
+		if err := os.Chmod(outPath, 0o755); err != nil {
+			return fmt.Errorf("chmod %s: %w", outPath, err)
+		}
 		return nil
 	}
 

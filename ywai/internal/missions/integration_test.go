@@ -88,9 +88,7 @@ func setupFakeOpencodeExitCode(t *testing.T, exitCode int) string {
 // prependPathDir puts dir at the front of PATH for the duration of the test.
 func prependPathDir(t *testing.T, dir string) {
 	t.Helper()
-	prev := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", prev) })
-	os.Setenv("PATH", dir+string(os.PathListSeparator)+prev)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // testHandoffJSON returns a valid handoff JSON string for testing.

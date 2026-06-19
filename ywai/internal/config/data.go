@@ -126,12 +126,14 @@ func SeedAgentsFromEmbedded() error {
 	if fn := getEmbeddedAgentsFS; fn != nil {
 		if fsys := fn(); fsys != nil {
 			count := 0
-			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+			if err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 				if err == nil && !d.IsDir() {
 					count++
 				}
 				return nil
-			})
+			}); err != nil {
+				return fmt.Errorf("failed to walk embedded agents: %w", err)
+			}
 			if count > 0 {
 				fmt.Printf("  Seeding agents from embedded (%d files)...\n", count)
 				if err := extractFS(fsys, ".", DataAgentsDir()); err != nil {
@@ -153,12 +155,14 @@ func SeedSkillsFromEmbedded() error {
 	if fn := getEmbeddedSkillsFS; fn != nil {
 		if fsys := fn(); fsys != nil {
 			count := 0
-			fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+			if err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 				if err == nil && !d.IsDir() {
 					count++
 				}
 				return nil
-			})
+			}); err != nil {
+				return fmt.Errorf("failed to walk embedded skills: %w", err)
+			}
 			if count > 0 {
 				fmt.Printf("  Seeding skills from embedded (%d files)...\n", count)
 				if err := extractFS(fsys, ".", DataSkillsDir()); err != nil {

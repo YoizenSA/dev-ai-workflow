@@ -226,12 +226,12 @@ func UpgradeEngram() {
 				return
 			}
 			oldPath := engramExe + ".bak"
-			os.Rename(engramExe, oldPath)
+			_ = os.Rename(engramExe, oldPath)
 			if err := runCommand("go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"); err != nil {
 				fmt.Printf("  Warning: engram update failed: %v\n", err)
-				os.Rename(oldPath, engramExe)
+				_ = os.Rename(oldPath, engramExe)
 			} else {
-				os.Remove(oldPath)
+				_ = os.Remove(oldPath)
 				fmt.Println("  engram updated successfully.")
 			}
 		} else {
@@ -485,7 +485,7 @@ func installGentleAIReleaseBinary(version string) error {
 	if err != nil {
 		return fmt.Errorf("cannot create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, archiveName)
 	fmt.Printf("  Downloading %s...\n", downloadURL)
@@ -535,7 +535,7 @@ func downloadFile(url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	return err
@@ -553,7 +553,7 @@ func extractBinaryFromZip(archivePath, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	for _, file := range reader.File {
 		if file.FileInfo().IsDir() {
@@ -567,7 +567,7 @@ func extractBinaryFromZip(archivePath, destDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 
 		outPath := filepath.Join(destDir, config.GentleAIBin+".exe")
 		out, err := os.Create(outPath)
@@ -575,7 +575,7 @@ func extractBinaryFromZip(archivePath, destDir string) (string, error) {
 			return "", err
 		}
 		if _, err := io.Copy(out, src); err != nil {
-			out.Close()
+			_ = out.Close()
 			return "", err
 		}
 		if err := out.Close(); err != nil {
@@ -592,13 +592,13 @@ func extractBinaryFromTarGz(archivePath, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gz, err := gzip.NewReader(file)
 	if err != nil {
 		return "", err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -619,7 +619,7 @@ func extractBinaryFromTarGz(archivePath, destDir string) (string, error) {
 			return "", err
 		}
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close()
 			return "", err
 		}
 		if err := out.Close(); err != nil {
@@ -676,7 +676,7 @@ func installGentleAIReleaseBinaryFirstTime() error {
 	if err != nil {
 		return fmt.Errorf("cannot create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, archiveName)
 	fmt.Printf("  Downloading %s...\n", downloadURL)
@@ -863,7 +863,7 @@ func installEngramReleaseBinary() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, archiveName)
 	fmt.Printf("  Downloading %s...\n", downloadURL)
@@ -913,13 +913,13 @@ func extractNamedBinaryFromTarGz(archivePath, destDir, binName string) (string, 
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gz, err := gzip.NewReader(file)
 	if err != nil {
 		return "", err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -940,7 +940,7 @@ func extractNamedBinaryFromTarGz(archivePath, destDir, binName string) (string, 
 			return "", err
 		}
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close()
 			return "", err
 		}
 		if err := out.Close(); err != nil {
@@ -960,7 +960,7 @@ func extractNamedBinaryFromZip(archivePath, destDir, binName string) (string, er
 	if err != nil {
 		return "", err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	for _, f := range reader.File {
 		if f.FileInfo().IsDir() {
@@ -974,7 +974,7 @@ func extractNamedBinaryFromZip(archivePath, destDir, binName string) (string, er
 		if err != nil {
 			return "", err
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 
 		outPath := filepath.Join(destDir, binName)
 		out, err := os.Create(outPath)
@@ -982,7 +982,7 @@ func extractNamedBinaryFromZip(archivePath, destDir, binName string) (string, er
 			return "", err
 		}
 		if _, err := io.Copy(out, src); err != nil {
-			out.Close()
+			_ = out.Close()
 			return "", err
 		}
 		if err := out.Close(); err != nil {

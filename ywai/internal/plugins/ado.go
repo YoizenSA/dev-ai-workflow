@@ -206,14 +206,14 @@ func SavePAT(pat string) error {
 					updated = append(updated, line)
 				}
 			}
-			os.WriteFile(shellRC, []byte(strings.Join(updated, "\n")), 0o644)
+			_ = os.WriteFile(shellRC, []byte(strings.Join(updated, "\n")), 0o644)
 		} else {
 			// Append new export
 			f, err := os.OpenFile(shellRC, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 			if err == nil {
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				exportLine := fmt.Sprintf("\n# Azure DevOps PAT (set by ywai)\nexport AZURE_DEVOPS_PAT=\"%s\"\n", pat)
-				f.WriteString(exportLine)
+				_, _ = f.WriteString(exportLine)
 			}
 		}
 		fmt.Printf("  ✓ AZURE_DEVOPS_PAT exported in %s\n", shellRC)
@@ -341,7 +341,7 @@ func InstallADODefaultConfig(config ADOPluginConfig) error {
 	// Read existing config to merge
 	existing := map[string]any{}
 	if data, err := os.ReadFile(configPath); err == nil {
-		json.Unmarshal(data, &existing)
+		_ = json.Unmarshal(data, &existing)
 	}
 
 	if _, ok := existing["ado"]; !ok {
