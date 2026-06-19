@@ -11,6 +11,10 @@ import (
 // adoConfigMu guards concurrent reads/writes to the ADO plugin config.
 var adoConfigMu sync.Mutex
 
+// adoPluginName is the identifier used in the opencode "plugin" array.
+// Must match the name in internal/plugins/ado.go.
+const adoPluginName = "@nahuelcio/opencode-ado"
+
 // AdoProfile represents a single ADO profile configuration.
 type AdoProfile struct {
 	Org       string   `json:"org"`
@@ -36,6 +40,9 @@ func (s *Server) registerAdoConfigRoutes() {
 }
 
 // readAdoConfig reads the ADO plugin section from opencode.json.
+// The plugin config is stored in the "plugin" array as a tuple:
+//
+//	"plugin": [["@nahuelcio/opencode-ado", { "enabled": true, ... }]]
 func readAdoConfig() (*AdoPluginConfig, error) {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
@@ -62,17 +69,8 @@ func readAdoConfig() (*AdoPluginConfig, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	plugins, ok := full["plugins"].(map[string]interface{})
-	if !ok {
-		return &AdoPluginConfig{
-			Enabled:        false,
-			DefaultProfile: "",
-			Profiles:       map[string]AdoProfile{},
-		}, nil
-	}
-
-	adoRaw, ok := plugins["@cioffinahuel/opencode-ado"].(map[string]interface{})
-	if !ok {
+	adoRaw := findAdoInPluginArray(full)
+	if adoRaw == nil {
 		return &AdoPluginConfig{
 			Enabled:        false,
 			DefaultProfile: "",
@@ -98,8 +96,38 @@ func readAdoConfig() (*AdoPluginConfig, error) {
 	return cfg, nil
 }
 
+// findAdoInPluginArray searches the "plugin" array for the ADO plugin tuple.
+func findAdoInPluginArray(full map[string]interface{}) map[string]interface{} {
+	pluginRaw, ok := full["plugin"]
+	if !ok {
+		return nil
+	}
+
+	plugins, ok := pluginRaw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	for _, p := range plugins {
+		arr, ok := p.([]interface{})
+		if !ok || len(arr) < 2 {
+			continue
+		}
+		name, ok := arr[0].(string)
+		if !ok || name != adoPluginName {
+			continue
+		}
+		cfg, ok := arr[1].(map[string]interface{})
+		if ok {
+			return cfg
+		}
+	}
+	return nil
+}
+
 // writeAdoConfig writes the ADO plugin section back to opencode.json,
-// preserving all other config keys.
+// preserving all other config keys. Stores the config as a tuple in the
+// "plugin" array to match the opencode schema.
 func writeAdoConfig(cfg *AdoPluginConfig) error {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
@@ -114,8 +142,8 @@ func writeAdoConfig(cfg *AdoPluginConfig) error {
 		if os.IsNotExist(err) {
 			// Create new config with just the ADO plugin.
 			full := map[string]interface{}{
-				"plugins": map[string]interface{}{
-					"@cioffinahuel/opencode-ado": cfg,
+				"plugin": []interface{}{
+					[]interface{}{adoPluginName, cfg},
 				},
 			}
 			out, marshalErr := json.MarshalIndent(full, "", "  ")
@@ -135,12 +163,33 @@ func writeAdoConfig(cfg *AdoPluginConfig) error {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
-	plugins, _ := full["plugins"].(map[string]interface{})
+	// Get or create the "plugin" array.
+	pluginRaw := full["plugin"]
+	plugins, _ := pluginRaw.([]interface{})
 	if plugins == nil {
-		plugins = map[string]interface{}{}
+		plugins = []interface{}{}
 	}
-	plugins["@cioffinahuel/opencode-ado"] = cfg
-	full["plugins"] = plugins
+
+	// Find and update existing ADO entry, or append a new tuple.
+	updated := false
+	for i, p := range plugins {
+		arr, ok := p.([]interface{})
+		if !ok || len(arr) < 2 {
+			continue
+		}
+		name, ok := arr[0].(string)
+		if !ok || name != adoPluginName {
+			continue
+		}
+		plugins[i] = []interface{}{adoPluginName, cfg}
+		updated = true
+		break
+	}
+	if !updated {
+		plugins = append(plugins, []interface{}{adoPluginName, cfg})
+	}
+
+	full["plugin"] = plugins
 
 	out, err := json.MarshalIndent(full, "", "  ")
 	if err != nil {
