@@ -97,9 +97,13 @@ agents/
 ├── dev/
 │   └── ...
 ├── sections/
-│   ├── handoff.md          # Standard handoff format for subagents
-│   └── context-gathering.md # Context gathering protocol
+│   ├── handoff.md          # Standard handoff format (core subagents → @orchestrator)
+│   ├── handoff-qa.md       # Handoff format for qa-automation subagents (@qa-*)
+│   ├── context-gathering.md # Context gathering protocol
+│   └── tdd.md              # Test-driven development discipline (dev/qa roles)
 ```
+
+Shared sections are appended to an agent's prompt at build time when referenced in the `sections:` frontmatter array (e.g. `sections: [handoff, context-gathering, tdd]`). A section named `foo` resolves to `sections/foo.md`; missing sections are skipped silently.
 
 ### AGENT.md
 
