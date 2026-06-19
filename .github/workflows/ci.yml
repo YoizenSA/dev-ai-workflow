@@ -28,11 +28,25 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ywai
+          args: --timeout=5m
+
       - name: Test unit
-        run: go test ./internal/... -count=1 -timeout 60s
+        run: go test ./internal/... -count=1 -timeout 60s -coverprofile=coverage.out -covermode=atomic
 
       - name: Test e2e
         run: go test ./e2e/ -v -count=1 -timeout 120s
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: ywai/coverage.out
 
   build:
     runs-on: ubuntu-latest

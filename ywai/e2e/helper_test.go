@@ -89,9 +89,6 @@ func runYwai(t *testing.T, bin string, args ...string) string {
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = repoRoot(t)
 
-	// Set environment variable to ensure consistent behavior
-	cmd.Env = append(os.Environ(), "YWAI_TEST_MODE=true")
-
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Logf("Command failed: %s %v", bin, args)
@@ -109,9 +106,6 @@ func runYwaiAllowFail(t *testing.T, bin string, args ...string) (string, error) 
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = repoRoot(t)
 
-	// Set environment variable to ensure consistent behavior
-	cmd.Env = append(os.Environ(), "YWAI_TEST_MODE=true")
-
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -121,7 +115,6 @@ func buildCmd(t *testing.T, bin string, args ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = repoRoot(t)
-	cmd.Env = append(os.Environ(), "YWAI_TEST_MODE=true")
 	return cmd
 }
 

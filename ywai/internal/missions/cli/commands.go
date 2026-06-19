@@ -6,13 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -59,7 +57,6 @@ Subcommands:
 	missionsCmd.AddCommand(newShowCmd())
 	missionsCmd.AddCommand(newResumeCmd())
 	missionsCmd.AddCommand(newCancelCmd())
-	missionsCmd.AddCommand(newServeCmd())
 	missionsCmd.AddCommand(newValidateContractCmd())
 	missionsCmd.AddCommand(newShowContractCmd())
 	missionsCmd.AddCommand(newAutoCmd())
@@ -716,37 +713,6 @@ func runCancel(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Mission %q (%s) cancelled.\n", mission.Name, mission.ID)
-	return nil
-}
-
-// ─── Serve Command ─────────────────────────────────────────────────────────
-
-func newServeCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Start the Mission Control Web UI server (deprecated: use 'ywai serve' instead)",
-		Long:  "Start the Mission Control Web UI HTTP server on port 5769 (default).\n\nDEPRECATED: Use 'ywai serve' instead to run the control server.",
-		RunE:  runServe,
-	}
-
-	cmd.Flags().IntP("port", "p", web.DefaultPort, "Port for Mission Control Web UI")
-	return cmd
-}
-
-func runServe(cmd *cobra.Command, args []string) error {
-	fmt.Fprintln(os.Stderr, "Warning: 'ywai missions serve' is deprecated. Use 'ywai serve' instead.")
-	port, _ := cmd.Flags().GetInt("port")
-
-	store, err := openStore()
-	if err != nil {
-		return fmt.Errorf("failed to open missions store: %w", err)
-	}
-
-	s := web.New(port, store)
-	log.Printf("Mission Control Web UI starting on http://localhost:%d", port)
-	if err := s.Start(); err != nil {
-		return fmt.Errorf("failed to start missions web UI: %w", err)
-	}
 	return nil
 }
 

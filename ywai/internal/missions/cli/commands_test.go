@@ -89,7 +89,7 @@ func TestHelpText(t *testing.T) {
 	}
 
 	// Should mention all subcommands
-	for _, sub := range []string{"start", "list", "show", "resume", "cancel", "serve"} {
+	for _, sub := range []string{"start", "list", "show", "resume", "cancel"} {
 		if !strings.Contains(output, sub) {
 			t.Errorf("help missing subcommand %q", sub)
 		}
@@ -549,7 +549,7 @@ func TestCommandStructure(t *testing.T) {
 		t.Fatalf("find missions command: %v", err)
 	}
 
-	expectedSubcommands := []string{"start", "list", "show", "resume", "cancel", "serve"}
+	expectedSubcommands := []string{"start", "list", "show", "resume", "cancel"}
 	for _, name := range expectedSubcommands {
 		subCmd, _, err := missionsCmd.Find([]string{name})
 		if err != nil {
@@ -621,19 +621,6 @@ func TestStartWithEmptyFile(t *testing.T) {
 }
 
 // ─── Serve command validation ──────────────────────────────────────────────
-
-func TestServeHelp(t *testing.T) {
-	root := &cobra.Command{Use: "ywai"}
-	RegisterCommands(root)
-
-	output, err := executeCommand(root, "missions", "serve", "--help")
-	if err != nil {
-		t.Fatalf("serve help should succeed: %v", err)
-	}
-	if !strings.Contains(output, "5769") {
-		t.Errorf("expected default port 5769 in help, got: %s", output)
-	}
-}
 
 // ─── UX: Consistent output styling ─────────────────────────────────────────
 

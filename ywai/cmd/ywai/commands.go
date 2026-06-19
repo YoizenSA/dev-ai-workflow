@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -67,7 +68,7 @@ func daemonize() error {
 }
 
 // killPort kills any process listening on the given TCP port.
-// Uses lsof (macOS/Linux) or fuser (Linux) to find the PID, then kills it.
+// Uses lsof (macOS/Linux), fuser (Linux), or netsh (Windows) to find the PID, then kills it.
 func killPort(port int) error {
 	portStr := fmt.Sprintf(":%d", port)
 
@@ -77,32 +78,112 @@ func killPort(port int) error {
 	if err == nil {
 		pidStr := strings.TrimSpace(string(out))
 		if pidStr != "" {
-			return exec.Command("kill", "-9", pidStr).Run()
+			return killPID(pidStr)
 		}
 	}
 
 	// Fallback: fuser <port>/tcp (Linux)
 	cmd = exec.Command("fuser", fmt.Sprintf("%d/tcp", port))
 	out, err = cmd.Output()
-	if err != nil {
-		return fmt.Errorf("port %d is in use and no process could be killed", port)
-	}
-
-	pidStr := strings.TrimSpace(string(out))
-	pidStr = strings.TrimSuffix(pidStr, "\n")
-	if pidStr == "" {
-		return fmt.Errorf("port %d is in use and no process could be killed", port)
-	}
-
-	// fuser outputs PIDs space-separated
-	pids := strings.Fields(pidStr)
-	var lastErr error
-	for _, pid := range pids {
-		if e := exec.Command("kill", "-9", pid).Run(); e != nil {
-			lastErr = e
+	if err == nil {
+		pidStr := strings.TrimSpace(string(out))
+		pidStr = strings.TrimSuffix(pidStr, "\n")
+		if pidStr != "" {
+			pids := strings.Fields(pidStr)
+			var lastErr error
+			for _, pid := range pids {
+				if e := killPID(pid); e != nil {
+					lastErr = e
+				}
+			}
+			return lastErr
 		}
 	}
-	return lastErr
+
+	// Fallback: Windows netsh
+	cmd = exec.Command("netsh", "interface", "ipv4", "show", "tcpconnections",
+		fmt.Sprintf("localport=%d", port))
+	out, err = cmd.Output()
+	if err == nil {
+		// Parse netsh output for PIDs
+		for _, line := range strings.Split(string(out), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 5 {
+				// The PID is typically in the last column
+				pidStr := fields[len(fields)-1]
+				if _, err := strconv.Atoi(pidStr); err == nil {
+					if e := killPID(pidStr); e != nil {
+						return e
+					}
+					return nil
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("port %d is in use and no process could be killed", port)
+}
+
+// killPID sends SIGTERM (graceful) to the given PID string.
+func killPID(pidStr string) error {
+	pid, err := strconv.Atoi(strings.TrimSpace(pidStr))
+	if err != nil {
+		return fmt.Errorf("invalid PID %q: %w", pidStr, err)
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("cannot find process %d: %w", pid, err)
+	}
+	return proc.Signal(syscall.SIGTERM)
+}
+
+var stopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop the background control server",
+	Long:  "Reads the PID file and sends SIGTERM for graceful shutdown.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		pidFile := filepath.Join(config.DataDir(), "serve.pid")
+		data, err := os.ReadFile(pidFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// No PID file — try killing by port
+				port, _ := cmd.Flags().GetInt("port")
+				if port == 0 {
+					port = 5768
+				}
+				if serverutil.CheckHealth(port) {
+					if err := killPort(port); err != nil {
+						return fmt.Errorf("could not stop server on port %d: %w", port, err)
+					}
+					fmt.Printf("Server on port %d stopped.\n", port)
+					return nil
+				}
+				return fmt.Errorf("no running server found (no PID file, port %d not responding)", port)
+			}
+			return fmt.Errorf("cannot read PID file: %w", err)
+		}
+
+		pidStr := strings.TrimSpace(string(data))
+		pid, err := strconv.Atoi(pidStr)
+		if err != nil {
+			return fmt.Errorf("invalid PID in %s: %w", pidFile, err)
+		}
+
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			_ = os.Remove(pidFile)
+			return fmt.Errorf("process %d not found (stale PID file cleaned up)", pid)
+		}
+
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			_ = os.Remove(pidFile)
+			return fmt.Errorf("could not send SIGTERM to PID %d: %w", pid, err)
+		}
+
+		_ = os.Remove(pidFile)
+		fmt.Printf("Server (PID %d) stopped.\n", pid)
+		return nil
+	},
 }
 
 // startOpencodeServe starts the opencode HTTP server in background if not already running.
@@ -380,11 +461,10 @@ var agentsCmd = &cobra.Command{
 var skillsCmd = &cobra.Command{
 	Use:   "skills",
 	Short: "List available extra skills",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		available, err := skills.ListAvailable()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Println("Extra skills available:")
@@ -393,6 +473,7 @@ var skillsCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\nTotal: %d skills\n", len(available))
+		return nil
 	},
 }
 
@@ -400,11 +481,8 @@ var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Run gentle-ai health check",
 	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := gentlai.Doctor(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return gentlai.Doctor()
 	},
 }
 
@@ -412,15 +490,12 @@ var skillRegistryCmd = &cobra.Command{
 	Use:   "skill-registry",
 	Short: "Refresh the project skill registry",
 	Long:  "Scan project and global skills, build the registry used by SDD orchestrators.",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, _ := cmd.Flags().GetString("cwd")
 		if cwd == "" {
 			cwd, _ = os.Getwd()
 		}
-		if err := gentlai.SkillRegistryRefresh(cwd); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+		return gentlai.SkillRegistryRefresh(cwd)
 	},
 }
 
@@ -430,61 +505,168 @@ var configCmd = &cobra.Command{
 	Long:  "View or edit ywai configuration stored in ~/.ywai/config.yaml",
 }
 
+// configField defines a gettable/settable config key.
+type configField struct {
+	Get func(*config.UserConfig) interface{}
+	Set func(*config.UserConfig, string) error
+}
+
+var configFields = map[string]configField{
+	"default_preset": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultPreset },
+		Set: func(c *config.UserConfig, v string) error { c.DefaultPreset = v; return nil },
+	},
+	"default_sdd_mode": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultSDDMode },
+		Set: func(c *config.UserConfig, v string) error { c.DefaultSDDMode = v; return nil },
+	},
+	"default_persona": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultPersona },
+		Set: func(c *config.UserConfig, v string) error { c.DefaultPersona = v; return nil },
+	},
+	"default_scope": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultScope },
+		Set: func(c *config.UserConfig, v string) error { c.DefaultScope = v; return nil },
+	},
+	"default_tui": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultTUI },
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.DefaultTUI = b
+			return nil
+		},
+	},
+	"default_mcp": {
+		Get: func(c *config.UserConfig) interface{} { return c.DefaultMCP },
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.DefaultMCP = b
+			return nil
+		},
+	},
+	"colored_output": {
+		Get: func(c *config.UserConfig) interface{} {
+			if c.ColoredOutput != nil {
+				return *c.ColoredOutput
+			}
+			return nil
+		},
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.ColoredOutput = &b
+			return nil
+		},
+	},
+	"log_level": {
+		Get: func(c *config.UserConfig) interface{} { return c.LogLevel },
+		Set: func(c *config.UserConfig, v string) error { c.LogLevel = v; return nil },
+	},
+	"agents": {
+		Get: func(c *config.UserConfig) interface{} { return c.Agents },
+		Set: func(c *config.UserConfig, v string) error {
+			var agents []string
+			for _, a := range strings.Split(v, ",") {
+				if trimmed := strings.TrimSpace(a); trimmed != "" {
+					agents = append(agents, trimmed)
+				}
+			}
+			c.Agents = agents
+			return nil
+		},
+	},
+	"server.port": {
+		Get: func(c *config.UserConfig) interface{} { return c.Server.Port },
+		Set: func(c *config.UserConfig, v string) error {
+			port, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("port must be a number")
+			}
+			c.Server.Port = port
+			return nil
+		},
+	},
+	"server.background": {
+		Get: func(c *config.UserConfig) interface{} { return c.Server.Background },
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.Server.Background = b
+			return nil
+		},
+	},
+	"server.mcp": {
+		Get: func(c *config.UserConfig) interface{} { return c.Server.MCP },
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.Server.MCP = b
+			return nil
+		},
+	},
+	"server.autostart": {
+		Get: func(c *config.UserConfig) interface{} { return c.Server.Autostart },
+		Set: func(c *config.UserConfig, v string) error {
+			b, err := parseBool(v)
+			if err != nil {
+				return err
+			}
+			c.Server.Autostart = b
+			return nil
+		},
+	},
+}
+
+func parseBool(v string) (bool, error) {
+	switch strings.ToLower(v) {
+	case "true", "1", "yes":
+		return true, nil
+	case "false", "0", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("value must be true or false")
+	}
+}
+
 var configGetCmd = &cobra.Command{
 	Use:   "get [key]",
 	Short: "Get a configuration value",
 	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		if len(args) == 0 {
-			// Show all config
 			data, err := yaml.Marshal(cfg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				return err
 			}
 			fmt.Println(string(data))
-			return
+			return nil
 		}
 
 		key := args[0]
-		var value interface{}
-		switch key {
-		case "default_preset":
-			value = cfg.DefaultPreset
-		case "default_sdd_mode":
-			value = cfg.DefaultSDDMode
-		case "default_persona":
-			value = cfg.DefaultPersona
-		case "default_scope":
-			value = cfg.DefaultScope
-		case "default_tui":
-			value = cfg.DefaultTUI
-		case "default_mcp":
-			value = cfg.DefaultMCP
-		case "colored_output":
-			value = cfg.ColoredOutput
-		case "log_level":
-			value = cfg.LogLevel
-		case "server.port":
-			value = cfg.Server.Port
-		case "server.background":
-			value = cfg.Server.Background
-		case "server.mcp":
-			value = cfg.Server.MCP
-		case "server.autostart":
-			value = cfg.Server.Autostart
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown key %q\n", key)
-			os.Exit(1)
+		f, ok := configFields[key]
+		if !ok {
+			return fmt.Errorf("unknown key %q (run 'ywai config list' for available keys)", key)
 		}
 
-		fmt.Printf("%v\n", value)
+		fmt.Printf("%v\n", f.Get(cfg))
+		return nil
 	},
 }
 
@@ -492,124 +674,63 @@ var configSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set a configuration value",
 	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
-		key := args[0]
-		value := args[1]
+		key, value := args[0], args[1]
+		f, ok := configFields[key]
+		if !ok {
+			return fmt.Errorf("unknown key %q (run 'ywai config list' for available keys)", key)
+		}
 
-		switch key {
-		case "default_preset":
-			cfg.DefaultPreset = value
-		case "default_sdd_mode":
-			cfg.DefaultSDDMode = value
-		case "default_persona":
-			cfg.DefaultPersona = value
-		case "default_scope":
-			cfg.DefaultScope = value
-		case "default_tui":
-			if value == "true" {
-				cfg.DefaultTUI = true
-			} else if value == "false" {
-				cfg.DefaultTUI = false
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		case "default_mcp":
-			if value == "true" {
-				cfg.DefaultMCP = true
-			} else if value == "false" {
-				cfg.DefaultMCP = false
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		case "colored_output":
-			if value == "true" {
-				b := true
-				cfg.ColoredOutput = &b
-			} else if value == "false" {
-				b := false
-				cfg.ColoredOutput = &b
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		case "log_level":
-			cfg.LogLevel = value
-		case "agents":
-			// Parse comma-separated agent names
-			var agents []string
-			for _, a := range strings.Split(value, ",") {
-				trimmed := strings.TrimSpace(a)
-				if trimmed != "" {
-					agents = append(agents, trimmed)
-				}
-			}
-			cfg.Agents = agents
-		case "server.port":
-			var port int
-			if _, err := fmt.Sscanf(value, "%d", &port); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: port must be a number\n")
-				os.Exit(1)
-			}
-			cfg.Server.Port = port
-		case "server.background":
-			if value == "true" {
-				cfg.Server.Background = true
-			} else if value == "false" {
-				cfg.Server.Background = false
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		case "server.mcp":
-			if value == "true" {
-				cfg.Server.MCP = true
-			} else if value == "false" {
-				cfg.Server.MCP = false
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		case "server.autostart":
-			if value == "true" {
-				cfg.Server.Autostart = true
-			} else if value == "false" {
-				cfg.Server.Autostart = false
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: value must be true or false\n")
-				os.Exit(1)
-			}
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown key %q\n", key)
-			os.Exit(1)
+		if err := f.Set(cfg, value); err != nil {
+			return fmt.Errorf("invalid value for %q: %w", key, err)
 		}
 
 		if err := config.SaveConfig(cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Printf("Set %s = %s\n", key, value)
+		return nil
+	},
+}
+
+var configListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List available configuration keys",
+	Run: func(cmd *cobra.Command, args []string) {
+		keys := make([]string, 0, len(configFields))
+		for k := range configFields {
+			keys = append(keys, k)
+		}
+		// Sort for consistent output
+		for i := 0; i < len(keys); i++ {
+			for j := i + 1; j < len(keys); j++ {
+				if keys[i] > keys[j] {
+					keys[i], keys[j] = keys[j], keys[i]
+				}
+			}
+		}
+		for _, k := range keys {
+			fmt.Println(k)
+		}
 	},
 }
 
 var configResetCmd = &cobra.Command{
 	Use:   "reset",
 	Short: "Reset configuration to defaults",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultConfig()
 		if err := config.SaveConfig(cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Println("Configuration reset to defaults")
+		return nil
 	},
 }
 
@@ -680,11 +801,10 @@ var groupsCmd = &cobra.Command{
 	Use:   "groups",
 	Short: "List available agent groups",
 	Long:  "List available agent groups from groups.json. Core group is always installed.",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if !config.IsDirPopulated(config.DataAgentsDir()) {
 			if err := config.SeedAgentsFromEmbedded(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: no agent data available: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("no agent data available: %w", err)
 			}
 		}
 		var names []string
@@ -696,41 +816,16 @@ var groupsCmd = &cobra.Command{
 			names, err = agentprofiles.ListGroups(config.DataAgentsDir())
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		if len(names) == 0 {
 			fmt.Println("No groups found.")
-			return
+			return nil
 		}
 		for _, name := range names {
 			fmt.Println(name)
 		}
-	},
-}
-
-// daemonCmd starts the Kanban UI server (deprecated: use 'ywai serve' instead).
-var daemonCmd = &cobra.Command{
-	Use:   "daemon",
-	Short: "Start the Kanban UI server (deprecated: use 'ywai serve' instead)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(os.Stderr, "Warning: 'ywai daemon' is deprecated. Use 'ywai serve' instead.")
-		mcpMode, _ := cmd.Flags().GetBool("mcp")
-		if mcpMode {
-			// Run as MCP adapter (stdio JSON-RPC)
-			adapter := kanban.NewMCPAdapter()
-			adapter.Run()
-			return nil
-		}
-
-		// Normal HTTP server mode with auto-start and port resolution
-		port, _ := cmd.Flags().GetInt("port")
-		_, err := kanban.GetOrStart(port)
-		if err != nil {
-			return err
-		}
-		// Block forever (server runs in background from GetOrStart)
-		select {}
+		return nil
 	},
 }
 
@@ -848,31 +943,27 @@ var tokenbankCmd = &cobra.Command{
 var tokenbankSetupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Save TokenBank URL and API key to ywai config",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		url := getStringFlag(cmd, "url")
 		key := getStringFlag(cmd, "key")
 
 		if url == "" {
-			fmt.Fprintln(os.Stderr, "Error: --url is required")
-			os.Exit(1)
+			return fmt.Errorf("--url is required")
 		}
 		if key == "" {
-			fmt.Fprintln(os.Stderr, "Error: --key is required")
-			os.Exit(1)
+			return fmt.Errorf("--key is required")
 		}
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		cfg.TokenBankURL = url
 		cfg.TokenBankAPIKey = key
 
 		if err := config.SaveConfig(cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Println("TokenBank configuration saved.")
@@ -885,25 +976,24 @@ var tokenbankSetupCmd = &cobra.Command{
 		if err != nil {
 			fmt.Printf("  ⚠ Warning: could not connect to TokenBank: %v\n", err)
 			fmt.Println("  Config saved anyway. Run 'ywai tokenbank configure' when the server is available.")
-			return
+			return nil
 		}
 		fmt.Printf("  ✓ Connected! %d models available (default: %s)\n", len(models.Models), models.DefaultModel)
+		return nil
 	},
 }
 
 var tokenbankConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure agents to use TokenBank proxy",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		if cfg.TokenBankURL == "" || cfg.TokenBankAPIKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: TokenBank not configured. Run 'ywai tokenbank setup --url <url> --key <key>' first.")
-			os.Exit(1)
+			return fmt.Errorf("TokenBank not configured. Run 'ywai tokenbank setup --url <url> --key <key>' first")
 		}
 
 		agentFlag := getStringFlag(cmd, "agent")
@@ -915,36 +1005,33 @@ var tokenbankConfigureCmd = &cobra.Command{
 			switch agentFlag {
 			case "opencode":
 				if err := tokenbank.ConfigureOpenCode(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
-					fmt.Fprintf(os.Stderr, "Error configuring opencode: %v\n", err)
-					os.Exit(1)
+					return fmt.Errorf("error configuring opencode: %w", err)
 				}
 			case "pi":
 				if err := tokenbank.ConfigurePi(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
-					fmt.Fprintf(os.Stderr, "Error configuring pi: %v\n", err)
-					os.Exit(1)
+					return fmt.Errorf("error configuring pi: %w", err)
 				}
 			case "copilot":
 				if err := tokenbank.ConfigureCopilot(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
-					fmt.Fprintf(os.Stderr, "Error configuring copilot: %v\n", err)
-					os.Exit(1)
+					return fmt.Errorf("error configuring copilot: %w", err)
 				}
 			default:
-				fmt.Fprintf(os.Stderr, "Error: unknown agent %q. Use: opencode, pi, copilot\n", agentFlag)
-				os.Exit(1)
+				return fmt.Errorf("unknown agent %q. Use: opencode, pi, copilot", agentFlag)
 			}
 		} else {
 			// Configure all agents
 			errors := tokenbank.ConfigureAll(cfg.TokenBankURL, cfg.TokenBankAPIKey)
 			if len(errors) > 0 {
-				fmt.Fprintln(os.Stderr, "\nSome agents failed:")
+				var msgs []string
 				for _, e := range errors {
-					fmt.Fprintf(os.Stderr, "  ✗ %v\n", e)
+					msgs = append(msgs, fmt.Sprintf("  ✗ %v", e))
 				}
-				os.Exit(1)
+				return fmt.Errorf("some agents failed:\n%s", strings.Join(msgs, "\n"))
 			}
 		}
 
 		fmt.Println("\nDone! Restart your agents to pick up the new configuration.")
+		return nil
 	},
 }
 
@@ -966,19 +1053,18 @@ func configureAutostart() error {
 func init() {
 	cli.RegisterCommands(rootCmd)
 
-	daemonCmd.Flags().Bool("mcp", false, "Run as MCP stdio adapter")
-	daemonCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
-
 	serveCmd.Flags().IntP("port", "p", 5768, "Port for control server")
 	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
 	serveCmd.Flags().Bool("no-mcp", false, "Don't start MCP adapter")
 	serveCmd.Flags().Bool("mcp-only", false, "Run as MCP adapter only (stdio, no HTTP)")
 	serveCmd.Flags().Bool("no-update", false, "Skip auto-update before starting")
 
+	stopCmd.Flags().IntP("port", "p", 5768, "Port to stop (fallback if no PID file)")
+
 	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
 
-	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(uiCmd)
 
 	installCmd.Flags().StringP("agent", "a", "", "Specific agent to install for")
@@ -1011,6 +1097,7 @@ func init() {
 
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
+	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configResetCmd)
 	rootCmd.AddCommand(configCmd)
 
