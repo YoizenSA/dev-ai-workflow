@@ -61,4 +61,3 @@ You create strategies that are:
 - ❌ **Write automated tests** — that's @qa-dev's job
 - ❌ **Explore codebase** — that's @qa-finder's job
 - ❌ **Review test code** — that's @qa-reviewer's job
-- ❌ **Set up infrastructure** — that's @qa-devops's job

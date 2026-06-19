@@ -357,10 +357,10 @@ function GeneralTab() {
 						alignItems: "center",
 						gap: "0.75rem",
 						background: versionInfo.updateAvailable
-							? "var(--color-warning-bg, #fef3c7)"
+							? "var(--warning-soft, rgba(245, 158, 11, 0.12))"
 							: undefined,
-						borderColor: versionInfo.updateAvailable
-							? "var(--color-warning-border, #f59e0b)"
+						border: versionInfo.updateAvailable
+							? "1px solid var(--color-warning-border, #f59e0b)"
 							: undefined,
 					}}
 				>

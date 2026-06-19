@@ -957,7 +957,20 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	if agentsDirPath != "" {
 		entries, _ := os.ReadDir(agentsDirPath)
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			if e.IsDir() {
+				// Scan subdirectory for .md files (e.g., core/architect.md, qa-automation/qa-analyst.md)
+				subEntries, _ := os.ReadDir(filepath.Join(agentsDirPath, e.Name()))
+				for _, se := range subEntries {
+					if !se.IsDir() && strings.HasSuffix(se.Name(), ".md") {
+						name := strings.TrimSuffix(se.Name(), ".md")
+						if !seen[name] {
+							info := agentInfo{Name: name, Group: e.Name()}
+							agents = append(agents, info)
+							seen[name] = true
+						}
+					}
+				}
+			} else if strings.HasSuffix(e.Name(), ".md") {
 				name := strings.TrimSuffix(e.Name(), ".md")
 				if !seen[name] {
 					info := agentInfo{Name: name}

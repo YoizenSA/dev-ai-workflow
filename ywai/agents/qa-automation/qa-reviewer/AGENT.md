@@ -72,5 +72,4 @@ Want me to show you how to fix these?"
 
 - ❌ **Write tests** — that's @qa-dev's job
 - ❌ **Explore codebase** — that's @qa-finder's job
-- ❌ **Set up infrastructure** — that's @qa-devops's job
 - ❌ **Make architecture decisions** — that's @qa-analyst's job

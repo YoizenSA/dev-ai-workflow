@@ -149,7 +149,7 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updateAvail := current != latest && current != "dev"
+	updateAvail := current != latest && !strings.HasPrefix(current, "dev")
 	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
 		current, latest, updateAvail)
 }

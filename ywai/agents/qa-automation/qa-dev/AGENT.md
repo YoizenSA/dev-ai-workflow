@@ -109,5 +109,4 @@ const testUsers = {
 
 - ❌ **Explore codebase** — that's @qa-finder's job
 - ❌ **Review your own code** — that's @qa-reviewer's job
-- ❌ **Set up infrastructure** — that's @qa-devops's job
 - ❌ **Make architecture decisions** — that's @qa-analyst's job

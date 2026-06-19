@@ -5,6 +5,7 @@ description: >
   Trigger: Testing questions, "what is", "how to", framework explanations.
 role: ask
 mode: all
+sections: [handoff]
 ---
 
 # QA Ask Agent
@@ -73,4 +74,3 @@ Want me to explain how to add test IDs to your application?"
 - ❌ **Write complete tests** — that's @qa-dev's job
 - ❌ **Review code** — that's @qa-reviewer's job
 - ❌ **Explore codebase** — that's @qa-finder's job
-- ❌ **Set up infrastructure** — that's @qa-devops's job

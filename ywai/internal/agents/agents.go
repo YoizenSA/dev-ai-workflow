@@ -717,7 +717,63 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 	if installed > 0 {
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
 	}
+
+	// Remove legacy flat agent files now superseded by grouped installs
+	// (e.g. delete architect.md when core/architect.md was installed).
+	cleanupLegacyFlatAgents(agentsDir, profiles)
+
 	return nil
+}
+
+// cleanupLegacyFlatAgents removes top-level agent .md files that are now
+// superseded by a grouped install. When ywai installs agents in group
+// subdirectories (e.g. core/architect.md), any leftover flat file from a
+// previous install (e.g. architect.md in the agents root) is removed to avoid
+// duplication. Flat files without a grouped counterpart are left untouched.
+func cleanupLegacyFlatAgents(agentsDir string, profiles map[string]AgentProfile) {
+	// Collect the base names of every agent that was installed inside a group
+	// (profile name contains a path separator).
+	groupedBases := make(map[string]bool)
+	for name := range profiles {
+		if strings.Contains(name, "/") {
+			groupedBases[filepath.Base(name)] = true
+		}
+	}
+	if len(groupedBases) == 0 {
+		return
+	}
+
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		fileName := entry.Name()
+		if !strings.HasSuffix(fileName, ".md") {
+			continue
+		}
+		base := strings.TrimSuffix(fileName, ".md")
+		// Only remove if a grouped counterpart exists AND the same name is not
+		// a flat profile installed in this same run.
+		if !groupedBases[base] {
+			continue
+		}
+		if _, flatInstalled := profiles[base]; flatInstalled {
+			continue
+		}
+		if err := os.Remove(filepath.Join(agentsDir, fileName)); err == nil {
+			fmt.Printf("  Removed legacy flat agent %s (grouped version exists)\n", fileName)
+			removed++
+		}
+	}
+	if removed > 0 {
+		fmt.Printf("  Cleaned up %d legacy flat agent file(s)\n", removed)
+	}
 }
 
 // buildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
