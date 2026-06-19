@@ -20,6 +20,7 @@ type AgentProfile struct {
 	Permission  map[string]string
 	Skills      []string
 	Mode        string
+	Group       string // group name from groups.json (e.g. "core", "qa-automation")
 }
 
 // GroupManifest represents the groups.json file.
@@ -700,6 +701,9 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString(fmt.Sprintf("description: %s\n", profile.Description))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
 	b.WriteString("temperature: 0.1\n")
+	if profile.Group != "" {
+		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
+	}
 
 	// Permission as nested YAML
 	b.WriteString("permission:\n")
@@ -914,13 +918,15 @@ func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]Agent
 		return LoadProfiles(sourceDir)
 	}
 
-	// Build set of allowed agent names
+	// Build set of allowed agent names + group assignment
 	allowed := make(map[string]bool)
+	groupOf := make(map[string]string) // agent name -> group name
 
 	// Core is always included
 	if core, ok := manifest.Groups["core"]; ok {
 		for _, name := range core.Agents {
 			allowed[name] = true
+			groupOf[name] = "core"
 		}
 	}
 
@@ -929,6 +935,7 @@ func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]Agent
 		if def, ok := manifest.Groups[groupName]; ok {
 			for _, name := range def.Agents {
 				allowed[name] = true
+				groupOf[name] = groupName
 			}
 		}
 	}
@@ -942,6 +949,7 @@ func LoadProfilesByGroup(sourceDir string, filter GroupFilter) (map[string]Agent
 	result := make(map[string]AgentProfile)
 	for name, profile := range allProfiles {
 		if allowed[name] {
+			profile.Group = groupOf[name]
 			result[name] = profile
 		}
 	}
