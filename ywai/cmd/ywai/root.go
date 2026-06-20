@@ -559,11 +559,32 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(home, ".config", "opencode", "opencode.json")
+	configDir := filepath.Join(home, ".config", "opencode")
+	path := config.FindJSONCPath(configDir, "opencode")
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("reading opencode.json: %w", err)
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("reading opencode config: %w", err)
+		}
+		// Config file does not exist — create it with default_agent.
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			return fmt.Errorf("creating opencode config dir: %w", err)
+		}
+		cfg := map[string]any{"default_agent": agentName}
+		updated, mErr := json.MarshalIndent(cfg, "", "\t")
+		if mErr != nil {
+			return mErr
+		}
+		if dryRun {
+			fmt.Printf("  Would set default_agent to %q\n", agentName)
+			return nil
+		}
+		if wErr := os.WriteFile(path, append(updated, '\n'), 0o644); wErr != nil {
+			return fmt.Errorf("writing opencode config: %w", wErr)
+		}
+		fmt.Printf("  Created opencode config with default_agent=%q\n", agentName)
+		return nil
 	}
 
 	var cfg map[string]any

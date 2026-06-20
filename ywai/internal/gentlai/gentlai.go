@@ -34,9 +34,39 @@ type githubRelease struct {
 	TagName string `json:"tag_name"`
 }
 
+// gentleAIBinaryPath resolves the full path to the gentle-ai binary.
+// It checks PATH first, then falls back to known install locations
+// (~/.local/bin, ~/go/bin, ~/.bin) where the release binary may have
+// been placed by installGentleAIReleaseBinaryFirstTime when Go was
+// not available. This is critical on Windows where ~/.local/bin is
+// typically not in PATH.
+func gentleAIBinaryPath() string {
+	if path, err := exec.LookPath(config.GentleAIBin); err == nil {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	exeName := config.GentleAIBin
+	if runtime.GOOS == "windows" {
+		exeName += ".exe"
+	}
+	for _, dir := range []string{
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, "go", "bin"),
+		filepath.Join(home, ".bin"),
+	} {
+		candidate := filepath.Join(dir, exeName)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func IsInstalled() bool {
-	_, err := exec.LookPath(config.GentleAIBin)
-	return err == nil
+	return gentleAIBinaryPath() != ""
 }
 
 func Install() error {
@@ -119,7 +149,7 @@ func InstallEcosystem(opts InstallOptions) error {
 	// Install the remaining components together.
 	args := opts.buildArgs(ecosystemComponents)
 	fmt.Printf("Running gentle-ai install --agent %s (%d components)...\n", opts.AgentName, len(ecosystemComponents))
-	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd := exec.Command(gentleAIBinaryPath(), args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -143,7 +173,7 @@ func InstallEcosystem(opts InstallOptions) error {
 func installEngramComponent(opts InstallOptions, extraEnv ...string) error {
 	args := opts.buildArgs([]string{"engram"})
 	fmt.Printf("Running gentle-ai install --agent %s --component engram...\n", opts.AgentName)
-	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd := exec.Command(gentleAIBinaryPath(), args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -251,7 +281,7 @@ func Upgrade() error {
 
 	beforeVersion := CurrentVersion()
 	fmt.Println("Upgrading gentle-ai...")
-	cmd := exec.Command(config.GentleAIBin, "upgrade")
+	cmd := exec.Command(gentleAIBinaryPath(), "upgrade")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	upgradeErr := cmd.Run()
@@ -296,7 +326,7 @@ func Sync(opts SyncOptions) error {
 
 	args := opts.buildArgs()
 
-	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd := exec.Command(gentleAIBinaryPath(), args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -333,7 +363,7 @@ func Doctor() error {
 	if !IsInstalled() {
 		return fmt.Errorf("gentle-ai is not installed")
 	}
-	cmd := exec.Command(config.GentleAIBin, "doctor")
+	cmd := exec.Command(gentleAIBinaryPath(), "doctor")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -348,7 +378,7 @@ func SkillRegistryRefresh(cwd string) error {
 	if cwd != "" {
 		args = append(args, "--cwd", cwd)
 	}
-	cmd := exec.Command(config.GentleAIBin, args...)
+	cmd := exec.Command(gentleAIBinaryPath(), args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -370,7 +400,7 @@ func findBinary(name string) string {
 
 func CurrentVersion() string {
 	for _, args := range [][]string{{"--version"}, {"version"}} {
-		cmd := exec.Command(config.GentleAIBin, args...)
+		cmd := exec.Command(gentleAIBinaryPath(), args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil && len(out) == 0 {
 			continue

@@ -17,9 +17,29 @@ func tuiConfigPath() string {
 func InstallSubAgentStatusline() error {
 	path := tuiConfigPath()
 
+	// Ensure the config directory exists.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating opencode config dir: %w", err)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("reading tui.json: %w", err)
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("reading tui.json: %w", err)
+		}
+		// tui.json does not exist yet — create it with the plugin.
+		root := map[string]any{
+			"plugin": []any{subAgentStatuslinePlugin},
+		}
+		updated, mErr := json.MarshalIndent(root, "", "  ")
+		if mErr != nil {
+			return fmt.Errorf("marshaling tui.json: %w", mErr)
+		}
+		if wErr := os.WriteFile(path, append(updated, '\n'), 0o644); wErr != nil {
+			return fmt.Errorf("writing tui.json: %w", wErr)
+		}
+		fmt.Printf("  Created tui.json with %s plugin\n", subAgentStatuslinePlugin)
+		return nil
 	}
 
 	var root map[string]any
