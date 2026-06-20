@@ -144,15 +144,6 @@ func killPIDs(pids []int) error {
 	return lastErr
 }
 
-// killPID sends SIGTERM (graceful) to the given PID string.
-func killPID(pidStr string) error {
-	pid, err := strconv.Atoi(strings.TrimSpace(pidStr))
-	if err != nil {
-		return fmt.Errorf("invalid PID %q: %w", pidStr, err)
-	}
-	return killPIDInt(pid)
-}
-
 // killPIDInt sends SIGTERM to a numeric PID. An already-finished process is
 // not an error here (the caller's intent — free the port — is satisfied).
 func killPIDInt(pid int) error {
