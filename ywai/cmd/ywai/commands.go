@@ -290,6 +290,7 @@ var installCmd = &cobra.Command{
 		var preset, scope, sddMode, persona string
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
+		ranTUI := false
 
 		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
 			if !isInteractiveTerminal() {
@@ -322,6 +323,7 @@ var installCmd = &cobra.Command{
 			sddMode = result.SDDMode
 			persona = result.Persona
 			groupFilter = result.GroupFilter
+			ranTUI = true
 		} else {
 			installMCP = mcpFlag
 			globalOnly = globalFlag
@@ -346,11 +348,13 @@ var installCmd = &cobra.Command{
 			DryRun:    dryRun,
 		}
 
-		if !tuiFlag {
+		// When the TUI ran it already collected ADO and overwrite choices.
+		// Only fall back to flag/prompt when the TUI did not run.
+		if !ranTUI {
 			installADO = getBoolFlag(cmd, "ado")
 		}
 
-		if !tuiFlag {
+		if !ranTUI {
 			fmt.Print("  Overwrite existing agent profiles? [Y/n] ")
 			var response string
 			_, _ = fmt.Scanln(&response)

@@ -283,8 +283,11 @@ func TestServerSession_Create_ServerError(t *testing.T) {
 
 func TestServerSession_Wait_ContextCancelled(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Never respond — simulates a long-running agent
-		select {}
+		// Never respond — simulates a long-running agent. Block on the request
+		// context (not select{}) so the handler returns once the client cancels;
+		// otherwise srv.Close() waits forever on the dangling connection (which
+		// hangs the test on Windows).
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 
