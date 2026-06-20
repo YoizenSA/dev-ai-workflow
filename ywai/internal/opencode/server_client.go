@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"os/exec"
 	"time"
 )
 
@@ -128,10 +128,12 @@ func (c *ServerClient) ListAgents(ctx context.Context) ([]AgentInfo, error) {
 // /api/provider endpoint only returns the handful declared in opencode.json.
 func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 	if c.useCLI {
-		if out, err := exec.CommandContext(ctx, "opencode", "models").Output(); err == nil {
+		if out, err := runOpencodeModels(ctx); err == nil {
 			if models := parseCLIModels(string(out)); len(models) > 0 {
 				return models, nil
 			}
+		} else {
+			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to HTTP /api/provider (free models may be missing)", err)
 		}
 	}
 

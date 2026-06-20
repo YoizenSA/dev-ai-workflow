@@ -3,12 +3,49 @@ package opencode
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 )
+
+// resolveOpencodeBin finds the opencode executable, trying Windows extensions
+// so the CLI works when opencode is installed as opencode.cmd / opencode.exe
+// (npm/bun shims) and not just a bare "opencode" on PATH.
+func resolveOpencodeBin() string {
+	candidates := []string{"opencode"}
+	if runtime.GOOS == "windows" {
+		// Prefer a real .exe (direct exec); fall back to npm/bun shims.
+		candidates = []string{"opencode.exe", "opencode.cmd", "opencode.bat", "opencode.ps1", "opencode"}
+	}
+	for _, name := range candidates {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return "opencode"
+}
+
+// runOpencodeModels runs `opencode models` cross-platform and returns its
+// stdout. On Windows a .cmd/.bat shim is run via `cmd /c` (and .ps1 via
+// PowerShell) so the model list — including free models the HTTP API omits —
+// is actually produced. The error is returned, not swallowed, so callers can
+// log why they fell back to the HTTP/config source.
+func runOpencodeModels(ctx context.Context) ([]byte, error) {
+	bin := resolveOpencodeBin()
+	lower := strings.ToLower(bin)
+	switch {
+	case runtime.GOOS == "windows" && (strings.HasSuffix(lower, ".cmd") || strings.HasSuffix(lower, ".bat")):
+		return exec.CommandContext(ctx, "cmd", "/c", bin, "models").Output()
+	case runtime.GOOS == "windows" && strings.HasSuffix(lower, ".ps1"):
+		return exec.CommandContext(ctx, "powershell", "-NoProfile", "-File", bin, "models").Output()
+	default:
+		return exec.CommandContext(ctx, bin, "models").Output()
+	}
+}
 
 // LocalClient implements Client by reading opencode config files directly.
 type LocalClient struct {
@@ -94,8 +131,12 @@ func (c *LocalClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 	// practice), not just the handful in the local config file. Skipped in
 	// unit tests (useCLI=false) so they can control the source via the config.
 	if c.useCLI {
-		if out, err := exec.CommandContext(ctx, "opencode", "models").Output(); err == nil {
-			return parseCLIModels(string(out)), nil
+		if out, err := runOpencodeModels(ctx); err == nil {
+			if models := parseCLIModels(string(out)); len(models) > 0 {
+				return models, nil
+			}
+		} else {
+			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to config (free models may be missing)", err)
 		}
 	}
 
