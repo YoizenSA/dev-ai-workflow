@@ -925,6 +925,15 @@ var serveCmd = &cobra.Command{
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 		noUpdate, _ := cmd.Flags().GetBool("no-update")
 
+		// MCP-only mode: talk over stdio, do NOT touch the HTTP port.
+		// NewMCPAdapter will reuse the control server if it is already
+		// running, or start a standalone one if needed.
+		if mcpOnly {
+			adapter := kanban.NewMCPAdapter()
+			adapter.Run()
+			return nil
+		}
+
 		// Ensure the port is available — kill any process holding it and wait
 		// for the OS to release the socket before we try to bind our own server.
 		ln, err := acquirePort(port)
@@ -941,7 +950,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		// Auto-update before starting (skip in MCP-only mode or if --no-update)
-		if !mcpOnly && !noUpdate {
+		if !noUpdate {
 			if newVer, err := selfupdate.Run(version); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: auto-update failed: %v\n", err)
 			} else if newVer != "" {
@@ -955,12 +964,6 @@ var serveCmd = &cobra.Command{
 					return fmt.Errorf("failed to re-exec after update: %w", err)
 				}
 			}
-		}
-
-		if mcpOnly {
-			adapter := kanban.NewMCPAdapter()
-			adapter.Run()
-			return nil
 		}
 
 		// Start control server

@@ -36,7 +36,7 @@ func InstallKanbanMCP(configPath, agentName string) error {
 		if _, exists := mcp["ywai-kanban"]; !exists {
 			mcp["ywai-kanban"] = map[string]any{
 				"command": "ywai",
-				"args":    []any{"daemon", "--mcp"},
+				"args":    []any{"serve", "--mcp-only"},
 			}
 			root[key] = mcp
 		}
@@ -50,7 +50,7 @@ func InstallKanbanMCP(configPath, agentName string) error {
 		if _, exists := mcp["ywai-kanban"]; !exists {
 			mcp["ywai-kanban"] = map[string]any{
 				"type":    "local",
-				"command": []any{"ywai", "daemon", "--mcp"},
+				"command": []any{"ywai", "serve", "--mcp-only"},
 				"enabled": true,
 			}
 			root[key] = mcp

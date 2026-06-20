@@ -174,8 +174,8 @@ do_kanban() {
 
     echo ""
     info "Starting kanban daemon with UI on http://localhost:5768 ..."
-    cmd "ywai daemon --port 5768"
-    ywai daemon --port 5768
+    cmd "ywai serve --port 5768"
+    ywai serve --port 5768
 }
 
 do_mcp_test() {
@@ -191,9 +191,9 @@ do_mcp_test() {
     local request
     request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ywai-dev-test","version":"1.0.0"}}}'
 
-    cmd "echo '<json-rpc>' | ywai daemon --mcp"
+    cmd "echo '<json-rpc>' | ywai serve --mcp-only"
     local response
-    response="$(printf '%s\n' "$request" | timeout 5 ywai daemon --mcp 2>/dev/null || true)"
+    response="$(printf '%s\n' "$request" | timeout 5 ywai serve --mcp-only 2>/dev/null || true)"
 
     if echo "$response" | grep -q '"jsonrpc":"2.0"' 2>/dev/null; then
         ok "MCP daemon responded with valid JSON-RPC"
