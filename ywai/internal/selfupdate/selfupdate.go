@@ -41,6 +41,12 @@ func LatestVersion() (string, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "ywai")
 
+	// Attach a GitHub token if available so we get the 5000/hour limit
+	// instead of the 60/hour unauthenticated limit (which 403s easily).
+	if token := githubToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch latest release: %w", err)
@@ -57,6 +63,18 @@ func LatestVersion() (string, error) {
 	}
 
 	return release.TagName, nil
+}
+
+// githubToken returns a GitHub token from the environment if present.
+// Supports GH_TOKEN, GITHUB_TOKEN, and the gh CLI config (GH_ENTERPRISE_TOKEN
+// is ignored here since we target github.com). Empty string means no token.
+func githubToken() string {
+	for _, key := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func assetName(version string) string {
