@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useUrlTab } from '../../hooks/useUrlTab'
 import { useMemoriesStore } from '../../stores/memoriesStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import type {
@@ -86,7 +87,7 @@ function formatRelative(iso?: string): string {
 }
 
 export default function Memories() {
-	const [tab, setTab] = useState<SubTab>('memories')
+	const [tab, setTab] = useUrlTab<SubTab>('memories', SUB_TABS.map((t) => t.id))
 	const [showCapture, setShowCapture] = useState(false)
 	const [showConsolidate, setShowConsolidate] = useState(false)
 	const [consolidateScope, setConsolidateScope] = useState<

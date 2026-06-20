@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useUrlTab } from "../../hooks/useUrlTab";
 import { configApi, missionsApi } from "../../api/client";
 import type {
 	MCPServer,
@@ -176,8 +177,10 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	},
 ];
 
+const TAB_IDS = TABS.map((t) => t.id);
+
 export default function Settings() {
-	const [activeTab, setActiveTab] = useState<Tab>("general");
+	const [activeTab, setActiveTab] = useUrlTab<Tab>("general", TAB_IDS);
 
 	return (
 		<div className="settings-page">

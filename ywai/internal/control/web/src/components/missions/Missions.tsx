@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMissionsStore } from "../../stores/missionsStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Mission, WSMessage } from "../../api/types";
@@ -437,9 +438,12 @@ export default function Missions() {
 		projects,
 		loading,
 		selectedMission,
+		selectMission,
 		fetchMissions,
 		fetchProjects,
 	} = useMissionsStore();
+
+	const [searchParams, setSearchParams] = useSearchParams();
 
 	const handleWSMessage = useCallback((msg: WSMessage) => {
 		useMissionsStore.getState().handleWSMessage(msg);
@@ -451,6 +455,25 @@ export default function Missions() {
 		fetchMissions();
 		fetchProjects();
 	}, [fetchMissions, fetchProjects]);
+
+	// Restore the selected mission from ?mission=<id> once missions are loaded
+	// (e.g. after F5 / deep-link).
+	useEffect(() => {
+		const id = searchParams.get("mission");
+		if (!id || selectedMission || missions.length === 0) return;
+		if (missions.some((m) => m.id === id)) selectMission(id);
+	}, [missions, selectedMission, searchParams, selectMission]);
+
+	// Keep the URL in sync with the selected mission so reloads/sharing work.
+	useEffect(() => {
+		const current = searchParams.get("mission") ?? "";
+		const next = selectedMission?.id ?? "";
+		if (current === next) return;
+		const params = new URLSearchParams(searchParams);
+		if (next) params.set("mission", next);
+		else params.delete("mission");
+		setSearchParams(params, { replace: true });
+	}, [selectedMission, searchParams, setSearchParams]);
 
 	// Track modal open/close
 	useEffect(() => {
