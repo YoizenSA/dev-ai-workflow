@@ -887,7 +887,7 @@ func TestStripOpencodeNoise(t *testing.T) {
 	}
 }
 
-// ─── DesignWorkerSystem (Droid-aligned SKILL.md) ───────────────────────────
+// ─── DesignWorkerSystem (codebase-aligned SKILL.md) ───────────────────────────
 
 // designWorkerTestPlan builds a plan with features exercising multiple worker
 // types (backend, frontend, qa) so DesignWorkerSystem has something to classify.
@@ -904,9 +904,9 @@ func designWorkerTestPlan() *PlanMission {
 	}
 }
 
-// TestDesignWorkerSystemGeneratesDroidFormat verifies each generated SKILL.md
-// contains the four Droid-required sections plus valid frontmatter.
-func TestDesignWorkerSystemGeneratesDroidFormat(t *testing.T) {
+// TestDesignWorkerSystemGeneratesSkillFormat verifies each generated SKILL.md
+// contains the four required sections plus valid frontmatter.
+func TestDesignWorkerSystemGeneratesSkillFormat(t *testing.T) {
 	store, _ := newTestStoreForPlanning(t)
 	plan := designWorkerTestPlan()
 	mission := &Mission{
@@ -942,7 +942,7 @@ func TestDesignWorkerSystemGeneratesDroidFormat(t *testing.T) {
 		}
 		content := string(data)
 
-		// Droid-required structure.
+		// required structure.
 		requiredSections := []string{
 			"---", // frontmatter
 			"name:",
@@ -958,7 +958,7 @@ func TestDesignWorkerSystemGeneratesDroidFormat(t *testing.T) {
 			}
 		}
 
-		// Example Handoff must be valid JSON (Droid: defines upper bound of effort).
+		// Example Handoff must be valid JSON (note: defines upper bound of effort).
 		if idx := strings.Index(content, "## Example Handoff"); idx >= 0 {
 			handoffPart := content[idx:]
 			// Find the first { ... } block in the handoff section.

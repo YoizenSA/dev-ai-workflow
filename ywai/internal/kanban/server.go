@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -186,6 +187,18 @@ func (s *Server) HTTPHandler() http.Handler {
 // Hub returns the WebSocket hub for the kanban server.
 func (s *Server) Hub() *Hub {
 	return s.hub
+}
+
+// Broadcast pushes a board update to all connected UI clients. It lets
+// non-HTTP producers (e.g. the missions→kanban projector) drive live updates
+// the same way the HTTP handlers do.
+func (s *Server) Broadcast(updateType string, payload interface{}) {
+	data, err := json.Marshal(BoardUpdate{Type: updateType, Payload: payload})
+	if err != nil {
+		log.Printf("kanban: marshal board update: %v", err)
+		return
+	}
+	s.hub.Broadcast(data)
 }
 
 var (

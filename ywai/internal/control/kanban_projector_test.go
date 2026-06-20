@@ -1,7 +1,6 @@
 package control
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
@@ -10,14 +9,14 @@ import (
 
 // --- helpers -----------------------------------------------------------
 
-func newTestStores(t *testing.T) (*kanban.Store, *missions.MissionsStore) {
+func newTestStores(t *testing.T) (*kanban.Server, *kanban.Store, *missions.MissionsStore) {
 	t.Helper()
 	dir := t.TempDir()
 
-	ks := kanban.NewStore(filepath.Join(dir, "kanban.json"))
+	srv := kanban.New(0, dir)
 	ms := missions.NewMissionsStore(dir)
 
-	return ks, ms
+	return srv, srv.Store(), ms
 }
 
 func seedMission(t *testing.T, ms *missions.MissionsStore, id string) {
@@ -40,10 +39,10 @@ func seedMission(t *testing.T, ms *missions.MissionsStore, id string) {
 // --- Tests -------------------------------------------------------------
 
 func TestKanbanProjector_FirstEventCreatesSession(t *testing.T) {
-	ks, ms := newTestStores(t)
+	ksrv, ks, ms := newTestStores(t)
 	seedMission(t, ms, "m1")
 
-	p := NewKanbanProjector(ks, ms)
+	p := NewKanbanProjector(ksrv, ms)
 
 	// First event for unknown mission → should create session + delegations
 	p.Project("feature_status_changed", map[string]interface{}{
@@ -75,10 +74,10 @@ func TestKanbanProjector_FirstEventCreatesSession(t *testing.T) {
 }
 
 func TestKanbanProjector_StatusUpdateMovesCard(t *testing.T) {
-	ks, ms := newTestStores(t)
+	ksrv, ks, ms := newTestStores(t)
 	seedMission(t, ms, "m1")
 
-	p := NewKanbanProjector(ks, ms)
+	p := NewKanbanProjector(ksrv, ms)
 
 	// Create session
 	p.Project("feature_status_changed", map[string]interface{}{
@@ -112,10 +111,10 @@ func TestKanbanProjector_StatusUpdateMovesCard(t *testing.T) {
 }
 
 func TestKanbanProjector_InProgressMapsCorrectly(t *testing.T) {
-	ks, ms := newTestStores(t)
+	ksrv, ks, ms := newTestStores(t)
 	seedMission(t, ms, "m1")
 
-	p := NewKanbanProjector(ks, ms)
+	p := NewKanbanProjector(ksrv, ms)
 
 	// Send in_progress event
 	p.Project("feature_status_changed", map[string]interface{}{
@@ -142,10 +141,10 @@ func TestKanbanProjector_InProgressMapsCorrectly(t *testing.T) {
 }
 
 func TestKanbanProjector_IdempotentDuplicateEvent(t *testing.T) {
-	ks, ms := newTestStores(t)
+	ksrv, ks, ms := newTestStores(t)
 	seedMission(t, ms, "m1")
 
-	p := NewKanbanProjector(ks, ms)
+	p := NewKanbanProjector(ksrv, ms)
 
 	// First event
 	p.Project("feature_status_changed", map[string]interface{}{
@@ -173,8 +172,8 @@ func TestKanbanProjector_IdempotentDuplicateEvent(t *testing.T) {
 }
 
 func TestKanbanProjector_IgnoresNonFeatureEvents(t *testing.T) {
-	ks, ms := newTestStores(t)
-	p := NewKanbanProjector(ks, ms)
+	ksrv, _, ms := newTestStores(t)
+	p := NewKanbanProjector(ksrv, ms)
 
 	p.Project("mission_started", map[string]interface{}{
 		"missionId": "m1",
@@ -190,10 +189,10 @@ func TestKanbanProjector_IgnoresNonFeatureEvents(t *testing.T) {
 }
 
 func TestKanbanProjector_FeatureStatusTypeAssertion(t *testing.T) {
-	ks, ms := newTestStores(t)
+	ksrv, ks, ms := newTestStores(t)
 	seedMission(t, ms, "m1")
 
-	p := NewKanbanProjector(ks, ms)
+	p := NewKanbanProjector(ksrv, ms)
 
 	// Simulate the real engine payload where status is FeatureStatus (named type),
 	// NOT a plain string. This is the exact bug that was caught in code review:

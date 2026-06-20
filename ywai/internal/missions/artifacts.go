@@ -15,7 +15,7 @@ var (
 
 // ─── Artifact Creator ─────────────────────────────────────────────────────
 
-// ArtifactCreator creates Factory.ai mission artifacts.
+// ArtifactCreator creates mission artifacts.
 type ArtifactCreator struct {
 	missionDir string
 	store      *MissionsStore

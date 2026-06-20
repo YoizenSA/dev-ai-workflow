@@ -983,8 +983,8 @@ func (h *Handlers) RunMission(w http.ResponseWriter, r *http.Request) {
 //
 // Unlike the two-step CreateMission/ApprovePlan dance, this endpoint takes a
 // goal, generates a plan, creates the mission (auto-approving it to active),
-// and kicks off execution in the background — mirroring the Factory.ai
-// "describe your goal and let Droid manage the work" experience.
+// and kicks off execution in the background — mirroring the
+// "describe your goal and let the orchestrator manage the work" experience.
 //
 // Request body:
 //
@@ -1018,7 +1018,7 @@ func (h *Handlers) AutoMission(w http.ResponseWriter, r *http.Request) {
 		plan = h.planner(req.Goal, req.Project, req.Model, req.Agent)
 	} else {
 		// Resolve the project repo path so the planner grounds the plan in the
-		// real codebase (Droid-aligned one-shot investigation for auto mode).
+		// real codebase (codebase-aligned one-shot investigation for auto mode).
 		repoPath := ""
 		if h.projectStore != nil && req.Project != "" {
 			if proj, pErr := h.projectStore.Get(req.Project); pErr == nil {

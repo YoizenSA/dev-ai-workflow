@@ -10,7 +10,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
-// PlannerSession drives the iterative (Droid-style) planning flow over a single
+// PlannerSession drives the iterative (iterative) planning flow over a single
 // opencode session: Investigate → ProposeArchitecture → GenerateFeatures.
 //
 // It keeps the session alive across stages so the model accumulates context

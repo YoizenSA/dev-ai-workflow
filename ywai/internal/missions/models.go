@@ -50,6 +50,12 @@ type PlanMission struct {
 	Features    []PlanFeature   `json:"features"`
 	Model       string          `json:"model,omitempty"`
 	Agent       string          `json:"agent,omitempty"`
+
+	// LocalFallback is true when the plan was produced by the generic local
+	// planner because opencode was unavailable or failed. Such a plan does NOT
+	// reflect the specific goal and should be surfaced loudly to the user.
+	// Not persisted — it only matters at planning time.
+	LocalFallback bool `json:"-"`
 }
 
 // Clone returns a deep copy of the PlanMission.
@@ -316,7 +322,7 @@ type FeatureVerifyStatus struct {
 	FailedCommand string `json:"failedCommand,omitempty"`
 }
 
-// ─── Mission Artifact Types (Factory.ai Alignment) ───────────────────────
+// ─── Mission Artifact Types ───────────────────────
 
 // ValidationContract represents the validation contract with behavioral assertions.
 type ValidationContract struct {
@@ -359,7 +365,7 @@ type Skill struct {
 	ReturnConditions string   `json:"returnConditions"`
 }
 
-// MissionArtifacts represents all Factory.ai mission artifacts.
+// MissionArtifacts represents all mission artifacts.
 type MissionArtifacts struct {
 	Architecture       string              `json:"architecture"`       // architecture.md content
 	ValidationContract *ValidationContract `json:"validationContract"` // Parsed from validation-contract.md

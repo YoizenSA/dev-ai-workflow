@@ -420,7 +420,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 		update({ refinedGoal: state.goal.trim(), goalAccepted: true });
 	};
 
-	// handleAutoRun is the one-shot Factory.ai-style flow: take the goal as
+	// handleAutoRun is the one-shot autonomous one-shot flow: take the goal as
 	// written, plan + approve + run in the backend without the review step.
 	const handleAutoRun = async () => {
 		if (!state.goal.trim() || !state.selectedProject) return;

@@ -145,14 +145,18 @@ func (e *Engine) runFeaturesSequentially(ctx context.Context, mission *Mission) 
 			"action":    "start",
 		})
 
-		// Set up worktree if workspace manager is configured
+		// Set up worktree if workspace manager is configured. Branch from the
+		// integration branch so each feature inherits all previously completed
+		// work (e.g. a test feature sees the implementation that ran before it).
 		if e.workspaceMgr != nil {
-			feature.WorktreePath = e.workspaceMgr.GetWorktreePath(mission.ID, feature.ID)
-			feature.Branch = e.workspaceMgr.BranchName(mission.ID, feature.ID)
-			if err := e.workspaceMgr.CreateWorktree(feature.WorktreePath, feature.Branch); err != nil {
-				log.Printf("Warning: could not create worktree for %s: %v — running in tempdir mode", feature.ID, err)
+			wtPath, wtBranch, wErr := e.workspaceMgr.CreateFeatureWorktree(mission.ID, feature.ID)
+			if wErr != nil {
+				log.Printf("Warning: could not create worktree for %s: %v — running in tempdir mode", feature.ID, wErr)
 				feature.WorktreePath = ""
 				feature.Branch = ""
+			} else {
+				feature.WorktreePath = wtPath
+				feature.Branch = wtBranch
 			}
 			_ = e.store.SaveMission(mission)
 		}
@@ -204,8 +208,14 @@ func (e *Engine) runFeaturesSequentially(ctx context.Context, mission *Mission) 
 			_ = e.store.RecordWorkerHandoff(mission.ID, feature.ID, handoff)
 		}
 
-		// Merge to integration branch if workspace manager is active
+		// Commit the worker's edits to the feature branch, then merge to
+		// integration. Without the commit the branch has no new commits and the
+		// merge brings nothing — the produced code would never land.
 		if e.workspaceMgr != nil {
+			wt := e.workspaceMgr.GetWorktreePath(mission.ID, feature.ID)
+			if cErr := e.workspaceMgr.CommitWorktree(wt, fmt.Sprintf("ywai(%s): %s", feature.ID, feature.Description)); cErr != nil {
+				log.Printf("Warning: could not commit %s: %v", feature.ID, cErr)
+			}
 			if err := e.workspaceMgr.MergeToIntegration(mission.ID, feature.ID); err != nil {
 				log.Printf("Warning: could not merge %s to integration: %v", feature.ID, err)
 			}

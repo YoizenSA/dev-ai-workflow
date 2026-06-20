@@ -228,7 +228,27 @@ Example:
 				if err := engine.RunMission(mission.ID); err != nil {
 					return fmt.Errorf("run mission: %w", err)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Mission %q completed.\n", mission.ID)
+
+				// Report the real outcome: RunMission can return nil even when the
+				// mission ended in a failed state (e.g. every feature failed), so we
+				// reload it and report the actual status instead of always saying
+				// "completed".
+				final, loadErr := store.LoadMission(mission.ID)
+				if loadErr != nil {
+					fmt.Fprintf(cmd.OutOrStdout(), "Mission %q finished, but its final status could not be read: %v\n", mission.ID, loadErr)
+					return nil
+				}
+
+				done, failed := countFeatureOutcomes(final)
+				switch final.Status {
+				case missions.MissionCompleted:
+					fmt.Fprintf(cmd.OutOrStdout(), "Mission %q completed: %d/%d features done.\n", mission.ID, done, len(final.Features))
+				case missions.MissionFailed:
+					fmt.Fprintf(cmd.OutOrStdout(), "Mission %q FAILED: %d/%d features failed. Inspect with 'ywai missions show %s'.\n", mission.ID, failed, len(final.Features), mission.ID)
+					return fmt.Errorf("mission %s failed", mission.ID)
+				default:
+					fmt.Fprintf(cmd.OutOrStdout(), "Mission %q ended in status %q (%d done, %d failed).\n", mission.ID, final.Status, done, failed)
+				}
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Run 'ywai missions run %s' to start execution.\n", mission.ID)
 			}
@@ -403,7 +423,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("interactive mode requires a terminal; use --file to start from a plan file")
 	}
 
-	// Try the iterative (Droid-style) flow when opencode is reachable; fall
+	// Try the iterative (iterative) flow when opencode is reachable; fall
 	// back transparently to the one-shot planner inside the function.
 	repoPath := resolveProjectPath(store, project)
 	client := opencodeClient()
@@ -854,6 +874,19 @@ func opencodeClient() opencode.Client {
 // resolveProjectPath resolves a project name to its filesystem path via the
 // project store. Returns empty string when the project isn't registered (the
 // planner then runs without repo grounding).
+// countFeatureOutcomes returns the number of completed and failed features.
+func countFeatureOutcomes(m *missions.Mission) (done, failed int) {
+	for i := range m.Features {
+		switch m.Features[i].Status {
+		case missions.FeatureCompleted:
+			done++
+		case missions.FeatureFailed:
+			failed++
+		}
+	}
+	return done, failed
+}
+
 func resolveProjectPath(store *missions.MissionsStore, projectName string) string {
 	if projectName == "" {
 		return ""

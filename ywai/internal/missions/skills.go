@@ -234,7 +234,7 @@ func ResolveSkillContent(missionDir, name string) (resolvedName, body string) {
 	return "", ""
 }
 
-// formatSkillBody renders a parsed Skill struct as markdown matching the Droid
+// formatSkillBody renders a parsed Skill struct as markdown matching the the worker
 // SKILL.md format (frontmatter + the four required body sections).
 func formatSkillBody(s *Skill) string {
 	var b strings.Builder

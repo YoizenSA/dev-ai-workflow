@@ -1,6 +1,6 @@
 {
   "name": "Test Mission",
-  "description": "Test mission to verify Factory.ai alignment",
+  "description": "Test mission to verify mission planning alignment",
   "milestones": [
     {
       "name": "setup",

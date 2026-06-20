@@ -42,14 +42,64 @@ func NewWorkspaceManager(repoPath string) *WorkspaceManager {
 // CreateWorktree creates a git worktree at targetPath from branch.
 // If branch does not exist it is created from BaseRef (or HEAD when empty).
 func (wm *WorkspaceManager) CreateWorktree(targetPath, branch string) error {
+	startPoint := wm.BaseRef
+	if startPoint == "" {
+		startPoint = "HEAD"
+	}
+	return wm.createWorktreeFrom(targetPath, branch, startPoint)
+}
+
+// CommitWorktree stages and commits all changes in a feature worktree to its
+// branch so the worker's edits can be merged into the integration branch. It is
+// a no-op (returns nil) when there's nothing to commit. A dedicated identity is
+// passed inline so it works even when the repo has no committer configured.
+func (wm *WorkspaceManager) CommitWorktree(worktreePath, message string) error {
+	if worktreePath == "" {
+		return nil
+	}
+	if out, err := exec.Command("git", "-C", worktreePath, "add", "-A").CombinedOutput(); err != nil {
+		return fmt.Errorf("git add in %s: %w\noutput: %s", worktreePath, err, string(out))
+	}
+	// Nothing staged → nothing to commit (clean exit means no diff).
+	if exec.Command("git", "-C", worktreePath, "diff", "--cached", "--quiet").Run() == nil {
+		return nil
+	}
+	commit := exec.Command("git", "-C", worktreePath,
+		"-c", "user.name=ywai", "-c", "user.email=ywai@local",
+		"commit", "-m", message)
+	if out, err := commit.CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit in %s: %w\noutput: %s", worktreePath, err, string(out))
+	}
+	return nil
+}
+
+// CreateFeatureWorktree creates a feature's worktree branched from the mission's
+// integration branch, so the feature inherits all previously completed and merged
+// features (impl, fixtures, etc.). This is the key to cohesive multi-feature work:
+// a test feature can see the implementation feature that ran before it. Returns
+// the worktree path and branch name.
+func (wm *WorkspaceManager) CreateFeatureWorktree(missionID, featureID string) (path, branch string, err error) {
+	if err := wm.EnsureIntegrationBranch(missionID); err != nil {
+		return "", "", err
+	}
+	path = wm.GetWorktreePath(missionID, featureID)
+	branch = wm.BranchName(missionID, featureID)
+	integration := wm.IntegrationBranchName(missionID)
+	if err := wm.createWorktreeFrom(path, branch, integration); err != nil {
+		return "", "", err
+	}
+	return path, branch, nil
+}
+
+// createWorktreeFrom creates a worktree at targetPath, creating branch from
+// startPoint when it doesn't already exist.
+func (wm *WorkspaceManager) createWorktreeFrom(targetPath, branch, startPoint string) error {
 	// Ensure target parent exists
 	parent := filepath.Dir(targetPath)
 	if err := os.MkdirAll(parent, 0755); err != nil {
 		return fmt.Errorf("create worktree parent dir: %w", err)
 	}
 
-	// Determine the ref to branch from: explicit BaseRef, else HEAD.
-	startPoint := wm.BaseRef
 	if startPoint == "" {
 		startPoint = "HEAD"
 	}
@@ -271,8 +321,12 @@ func (wm *WorkspaceManager) EnsureIntegrationBranch(missionID string) error {
 	branch := wm.IntegrationBranchName(missionID)
 	checkCmd := exec.Command("git", "-C", wm.repoPath, "rev-parse", "--verify", branch)
 	if err := checkCmd.Run(); err != nil {
-		// Create from current HEAD
-		createCmd := exec.Command("git", "-C", wm.repoPath, "branch", branch)
+		// Create from BaseRef when set, else current HEAD.
+		args := []string{"-C", wm.repoPath, "branch", branch}
+		if wm.BaseRef != "" {
+			args = append(args, wm.BaseRef)
+		}
+		createCmd := exec.Command("git", args...)
 		if out, err := createCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("create integration branch %s: %w\noutput: %s", branch, err, string(out))
 		}

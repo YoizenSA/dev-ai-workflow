@@ -140,13 +140,37 @@ func GeneratePlanWithRepo(goal string, clarifications []QAPair, project, model, 
 			p.Project = project
 		}
 		applyRoleDefaults(p.Features, hints, cfg)
+		// An explicit --model / --agent must reach the workers: applyRoleDefaults
+		// fills per-feature Model/Agent from role-default config, which otherwise
+		// silently overrides the user's choice (the worker uses feature.Model, not
+		// the mission-level Model). Force the override per feature when set.
+		if model != "" {
+			for i := range p.Features {
+				p.Features[i].Model = model
+			}
+		}
+		if agent != "" {
+			for i := range p.Features {
+				p.Features[i].Agent = agent
+			}
+		}
+		return p
+	}
+
+	// localFallbackPlan builds a generic plan with the local planner and flags
+	// it as a fallback so callers can warn that it doesn't reflect the goal.
+	localFallbackPlan := func() *PlanMission {
+		p := applyModelAgent(GeneratePlan(goal, clarifications))
+		if p != nil {
+			p.LocalFallback = true
+		}
 		return p
 	}
 
 	opencodePath, err := DetectOpencode()
 	if err != nil {
 		log.Printf("opencode not available, falling back to local planning: %v", err)
-		return applyModelAgent(GeneratePlan(goal, clarifications))
+		return localFallbackPlan()
 	}
 
 	// Build the prompt for opencode
@@ -173,14 +197,14 @@ func GeneratePlanWithRepo(goal string, clarifications []QAPair, project, model, 
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("opencode plan generation failed: %v, falling back to local planning", err)
-		return applyModelAgent(GeneratePlan(goal, clarifications))
+		return localFallbackPlan()
 	}
 
 	// Try to parse the output as JSON plan
 	plan, parseErr := parsePlanFromOutput(string(output))
 	if parseErr != nil {
 		log.Printf("parse opencode output: %v, falling back to local planning", parseErr)
-		return applyModelAgent(GeneratePlan(goal, clarifications))
+		return localFallbackPlan()
 	}
 
 	return applyModelAgent(plan)
@@ -333,11 +357,11 @@ func localRefineGoal(goal string) string {
 
 // buildPlanPromptWithRepo is the repo-aware variant. When repoPath is non-empty,
 // the prompt instructs opencode to read the actual codebase and ground the plan
-// in real patterns/conventions (Droid-aligned one-shot investigation).
+// in real patterns/conventions (codebase-aligned one-shot investigation).
 func buildPlanPromptWithRepo(goal string, clarifications []QAPair, project, repoPath string) string {
 	var sb strings.Builder
-	sb.WriteString("You are a technical architect following Factory.ai mission planning methodology. Generate a development plan for the following goal.\n\n")
-	sb.WriteString("## Planning Phases (Factory.ai Methodology)\n")
+	sb.WriteString("You are a technical architect following a structured mission planning methodology. Generate a development plan for the following goal.\n\n")
+	sb.WriteString("## Planning Phases\n")
 	sb.WriteString("1. Understand & Plan - Deeply understand requirements, investigate codebase, identify unknowns\n")
 	sb.WriteString("2. Architectural Design & Decomposition - Define system components, responsibilities, interactions\n")
 	sb.WriteString("3. Infrastructure & Boundaries - Check existing services, define port ranges, identify off-limits resources\n")
@@ -388,7 +412,7 @@ func buildPlanPromptWithRepo(goal string, clarifications []QAPair, project, repo
   ]
 }
 
-IMPORTANT RULES (Factory.ai Alignment):
+IMPORTANT RULES:
 - Each feature must have a unique id (feat-1, feat-2, etc.)
 - Each feature must reference a milestone that exists
 - preconditions is a list of feature IDs that must be done first
@@ -801,7 +825,7 @@ func RunInteractivePlanning(store *MissionsStore, r io.Reader, w io.Writer, proj
 
 // RunInteractivePlanningWithClient is the opencode-client-aware variant of
 // RunInteractivePlanning. When the client supports the Sessions API (opencode
-// server reachable), it drives an iterative Droid-style flow:
+// server reachable), it drives an iterative iterative flow:
 //
 //  1. Investigate the codebase (PlannerSession.Investigate)
 //  2. Surface unknowns to the user, replacing the hardcoded clarifying questions
@@ -825,7 +849,7 @@ func RunInteractivePlanningWithClient(store *MissionsStore, r io.Reader, w io.Wr
 
 	scanner := bufio.NewScanner(r)
 	_, _ = fmt.Fprintf(w, "╔══════════════════════════════════════════════╗\n")
-	_, _ = fmt.Fprintf(w, "║   ywai Missions — Iterative Planning (Droid) ║\n")
+	_, _ = fmt.Fprintf(w, "║   ywai Missions — Iterative Planning ║\n")
 	_, _ = fmt.Fprintf(w, "╚══════════════════════════════════════════════╝\n\n")
 
 	goal, err := promptGoal(scanner, w)
@@ -1118,7 +1142,7 @@ func regeneratePlan(prevPlan *PlanMission, feedback string, clarifications []QAP
 // ─── Mission Lifecycle ─────────────────────────────────────────────────────
 
 // CreateMissionFromPlan creates a new Mission from a PlanMission in "planning"
-// state and persists it to the store. Also creates Factory.ai mission artifacts.
+// state and persists it to the store. Also creates mission artifacts.
 func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, error) {
 	if err := ValidatePlan(plan); err != nil {
 		return nil, err
@@ -1173,7 +1197,7 @@ func CreateMissionFromPlan(store *MissionsStore, plan *PlanMission) (*Mission, e
 		return nil, fmt.Errorf("save mission: %w", err)
 	}
 
-	// Create Factory.ai mission artifacts
+	// Create mission artifacts
 	missionDir := store.MissionDir(missionID)
 	artifactCreator := NewArtifactCreator(missionDir, store)
 	if err := artifactCreator.CreateAllArtifacts(mission); err != nil {
@@ -1218,12 +1242,12 @@ func workerTypeForFeature(feature PlanFeature) string {
 	}
 }
 
-// DesignWorkerSystem classifies features into worker types, writes Droid-format
+// DesignWorkerSystem classifies features into worker types, writes skill-format
 // SKILL.md files (Required Skills/Tools, Work Procedure, Example Handoff, When
 // to Return), and updates mission.WorkerTypes and mission.Features[].SkillName.
 //
 // Each generated skill reuses GetDefaultSkill's content (which already matches
-// the Droid SKILL.md structure) so workers get a realistic quality bar instead
+// the SKILL.md structure) so workers get a realistic quality bar instead
 // of a generic 5-step checklist.
 func DesignWorkerSystem(plan *PlanMission, mission *Mission, missionDir, model, agent string) error {
 	// Classify features into worker skill names (canonical).
@@ -1253,7 +1277,7 @@ func DesignWorkerSystem(plan *PlanMission, mission *Mission, missionDir, model, 
 		// generated SKILL.md advertises the full kit the worker should load.
 		enrichSkillWithRoleSkills(skill, features)
 
-		// Render the SKILL.md body in Droid format.
+		// Render the SKILL.md body in skill format.
 		skillContent := formatSkillBody(skill)
 
 		// Write skill file.
@@ -1288,7 +1312,7 @@ func DesignWorkerSystem(plan *PlanMission, mission *Mission, missionDir, model, 
 	return nil
 }
 
-// genericSkillForWorkerType builds a minimal Droid-format skill for a worker
+// genericSkillForWorkerType builds a minimal skill-format skill for a worker
 // type that GetDefaultSkill doesn't know. Used as a last-resort fallback.
 func genericSkillForWorkerType(wtName string) *Skill {
 	return &Skill{
@@ -1456,7 +1480,7 @@ type AutoPlanOpts struct {
 	AutoApprove bool
 	// RepoPath is the resolved filesystem path of the project repo. When set,
 	// the planner prompt tells opencode to read the repo and ground the plan in
-	// the real codebase (Droid-aligned investigation in one-shot for auto mode).
+	// the real codebase (codebase-aligned investigation in one-shot for auto mode).
 	RepoPath string
 }
 
@@ -1465,13 +1489,17 @@ type AutoPlanOpts struct {
 //
 // When AutoPlanOpts.RepoPath is set (or can be resolved from the project name
 // via a RepoResolver), the planner prompt is enriched to read the real codebase,
-// giving Droid-style grounding in one shot (auto mode skips the interactive
+// giving iterative grounding in one shot (auto mode skips the interactive
 // milestone confirmation the interactive path does).
 func PlanAndApprove(store *MissionsStore, goal string, opts AutoPlanOpts) (*Mission, error) {
 	repoPath := opts.RepoPath
 	plan := GeneratePlanWithRepo(goal, nil, opts.Project, opts.Model, opts.Agent, repoPath)
 	if plan == nil {
 		return nil, fmt.Errorf("plan generation returned nil")
+	}
+	if plan.LocalFallback {
+		log.Printf("WARNING: opencode planning was unavailable — using a GENERIC local plan that does NOT reflect your goal %q. "+
+			"Features are boilerplate (foundation/core/polish). Fix opencode (check `opencode run`, auth, and balance) and re-run for a real plan.", goal)
 	}
 
 	mission, err := CreateMissionFromPlan(store, plan)

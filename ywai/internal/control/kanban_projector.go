@@ -3,12 +3,26 @@ package control
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 )
+
+// ansiRe strips ANSI escape sequences from worker log lines so the kanban
+// activity feed shows clean text.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// logMarkers are substrings that make a worker log line worth surfacing as a
+// kanban activity — tool actions, shell commands, file writes, and results.
+// Filtering keeps the live feed readable instead of dumping every raw line.
+var logMarkers = []string{
+	"$ ", "Write", "Read ", "Edit", "Glob", "Grep", "Bash", "Wrote",
+	"go build", "go test", "Error", "error:", "FAIL", "PASS", " ok ",
+	"✓", "✗", "Status:", "Did:", "Created", "Running", "Verify",
+}
 
 // KanbanProjector bridges missions events to the kanban board.
 // It creates a kanban session per mission and a delegation per feature,
@@ -18,6 +32,7 @@ import (
 // does NOT affect the mission FSM. Completed/cancelled missions leave
 // their kanban session as history (no deletion).
 type KanbanProjector struct {
+	server   *kanban.Server
 	kanban   *kanban.Store
 	missions *missions.MissionsStore
 	mu       sync.Mutex
@@ -26,22 +41,88 @@ type KanbanProjector struct {
 }
 
 // NewKanbanProjector creates a projector that pushes mission events to kanban.
-func NewKanbanProjector(k *kanban.Store, m *missions.MissionsStore) *KanbanProjector {
+// It takes the kanban Server (not just the Store) so it can broadcast live
+// updates to connected UI clients the same way the HTTP handlers do.
+func NewKanbanProjector(srv *kanban.Server, m *missions.MissionsStore) *KanbanProjector {
 	return &KanbanProjector{
-		kanban:   k,
+		server:   srv,
+		kanban:   srv.Store(),
 		missions: m,
 		sessions: make(map[string]string),
 		delegs:   make(map[string]map[string]string),
 	}
 }
 
+// broadcast pushes a board update to UI clients when a server is wired.
+func (p *KanbanProjector) broadcast(updateType string, payload interface{}) {
+	if p.server != nil {
+		p.server.Broadcast(updateType, payload)
+	}
+}
+
+// addActivity appends an activity to a delegation and broadcasts it live.
+func (p *KanbanProjector) addActivity(delegID, actType, content string) {
+	act := &kanban.ActivityEvent{Type: kanban.ActivityType(actType), Content: content}
+	if err := p.kanban.AddActivity(delegID, act); err != nil {
+		return
+	}
+	p.broadcast("activity.created", act)
+}
+
 // Project implements the mission event sink. It handles feature_status_changed
 // events by creating/updating kanban sessions and delegations.
 func (p *KanbanProjector) Project(evtType string, payload interface{}) {
-	if evtType != "feature_status_changed" {
+	switch evtType {
+	case "feature_status_changed":
+		p.handleFeatureStatus(payload)
+	case "log_update":
+		p.handleLogUpdate(payload)
+	}
+}
+
+// handleLogUpdate surfaces meaningful worker log lines as live progress
+// activities on the matching kanban card, so the user sees what each agent is
+// actually doing in real time.
+func (p *KanbanProjector) handleLogUpdate(payload interface{}) {
+	m, ok := payload.(map[string]interface{})
+	if !ok {
+		return
+	}
+	missionID, _ := m["missionId"].(string)
+	featureID, _ := m["featureId"].(string)
+	line, _ := m["line"].(string)
+	if missionID == "" || featureID == "" {
 		return
 	}
 
+	clean := strings.TrimSpace(ansiRe.ReplaceAllString(line, ""))
+	if len(clean) < 3 || !isMeaningfulLog(clean) {
+		return
+	}
+	if len(clean) > 200 {
+		clean = clean[:200] + "…"
+	}
+
+	p.mu.Lock()
+	delegID, ok := p.delegs[missionID][featureID]
+	p.mu.Unlock()
+	if !ok {
+		return
+	}
+	p.addActivity(delegID, "progress", clean)
+}
+
+// isMeaningfulLog reports whether a cleaned log line is worth showing.
+func isMeaningfulLog(line string) bool {
+	for _, mk := range logMarkers {
+		if strings.Contains(line, mk) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *KanbanProjector) handleFeatureStatus(payload interface{}) {
 	payloadMap, ok := payload.(map[string]interface{})
 	if !ok {
 		log.Printf("KanbanProjector: invalid payload type %T", payload)
@@ -93,8 +174,22 @@ func (p *KanbanProjector) Project(evtType string, payload interface{}) {
 	// So we translate: in_progress → active, pending → pending, etc.
 	missionStatus := mapFeatureStatusToMissionStatus(featureStatus)
 	statusCopy := string(missionStatus)
-	if _, err := p.kanban.UpdateDelegation(delegID, &statusCopy, nil, nil, nil, nil); err != nil {
+	d, err := p.kanban.UpdateDelegation(delegID, &statusCopy, nil, nil, nil, nil)
+	if err != nil {
 		log.Printf("KanbanProjector: update delegation %s: %v", delegID, err)
+		return
+	}
+	// Broadcast the card move so the UI reflects it live.
+	p.broadcast("delegation.status_changed", d)
+
+	// Add a concise lifecycle activity so the timeline shows the agent moving.
+	switch missions.FeatureStatus(featureStatus) {
+	case missions.FeatureInProgress:
+		p.addActivity(delegID, "progress", "▶ Agent started working")
+	case missions.FeatureCompleted:
+		p.addActivity(delegID, "progress", "✓ Completed")
+	case missions.FeatureFailed:
+		p.addActivity(delegID, "blocked", "✗ Failed")
 	}
 }
 
@@ -115,6 +210,7 @@ func (p *KanbanProjector) ensureSession(missionID string) (string, error) {
 	sessionID := session.ID
 	p.sessions[missionID] = sessionID
 	p.delegs[missionID] = make(map[string]string)
+	p.broadcast("session.created", session)
 
 	// Create a delegation per feature
 	for _, f := range mission.Features {
@@ -126,6 +222,7 @@ func (p *KanbanProjector) ensureSession(missionID string) (string, error) {
 			continue
 		}
 		p.delegs[missionID][f.ID] = deleg.ID
+		p.broadcast("delegation.created", deleg)
 	}
 
 	return sessionID, nil

@@ -3,6 +3,7 @@ package missions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -178,12 +179,17 @@ func (e *Engine) RunFeaturesConcurrently(ctx context.Context, mission *Mission) 
 						}
 					}
 					if reloadedFeat != nil {
-						reloadedFeat.WorktreePath = e.workspaceMgr.GetWorktreePath(mission.ID, reloadedFeat.ID)
-						reloadedFeat.Branch = e.workspaceMgr.BranchName(mission.ID, reloadedFeat.ID)
-						if err := e.workspaceMgr.CreateWorktree(reloadedFeat.WorktreePath, reloadedFeat.Branch); err != nil {
-							log.Printf("Warning: worktree for %s: %v — using tempdir", f.ID, err)
+						// Branch the feature worktree from the integration branch so it
+						// inherits all previously completed features (e.g. a test feature
+						// sees the implementation that merged before it).
+						wtPath, wtBranch, wErr := e.workspaceMgr.CreateFeatureWorktree(mission.ID, reloadedFeat.ID)
+						if wErr != nil {
+							log.Printf("Warning: worktree for %s: %v — using tempdir", f.ID, wErr)
 							reloadedFeat.WorktreePath = ""
 							reloadedFeat.Branch = ""
+						} else {
+							reloadedFeat.WorktreePath = wtPath
+							reloadedFeat.Branch = wtBranch
 						}
 						_ = e.store.SaveMission(rel)
 						currentMission = rel // C2a fix: fresh mission with WorktreePath populated
@@ -205,8 +211,15 @@ func (e *Engine) RunFeaturesConcurrently(ctx context.Context, mission *Mission) 
 					_ = e.store.RecordWorkerHandoff(mission.ID, f.ID, handoff)
 				}
 
-				// C2b fix: MergeToIntegration serializes internally via WorkspaceManager.mergeMu.
+				// Commit the worker's edits to the feature branch, then merge to
+				// integration. Without the commit the branch has no new commits and
+				// the merge brings nothing — the produced code would never land.
 				if e.workspaceMgr != nil {
+					wt := e.workspaceMgr.GetWorktreePath(mission.ID, f.ID)
+					if cErr := e.workspaceMgr.CommitWorktree(wt, fmt.Sprintf("ywai(%s): %s", f.ID, f.Description)); cErr != nil {
+						log.Printf("Warning: commit %s: %v", f.ID, cErr)
+					}
+					// C2b fix: MergeToIntegration serializes internally via WorkspaceManager.mergeMu.
 					if mErr := e.workspaceMgr.MergeToIntegration(mission.ID, f.ID); mErr != nil {
 						log.Printf("Warning: merge %s: %v", f.ID, mErr)
 					}

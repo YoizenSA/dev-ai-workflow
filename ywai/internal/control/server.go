@@ -75,7 +75,7 @@ func New(port int) (*Server, error) {
 	}
 
 	// Wire the missions→kanban event bridge
-	projector := NewKanbanProjector(kServer.Store(), missionsStore)
+	projector := NewKanbanProjector(kServer, missionsStore)
 	mServer.SetEventSink(projector.Project)
 
 	s.buildRoutes()
