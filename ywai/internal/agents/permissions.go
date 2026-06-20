@@ -84,14 +84,14 @@ var toolRegistry = []toolPattern{
 	{prefix: "engram_mem_session_summary", category: ToolAdmin},
 
 	// ywai-kanban — read tools
-	{prefix: "ywai-kanban_kanban_get_", category: ToolRead},
-	{prefix: "ywai-kanban_kanban_list_sessions", category: ToolRead},
+	{prefix: "ywai-kanban_get_", category: ToolRead},
+	{prefix: "ywai-kanban_list_sessions", category: ToolRead},
 
 	// ywai-kanban — write tools
-	{prefix: "ywai-kanban_kanban_create_", category: ToolWrite},
-	{prefix: "ywai-kanban_kanban_delete_session", category: ToolWrite},
-	{prefix: "ywai-kanban_kanban_update_delegation", category: ToolWrite},
-	{prefix: "ywai-kanban_kanban_add_activity", category: ToolWrite},
+	{prefix: "ywai-kanban_create_", category: ToolWrite},
+	{prefix: "ywai-kanban_delete_session", category: ToolWrite},
+	{prefix: "ywai-kanban_update_delegation", category: ToolWrite},
+	{prefix: "ywai-kanban_add_activity", category: ToolWrite},
 
 	// Delegation — read tools
 	{prefix: "delegate", category: ToolRead},

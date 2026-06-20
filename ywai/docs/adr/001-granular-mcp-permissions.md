@@ -18,7 +18,7 @@ The `mcp` permission is currently **binary** — `allow` or `deny`. When set to 
 | `ado_pr_comment` | Write comments on PRs |
 | `ado_work_item_update` | Change work item state |
 | `engram_mem_save` | Write to persistent memory |
-| `ywai-kanban_kanban_delete_session` | Delete entire sessions |
+| `ywai-kanban_delete_session` | Delete entire sessions |
 
 ### Active MCP servers
 
@@ -44,8 +44,8 @@ Every MCP tool is classified into one of three categories based on its operation
 
 | Category | Definition | Examples |
 |---|---|---|
-| **read** | Queries or retrieves data. No side effects. | `codegraph_*`, `context7_*`, `ado_prs`, `engram_mem_context`, `ywai-kanban_kanban_get_board` |
-| **write** | Creates, modifies, or deletes state. | `ado_review`, `engram_mem_save`, `ywai-kanban_kanban_delete_session` |
+| **read** | Queries or retrieves data. No side effects. | `codegraph_*`, `context7_*`, `ado_prs`, `engram_mem_context`, `ywai-kanban_get_board` |
+| **write** | Creates, modifies, or deletes state. | `ado_review`, `engram_mem_save`, `ywai-kanban_delete_session` |
 | **admin** | Changes configuration or session lifecycle. | `ado_profile_use`, `engram_mem_session_start`, `engram_mem_session_end` |
 
 **Classification rules:**
@@ -165,15 +165,15 @@ var toolRegistry = map[string]ToolCategory{
     "engram_mem_session_summary": ToolWrite,
     "engram_mem_suggest_topic_key": ToolRead,
     // ywai-kanban — mixed
-    "ywai-kanban_kanban_get_":     ToolRead,
-    "ywai-kanban_kanban_list_":    ToolRead,
-    "ywai-kanban_kanban_get_board": ToolRead,
-    "ywai-kanban_kanban_get_graph": ToolRead,
-    "ywai-kanban_kanban_get_ui_url": ToolRead,
-    "ywai-kanban_kanban_create_":  ToolWrite,
-    "ywai-kanban_kanban_update_":  ToolWrite,
-    "ywai-kanban_kanban_delete_":  ToolWrite,
-    "ywai-kanban_kanban_add_activity": ToolWrite,
+    "ywai-kanban_get_":     ToolRead,
+    "ywai-kanban_list_":    ToolRead,
+    "ywai-kanban_get_board": ToolRead,
+    "ywai-kanban_get_graph": ToolRead,
+    "ywai-kanban_get_ui_url": ToolRead,
+    "ywai-kanban_create_":  ToolWrite,
+    "ywai-kanban_update_":  ToolWrite,
+    "ywai-kanban_delete_":  ToolWrite,
+    "ywai-kanban_add_activity": ToolWrite,
     // Delegation — mixed
     "delegation_list": ToolRead,
     "delegation_read": ToolRead,
@@ -275,7 +275,7 @@ func (e *MCPEnforcer) Allow(toolName string) (bool, string) {
 }
 ```
 
-This grants access to `codegraph_*`, `context7_*`, `engram_mem_search`/`context`, `ado_prs` etc. while blocking `ado_review`, `engram_mem_save`, `ywai-kanban_kanban_delete_session`, and other write-capable tools.
+This grants access to `codegraph_*`, `context7_*`, `engram_mem_search`/`context`, `ado_prs` etc. while blocking `ado_review`, `engram_mem_save`, `ywai-kanban_delete_session`, and other write-capable tools.
 
 ### 5. Tests to write
 

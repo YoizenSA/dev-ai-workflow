@@ -218,7 +218,7 @@ var customMcpCatalog = []McpCatalogEntry{
 		Popular:     false,
 		Type:        "local",
 		Command:     []string{"ywai", "serve", "--mcp-only"},
-		Tools:       []string{"kanban_create_session", "kanban_create_delegation", "kanban_update_delegation", "kanban_get_board"},
+		Tools:       []string{"create_session", "create_delegation", "update_delegation", "get_board"},
 		Docs:        "https://github.com/Yoizen/dev-ai-workflow",
 	},
 }

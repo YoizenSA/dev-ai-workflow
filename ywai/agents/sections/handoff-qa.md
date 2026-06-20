@@ -20,4 +20,4 @@ When the orchestrator is tracking a Kanban board (session was created at session
 - **Blocker**: <reason, if status is blocked> (omit if not blocked)
 ```
 
-This is **mandatory** when the orchestrator created a kanban session. The orchestrator uses your Kanban Update to call `kanban_update_delegation` and `kanban_add_activity`. If you omit it, the board will be stale and the user loses visibility.
+This is **mandatory** when the orchestrator created a kanban session. The orchestrator uses your Kanban Update to call `update_delegation` and `add_activity`. If you omit it, the board will be stale and the user loses visibility.

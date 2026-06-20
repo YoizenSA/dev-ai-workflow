@@ -93,7 +93,7 @@ func (p *KanbanProjector) Project(evtType string, payload interface{}) {
 	// So we translate: in_progress → active, pending → pending, etc.
 	missionStatus := mapFeatureStatusToMissionStatus(featureStatus)
 	statusCopy := string(missionStatus)
-	if _, err := p.kanban.UpdateDelegation(delegID, &statusCopy, nil, nil, nil); err != nil {
+	if _, err := p.kanban.UpdateDelegation(delegID, &statusCopy, nil, nil, nil, nil); err != nil {
 		log.Printf("KanbanProjector: update delegation %s: %v", delegID, err)
 	}
 }

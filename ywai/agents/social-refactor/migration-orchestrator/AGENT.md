@@ -234,69 +234,69 @@ multiple delegations and collect them later.
 Track every delegation on the Kanban board so the user can see progress
 visually without reading handoffs. The Kanban is your audit trail.
 
-> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_kanban_*` (e.g. `ywai-kanban_kanban_create_session`). The short `kanban_*` form is used below for readability — call whichever form your host exposes.
+> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_*` (e.g. `ywai-kanban_create_session`). The short bare names (e.g. `create_session`) are used below for readability — call whichever form your host exposes.
 
 ### Workflow
 
-1. **On session start**: Call `kanban_create_session(goal="<migration goal>")`
+1. **On session start**: Call `create_session(goal="<migration goal>")`
    to get a `session_id`. Use this session for all subsequent board calls.
 
 2. **Before each delegation**: Call
-   `kanban_create_delegation(session_id, agent="<agent>",
+   `create_delegation(session_id, agent="<agent>",
    task_summary="<one-liner>")` to create a card. Save the returned delegation
    `id`.
 
 3. **On phase start**: After delegating, call
-   `kanban_update_delegation(id, column="in_progress", status="running")` to
+   `update_delegation(id, column="in_progress", status="running")` to
    mark the card as in progress.
 
 4. **On progress updates**: Call
-   `kanban_add_activity(delegation_id=<id>, type="progress",
+   `add_activity(delegation_id=<id>, type="progress",
    content="<what happened>")` to log progress events. This populates the
    activity history visible in the board UI.
 
 5. **On handoff received** (after reading the handoff):
-   - Call `kanban_add_activity(delegation_id=<id>, type="progress",
+   - Call `add_activity(delegation_id=<id>, type="progress",
      content="<handoff summary>")` to store the handoff content
-   - Call `kanban_update_delegation(id, handoff_preview="<brief summary>")`
+   - Call `update_delegation(id, handoff_preview="<brief summary>")`
      to set a short preview on the card
-   - Call `kanban_update_delegation(id, column="review", status="review")`
+   - Call `update_delegation(id, column="review", status="review")`
      to move the card to the Review column
 
 6. **On validation approved**: After `@migration-validator` returns `APPROVED`,
-   - Call `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>,
+   - Call `resolve_activity(delegation_id=<id>, activity_id=<actId>,
      resolution="approved")` if there were pending decisions
-   - Call `kanban_update_delegation(id, column="done", status="done")` to mark
+   - Call `update_delegation(id, column="done", status="done")` to mark
      complete
 
 7. **On changes requested**: If validation returns `CHANGES_REQUESTED`, call
-   `kanban_update_delegation(id, column="backlog", status="changes")` to move
+   `update_delegation(id, column="backlog", status="changes")` to move
    back.
 
 8. **On blocked / needs decision**: If any phase returns `BLOCKED`, call
-   `kanban_add_activity(delegation_id=<id>, type="blocked",
+   `add_activity(delegation_id=<id>, type="blocked",
    content="<reason>", options=["opt1", "opt2"])` to log the blocker, then
-   `kanban_update_delegation(id, status="blocked", blocker="<reason>")`.
+   `update_delegation(id, status="blocked", blocker="<reason>")`.
 
 ### Reading board state
 
-- **Check board**: Call `kanban_get_board(session_id=<id>)` anytime to see
+- **Check board**: Call `get_board(session_id=<id>)` anytime to see
   all delegations grouped by column, including handoff_preview, blocker, and
   pending_action indicators.
-- **Check activities**: Call `kanban_get_activities(delegation_id=<id>)` to
+- **Check activities**: Call `get_activities(delegation_id=<id>)` to
   see the full activity timeline for a specific card.
 - **Check pending decisions**: Call
-  `kanban_get_pending_decisions(session_id=<id>)` to see all unresolved
+  `get_pending_decisions(session_id=<id>)` to see all unresolved
   blockers, decisions, and questions.
-- **Check dependency graph**: Call `kanban_get_graph(session_id=<id>)` to
+- **Check dependency graph**: Call `get_graph(session_id=<id>)` to
   visualize task dependencies and identify blockers.
 - **Resolve decisions**: Call
-  `kanban_resolve_activity(delegation_id=<id>, activity_id=<actId>,
+  `resolve_activity(delegation_id=<id>, activity_id=<actId>,
   resolution="<decision>")` to resolve a pending decision/question/blocker.
 
 ### Getting the Kanban UI URL
 
-Call `kanban_get_ui_url()` anytime to get the browser URL where the Kanban
+Call `get_ui_url()` anytime to get the browser URL where the Kanban
 board is visible. Share this with the user so they can open it.
 
 ### Column mapping

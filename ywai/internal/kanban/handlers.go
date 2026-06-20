@@ -349,6 +349,7 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Status         *string `json:"status"`
 		Column         *string `json:"column"`
+		Handoff        *string `json:"handoff"`
 		HandoffPreview *string `json:"handoff_preview"`
 		Blocker        *string `json:"blocker"`
 	}
@@ -357,25 +358,16 @@ func (h *Handlers) UpdateDelegation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Map kanban status to FSM and validate transition
+	// Map kanban status to the FSM value stored on the delegation. The board is
+	// decoupled from the mission FSM (see KanbanProjector: kanban moves never
+	// affect the engine), so we do NOT enforce FSM transitions here — that only
+	// caused legitimate card moves to fail silently.
 	if req.Status != nil && *req.Status != "" {
-		fsmStatus := MapKanbanStatusToFSM(*req.Status)
-		s := string(fsmStatus)
+		s := string(MapKanbanStatusToFSM(*req.Status))
 		req.Status = &s // store will receive FSM value
-
-		// Load current delegation to get current FSM status
-		if cur, ok := h.store.GetDelegation(id); ok {
-			if err := missions.IsValidTransition(
-				missions.MissionStatus(cur.Status),
-				fsmStatus,
-			); err != nil {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-				return
-			}
-		}
 	}
 
-	d, err := h.store.UpdateDelegation(id, req.Status, req.Column, req.HandoffPreview, req.Blocker)
+	d, err := h.store.UpdateDelegation(id, req.Status, req.Column, req.Handoff, req.HandoffPreview, req.Blocker)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1312,18 +1304,18 @@ var ValidPermissionKeys = map[string]bool{
 	"mem_update":            true,
 
 	// Kanban MCP tools (from ywai-kanban MCP server)
-	"kanban_add_activity":          true,
-	"kanban_create_delegation":     true,
-	"kanban_create_session":        true,
-	"kanban_delete_session":        true,
-	"kanban_get_activities":        true,
-	"kanban_get_board":             true,
-	"kanban_get_graph":             true,
-	"kanban_get_pending_decisions": true,
-	"kanban_get_ui_url":            true,
-	"kanban_list_sessions":         true,
-	"kanban_resolve_activity":      true,
-	"kanban_update_delegation":     true,
+	"add_activity":          true,
+	"create_delegation":     true,
+	"create_session":        true,
+	"delete_session":        true,
+	"get_activities":        true,
+	"get_board":             true,
+	"get_graph":             true,
+	"get_pending_decisions": true,
+	"get_ui_url":            true,
+	"list_sessions":         true,
+	"resolve_activity":      true,
+	"update_delegation":     true,
 }
 
 // ValidPermissionValues are the only accepted permission values.

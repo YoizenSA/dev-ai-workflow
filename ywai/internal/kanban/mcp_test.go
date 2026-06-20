@@ -62,7 +62,7 @@ func TestMCPAdapter_Flow(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      3,
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"kanban_create_session","arguments":{"goal":"Test session"}}`),
+		Params:  json.RawMessage(`{"name":"create_session","arguments":{"goal":"Test session"}}`),
 	}
 	resp = adapter.handleRequest(createReq)
 	if resp == nil {
@@ -101,7 +101,7 @@ func TestMCPAdapter_Flow(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      4,
 			Method:  "tools/call",
-			Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Do work","dependencies":[]}}`, sessionID)),
+			Params:  json.RawMessage(fmt.Sprintf(`{"name":"create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Do work","dependencies":[]}}`, sessionID)),
 		}
 		resp = adapter.handleRequest(delegationReq)
 		if resp == nil {
@@ -113,7 +113,7 @@ func TestMCPAdapter_Flow(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      5,
 			Method:  "tools/call",
-			Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_get_board","arguments":{"session_id":"%s"}}`, sessionID)),
+			Params:  json.RawMessage(fmt.Sprintf(`{"name":"get_board","arguments":{"session_id":"%s"}}`, sessionID)),
 		}
 		resp = adapter.handleRequest(boardReq)
 		if resp == nil {
@@ -156,7 +156,7 @@ func TestMCPAdapter_Flow(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      4,
 			Method:  "tools/call",
-			Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Do work","dependencies":[]}}`, sessionID)),
+			Params:  json.RawMessage(fmt.Sprintf(`{"name":"create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Do work","dependencies":[]}}`, sessionID)),
 		}
 		resp = adapter.handleRequest(delegationReq)
 		if resp == nil {
@@ -168,7 +168,7 @@ func TestMCPAdapter_Flow(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      5,
 			Method:  "tools/call",
-			Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_get_board","arguments":{"session_id":"%s"}}`, sessionID)),
+			Params:  json.RawMessage(fmt.Sprintf(`{"name":"get_board","arguments":{"session_id":"%s"}}`, sessionID)),
 		}
 		resp = adapter.handleRequest(boardReq)
 		if resp == nil {
@@ -209,7 +209,7 @@ func TestMCPAdapter_AddActivity(t *testing.T) {
 		ID:      2,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			`{"name":"kanban_create_session","arguments":{"project":"test","goal":"Activity MCP test"}}`,
+			`{"name":"create_session","arguments":{"project":"test","goal":"Activity MCP test"}}`,
 		),
 	}
 	resp = adapter.handleRequest(createSessionReq)
@@ -233,7 +233,7 @@ func TestMCPAdapter_AddActivity(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      3,
 		Method:  "tools/call",
-		Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test activity","dependencies":[]}}`, sessionID)),
+		Params:  json.RawMessage(fmt.Sprintf(`{"name":"create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test activity","dependencies":[]}}`, sessionID)),
 	}
 	resp = adapter.handleRequest(createDelReq)
 	if resp == nil {
@@ -251,13 +251,13 @@ func TestMCPAdapter_AddActivity(t *testing.T) {
 	delIDParts := strings.Split(delParts[1], " ")
 	delegationID := delIDParts[0]
 
-	// Test kanban_add_activity
+	// Test add_activity
 	addActivityReq := JSONRPCRequest{
 		JSONRPC: "2.0",
 		ID:      4,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_add_activity","arguments":{"delegation_id":"%s","type":"progress","content":"Implementing feature"}}`, delegationID),
+			fmt.Sprintf(`{"name":"add_activity","arguments":{"delegation_id":"%s","type":"progress","content":"Implementing feature"}}`, delegationID),
 		),
 	}
 	resp = adapter.handleRequest(addActivityReq)
@@ -298,7 +298,7 @@ func TestMCPAdapter_GetActivities(t *testing.T) {
 		ID:      2,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			`{"name":"kanban_create_session","arguments":{"project":"test","goal":"Activity list test"}}`,
+			`{"name":"create_session","arguments":{"project":"test","goal":"Activity list test"}}`,
 		),
 	}
 	resp = adapter.handleRequest(createSessionReq)
@@ -312,7 +312,7 @@ func TestMCPAdapter_GetActivities(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      3,
 		Method:  "tools/call",
-		Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test activity list","dependencies":[]}}`, sessionID)),
+		Params:  json.RawMessage(fmt.Sprintf(`{"name":"create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test activity list","dependencies":[]}}`, sessionID)),
 	}
 	resp = adapter.handleRequest(createDelReq)
 	result, _ = resp.Result.(*ToolsCallResult)
@@ -327,18 +327,18 @@ func TestMCPAdapter_GetActivities(t *testing.T) {
 		ID:      4,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_add_activity","arguments":{"delegation_id":"%s","type":"decision","content":"Approve?","options":["yes","no"]}}`, delegationID),
+			fmt.Sprintf(`{"name":"add_activity","arguments":{"delegation_id":"%s","type":"decision","content":"Approve?","options":["yes","no"]}}`, delegationID),
 		),
 	}
 	adapter.handleRequest(addReq)
 
-	// Test kanban_get_activities
+	// Test get_activities
 	getActivitiesReq := JSONRPCRequest{
 		JSONRPC: "2.0",
 		ID:      5,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_get_activities","arguments":{"delegation_id":"%s"}}`, delegationID),
+			fmt.Sprintf(`{"name":"get_activities","arguments":{"delegation_id":"%s"}}`, delegationID),
 		),
 	}
 	resp = adapter.handleRequest(getActivitiesReq)
@@ -379,7 +379,7 @@ func TestMCPAdapter_GetPendingDecisions(t *testing.T) {
 		ID:      2,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			`{"name":"kanban_create_session","arguments":{"project":"test","goal":"Pending decisions test"}}`,
+			`{"name":"create_session","arguments":{"project":"test","goal":"Pending decisions test"}}`,
 		),
 	}
 	resp = adapter.handleRequest(createSessionReq)
@@ -393,7 +393,7 @@ func TestMCPAdapter_GetPendingDecisions(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      3,
 		Method:  "tools/call",
-		Params:  json.RawMessage(fmt.Sprintf(`{"name":"kanban_create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test pending","dependencies":[]}}`, sessionID)),
+		Params:  json.RawMessage(fmt.Sprintf(`{"name":"create_delegation","arguments":{"session_id":"%s","agent":"dev","task_summary":"Test pending","dependencies":[]}}`, sessionID)),
 	}
 	resp = adapter.handleRequest(createDelReq)
 	result, _ = resp.Result.(*ToolsCallResult)
@@ -408,7 +408,7 @@ func TestMCPAdapter_GetPendingDecisions(t *testing.T) {
 		ID:      4,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_add_activity","arguments":{"delegation_id":"%s","type":"decision","content":"Choose tech stack","options":["React","Vue"]}}`, delegationID),
+			fmt.Sprintf(`{"name":"add_activity","arguments":{"delegation_id":"%s","type":"decision","content":"Choose tech stack","options":["React","Vue"]}}`, delegationID),
 		),
 	}
 	adapter.handleRequest(addReq)
@@ -419,18 +419,18 @@ func TestMCPAdapter_GetPendingDecisions(t *testing.T) {
 		ID:      5,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_add_activity","arguments":{"delegation_id":"%s","type":"progress","content":"Working..."}}`, delegationID),
+			fmt.Sprintf(`{"name":"add_activity","arguments":{"delegation_id":"%s","type":"progress","content":"Working..."}}`, delegationID),
 		),
 	}
 	adapter.handleRequest(addProgressReq)
 
-	// Test kanban_get_pending_decisions
+	// Test get_pending_decisions
 	getPendingReq := JSONRPCRequest{
 		JSONRPC: "2.0",
 		ID:      6,
 		Method:  "tools/call",
 		Params: json.RawMessage(
-			fmt.Sprintf(`{"name":"kanban_get_pending_decisions","arguments":{"session_id":"%s"}}`, sessionID),
+			fmt.Sprintf(`{"name":"get_pending_decisions","arguments":{"session_id":"%s"}}`, sessionID),
 		),
 	}
 	resp = adapter.handleRequest(getPendingReq)

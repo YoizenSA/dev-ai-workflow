@@ -34,6 +34,18 @@ func (s *Session) matchQuery(query string) bool {
 	return false
 }
 
+// handoffPreviewMaxLen bounds the auto-generated preview length.
+const handoffPreviewMaxLen = 280
+
+// DeriveHandoffPreview builds a short, single-line preview from a full handoff.
+func DeriveHandoffPreview(handoff string) string {
+	preview := strings.Join(strings.Fields(handoff), " ")
+	if len(preview) > handoffPreviewMaxLen {
+		preview = strings.TrimSpace(preview[:handoffPreviewMaxLen]) + "…"
+	}
+	return preview
+}
+
 // Delegation represents a task delegated to an agent on the board.
 type Delegation struct {
 	ID             string     `json:"id"`
@@ -46,6 +58,7 @@ type Delegation struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	Handoff        string     `json:"handoff,omitempty"` // full handoff detail
 	HandoffPreview string     `json:"handoff_preview,omitempty"`
 	Blocker        string     `json:"blocker,omitempty"`
 	PendingAction  bool       `json:"pending_action,omitempty"`

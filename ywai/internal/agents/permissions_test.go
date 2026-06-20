@@ -144,12 +144,12 @@ func TestClassifyMCPTool_Engram_Admin(t *testing.T) {
 
 func TestClassifyMCPTool_Kanban_Read(t *testing.T) {
 	tools := []string{
-		"ywai-kanban_kanban_get_board",
-		"ywai-kanban_kanban_get_activities",
-		"ywai-kanban_kanban_get_graph",
-		"ywai-kanban_kanban_get_pending_decisions",
-		"ywai-kanban_kanban_get_ui_url",
-		"ywai-kanban_kanban_list_sessions",
+		"ywai-kanban_get_board",
+		"ywai-kanban_get_activities",
+		"ywai-kanban_get_graph",
+		"ywai-kanban_get_pending_decisions",
+		"ywai-kanban_get_ui_url",
+		"ywai-kanban_list_sessions",
 	}
 	for _, tool := range tools {
 		t.Run(tool, func(t *testing.T) {
@@ -162,11 +162,11 @@ func TestClassifyMCPTool_Kanban_Read(t *testing.T) {
 
 func TestClassifyMCPTool_Kanban_Write(t *testing.T) {
 	tools := []string{
-		"ywai-kanban_kanban_create_delegation",
-		"ywai-kanban_kanban_create_session",
-		"ywai-kanban_kanban_delete_session",
-		"ywai-kanban_kanban_update_delegation",
-		"ywai-kanban_kanban_add_activity",
+		"ywai-kanban_create_delegation",
+		"ywai-kanban_create_session",
+		"ywai-kanban_delete_session",
+		"ywai-kanban_update_delegation",
+		"ywai-kanban_add_activity",
 	}
 	for _, tool := range tools {
 		t.Run(tool, func(t *testing.T) {
@@ -391,7 +391,7 @@ func TestMCPEnforce_AskAgentConfig(t *testing.T) {
 		"context7_query-docs",
 		"ado_pr",
 		"engram_mem_context",
-		"ywai-kanban_kanban_get_board",
+		"ywai-kanban_get_board",
 		"delegate",
 	}
 	for _, tool := range readTools {
@@ -407,7 +407,7 @@ func TestMCPEnforce_AskAgentConfig(t *testing.T) {
 		"ado_review",
 		"ado_pr_comment",
 		"engram_mem_save",
-		"ywai-kanban_kanban_create_delegation",
+		"ywai-kanban_create_delegation",
 	}
 	for _, tool := range writeTools {
 		t.Run("write_"+tool, func(t *testing.T) {

@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 )
 
@@ -191,7 +190,7 @@ func (m *MCPAdapter) handleInitialize(req JSONRPCRequest) *JSONRPCResponse {
 func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 	tools := []map[string]interface{}{
 		{
-			"name":        "kanban_create_session",
+			"name":        "create_session",
 			"description": "Create a new kanban session",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -209,7 +208,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_create_delegation",
+			"name":        "create_delegation",
 			"description": "Create a new delegation card",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -235,8 +234,8 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_update_delegation",
-			"description": "Update delegation status and column",
+			"name":        "update_delegation",
+			"description": "Update a delegation's column, status, handoff, or blocker. The column moves the card and is independent of status. Provide 'handoff' with the full detail of what the task did/produced; a short preview is generated automatically.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -244,15 +243,21 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 						"type": "string",
 					},
 					"column": map[string]interface{}{
-						"type": "string",
-						"enum": []string{"backlog", "ready", "in_progress", "review", "done"},
+						"type":        "string",
+						"description": "Board column the card should move to. Independent of status.",
+						"enum":        []string{"backlog", "ready", "in_progress", "review", "done"},
 					},
 					"status": map[string]interface{}{
 						"type": "string",
 						"enum": []string{"pending", "running", "review", "changes", "blocked", "done"},
 					},
+					"handoff": map[string]interface{}{
+						"type":        "string",
+						"description": "Full handoff / detail of what this task is doing or has produced. A short preview is derived automatically.",
+					},
 					"handoff_preview": map[string]interface{}{
-						"type": "string",
+						"type":        "string",
+						"description": "Optional explicit short preview. Usually omit it and let it derive from 'handoff'.",
 					},
 					"blocker": map[string]interface{}{
 						"type": "string",
@@ -262,7 +267,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_list_sessions",
+			"name":        "list_sessions",
 			"description": "List kanban sessions, grouped by project. Filter by status, project, or search query.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -283,7 +288,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_get_board",
+			"name":        "get_board",
 			"description": "Get kanban board for a session",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -296,7 +301,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_get_ui_url",
+			"name":        "get_ui_url",
 			"description": "Get the Kanban UI URL to open in browser",
 			"inputSchema": map[string]interface{}{
 				"type":       "object",
@@ -304,7 +309,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_delete_session",
+			"name":        "delete_session",
 			"description": "Delete a kanban session and all its delegations",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -318,7 +323,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_add_activity",
+			"name":        "add_activity",
 			"description": "Add a progress update, decision request, or question to a delegation",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -346,7 +351,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_get_activities",
+			"name":        "get_activities",
 			"description": "Get activity timeline for a delegation",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -360,7 +365,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_get_pending_decisions",
+			"name":        "get_pending_decisions",
 			"description": "Get unresolved decisions, questions, and blockers for a session",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -374,7 +379,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_get_graph",
+			"name":        "get_graph",
 			"description": "Get dependency graph for a session (nodes + edges). Shows task dependencies and helps identify blockers.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -388,7 +393,7 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
-			"name":        "kanban_resolve_activity",
+			"name":        "resolve_activity",
 			"description": "Resolve a pending decision, question, or blocker on a delegation",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
@@ -430,29 +435,29 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 	var err error
 
 	switch params.Name {
-	case "kanban_create_session":
+	case "create_session":
 		result, err = m.callCreateSession(params.Arguments)
-	case "kanban_create_delegation":
+	case "create_delegation":
 		result, err = m.callCreateDelegation(params.Arguments)
-	case "kanban_update_delegation":
+	case "update_delegation":
 		result, err = m.callUpdateDelegation(params.Arguments)
-	case "kanban_list_sessions":
+	case "list_sessions":
 		result, err = m.callListSessions(params.Arguments)
-	case "kanban_get_board":
+	case "get_board":
 		result, err = m.callGetBoard(params.Arguments)
-	case "kanban_get_ui_url":
+	case "get_ui_url":
 		result, err = m.callGetUIURL()
-	case "kanban_delete_session":
+	case "delete_session":
 		result, err = m.callDeleteSession(params.Arguments)
-	case "kanban_add_activity":
+	case "add_activity":
 		result, err = m.callAddActivity(params.Arguments)
-	case "kanban_get_activities":
+	case "get_activities":
 		result, err = m.callGetActivities(params.Arguments)
-	case "kanban_get_pending_decisions":
+	case "get_pending_decisions":
 		result, err = m.callGetPendingDecisions(params.Arguments)
-	case "kanban_resolve_activity":
+	case "resolve_activity":
 		result, err = m.callResolveActivity(params.Arguments)
-	case "kanban_get_graph":
+	case "get_graph":
 		result, err = m.callGetGraph(params.Arguments)
 	default:
 		return m.errorResponse(req.ID, -32601, "Tool not found: "+params.Name)
@@ -599,6 +604,7 @@ func (m *MCPAdapter) callUpdateDelegation(args json.RawMessage) (*ToolsCallResul
 		ID             string `json:"id"`
 		Column         string `json:"column"`
 		Status         string `json:"status"`
+		Handoff        string `json:"handoff"`
 		HandoffPreview string `json:"handoff_preview"`
 		Blocker        string `json:"blocker"`
 	}
@@ -606,34 +612,18 @@ func (m *MCPAdapter) callUpdateDelegation(args json.RawMessage) (*ToolsCallResul
 		return nil, err
 	}
 
-	// Fetch current delegation to get its current FSM status for transition validation
-	var curStatus string
-	if req.Status != "" {
-		getBody, getErr := m.doRequest("GET", fmt.Sprintf("/api/delegations/%s", req.ID), nil)
-		if getErr == nil {
-			var cur Delegation
-			if json.Unmarshal(getBody, &cur) == nil {
-				curStatus = cur.Status
-			}
-		}
-	}
-
 	bodyMap := make(map[string]string)
 	if req.Column != "" {
 		bodyMap["column"] = req.Column
 	}
 	if req.Status != "" {
-		// Map kanban status to FSM and validate the transition
-		fsmStatus := MapKanbanStatusToFSM(req.Status)
-		if curStatus != "" {
-			if err := missions.IsValidTransition(
-				missions.MissionStatus(curStatus),
-				fsmStatus,
-			); err != nil {
-				return nil, fmt.Errorf("invalid status transition: %w", err)
-			}
-		}
-		bodyMap["status"] = string(fsmStatus)
+		// The kanban board is decoupled from the mission FSM (moving a card never
+		// affects the engine), so we just map the status to its FSM value and store
+		// it — no transition validation, which previously blocked valid board moves.
+		bodyMap["status"] = req.Status
+	}
+	if req.Handoff != "" {
+		bodyMap["handoff"] = req.Handoff
 	}
 	if req.HandoffPreview != "" {
 		bodyMap["handoff_preview"] = req.HandoffPreview
@@ -674,6 +664,8 @@ func buildUpdateMsg(d Delegation) string {
 	}
 	if d.HandoffPreview != "" {
 		parts = append(parts, fmt.Sprintf("handoff: %s", d.HandoffPreview))
+	} else if d.Handoff != "" {
+		parts = append(parts, fmt.Sprintf("handoff: %s", DeriveHandoffPreview(d.Handoff)))
 	}
 	if d.Blocker != "" {
 		parts = append(parts, fmt.Sprintf("blocker: %s", d.Blocker))
@@ -876,7 +868,28 @@ func (m *MCPAdapter) callGetActivities(args json.RawMessage) (*ToolsCallResult, 
 		return nil, err
 	}
 
-	lines := []string{fmt.Sprintf("Activities for delegation %s:", req.DelegationID)}
+	var lines []string
+
+	// Lead with the task's full detail (status, column, handoff, blocker) so the
+	// reader sees what the task is doing before the activity timeline.
+	if delBody, delErr := m.doRequest("GET", fmt.Sprintf("/api/delegations/%s", req.DelegationID), nil); delErr == nil {
+		var d Delegation
+		if json.Unmarshal(delBody, &d) == nil {
+			lines = append(lines, fmt.Sprintf("Delegation %s — %s", d.ID, d.TaskSummary))
+			lines = append(lines, fmt.Sprintf("status: %s | column: %s | agent: %s", d.Status, d.Column, d.Agent))
+			if d.Handoff != "" {
+				lines = append(lines, "", "Handoff:", d.Handoff)
+			} else if d.HandoffPreview != "" {
+				lines = append(lines, "", "Handoff: "+d.HandoffPreview)
+			}
+			if d.Blocker != "" {
+				lines = append(lines, "", "Blocker: "+d.Blocker)
+			}
+			lines = append(lines, "")
+		}
+	}
+
+	lines = append(lines, fmt.Sprintf("Activity timeline (%d):", len(activities)))
 	for _, a := range activities {
 		status := ""
 		if a.ResolvedAt != nil {

@@ -35,10 +35,10 @@ When unsure, default to **goal** — the ceremony helps a learner see progress. 
 
 When triage classifies the request as a **goal**, you MUST follow this sequence. Do NOT skip steps. Do NOT investigate directly first.
 
-1. **Call `kanban_create_session`** with the project name and goal. Store the session_id. This is your FIRST tool call for a goal, always.
+1. **Call `create_session`** with the project name and goal. Store the session_id. This is your FIRST tool call for a goal, always.
 2. **Call `todowrite`** with the QA automation checklist (analyze → explore → implement → review → close).
 3. **Delegate the first phase** via `task` or `delegate` to `qa-automation/qa-analyst` (understand requirements). Do NOT read files yourself.
-4. **For every delegation**, call `kanban_create_delegation` to create a board card.
+4. **For every delegation**, call `create_delegation` to create a board card.
 
 If you catch yourself calling `read`, `grep`, `glob`, or `codegraph_*` directly: STOP. You are doing the job of a subagent. Delegate instead.
 
@@ -109,7 +109,7 @@ A learner can't tell when the orchestrator is stuck in a loop — so you must ca
 | `blocked` / `needs-decision` | Translate to simple terms, ask the user, or re-delegate with the missing context | If still blocked after the user answers and one re-delegation, escalate again — explain what's still missing in everyday language. |
 | `done` but the user reports it doesn't work | Re-delegate to `@qa-dev` with the user's feedback | After 2 tries, stop and tell the user plainly: "We've tried this twice and it's still not working. Here's what happened each time. Want me to try a different approach, or should we take a step back?" |
 
-**Default budget: 2 re-delegations** per subagent per task. Every retry must show on the Kanban board as a `kanban_add_activity(type="progress", content="retry N: <reason in plain language>")` so the learner can see you're trying again and why.
+**Default budget: 2 re-delegations** per subagent per task. Every retry must show on the Kanban board as a `add_activity(type="progress", content="retry N: <reason in plain language>")` so the learner can see you're trying again and why.
 
 Never loop silently. When you escalate, hand the user enough to decide: what the task was, what each attempt produced, and a clear question — re-scope, try differently, or take a break.
 
@@ -130,21 +130,21 @@ The Kanban board is the user's primary visual progress signal. For a manual QA t
 >
 > **Conflict rule**: if `todowrite` and Kanban ever disagree about where things stand, **Kanban wins**. Update `todowrite` to reflect the board. Never silently let them drift.
 
-> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_kanban_*` (e.g. `ywai-kanban_kanban_create_session`). The short `kanban_*` form is used below for readability — call whichever form your host exposes.
+> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_*` (e.g. `ywai-kanban_create_session`). The short bare names (e.g. `create_session`) are used below for readability — call whichever form your host exposes.
 
 ### Hard Gate: Session Start
 
 At the start of every session with a goal, you MUST:
 
-1. Call `kanban_create_session(project=<repo/project name>, goal=<session goal>)`.
-2. If the call succeeds → store the `session_id` and call `kanban_get_ui_url()` to share the board URL with the user. Tell them: "You can watch our progress here: <url>".
+1. Call `create_session(project=<repo/project name>, goal=<session goal>)`.
+2. If the call succeeds → store the `session_id` and call `get_ui_url()` to share the board URL with the user. Tell them: "You can watch our progress here: <url>".
 3. If the call fails or the tool is unavailable → tell the user: "The progress board isn't available right now — I'll track our steps in a checklist instead." Then use `todowrite` only.
 
 **Do NOT silently skip the kanban.** Always attempt it first. The user expects to see a board.
 
 ### Hard Gate: Every Delegation (within a goal session)
 
-Every time you call `delegate()` or `task()` **inside a goal session**, you MUST also call `kanban_create_delegation(session_id, agent, task_summary, dependencies)` to create a card. Store the returned `delegation_id` — you will need it for every subsequent update.
+Every time you call `delegate()` or `task()` **inside a goal session**, you MUST also call `create_delegation(session_id, agent, task_summary, dependencies)` to create a card. Store the returned `delegation_id` — you will need it for every subsequent update.
 
 Two exemptions, both legitimate:
 - **Trivial direct delegation**: when triage classified the request as trivial and you delegate straight to `@qa-dev`/`@qa-ask` with no session — no card needed, by design.
@@ -158,25 +158,25 @@ Update the board on these events. Skip micro-updates — the board is a progress
 
 | Event | Kanban calls |
 |---|---|
-| **Delegation created / starts running** | `kanban_create_delegation(...)` → store `delegation_id`, then `kanban_update_delegation(id, column="in_progress", status="running")` |
-| **Handoff received** | `kanban_add_activity(...)` with a one-line preview → `kanban_update_delegation(id, column="review", status="review", handoff_preview="<brief>")` |
-| **Blocker / needs decision** | `kanban_add_activity(type="blocked", content="<reason>", options=[...])` → `kanban_update_delegation(id, status="blocked", blocker="<reason>")` |
-| **Approved → done** | `kanban_resolve_activity(...)` if pending → `kanban_update_delegation(id, column="done", status="done")` |
-| **Changes requested** | `kanban_update_delegation(id, column="backlog", status="changes")` |
+| **Delegation created / starts running** | `create_delegation(...)` → store `delegation_id`, then `update_delegation(id, column="in_progress", status="running")` |
+| **Handoff received** | `add_activity(...)` with a one-line preview → `update_delegation(id, column="review", status="review", handoff_preview="<brief>")` |
+| **Blocker / needs decision** | `add_activity(type="blocked", content="<reason>", options=[...])` → `update_delegation(id, status="blocked", blocker="<reason>")` |
+| **Approved → done** | `resolve_activity(...)` if pending → `update_delegation(id, column="done", status="done")` |
+| **Changes requested** | `update_delegation(id, column="backlog", status="changes")` |
 
-For mid-run progress that doesn't change column/status, a single `kanban_add_activity(type="progress", ...)` is enough — don't chain multiple updates per heartbeat.
+For mid-run progress that doesn't change column/status, a single `add_activity(type="progress", ...)` is enough — don't chain multiple updates per heartbeat.
 
 ### Reading Board State
 
-- **Board overview**: `kanban_get_board(session_id)` — all cards grouped by column.
-- **Card history**: `kanban_get_activities(delegation_id)` — full activity timeline.
-- **Pending blockers**: `kanban_get_pending_decisions(session_id)` — unresolved decisions/questions.
-- **Dependency graph**: `kanban_get_graph(session_id)` — task dependencies and blockers.
-- **Resolve a decision**: `kanban_resolve_activity(delegation_id, activity_id, resolution)`.
+- **Board overview**: `get_board(session_id)` — all cards grouped by column.
+- **Card history**: `get_activities(delegation_id)` — full activity timeline.
+- **Pending blockers**: `get_pending_decisions(session_id)` — unresolved decisions/questions.
+- **Dependency graph**: `get_graph(session_id)` — task dependencies and blockers.
+- **Resolve a decision**: `resolve_activity(delegation_id, activity_id, resolution)`.
 
 ### Sharing the Board with the User
 
-Call `kanban_get_ui_url()` at session start and whenever the user asks about progress. Always share the URL so they can open the visual board — for a learner, watching the steps build confidence.
+Call `get_ui_url()` at session start and whenever the user asks about progress. Always share the URL so they can open the visual board — for a learner, watching the steps build confidence.
 
 ### Column / Status Reference
 

@@ -336,7 +336,7 @@ func (s *Store) DeleteDelegation(id string) error {
 
 // UpdateDelegation applies the given updates to a delegation.
 // Supported fields: status, column, handoff_preview, blocker.
-func (s *Store) UpdateDelegation(id string, status, column, handoffPreview, blocker *string) (*Delegation, error) {
+func (s *Store) UpdateDelegation(id string, status, column, handoff, handoffPreview, blocker *string) (*Delegation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer s.autoSave()
@@ -357,11 +357,23 @@ func (s *Store) UpdateDelegation(id string, status, column, handoffPreview, bloc
 		if fsmStatus == missions.MissionCompleted && d.CompletedAt == nil {
 			d.CompletedAt = &now
 		}
-		// Column is derived from Status, not independently set.
-		d.Column = MapFSMToKanbanColumn(fsmStatus)
-	} else if column != nil {
-		// Accept explicit column only when status is not being changed.
+	}
+
+	// Column is independent of status: an explicit column always wins. When no
+	// column is given but the status changed, fall back to the derived column so
+	// the projector (missions→kanban) keeps moving cards.
+	if column != nil {
 		d.Column = *column
+	} else if status != nil {
+		d.Column = MapFSMToKanbanColumn(missions.MissionStatus(*status))
+	}
+
+	if handoff != nil {
+		d.Handoff = *handoff
+		// Keep the preview in sync with the full handoff unless one is set explicitly.
+		if handoffPreview == nil {
+			d.HandoffPreview = DeriveHandoffPreview(*handoff)
+		}
 	}
 	if handoffPreview != nil {
 		d.HandoffPreview = *handoffPreview
