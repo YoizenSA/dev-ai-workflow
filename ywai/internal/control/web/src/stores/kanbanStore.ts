@@ -19,7 +19,7 @@ interface KanbanState {
   error: string | null
 
   // Actions
-  fetchSessions: () => Promise<void>
+  fetchSessions: (preferredId?: string) => Promise<void>
   selectSession: (session: Session) => Promise<void>
   createSession: (project: string, goal: string) => Promise<Session>
   deleteSession: (id: string) => Promise<void>
@@ -52,15 +52,20 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
   loading: false,
   error: null,
 
-  fetchSessions: async () => {
+  fetchSessions: async (preferredId?: string) => {
     set({ loading: true, error: null })
     try {
       const sessions = await kanbanApi.listSessions()
       set({ sessions, loading: false })
-      // Auto-select first active session (prefer sessions with delegations)
-      const active = sessions.find((s) => s.status === 'active')
-      if (active && !get().activeSession) {
-        await get().selectSession(active)
+      if (get().activeSession) return
+      // Prefer the session requested via URL (deep-link / reload), then fall
+      // back to the first active session.
+      const preferred = preferredId
+        ? sessions.find((s) => s.id === preferredId)
+        : undefined
+      const target = preferred ?? sessions.find((s) => s.status === 'active')
+      if (target) {
+        await get().selectSession(target)
       }
     } catch (err) {
       set({ error: String(err), loading: false })

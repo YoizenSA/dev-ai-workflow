@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
@@ -215,6 +216,8 @@ export default function Kanban() {
 		handleWSMessage,
 	} = useKanbanStore();
 
+	const [searchParams, setSearchParams] = useSearchParams();
+
 	const onWSMessage = useCallback(
 		(msg: WSMessage) => handleWSMessage(msg),
 		[handleWSMessage],
@@ -222,9 +225,22 @@ export default function Kanban() {
 
 	useWebSocket("/api/events", onWSMessage);
 
+	// On first load, honor a ?session=<id> deep-link (e.g. after F5) and fall
+	// back to the first active session otherwise.
 	useEffect(() => {
-		fetchSessions();
+		fetchSessions(searchParams.get("session") ?? undefined);
+		// Only on mount — the URL is kept in sync by the effect below.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [fetchSessions]);
+
+	// Keep the URL in sync with the selected session so reloads/sharing work.
+	useEffect(() => {
+		if (!activeSession) return;
+		if (searchParams.get("session") === activeSession.id) return;
+		const next = new URLSearchParams(searchParams);
+		next.set("session", activeSession.id);
+		setSearchParams(next, { replace: true });
+	}, [activeSession, searchParams, setSearchParams]);
 
 	const handleDrop = (e: React.DragEvent, col: DelegationColumn) => {
 		e.preventDefault();

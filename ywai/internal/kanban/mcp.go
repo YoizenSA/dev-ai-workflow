@@ -302,10 +302,15 @@ func (m *MCPAdapter) handleToolsList(req JSONRPCRequest) *JSONRPCResponse {
 		},
 		{
 			"name":        "get_ui_url",
-			"description": "Get the Kanban UI URL to open in browser",
+			"description": "Get the Kanban UI URL to open in browser. Pass session_id to get a deep-link that opens straight to that session (survives reload).",
 			"inputSchema": map[string]interface{}{
-				"type":       "object",
-				"properties": map[string]interface{}{},
+				"type": "object",
+				"properties": map[string]interface{}{
+					"session_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional session ID to deep-link directly to that board.",
+					},
+				},
 			},
 		},
 		{
@@ -446,7 +451,7 @@ func (m *MCPAdapter) handleToolsCall(req JSONRPCRequest) *JSONRPCResponse {
 	case "get_board":
 		result, err = m.callGetBoard(params.Arguments)
 	case "get_ui_url":
-		result, err = m.callGetUIURL()
+		result, err = m.callGetUIURL(params.Arguments)
 	case "delete_session":
 		result, err = m.callDeleteSession(params.Arguments)
 	case "add_activity":
@@ -784,8 +789,18 @@ func (m *MCPAdapter) callGetBoard(args json.RawMessage) (*ToolsCallResult, error
 	}, nil
 }
 
-func (m *MCPAdapter) callGetUIURL() (*ToolsCallResult, error) {
+func (m *MCPAdapter) callGetUIURL(args json.RawMessage) (*ToolsCallResult, error) {
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	// Arguments are optional; ignore unmarshal errors (e.g. empty/no args).
+	_ = json.Unmarshal(args, &req)
+
 	url := fmt.Sprintf("http://localhost:%d", m.port)
+	if req.SessionID != "" {
+		// Deep-link straight to the session; survives reload (F5).
+		url = fmt.Sprintf("%s/?session=%s", url, req.SessionID)
+	}
 	return &ToolsCallResult{
 		Content: []ToolContent{
 			{Type: "text", Text: fmt.Sprintf("🚀 ywai Kanban UI: %s\n📊 Open this URL in your browser to view the Kanban board", url)},
