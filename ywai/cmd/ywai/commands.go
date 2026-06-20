@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -96,12 +94,13 @@ func killPort(port int) error {
 		}
 	}
 
-	// Fallback: Windows netsh
-	cmd = exec.Command("netsh", "interface", "ipv4", "show", "tcpconnections",
-		fmt.Sprintf("localport=%d", port))
+	// Fallback: Windows netstat -ano (findstr filters to lines with the port)
+	cmd = exec.Command("cmd", "/C",
+		fmt.Sprintf("netstat -ano | findstr :%d", port))
 	out, err = cmd.Output()
 	if err == nil {
-		// Parse netsh output for PIDs (the PID is the last column on each row).
+		// netstat -ano output: "  TCP    0.0.0.0:5768    0.0.0.0:0    LISTENING    1234"
+		// The PID is the last whitespace-separated field on each line.
 		for _, line := range strings.Split(string(out), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 5 {
@@ -130,7 +129,7 @@ func parsePIDs(raw string) []int {
 	return pids
 }
 
-// killPIDs sends SIGTERM (graceful) to every PID and returns the last error
+// killPIDs sends a termination signal to every PID and returns the last error
 // encountered (nil if all succeeded). A process that already exited reports
 // "process already finished", which we treat as success — the goal is that
 // nothing is left listening on the port.
@@ -142,23 +141,6 @@ func killPIDs(pids []int) error {
 		}
 	}
 	return lastErr
-}
-
-// killPIDInt sends SIGTERM to a numeric PID. An already-finished process is
-// not an error here (the caller's intent — free the port — is satisfied).
-func killPIDInt(pid int) error {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("cannot find process %d: %w", pid, err)
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		// "process already finished" / ESRCH means nothing to stop — succeed.
-		if errors.Is(err, os.ErrProcessDone) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 // readStopPIDFile reads the first valid PID from a PID file. Accepts a file
@@ -960,9 +942,7 @@ var serveCmd = &cobra.Command{
 					return fmt.Errorf("failed to resolve ywai binary after update: %w", err)
 				}
 				fmt.Printf("Updated %s → %s, restarting...\n", version, newVer)
-				if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
-					return fmt.Errorf("failed to re-exec after update: %w", err)
-				}
+				reexecSelf(exe)
 			}
 		}
 

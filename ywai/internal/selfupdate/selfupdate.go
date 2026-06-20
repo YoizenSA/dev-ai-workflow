@@ -192,6 +192,11 @@ func downloadAndReplace(version string) (string, error) {
 	bakPath := exe + ".bak"
 	_ = os.Remove(bakPath)
 	if err := os.Rename(exe, bakPath); err != nil {
+		// Windows locks the running executable and may refuse the rename
+		// with "Access denied". Fall back to a platform-specific handler.
+		if runtime.GOOS == "windows" {
+			return deferredReplace(binaryPath, exe, version)
+		}
 		return "", fmt.Errorf("cannot backup old binary: %w", err)
 	}
 
