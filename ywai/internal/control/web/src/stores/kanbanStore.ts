@@ -155,9 +155,19 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
   },
 
   resolveActivity: async (delegationId, activityId, resolution) => {
-    await kanbanApi.resolveActivity(delegationId, activityId, resolution)
+    const resolved = await kanbanApi.resolveActivity(
+      delegationId,
+      activityId,
+      resolution,
+    )
     set((s) => ({
       pendingDecisions: s.pendingDecisions.filter((a) => a.id !== activityId),
+      activities: {
+        ...s.activities,
+        [delegationId]: (s.activities[delegationId] ?? []).map((a) =>
+          a.id === activityId ? resolved : a,
+        ),
+      },
     }))
   },
 
@@ -200,6 +210,36 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
           ]
         }
         set({ board: newBoard })
+        break
+      }
+      case 'activity.created': {
+        const a = msg.payload as ActivityEvent
+        const list = state.activities[a.delegation_id]
+        // Only append if the timeline is already loaded; otherwise it will be
+        // fetched fresh (with this event included) when the card is expanded.
+        if (list === undefined) break
+        if (list.some((x) => x.id === a.id)) break
+        set({
+          activities: {
+            ...state.activities,
+            [a.delegation_id]: [...list, a],
+          },
+        })
+        break
+      }
+      case 'activity.resolved': {
+        const a = msg.payload as ActivityEvent
+        const list = state.activities[a.delegation_id]
+        if (list === undefined) break
+        set({
+          activities: {
+            ...state.activities,
+            [a.delegation_id]: list.map((x) => (x.id === a.id ? a : x)),
+          },
+        })
+        set((s) => ({
+          pendingDecisions: s.pendingDecisions.filter((p) => p.id !== a.id),
+        }))
         break
       }
       case 'delegation.deleted': {

@@ -252,6 +252,14 @@
 	margin-top: var(--space-3);
 }
 
+.detail-section {
+	margin-bottom: var(--space-4);
+}
+
+.detail-section:last-child {
+	margin-bottom: 0;
+}
+
 .delegation-handoff-full-text {
 	font-size: 0.75rem;
 	color: var(--text-muted);

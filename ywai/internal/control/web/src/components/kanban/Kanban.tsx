@@ -3,6 +3,7 @@ import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
 import CreateDelegationModal from "./CreateDelegationModal";
+import DelegationDetailModal from "./DelegationDetailModal";
 import "./Kanban.css";
 
 const COLUMNS: { id: DelegationColumn; label: string; color: string }[] = [
@@ -15,15 +16,37 @@ const COLUMNS: { id: DelegationColumn; label: string; color: string }[] = [
 
 const AGENT_PILL: Record<string, string> = {
 	dev: "pill-info",
-	qa: "pill-success",
-	architect: "pill-warn",
-	reviewer: "pill-muted",
+	qa: "pill-warning",
+	architect: "pill-accent",
+	reviewer: "pill-primary",
 	devops: "pill-danger",
 };
+
+// Palette used to derive a stable color for agents that aren't hardcoded above.
+const PILL_PALETTE = [
+	"pill-info",
+	"pill-warning",
+	"pill-accent",
+	"pill-primary",
+	"pill-danger",
+	"pill-success",
+];
+
+// agentPillClass returns the hardcoded pill for known agents, or a deterministic
+// color derived from the agent name so every distinct name gets a stable hue.
+function agentPillClass(agent: string): string {
+	if (AGENT_PILL[agent]) return AGENT_PILL[agent];
+	let hash = 0;
+	for (let i = 0; i < agent.length; i++) {
+		hash = (hash * 31 + agent.charCodeAt(i)) >>> 0;
+	}
+	return PILL_PALETTE[hash % PILL_PALETTE.length];
+}
 
 function DelegationCard({ delegation }: { delegation: Delegation }) {
 	const { fetchActivities, resolveActivity, moveDelegation } = useKanbanStore();
 	const [expanded, setExpanded] = useState(false);
+	const [showDetail, setShowDetail] = useState(false);
 	const [dragging, setDragging] = useState(false);
 	const activities = useKanbanStore((s) => s.activities[delegation.id]);
 
@@ -41,7 +64,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 		if (next && !activities) fetchActivities(delegation.id);
 	};
 
-	const pillClass = AGENT_PILL[delegation.agent] ?? "pill-muted";
+	const pillClass = agentPillClass(delegation.agent);
 	const shortId = delegation.id.split("-")[0]?.slice(0, 8) ?? delegation.id;
 
 	return (
@@ -151,6 +174,12 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 					</div>
 
 					<div className="delegation-move-row">
+						<button
+							className="quick-move-btn"
+							onClick={() => setShowDetail(true)}
+						>
+							⤢ Details
+						</button>
 						{COLUMNS.filter((c) => c.id !== delegation.column).map((c) => (
 							<button
 								key={c.id}
@@ -163,6 +192,12 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 					</div>
 				</div>
 			)}
+
+			<DelegationDetailModal
+				delegation={delegation}
+				open={showDetail}
+				onClose={() => setShowDetail(false)}
+			/>
 		</div>
 	);
 }
