@@ -258,8 +258,9 @@ visually without reading handoffs. The Kanban is your audit trail.
 5. **On handoff received** (after reading the handoff):
    - Call `add_activity(delegation_id=<id>, type="progress",
      content="<handoff summary>")` to store the handoff content
-   - Call `update_delegation(id, handoff_preview="<brief summary>")`
-     to set a short preview on the card
+   - Call `update_delegation(id, handoff="<full handoff / plan>")`
+     to store the complete detail on the card (the preview auto-derives;
+     the card shows this full text in its Details modal — do NOT truncate)
    - Call `update_delegation(id, column="review", status="review")`
      to move the card to the Review column
 

@@ -194,7 +194,7 @@ Update the board on these events. Skip micro-updates — the board is a progress
 | Event | Kanban calls |
 |---|---|
 | **Delegation created / starts running** | `create_delegation(...)` → store `delegation_id`, then `update_delegation(id, column="in_progress", status="running")` |
-| **Handoff received** | `add_activity(...)` with a one-line preview → `update_delegation(id, column="review", status="review", handoff_preview="<brief>")` |
+| **Handoff received** | `add_activity(...)` with a one-line preview → `update_delegation(id, column="review", status="review", handoff="<full Detail / plan from the handoff>", handoff_preview="<brief>")` — always pass the full `handoff`; the preview auto-derives if omitted |
 | **Blocker / needs decision** | `add_activity(type="blocked", content="<reason>", options=[...])` → `update_delegation(id, status="blocked", blocker="<reason>")` |
 | **Approved → done** | `resolve_activity(...)` if pending → `update_delegation(id, column="done", status="done")` |
 | **Changes requested** | `update_delegation(id, column="backlog", status="changes")` |
