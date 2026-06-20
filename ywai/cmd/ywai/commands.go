@@ -324,7 +324,13 @@ var installCmd = &cobra.Command{
 				fmt.Println("Installation cancelled.")
 				return
 			}
-			agentFlag = result.Agent
+			// "all" means install for every detected agent -- clear the flag so
+			// executeInstall resolves all agents instead of looking up "all".
+			if result.Agent == "all" {
+				agentFlag = ""
+			} else {
+				agentFlag = result.Agent
+			}
 			installMCP = result.MCP
 			installADO = result.ADO
 			globalOnly = result.GlobalOnly
