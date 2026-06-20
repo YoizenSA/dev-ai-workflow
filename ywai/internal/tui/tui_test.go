@@ -235,12 +235,13 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 	if m.optionsCursor != 0 {
 		t.Fatalf("cursor should stay at 0, got %d", m.optionsCursor)
 	}
-	// Go to bottom (4 = Persona)
+	// Go to bottom (5 = Overwrite agents). With no groups loaded the cursor
+	// stops at the last option row instead of jumping to group selection.
 	for i := 0; i < 10; i++ {
 		sendKey(&m, "down")
 	}
-	if m.optionsCursor != 4 {
-		t.Fatalf("cursor should max at 4, got %d", m.optionsCursor)
+	if m.optionsCursor != optionsRowCount-1 {
+		t.Fatalf("cursor should max at %d, got %d", optionsRowCount-1, m.optionsCursor)
 	}
 }
 

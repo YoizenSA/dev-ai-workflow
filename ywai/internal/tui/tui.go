@@ -112,6 +112,10 @@ const (
 	stepProgress
 )
 
+// optionsRowCount is the number of navigable rows on the Options step
+// (Preset, Scope, Global only, SDD Mode, Persona, Overwrite agents).
+const optionsRowCount = 6
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Choices
 // ──────────────────────────────────────────────────────────────────────────────
@@ -119,24 +123,24 @@ const (
 var (
 	presetChoices = []string{"full-gentleman", "ecosystem-only", "minimal"}
 	presetDescs   = map[string]string{
-		"full-gentleman": "gentle-ai completo + todos los skills + agentes preconfigurados",
-		"ecosystem-only": "Solo gentle-ai core (sin skills extra)",
-		"minimal":        "Solo lo esencial (gentle-ai básico)",
+		"full-gentleman": "Complete gentle-ai + all skills + preconfigured agents",
+		"ecosystem-only": "gentle-ai core only (no extra skills)",
+		"minimal":        "Just the essentials (basic gentle-ai)",
 	}
 	scopeChoices = []string{"global", "workspace"}
 	scopeDescs   = map[string]string{
-		"global":    "Skills compartidos entre todos tus proyectos (~/.local)",
-		"workspace": "Skills solo en este proyecto (directorio actual)",
+		"global":    "Skills shared across all your projects (~/.local)",
+		"workspace": "Skills only in this project (current directory)",
 	}
 	sddModeChoices = []string{"single", "multi"}
 	sddModeDescs   = map[string]string{
-		"single": "Un solo agente hace todo el trabajo",
-		"multi":  "Divide trabajo entre múltiples agentes (build, plan, etc.)",
+		"single": "A single agent does all the work",
+		"multi":  "Split work across multiple agents (build, plan, etc.)",
 	}
 	personaChoices = []string{"neutral", "gentleman"}
 	personaDescs   = map[string]string{
-		"neutral":   "Respuestas directas y concisas",
-		"gentleman": "Más cortés y explicativo",
+		"neutral":   "Direct, concise responses",
+		"gentleman": "More courteous and explanatory",
 	}
 )
 
@@ -178,6 +182,7 @@ type Model struct {
 	height    int
 	quitting  bool
 	confirmed bool // true only when user explicitly confirms at stepConfirm
+	showHelp  bool // keymap overlay toggled with "?"
 
 	// Install mode step
 	installModeCursor int // 0 = quick, 1 = custom
@@ -357,11 +362,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// The help overlay swallows the next key: any key closes it.
+		if m.showHelp {
+			m.showHelp = false
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+c", "q":
 			m.quitting = true
 			return m, tea.Quit
-		case "esc":
+		case "?":
+			m.showHelp = true
+			return m, nil
+		case "esc", "backspace":
 			return m.handleEsc()
 		case "enter":
 			return m.handleEnter()
@@ -468,12 +481,10 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepInstallMode:
-		if m.installModeCursor > 0 {
-			m.installModeCursor--
-		}
+		m.installModeCursor = (m.installModeCursor + 1) % 2 // 2 items: wrap
 	case stepAgent:
-		if m.agentCursor > 0 {
-			m.agentCursor--
+		if n := len(m.agents); n > 0 {
+			m.agentCursor = (m.agentCursor - 1 + n) % n
 		}
 	case stepOptions:
 		if m.showGroupOptions {
@@ -482,7 +493,7 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 			} else {
 				// Move back to options rows
 				m.showGroupOptions = false
-				m.optionsCursor = 4
+				m.optionsCursor = optionsRowCount - 1
 			}
 		} else {
 			if m.optionsCursor > 0 {
@@ -500,12 +511,10 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepInstallMode:
-		if m.installModeCursor < 1 {
-			m.installModeCursor++
-		}
+		m.installModeCursor = (m.installModeCursor + 1) % 2 // 2 items: wrap
 	case stepAgent:
-		if m.agentCursor < len(m.agents)-1 {
-			m.agentCursor++
+		if n := len(m.agents); n > 0 {
+			m.agentCursor = (m.agentCursor + 1) % n
 		}
 	case stepOptions:
 		if m.showGroupOptions {
@@ -513,7 +522,7 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 				m.groupCursor++
 			}
 		} else {
-			if m.optionsCursor < 4 {
+			if m.optionsCursor < optionsRowCount-1 {
 				m.optionsCursor++
 			} else if len(m.groupNames) > 0 {
 				// Move to group selection
@@ -641,6 +650,10 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	if m.showHelp {
+		return m.viewHelpOverlay()
+	}
+
 	var b strings.Builder
 
 	b.WriteString(m.renderBreadcrumbs())
@@ -663,6 +676,66 @@ func (m *Model) View() string {
 		b.WriteString(m.viewProgress())
 	}
 
+	b.WriteString(m.renderFooter())
+
+	return b.String()
+}
+
+// renderFooter draws a single, consistent key-hint line across the wizard
+// steps so the available keys are always shown in the same place and order.
+func (m *Model) renderFooter() string {
+	var keys string
+	switch m.step {
+	case stepInstallMode, stepAgent:
+		keys = "↑/↓ navigate  •  enter select"
+	case stepOptions:
+		if m.showGroupOptions {
+			keys = "↑/↓ navigate  •  space toggle  •  enter continue"
+		} else {
+			keys = "↑/↓ navigate  •  ←/→ change  •  enter continue"
+		}
+	case stepMCP:
+		keys = "↑/↓ navigate  •  space toggle  •  enter continue"
+	default:
+		return "" // welcome / confirm / progress have their own hints
+	}
+	global := "esc back  •  ? help  •  q quit"
+	return "\n\n" + helpStyle.Render("  "+keys+"  •  "+global)
+}
+
+// viewHelpOverlay renders a full keymap, toggled with "?".
+func (m *Model) viewHelpOverlay() string {
+	rows := [][2]string{
+		{"↑ / k", "Move up"},
+		{"↓ / j", "Move down"},
+		{"← / h", "Previous value"},
+		{"→ / l", "Next value"},
+		{"space", "Toggle option / checkbox"},
+		{"enter", "Select / continue"},
+		{"esc / backspace", "Go back"},
+		{"?", "Toggle this help"},
+		{"q / ctrl+c", "Quit"},
+	}
+	maxKey := 0
+	for _, r := range rows {
+		if w := lipgloss.Width(r[0]); w > maxKey {
+			maxKey = w
+		}
+	}
+	var lines []string
+	for _, r := range rows {
+		pad := strings.Repeat(" ", maxKey-lipgloss.Width(r[0])+3)
+		lines = append(lines, monoStyle.Render(r[0])+pad+dimStyle.Render(r[1]))
+	}
+	box := boxStyle.Render(strings.Join(lines, "\n"))
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(centerLine(titleStyle.Render("Keyboard shortcuts"), m.width))
+	b.WriteString("\n\n")
+	b.WriteString(centerBlock(box, m.width))
+	b.WriteString("\n\n")
+	b.WriteString(centerLine(helpStyle.Render("Press any key to close"), m.width))
 	return b.String()
 }
 
@@ -755,7 +828,7 @@ func (m *Model) viewWelcome() string {
 	}
 
 	// Key hints - centered
-	hints := dimStyle.Render("Enter to start  •  q to quit")
+	hints := dimStyle.Render("Enter to start  •  ? help  •  q to quit")
 	b.WriteString(centerLine(hints, m.width))
 
 	return b.String()
@@ -796,8 +869,22 @@ func (m *Model) viewInstallMode() string {
 		b.WriteString(fmt.Sprintf("  %s %s%s\n", cursor, name, desc))
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  ↑/↓ navigate  •  enter select  •  esc back"))
+	// Quick install preview: show the defaults that will be applied so the user
+	// isn't installing blind.
+	if m.installModeCursor == 0 {
+		b.WriteString("\n")
+		b.WriteString(subtitleStyle.Render("  Defaults that will be applied:"))
+		b.WriteString("\n")
+		defaults := [][2]string{
+			{"Preset", presetChoices[m.presetIdx]},
+			{"Scope", scopeChoices[m.scopeIdx]},
+			{"SDD Mode", sddModeChoices[m.sddModeIdx]},
+			{"Persona", personaChoices[m.personaIdx]},
+		}
+		for _, d := range defaults {
+			b.WriteString(fmt.Sprintf("    %s %s\n", dimStyle.Render(d[0]+":"), monoStyle.Render(d[1])))
+		}
+	}
 
 	return b.String()
 }
@@ -850,9 +937,6 @@ func (m *Model) viewAgent() string {
 			b.WriteString(fmt.Sprintf("  %s %s%s%s\n", cursor, name, pad, pathInfo))
 		}
 	}
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  ↑/↓ navigate  •  enter select  •  esc back"))
 
 	return b.String()
 }
@@ -915,7 +999,7 @@ func (m *Model) viewOptions() string {
 		pad := strings.Repeat(" ", maxLabel-len(r.label)+1)
 
 		// Value
-		value := monoStyle.Render(r.value)
+		value := renderValue(r.value)
 		if isSelected {
 			value = activeStyle.Render(r.value)
 		}
@@ -939,9 +1023,15 @@ func (m *Model) viewOptions() string {
 			b.WriteString(helpStyle.Render("    " + scopeDescs[scopeChoices[m.scopeIdx]]))
 		case 2:
 			if m.globalOnly {
-				b.WriteString(helpStyle.Render("    Solo skills globales (sin AGENTS.md/REVIEW.md en el repo)"))
+				b.WriteString(helpStyle.Render("    Global skills only (no AGENTS.md/REVIEW.md in the repo)"))
 			} else {
-				b.WriteString(helpStyle.Render("    Skills globales + AGENTS.md/REVIEW.md en el repo"))
+				b.WriteString(helpStyle.Render("    Global skills + AGENTS.md/REVIEW.md in the repo"))
+			}
+		case 5:
+			if m.overwriteAgents {
+				b.WriteString(helpStyle.Render("    Overwrite existing agent profiles with fresh copies"))
+			} else {
+				b.WriteString(helpStyle.Render("    Keep existing agent profiles untouched"))
 			}
 		case 3:
 			b.WriteString(helpStyle.Render("    " + sddModeDescs[sddModeChoices[m.sddModeIdx]]))
@@ -989,13 +1079,6 @@ func (m *Model) viewOptions() string {
 		}
 	}
 
-	b.WriteString("\n")
-	if m.showGroupOptions {
-		b.WriteString(helpStyle.Render("  ↑/↓ navigate  •  space/enter toggle  •  esc back to options"))
-	} else {
-		b.WriteString(helpStyle.Render("  ↑/↓ navigate  •  ←/→ change  •  enter continue  •  esc back"))
-	}
-
 	return b.String()
 }
 
@@ -1030,7 +1113,7 @@ func (m *Model) viewMCP() string {
 		if isCursor {
 			name = activeStyle.Render("Microsoft Learn MCP")
 		}
-		desc := descStyle.Render("  Acceso a documentación oficial de Microsoft")
+		desc := descStyle.Render("  Access to official Microsoft documentation")
 		b.WriteString(fmt.Sprintf("  %s %s %s%s\n", cursor, checkbox, name, desc))
 	}
 
@@ -1049,12 +1132,9 @@ func (m *Model) viewMCP() string {
 		if isCursor {
 			name = activeStyle.Render("Azure DevOps Plugin")
 		}
-		desc := descStyle.Render("  Integración con Azure DevOps (boards, PRs, pipelines)")
+		desc := descStyle.Render("  Azure DevOps integration (boards, PRs, pipelines)")
 		b.WriteString(fmt.Sprintf("  %s %s %s%s\n", cursor, checkbox, name, desc))
 	}
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  ↑/↓ navigate  •  space toggle  •  enter continue  •  esc back"))
 
 	return b.String()
 }
@@ -1151,7 +1231,7 @@ func (m *Model) viewConfirm() string {
 	for _, r := range rows {
 		label := dimStyle.Render(r[0])
 		pad := strings.Repeat(" ", maxLabel-len(r[0])+3)
-		value := monoStyle.Render(r[1])
+		value := renderValue(r[1])
 		lines = append(lines, label+pad+value)
 	}
 
@@ -1161,7 +1241,7 @@ func (m *Model) viewConfirm() string {
 	b.WriteString("\n\n")
 
 	// Centered action hints
-	hint := okStyle.Render("Enter to install") + dimStyle.Render("  •  ") + dimStyle.Render("Esc to go back")
+	hint := okStyle.Render("Enter to install") + dimStyle.Render("  •  Esc to go back  •  ? help")
 	b.WriteString(centerLine(hint, m.width))
 
 	return b.String()
@@ -1342,6 +1422,18 @@ func centerBlock(block string, width int) string {
 		lines = append(lines, indent+line)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// renderValue styles a value cell: green for "yes", dim for "no", mono otherwise.
+func renderValue(v string) string {
+	switch v {
+	case "yes":
+		return okStyle.Render("yes")
+	case "no":
+		return dimStyle.Render("no")
+	default:
+		return monoStyle.Render(v)
+	}
 }
 
 func shortPath(p string) string {
