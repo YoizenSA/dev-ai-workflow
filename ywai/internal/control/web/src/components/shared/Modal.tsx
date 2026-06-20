@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
 	open: boolean;
@@ -37,7 +38,7 @@ export default function Modal({
 
 	if (!open) return null;
 
-	return (
+	return createPortal(
 		<div
 			className="overlay"
 			ref={overlayRef}
@@ -72,6 +73,7 @@ export default function Modal({
 				<div className="modal-body">{children}</div>
 				{footer && <div className="modal-foot">{footer}</div>}
 			</div>
-		</div>
+		</div>,
+		document.body,
 	);
 }
