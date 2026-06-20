@@ -1,12 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
   <defs>
-    <linearGradient id="yoizenGrad" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1A66FF" />
-      <stop offset="55%" stop-color="#4A3ABF" />
-      <stop offset="100%" stop-color="#FD6421" />
-    </linearGradient>
+    <style>
+      .cls-1 {
+        fill: #fd6421;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        stroke-width: 0px;
+      }
+
+      .cls-2 {
+        fill: #0068fd;
+      }
+
+      .cls-3 {
+        fill: #4d39c3;
+      }
+    </style>
   </defs>
-  <rect width="64" height="64" rx="16" fill="#050505" />
-  <circle cx="32" cy="32" r="22" fill="none" stroke="url(#yoizenGrad)" stroke-width="6" />
-  <path d="M23 24h7l6 10 5-10h7l-9 16v10h-6V40z" fill="url(#yoizenGrad)" />
+  <g id="Yoizen_primario" data-name="Yoizen primario">
+    <g>
+      <path class="cls-1" d="M286.48,148.24s-5.76,7-12.1,14.87l89.13,103.49,15.69-179.64c-36.01,14.29-67.83,35.42-92.73,61.28Z"/>
+      <path class="cls-2" d="M149.31,411.22l60.08-73.42c-68.4-40.51-84.4-88.58-81.53-147.2,1.92-39.39,25.18-76.35,53.77-103.77l77.6,91.79c-15.54,24.32-24.93,51.93-26.38,81.48-1.58,32.37,6.55,63.34,22.22,90.95l-104.88,61.19c-.66.38-1.35-.43-.87-1.02Z"/>
+      <path class="cls-3" d="M360.1,296.95l-105.04,54.1c-15.67-27.6-23.8-58.58-22.22-90.95,1.44-29.55,10.83-57.17,26.38-81.48l100.63,117.85.26.49Z"/>
+    </g>
+  </g>
 </svg>

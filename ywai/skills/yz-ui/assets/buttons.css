@@ -49,6 +49,9 @@
   border-color: var(--danger-border);
 }
 .btn-danger:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.30); color: var(--yz-light); transform: translateY(-1px); }
+/* Light: el hover translúcido + texto blanco queda lavado sobre fondo claro;
+   usar el rojo sólido (mismo que btn-danger-solid) para que el blanco contraste. */
+:root[data-theme="light"] .btn-danger:hover:not(:disabled) { background: var(--btn-danger-bg); border-color: transparent; color: #fff; }
 
 .btn-danger-solid {
   background: var(--btn-danger-bg); color: var(--yz-light);

@@ -32,7 +32,7 @@ const SEARCH_THRESHOLD = 7;
         <lucide-icon name="chevron-down" [size]="15" />
       </button>
       @if (open()) {
-        <div class="yd-pop yd-select-menu yd-menu-docked" ydAnchored>
+        <div class="yd-pop yd-select-menu yd-menu-docked" ydAnchored [ydConfineToModal]="true">
           @if (showSearch()) {
             <div class="yd-select-search" (click)="$event.stopPropagation()">
               <lucide-icon name="search" [size]="15" />
