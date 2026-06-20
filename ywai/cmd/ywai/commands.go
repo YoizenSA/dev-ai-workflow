@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -76,9 +77,12 @@ func killPort(port int) error {
 	cmd := exec.Command("lsof", "-ti", portStr)
 	out, err := cmd.Output()
 	if err == nil {
-		pidStr := strings.TrimSpace(string(out))
-		if pidStr != "" {
-			return killPID(pidStr)
+		// lsof prints one PID per line when several processes hold the port
+		// (e.g. parent + child, or a leftover plus the new server). parsePIDs
+		// splits on any whitespace so we kill each one instead of handing the
+		// whole blob to Atoi and failing with invalid PID "1040\n19768".
+		if pids := parsePIDs(string(out)); len(pids) > 0 {
+			return killPIDs(pids)
 		}
 	}
 
@@ -86,17 +90,8 @@ func killPort(port int) error {
 	cmd = exec.Command("fuser", fmt.Sprintf("%d/tcp", port))
 	out, err = cmd.Output()
 	if err == nil {
-		pidStr := strings.TrimSpace(string(out))
-		pidStr = strings.TrimSuffix(pidStr, "\n")
-		if pidStr != "" {
-			pids := strings.Fields(pidStr)
-			var lastErr error
-			for _, pid := range pids {
-				if e := killPID(pid); e != nil {
-					lastErr = e
-				}
-			}
-			return lastErr
+		if pids := parsePIDs(string(out)); len(pids) > 0 {
+			return killPIDs(pids)
 		}
 	}
 
@@ -105,17 +100,12 @@ func killPort(port int) error {
 		fmt.Sprintf("localport=%d", port))
 	out, err = cmd.Output()
 	if err == nil {
-		// Parse netsh output for PIDs
+		// Parse netsh output for PIDs (the PID is the last column on each row).
 		for _, line := range strings.Split(string(out), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 5 {
-				// The PID is typically in the last column
-				pidStr := fields[len(fields)-1]
-				if _, err := strconv.Atoi(pidStr); err == nil {
-					if e := killPID(pidStr); e != nil {
-						return e
-					}
-					return nil
+				if pids := parsePIDs(fields[len(fields)-1]); len(pids) > 0 {
+					return killPIDs(pids)
 				}
 			}
 		}
@@ -124,17 +114,74 @@ func killPort(port int) error {
 	return fmt.Errorf("port %d is in use and no process could be killed", port)
 }
 
+// parsePIDs extracts every numeric PID from raw output, splitting on any
+// whitespace or newline. It skips non-numeric tokens, so it tolerates both
+// `lsof -ti` (one PID per line) and mixed text. Returns nil if no PID is found.
+func parsePIDs(raw string) []int {
+	var pids []int
+	for _, tok := range strings.Fields(raw) {
+		pid, err := strconv.Atoi(tok)
+		if err != nil {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids
+}
+
+// killPIDs sends SIGTERM (graceful) to every PID and returns the last error
+// encountered (nil if all succeeded). A process that already exited reports
+// "process already finished", which we treat as success — the goal is that
+// nothing is left listening on the port.
+func killPIDs(pids []int) error {
+	var lastErr error
+	for _, pid := range pids {
+		if e := killPIDInt(pid); e != nil {
+			lastErr = e
+		}
+	}
+	return lastErr
+}
+
 // killPID sends SIGTERM (graceful) to the given PID string.
 func killPID(pidStr string) error {
 	pid, err := strconv.Atoi(strings.TrimSpace(pidStr))
 	if err != nil {
 		return fmt.Errorf("invalid PID %q: %w", pidStr, err)
 	}
+	return killPIDInt(pid)
+}
+
+// killPIDInt sends SIGTERM to a numeric PID. An already-finished process is
+// not an error here (the caller's intent — free the port — is satisfied).
+func killPIDInt(pid int) error {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("cannot find process %d: %w", pid, err)
 	}
-	return proc.Signal(syscall.SIGTERM)
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		// "process already finished" / ESRCH means nothing to stop — succeed.
+		if errors.Is(err, os.ErrProcessDone) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// readStopPIDFile reads the first valid PID from a PID file. Accepts a file
+// with multiple PIDs (returns the first) but fails when no numeric PID is
+// present at all, so garbage is never mistaken for PID 0.
+func readStopPIDFile(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pids := parsePIDs(string(data))
+	if len(pids) == 0 {
+		return 0, fmt.Errorf("invalid PID in %s: no numeric PID found", path)
+	}
+	return pids[0], nil
 }
 
 var stopCmd = &cobra.Command{
@@ -143,7 +190,7 @@ var stopCmd = &cobra.Command{
 	Long:  "Reads the PID file and sends SIGTERM for graceful shutdown.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pidFile := filepath.Join(config.DataDir(), "serve.pid")
-		data, err := os.ReadFile(pidFile)
+		pid, err := readStopPIDFile(pidFile)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// No PID file — try killing by port
@@ -163,24 +210,17 @@ var stopCmd = &cobra.Command{
 			return fmt.Errorf("cannot read PID file: %w", err)
 		}
 
-		pidStr := strings.TrimSpace(string(data))
-		pid, err := strconv.Atoi(pidStr)
-		if err != nil {
-			return fmt.Errorf("invalid PID in %s: %w", pidFile, err)
+		// Always remove the PID file: whether the signal landed or the process
+		// had already exited, there is nothing left for a future `stop` to signal.
+		defer func() { _ = os.Remove(pidFile) }()
+
+		// killPIDInt treats "process already finished" as success, so a stale
+		// PID file (server crashed/was killed out of band) cleans up instead of
+		// erroring with "could not send SIGTERM".
+		if err := killPIDInt(pid); err != nil {
+			return fmt.Errorf("could not stop server (PID %d): %w", pid, err)
 		}
 
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			_ = os.Remove(pidFile)
-			return fmt.Errorf("process %d not found (stale PID file cleaned up)", pid)
-		}
-
-		if err := proc.Signal(syscall.SIGTERM); err != nil {
-			_ = os.Remove(pidFile)
-			return fmt.Errorf("could not send SIGTERM to PID %d: %w", pid, err)
-		}
-
-		_ = os.Remove(pidFile)
 		fmt.Printf("Server (PID %d) stopped.\n", pid)
 		return nil
 	},
