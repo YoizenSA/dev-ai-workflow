@@ -485,7 +485,7 @@ var updateCmd = &cobra.Command{
 			}
 		}
 		// Re-launch in background
-		exe, err := os.Executable()
+		exe, err := selfupdate.ResolvedExecutable()
 		if err != nil {
 			warn("could not find ywai binary: %v", err)
 		} else {
@@ -940,7 +940,10 @@ var serveCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Warning: auto-update failed: %v\n", err)
 			} else if newVer != "" {
 				// Binary was replaced — re-exec with the new version
-				exe, _ := os.Executable()
+				exe, err := selfupdate.ResolvedExecutable()
+				if err != nil {
+					return fmt.Errorf("failed to resolve ywai binary after update: %w", err)
+				}
 				fmt.Printf("Updated %s → %s, restarting...\n", version, newVer)
 				if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
 					return fmt.Errorf("failed to re-exec after update: %w", err)

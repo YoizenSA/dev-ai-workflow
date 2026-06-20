@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -75,6 +76,35 @@ func githubToken() string {
 		}
 	}
 	return ""
+}
+
+// ResolvedExecutable returns the path to the ywai binary that should be
+// used for re-execution after a self-update.
+//
+// After selfupdate.Run replaces the running binary, os.Executable() on Linux
+// returns a stale path: /proc/self/exe follows the rename to the .bak file
+// which has already been removed. This helper detects that situation (the
+// reported path no longer exists on disk) and falls back to exec.LookPath so
+// callers get the real, current binary path.
+func ResolvedExecutable() (string, error) {
+	exe, err := os.Executable()
+	if err == nil {
+		if resolved, e := filepath.EvalSymlinks(exe); e == nil {
+			exe = resolved
+		}
+		if _, statErr := os.Stat(exe); statErr == nil {
+			return exe, nil
+		}
+		// Path from os.Executable() no longer exists (stale .bak after
+		// self-update). Fall through to LookPath.
+	}
+	if path, err := exec.LookPath("ywai"); err == nil {
+		return path, nil
+	}
+	if exe != "" {
+		return exe, nil
+	}
+	return "", fmt.Errorf("cannot resolve ywai executable path")
 }
 
 func assetName(version string) string {
