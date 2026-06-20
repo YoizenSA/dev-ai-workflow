@@ -162,7 +162,7 @@ func TestSettingsPaths_ReturnsMap(t *testing.T) {
 		t.Fatal("SettingsPaths() returned nil")
 	}
 
-	expected := []string{"opencode", "kilocode", "windsurf", "gemini-cli"}
+	expected := []string{"opencode", "kilocode", "windsurf", "gemini-cli", "pi"}
 	for _, name := range expected {
 		if _, ok := paths[name]; !ok {
 			t.Fatalf("SettingsPaths() missing %q", name)

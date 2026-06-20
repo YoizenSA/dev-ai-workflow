@@ -294,6 +294,7 @@ func SettingsPaths() map[string]string {
 		"kilocode":    config.FindJSONCPath(filepath.Join(home, ".config", "kilo"), "opencode"),
 		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli":  pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
+		"pi":          pathIfExists(filepath.Join(home, ".pi", "agent", "mcp.json")),
 	}
 }
 

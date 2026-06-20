@@ -9,7 +9,7 @@ import (
 // mcpConfigKey returns the top-level key for MCP servers based on agent format.
 func mcpConfigKey(agentName string) string {
 	switch agentName {
-	case "claude-code":
+	case "claude-code", "pi":
 		return "mcpServers"
 	default:
 		return "mcp"

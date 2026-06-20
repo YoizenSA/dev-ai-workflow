@@ -440,8 +440,8 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 	}
 
 	for _, a := range agents {
-		// Only install plugins for opencode and claude-code
-		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" {
+		// Install MCP for agents that support it
+		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" && a.Name != "pi" {
 			continue
 		}
 
