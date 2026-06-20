@@ -7,7 +7,25 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+// waitForOccupied polls until a TCP bind on port fails (something is listening),
+// or returns false when the timeout elapses. Used to synchronize tests on the
+// occupant child actually grabbing the port before assertions run.
+func waitForOccupied(port int, timeout time.Duration) bool {
+	addr := "127.0.0.1:" + itoa(port)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return true // bind failed -> something holds the port
+		}
+		ln.Close()
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
+}
 
 // freePort grabs an unused TCP port for tests that need to bind a real listener.
 func freePort(t *testing.T) int {
@@ -19,6 +37,57 @@ func freePort(t *testing.T) int {
 	port := l.Addr().(*net.TCPAddr).Port
 	l.Close()
 	return port
+}
+
+// TestAcquirePort_KillsOccupantAndBinds reproduces the race that broke `ywai
+// serve` after `ywai update`: killPort sends SIGTERM and returns at once, but
+// the old process has not released the socket yet. An immediate single retry
+// of net.Listen failed with "still in use after cleanup". acquirePort must kill
+// the occupant and then retry the bind with backoff until the OS frees the
+// port (or give up after a bounded timeout).
+func TestAcquirePort_KillsOccupantAndBinds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test: spawns child processes")
+	}
+	port := freePort(t)
+
+	// Occupy the port with a child that holds the socket until SIGTERM lands.
+	// This mirrors the real ywai server.
+	cmd := exec.Command("python3", "-c", "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', "+itoa(port)+")); s.listen(5); time.sleep(30)")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("spawn occupant: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}()
+
+	// Wait until the child actually holds the port (python startup is async)
+	// before we assert it's occupied and try to acquire it.
+	if !waitForOccupied(port, 3*time.Second) {
+		t.Fatalf("occupant did not bind port %d", port)
+	}
+
+	// acquirePort must kill the occupant and win the bind within the retry window.
+	ln, err := acquirePort(port)
+	if err != nil {
+		t.Fatalf("acquirePort(%d) failed: %v (the immediate-retry race)", port, err)
+	}
+	if ln == nil {
+		t.Fatal("acquirePort returned nil listener with nil error")
+	}
+	defer ln.Close()
+}
+
+// TestAcquirePort_FreePortSucceeds is the common case: a free port binds on the
+// first try with no killing, so acquirePort must not error or require a retry.
+func TestAcquirePort_FreePortSucceeds(t *testing.T) {
+	port := freePort(t)
+	ln, err := acquirePort(port)
+	if err != nil {
+		t.Fatalf("acquirePort on free port %d: %v", port, err)
+	}
+	defer ln.Close()
 }
 
 // TestKillPIDs_KillsMultipleRealProcesses exercises killPIDs against two real

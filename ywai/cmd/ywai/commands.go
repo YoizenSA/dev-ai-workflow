@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -182,6 +183,52 @@ func readStopPIDFile(path string) (int, error) {
 		return 0, fmt.Errorf("invalid PID in %s: no numeric PID found", path)
 	}
 	return pids[0], nil
+}
+
+// acquirePort binds the given TCP port, killing any process that still holds it
+// and retrying the bind with backoff until the OS releases the socket.
+//
+// `ywai serve` used to retry net.Listen exactly once after killPort. That raced
+// against the old process releasing the socket (SIGTERM is delivered, but the
+// TCP listener isn't gone yet), so the immediate retry failed with
+// "still in use after cleanup" even though killPort had succeeded. We now poll
+// the bind for a short window after killing so a slow shutdown doesn't abort
+// the restart.
+func acquirePort(port int) (net.Listener, error) {
+	addr := fmt.Sprintf(":%d", port)
+
+	// Fast path: the port is already free.
+	if ln, err := net.Listen("tcp", addr); err == nil {
+		return ln, nil
+	}
+
+	// Port is busy — try to free it, then poll the bind.
+	fmt.Fprintf(os.Stderr, "Port %d is in use, attempting to free it...\n", port)
+	if err := killPort(port); err != nil {
+		return nil, fmt.Errorf("port %d is already in use and could not be freed: %w", port, err)
+	}
+
+	// Poll for the socket to be released. The OS keeps a listener in CLOSE_WAIT
+	// / TIME_WAIT briefly after the owning process exits; a few hundred ms is
+	// plenty in practice while still failing fast on a truly stuck port.
+	const (
+		totalWait = 2 * time.Second
+		step      = 50 * time.Millisecond
+	)
+	deadline := time.Now().Add(totalWait)
+	var lastErr error
+	for {
+		if ln, err := net.Listen("tcp", addr); err == nil {
+			return ln, nil
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(step)
+	}
+	return nil, fmt.Errorf("port %d is still in use after cleanup: %w", port, lastErr)
 }
 
 var stopCmd = &cobra.Command{
@@ -881,21 +928,13 @@ var serveCmd = &cobra.Command{
 		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 		noUpdate, _ := cmd.Flags().GetBool("no-update")
 
-		// Check if port is available — kill any process using it
-		if ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
-			fmt.Fprintf(os.Stderr, "Port %d is in use, attempting to free it...\n", port)
-			if killErr := killPort(port); killErr != nil {
-				return fmt.Errorf("port %d is already in use and could not be freed: %w", port, err)
-			}
-			fmt.Fprintf(os.Stderr, "Freed port %d\n", port)
-			// Retry once after killing
-			if ln, err = net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
-				return fmt.Errorf("port %d is still in use after cleanup: %w", port, err)
-			}
-			_ = ln.Close()
-		} else {
-			_ = ln.Close()
+		// Ensure the port is available — kill any process holding it and wait
+		// for the OS to release the socket before we try to bind our own server.
+		ln, err := acquirePort(port)
+		if err != nil {
+			return err
 		}
+		_ = ln.Close()
 
 		// Fork to background before doing any work
 		if background {
