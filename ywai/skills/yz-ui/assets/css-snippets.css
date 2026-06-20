@@ -1,0 +1,23 @@
+/* ============================================================
+   DEPRECATED — do not copy this file.
+   ------------------------------------------------------------
+   The canonical, token-consistent bundle (dark + light) now
+   lives in split files that consume the tokens from palette.css:
+
+     palette.css     · design tokens (dark :root + light data-theme)
+     base.css        · reset, ambient bg, scrollbar, focus, .glass, theme reveal
+     buttons.css     · .btn + variants
+     forms.css       · inputs, fields, yd-select, yd-cal (calendar)
+     table.css       · .data-table + col-hide-* responsive
+     modal.css       · .overlay / .modal glass dialog
+     components.css  · pills, tags, cards, headers, KPI, alerts, spinner,
+                       skeleton, empty states, toasts, tooltips ([data-tip]),
+                       diff box, key-value rows
+     shell.css       · sidebar/drawer, topbar, login, responsive
+
+   Behavioral primitives (TypeScript): yz-modal.directive.ts,
+   yd-anchored.directive.ts, yd-select.component.ts, yd-date.component.ts,
+   toast.service.ts, toast-stack.component.ts.
+
+   See SKILL.md → "CSS Architecture" and "CSS bundle & behavioral primitives".
+   ============================================================ */

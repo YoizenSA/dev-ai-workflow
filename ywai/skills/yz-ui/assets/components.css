@@ -107,16 +107,6 @@
 .kpi-value { font-size: var(--text-3xl); font-weight: 720; letter-spacing: -0.02em; line-height: 1; position: relative; z-index: var(--z-base); }
 .kpi-label { color: var(--text-muted); font-size: var(--text-base); margin-top: 0.4rem; position: relative; z-index: var(--z-base); }
 
-/* Compact KPI: icon at the left, value+label stacked beside it. The stacked
-   icon-above-number layout wastes half the card and reads empty at desktop
-   widths — this is the preferred dashboard form. */
-.kpi-compact { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); }
-.kpi-compact .kpi-icon, .kpi-compact .kpi-meta { position: relative; z-index: var(--z-base); }
-.kpi-compact .kpi-icon { flex-shrink: 0; }
-.kpi-compact .kpi-meta { min-width: 0; }
-.kpi-compact .kpi-value { font-size: var(--text-2xl); line-height: 1.1; }
-.kpi-compact .kpi-label { font-size: var(--text-sm); }
-
 /* ---- Alerts ---- */
 .alert {
   display: flex; align-items: flex-start; gap: 0.6rem;
@@ -311,9 +301,14 @@
 
 /* ---- Tooltip temático (atributo data-tip) ----
    Reemplaza al title nativo manteniendo la estética glass de la app.
-   Uso: [attr.data-tip]="texto" (null = sin tooltip). */
+   Uso: [attr.data-tip]="texto" (null = sin tooltip).
+   Se muestra en :hover Y en :focus-visible — un control alcanzable por teclado
+   (tabindex/botón) revela el tip al enfocarlo, no solo con mouse. Aun así, el
+   tooltip es un refuerzo VISUAL: la info que comunica debe existir también en el
+   contenido o en aria-label (nunca es canal único de información crítica). */
 [data-tip] { position: relative; }
-[data-tip]:hover::after {
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
   content: attr(data-tip);
   position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
   background: linear-gradient(160deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
@@ -324,7 +319,8 @@
   max-width: 360px; overflow-wrap: anywhere;
   box-shadow: var(--shadow-glass); pointer-events: none; z-index: var(--z-dropdown);
 }
-[data-tip]:hover::before {
+[data-tip]:hover::before,
+[data-tip]:focus-visible::before {
   content: ""; position: absolute; bottom: calc(100% + 5px); left: 50%;
   transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px;
   background: rgba(var(--surf-10-rgb),0.98);
@@ -334,10 +330,12 @@
 [data-tip=""]::after, [data-tip=""]::before { display: none; }
 
 /* Variante lateral: data-tip-pos="right" (sidebars colapsadas, rails). */
-[data-tip][data-tip-pos="right"]:hover::after {
+[data-tip][data-tip-pos="right"]:hover::after,
+[data-tip][data-tip-pos="right"]:focus-visible::after {
   bottom: auto; left: calc(100% + 9px); top: 50%; transform: translateY(-50%);
 }
-[data-tip][data-tip-pos="right"]:hover::before {
+[data-tip][data-tip-pos="right"]:hover::before,
+[data-tip][data-tip-pos="right"]:focus-visible::before {
   bottom: auto; left: calc(100% + 5px); top: 50%;
   transform: translateY(-50%) rotate(135deg);
 }
@@ -352,43 +350,27 @@
    pueden recortar) abren el tip hacia la izquierda. Al sumar un cluster nuevo,
    agregalo acá (es la única fuente). */
 [data-tip][data-tip-pos="left"]:hover::after,
+[data-tip][data-tip-pos="left"]:focus-visible::after,
 .row-actions [data-tip]:hover::after,
+.row-actions [data-tip]:focus-visible::after,
 .fr-acts [data-tip]:hover::after,
+.fr-acts [data-tip]:focus-visible::after,
 .slot-acts [data-tip]:hover::after,
-.ver-acts [data-tip]:hover::after {
+.slot-acts [data-tip]:focus-visible::after,
+.ver-acts [data-tip]:hover::after,
+.ver-acts [data-tip]:focus-visible::after {
   bottom: auto; left: auto; right: calc(100% + 9px); top: 50%; transform: translateY(-50%);
 }
 [data-tip][data-tip-pos="left"]:hover::before,
+[data-tip][data-tip-pos="left"]:focus-visible::before,
 .row-actions [data-tip]:hover::before,
+.row-actions [data-tip]:focus-visible::before,
 .fr-acts [data-tip]:hover::before,
+.fr-acts [data-tip]:focus-visible::before,
 .slot-acts [data-tip]:hover::before,
-.ver-acts [data-tip]:hover::before {
+.slot-acts [data-tip]:focus-visible::before,
+.ver-acts [data-tip]:hover::before,
+.ver-acts [data-tip]:focus-visible::before {
   bottom: auto; left: auto; right: calc(100% + 5px); top: 50%;
   transform: translateY(-50%) rotate(-45deg);
 }
-
-/* ============================================================
-   Card footer (pinned) + compact empty state for cards/tables.
-   Reusable primitives — define ONCE here, never per-feature.
-   ============================================================ */
-/* A pinned, actionable "Ver todos (N) →" footer link flush with the card edge:
-   margin-top:auto pins it; the bottom radius matches the card so its hover bg
-   doesn't paint square corners outside the rounded card. */
-.card-foot-link {
-  display: flex; align-items: center; gap: 0.3rem; width: 100%;
-  margin-top: auto; padding: 0.65rem var(--space-6);
-  border: none; border-top: 1px solid var(--panel-border);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: none; cursor: pointer; font-family: inherit; text-align: left;
-  color: var(--tint-info); font-size: var(--text-xs); font-weight: 600;
-  transition: background var(--t-fast) ease, color var(--t-fast) ease;
-}
-.card-foot-link:hover { background: var(--surface-soft); color: var(--text); }
-
-/* Compact empty row inside a card's table (never a bare header over blank
-   space). .ok turns it green for good-news empties ("todo al día"). */
-.mini-empty {
-  display: flex; align-items: center; justify-content: center; gap: 0.45rem;
-  padding: var(--space-6) var(--space-4); color: var(--text-faint); font-size: var(--text-sm);
-}
-.mini-empty.ok { color: var(--tint-success); }

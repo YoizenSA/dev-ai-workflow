@@ -11,12 +11,13 @@ import { Directive, ElementRef, DestroyRef, afterNextRender, inject, input } fro
  *   • Clamp: deja siempre un margen contra el borde; si aun así no entra,
  *     limita el alto con `--yd-pop-maxh` y el menú scrollea por dentro.
  *
- * El borde de referencia es siempre el viewport: dentro de un modal con
- * `modal-popovers` (overflow visible) el popover está pensado para escapar el
- * modal y flotar sobre el overlay, así que se mide contra la ventana, no contra
- * el modal. Para que un popover alto (calendario) abra hacia abajo y no quede
- * «mirando para arriba», el modal que lo contiene se ancla arriba por CSS
- * (`.overlay:has(yd-date)`), dejándole aire debajo.
+ * El borde de referencia es el `.modal` que contiene al host (si existe),
+ * intersecado con el viewport; si el host no está en un modal, es el viewport.
+ * Así el menú **nunca sobresale del modal**: con muchas opciones clampa su alto
+ * al espacio disponible dentro del modal y scrollea por dentro. Para que un
+ * popover alto (calendario) abra hacia abajo y no quede «mirando para arriba»,
+ * el modal que lo contiene se ancla arriba por CSS (`.overlay:has(yd-date)`),
+ * dejándole aire debajo.
  *
  * Cada popover decide si consume `--yd-pop-maxh`: el select sí (lista
  * scrolleable); el calendario la ignora (alto fijo) y sólo usa el flip.
@@ -30,6 +31,13 @@ export class YdAnchoredDirective {
   readonly margin = input(14, { alias: 'ydMargin' });
   /** Alto mínimo al que puede encoger antes de dejar de clampar (px). */
   readonly minHeight = input(140, { alias: 'ydMinHeight' });
+  /**
+   * Confinar el popover al `.modal` que lo contiene (no sobresalir de él).
+   * Sólo para popovers que pueden encoger y scrollear (la lista del select);
+   * el calendario es de alto fijo y mayor que un modal corto, así que debe
+   * seguir escapando al viewport (default false).
+   */
+  readonly confineToModal = input(false, { alias: 'ydConfineToModal' });
 
   /** Separación disparador↔menú; coincide con el `calc(100% + 6px)` del CSS. */
   private readonly gap = 6;
@@ -75,8 +83,15 @@ export class YdAnchoredDirective {
     const rect = host.getBoundingClientRect();
     const natural = pop.offsetHeight;
 
-    const below = window.innerHeight - rect.bottom - this.gap - this.margin();
-    const above = rect.top - this.gap - this.margin();
+    // Con confineToModal, el popover no debe sobresalir del modal que lo
+    // contiene: el borde de referencia es el `.modal` ancestro (intersecado con
+    // el viewport). Sin modal —o sin confinar— cae al viewport.
+    const modalRect = this.confineToModal() ? host.closest('.modal')?.getBoundingClientRect() : undefined;
+    const topBound = modalRect ? Math.max(0, modalRect.top) : 0;
+    const bottomBound = modalRect ? Math.min(window.innerHeight, modalRect.bottom) : window.innerHeight;
+
+    const below = bottomBound - rect.bottom - this.gap - this.margin();
+    const above = rect.top - topBound - this.gap - this.margin();
 
     const up = natural > below && above > below;
     const avail = Math.max(up ? above : below, this.minHeight());

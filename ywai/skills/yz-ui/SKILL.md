@@ -1,234 +1,229 @@
 ---
 name: yz-ui
-description: Yoizen UI design system (Dark Glass theme). Trigger: Yoizen UI components, styling, colors, typography, light/dark theme, tables, modals, dropdowns.
+description: Yoizen UI design system standards. Trigger: Yoizen UI components, styling, colors, typography, visual polish or correction of any Yoizen Angular frontend.
+license: Apache-2.0
 ---
 
 ## When to Use
 
-Use this skill when:
-- Creating new UI components for Yoizen products (any framework: Angular, React, plain HTML)
-- Implementing consistent styling across the application
-- Choosing colors, fonts, or spacing
-- Working with icons and brand assets
-- Ensuring design system compliance
+- Creating new UI for any Yoizen frontend
+- **Correcting visually poor screens** — bringing legacy UIs up to this standard
+- Choosing colors, fonts, spacing, shadows; working with icons and brand assets
+- Auditing a project for design-system compliance
 
-This file is the **core doctrine** (always read it). Deep, field-tested lessons
-live in `references/` and are loaded on demand — see "Deep references" below;
-pull the relevant one when the task touches it.
+## Scope
 
-## The One Rule
+These are the **mandatory UI norms for every Yoizen frontend** — existing repos and new ones alike. The skill is self-contained: tokens, themes, patterns, and copyable artifacts live in `assets/`. If a project's visuals deviate, the project is wrong, not the norm — correct it with the checklist. Never imitate a legacy project's existing look.
 
-**Tokens live ONLY in `palette.css`. Components consume `var(--*)` — never raw hex, never raw rgba triplets, never raw rem/ms/z-index.**
+**How to apply it to any project:** copy the canonical artifacts from `assets/`. `palette.css` (tokens, dark + light) and `base.css` go in **verbatim** (brand truth). The component CSS (`buttons/forms/table/modal/components/shell`) and the behavioral primitives (modal/anchored directives, `yd-select`, `yd-date` calendar, toasts) are copied and **wired/renamed to the project's components**. A brand-new app comes out identical — colors, dark/light, animations, tooltips, calendar, responsive — without re-deriving the design.
 
-Every color, radius, spacing value, shadow, gradient, font-size, duration and
-stacking level is a CSS custom property. If you find yourself typing a literal
-inside a component, stop and either use an existing token or add a new one to the
-palette. This is both a consistency rule and a maintainability rule: a theme swap
-(e.g. a light variant) must touch one file only. A third-party brand's exact
-colors (e.g. an OAuth button) are the only sanctioned literal exception.
+## Tech Stack Norms
 
-**Two traps that silently break theming — the palette already solves both:**
+Yoizen frontends are **Angular** (standalone components) — **never React/JSX**.
 
-1. **Translucent brand/semantic colors.** You can't apply alpha to a hex var (`rgba(var(--accent), .2)` is invalid). So every color that needs a faded variant is *also* published as an RGB-channel token: `--yz-primary-1-rgb: 26, 102, 255`. Use `rgba(var(--yz-primary-1-rgb), 0.18)` — never inline the `26,102,255`. This is the #1 source of un-themeable hardcoding.
-2. **Text tints (the bright pastels).** On dark glass, label/value text uses the light pastel of each hue. These are **tokens** (`--tint-success`, `--tint-danger`, `--tint-info`, `--tint-accent`, `--tint-purple`, `--tint-primary`), not inline hex like `#6ee7b7`. The saturated base colors (`--success` etc.) are for dots/icons only.
+**MANDATORY: latest stable Angular major.** Check `ng version` / `package.json`; if behind, upgrading is part of the work — one major at a time, per `https://angular.dev/update-guide`. Run bare `ng update` first to see everything updatable, and bump the Angular packages **together with their peers** (`@angular/cdk`/Material, `lucide-angular`, …) in the same major step — `ng update @angular/core @angular/cli` alone leaves peers on the old major (peer-dep conflicts). **Never `--force`** (it installs incompatible peers). Commit before each major; `ng update` runs migration schematics, so review the diff and run the app after each step. New code uses zoneless change detection, signals (`input()`/`output()`/`computed()`), and native control flow (`@if`/`@for`/`@defer`). Never `*ngIf`/`*ngFor`, `@Input()`/`@Output()` decorators, or NgModules.
 
-Glass surface darks are likewise tokenized as channels (`--surf-1-rgb` … `--surf-12-rgb`) so a light theme can flip them centrally.
+Detect the styling approach before writing styles:
 
-## Quick Start (any project)
+| Approach | Detection |
+|----------|-----------|
+| **Pure CSS + design tokens** (default) | `:root` custom properties in `palette.css`, modular CSS per feature |
+| **Tailwind CSS 4** | `@import "tailwindcss"` in `styles.css` (CSS-first) — **never** a `tailwind.config.js` (configure via `@theme`; see `assets/tailwind-theme-schema.json`) |
 
-Copy the theme bundle from this skill into the project and import it once:
+## Brand Palette
 
-```
-assets/theme/
-├── index.css       ← entry point: @import of all the rest + layout helpers
-├── palette.css     ← design tokens (THE source of truth, incl. light theme block)
-├── base.css        ← reset, ambient background, typography, scrollbar, focus ring, glow alphas
-├── buttons.css     ← .btn variants (pill buttons with lift + glow)
-├── forms.css       ← inputs, selects, date fields, search, toggles, tabs
-├── table.css       ← .data-table dark glass tables + reusable cell/column primitives
-├── modal.css       ← .modal glass modals (+ .modal-popovers) + action popups
-├── components.css  ← pills, tags, KPI cards, page headers, alerts, toasts, tooltips, .yd-* dropdowns
-└── shell.css       ← app shell (sidebar + topbar + content), login split-screen
-```
+Source of truth: `assets/paleta-institucional.png`. Exact hexes:
 
-- **Angular**: copy to `src/styles/` (and the shared CSS to `src/app/shared/styles/`) and reference `index.css` in `angular.json` `"styles"`.
-- **React/Vite**: `import './styles/index.css'` in `main.tsx`.
-- **Tailwind projects**: keep the palette as CSS vars and map them in the Tailwind theme (see "Tailwind Mapping"). Tailwind utilities then resolve to tokens, not hex.
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Primary Blue | `#1A66FF` | Buttons, links, primary actions |
+| Secondary Purple | `#4A3ABF` | Supportive emphasis, gradients |
+| Accent Orange | `#FD6421` | Critical CTAs, urgent attention |
+| Yellow | `#FDBD27` | Auxiliary highlights |
+| Dark | `#272A35` | Text, dark surfaces |
+| Dark Navy / Darker Navy | `#00183F` / `#00122D` | Deep dark bg alternatives |
 
-The classes are framework-agnostic (`class=` or `className=` both work).
+Brand gradients are tokens in `palette.css`: `--grad-full` (blue→purple→orange), `--grad-brand` (blue→purple, for buttons/highlights), `--grad-accent`, `--grad-text` (wordmark). **Reserve the full gradient for highlights/CTAs — never large surfaces. Never use `#000` as a background** (use `--yz-dark`/`--yz-dark-soft` on dark, or the light ambient gradient). Realign any off-brand blues / muddy grays to these hexes — it's part of any UI work.
 
-For the theme toggle + before-first-paint bootstrap + variable fonts, see
-`references/theming.md` and copy `assets/angular/theme.service.ts`.
+## Design Tokens — one set, two themes
 
-## Design Tokens (palette.css)
+The design system is **one set of CSS custom properties** in `:root` (dark = default, `color-scheme: dark`) and **re-themed** by a single `:root[data-theme="light"]` block that redefines only what must change (surfaces dark→light, text→dark, tints pastel→saturated-dark, glows/shadows softened, `--white-rgb`/`--black-rgb` flipped; translucent semantics need higher alpha on white). Components consume `var(--*)` and **never** raw hex. **Do not build a second, parallel token system for light.**
 
-Read `assets/theme/palette.css` for the full list. The key groups:
-
-| Group | Tokens | Notes |
-|-------|--------|-------|
-| Brand | `--yz-primary-1` #1a66ff, `--yz-primary-2` #4a3abf, `--yz-accent` #fd6421, `--yz-yellow` #fdbd27, `--yz-dark` #272a35, `--yz-navy` #00183f | Exact institutional hexes |
-| Brand/semantic RGB channels | `--yz-primary-1-rgb`, `--yz-accent-rgb`, `--info-rgb`, `--success-rgb`, `--danger-rgb`, `--slate-rgb`, `--white-rgb`, `--black-rgb` … | For `rgba(var(--x-rgb), a)` — the only correct way to fade a token |
-| Text tints | `--tint-primary`, `--tint-purple`, `--tint-accent`, `--tint-success`, `--tint-danger`, `--tint-info`, `--tint-yellow` (+ `-2`…`-5` blue steps) | Bright pastels for **text** on glass; use the token, not the hex |
-| Surfaces | `--surface`, `--surface-strong`, `--surface-soft`, `--surface-hover`, `--panel-border`, `--panel-border-strong`, `--table-head-bg`, `--input-bg` | Translucent rgba — glass effect needs alpha |
-| Glass surface channels | `--surf-1-rgb` … `--surf-12-rgb` (+ `--surf-success/danger/flat/input-rgb`) | Dark translucent stack behind cards/popovers/footers; flip these for light |
-| Text | `--text` #f3f5fb, `--text-soft` #c4cbdd, `--text-muted` #8b93ab, `--text-faint` | 4-level hierarchy; never use pure #fff/#808080 |
-| Semantic | `--success`, `--danger`, `--warning`, `--info` + each with `-soft` (bg) and `-border` variants | Always use the trio: bg=soft, border=border, text=tint token |
-| Buttons | `--btn-primary-bg` (deep indigo), `--btn-danger-bg` (deep red) | Sober gradients — NOT the raw neon brand gradient |
-| Radii | `--radius-sm` .55rem → `--radius-xl` 1.6rem | Generous rounding; buttons are full pills (999px) |
-| Spacing | `--space-1` (.25rem) → `--space-10` (2.75rem) | cards `--space-6`, page sections `--space-6`, KPI grid gap `--space-4` |
-| Shadows | `--shadow-glass`, `--shadow-lift`, `--focus-ring` | |
-| Gradients | `--grad-brand`, `--grad-accent`, `--grad-full`, `--grad-text` | See contrast rules |
-| Fonts | `--font-sans` (Inter), `--font-mono` (JetBrains Mono) | |
-| Type scale | `--text-2xs` .6875 → `--text-3xl` 2rem (9 steps) | Every `font-size` consumes a step — never raw rem |
-| Motion | `--t-fast` 120 / `--t-base` 150 / `--t-slow` 260ms, `--ease-out` | One set of durations |
-| Z-index | `--z-base/sticky/drawer/fab/overlay/popover/dropdown/toast` | Stacking as a scale, not magic numbers |
-| Misc | `--disabled-opacity` 0.5 | |
-
-## Contrast Rules (learned the hard way)
-
-1. **Gradient text on dark surfaces**: the institutional gradient (`--grad-full`) is **too dark** for text on dark backgrounds — the purple midpoint becomes illegible. Use the high-luminance `--grad-text` plus the `.grad-text` helper (it also adds a faint glow to lift the wordmark). Use this for the app name / brand title.
-2. **Semantic text colors**: on dark glass, use the *bright pastel* of each hue via its token (`var(--tint-success)` …) — never the raw hex. The saturated base colors (`--success` etc.) are for dots/icons only.
-3. **Text hierarchy**: titles `--text`, body/cells `--text-soft`, labels/subtitles `--text-muted`, placeholders/help `--text-faint`. Don't skip levels — that's what makes the UI feel flat or muddy.
-4. **No pure black/white**: backgrounds derive from `--yz-dark` with an ambient radial glow stack; text tops out at #f3f5fb.
-5. `html { color-scheme: dark; }` so native controls render dark (flips to `light` in the light scope).
-6. **Active/selected state text — the white-on-translucent trap**: an active nav item/tab over a *translucent* tinted background looks crisp on dark but **vanishes on light** (white text on a pale tint). Drive it from `--nav-active-text` (white on dark, dark-hue on light). The exception: when the active background is a **solid** brand gradient (`--grad-brand`), white text is correct in both themes.
-
-## Signature Visual Language
-
-- **Glass panels**: `.glass` / `.card` = translucent gradient background + `backdrop-filter: blur(18-22px)` + 1px `--panel-border` + `--shadow-glass`. Everything floats over the ambient background.
-- **Ambient background**: the `body::before` carries a fixed 3-layer radial glow (blue / orange / purple) over `--yz-dark`. Never a flat color.
-- **Pill buttons**: full-radius (999px), `translateY(-1px)` lift on hover, inner white-ish border. Variants: `.btn-primary`, `.btn-accent`, `.btn-ghost`, `.btn-outline`, `.btn-danger`, `.btn-danger-solid`, sizes `.btn-sm`/`.btn-xs`, circular `.btn-icon`.
-  - **The primary button is NOT the raw brand gradient** (reads neon). Use `--btn-primary-bg` (deep indigo, same both themes) with a *contained* `--shadow-lift` glow. Keep `--grad-brand` for *decorative* fills (progress bars, selected calendar day).
-  - **The solid danger button is sober too**: `.btn-danger-solid` uses `--btn-danger-bg` (deep red), not the neon `--danger-strong`.
-- **Status pills**: `.pill .pill-{success|info|primary|accent|danger|warning|muted}` with a status `.dot` (add `.pill-running` for pulsing dot).
-- **KPI cards**: `.kpi-grid` (4→2→1 responsive) with `.kpi` cards; prefer the compact horizontal `.kpi-compact`. Each card gets a colour identity from a single `--kpi-rgb` triple — tinted border + corner wash + a gradient/glow icon chip.
-- **Page headers**: `.page-header` with `.page-eyebrow` (orange uppercase micro-label) + `.page-title` (clamp sizing) + `.page-subtitle`. Sections use `.section-head` with the glowing `.section-tick`.
-- **Tables**: `.data-table` with sticky blurred header, uppercase micro-label `th`, row hover, `.row-actions` on hover/focus-within, `.table-foot` pagination. Reusable primitives in `table.css`: `.col-hide-lg/md`, `.cell-trunc`, `.cell-stack`, `.cell-sub`, `.col-fit`, `.id-trunc`.
-- **Dropdowns & calendar**: native `<select>`/`<input type=date>` can't match the theme. Use the themed `.yd-select` / `.yd-date` controls with a `.yd-pop` glass popover (Angular references in `assets/angular/`, positioned by the `ydAnchored` directive). **See `references/forms-modals.md` for the modal-popovers / flip-clamp / propagation traps.**
-- **Modals**: `.overlay` (blurred fixed-dark scrim) + `.modal` (flex column: head/foot pinned, body scrolls) with `modalIn` animation; `.form-grid` 2-col forms. Add `.modal-popovers` when the body holds a themed dropdown.
-- **Toasts / alerts / skeletons / empty states**: `.toast`, `.alert-{success|warning|danger|info}`, `.skeleton`/`.skel-line`, `.empty-state`, `.mini-empty`.
-- **Motion**: 120–160ms ease; entrance animations use `cubic-bezier(0.16, 1, 0.3, 1)`; always honor `prefers-reduced-motion` (handled in `base.css`).
-- **A11y**: global `:focus-visible` ring in `base.css`; custom scrollbar; WCAG 4.5:1 minimum for text; icon-only buttons need `aria-label`.
-
-## Layout Helpers (index.css)
-
-`.stack` (column, gap-4), `.row` (+`.wrap`), `.grid-2`, `.grid-equal` (cards stretch evenly), `.spacer`, `.muted`, `.soft`, `.mono`, `.tnum` (tabular numbers for metrics).
-
-App shell: `.app-shell` grid (sidebar `--sidebar-w` 264px / collapsed 78px) + sticky `.sidebar` + `.topbar` + `.content` (clamp() horizontal padding, `--space-8`/`--space-10` vertical rhythm). Mobile (≤920px): sidebar becomes a fixed drawer with `.scrim` + `.mobile-fab`. Brand block uses `.brand-name.grad-text`.
-
-## Code Examples
-
-```html
-<!-- Page header -->
-<header class="page-header">
-  <div class="page-heading">
-    <span class="page-eyebrow">Sección</span>
-    <h1 class="page-title">Panel principal</h1>
-    <p class="page-subtitle">Resumen del estado general</p>
-  </div>
-  <div class="page-actions">
-    <button class="btn btn-ghost">Exportar</button>
-    <button class="btn btn-primary">Nuevo</button>
-  </div>
-</header>
-
-<!-- KPI card (compact): one --kpi-rgb triple drives border+wash+icon chip -->
-<div class="kpi kpi-compact" style="--kpi-rgb: var(--success-rgb); --kpi-icon-color: var(--tint-success);">
-  <div class="kpi-icon"><svg>…</svg></div>
-  <div class="kpi-meta">
-    <div class="kpi-value tnum">248</div>
-    <div class="kpi-label">Registros activos</div>
-  </div>
-</div>
-
-<!-- Status pill -->
-<span class="pill pill-success"><span class="dot"></span> Activo</span>
-
-<!-- Field -->
-<label class="field">
-  <span class="field-label">Nombre</span>
-  <input class="input" placeholder="Buscar…" />
-  <span class="field-help">Identificador interno</span>
-</label>
-```
-
-Custom component CSS (when the bundle doesn't cover it):
+**Copy `assets/palette.css` verbatim** — it is the canonical token file (dark + light, ~120 tokens). Families:
 
 ```css
-.my-widget {
-  background: var(--surface-soft);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  color: var(--text-soft);
-}
-.my-widget:hover { background: var(--surface-hover); border-color: var(--panel-border-strong); }
+--yz-primary-1/2; --yz-accent; --yz-yellow; --yz-dark; --yz-light;   /* brand */
+--*-rgb  /* channels for rgba(var(--x-rgb), a): brand, --surf-1..12-rgb, --white-rgb/--black-rgb (flip) */
+--surface; --surface-soft; --surface-hover; --panel-border; --panel-border-strong; --input-bg;
+--text; --text-soft; --text-muted; --text-faint;                     /* hierarchy */
+--success/--danger/--warning/--info (+ each -soft, -border);  --tint-*;  /* coloured text on glass */
+--btn-primary-bg; --btn-danger-bg; --grad-brand/-accent/-text; --shadow-glass; --shadow-lift; --focus-ring;
+--radius-sm/md/lg/xl; --space-1..10; --text-2xs..3xl; --t-fast/base/slow + --ease-out; --z-overlay/popover/dropdown/toast;
 ```
 
-## Tailwind Mapping (optional)
+**`assets/base.css` (copy verbatim)** carries the mandatory ambient background — a *fixed* 3-layer radial glow (brand blue + accent + purple over `--yz-dark`, `--glow-1..3`: dark ~0.30, light ~0.11) — plus the custom scrollbar, the global `:focus-visible` ring, the `.glass` primitive, and the **theme switch as a circular reveal (View Transitions API)**. **Never a flat background.** Always ship `backdrop-filter` with its `-webkit-` prefix, or glass silently degrades to a flat panel on Safari/iOS.
 
-Keep `palette.css` loaded and map tokens so utilities resolve to vars:
+## Signature Visual Patterns
 
-```javascript
-// tailwind.config.js
-export default {
-  theme: {
-    extend: {
-      colors: {
-        primary: 'var(--yz-primary-1)', secondary: 'var(--yz-primary-2)',
-        accent: 'var(--yz-accent)', surface: 'var(--surface)', muted: 'var(--text-muted)',
-      },
-      borderRadius: { sm: 'var(--radius-sm)', md: 'var(--radius-md)', lg: 'var(--radius-lg)' },
-      fontFamily: { sans: 'var(--font-sans)', mono: 'var(--font-mono)' },
-    },
-  },
-};
+Apply these when building or correcting UI. Full CSS for each lives in the named `assets/` file.
+
+**1. Ambient background** — never flat; the layered radial brand glow from `assets/base.css` (pattern is mandatory in both themes).
+
+**2. Buttons with lift** — `font-weight: 600`, ~140–150ms transition, `translateY(-1px)` on hover (guard with `@media (hover: hover)`), reset on `:active`, `cursor: not-allowed; opacity ~0.55` disabled. Pill radius in both themes. **Name transitioned properties — never `transition: all`** (it animates disabled/theme flips + layout). **Hover must hold contrast in BOTH themes:** a soft/tinted variant (e.g. `.btn-danger`) whose hover puts white text on a *translucent* fill washes out on light — land the hover on a **solid** fill (add a `:root[data-theme="light"] .btn-x:hover` override if the base was tuned for dark). Full set (primary/ghost/danger/danger-solid/accent/outline + `.btn-sm`/`.btn-xs`): `assets/buttons.css`.
+
+**3. Outline variants via custom-property overrides** — one `.btn-outline` rule parameterized with `--btn-outline-color/-border/-hover-bg`; each variant only sets those vars. Keeps CSS DRY. See `assets/buttons.css`.
+
+**4. Global focus ring** — `:focus-visible { box-shadow: var(--focus-ring) }` on links/buttons/inputs/selects/textareas (in `assets/base.css`).
+
+**5. Semantic alerts & pills** — soft bg + matching border + readable text per semantic (`--x-soft`/`--x-border`). Pills are rounded with a status dot; tags are compact mono chips. `assets/components.css`.
+
+**6. Toasts with motion** — top-stacked glass cards: spring cubic-bezier enter, fade-up exit, linear progress bar, semantic border/icon tints; full-width bottom on mobile; honor `prefers-reduced-motion`. CSS in `assets/components.css`; driver `assets/toast.service.ts` + `toast-stack.component.ts` (adapt the API).
+
+**7. Loading & disabled states — never flash controls on data load.** Controls carry a 140–150ms transition, so toggling `disabled` **replays it** — binding `disabled` (or a reactive form's `disable()`/`enable()`) to a loading flag makes the toolbar visibly flicker on every load.
+
+```ts
+effect(() => { isLoading() ? form.disable() : form.enable(); });  // ✗ flickers
+<app-select [disabled]="isLoading()" />                            // ✗
+<app-select />                                                     // ✓ stays interactive
 ```
 
-## Brand Assets
+- Keep **filters/read controls interactive while loading**; show loading in the content area (spinner/skeleton on `--surface-soft`, `aria-busy`).
+- Reserve `disabled` for real **action** states the user initiates and that don't flip on navigation (`isSaving`, validating, `!canExport`). A control that enables **once** when data first arrives is fine.
 
-See `assets/*.svg` in this skill (logo, variantes negativas/secundarias/con slogan, icon). Copy what the project needs into its `public/`/`assets/` folder.
+**8. Modals & overlays (glass dialog).** Structure: `.overlay` (scrim) → `.modal` with `.modal-head` / `.modal-body` (scrolls) / `.modal-foot` (`.modal-foot.split` pushes a destructive action left). Drive open/close with a **signal** + `@if` — never leave a hidden modal in the DOM. CSS in `assets/modal.css`. Accessibility is **mandatory** — wire the **`[yzModal]` directive** (`assets/yz-modal.directive.ts`) on every modal:
+
+- `role="dialog"` + `aria-modal="true"` + `aria-labelledby` → title.
+- Close on Escape / overlay click / close-button (`aria-label`); `stopPropagation` on the card.
+- **Focus trap** (cycle Tab/Shift+Tab, restore focus to trigger on close) + **scroll-lock** the body.
+- Entrances (`overlay-in`, `modal-in`) behind `prefers-reduced-motion`.
+- **An anchored dropdown must NEVER overflow its modal.** A popover clamps against the *viewport* by default, so a long list spills past a modal's edges/footer. Clamp it against the **containing modal's rect** instead — it shrinks to fit and scrolls internally. *Exception:* a fixed-height popover taller than a short modal (a date-picker calendar) keeps clamping to the *viewport* and floats over the modal (confining it flips it off-screen). Reference: `ydAnchored` derives bounds from `host.closest('.modal')` **only when `ydConfineToModal` is set** — `yd-select` opts in, `yd-date` doesn't (`assets/yd-anchored.directive.ts`). A modal that's essentially just the select also needs a hint/empty-state below it (so the menu opens over content, not the footer). **Top-anchoring the overlay does NOT fix this** — the collision is with the modal's own edge.
+
+**9. Collapsible sidebar — the collapsed rail (when present).** Hide labels, center icons, keep the label as a tooltip (`data-tip-pos="right"`) + `aria-label`; swap wordmark→isotipo (`icon.svg`); stack footer tools (theme/collapse) as **contained icon-buttons a step below the user chip** (e.g. ~53×38 in a ~78px rail, ~20px icon) — never wide-short pills. Preserve focus order in both states. CSS in `assets/shell.css`.
+
+**10. Tooltips (CSS-only, `[data-tip]`).** Themed glass tooltip replacing native `title` — pure CSS via `::after`/`::before`, no JS. CSS in `assets/components.css`.
 
 ```html
-<img src="/logo.svg" alt="Yoizen" class="h-8 w-auto" />
+<button class="icon-act" [attr.data-tip]="'Eliminar'" aria-label="Eliminar"> … </button>
+<a class="nav-link" [attr.data-tip]="collapsed() ? label : null" data-tip-pos="right"> … </a>
 ```
 
-## Best Practices
+- Default position **above, centered**; `data-tip-pos="right"`/`"left"` for sides. Action clusters at a row's right edge (`.row-actions`, `.fr-acts`…) auto-open **left** to avoid horizontal scroll. `pointer-events: none` (never steals clicks); `data-tip=""`/`null` = no tooltip.
+- **The tooltip is a visual reinforcement — never the sole channel for information.** It fires on `:hover` **and** `:focus-visible` (keyboard-reachable), but touch and screen readers never see it, so whatever it carries must also live in the visible content or an `aria-label`: **(a)** icon-only controls always keep an `aria-label`; **(b)** when the tip reveals info not otherwise present (an error detail, a field's help text), **duplicate it into `aria-label` and make the host focusable** (`tabindex="0"`) — don't bury an error in hover; **(c)** if the same text is already visible beside the control, **drop the tooltip** — reserve it for *extra* info (a chip reading "secret" whose tip adds "· sealed with kubeseal"), never to echo a label. This is the anti-abuse rule: a tooltip earns its place by adding value, not by restating what's on screen.
 
-### DO:
-- Consume `var(--*)` tokens for every color, radius, spacing, shadow, font-size, duration and z-index
-- Use `.grad-text` for brand titles on dark surfaces
-- Use the semantic trio (`-soft` bg + `-border` + bright pastel text) for states
-- Apply spacing rhythm with `--space-*` (sections gap-6, cards pad-6, grids gap-4/5)
-- Keep `prefers-reduced-motion` and `:focus-visible` support intact
-- Use `.tnum`/`.cell-mono` for numeric/metric columns
-- Mirror every icon-only button's `data-tip` into an `aria-label`
+**11. Themed selects & date pickers (never native).** Native `<select>`/`<input type=date>` show OS chrome that breaks the glass look. Use `assets/yd-select.component.ts` (signal select: glass popover, search above a threshold, `tags` mode) and `assets/yd-date.component.ts` (themed **calendar**: month grid, prev/next, today/clear). Both position via `assets/yd-anchored.directive.ts` (see #8). Adapt the components' I/O but keep the markup contract (`.yd-select` / `.yd-cal`) so `assets/forms.css` + `components.css` apply. The calendar comes out identical because look **and** logic ship together.
 
-### DON'T:
-- Hardcode hex/rgba/rem/ms/z-index in components — add or consume a token instead
-- Use `--grad-full` for text (illegible on dark) — that's `--grad-text`'s job
-- Use saturated semantic base colors for text (they're for dots/icons)
-- Use `--yz-primary-1` as active-state text on dark — it sinks in; use `--nav-active-text` (never a literal `#fff`, which vanishes on the pale active tint in light)
-- Forget `.modal-popovers` on any modal with a `yd-select`/`yd-date`, or `stopPropagation` on the modal panel — see `references/forms-modals.md`
-- Use native `<select>`/`<input type=date>` unthemed — use the `.yd-*` pattern (`grep -rn '<select' src/` must be zero)
-- Ship native `title` tooltips — every hover text uses `data-tip` (+ `aria-label`)
-- Use pure black or flat backgrounds — ambient glow over `--yz-dark`
-- Skip text-hierarchy levels (title→soft→muted→faint)
+**12. App shell & responsive layout (reference, not mandatory).** The design system is **layout-agnostic** — tokens/base/components assume *no* particular nav. The shell (`assets/shell.css`: collapsible left sidebar + mobile drawer) is **one reference layout — reshape or replace it**. A top-nav app keeps every token/component/primitive and just builds a different chassis with the same techniques:
 
-## Deep references (load on demand)
+- **Desktop collapse:** a `.collapsed` class on a CSS-grid shell flips `grid-template-columns` from `var(--sidebar-w) 1fr` to `var(--sidebar-w-collapsed) 1fr`; `.collapsed .x` rules drive the rail (pattern #9). Toggled by a signal.
+- **Mobile drawer:** below the seam the grid drops to one column; the sidebar goes `position: fixed` + `transform: translateX(-105%)`, sliding in via `.open`, with a blurred **scrim** and a floating **FAB (☰)** (z: fab < scrim < drawer). **The same off-canvas pattern works for a top nav** — just anchor it to the top.
+- **Breakpoint seams** (desktop-first): KPI/grids 3→2→1, master-detail editors stack, `form-grid`→1col, tighter padding; tables drop columns with `col-hide-md`/`col-hide-lg` (keep identifier + primary action) instead of horizontal scroll; toasts full-width bottom; modals cap `90vh`. Guard hover lifts with `@media (hover: hover)`.
 
-Pull the matching file into context when the task touches it — they hold the
-full field-tested detail that doesn't need to be in working memory all the time:
+## Visual Correction Checklist
 
-- **`references/theming.md`** — light-theme variant (the inversions that matter), theme-toggle bootstrap (pre-paint, View-Transitions reveal), variable fonts. Read before building the light theme or the toggle.
-- **`references/tables.md`** — tables, lists, dashboards, server-side pagination, grouped catalogs, deep-link filtering, pill→variant mapping. Read before building any data view.
-- **`references/forms-modals.md`** — `data-tip` tooltips, themed `yd-select`/`yd-date` inside modals (the modal-popovers / flip-clamp / propagation traps), destructive/confirmation dialogs. Read before adding tooltips, dropdowns-in-modals or a delete dialog.
-- **`references/performance.md`** — zoneless/OnPush/signals, lazy routes, skeletons, a11y, paint cost of `backdrop-filter`. Read when scaffolding a project or doing a perf pass.
-- **`references/docs.md`** — index of the theme bundle, Angular references and brand assets.
+Audit a screen against this; each item points at the pattern with the fix.
 
-## Resources
+1. Flat background → ambient gradient stack (#1).
+2. Off-brand hexes / muddy grays / default browser blues → realign to brand tokens.
+3. Buttons without lift/glow, abrupt color-only hover, or a soft variant washing out in light → #2.
+4. Harsh `1px solid #ccc` + flat `0 1px 2px` shadow → `--panel-border`/`-strong` + `--shadow-glass` / `.glass`.
+5. Arbitrary paddings/margins → `--space-*` tokens.
+6. No type hierarchy → title 600–700 / body / muted via `--text`/`--text-soft`/`--text-muted`/`--text-faint` + type scale.
+7. Mixed corner radii → `--radius-sm/md/lg`; pills for badges and (dark) buttons.
+8. Raw red/green state text → soft+border alerts/pills (#5).
+9. Missing focus styles, or contrast < 4.5:1 → global focus ring (#4) + fix contrast.
+10. No transitions / janky / `transition: all` / keyframes without a `prefers-reduced-motion` guard → 140–150ms ease, named properties, guard **every** keyframe (#2).
+11. Blank divs while loading, or toolbar disabled to signal loading → spinner/skeleton/empty on `--surface-soft`, controls stay interactive (#7).
+12. Emojis / mixed icon sets / hardcoded icon colors / odd sizes → Lucide 16/20/24 via `currentColor` (Iconography).
+13. `backdrop-filter` without `-webkit-`, or dark theme missing `color-scheme: dark` → add both.
+14. Bare overlay (no `role=dialog`/focus-trap/scroll-lock/Escape) → `[yzModal]` + `.overlay`/`.modal` (#8).
+15. Collapsed footer tools as wide-short pills → contained icon-buttons below the avatar (#9).
+16. Native `title`, icon-only control with no hover hint, a tooltip that's the **only** carrier of an error/description (lost on touch & screen readers), or a tip **echoing already-visible text** → `[data-tip]` + `aria-label`; duplicate critical info into `aria-label` + make focusable; drop redundant tips (#10).
+17. Raw `<select>`/`<input type=date>` OS chrome → themed `yd-select`/`yd-date` (#11).
+18. Fixed-width layout / horizontal table scroll / sidebar not collapsing on mobile → #12.
 
-- **Theme bundle (copy-paste ready)**: `assets/theme/`
-- **Themed select/date + positioning + theme toggle (Angular)**: `assets/angular/` (`yd-select`, `yd-date`, `yd-anchored` directive, `popover.service`, `theme.service`)
-- **React component template (token-consuming)**: `assets/component-template.tsx`
-- **Brand assets**: `assets/*.svg`
+Correct at the token level first (palette/base), then per-component — a fixed palette improves every screen at once. **The audit is done only when all 18 items have been checked against the screen** — not the first few that obviously match.
+
+## CSS Architecture (pure-CSS projects)
+
+Copy the canonical files from `assets/` and import them once from `styles.css`, **in this order** (later files consume the tokens):
+
+```css
+@import "./styles/palette.css";               /* tokens only — dark + light */
+@import "./styles/base.css";                  /* reset, ambient bg, scrollbar, focus, glass, theme reveal */
+@import "./app/shared/styles/buttons.css";
+@import "./app/shared/styles/forms.css";      /* inputs, fields, yd-select, yd-cal */
+@import "./app/shared/styles/table.css";      /* data-table + col-hide-* responsive */
+@import "./app/shared/styles/modal.css";
+@import "./app/shared/styles/components.css"; /* pills, tags, cards, headers, KPI, alerts, spinner, skeleton, empty, toasts, tooltips, diff, kv */
+@import "./app/layout/shell.css";             /* reference shell — swap per app */
+/* feature-specific styles stay under ./app/features/<feature>/ */
+```
+
+- **Copy `palette.css` + `base.css` verbatim** (brand truth, both themes); adapt the rest.
+- Tokens live **only** in `palette.css`; components consume `var(--*)`, never raw hex.
+- New semantic colors get a `-soft` + `-border` pair, defined in **both** theme blocks.
+
+## Assets
+
+### Brand files (official Yoizen brand kit — color decisions trace back to the palette)
+
+| File(s) | Usage |
+|------|-------|
+| `logo.svg` / `logo-negativo.svg` / `logo-blanco.svg` / `logo-negro.svg` | Wordmark — light bg / dark bg / all-white / all-black |
+| `logo-secundario*.svg` | Compact/square wordmark (app shells) |
+| `logo-slogan*.svg` | Logo + slogan (landing/marketing) |
+| `icon.svg` / `icon-blanco.svg` / `icon-negro.svg` | Isotipo — favicon, avatar, collapsed-rail brand |
+| `paleta-institucional.png` / `paleta-degrade.png` | The institutional palette + gradients |
+
+```html
+<img src="/assets/logo.svg" alt="Yoizen" class="h-8 w-auto" />          <!-- header -->
+<img src="/assets/logo-negativo.svg" alt="Yoizen" class="h-7 w-auto" /> <!-- dark sidebar -->
+<img src="/assets/icon.svg" alt="Yoizen" class="h-9 w-9" />             <!-- compact / favicon -->
+```
+
+### CSS bundle (copy `palette.css`/`base.css` verbatim; adapt the rest)
+
+| File | Contents |
+|------|----------|
+| `palette.css` | Design tokens — dark `:root` + `:root[data-theme="light"]` |
+| `base.css` | Reset, ambient background, scrollbar, focus ring, `.glass`, theme reveal |
+| `buttons.css` | `.btn` + variants (primary/ghost/danger/accent/outline, sizes) |
+| `forms.css` | Inputs, `.field`/`.field-help`, textarea, `yd-select`, `yd-cal` |
+| `table.css` | `.data-table` + `col-hide-*` responsive + skeleton rows |
+| `modal.css` | `.overlay`/`.modal` glass dialog (+ `.modal-foot.split`) |
+| `components.css` | Pills, tags, cards, page/section headers, KPI, alerts, spinner, skeleton, empty states, toasts, **tooltips**, code-chip, diff box, key-value rows |
+| `shell.css` | **Reference layout** (swap/reshape per app) — sidebar/drawer, topbar, login, responsive |
+
+### Behavioral primitives (TypeScript — wire to the project's components)
+
+| File | Role |
+|------|------|
+| `yz-modal.directive.ts` | Accessible dialog: `role`/`aria-modal`, focus-trap, scroll-lock, Escape |
+| `yd-anchored.directive.ts` | Popover positioning: flip/clamp vs viewport or modal (`ydConfineToModal`) |
+| `yd-select.component.ts` | Themed select with search / tags |
+| `yd-date.component.ts` | Themed **calendar** date picker |
+| `toast.service.ts` + `toast-stack.component.ts` | Toast system (CSS in `components.css`) |
+| `component-template.ts` | Angular standalone starting point (signals, OnPush) |
+
+## Iconography
+
+**Mandatory icon set: [Lucide](https://lucide.dev) (`lucide-angular`)** — uniform 2px-stroke outline icons. One set per app; never mix libraries or use emojis/ad-hoc SVGs when a Lucide icon exists.
+
+```ts
+import { LucideAngularModule, Search } from 'lucide-angular';
+@Component({ imports: [LucideAngularModule], template: `<lucide-icon [img]="SearchIcon" [size]="20" />` })
+export class MyComponent { protected readonly SearchIcon = Search; }
+```
+
+- **Sizes**: 16 inline/inputs · 20 buttons & nav (default) · 24 page headers & empty states. No other sizes.
+- **Stroke**: default `stroke-width: 2`; never mix widths or outline/filled.
+- **Color**: inherit `currentColor` — never hardcode. Semantic icons take the semantic token; interactive icons follow their button/link color.
+- **Icon-only buttons**: circular, bordered, with hover (`.btn-icon` in `buttons.css`, or `.icon-act` for inline row actions in `components.css`) + an `aria-label`.
+
+## Performance
+
+- **Change detection**: `ChangeDetectionStrategy.OnPush` on every component, zoneless app. Derive view state with `computed()`; don't recompute in the template.
+- **Lists**: `@for` **must** declare `track` (stable id) so rows aren't re-created.
+- **Routing**: lazy-load feature routes with `loadComponent`; defer heavy/below-the-fold blocks with `@defer`.
+- **Data at scale**: paginate + filter **server-side** for growing lists; **debounce** search (~300ms) before querying.
+- **CSS**: prefer `transform`/`opacity` (compositor-only); keep the ambient glow a fixed `body::before` (not `background-attachment: fixed`) to avoid full repaints on scroll. (Transitioned-property naming and the `disabled`-flicker rule live in #2 and #7 — not restated here.)

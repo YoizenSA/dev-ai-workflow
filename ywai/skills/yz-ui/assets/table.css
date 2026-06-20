@@ -60,28 +60,3 @@
 }
 .table-foot > span:first-child { font-variant-numeric: tabular-nums; }
 .pager { display: flex; align-items: center; gap: 0.5rem; }
-
-/* ============================================================
-   Reusable table primitives (define ONCE here, never per-feature).
-   - Responsive column hiding: drop low-priority columns before the
-     wrapper has to scroll. Put the class on BOTH the th and the td.
-     Keep a never-hidden core (identifier + status + actions).
-   - Truncation: .cell-trunc goes on an inner <span>, NEVER on the td
-     (a block td leaves table layout and misaligns the row border).
-     Pair with a length-gated data-tip for the full value.
-   - .col-fit / .col-total: fit-to-content, centered columns (pills,
-     tags, small counts) so they don't eat row width.
-   ============================================================ */
-@media (max-width: 1300px) { .col-hide-lg { display: none; } }
-@media (max-width: 1040px) { .col-hide-md { display: none; } }
-
-.cell-trunc { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Stacked cell: a primary line + a muted sub-line (e.g. value + branch/error). */
-.cell-stack { display: flex; flex-direction: column; gap: 2px; }
-.cell-sub { font-size: var(--text-xs); color: var(--text-faint); }
-.cell-sub.err { color: var(--tint-danger); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-.cell-sub.branch { color: var(--tint-info); }
-
-/* Fit-to-content centered columns (pills/tags/short counts). */
-.data-table th.col-fit, .data-table td.col-fit { width: 1%; white-space: nowrap; text-align: center; }
-.data-table th.col-total, .data-table td.col-total { width: 84px; min-width: 84px; text-align: center; }
