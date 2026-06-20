@@ -100,6 +100,13 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 						<span className="delegation-meta-status">{delegation.status}</span>
 					</div>
 
+					{delegation.handoff && (
+						<div className="delegation-handoff-full">
+							<h4 className="activity-title">Handoff</h4>
+							<p className="delegation-handoff-full-text">{delegation.handoff}</p>
+						</div>
+					)}
+
 					<div className="activity-section">
 						<h4 className="activity-title">Activities</h4>
 						{activities && activities.length > 0 ? (

@@ -248,6 +248,20 @@
 	line-height: 1.4;
 }
 
+.delegation-handoff-full {
+	margin-top: var(--space-3);
+}
+
+.delegation-handoff-full-text {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 16rem;
+	overflow-y: auto;
+}
+
 /* Blocker badge */
 .delegation-blocker {
 	margin-top: var(--space-2);

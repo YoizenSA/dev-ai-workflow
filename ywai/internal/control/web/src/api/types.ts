@@ -34,6 +34,7 @@ export interface Delegation {
   created_at: string
   started_at?: string | null
   completed_at?: string | null
+  handoff?: string
   handoff_preview?: string
   blocker?: string
   pending_action?: boolean
