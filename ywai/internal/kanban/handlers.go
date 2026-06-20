@@ -538,17 +538,49 @@ func isValidName(name string) bool {
 
 // --- Markdown Frontmatter Helpers ---
 
+// resolveAgentFile finds the .md file for an agent name within dir.
+//
+// Agents may live either directly under dir (e.g. dir/gentle-orchestrator.md)
+// or inside a group subdirectory (e.g. dir/core/architect.md,
+// dir/social-refactor/migration-orchestrator.md). ListAgents already scans
+// both layouts when listing; this helper mirrors that so the single-agent
+// handlers (GetAgent, PutAgent, DeleteAgent, permissions) resolve the same
+// file the list presented — otherwise selecting a nested agent returns 404.
+//
+// Returns the absolute path or "" when nothing matches.
+func resolveAgentFile(dir, name string) string {
+	target := name + ".md"
+
+	// 1. Flat layout: dir/{name}.md
+	flat := filepath.Join(dir, target)
+	if info, err := os.Stat(flat); err == nil && !info.IsDir() {
+		return flat
+	}
+
+	// 2. Grouped layout: dir/{group}/{name}.md — scan one level of subdirs.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		nested := filepath.Join(dir, e.Name(), target)
+		if info, err := os.Stat(nested); err == nil && !info.IsDir() {
+			return nested
+		}
+	}
+	return ""
+}
+
 // readAgentMarkdownPath returns the path to an agent's .md file, or "" if it doesn't exist.
 func readAgentMarkdownPath(name string) string {
 	dir, err := agentsDir()
 	if err != nil {
 		return ""
 	}
-	path := filepath.Join(dir, name+".md")
-	if _, err := os.Stat(path); err != nil {
-		return ""
-	}
-	return path
+	return resolveAgentFile(dir, name)
 }
 
 // parseFrontmatter extracts YAML frontmatter from a markdown file.
@@ -1011,7 +1043,11 @@ func (h *Handlers) GetAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	path := filepath.Join(agentsDirPath, name+".md")
+	path := resolveAgentFile(agentsDirPath, name)
+	if path == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -1042,9 +1078,11 @@ func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	path := filepath.Join(agentsDirPath, name+".md")
+	path := resolveAgentFile(agentsDirPath, name)
 
-	// Prevent path traversal
+	// Prevent path traversal (resolveAgentFile only returns paths under
+	// agentsDirPath, but a flat or nested layout must still be verified so a
+	// crafted name can never escape the base directory).
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1055,8 +1093,8 @@ func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if !strings.HasPrefix(absPath, baseDir) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+	if path == "" || !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
 
@@ -1145,9 +1183,11 @@ func (h *Handlers) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	path := filepath.Join(agentsDirPath, name+".md")
+	path := resolveAgentFile(agentsDirPath, name)
 
-	// Prevent path traversal
+	// Prevent path traversal (resolveAgentFile only returns paths under
+	// agentsDirPath, flat or nested — still verify so a crafted name cannot
+	// escape the base directory).
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1158,8 +1198,8 @@ func (h *Handlers) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if !strings.HasPrefix(absPath, baseDir) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path outside allowed directory"})
+	if path == "" || !strings.HasPrefix(absPath, baseDir) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
 
