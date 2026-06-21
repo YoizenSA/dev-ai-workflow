@@ -53,7 +53,7 @@ comm -23 /tmp/used.txt /tmp/defined.txt   # should list ONLY contextual/runtime 
 ```
 
 Expected "orphans" are **contextual vars set at runtime**, not palette tokens — these are fine:
-`--glow-1/2/3` (set in `base.css` + light block), `--kpi-rgb`/`--kpi-icon-color`/`--modal-w`/`--yd-pop-maxh`/`--nav-active-a1/a2` (set inline or by a directive). Anything else in the list is a real orphan — fix it.
+`--glow-1/2/3` (set in `base.css` + light block), `--kpi-rgb`/`--kpi-icon-color`/`--modal-w`/`--yd-pop-maxh`/`--nav-active-a1/a2`/`--toast-dur` (set inline or by a directive). Anything else in the list is a real orphan — fix it.
 
 **2. Dark + light** — confirm nothing is hardcoded that breaks in light; every colour flows from a token re-themed by `data-theme`.
 

@@ -6,18 +6,17 @@ import { Directive, ElementRef, DestroyRef, afterNextRender, inject, input } fro
  * El menú sigue siendo `position: absolute` anclado a su host (.yd-select /
  * .yd-date), pero al abrir —y en resize/scroll— ajustamos dos cosas para que
  * nunca quede pegado ni se salga del borde:
- *   • Flip: si debajo del disparador no entra el menú pero arriba sí, lo abre
- *     hacia arriba (clase `yd-menu-up`).
+ *   • Preferencia por abajo: el menú abre SIEMPRE hacia abajo mientras haya un
+ *     alto usable bajo el disparador (medido contra el viewport, no el modal).
+ *     Sólo voltea hacia arriba (`yd-menu-up`) si abajo no alcanza el mínimo y
+ *     arriba ofrece más espacio.
  *   • Clamp: deja siempre un margen contra el borde; si aun así no entra,
  *     limita el alto con `--yd-pop-maxh` y el menú scrollea por dentro.
  *
- * El borde de referencia es el `.modal` que contiene al host (si existe),
- * intersecado con el viewport; si el host no está en un modal, es el viewport.
- * Así el menú **nunca sobresale del modal**: con muchas opciones clampa su alto
- * al espacio disponible dentro del modal y scrollea por dentro. Para que un
- * popover alto (calendario) abra hacia abajo y no quede «mirando para arriba»,
- * el modal que lo contiene se ancla arriba por CSS (`.overlay:has(yd-date)`),
- * dejándole aire debajo.
+ * El límite inferior es el viewport: el menú puede caer por debajo del borde del
+ * modal (incluso sobre su footer) con tal de no voltear hacia arriba y tapar
+ * contenido. Con `ydConfineToModal` sólo se acota el límite superior al modal
+ * (para el caso raro de tener que voltear). El modal va centrado por CSS.
  *
  * Cada popover decide si consume `--yd-pop-maxh`: el select sí (lista
  * scrolleable); el calendario la ignora (alto fijo) y sólo usa el flip.
@@ -83,17 +82,20 @@ export class YdAnchoredDirective {
     const rect = host.getBoundingClientRect();
     const natural = pop.offsetHeight;
 
-    // Con confineToModal, el popover no debe sobresalir del modal que lo
-    // contiene: el borde de referencia es el `.modal` ancestro (intersecado con
-    // el viewport). Sin modal —o sin confinar— cae al viewport.
+    // Preferencia fuerte por abrir HACIA ABAJO: el límite inferior es siempre el
+    // viewport (no el modal), así el menú cae por debajo —incluso sobre el footer
+    // del modal— en vez de voltear hacia arriba y tapar contenido. Con confineToModal
+    // mantenemos el límite superior en el modal para el caso (raro) de tener que
+    // voltear. Si abajo no entra, clampa el alto y scrollea por dentro.
     const modalRect = this.confineToModal() ? host.closest('.modal')?.getBoundingClientRect() : undefined;
     const topBound = modalRect ? Math.max(0, modalRect.top) : 0;
-    const bottomBound = modalRect ? Math.min(window.innerHeight, modalRect.bottom) : window.innerHeight;
+    const bottomBound = window.innerHeight;
 
     const below = bottomBound - rect.bottom - this.gap - this.margin();
     const above = rect.top - topBound - this.gap - this.margin();
 
-    const up = natural > below && above > below;
+    // Sólo voltea hacia arriba si abajo no alcanza un alto usable y arriba ofrece más.
+    const up = below < this.minHeight() && above > below;
     const avail = Math.max(up ? above : below, this.minHeight());
 
     pop.classList.toggle('yd-menu-up', up);

@@ -16,6 +16,10 @@ body {
   background: var(--yz-dark);
 }
 
+/* Intensidad de los glows del fondo, como tokens (un solo punto de control para
+   el fondo de la app Y el del login; en light se redefinen abajo). */
+:root { --glow-1: 0.21; --glow-2: 0.17; --glow-3: 0.16; }
+
 /* Ambient 3-layer radial glow — capa fija propia en vez de
    background-attachment: fixed (que fuerza repaint completo al scrollear). */
 body::before {
@@ -25,17 +29,19 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 8%,  rgba(var(--yz-primary-1-rgb), var(--glow-1, 0.30)), transparent 52%),
-    radial-gradient(circle at 88% 92%, rgba(var(--yz-accent-rgb), var(--glow-2, 0.26)), transparent 55%),
-    radial-gradient(circle at 78% 12%, rgba(var(--yz-primary-2-rgb), var(--glow-3, 0.24)), transparent 48%),
+    radial-gradient(circle at 12% 8%,  rgba(var(--yz-primary-1-rgb), var(--glow-1, 0.21)), transparent 52%),
+    radial-gradient(circle at 88% 92%, rgba(var(--yz-accent-rgb), var(--glow-2, 0.17)), transparent 55%),
+    radial-gradient(circle at 78% 12%, rgba(var(--yz-primary-2-rgb), var(--glow-3, 0.16)), transparent 48%),
     var(--yz-dark);
 }
 /* Light theme: keep a hint of warmth but pull the glows way down so
    they read as a soft tint, not saturated blotches. */
 :root[data-theme="light"] {
+  /* Sobre fondo claro los mismos glows rinden más fuerte (manchas, no tinte) →
+     más bajos que en dark, para que se lean como un wash sutil. */
   --glow-1: 0.12;
-  --glow-2: 0.10;
-  --glow-3: 0.11;
+  --glow-2: 0.09;
+  --glow-3: 0.10;
 }
 
 h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
@@ -58,6 +64,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   /* faint glow lifts the wordmark off the dark sidebar */
   filter: drop-shadow(0 1px 8px rgba(var(--tint-primary-glow-rgb), 0.25));
 }
+/* En light el glow azul detrás del wordmark saturado no aporta y ensucia → sin filtro. */
+:root[data-theme="light"] .grad-text { filter: none; }
 
 /* ---- Custom scrollbar ---- */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -101,6 +109,20 @@ textarea:focus-visible, [tabindex]:focus-visible {
    wipes it in. toggleTheme() animates ::view-transition-new(root). */
 ::view-transition-old(root),
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+/* El ícono sol/luna gira + desvanece con su PROPIO snapshot mientras corre el wipe
+   (es el elemento que el usuario mira al hacer clic). Un solo toggle visible a la
+   vez (shell xor login) → un name compartido es seguro. No hace falta guard de
+   reduced-motion: theme.service saltea toda la View Transition en ese caso. */
+/* inline-flex: le da una caja propia al ícono para que view-transition-name sea
+   robusto (un inline puede fragmentarse e ignorar el name). */
+.theme-toggle lucide-icon { display: inline-flex; view-transition-name: theme-icon; }
+::view-transition-old(theme-icon),
+::view-transition-new(theme-icon) { animation-duration: 420ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(theme-icon) { animation-name: theme-icon-out; }
+::view-transition-new(theme-icon) { animation-name: theme-icon-in; }
+@keyframes theme-icon-out { to { opacity: 0; transform: rotate(-160deg) scale(0.3); } }
+@keyframes theme-icon-in { from { opacity: 0; transform: rotate(160deg) scale(0.3); } }
 
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {

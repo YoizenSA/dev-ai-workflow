@@ -2,29 +2,46 @@
    table.css · dark glass data tables
    ============================================================ */
 .table-wrap { overflow-x: auto; border-radius: var(--radius-md); }
-.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+/* Tabla que llena una card: el wrap recorta a las esquinas de la CARD (radius-lg),
+   si no el header opaco queda con esquina cuadrada y se ve un "borde cortado". */
+.card > .table-wrap:first-child { border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg); }
+.card > .table-wrap:last-child { border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg); }
+/* `separate` (no `collapse`): un th `position: sticky` con `collapse` no pinta su
+   borde de forma continua y la línea bajo los títulos se ve escalonada/serruchada
+   (peor en columnas de ancho fijo por redondeo sub-píxel). Con `separate` el
+   border-bottom del header se renderiza parejo. */
+.data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-base); }
 
 .data-table thead th {
   text-align: left; font-size: var(--text-xs); font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-muted); padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--panel-border-strong);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-soft); padding: 0.7rem 1rem;
+  /* El header se distingue por TIPOGRAFÍA (soft + bold + uppercase), no por una
+     barra gris ni una línea dura. Fondo OPACO sin backdrop-filter (el blur sobre
+     un th sticky rompe la línea hasta refrescar); separador visible pero sobrio. */
+  border-bottom: 1px solid var(--panel-border);
   white-space: nowrap; position: sticky; top: 0;
-  background: var(--table-head-bg); backdrop-filter: blur(8px);
+  background: var(--table-head-bg);
 }
 .data-table th.sortable { cursor: pointer; user-select: none; }
 .data-table th.sortable:hover { color: var(--text); }
 .data-table th.num, .data-table td.cell-num { text-align: right; }
 /* Columnas de pills/tags: header y contenido centrados */
 .data-table th.col-c, .data-table td.col-c { text-align: center; }
+/* Columna al contenido (no se estira): evita el aire excesivo entre columnas de
+   texto corto. La columna identificadora queda flexible y absorbe el sobrante. */
+.data-table th.col-min, .data-table td.col-min { width: 1%; white-space: nowrap; }
 
 .data-table tbody td {
-  padding: 0.72rem 1rem;
-  border-bottom: 1px solid rgba(var(--slate-rgb), 0.11);
+  padding: 0.78rem 1rem;
+  /* Borderless (variante premium minimal, estilo Linear/Stripe): sin líneas entre
+     filas. Separan el hover y el espaciado; la única línea es la del header. */
+  border-bottom: 1px solid transparent;
   color: var(--text-soft); white-space: nowrap; vertical-align: middle;
 }
 .data-table tbody tr { transition: background var(--t-fast) ease; }
-.data-table tbody tr:hover { background: var(--surface-soft); }
+/* Sin líneas, el hover es el separador principal de fila → un poco más presente. */
+.data-table tbody tr:hover { background: var(--surface-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr.clickable { cursor: pointer; }
 
@@ -39,8 +56,9 @@
   text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
 }
 
-/* Row actions revealed on hover */
-.row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity var(--t-base) ease; }
+/* Acciones de fila SIEMPRE visibles (atenuadas), nítidas en hover/focus. El
+   solo-hover esconde acciones en táctil y resta descubribilidad. */
+.row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; opacity: 0.5; transition: opacity var(--t-base) ease; }
 .data-table tbody tr:hover .row-actions,
 .data-table tbody tr:focus-within .row-actions { opacity: 1; }
 .icon-act {
