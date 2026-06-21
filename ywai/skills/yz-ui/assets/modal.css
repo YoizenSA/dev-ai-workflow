@@ -14,10 +14,9 @@
   overflow-y: auto;
   animation: fadeIn 0.2s ease;
 }
-/* Modales con calendario (yd-date es un popover alto): anclar arriba para darle
-   aire debajo y que abra hacia abajo en vez de «mirar para arriba». El select,
-   más bajo, no lo necesita; por eso sólo cuando hay yd-date. */
-.overlay:has(yd-date) { align-items: start; padding-top: clamp(var(--space-6), 8vh, 72px); }
+/* El modal siempre va centrado. Los popovers (yd-select / yd-date) prefieren abrir
+   hacia abajo y, si no entran, la directiva ydAnchored clampa/voltea; ya no hace
+   falta anclar el modal arriba. */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal {
@@ -25,7 +24,7 @@
   display: flex; flex-direction: column; overflow: hidden;
   border-radius: var(--radius-xl); border: 1px solid var(--panel-border-strong);
   background: linear-gradient(165deg, rgba(var(--surf-5-rgb),0.96), rgba(var(--surf-6-rgb),0.98));
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--shadow-glass), var(--glass-highlight);
   animation: modalIn 0.34s cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* El scroll vive en el body (head/foot fijos) y queda dentro del borde redondeado */

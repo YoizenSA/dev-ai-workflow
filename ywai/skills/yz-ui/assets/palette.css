@@ -14,8 +14,10 @@
   --yz-primary-2: #4a3abf;  /* Secondary Purple */
   --yz-accent:    #fd6421;  /* Accent Orange  */
   --yz-yellow:    #fdbd27;  /* Yellow         */
-  --yz-dark:      #272a35;  /* Dark surface   */
-  --yz-dark-soft: #1d2029;
+  --yz-dark:      #131722;  /* Fondo base profundo: las cards glass se elevan por
+                               encima (antes #272a35 era más claro que las cards,
+                               que quedaban "hundidas"). Realza los glows de marca. */
+  --yz-dark-soft: #0d0f17;
   --yz-navy:      #00183f;  /* Dark Navy      */
   --yz-navy-deep: #00122d;  /* Darker Navy    */
   --yz-light:     #ffffff;
@@ -25,13 +27,15 @@
   --yz-primary-2-rgb: 74, 58, 191;
   --yz-accent-rgb:    253, 100, 33;
   --yz-yellow-rgb:    253, 189, 39;
-  --info-rgb:         96, 165, 250;
+  /* Acentos como canales RGB. Hue alineado a la marca (mismo H en ambos temas):
+     info/azul H262, púrpura H290 — sólo la luminosidad cambia entre temas. */
+  --info-rgb:         124, 162, 227;  /* azul H262, croma bajo (anti-glow) */
   --success-rgb:      16, 185, 129;
   --success-bright-rgb: 52, 211, 153;
   --danger-rgb:       220, 38, 38;
-  --danger-bright-rgb: 248, 113, 113;
+  --danger-bright-rgb: 219, 130, 127;  /* rojo H22, croma bajo */
   --slate-rgb:        148, 163, 184;  /* borders / dividers */
-  --purple-bright-rgb: 139, 123, 255;
+  --purple-bright-rgb: 164, 153, 228;  /* púrpura H290, croma bajo */
   --white-rgb:        255, 255, 255;   /* flips in light theme */
   --black-rgb:        0, 0, 0;         /* flips in light theme */
 
@@ -39,10 +43,11 @@
   --surface:             rgba(30, 35, 48, 0.72);
   --surface-strong:      rgba(22, 26, 38, 0.92);
   --surface-soft:        rgba(var(--white-rgb), 0.04);
-  --surface-hover:       rgba(var(--white-rgb), 0.07);
-  --panel-border:        rgba(var(--slate-rgb), 0.18);
-  --panel-border-strong: rgba(var(--slate-rgb), 0.32);
-  --table-head-bg:       rgba(var(--surf-12-rgb), 0.60);  /* separates header from body */
+  --surface-hover:       rgba(var(--white-rgb), 0.10);  /* feedback de hover visible sobre el fondo profundo */
+  --panel-border:        rgba(var(--slate-rgb), 0.30);  /* contorno visible: define la card sobre el fondo profundo */
+  --panel-border-strong: rgba(var(--slate-rgb), 0.42);
+  --table-head-bg:       #141925;  /* OPACO + un escalón más oscuro que las filas → el header se "hunde" y se diferencia (no se confunde con los datos) */
+  --sidebar-grad:        linear-gradient(185deg, rgba(var(--surf-11-rgb),0.86), rgba(var(--surf-7-rgb),0.92));
   --input-bg:            rgba(var(--surf-4-rgb), 0.60);   /* field fill */
 
   /* ---- Glass surface channels (dark stack; flipped for light theme) ---- */
@@ -62,38 +67,43 @@
   --text:       #f3f5fb;
   --text-soft:  #c4cbdd;
   --text-muted: #8b93ab;
-  --text-faint: #7a8298;   /* lifted to ~AA on dark surfaces, still below muted */
+  --text-faint: #878fa6;   /* AA real sobre card (4.8:1); placeholders/ayudas/eyebrows */
 
   /* ---- Semantic ---- */
   --success:        #34d399;
   --success-soft:   rgba(var(--success-rgb), 0.12);
   --success-border: rgba(var(--success-bright-rgb), 0.30);
-  --danger:         #f87171;
+  --danger:         #db827f;   /* rojo H22, croma bajo (coherente con light) */
   --danger-soft:    rgba(var(--danger-rgb), 0.12);
   --danger-border:  rgba(var(--danger-bright-rgb), 0.30);
   --danger-strong:   #ef4444;
   --danger-strong-2: #dc2626;
-  --warning:        #e9c468;
+  --warning:        #c49d67;   /* ámbar H75 apagado (cierra el desbalance con el light) */
   --warning-soft:   rgba(var(--yz-yellow-rgb), 0.12);
-  --warning-border: rgba(251, 191, 36, 0.30);
-  --info:           #60a5fa;
+  --warning-border: rgba(196, 157, 103, 0.32);
+  --info:           #7ca2e3;   /* azul H262, croma bajo */
   --info-soft:      rgba(var(--yz-primary-1-rgb), 0.12);
   --info-border:    rgba(var(--info-rgb), 0.30);
 
-  /* ---- Semantic text tints (bright pastels for text on glass) ---- */
-  --tint-primary:   #79a9ff;
-  --tint-primary-2: #cbe0ff;
-  --tint-primary-3: #9cc2ff;
-  --tint-primary-4: #cfe0ff;
-  --tint-primary-5: #8fb0e8;
-  --tint-primary-glow-rgb: 110, 163, 255;
-  --tint-purple:    #c4b5fd;
-  --tint-purple-dot: #a78bfa;
-  --tint-accent:    #fdba74;
-  --tint-success:   #6cc8a1;
-  --tint-danger:    #fca5a5;
-  --tint-danger-2:  #fecaca;
-  --tint-info:      #93c5fd;
+  /* ---- Semantic text tints (texto/acento sobre glass) ----
+     Mismo HUE que en light; aquí sube la luminosidad (texto claro sobre oscuro).
+     Croma deliberadamente REDUCIDO (~25% vs un tint puro): sobre fondo oscuro un
+     color claro+saturado "brilla" (glow) y se ve neón — bajar el croma lo iguala
+     a la sobriedad del light. Hues: azul 262 · púrpura 290 · naranja 47 · verde
+     162 · rojo 22. Todos ≥ AA sobre superficie de chip. */
+  --tint-primary:   #7ca2e3;   /* H262, croma bajo */
+  --tint-primary-2: #c4d6ee;
+  --tint-primary-3: #9cb6df;
+  --tint-primary-4: #cfdef3;
+  --tint-primary-5: #9bb2dd;
+  --tint-primary-glow-rgb: 124, 162, 227;
+  --tint-purple:    #a499e4;   /* H290 */
+  --tint-purple-dot: #9a8cd9;
+  --tint-accent:    #e79870;   /* H47 */
+  --tint-success:   #6cbb95;   /* H162 */
+  --tint-danger:    #db827f;   /* H22 */
+  --tint-danger-2:  #f5c2bf;
+  --tint-info:      #7ca2e3;   /* H262 (= tint-primary) */
   --tint-yellow:    var(--yz-yellow);  /* brand yellow as text/icon (flips dark on light) */
   --tint-on-light:  #1f2433;
   --nav-active-text: var(--yz-light);  /* active sidebar item label */
@@ -110,21 +120,40 @@
   --space-8: 2rem;     --space-10: 2.75rem;
 
   /* ---- Shadows ---- */
-  --shadow-glass: 0 24px 60px rgba(5, 9, 20, 0.55);
+  --shadow-glass: 0 30px 64px rgba(0, 0, 0, 0.58);  /* sombra profunda → lift sobre el fondo oscuro */
+  /* Filo superior iluminado (efecto vidrio). Sólo dark; en light se anula. */
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Lift de superficie (cards/KPI): un token, no overrides por componente.
+     Dark = filo glass; light = sombra material (se redefine abajo). */
+  --shadow-card:  var(--glass-highlight);
+  /* Sombras de acento: en dark llevan color de marca; en light pasan a sombra
+     NEUTRA (se redefinen en el bloque light) para no dejar halo sobre blanco. */
+  --shadow-accent:       0 14px 34px rgba(var(--yz-accent-rgb), 0.40);
+  --shadow-danger:       0 5px 14px rgba(var(--danger-rgb), 0.20);
+  --shadow-glow-primary: 0 6px 16px rgba(var(--yz-primary-1-rgb), 0.30);
   /* Contained button glow — present on dark, not neon. */
   --shadow-lift:  0 6px 18px rgba(var(--yz-primary-1-rgb), 0.20);
-  --focus-ring:   0 0 0 3px rgba(var(--yz-primary-1-rgb), 0.42);
+  --focus-ring:   0 0 0 3px rgba(var(--yz-primary-1-rgb), 0.45);
 
   /* ---- Gradient shortcuts ---- */
-  --grad-brand:  linear-gradient(135deg, var(--yz-primary-1), var(--yz-primary-2));
+  /* Degradé de marca para barras/realces (dist-fill, progress, toast, avatar,
+     segmented, calendar-day). Mismos hues que --yz-primary-1/2 pero croma bajo
+     y luminosidad media: visible pero SOBRIO, no el neón puro (igual en ambos temas). */
+  --grad-brand:  linear-gradient(135deg, #4d78ca, #5d55a9);
   /* Primary button fill — a deep indigo (not the raw neon brand gradient) so it
      stays sober in both themes. Same value light + dark for consistency. */
   --btn-primary-bg: linear-gradient(135deg, #2a4cae, #372a8c);
   /* Solid danger button — a confident red with presence, not neon #ef4444. */
   --btn-danger-bg: linear-gradient(135deg, #cf4242, #a52121);
   --grad-accent: linear-gradient(135deg, var(--yz-accent), #df4f12);
+  /* Caution gradient — opción "negativa" de un segmented (p. ej. Desactivar):
+     ámbar cálido, épico en dark Y en white (mismo valor en ambos temas, como
+     --grad-brand). El texto va con --warning-ink (oscuro: el ámbar es luminoso
+     en los dos temas, así que tinta oscura contrasta siempre). */
+  --grad-warning: linear-gradient(135deg, #f0b440, #df8a26);
+  --warning-ink:  #3a2906;
   --grad-full:   linear-gradient(90deg, #1a66ff 0%, #4a3abf 55%, #fd6421 100%);
-  --grad-text:   linear-gradient(95deg, #6ea3ff 0%, #b3a6ff 46%, #ff9e6b 100%);
+  --grad-text:   linear-gradient(95deg, #72a6ff 0%, #aa98ff 48%, #ff935b 100%);  /* mismos hues que la paleta: azul262 · púrpura290 · naranja47 */
 
   /* ---- Layout ---- */
   --sidebar-w:          264px;
@@ -182,20 +211,20 @@
   --text:       #1a1f2e;
   --text-soft:  #3b4458;
   --text-muted: #5a6377;
-  --text-faint: #6b7488;   /* darkened to ~AA on white, still above muted */
+  --text-faint: #626a7e;   /* AA real también sobre input-bg (4.8:1), no sólo white */
 
   /* Overlays flip: "light" translucents now darken; borders get visible */
   --white-rgb: 15, 23, 42;
   --slate-rgb: 71, 85, 105;
-  --panel-border:        rgba(var(--slate-rgb), 0.20);  /* a touch more defined contour */
-  --panel-border-strong: rgba(var(--slate-rgb), 0.34);
+  --panel-border:        rgba(var(--slate-rgb), 0.28);  /* contorno más definido en blanco */
+  --panel-border-strong: rgba(var(--slate-rgb), 0.44);
 
   /* Semantic bg + border with more punch — a translucent tint reads paler on
      white than on dark, so light needs higher alpha to feel as alive. */
   --success-soft:   rgba(var(--success-rgb), 0.34);
   --success-border: rgba(var(--success-rgb), 0.72);
-  --danger-soft:    rgba(var(--danger-rgb), 0.16);
-  --danger-border:  rgba(var(--danger-rgb), 0.48);
+  --danger-soft:    rgba(var(--danger-rgb), 0.13);
+  --danger-border:  rgba(var(--danger-rgb), 0.36);
   --warning-soft:   rgba(var(--yz-yellow-rgb), 0.30);
   --warning-border: rgba(217, 119, 6, 0.58);
   --info-soft:      rgba(var(--yz-primary-1-rgb), 0.16);
@@ -204,7 +233,8 @@
   /* Surfaces: light translucent */
   --surface:        rgba(255, 255, 255, 0.86);
   --surface-strong: rgba(255, 255, 255, 0.96);
-  --table-head-bg:  #e9edf4;   /* solid light-grey header, distinct from white rows */
+  --table-head-bg:  #e4e9f1;   /* gris definido, claramente distinto de las filas blancas */
+  --sidebar-grad:   linear-gradient(185deg, #dbe1ec, #e3e8f1);  /* panel tintado, no blanco puro */
   --input-bg:       #eef2f8;   /* subtle grey fill so fields read as a "well" on white cards */
 
   /* Glass channels → light, near-flat gradients (depth comes from shadow) */
@@ -220,25 +250,32 @@
   --surf-input-rgb:   248, 250, 253;
   --option-bg: #ffffff;
 
-  /* Tints: saturated-dark of each hue (legible on light) */
-  --tint-primary:   #1d4ed8;
-  --tint-primary-2: #2563eb;
-  --tint-primary-3: #2563eb;
-  --tint-primary-4: #1e40af;
-  --tint-primary-5: #1e3a8a;
-  --tint-primary-glow-rgb: 37, 99, 235;
-  --tint-purple:    #6d28d9;
-  --tint-purple-dot: #7c3aed;
-  --tint-accent:    #c2410c;
-  --tint-success:   #047857;
-  --tint-danger:    #b91c1c;
-  --tint-danger-2:  #dc2626;
-  --tint-info:      #1d4ed8;
+  /* Tints: el MISMO hue que en dark, en luminosidad baja (texto oscuro sobre claro).
+     Sólo cambia L respecto a dark — el hue se mantiene, así la tonalidad no salta. */
+  --tint-primary:   #1e59cd;   /* H262 */
+  --tint-primary-2: #326ad9;
+  --tint-primary-3: #326ad9;
+  --tint-primary-4: #1043a8;
+  --tint-primary-5: #144097;
+  --tint-primary-glow-rgb: 30, 89, 205;
+  --tint-purple:    #6741ca;   /* H290 (= hue del púrpura dark) */
+  --tint-purple-dot: #6b46d4;
+  --tint-accent:    #b44300;   /* H47 (= naranja dark, sólo más oscuro) */
+  --tint-success:   #00734d;   /* H162 */
+  --tint-danger:    #b13038;   /* H22 */
+  --tint-danger-2:  #c03a37;
+  /* Botón eliminar en light: rojo profundo y desaturado (menos chillón). */
+  --btn-danger-bg:  linear-gradient(135deg, #be463e, #962e29);
+  /* Naranja del botón accent: en light también más profundo/desaturado (mismo
+     criterio que el rojo) — el #fd6421 puro queda chillón sobre blanco. */
+  --grad-accent:    linear-gradient(135deg, #d2581f, #b03f10);
+  --tint-info:      #1e59cd;   /* H262 (= tint-primary) */
   --nav-active-text: #5b21b6;   /* dark purple label on the pale active gradient */
 
-  /* Yellow hues need a dark text/icon on light (the bright yellow vanishes) */
-  --warning: #b45309;
-  --tint-yellow: #b45309;
+  /* Warning: ámbar oscuro H75 — mismo hue que el ámbar dorado de dark, sólo más
+     oscuro para leer sobre blanco (el amarillo puro de marca no rinde como texto). */
+  --warning: #935b00;
+  --tint-yellow: #935b00;
 
   /* Wordmark: institutional saturated gradient reads on light */
   --grad-text: var(--grad-full);
@@ -246,6 +283,12 @@
   /* Material layered shadow: a tight contact shadow + a soft ambient one
      gives cards a real "lift" off the grey base (depth without dark glow). */
   --shadow-glass: 0 1px 3px rgba(15, 23, 42, 0.07), 0 10px 28px rgba(15, 23, 42, 0.10);
+  --glass-highlight: inset 0 0 0 0 rgba(0, 0, 0, 0);  /* sin filo claro sobre superficies blancas */
+  --shadow-card:   var(--shadow-glass);               /* light: lift material en vez del filo */
+  --shadow-accent: var(--shadow-lift);                /* light: sombra NEUTRA, sin halo naranja */
+  --shadow-danger: 0 4px 12px rgba(15, 23, 42, 0.14); /* light: sombra neutra, sin halo rojo */
+  --shadow-glow-primary: 0 4px 12px rgba(15, 23, 42, 0.12);
+  --surface-hover:   rgba(var(--white-rgb), 0.05);    /* hover sutil sobre claro (no el 0.10 de dark) */
   /* Neutral material shadow for primary/accent buttons (no neon colour halo). */
   --shadow-lift:  0 1px 2px rgba(15, 23, 42, 0.12), 0 6px 16px rgba(15, 23, 42, 0.14);
   --focus-ring:   0 0 0 3px rgba(var(--yz-primary-1-rgb), 0.30);

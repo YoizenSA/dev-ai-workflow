@@ -25,7 +25,7 @@
 .btn-accent {
   background: var(--grad-accent); color: var(--yz-light);
   border-color: rgba(var(--white-rgb), 0.20);
-  box-shadow: 0 14px 34px rgba(var(--yz-accent-rgb), 0.40);
+  box-shadow: var(--shadow-accent);   /* dark: halo naranja · light: sombra neutra */
 }
 .btn-accent:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); }
 
@@ -36,7 +36,7 @@
 .btn-ghost:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); transform: translateY(-1px); }
 /* Light: the translucent grey fill reads muddy over the tinted bg — use a clean white chip with a defined border. */
 :root[data-theme="light"] .btn-ghost { background: var(--surface-strong); border-color: var(--panel-border-strong); }
-:root[data-theme="light"] .btn-ghost:hover:not(:disabled) { background: #fff; }
+:root[data-theme="light"] .btn-ghost:hover:not(:disabled) { background: var(--surface-strong); }
 
 .btn-outline {
   background: transparent; color: var(--text-soft);
@@ -51,12 +51,12 @@
 .btn-danger:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.30); color: var(--yz-light); transform: translateY(-1px); }
 /* Light: el hover translúcido + texto blanco queda lavado sobre fondo claro;
    usar el rojo sólido (mismo que btn-danger-solid) para que el blanco contraste. */
-:root[data-theme="light"] .btn-danger:hover:not(:disabled) { background: var(--btn-danger-bg); border-color: transparent; color: #fff; }
+:root[data-theme="light"] .btn-danger:hover:not(:disabled) { background: var(--btn-danger-bg); border-color: transparent; color: var(--yz-light); }
 
 .btn-danger-solid {
   background: var(--btn-danger-bg); color: var(--yz-light);
   border-color: rgba(var(--white-rgb), 0.18);
-  box-shadow: 0 5px 14px rgba(var(--danger-rgb), 0.20);
+  box-shadow: var(--shadow-danger);   /* dark: halo rojo · light: sombra neutra */
 }
 .btn-danger-solid:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 

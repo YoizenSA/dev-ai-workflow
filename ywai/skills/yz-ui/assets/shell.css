@@ -13,11 +13,9 @@
   display: flex; flex-direction: column; gap: var(--space-2);
   padding: var(--space-6) var(--space-4);
   border-right: 1px solid var(--panel-border);
-  background: linear-gradient(185deg, rgba(var(--surf-11-rgb),0.86), rgba(var(--surf-7-rgb),0.92));
+  background: var(--sidebar-grad);
   backdrop-filter: blur(18px); z-index: var(--z-sticky);
 }
-/* Light: pull the sidebar off pure white so it reads as a tinted panel, not a void. */
-:root[data-theme="light"] .sidebar { background: linear-gradient(185deg, #dbe1ec, #e3e8f1); }
 .collapsed .sidebar { padding: var(--space-6) var(--space-3); align-items: stretch; }
 
 .brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; padding: var(--space-3) 0 var(--space-6); }
@@ -62,9 +60,15 @@
 .nav-link:hover { background: var(--surface-hover); color: var(--text); }
 .nav-link.is-active {
   color: var(--nav-active-text);
-  background: linear-gradient(135deg, rgba(var(--yz-primary-1-rgb),var(--nav-active-a1,0.26)), rgba(var(--yz-primary-2-rgb),var(--nav-active-a2,0.18)));
-  border-color: rgba(var(--info-rgb),0.38);
-  box-shadow: inset 0 0 0 1px rgba(var(--white-rgb),0.04), 0 8px 22px rgba(var(--yz-primary-1-rgb),0.22);
+  background: linear-gradient(135deg, rgba(var(--yz-primary-1-rgb),var(--nav-active-a1,0.17)), rgba(var(--yz-primary-2-rgb),var(--nav-active-a2,0.11)));
+  border-color: rgba(var(--info-rgb),0.28);
+  box-shadow: inset 0 0 0 1px rgba(var(--white-rgb),0.04), 0 3px 10px rgba(var(--yz-primary-1-rgb),0.10);
+}
+/* Light ya luce sobrio: degradé pálido + borde, sin el inset/glow de dark (que al
+   flipear --white-rgb se ensuciaba). */
+:root[data-theme="light"] .nav-link.is-active {
+  background: linear-gradient(135deg, rgba(var(--yz-primary-1-rgb),0.26), rgba(var(--yz-primary-2-rgb),0.18));
+  box-shadow: none;
 }
 .nav-link.is-active lucide-icon, .nav-link.is-active svg { color: var(--tint-primary); }
 .collapsed .nav-link { justify-content: center; padding: 0.62rem; }
@@ -154,14 +158,15 @@
 /* Un solo degradé ambiental continuo para toda la pantalla (sin costura). */
 .login-stage::before {
   content: ""; position: absolute; inset: 0;
+  /* Mismos tokens de glow que el fondo de la app → un solo punto de control y
+     sintonía dark/light (antes era alphas fijas + opacity 0.42 ad-hoc en light). */
   background:
-    radial-gradient(circle at 12% 25%, rgba(var(--yz-primary-1-rgb),0.38), transparent 42%),
-    radial-gradient(circle at 50% 92%, rgba(var(--yz-accent-rgb),0.15), transparent 42%),
-    radial-gradient(circle at 88% 12%, rgba(var(--yz-primary-2-rgb),0.30), transparent 42%);
+    radial-gradient(circle at 12% 25%, rgba(var(--yz-primary-1-rgb), var(--glow-1)), transparent 44%),
+    radial-gradient(circle at 50% 92%, rgba(var(--yz-accent-rgb), var(--glow-2)), transparent 44%),
+    radial-gradient(circle at 88% 12%, rgba(var(--yz-primary-2-rgb), var(--glow-3)), transparent 46%);
   pointer-events: none;
 }
 /* Light: those glows turn into strong blotches that wash out the hero text — soften them. */
-:root[data-theme="light"] .login-stage::before { opacity: 0.42; }
 .login-aside {
   position: relative; padding: clamp(2rem, 5vw, 4.5rem);
   display: flex; flex-direction: column; justify-content: flex-start;
