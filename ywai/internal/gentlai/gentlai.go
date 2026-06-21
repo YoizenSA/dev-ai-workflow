@@ -455,8 +455,10 @@ func ensureLatestWindowsBinary(beforeVersion string) error {
 	return nil
 }
 
-func latestGentleAIRelease() (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", gentleAIOwner, gentleAIRepo)
+// latestRelease returns the tag name of the latest GitHub release for the given
+// owner/repo.
+func latestRelease(owner, repo string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
@@ -486,6 +488,10 @@ func latestGentleAIRelease() (string, error) {
 	return release.TagName, nil
 }
 
+func latestGentleAIRelease() (string, error) {
+	return latestRelease(gentleAIOwner, gentleAIRepo)
+}
+
 func installGentleAIReleaseBinary(version string) error {
 	target := findBinary(config.GentleAIBin)
 	if target == "" {
@@ -502,7 +508,7 @@ func installGentleAIReleaseBinary(version string) error {
 		return fmt.Errorf("resolved gentle-ai is a shim (%s); use the official installer or package manager for that install method", target)
 	}
 
-	archiveName := gentleAIAssetName(version)
+	archiveName := assetName(config.GentleAIBin, version)
 	downloadURL := fmt.Sprintf(
 		"https://github.com/%s/%s/releases/download/%s/%s",
 		gentleAIOwner,
@@ -523,7 +529,7 @@ func installGentleAIReleaseBinary(version string) error {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	binaryPath, err := extractGentleAIBinary(archivePath, tmpDir)
+	binaryPath, err := extractNamedBinary(archivePath, tmpDir, config.GentleAIBin)
 	if err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
@@ -540,13 +546,15 @@ func isScoopShim(path string) bool {
 	return strings.Contains(normalized, "/scoop/shims/")
 }
 
-func gentleAIAssetName(version string) string {
+// assetName builds the release archive name for a binary following the
+// "{bin}_{version}_{os}_{arch}.{ext}" convention shared by gentle-ai and engram.
+func assetName(binName, version string) string {
 	clean := normalizeVersion(version)
 	ext := "tar.gz"
 	if runtime.GOOS == "windows" {
 		ext = "zip"
 	}
-	return fmt.Sprintf("%s_%s_%s_%s.%s", config.GentleAIBin, clean, runtime.GOOS, runtime.GOARCH, ext)
+	return fmt.Sprintf("%s_%s_%s_%s.%s", binName, clean, runtime.GOOS, runtime.GOARCH, ext)
 }
 
 func downloadFile(url, dest string) error {
@@ -569,99 +577,6 @@ func downloadFile(url, dest string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	return err
-}
-
-func extractGentleAIBinary(archivePath, destDir string) (string, error) {
-	if runtime.GOOS == "windows" {
-		return extractBinaryFromZip(archivePath, destDir)
-	}
-	return extractBinaryFromTarGz(archivePath, destDir)
-}
-
-func extractBinaryFromZip(archivePath, destDir string) (string, error) {
-	reader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = reader.Close() }()
-
-	for _, file := range reader.File {
-		if file.FileInfo().IsDir() {
-			continue
-		}
-		if filepath.Base(file.Name) != config.GentleAIBin+".exe" {
-			continue
-		}
-
-		src, err := file.Open()
-		if err != nil {
-			return "", err
-		}
-		defer func() { _ = src.Close() }()
-
-		outPath := filepath.Join(destDir, config.GentleAIBin+".exe")
-		out, err := os.Create(outPath)
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(out, src); err != nil {
-			_ = out.Close()
-			return "", err
-		}
-		if err := out.Close(); err != nil {
-			return "", err
-		}
-		return outPath, nil
-	}
-
-	return "", fmt.Errorf("%s.exe not found in archive", config.GentleAIBin)
-}
-
-func extractBinaryFromTarGz(archivePath, destDir string) (string, error) {
-	file, err := os.Open(archivePath)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = file.Close() }()
-
-	gz, err := gzip.NewReader(file)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = gz.Close() }()
-
-	tr := tar.NewReader(gz)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		if header.Typeflag != tar.TypeReg || filepath.Base(header.Name) != config.GentleAIBin {
-			continue
-		}
-
-		outPath := filepath.Join(destDir, config.GentleAIBin)
-		out, err := os.Create(outPath)
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(out, tr); err != nil {
-			_ = out.Close()
-			return "", err
-		}
-		if err := out.Close(); err != nil {
-			return "", err
-		}
-		if err := os.Chmod(outPath, 0o755); err != nil {
-			return "", err
-		}
-		return outPath, nil
-	}
-
-	return "", fmt.Errorf("%s not found in archive", config.GentleAIBin)
 }
 
 // installGentleAIReleaseBinaryFirstTime downloads the latest release binary
@@ -693,7 +608,7 @@ func installGentleAIReleaseBinaryFirstTime() error {
 		return fmt.Errorf("failed to check latest release: %w", err)
 	}
 
-	archiveName := gentleAIAssetName(version)
+	archiveName := assetName(config.GentleAIBin, version)
 	downloadURL := fmt.Sprintf(
 		"https://github.com/%s/%s/releases/download/%s/%s",
 		gentleAIOwner,
@@ -714,7 +629,7 @@ func installGentleAIReleaseBinaryFirstTime() error {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	binaryPath, err := extractGentleAIBinary(archivePath, tmpDir)
+	binaryPath, err := extractNamedBinary(archivePath, tmpDir, config.GentleAIBin)
 	if err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
@@ -811,43 +726,7 @@ func pathEnvWith(dir string) []string {
 }
 
 func latestEngramRelease() (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", engramOwner, engramRepo)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "ywai")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
-	}
-
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", err
-	}
-	if release.TagName == "" {
-		return "", fmt.Errorf("latest release did not include tag_name")
-	}
-	return release.TagName, nil
-}
-
-func engramAssetName(version string) string {
-	clean := normalizeVersion(version)
-	ext := "tar.gz"
-	if runtime.GOOS == "windows" {
-		ext = "zip"
-	}
-	return fmt.Sprintf("%s_%s_%s_%s.%s", engramBin, clean, runtime.GOOS, runtime.GOARCH, ext)
+	return latestRelease(engramOwner, engramRepo)
 }
 
 // installEngramReleaseBinary downloads the latest prebuilt engram binary into a
@@ -880,7 +759,7 @@ func installEngramReleaseBinary() (string, error) {
 		return "", fmt.Errorf("failed to check latest engram release: %w", err)
 	}
 
-	archiveName := engramAssetName(version)
+	archiveName := assetName(engramBin, version)
 	downloadURL := fmt.Sprintf(
 		"https://github.com/%s/%s/releases/download/%s/%s",
 		engramOwner,
