@@ -3,12 +3,14 @@ import { useUrlTab } from "../../hooks/useUrlTab";
 import { configApi, missionsApi } from "../../api/client";
 import type {
 	MCPServer,
+	ModelInfo,
 	ProviderInfo,
 	OpenCodeConfig as OpenCodeConfigType,
 } from "../../api/types";
 import RoleDefaultsTab from "./RoleDefaultsTab";
 import ReferencesTab from "./ReferencesTab";
 import SearchSelect from "../shared/SearchSelect";
+import ModelCombobox from "../missions/ModelCombobox";
 import Modal from "../shared/Modal";
 import "./Settings.css";
 
@@ -227,6 +229,7 @@ function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [agentList, setAgentList] = useState<string[]>([]);
 	const [providerList, setProviderList] = useState<string[]>([]);
+	const [models, setModels] = useState<ModelInfo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
@@ -264,6 +267,11 @@ function GeneralTab() {
 				(a, b) => a.localeCompare(b),
 			);
 			setProviderList(union);
+			setModels(
+				modelsRes
+					? Object.values(modelsRes.modelsByProvider ?? {}).flat()
+					: [],
+			);
 			setLoading(false);
 		});
 
@@ -422,36 +430,20 @@ function GeneralTab() {
 						onChange={(v) => setConfig({ ...config, provider: v })}
 					/>
 				</div>
-				<div className="field">
-					<label className="field-label" htmlFor="cfg-model">
-						Model
-					</label>
-					<span className="field-hint">The model identifier to use</span>
-					<input
-						id="cfg-model"
-						className="input"
-						value={config.model ?? ""}
-						onChange={(e) => setConfig({ ...config, model: e.target.value })}
-						placeholder="e.g., gpt-4o"
-					/>
-				</div>
-				<div className="field">
-					<label className="field-label" htmlFor="cfg-small-model">
-						Small Model
-					</label>
-					<span className="field-hint">
-						Cheaper model for lightweight tasks (title gen, etc.)
-					</span>
-					<input
-						id="cfg-small-model"
-						className="input"
-						value={config.smallModel ?? ""}
-						onChange={(e) =>
-							setConfig({ ...config, smallModel: e.target.value })
-						}
-						placeholder="e.g., anthropic/claude-haiku-4-5"
-					/>
-				</div>
+				<ModelCombobox
+					id="cfg-model"
+					label="Model"
+					value={config.model ?? ""}
+					models={models}
+					onChange={(v) => setConfig({ ...config, model: v })}
+				/>
+				<ModelCombobox
+					id="cfg-small-model"
+					label="Small Model"
+					value={config.smallModel ?? ""}
+					models={models}
+					onChange={(v) => setConfig({ ...config, smallModel: v })}
+				/>
 				<div className="field span-2">
 					<label className="field-label" htmlFor="cfg-default-agent">
 						Default Agent
@@ -636,7 +628,7 @@ function AgentsTab() {
 				})),
 		])
 			.then(([agentList, toolsRes]) => {
-				const list = agentList.map((a) => ({
+				const list = (agentList ?? []).map((a) => ({
 					name: a.name,
 					content: undefined as string | undefined,
 					group: a.group,
@@ -1105,7 +1097,7 @@ function SkillsTab() {
 		configApi
 			.listSkills()
 			.then((list) => {
-				setSkills(list);
+				setSkills(Array.isArray(list) ? list : []);
 				setLoading(false);
 			})
 			.catch(() => setLoading(false));
@@ -1297,7 +1289,9 @@ function MCPTab() {
 		configApi
 			.listMCP()
 			.then((list) => {
-				setServers(list);
+				// The API returns null for an empty list; guard so servers is never
+				// null (servers.length would crash the whole page).
+				setServers(Array.isArray(list) ? list : []);
 				setLoading(false);
 			})
 			.catch(() => setLoading(false));
@@ -1429,7 +1423,7 @@ function ProvidersTab() {
 		configApi
 			.listProviders()
 			.then((list) => {
-				setProviders(list);
+				setProviders(list ?? {});
 				setLoading(false);
 			})
 			.catch(() => setLoading(false));

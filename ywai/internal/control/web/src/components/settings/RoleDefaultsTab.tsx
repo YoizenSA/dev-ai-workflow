@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { configApi, missionsApi } from "../../api/client";
 import YdSelect from "../shared/YdSelect";
 import type {
+	AgentInfo,
 	ModelInfo,
 	RoleDefault,
 	RoleDefaults,
@@ -47,7 +48,11 @@ export default function RoleDefaultsTab() {
 		Promise.all([
 			configApi.getUserConfig().catch(() => null),
 			missionsApi.listModels().catch(() => null),
-			missionsApi.listAgents().catch(() => null),
+			// Use the config agents source (reads opencode.json + the ywai agents
+			// dir) — the same one other screens use. The missions opencode endpoint
+			// returns empty when the opencode HTTP server isn't running (e.g. on
+			// Windows), which left this dropdown blank.
+			configApi.listAgents().catch(() => [] as AgentInfo[]),
 			configApi.listSkills().catch(() => [] as SkillInfo[]),
 		])
 			.then(([cfg, m, a, s]) => {
@@ -56,7 +61,7 @@ export default function RoleDefaultsTab() {
 					const allModels = Object.values(m.modelsByProvider).flat();
 					setModels(allModels);
 				}
-				setAgents(a?.agents ?? []);
+				setAgents((Array.isArray(a) ? a : []).map((x) => x.name));
 				setSkills(Array.isArray(s) ? s : []);
 				setLoading(false);
 			})
