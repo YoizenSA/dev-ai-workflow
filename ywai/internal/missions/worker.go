@@ -782,22 +782,53 @@ func parseHandoff(output string) (*WorkerHandoff, error) {
 //  9. Completes or fails the feature based on result
 //
 // Returns the parsed WorkerHandoff on success, or an error describing the failure.
+// checkRetryBudget verifies the feature has not exhausted its retry budget,
+// marking it failed and returning ErrMaxRetries when it has. Shared by the CLI
+// and API execution paths.
+func (wm *WorkerManager) checkRetryBudget(mission *Mission, featureID string) error {
+	feat, err := GetFeatureByID(mission, featureID)
+	if err != nil {
+		return err
+	}
+	if feat.RetryCount >= wm.config.MaxRetries {
+		_, _ = FailFeature(wm.store, mission, featureID)
+		return fmt.Errorf("%w: feature %q retried %d/%d times",
+			ErrMaxRetries, featureID, feat.RetryCount, wm.config.MaxRetries)
+	}
+	return nil
+}
+
+// startAndReload transitions the feature to in_progress and returns a fresh
+// feature pointer reflecting the new state. Shared by both execution paths.
+func (wm *WorkerManager) startAndReload(mission *Mission, featureID string) (*Feature, error) {
+	if _, err := StartFeature(wm.store, mission, featureID); err != nil {
+		return nil, fmt.Errorf("start feature: %w", err)
+	}
+	feat, _ := GetFeatureByID(mission, featureID)
+	return feat, nil
+}
+
+// resolveModelChain resolves the effective model, agent and fallback chain for a
+// feature, guaranteeing a non-empty chain. Shared by both execution paths.
+func (wm *WorkerManager) resolveModelChain(feat *Feature, mission *Mission) (model, agent string, chain []string) {
+	cfg, _ := config.LoadConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	model, agent, chain = ResolveExecution(feat, mission, cfg)
+	if len(chain) == 0 {
+		chain = []string{model}
+	}
+	return model, agent, chain
+}
+
 func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*WorkerHandoff, error) {
 	if mission == nil {
 		return nil, ErrInvalidMission
 	}
 
-	feat, err := GetFeatureByID(mission, featureID)
-	if err != nil {
+	if err := wm.checkRetryBudget(mission, featureID); err != nil {
 		return nil, err
-	}
-
-	// Check if max retries reached
-	if feat.RetryCount >= wm.config.MaxRetries {
-		// Mark as permanently failed
-		_, _ = FailFeature(wm.store, mission, featureID)
-		return nil, fmt.Errorf("%w: feature %q retried %d/%d times",
-			ErrMaxRetries, featureID, feat.RetryCount, wm.config.MaxRetries)
 	}
 
 	// Validate opencode exists before doing any work
@@ -806,13 +837,11 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 		return nil, err
 	}
 
-	// Transition feature to in_progress
-	if _, err := StartFeature(wm.store, mission, featureID); err != nil {
-		return nil, fmt.Errorf("start feature: %w", err)
+	// Transition feature to in_progress and get a fresh pointer.
+	feat, err := wm.startAndReload(mission, featureID)
+	if err != nil {
+		return nil, err
 	}
-
-	// Reload feature pointer after state change
-	feat, _ = GetFeatureByID(mission, featureID)
 
 	// Prepare context directory
 	contextDir, err := wm.PrepareContext(mission, feat, feat.WorktreePath)
@@ -825,14 +854,7 @@ func (wm *WorkerManager) ExecuteViaCLI(mission *Mission, featureID string) (*Wor
 	}
 
 	// Resolve effective model + agent + fallback chain from role defaults.
-	cfg, _ := config.LoadConfig()
-	if cfg == nil {
-		cfg = config.DefaultConfig()
-	}
-	primaryModel, execAgent, chain := ResolveExecution(feat, mission, cfg)
-	if len(chain) == 0 {
-		chain = []string{primaryModel}
-	}
+	_, execAgent, chain := wm.resolveModelChain(feat, mission)
 
 	// Spawn worker — try each model in the fallback chain on retriable errors.
 	var (
@@ -1000,23 +1022,15 @@ func (wm *WorkerManager) ExecuteFeature(mission *Mission, featureID string) (*Wo
 // executeViaAPI runs a feature by creating an opencode session, sending the task
 // as a prompt, waiting for completion, and extracting the handoff from the response.
 func (wm *WorkerManager) executeViaAPI(mission *Mission, featureID string) (*WorkerHandoff, error) {
-	feat, err := GetFeatureByID(mission, featureID)
-	if err != nil {
+	if err := wm.checkRetryBudget(mission, featureID); err != nil {
 		return nil, err
 	}
 
-	// Check retries
-	if feat.RetryCount >= wm.config.MaxRetries {
-		FailFeature(wm.store, mission, featureID)
-		return nil, fmt.Errorf("%w: feature %q retried %d/%d times",
-			ErrMaxRetries, featureID, feat.RetryCount, wm.config.MaxRetries)
+	// Transition feature to in_progress and get a fresh pointer.
+	feat, err := wm.startAndReload(mission, featureID)
+	if err != nil {
+		return nil, err
 	}
-
-	// Transition feature to in_progress
-	if _, err := StartFeature(wm.store, mission, featureID); err != nil {
-		return nil, fmt.Errorf("start feature: %w", err)
-	}
-	feat, _ = GetFeatureByID(mission, featureID)
 
 	// Build the full orchestration brief via PrepareContext
 	promptContent, err := wm.PrepareContext(mission, feat, feat.WorktreePath)
@@ -1032,14 +1046,7 @@ func (wm *WorkerManager) executeViaAPI(mission *Mission, featureID string) (*Wor
 	}
 
 	// Resolve effective model + agent + fallback chain from role defaults.
-	cfg, _ := config.LoadConfig()
-	if cfg == nil {
-		cfg = config.DefaultConfig()
-	}
-	primaryModel, execAgent, chain := ResolveExecution(feat, mission, cfg)
-	if len(chain) == 0 {
-		chain = []string{primaryModel}
-	}
+	_, execAgent, chain := wm.resolveModelChain(feat, mission)
 
 	sessions := wm.client.Sessions()
 
