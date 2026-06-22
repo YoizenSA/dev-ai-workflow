@@ -228,7 +228,7 @@ export default function Settings() {
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [agentList, setAgentList] = useState<string[]>([]);
-	const [providerList, setProviderList] = useState<string[]>([]);
+
 	const [models, setModels] = useState<ModelInfo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -254,19 +254,10 @@ function GeneralTab() {
 		Promise.all([
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => [] as { name: string }[]),
-			configApi.listProviders().catch(() => ({})),
 			missionsApi.listModels().catch(() => null),
-		]).then(([cfg, agents, providers, modelsRes]) => {
+		]).then(([cfg, agents, modelsRes]) => {
 			if (cfg) setConfig(cfg);
 			setAgentList((agents ?? []).map((a) => a.name));
-			const declared = Object.keys(providers ?? {});
-			const runtime = modelsRes
-				? Object.keys(modelsRes.modelsByProvider ?? {})
-				: [];
-			const union = Array.from(new Set([...declared, ...runtime])).sort(
-				(a, b) => a.localeCompare(b),
-			);
-			setProviderList(union);
 			setModels(
 				modelsRes
 					? Object.values(modelsRes.modelsByProvider ?? {}).flat()
@@ -420,21 +411,6 @@ function GeneralTab() {
 			)}
 			<div className="card card-pad">
 				<div className="form-grid">
-				<div className="field">
-					<label className="field-label" htmlFor="cfg-provider">
-						Provider
-					</label>
-					<span className="field-hint">
-						The LLM provider for this configuration
-					</span>
-					<SearchSelect
-						id="cfg-provider"
-						value={readKey(config.provider)}
-						options={providerList}
-						placeholder="e.g., openai"
-						onChange={(v) => setConfig({ ...config, provider: v })}
-					/>
-				</div>
 				<ModelCombobox
 					id="cfg-model"
 					label="Model"
