@@ -727,6 +727,7 @@ func TestSortedPermissionKeys_IsSorted(t *testing.T) {
 func TestPutAgentPermissions_SyncsFrontmatter(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	configDir := filepath.Join(homeDir, ".config", "opencode")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
