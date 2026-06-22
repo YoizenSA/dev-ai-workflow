@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -719,5 +721,93 @@ func TestSortedPermissionKeys_IsSorted(t *testing.T) {
 		if keys[i-1] >= keys[i] {
 			t.Errorf("keys not sorted: %q >= %q", keys[i-1], keys[i])
 		}
+	}
+}
+
+func TestPutAgentPermissions_SyncsFrontmatter(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	configDir := filepath.Join(homeDir, ".config", "opencode")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("create config dir: %v", err)
+	}
+	opencodeJSON := `{
+		"agent": {
+			"test": {
+				"mode": "subagent"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(configDir, "opencode.json"), []byte(opencodeJSON), 0o644); err != nil {
+		t.Fatalf("write opencode.json: %v", err)
+	}
+
+	agentsDir := filepath.Join(configDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatalf("create agents dir: %v", err)
+	}
+	mdContent := `---
+description: Test agent
+mode: subagent
+permission:
+  read: allow
+  edit: allow
+---
+Prompt body
+`
+	mdPath := filepath.Join(agentsDir, "test.md")
+	if err := os.WriteFile(mdPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatalf("write agent md: %v", err)
+	}
+
+	s, baseURL := setupTestServer(t)
+	defer s.Stop()
+
+	payload := map[string]string{
+		"read": "allow",
+		"edit": "deny",
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/config/agents/test/permissions", baseURL), bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("update permissions failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(b))
+	}
+
+	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+	if err != nil {
+		t.Fatalf("read opencode.json: %v", err)
+	}
+	var cfg struct {
+		Agent map[string]struct {
+			Permission map[string]string `json:"permission"`
+		} `json:"agent"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse opencode.json: %v", err)
+	}
+	if cfg.Agent["test"].Permission["edit"] != "deny" {
+		t.Errorf("opencode.json permission not updated: got %q", cfg.Agent["test"].Permission["edit"])
+	}
+
+	mdData, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatalf("read agent md: %v", err)
+	}
+	if !strings.Contains(string(mdData), "edit: deny") {
+		t.Errorf("AGENT.md frontmatter not updated: %s", string(mdData))
+	}
+	if !strings.Contains(string(mdData), "Prompt body") {
+		t.Errorf("AGENT.md body was lost: %s", string(mdData))
 	}
 }

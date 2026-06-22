@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUrlTab } from "../../hooks/useUrlTab";
 import { configApi, missionsApi } from "../../api/client";
 import type {
@@ -664,6 +664,25 @@ function AgentsTab() {
 	}, []);
 
 	// Lazy-load the selected agent's content the first time it's opened.
+	const loadAgentContent = useCallback(
+		(name: string, updateEditor: boolean) => {
+			configApi
+				.getAgent(name)
+				.then((d) => {
+					setAgents((prev) =>
+						prev.map((a) =>
+							a.name === name ? { ...a, content: d.content } : a,
+						),
+					);
+					if (updateEditor) {
+						setEditContent(d.content ?? "");
+					}
+				})
+				.catch(() => {});
+		},
+		[],
+	);
+
 	useEffect(() => {
 		if (!selected) return;
 		const agent = agents.find((a) => a.name === selected);
@@ -672,18 +691,8 @@ function AgentsTab() {
 			setEditContent(agent.content);
 			return;
 		}
-		configApi
-			.getAgent(selected)
-			.then((d) => {
-				setAgents((prev) =>
-					prev.map((a) =>
-						a.name === selected ? { ...a, content: d.content } : a,
-					),
-				);
-				setEditContent(d.content ?? "");
-			})
-			.catch(() => {});
-	}, [selected, agents]);
+		loadAgentContent(selected, true);
+	}, [selected, agents, loadAgentContent]);
 
 	// Load permissions when agent selected
 	useEffect(() => {
@@ -874,6 +883,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentPermissions(agentName, perms);
 			setPermissions((prev) => ({ ...prev, [agentName]: perms }));
+			loadAgentContent(agentName, agentName === selected);
 			setMessage("Permissions saved");
 		} catch (err) {
 			setMessage(`Error saving permission: ${err}`);
@@ -895,6 +905,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentPermissions(agentName, perms);
 			setPermissions((prev) => ({ ...prev, [agentName]: perms }));
+			loadAgentContent(agentName, agentName === selected);
 			setMessage("Permissions saved");
 		} catch (err) {
 			setMessage(`Error saving permissions: ${err}`);
