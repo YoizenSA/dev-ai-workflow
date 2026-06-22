@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -441,9 +442,14 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
 	}
 
-	// Permission as nested YAML. ywai's coarse buckets (ado, memory, intercom,
-	// mcp) are expanded to opencode-native wildcard patterns so the deny/allow
-	// is actually enforced by opencode, not silently dropped.
+	// Permission as nested YAML using the "*: deny" + whitelist pattern
+	// (same as opencode's built-in agents like explore). This ensures only
+	// the explicitly allowed tools are exposed to the LLM — denied tools
+	// are filtered out by opencode's resolveTools() before the request.
+	//
+	// ywai's coarse buckets (ado, memory, intercom, mcp) are expanded to
+	// opencode-native wildcard patterns so the deny/allow is actually
+	// enforced by opencode, not silently dropped.
 	b.WriteString("permission:\n")
 	emitPermission := func(key, val string) {
 		if patterns, ok := ywaiBucketPatterns[key]; ok {
@@ -455,31 +461,60 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		}
 		b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
 	}
-	permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
-	written := map[string]bool{}
-	for _, key := range permOrder {
-		if val, ok := profile.Permission[key]; ok {
-			emitPermission(key, val)
-			written[key] = true
+
+	// Check if any tool is denied — if so, use "*: deny" + whitelist pattern.
+	hasDeny := false
+	for _, v := range profile.Permission {
+		if v == "deny" {
+			hasDeny = true
+			break
 		}
 	}
-	// Append any remaining permission keys not in permOrder (e.g. custom/MCP tools)
-	var remaining []string
-	for k := range profile.Permission {
-		if !written[k] {
-			remaining = append(remaining, k)
-		}
-	}
-	// Simple sort
-	for i := 0; i < len(remaining); i++ {
-		for j := i + 1; j < len(remaining); j++ {
-			if remaining[j] < remaining[i] {
-				remaining[i], remaining[j] = remaining[j], remaining[i]
+
+	if hasDeny {
+		// Emit "*: deny" first (blocks everything by default).
+		emitPermission("*", "deny")
+		// Then emit only the "allow" rules (whitelist).
+		allowOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
+		written := map[string]bool{}
+		for _, key := range allowOrder {
+			if val, ok := profile.Permission[key]; ok && val == "allow" {
+				emitPermission(key, val)
+				written[key] = true
 			}
 		}
-	}
-	for _, key := range remaining {
-		emitPermission(key, profile.Permission[key])
+		// Append any remaining allow keys not in allowOrder (e.g. custom/MCP tools).
+		var remaining []string
+		for k, v := range profile.Permission {
+			if v == "allow" && !written[k] {
+				remaining = append(remaining, k)
+			}
+		}
+		sort.Strings(remaining)
+		for _, key := range remaining {
+			emitPermission(key, profile.Permission[key])
+		}
+	} else {
+		// No deny rules — emit all permissions as-is (full access agent).
+		permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
+		written := map[string]bool{}
+		for _, key := range permOrder {
+			if val, ok := profile.Permission[key]; ok {
+				emitPermission(key, val)
+				written[key] = true
+			}
+		}
+		// Append any remaining permission keys not in permOrder (e.g. custom/MCP tools)
+		var remaining []string
+		for k := range profile.Permission {
+			if !written[k] {
+				remaining = append(remaining, k)
+			}
+		}
+		sort.Strings(remaining)
+		for _, key := range remaining {
+			emitPermission(key, profile.Permission[key])
+		}
 	}
 	b.WriteString("---\n\n")
 

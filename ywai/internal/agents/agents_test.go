@@ -497,28 +497,38 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 
 	md := buildOpenCodeMarkdown("orchestrator", profile)
 
-	// Canonical keys pass through unchanged.
-	if !strings.Contains(md, "edit: deny") {
-		t.Error("canonical key edit should pass through unchanged")
+	// With the "*: deny" + whitelist pattern, denied tools are NOT emitted
+	// individually — instead "*: deny" blocks everything and only "allow"
+	// rules whitelist specific tools.
+	if !strings.Contains(md, "*: deny") {
+		t.Error("should emit '*: deny' when any tool is denied")
+	}
+	// Explicit deny rules like "edit: deny" are redundant with "*: deny"
+	// and should NOT be emitted (they waste tokens in the system prompt).
+	if strings.Contains(md, "edit: deny") {
+		t.Error("explicit deny rules should not be emitted with '*: deny' pattern")
 	}
 	// Bare ywai buckets must NOT leak into opencode output (they are no-ops there).
-	for _, bare := range []string{"\n  ado: ", "\n  memory: ", "\n  mcp: "} {
+	for _, bare := range []string{"\n  memory: ", "\n  mcp: "} {
 		if strings.Contains(md, bare) {
 			t.Errorf("bare bucket %q should have been expanded, not emitted verbatim", strings.TrimSpace(bare))
 		}
 	}
-	// Buckets expand to quoted opencode wildcard patterns carrying the same value.
-	expansions := map[string]string{
-		`"ado_*": deny`:          "ado",
+	// Allow bucket expansions should be present.
+	allowExpansions := map[string]string{
 		`"engram_*": allow`:      "memory",
 		`"codegraph_*": allow`:   "mcp",
 		`"context7_*": allow`:    "mcp",
 		`"ywai-kanban_*": allow`: "mcp",
 	}
-	for pattern, bucket := range expansions {
+	for pattern, bucket := range allowExpansions {
 		if !strings.Contains(md, pattern) {
 			t.Errorf("bucket %q should expand to %q, missing in:\n%s", bucket, pattern, md)
 		}
+	}
+	// Deny bucket expansions should NOT be emitted (redundant with "*: deny").
+	if strings.Contains(md, `"ado_*": deny`) {
+		t.Error("deny bucket expansions should not be emitted with '*: deny' pattern")
 	}
 }
 
