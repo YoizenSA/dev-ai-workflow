@@ -500,8 +500,8 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	// With the "*: deny" + whitelist pattern, denied tools are NOT emitted
 	// individually — instead "*: deny" blocks everything and only "allow"
 	// rules whitelist specific tools.
-	if !strings.Contains(md, "*: deny") {
-		t.Error("should emit '*: deny' when any tool is denied")
+	if !strings.Contains(md, `"*": deny`) {
+		t.Error(`should emit "*: deny" when any tool is denied`)
 	}
 	// Explicit deny rules like "edit: deny" are redundant with "*: deny"
 	// and should NOT be emitted (they waste tokens in the system prompt).

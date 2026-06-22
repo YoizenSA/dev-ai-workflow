@@ -459,7 +459,12 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 			}
 			return
 		}
-		b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+		// Quote keys with YAML-special characters (*, :, #, etc.).
+		if key == "*" || strings.ContainsAny(key, "*:#&!|>',[]{}%`@") {
+			b.WriteString(fmt.Sprintf("  %q: %s\n", key, val))
+		} else {
+			b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+		}
 	}
 
 	// Check if any tool is denied — if so, use "*: deny" + whitelist pattern.
