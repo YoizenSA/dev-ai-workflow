@@ -119,7 +119,11 @@ effect(() => { isLoading() ? form.disable() : form.enable(); });  // ✗ flicker
 - Default position **above, centered**; `data-tip-pos="right"`/`"left"` for sides. Action clusters at a row's right edge (`.row-actions`, `.fr-acts`…) auto-open **left** to avoid horizontal scroll. `pointer-events: none` (never steals clicks); `data-tip=""`/`null` = no tooltip. **Never put `opacity` on the element that owns a `[data-tip]`** — the `::after` inherits it, the tooltip renders semi-transparent and the content behind bleeds through (looks "broken"). Dim the icon/content *inside* instead, or hide the control (e.g. a disabled-for-this-user action that doesn't apply — don't show it greyed with a tip).
 - **The tooltip is a visual reinforcement — never the sole channel for information.** It fires on `:hover` **and** `:focus-visible` (keyboard-reachable), but touch and screen readers never see it, so whatever it carries must also live in the visible content or an `aria-label`: **(a)** icon-only controls always keep an `aria-label`; **(b)** when the tip reveals info not otherwise present (an error detail, a field's help text), **duplicate it into `aria-label` and make the host focusable** (`tabindex="0"`) — don't bury an error in hover; **(c)** if the same text is already visible beside the control, **drop the tooltip** — reserve it for *extra* info (a chip reading "secret" whose tip adds "· sealed with kubeseal"), never to echo a label. This is the anti-abuse rule: a tooltip earns its place by adding value, not by restating what's on screen.
 
-**11. Themed selects & date pickers (never native).** Native `<select>`/`<input type=date>` show OS chrome that breaks the glass look. Use `assets/yd-select.component.ts` (signal select: glass popover, search above a threshold, `tags` mode) and `assets/yd-date.component.ts` (themed **calendar**: month grid, prev/next, today/clear). Both position via `assets/yd-anchored.directive.ts` (see #8). Adapt the components' I/O but keep the markup contract (`.yd-select` / `.yd-cal`) so `assets/forms.css` + `components.css` apply. The calendar comes out identical because look **and** logic ship together. **Selected option (`.yd-select-opt.sel`) is minimal:** a faint brand-blue fill + a `✓` — no side bar, no glow (an over-decorated selected row reads loud, not premium).
+**11. Themed selects & date pickers (never native).** Native `<select>`/`<input type=date>` show OS chrome that breaks the glass look. Use `assets/yd-select.component.ts` (signal select: glass popover, search above a threshold, `tags` mode) and `assets/yd-date.component.ts` (themed calendar). Both position via `assets/yd-anchored.directive.ts` (see #8). Adapt the components' I/O but keep the markup contract (`.yd-select` / `.yd-cal`) so `assets/forms.css` + `components.css` apply. **Selected option (`.yd-select-opt.sel`) is minimal:** a faint brand-blue fill + a `✓` — no side bar, no glow (an over-decorated selected row reads loud, not premium).
+
+- **Calendar header = dropdown-caption (shadcn / Google Calendar), NOT a "title → month-grid → year-block-grid" jump** — that progressive grid reads *rebuscado* and got rejected by a real user twice. `‹ ›` move the month one step; **Month and Year are themed dropdowns of their own** (same glass language as `yd-select`), the year a scrollable list centred on the view year (`scrollIntoView`). **Never a native `<select>` for month/year** — its OS list shatters the glass (rejected on sight). Keep it sober: the month/year triggers need **no chevron** (hover signals they're clickable) and "Hoy" needs **no icon** (a `circle-dot` reads like an archery target).
+- **Nested popovers:** the month/year dropdowns live inside the calendar's DOM with a local `picker` signal and do **NOT** go through `PopoverService` (that would close the calendar containing them). Every inner click `stopPropagation`; Esc closes the open dropdown first, then the calendar.
+- **Popover direction is a product call.** Default flips up when it doesn't fit below; some products want **always-down** (a flip-up that covers the trigger reads worse than spilling under the edge). `yd-anchored` can force down — confirm the preference per app.
 
 **12. App shell & responsive layout (reference, not mandatory).** The design system is **layout-agnostic** — tokens/base/components assume *no* particular nav. The shell (`assets/shell.css`: collapsible left sidebar + mobile drawer) is **one reference layout — reshape or replace it**. A top-nav app keeps every token/component/primitive and just builds a different chassis with the same techniques:
 
@@ -136,6 +140,13 @@ effect(() => { isLoading() ? form.disable() : form.enable(); });  // ✗ flicker
 - **A table that fills a card**: the wrap must clip to the **card's** radius (`.card > .table-wrap:first/last-child { border-radius: var(--radius-lg) }`), else the opaque header keeps a square corner ("clipped border").
 - **Don't over-shrink columns** of short content to `width:1%` — one flex column then hoards the space and the rest **clump to one edge**. Let columns distribute naturally (the identifier column absorbs slack).
 - **Column alignment = a scan edge that matches the header.** Text/identifiers/categorical → **left**; numbers → **right** (digits line up). **Status pills/badges → left too** (`col-min`: `width:1%` + default left), *not* centered: centered variable-width pills zig-zag both edges and read messy. Reserve center only for **fixed-width or icon-only** status columns. This is the GitHub/Linear/Stripe audit-log convention — a clean left edge down the column.
+
+**14. Side-by-side diff (`yd-diff`, `assets/diff.ts` + `assets/yd-diff.component.ts`, CSS `.diff-split` in `components.css`).** For showing differences (config YAML, audit changes) GitHub-style: two columns (antes | después) with line numbers and a red/green per-line background. The math lives in `diff.ts` — `unifiedToRows()` for a backend-parsed diff (added/removed/context), `diffTexts()` = an LCS between two raw strings (audit's old/new value); the component only renders `rows`. Hard-won rules:
+
+- **Grid `auto minmax(0,1fr) auto minmax(0,1fr)`** — the `minmax(0,…)` is the trick: it lets a cell shrink **below** its content width. Without it a long line forces its column wide and **collapses the opposite column** (you see one column + a red sliver) plus horizontal scroll.
+- **Long lines → `white-space: pre-wrap; overflow-wrap: anywhere`** so a long URL wraps inside its column instead of overflowing. Side-by-side + wrap reads better than per-pane horizontal scroll.
+- **Memoize the rows** per file/change (`WeakMap`) — the LCS is O(m·n); don't recompute it on every change-detection pass.
+- Widen the modal (~1100px clients, ~820px audit). Mark unchanged files with a **"Sin cambios"** badge so the user sees the full picture before pushing.
 
 ## Visual Correction Checklist
 
@@ -210,7 +221,7 @@ Copy the canonical files from `assets/` and import them once from `styles.css`, 
 | `forms.css` | Inputs, `.field`/`.field-help`, textarea, `yd-select`, `yd-cal` |
 | `table.css` | `.data-table` + `col-hide-*` responsive + skeleton rows |
 | `modal.css` | `.overlay`/`.modal` glass dialog (+ `.modal-foot.split`) |
-| `components.css` | Pills, tags, cards, page/section headers, KPI, alerts, spinner, skeleton, empty states, toasts, **tooltips**, code-chip, diff box, key-value rows |
+| `components.css` | Pills, tags, cards, page/section headers, KPI, alerts, spinner, skeleton, empty states, toasts, **tooltips**, code-chip, diff box + **side-by-side diff** (`.diff-split`), key-value rows |
 | `shell.css` | **Reference layout** (swap/reshape per app) — sidebar/drawer, topbar, login, responsive |
 
 ### Behavioral primitives (TypeScript — wire to the project's components)
@@ -220,7 +231,8 @@ Copy the canonical files from `assets/` and import them once from `styles.css`, 
 | `yz-modal.directive.ts` | Accessible dialog: `role`/`aria-modal`, focus-trap, scroll-lock, Escape |
 | `yd-anchored.directive.ts` | Popover positioning: flip/clamp vs viewport or modal (`ydConfineToModal`) |
 | `yd-select.component.ts` | Themed select with search / tags |
-| `yd-date.component.ts` | Themed **calendar** date picker (month/year jump, keyboard nav, optional relative presets for filters) |
+| `yd-date.component.ts` | Themed calendar — dropdown-caption header (month/year as themed dropdowns, never native), keyboard nav |
+| `yd-diff.component.ts` + `diff.ts` | Side-by-side diff (antes \| después) GitHub-style; `diff.ts` = `unifiedToRows` / `diffTexts` (LCS) |
 | `toast.service.ts` + `toast-stack.component.ts` | Toast system (CSS in `components.css`) |
 | `theme.service.ts` | Dark⇄light **circular reveal** (View Transitions): brand-glow edge + icon morph (CSS in `base.css`) |
 | `component-template.ts` | Angular standalone starting point (signals, OnPush) |

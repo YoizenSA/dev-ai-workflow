@@ -69,16 +69,19 @@ export class YzModalDirective implements OnInit, OnDestroy {
     this.restoreFocusTo?.focus(); // restaura el foco al disparador
   }
 
-  protected onTab(e: KeyboardEvent): void {
+  // $event en un host binding string llega tipado como Event (no KeyboardEvent)
+  // bajo el chequeo estricto de Angular (typeCheckHostBindings); casteamos para shiftKey.
+  protected onTab(e: Event): void {
     const items = this.focusables();
     if (items.length === 0) return;
     const first = items[0];
     const last = items[items.length - 1];
     const active = document.activeElement;
-    if (e.shiftKey && active === first) {
+    const shift = (e as KeyboardEvent).shiftKey;
+    if (shift && active === first) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && active === last) {
+    } else if (!shift && active === last) {
       e.preventDefault();
       first.focus();
     }
