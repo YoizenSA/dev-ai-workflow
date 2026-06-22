@@ -262,16 +262,16 @@ func stripOpencodeNoise(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// planningAgentDefault returns the agent configured for the planning role,
-// falling back to "orchestrator" when config is unavailable or unset. This
-// keeps goal refinement on the planning agent rather than opencode's default.
+// planningAgentDefault returns the agent configured for the planning role in
+// the role-defaults — the single source of truth for agent selection. The value
+// comes from user config or the embedded seed; it is never a hardcoded literal.
+// This keeps goal refinement and orchestration on the configured planning agent.
 func planningAgentDefault() string {
-	if cfg, _ := config.LoadConfig(); cfg != nil {
-		if a := cfg.GetRoleDefault(config.RolePlanning).Agent; a != "" {
-			return a
-		}
+	cfg, _ := config.LoadConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
-	return "orchestrator"
+	return cfg.GetRoleDefault(config.RolePlanning).Agent
 }
 
 // buildRefinePrompt constructs the prompt sent to opencode to refine a goal.

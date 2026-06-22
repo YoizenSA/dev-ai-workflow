@@ -600,72 +600,62 @@ func TestInstallOpenCodeMarkdownOverwriteExisting(t *testing.T) {
 	}
 }
 
-func TestCleanupLegacyFlatAgentsRemovesSuperseded(t *testing.T) {
-	dir := t.TempDir()
-	agentsDir := filepath.Join(dir, "agents")
-	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Simulate a previous flat install: legacy flat files in the root.
-	if err := os.WriteFile(filepath.Join(agentsDir, "architect.md"), []byte("legacy"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(agentsDir, "dev.md"), []byte("legacy"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// A flat file with no grouped counterpart — must be preserved.
-	if err := os.WriteFile(filepath.Join(agentsDir, "review-readability.md"), []byte("keep"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// New grouped profiles: core/architect and core/dev now exist in subdirs.
-	profiles := map[string]AgentProfile{
-		"core/architect": {Name: "core/architect", Description: "Architect", Prompt: "# Architect", Mode: "subagent"},
-		"core/dev":       {Name: "core/dev", Description: "Dev", Prompt: "# Dev", Mode: "subagent"},
-	}
-
-	cleanupLegacyFlatAgents(agentsDir, profiles)
-
-	if _, err := os.Stat(filepath.Join(agentsDir, "architect.md")); !os.IsNotExist(err) {
-		t.Error("legacy architect.md should be removed when core/architect exists")
-	}
-	if _, err := os.Stat(filepath.Join(agentsDir, "dev.md")); !os.IsNotExist(err) {
-		t.Error("legacy dev.md should be removed when core/dev exists")
-	}
-	if _, err := os.Stat(filepath.Join(agentsDir, "review-readability.md")); err != nil {
-		t.Error("review-readability.md has no grouped counterpart and must be preserved")
-	}
-}
-
-func TestCleanupLegacyFlatAgentsKeepsFlatProfileInstalledThisRun(t *testing.T) {
+func TestInstallOpenCodeMarkdownFlattensGroupedNames(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "agents")
 
-	// InstallOpenCodeMarkdown writes a fresh flat ask.md AND a grouped core/ask.
-	// The flat file from THIS run must survive because "ask" is a flat profile key.
+	// A grouped profile name must be written FLAT at the root using its base
+	// name, because opencode derives the agent id from the file path.
 	profiles := map[string]AgentProfile{
-		"ask":       {Name: "ask", Description: "Ask", Prompt: "# Ask", Mode: "subagent"},
-		"core/ask":  {Name: "core/ask", Description: "Ask", Prompt: "# Ask", Mode: "subagent"},
-		"core/arch": {Name: "core/arch", Description: "Arch", Prompt: "# Arch", Mode: "subagent"},
+		"core/orchestrator": {Name: "core/orchestrator", Description: "Orch", Prompt: "# Orch", Mode: "primary", Group: "core"},
 	}
 	if err := InstallOpenCodeMarkdown(agentsDir, profiles, true); err != nil {
 		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
 	}
 
-	// Legacy flat arch.md from a previous install (not written this run).
-	if err := os.WriteFile(filepath.Join(agentsDir, "arch.md"), []byte("legacy"), 0o644); err != nil {
+	flat := filepath.Join(agentsDir, "orchestrator.md")
+	if _, err := os.Stat(flat); err != nil {
+		t.Errorf("grouped profile should be installed flat at %s: %v", flat, err)
+	}
+	nested := filepath.Join(agentsDir, "core", "orchestrator.md")
+	if _, err := os.Stat(nested); !os.IsNotExist(err) {
+		t.Errorf("grouped profile must NOT be nested at %s", nested)
+	}
+	// Group membership is preserved via frontmatter, not the directory.
+	data, _ := os.ReadFile(flat)
+	if !strings.Contains(string(data), "group: core") {
+		t.Error("flat agent should carry group in frontmatter")
+	}
+}
+
+func TestInstallOpenCodeMarkdownMigratesGroupedToFlat(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+
+	// Simulate a previous grouped install: nested file under core/.
+	if err := os.MkdirAll(filepath.Join(agentsDir, "core"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cleanupLegacyFlatAgents(agentsDir, profiles)
-
-	// ask.md was installed flat this run -> kept.
-	if _, err := os.Stat(filepath.Join(agentsDir, "ask.md")); err != nil {
-		t.Error("flat ask.md installed this run must be preserved")
+	if err := os.WriteFile(filepath.Join(agentsDir, "core", "architect.md"), []byte("stale grouped"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	// arch.md has no flat profile key and a grouped counterpart -> removed.
-	if _, err := os.Stat(filepath.Join(agentsDir, "arch.md")); !os.IsNotExist(err) {
-		t.Error("legacy arch.md should be removed")
+
+	profiles := map[string]AgentProfile{
+		"core/architect": {Name: "core/architect", Description: "Architect", Prompt: "# Architect", Mode: "subagent", Group: "core"},
+	}
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles, true); err != nil {
+		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
+	}
+
+	// Flat file created, stale nested file and empty group dir removed.
+	if _, err := os.Stat(filepath.Join(agentsDir, "architect.md")); err != nil {
+		t.Error("flat architect.md should be installed")
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "core", "architect.md")); !os.IsNotExist(err) {
+		t.Error("stale grouped core/architect.md should be migrated away")
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "core")); !os.IsNotExist(err) {
+		t.Error("empty core/ group dir should be removed")
 	}
 }
 

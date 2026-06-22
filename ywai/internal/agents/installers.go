@@ -319,9 +319,13 @@ func AgentsSourceDir() string {
 	return config.AgentsSourceDir()
 }
 
-// InstallOpenCodeMarkdown writes agent profiles as .md files to ~/.config/opencode/agents/.
-// This is the native OpenCode format and takes precedence over JSON configuration.
-// When overwrite is true, existing files are overwritten.
+// InstallOpenCodeMarkdown writes agent profiles as flat .md files to
+// ~/.config/opencode/agents/. opencode derives the agent id from the file's
+// path under the agents dir, so agents are written FLAT at the root using their
+// base name (e.g. "orchestrator.md", not "core/orchestrator.md") to match the
+// flat ids the role-defaults reference. Group membership is preserved via the
+// `group:` frontmatter field, not the directory layout. When overwrite is true,
+// existing files are overwritten.
 func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return fmt.Errorf("create dir %s: %w", agentsDir, err)
@@ -329,13 +333,9 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 
 	installed := 0
 	for name, profile := range profiles {
-		targetPath := filepath.Join(agentsDir, name+".md")
-
-		// Ensure parent directory exists for nested agent names
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
-			continue
-		}
+		// Always install flat at the root using the base name so opencode
+		// registers the agent under its flat id (e.g. "orchestrator").
+		targetPath := filepath.Join(agentsDir, filepath.Base(name)+".md")
 
 		if !overwrite {
 			if _, err := os.Stat(targetPath); err == nil {
@@ -357,61 +357,36 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
 	}
 
-	// Remove legacy flat agent files now superseded by grouped installs
-	// (e.g. delete architect.md when core/architect.md was installed).
-	cleanupLegacyFlatAgents(agentsDir, profiles)
+	// Migrate any stale grouped copies from previous installs to flat: a nested
+	// copy (e.g. core/orchestrator.md) registers in opencode as
+	// "core/orchestrator" and shadows the flat "orchestrator" id.
+	cleanupGroupedAgentCopies(agentsDir, profiles)
 
 	return nil
 }
 
-// cleanupLegacyFlatAgents removes top-level agent .md files that are now
-// superseded by a grouped install. When ywai installs agents in group
-// subdirectories (e.g. core/architect.md), any leftover flat file from a
-// previous install (e.g. architect.md in the agents root) is removed to avoid
-// duplication. Flat files without a grouped counterpart are left untouched.
-func cleanupLegacyFlatAgents(agentsDir string, profiles map[string]AgentProfile) {
-	// Collect the base names of every agent that was installed inside a group
-	// (profile name contains a path separator).
-	groupedBases := make(map[string]bool)
+// cleanupGroupedAgentCopies removes agent .md files that a previous install
+// nested inside group subdirectories (e.g. core/orchestrator.md), along with
+// the now-empty group directories. This migrates an existing install from the
+// old grouped layout to the flat layout opencode expects.
+func cleanupGroupedAgentCopies(agentsDir string, profiles map[string]AgentProfile) {
+	groupDirs := make(map[string]bool)
 	for name := range profiles {
-		if strings.Contains(name, "/") {
-			groupedBases[filepath.Base(name)] = true
-		}
-	}
-	if len(groupedBases) == 0 {
-		return
-	}
-
-	entries, err := os.ReadDir(agentsDir)
-	if err != nil {
-		return
-	}
-
-	removed := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
+		if !strings.Contains(name, "/") {
 			continue
 		}
-		fileName := entry.Name()
-		if !strings.HasSuffix(fileName, ".md") {
-			continue
+		nested := filepath.Join(agentsDir, name+".md")
+		if err := os.Remove(nested); err == nil {
+			fmt.Printf("  Migrated grouped agent %s to flat layout\n", name+".md")
 		}
-		base := strings.TrimSuffix(fileName, ".md")
-		// Only remove if a grouped counterpart exists AND the same name is not
-		// a flat profile installed in this same run.
-		if !groupedBases[base] {
-			continue
-		}
-		if _, flatInstalled := profiles[base]; flatInstalled {
-			continue
-		}
-		if err := os.Remove(filepath.Join(agentsDir, fileName)); err == nil {
-			fmt.Printf("  Removed legacy flat agent %s (grouped version exists)\n", fileName)
-			removed++
-		}
+		groupDirs[filepath.Dir(nested)] = true
 	}
-	if removed > 0 {
-		fmt.Printf("  Cleaned up %d legacy flat agent file(s)\n", removed)
+	// Remove group subdirectories that are now empty.
+	for dir := range groupDirs {
+		if dir == agentsDir {
+			continue
+		}
+		_ = os.Remove(dir) // succeeds only when the directory is empty
 	}
 }
 

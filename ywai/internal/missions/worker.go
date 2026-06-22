@@ -207,7 +207,7 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature, work
 	var isTempDir bool
 	execAgent := mission.ExecutionAgent
 	if execAgent == "" {
-		execAgent = "orchestrator"
+		execAgent = planningAgentDefault()
 	}
 
 	if worktreePath != "" {
@@ -541,7 +541,7 @@ func (wm *WorkerManager) SpawnWorker(mission *Mission, feature *Feature, context
 	}
 
 	if agent == "" {
-		agent = "orchestrator"
+		agent = planningAgentDefault()
 	}
 	args := []string{"run"}
 	if model != "" {

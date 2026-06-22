@@ -33,7 +33,7 @@ type PlannerSession struct {
 // NewPlannerSession constructs a PlannerSession over the given client.
 func NewPlannerSession(client opencode.Client, model, agent string) *PlannerSession {
 	if agent == "" {
-		agent = "orchestrator"
+		agent = planningAgentDefault()
 	}
 	return &PlannerSession{
 		client:  client,
