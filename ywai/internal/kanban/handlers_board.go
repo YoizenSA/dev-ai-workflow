@@ -133,9 +133,11 @@ func (h *Handlers) CreateDelegation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validAgents := map[string]bool{"dev": true, "qa": true, "reviewer": true, "architect": true, "devops": true}
-	if !validAgents[req.Agent] {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent: must be dev, qa, reviewer, architect, or devops"})
+	// Validate the agent against the real roster (opencode.json + agents dir).
+	// If the roster can't be resolved (empty), fall back to accepting any
+	// non-empty agent rather than blocking delegation entirely.
+	if roster := collectAgentNames(); len(roster) > 0 && !roster[req.Agent] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid agent: %q is not in the configured roster", req.Agent)})
 		return
 	}
 

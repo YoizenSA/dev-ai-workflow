@@ -115,7 +115,7 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
 
   createDelegation: async (agent, taskSummary, dependencies) => {
     const session = get().activeSession
-    if (!session) return
+    if (!session) throw new Error("No active session")
     await kanbanApi.createDelegation({
       session_id: session.id,
       agent,

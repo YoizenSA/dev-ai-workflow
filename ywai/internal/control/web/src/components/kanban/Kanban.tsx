@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
-import CreateDelegationModal from "./CreateDelegationModal";
 import DelegationDetailModal from "./DelegationDetailModal";
 import "./Kanban.css";
 
@@ -204,7 +203,6 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 }
 
 export default function Kanban() {
-	const [showNewDelegation, setShowNewDelegation] = useState(false);
 	const [dragOverColumn, setDragOverColumn] = useState<DelegationColumn | null>(null);
 
 	const {
@@ -280,13 +278,6 @@ export default function Kanban() {
 							<span className="page-title-project">{activeSession.project}</span>
 						)}
 					</div>
-					<button
-						className="btn btn-primary"
-						onClick={() => setShowNewDelegation(true)}
-						disabled={!activeSession}
-					>
-						+ New Delegation
-					</button>
 				</div>
 
 			{/* Kanban board */}
@@ -325,10 +316,6 @@ export default function Kanban() {
 				})}
 			</div>
 
-			<CreateDelegationModal
-				open={showNewDelegation}
-				onClose={() => setShowNewDelegation(false)}
-			/>
 			</div>
 		</div>
 	);

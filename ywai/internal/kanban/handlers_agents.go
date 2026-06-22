@@ -79,6 +79,44 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agents)
 }
 
+// collectAgentNames returns the set of known agent names from opencode.json and
+// the agents directory — the same roster surfaced by ListAgents. Used to keep
+// delegation targets aligned with the configured agents instead of a hardcoded list.
+func collectAgentNames() map[string]bool {
+	names := map[string]bool{}
+
+	if configPath, err := opencodeConfigPath(); err == nil {
+		if data, err := os.ReadFile(configPath); err == nil {
+			var cfg struct {
+				Agent map[string]json.RawMessage `json:"agent"`
+			}
+			if json.Unmarshal(data, &cfg) == nil {
+				for name := range cfg.Agent {
+					names[name] = true
+				}
+			}
+		}
+	}
+
+	if agentsDirPath, err := agentsDir(); err == nil && agentsDirPath != "" {
+		entries, _ := os.ReadDir(agentsDirPath)
+		for _, e := range entries {
+			if e.IsDir() {
+				subEntries, _ := os.ReadDir(filepath.Join(agentsDirPath, e.Name()))
+				for _, se := range subEntries {
+					if !se.IsDir() && strings.HasSuffix(se.Name(), ".md") {
+						names[strings.TrimSuffix(se.Name(), ".md")] = true
+					}
+				}
+			} else if strings.HasSuffix(e.Name(), ".md") {
+				names[strings.TrimSuffix(e.Name(), ".md")] = true
+			}
+		}
+	}
+
+	return names
+}
+
 // resolveTeam detects the team for an agent.
 func resolveTeam(agentName, agentsDirPath string) string {
 	if agentsDirPath == "" {
