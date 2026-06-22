@@ -17,8 +17,10 @@
   "memory": "allow",
   "intercom": "allow",
   "ado": "deny",
-  "mcp": "allow",
-  "ywai-kanban_create_session": "deny",
-  "ywai-kanban_create_delegation": "deny",
-  "ywai-kanban_delete_session": "deny"
+  "codegraph_*": "allow",
+  "context7_*": "allow",
+  "ywai-kanban_get_*": "allow",
+  "ywai-kanban_list_sessions": "allow",
+  "ywai-kanban_update_delegation": "allow",
+  "ywai-kanban_add_activity": "allow"
 }

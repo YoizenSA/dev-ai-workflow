@@ -17,5 +17,6 @@
   "memory": "allow",
   "intercom": "allow",
   "ado": "deny",
-  "mcp": "allow"
+  "codegraph_*": "allow",
+  "context7_*": "allow"
 }

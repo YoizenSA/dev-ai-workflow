@@ -17,5 +17,10 @@
   "memory": "allow",
   "intercom": "allow",
   "ado": "allow",
-  "mcp": "allow"
+  "codegraph_*": "allow",
+  "context7_*": "allow",
+  "ywai-kanban_get_*": "allow",
+  "ywai-kanban_list_sessions": "allow",
+  "ywai-kanban_update_delegation": "allow",
+  "ywai-kanban_add_activity": "allow"
 }

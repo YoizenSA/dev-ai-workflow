@@ -17,5 +17,10 @@
   "memory": "allow",
   "intercom": "deny",
   "ado": "deny",
-  "mcp": "allow"
+  "engram_mem_save": "deny",
+  "engram_mem_save_prompt": "deny",
+  "engram_mem_update": "deny",
+  "engram_mem_session_start": "deny",
+  "engram_mem_session_end": "deny",
+  "engram_mem_session_summary": "deny"
 }
