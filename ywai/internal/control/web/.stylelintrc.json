@@ -1,0 +1,19 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "plugins": ["stylelint-declaration-strict-value"],
+  "rules": {
+    "scale-unlimited/declaration-strict-value": [["/color/", "font-size", "border-radius"], {
+      "ignoreValues": ["transparent", "currentColor", "inherit", "none", "0", "unset"]
+    }],
+    "color-no-hex": [true, { "message": "Use a token from palette.css, not raw hex" }]
+  },
+  "overrides": [
+    {
+      "files": ["src/styles/theme/palette.css"],
+      "rules": {
+        "color-no-hex": null,
+        "scale-unlimited/declaration-strict-value": null
+      }
+    }
+  ]
+}

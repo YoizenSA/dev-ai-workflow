@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "stylelint": "stylelint 'src/**/*.{css,tsx}'",
+    "lint": "eslint src --ext .ts,.tsx",
+    "tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.40.0",
@@ -18,10 +23,24 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-react": "^7.37.0",
+    "jsdom": "^25.0.0",
+    "stylelint": "^16.10.0",
+    "stylelint-config-standard": "^36.0.0",
+    "stylelint-declaration-strict-value": "^1.10.0",
     "typescript": "^5.5.3",
-    "vite": "^5.4.2"
+    "globals": "^15.9.0",
+    "vite": "^5.4.2",
+    "vitest": "^2.1.0"
   }
 }

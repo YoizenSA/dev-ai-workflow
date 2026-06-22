@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    stylelint:
+      glob: "**/*.{css,tsx}"
+      root: "internal/control/web"
+      run: npm run stylelint -- {staged_files}
+    eslint:
+      glob: "**/*.{ts,tsx}"
+      root: "internal/control/web"
+      run: npm run lint -- {staged_files}
+    typecheck:
+      glob: "**/*.{ts,tsx}"
+      root: "internal/control/web"
+      run: npx tsc --noEmit
