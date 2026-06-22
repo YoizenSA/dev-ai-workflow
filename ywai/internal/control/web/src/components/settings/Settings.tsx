@@ -596,7 +596,7 @@ function GeneralTab() {
 
 function AgentsTab() {
 	const [agents, setAgents] = useState<
-		{ name: string; content?: string; group?: string }[]
+		{ name: string; content?: string; group?: string; mode?: string }[]
 	>([]);
 	const [loading, setLoading] = useState(true);
 	const [selected, setSelected] = useState<string | null>(null);
@@ -604,6 +604,16 @@ function AgentsTab() {
 	const [permissions, setPermissions] = useState<
 		Record<string, Record<string, string>>
 	>({});
+	// Per-subagent task delegation maps (permission.task), keyed by agent name.
+	// Only meaningful for primary agents (orchestrators).
+	const [taskPerms, setTaskPerms] = useState<
+		Record<string, Record<string, string>>
+	>({});
+	const [savingTaskPerms, setSavingTaskPerms] = useState<string | null>(null);
+	// Per-agent default model (agent.<name>.model), keyed by agent name.
+	const [agentModels, setAgentModels] = useState<Record<string, string>>({});
+	const [models, setModels] = useState<ModelInfo[]>([]);
+	const [savingModel, setSavingModel] = useState<string | null>(null);
 	const [toolsData, setToolsData] = useState<{
 		built_in: string[];
 		mcp_tools: Record<string, { tools: string[]; enabled: boolean }>;
@@ -638,6 +648,7 @@ function AgentsTab() {
 					name: a.name,
 					content: undefined as string | undefined,
 					group: a.group,
+					mode: a.mode,
 				}));
 				setAgents(list);
 				setToolsData({
@@ -687,6 +698,57 @@ function AgentsTab() {
 				.catch(() => {});
 		}
 	}, [selected]);
+
+	// Load the task delegation map for primary agents when selected.
+	useEffect(() => {
+		if (!selected) return;
+		const agent = agents.find((a) => a.name === selected);
+		if (agent?.mode !== "primary") return;
+		if (taskPerms[selected]) return;
+		configApi
+			.getAgentTaskPermissions(selected)
+			.then((perms) => {
+				setTaskPerms((prev) => ({ ...prev, [selected]: perms }));
+			})
+			.catch(() => {});
+	}, [selected, agents]);
+
+	// Load the available model catalog once for the model picker.
+	useEffect(() => {
+		missionsApi
+			.listModels()
+			.then((m) => {
+				if (m?.modelsByProvider) {
+					setModels(Object.values(m.modelsByProvider).flat());
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	// Load the selected agent's default model.
+	useEffect(() => {
+		if (!selected) return;
+		if (agentModels[selected] !== undefined) return;
+		configApi
+			.getAgentModel(selected)
+			.then((res) => {
+				setAgentModels((prev) => ({ ...prev, [selected]: res.model ?? "" }));
+			})
+			.catch(() => {});
+	}, [selected]);
+
+	const handleChangeModel = async (agentName: string, model: string) => {
+		setSavingModel(agentName);
+		try {
+			await configApi.updateAgentModel(agentName, model);
+			setAgentModels((prev) => ({ ...prev, [agentName]: model }));
+			setMessage(null);
+		} catch (err) {
+			setMessage(`Error saving model: ${err}`);
+		} finally {
+			setSavingModel(null);
+		}
+	};
 
 	const handleSelectAgent = (name: string) => {
 		setSelected(name);
@@ -840,6 +902,79 @@ function AgentsTab() {
 		} finally {
 			setSavingPerms(null);
 		}
+	};
+
+	// Cycle a sub-agent's delegation rule: allow → ask → deny → allow.
+	const cycleTaskPermission = async (agentName: string, subAgent: string) => {
+		const next: Record<string, string> = {
+			allow: "ask",
+			ask: "deny",
+			deny: "allow",
+		};
+		const current = taskPerms[agentName] ?? {};
+		const value = current[subAgent] ?? "deny";
+		const updated = { ...current, [subAgent]: next[value] ?? "allow" };
+		setSavingTaskPerms(agentName);
+		try {
+			await configApi.updateAgentTaskPermissions(agentName, updated);
+			setTaskPerms((prev) => ({ ...prev, [agentName]: updated }));
+			setMessage(null);
+		} catch (err) {
+			setMessage(`Error saving delegation: ${err}`);
+		} finally {
+			setSavingTaskPerms(null);
+		}
+	};
+
+	const pillClassForRule = (rule: string) =>
+		rule === "allow"
+			? "pill-success"
+			: rule === "ask"
+				? "pill-warning"
+				: "pill-danger";
+
+	// Sub-agent delegation editor (permission.task) — primary agents only.
+	const renderTaskDelegation = () => {
+		const rules = selected ? (taskPerms[selected] ?? {}) : {};
+		// Candidate sub-agents = every other non-primary agent, plus the
+		// catch-all "*" default that gates anything not listed explicitly.
+		const candidates = agents
+			.filter((a) => a.name !== selected && a.mode !== "primary")
+			.map((a) => a.name);
+		const rows = ["*", ...candidates];
+		return (
+			<div className="settings-section">
+				<div className="settings-section-header">
+					<h2>Sub-agent Delegation</h2>
+					<span className="permissions-helper">
+						Click to cycle allow → ask → deny. Last rule wins; "*" is the
+						default for anything not listed.
+					</span>
+				</div>
+				<div className="settings-section-body">
+					<div
+						style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}
+					>
+						{rows.map((sub) => {
+							const rule = rules[sub] ?? (sub === "*" ? "allow" : "deny");
+							return (
+								<button
+									key={sub}
+									className={`pill ${pillClassForRule(rule)}`}
+									style={{ cursor: "pointer", fontSize: "0.72rem" }}
+									onClick={() => cycleTaskPermission(selected!, sub)}
+									disabled={savingTaskPerms === selected}
+									data-tip={`${sub}: ${rule}`}
+								>
+									<span className="dot"></span>
+									{sub === "*" ? "* (default)" : sub} · {rule}
+								</button>
+							);
+						})}
+					</div>
+				</div>
+			</div>
+		);
 	};
 
 	const renderPermissionGroup = (
@@ -1038,6 +1173,31 @@ function AgentsTab() {
 							</div>
 						</div>
 
+						{/* Default model */}
+						<div className="settings-section">
+							<div className="settings-section-header">
+								<h2>Default Model</h2>
+								<span className="permissions-helper">
+									Override the model for this agent. Leave empty to use the
+									runtime default. Lighter models suit scouts/explorers.
+								</span>
+							</div>
+							<div className="settings-section-body">
+								<ModelCombobox
+									id={`agent-${selected}-model`}
+									label="Model"
+									value={selected ? (agentModels[selected] ?? "") : ""}
+									models={models}
+									onChange={(v) => selected && handleChangeModel(selected, v)}
+								/>
+								{savingModel === selected && (
+									<span className="muted" style={{ fontSize: "0.72rem" }}>
+										Saving…
+									</span>
+								)}
+							</div>
+						</div>
+
 						{/* Permissions */}
 						<div className="settings-section">
 							<div className="settings-section-header">
@@ -1068,6 +1228,10 @@ function AgentsTab() {
 								)}
 							</div>
 						</div>
+
+						{/* Sub-agent delegation (primary agents only) */}
+						{agents.find((a) => a.name === selected)?.mode === "primary" &&
+							renderTaskDelegation()}
 
 						{/* Status message */}
 						{message && (

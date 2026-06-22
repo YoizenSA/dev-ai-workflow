@@ -294,8 +294,19 @@ func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 							var agent map[string]json.RawMessage
 							if err := json.Unmarshal(agentData, &agent); err == nil {
 								if permRaw, ok := agent["permission"]; ok {
-									var permission map[string]string
-									if err := json.Unmarshal(permRaw, &permission); err == nil {
+									// permission.task may be a nested object (per-subagent
+									// map) that does not fit map[string]string. Decode into
+									// raw values and keep only scalar-string entries; the
+									// task object is surfaced via the task-permissions endpoint.
+									var rawPerm map[string]json.RawMessage
+									if err := json.Unmarshal(permRaw, &rawPerm); err == nil {
+										permission := make(map[string]string, len(rawPerm))
+										for k, v := range rawPerm {
+											var s string
+											if json.Unmarshal(v, &s) == nil {
+												permission[k] = s
+											}
+										}
 										writeJSON(w, http.StatusOK, permission)
 										return
 									}
@@ -439,7 +450,31 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 						if existingRaw, exists := agents[name]; exists {
 							var agentCfg map[string]json.RawMessage
 							if err := json.Unmarshal(existingRaw, &agentCfg); err == nil {
-								permJSON, _ := json.Marshal(body)
+								// Build the new permission block from the incoming
+								// scalar map, but preserve any existing object-valued
+								// entries (e.g. permission.task as a per-subagent map)
+								// that the flat editor cannot represent and must not clobber.
+								merged := make(map[string]json.RawMessage, len(body))
+								for k, v := range body {
+									vJSON, _ := json.Marshal(v)
+									merged[k] = vJSON
+								}
+								if prevRaw, ok := agentCfg["permission"]; ok {
+									var prev map[string]json.RawMessage
+									if json.Unmarshal(prevRaw, &prev) == nil {
+										for k, v := range prev {
+											if _, sent := merged[k]; sent {
+												continue
+											}
+											var s string
+											if json.Unmarshal(v, &s) != nil {
+												// Non-scalar (object) entry — preserve it.
+												merged[k] = v
+											}
+										}
+									}
+								}
+								permJSON, _ := json.Marshal(merged)
 								agentCfg["permission"] = permJSON
 								agentJSON, _ := json.Marshal(agentCfg)
 								agents[name] = agentJSON
@@ -481,4 +516,307 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, body)
+}
+
+// GET /api/config/agents/{name}/task-permissions
+// Returns the per-subagent task delegation map (permission.task) from
+// opencode.json. A scalar task value is normalized to {"*": value}; absence
+// returns an empty map.
+func (h *Handlers) GetAgentTaskPermissions(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	result := map[string]string{}
+
+	path, err := opencodeConfigPath()
+	if err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			taskRaw := lookupAgentPermissionKey(data, name, "task")
+			if len(taskRaw) > 0 {
+				// Object form: {"*": "deny", "sub-agent": "allow"}.
+				var asMap map[string]string
+				if json.Unmarshal(taskRaw, &asMap) == nil {
+					result = asMap
+				} else {
+					// Scalar form: "allow"/"ask"/"deny".
+					var asStr string
+					if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
+						result["*"] = asStr
+					}
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// PUT /api/config/agents/{name}/task-permissions
+// Writes the per-subagent task delegation map (permission.task) as an object
+// into opencode.json. Keys are sub-agent name globs ("*" is the catch-all);
+// values must be allow, ask, or deny.
+func (h *Handlers) PutAgentTaskPermissions(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+
+	var body map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var invalidValues []string
+	for k, v := range body {
+		if !ValidPermissionValues[v] {
+			invalidValues = append(invalidValues, fmt.Sprintf("%s=%q", k, v))
+		}
+	}
+	if len(invalidValues) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":   "invalid permission value(s), must be allow, ask, or deny",
+			"invalid": invalidValues,
+		})
+		return
+	}
+
+	path, err := opencodeConfigPath()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "opencode.json not found"})
+		return
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	var agents map[string]json.RawMessage
+	if agentRaw, ok := config["agent"]; !ok || json.Unmarshal(agentRaw, &agents) != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no agents in opencode.json"})
+		return
+	}
+	existingRaw, ok := agents[name]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json"})
+		return
+	}
+
+	var agentCfg map[string]json.RawMessage
+	if err := json.Unmarshal(existingRaw, &agentCfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Merge into the existing permission block so scalar tool permissions are kept.
+	var perm map[string]json.RawMessage
+	if permRaw, ok := agentCfg["permission"]; ok {
+		_ = json.Unmarshal(permRaw, &perm)
+	}
+	if perm == nil {
+		perm = map[string]json.RawMessage{}
+	}
+	if len(body) == 0 {
+		// Empty map clears the delegation restriction.
+		delete(perm, "task")
+	} else {
+		taskJSON, _ := json.Marshal(body)
+		perm["task"] = taskJSON
+	}
+	permJSON, _ := json.Marshal(perm)
+	agentCfg["permission"] = permJSON
+	agentJSON, _ := json.Marshal(agentCfg)
+	agents[name] = agentJSON
+	agentsJSON, _ := json.Marshal(agents)
+	config["agent"] = agentsJSON
+
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+	_ = os.WriteFile(path+".bak", data, 0644)
+	if err := os.WriteFile(path, pretty, 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, body)
+}
+
+// GET /api/config/agents/{name}/model
+// Returns the agent's default model from opencode.json (agent.<name>.model),
+// falling back to the markdown frontmatter "model:" field. Empty when unset.
+func (h *Handlers) GetAgentModel(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	model := ""
+
+	// opencode.json is the primary source.
+	if path, err := opencodeConfigPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			if raw := lookupAgentField(data, name, "model"); len(raw) > 0 {
+				_ = json.Unmarshal(raw, &model)
+			}
+		}
+	}
+
+	// Fallback: markdown frontmatter.
+	if model == "" {
+		if mdPath := readAgentMarkdownPath(name); mdPath != "" {
+			if mdContent, err := os.ReadFile(mdPath); err == nil {
+				model = getScalarFrontmatterField(string(mdContent), "model")
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"model": model})
+}
+
+// PUT /api/config/agents/{name}/model
+// Sets the agent's default model in opencode.json and markdown frontmatter.
+// An empty model clears the override (the agent falls back to the runtime default).
+func (h *Handlers) PutAgentModel(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+
+	var body struct {
+		Model string `json:"model"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	model := strings.TrimSpace(body.Model)
+
+	found := false
+
+	// Write to opencode.json if the agent is configured there.
+	if path, err := opencodeConfigPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var config map[string]json.RawMessage
+			if json.Unmarshal(data, &config) == nil {
+				var agents map[string]json.RawMessage
+				if agentRaw, ok := config["agent"]; ok && json.Unmarshal(agentRaw, &agents) == nil {
+					if existingRaw, exists := agents[name]; exists {
+						var agentCfg map[string]json.RawMessage
+						if json.Unmarshal(existingRaw, &agentCfg) == nil {
+							if model == "" {
+								delete(agentCfg, "model")
+							} else {
+								modelJSON, _ := json.Marshal(model)
+								agentCfg["model"] = modelJSON
+							}
+							agentJSON, _ := json.Marshal(agentCfg)
+							agents[name] = agentJSON
+							agentsJSON, _ := json.Marshal(agents)
+							config["agent"] = agentsJSON
+							pretty, _ := json.MarshalIndent(config, "", "  ")
+							_ = os.WriteFile(path+".bak", data, 0644)
+							if os.WriteFile(path, pretty, 0644) == nil {
+								found = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Also update markdown frontmatter (backward compat / source of truth on disk).
+	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
+		if mdContent, err := os.ReadFile(mdPath); err == nil {
+			updated := setScalarFrontmatterField(string(mdContent), "model", model)
+			_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+			if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			found = true
+		}
+	}
+
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"model": model})
+}
+
+// lookupAgentField returns the raw JSON value of agent.<name>.<key> from
+// opencode.json config bytes, or nil if any level is missing.
+func lookupAgentField(configData []byte, name, key string) json.RawMessage {
+	var config map[string]json.RawMessage
+	if json.Unmarshal(configData, &config) != nil {
+		return nil
+	}
+	agentRaw, ok := config["agent"]
+	if !ok {
+		return nil
+	}
+	var agents map[string]json.RawMessage
+	if json.Unmarshal(agentRaw, &agents) != nil {
+		return nil
+	}
+	agentData, ok := agents[name]
+	if !ok {
+		return nil
+	}
+	var agent map[string]json.RawMessage
+	if json.Unmarshal(agentData, &agent) != nil {
+		return nil
+	}
+	return agent[key]
+}
+
+// lookupAgentPermissionKey returns the raw JSON value of agent.<name>.permission.<key>
+// from opencode.json config bytes, or nil if any level is missing.
+func lookupAgentPermissionKey(configData []byte, name, key string) json.RawMessage {
+	var config map[string]json.RawMessage
+	if json.Unmarshal(configData, &config) != nil {
+		return nil
+	}
+	agentRaw, ok := config["agent"]
+	if !ok {
+		return nil
+	}
+	var agents map[string]json.RawMessage
+	if json.Unmarshal(agentRaw, &agents) != nil {
+		return nil
+	}
+	agentData, ok := agents[name]
+	if !ok {
+		return nil
+	}
+	var agent map[string]json.RawMessage
+	if json.Unmarshal(agentData, &agent) != nil {
+		return nil
+	}
+	permRaw, ok := agent["permission"]
+	if !ok {
+		return nil
+	}
+	var perm map[string]json.RawMessage
+	if json.Unmarshal(permRaw, &perm) != nil {
+		return nil
+	}
+	return perm[key]
 }

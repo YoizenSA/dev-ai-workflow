@@ -300,6 +300,64 @@ func updatePermissionsInFrontmatter(content string, perms map[string]string) str
 	return "---\n" + newFM + "\n---\n\n" + body
 }
 
+// getScalarFrontmatterField returns the value of a top-level scalar key in the
+// frontmatter (e.g. "model"), or "" if absent. Quotes around the value are stripped.
+func getScalarFrontmatterField(content, key string) string {
+	fm, _ := parseFrontmatter(content)
+	if fm == "" {
+		return ""
+	}
+	prefix := key + ":"
+	for _, line := range strings.Split(fm, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Skip indented lines so a nested "model:" inside another block is ignored.
+		if line != trimmed {
+			continue
+		}
+		if strings.HasPrefix(trimmed, prefix) {
+			val := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			return strings.Trim(val, `"'`)
+		}
+	}
+	return ""
+}
+
+// setScalarFrontmatterField sets a top-level scalar key to value in the
+// frontmatter, inserting it if absent. An empty value removes the key. Returns
+// the updated full markdown content.
+func setScalarFrontmatterField(content, key, value string) string {
+	fm, body := parseFrontmatter(content)
+	prefix := key + ":"
+
+	if fm == "" {
+		if value == "" {
+			return content
+		}
+		return fmt.Sprintf("---\n%s %s\n---\n\n%s", prefix, value, body)
+	}
+
+	lines := strings.Split(fm, "\n")
+	var result []string
+	replaced := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if line == trimmed && strings.HasPrefix(trimmed, prefix) {
+			replaced = true
+			if value != "" {
+				result = append(result, fmt.Sprintf("%s %s", prefix, value))
+			}
+			continue // drop the old line (and skip entirely when clearing)
+		}
+		result = append(result, line)
+	}
+	if !replaced && value != "" {
+		result = append(result, fmt.Sprintf("%s %s", prefix, value))
+	}
+
+	newFM := strings.Join(result, "\n")
+	return "---\n" + newFM + "\n---\n\n" + body
+}
+
 func sortedKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

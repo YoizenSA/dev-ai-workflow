@@ -284,6 +284,22 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify(perms),
 		}),
+	getAgentModel: (name: string) =>
+		request<{ model: string }>(`/api/config/agents/${name}/model`),
+	updateAgentModel: (name: string, model: string) =>
+		request<void>(`/api/config/agents/${name}/model`, {
+			method: "PUT",
+			body: JSON.stringify({ model }),
+		}),
+	getAgentTaskPermissions: (name: string) =>
+		request<Record<string, string>>(
+			`/api/config/agents/${name}/task-permissions`,
+		),
+	updateAgentTaskPermissions: (name: string, perms: Record<string, string>) =>
+		request<void>(`/api/config/agents/${name}/task-permissions`, {
+			method: "PUT",
+			body: JSON.stringify(perms),
+		}),
 
 	createAgent: (name: string, content: string) =>
 		request<void>("/api/config/agents", {
