@@ -357,37 +357,54 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
 	}
 
-	// Migrate any stale grouped copies from previous installs to flat: a nested
-	// copy (e.g. core/orchestrator.md) registers in opencode as
-	// "core/orchestrator" and shadows the flat "orchestrator" id.
-	cleanupGroupedAgentCopies(agentsDir, profiles)
+	// Drop any grouped/legacy subdirectories: opencode derives the agent id from
+	// the file path, so a nested copy (e.g. core/orchestrator.md) registers as
+	// "core/orchestrator" and shadows the canonical flat "orchestrator" id.
+	removeLegacyGroupDirs(agentsDir)
 
 	return nil
 }
 
-// cleanupGroupedAgentCopies removes agent .md files that a previous install
-// nested inside group subdirectories (e.g. core/orchestrator.md), along with
-// the now-empty group directories. This migrates an existing install from the
-// old grouped layout to the flat layout opencode expects.
-func cleanupGroupedAgentCopies(agentsDir string, profiles map[string]AgentProfile) {
-	groupDirs := make(map[string]bool)
-	for name := range profiles {
-		if !strings.Contains(name, "/") {
+// removeLegacyGroupDirs deletes every subdirectory under the agents dir. The
+// flat layout is the only valid one (opencode registers nested files under a
+// path-derived id that shadows the flat id), so any subdirectory — whether it
+// came from a current group profile or an orphaned legacy install whose profile
+// no longer exists — is removed wholesale. Top-level flat .md files are left
+// untouched.
+func removeLegacyGroupDirs(agentsDir string) {
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
 			continue
 		}
-		nested := filepath.Join(agentsDir, name+".md")
-		if err := os.Remove(nested); err == nil {
-			fmt.Printf("  Migrated grouped agent %s to flat layout\n", name+".md")
-		}
-		groupDirs[filepath.Dir(nested)] = true
-	}
-	// Remove group subdirectories that are now empty.
-	for dir := range groupDirs {
-		if dir == agentsDir {
+		dir := filepath.Join(agentsDir, e.Name())
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Printf("  Warning: failed to remove legacy agent dir %s: %v\n", dir, err)
 			continue
 		}
-		_ = os.Remove(dir) // succeeds only when the directory is empty
+		fmt.Printf("  Removed legacy grouped agent dir %s\n", e.Name())
 	}
+}
+
+// ywaiBucketPatterns maps ywai's coarse permission buckets to the opencode-native
+// wildcard patterns that actually gate the underlying MCP tools. opencode matches
+// permission keys as globs against real tool names, so the bare bucket names
+// (e.g. "ado", "memory") never match the prefixed tool ids (ado_pr_create,
+// engram_mem_save) and are silently ignored. Expanding them here makes the
+// generated permission block enforceable in opencode itself, not just inside
+// ywai's own MCPEnforce layer.
+//
+// The blanket "mcp" bucket enumerates every MCP server not covered by a
+// dedicated bucket above. Kept explicit (one pattern per server) so a new MCP
+// server is a visible, deliberate addition rather than a silent catch-all.
+var ywaiBucketPatterns = map[string][]string{
+	"ado":      {"ado_*"},
+	"memory":   {"engram_*"},
+	"intercom": {"intercom_*"},
+	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*"},
 }
 
 // buildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
@@ -403,13 +420,25 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
 	}
 
-	// Permission as nested YAML
+	// Permission as nested YAML. ywai's coarse buckets (ado, memory, intercom,
+	// mcp) are expanded to opencode-native wildcard patterns so the deny/allow
+	// is actually enforced by opencode, not silently dropped.
 	b.WriteString("permission:\n")
+	emitPermission := func(key, val string) {
+		if patterns, ok := ywaiBucketPatterns[key]; ok {
+			for _, p := range patterns {
+				// Quote the key: it contains glob/hyphen chars (e.g. ywai-kanban_*).
+				b.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
+			}
+			return
+		}
+		b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+	}
 	permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
 	written := map[string]bool{}
 	for _, key := range permOrder {
 		if val, ok := profile.Permission[key]; ok {
-			b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+			emitPermission(key, val)
 			written[key] = true
 		}
 	}
@@ -429,7 +458,7 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		}
 	}
 	for _, key := range remaining {
-		b.WriteString(fmt.Sprintf("  %s: %s\n", key, profile.Permission[key]))
+		emitPermission(key, profile.Permission[key])
 	}
 	b.WriteString("---\n\n")
 

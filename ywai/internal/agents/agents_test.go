@@ -482,6 +482,46 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	}
 }
 
+func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
+	profile := AgentProfile{
+		Description: "Orchestrator",
+		Prompt:      "# Orchestrator\n\nCoordinate.",
+		Mode:        "all",
+		Permission: map[string]string{
+			"edit":   "deny",
+			"ado":    "deny",
+			"memory": "allow",
+			"mcp":    "allow",
+		},
+	}
+
+	md := buildOpenCodeMarkdown("orchestrator", profile)
+
+	// Canonical keys pass through unchanged.
+	if !strings.Contains(md, "edit: deny") {
+		t.Error("canonical key edit should pass through unchanged")
+	}
+	// Bare ywai buckets must NOT leak into opencode output (they are no-ops there).
+	for _, bare := range []string{"\n  ado: ", "\n  memory: ", "\n  mcp: "} {
+		if strings.Contains(md, bare) {
+			t.Errorf("bare bucket %q should have been expanded, not emitted verbatim", strings.TrimSpace(bare))
+		}
+	}
+	// Buckets expand to quoted opencode wildcard patterns carrying the same value.
+	expansions := map[string]string{
+		`"ado_*": deny`:          "ado",
+		`"engram_*": allow`:      "memory",
+		`"codegraph_*": allow`:   "mcp",
+		`"context7_*": allow`:    "mcp",
+		`"ywai-kanban_*": allow`: "mcp",
+	}
+	for pattern, bucket := range expansions {
+		if !strings.Contains(md, pattern) {
+			t.Errorf("bucket %q should expand to %q, missing in:\n%s", bucket, pattern, md)
+		}
+	}
+}
+
 func TestInstallOpenCodeMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "agents")
