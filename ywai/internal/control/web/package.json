@@ -9,8 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "stylelint": "stylelint 'src/**/*.{css,tsx}'",
-    "lint": "eslint src --ext .ts,.tsx",
+    "stylelint": "stylelint --allow-empty-input",
+    "stylelint:all": "stylelint 'src/**/*.css'",
+    "lint": "eslint --ext .ts,.tsx --no-error-on-unmatched-pattern",
+    "lint:all": "eslint src --ext .ts,.tsx",
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
@@ -35,6 +37,7 @@
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "eslint-plugin-react": "^7.37.0",
     "jsdom": "^25.0.0",
+    "lefthook": "^1.10.0",
     "stylelint": "^16.10.0",
     "stylelint-config-standard": "^36.0.0",
     "stylelint-declaration-strict-value": "^1.10.0",

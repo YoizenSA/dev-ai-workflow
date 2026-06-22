@@ -2,14 +2,14 @@ pre-commit:
   parallel: true
   commands:
     stylelint:
-      glob: "**/*.{css,tsx}"
+      glob: "internal/control/web/**/*.css"
       root: "internal/control/web"
       run: npm run stylelint -- {staged_files}
     eslint:
-      glob: "**/*.{ts,tsx}"
+      glob: "internal/control/web/**/*.{ts,tsx}"
       root: "internal/control/web"
       run: npm run lint -- {staged_files}
     typecheck:
-      glob: "**/*.{ts,tsx}"
+      glob: "internal/control/web/**/*.{ts,tsx}"
       root: "internal/control/web"
       run: npx tsc --noEmit

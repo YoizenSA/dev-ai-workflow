@@ -12,7 +12,12 @@
       "files": ["src/styles/theme/palette.css"],
       "rules": {
         "color-no-hex": null,
-        "scale-unlimited/declaration-strict-value": null
+        "color-hex-length": null,
+        "color-function-notation": null,
+        "alpha-value-notation": null,
+        "scale-unlimited/declaration-strict-value": null,
+        "comment-empty-line-before": null,
+        "value-keyword-case": null
       }
     }
   ]

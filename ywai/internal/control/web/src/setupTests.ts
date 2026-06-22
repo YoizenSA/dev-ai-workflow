@@ -2,10 +2,13 @@ import '@testing-library/jest-dom';
 
 // Workaround for Vitest 2.1.9 + jsdom 25.0.1 + Node 25 leaving
 // `window.localStorage` as an empty object (no `getItem`/`setItem`/etc.).
-// Any component that reads localStorage during render (e.g. SessionSidebar
-// reading `kanban-collapsed-groups`) would otherwise crash with
-// "localStorage.getItem is not a function". Polyfill with an in-memory
-// Storage so the test env matches a real browser.
+// Verified that the `environmentOptions: { jsdom: { url: 'http://localhost/' } }`
+// setting in vitest.config.ts does NOT initialize the Storage backend in
+// this version combination — the polyfill below is required. Any component
+// that reads localStorage during render (e.g. SessionSidebar reading
+// `kanban-collapsed-groups`) would otherwise crash with
+// "localStorage.getItem is not a function". Polyfill is in-memory and
+// only activates when jsdom's Storage isn't properly installed.
 if (typeof window.localStorage === 'undefined' || typeof window.localStorage.getItem !== 'function') {
   const store = new Map<string, string>();
   const memoryStorage: Storage = {

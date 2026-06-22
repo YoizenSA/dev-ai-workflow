@@ -6,8 +6,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     // jsdom v25 leaves `window.localStorage` uninitialized for `about:blank`
-    // URLs, so any code that reads localStorage (e.g. SessionSidebar) crashes.
-    // Forcing an http:// origin tells jsdom to construct the Storage backend.
+    // URLs. The `environmentOptions: { jsdom: { url: 'http://localhost/' } }`
+    // setting below was verified to NOT initialize the Storage backend in
+    // Vitest 2.1.9 + jsdom 25.0.1 + Node 25, so the actual fix lives in
+    // src/setupTests.ts (an in-memory localStorage polyfill).
     environmentOptions: { jsdom: { url: 'http://localhost/' } },
     globals: true,
     setupFiles: ['./src/setupTests.ts'],
