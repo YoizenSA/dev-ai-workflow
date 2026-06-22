@@ -8,9 +8,75 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
+
+// toolCacheTTL is how long an assembled tools payload is considered fresh.
+const toolCacheTTL = 60 * time.Second
+
+// toolCache caches the /api/config/tools payload with a stale-while-revalidate
+// policy: the first request pays the slow discovery cost, later requests return
+// instantly, and a stale entry is served immediately while a single background
+// refresh picks up newly added MCPs/plugins. The zero value is ready to use.
+type toolCache struct {
+	mu         sync.Mutex
+	resp       map[string]interface{}
+	fetchedAt  time.Time
+	refreshing bool
+}
+
+func (c *toolCache) get(
+	fetch func() (map[string]interface{}, error),
+) (map[string]interface{}, error) {
+	c.mu.Lock()
+	cached := c.resp
+	hasCache := !c.fetchedAt.IsZero()
+	fresh := hasCache && time.Since(c.fetchedAt) < toolCacheTTL
+
+	if fresh {
+		c.mu.Unlock()
+		return cached, nil
+	}
+
+	if hasCache {
+		// Stale: serve what we have and refresh out of band (at most one in flight).
+		if !c.refreshing {
+			c.refreshing = true
+			go c.refresh(fetch)
+		}
+		c.mu.Unlock()
+		return cached, nil
+	}
+	c.mu.Unlock()
+
+	// Cold cache: this request must block on the assembly.
+	resp, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.resp = resp
+	c.fetchedAt = time.Now()
+	c.mu.Unlock()
+	return resp, nil
+}
+
+func (c *toolCache) refresh(fetch func() (map[string]interface{}, error)) {
+	resp, err := fetch()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refreshing = false
+	// Keep the previous cache on failure rather than wiping a good payload.
+	if err != nil || resp == nil {
+		return
+	}
+	c.resp = resp
+	c.fetchedAt = time.Now()
+}
 
 // --- Config Handlers ---
 
@@ -108,22 +174,30 @@ type MCPToolGroup struct {
 
 // GET /api/config/tools
 func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
-	path, err := opencodeConfigPath()
+	resp, err := h.toolCache.get(buildToolsResponse)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// buildToolsResponse assembles the /api/config/tools payload from the opencode
+// config plus MCP and plugin discovery. It is the slow source behind toolCache.
+func buildToolsResponse() (map[string]interface{}, error) {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		return nil, err
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, err
 	}
 
 	var config map[string]json.RawMessage
 	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, err
 	}
 
 	// Built-in opencode tools
@@ -249,12 +323,12 @@ func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
 	}
 	sortStrings(allTools)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return map[string]interface{}{
 		"built_in":     builtIn,
 		"all":          allTools,
 		"mcp_tools":    mcpTools,
 		"plugin_tools": pluginTools,
-	})
+	}, nil
 }
 
 // GET /api/config/skills

@@ -52,6 +52,88 @@ type Handlers struct {
 	// the wizard auto-runs after approval AND the user clicks Run separately.
 	runningMu       sync.Mutex
 	runningMissions map[string]struct{}
+
+	// modelCache memoizes the slow opencode model lookup with a
+	// stale-while-revalidate policy. The zero value is ready to use.
+	modelCache modelCache
+}
+
+// modelCacheTTL is how long a cached model list is considered fresh. Within
+// this window requests are served straight from memory; past it the cache is
+// still served immediately but a single background refresh is kicked off.
+const modelCacheTTL = 60 * time.Second
+
+// modelCache caches opencode model lists with a stale-while-revalidate policy.
+// The underlying source (`opencode models` CLI) takes ~3s, so the first call
+// pays that cost, every later call returns instantly, and a stale entry is
+// refreshed in the background so newly added models still show up. The zero
+// value is ready to use (no constructor needed — tests build Handlers directly).
+type modelCache struct {
+	mu         sync.Mutex
+	models     []opencode.ModelInfo
+	fetchedAt  time.Time
+	refreshing bool
+}
+
+// get returns cached models when available. A cold cache fetches synchronously;
+// a stale cache returns the old value immediately and refreshes in the
+// background (at most one refresh in flight). fetch is the slow source.
+func (c *modelCache) get(
+	ctx context.Context,
+	fetch func(context.Context) ([]opencode.ModelInfo, error),
+) ([]opencode.ModelInfo, error) {
+	c.mu.Lock()
+	cached := c.models
+	hasCache := !c.fetchedAt.IsZero()
+	fresh := hasCache && time.Since(c.fetchedAt) < modelCacheTTL
+
+	if fresh {
+		c.mu.Unlock()
+		return cached, nil
+	}
+
+	if hasCache {
+		// Stale: serve what we have now, refresh out of band so this request
+		// never waits on the slow CLI. Use a detached context — the request
+		// context is cancelled the moment we return.
+		if !c.refreshing {
+			c.refreshing = true
+			go c.refresh(fetch)
+		}
+		c.mu.Unlock()
+		return cached, nil
+	}
+	c.mu.Unlock()
+
+	// Cold cache: nothing to serve, so this one request must block on the fetch.
+	models, err := fetch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.models = models
+	c.fetchedAt = time.Now()
+	c.mu.Unlock()
+	return models, nil
+}
+
+func (c *modelCache) refresh(
+	fetch func(context.Context) ([]opencode.ModelInfo, error),
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	models, err := fetch(ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refreshing = false
+	// Keep the previous cache on failure or empty result rather than wiping a
+	// good list because one refresh hiccupped.
+	if err != nil || len(models) == 0 {
+		return
+	}
+	c.models = models
+	c.fetchedAt = time.Now()
 }
 
 // ─── Health Check ──────────────────────────────────────────────────────────
@@ -116,7 +198,7 @@ func (h *Handlers) RefineGoal(w http.ResponseWriter, r *http.Request) {
 // ListModels returns available opencode models from config.
 func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	models, err := h.opencodeClient.ListModels(ctx)
+	models, err := h.modelCache.get(ctx, h.opencodeClient.ListModels)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"models": []string{}})
 		return

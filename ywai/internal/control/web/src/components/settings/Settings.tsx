@@ -361,55 +361,61 @@ function GeneralTab() {
 		<div>
 			{versionInfo && (
 				<div
-					className="card card-pad"
-					style={{
-						marginBottom: "1rem",
-						display: "flex",
-						alignItems: "center",
-						gap: "0.75rem",
-						background: versionInfo.updateAvailable
-							? "var(--warning-soft, rgba(245, 158, 11, 0.12))"
-							: undefined,
-						border: versionInfo.updateAvailable
-							? "1px solid var(--color-warning-border, #f59e0b)"
-							: undefined,
-					}}
+					className={`version-banner${versionInfo.updateAvailable ? " update" : ""}`}
 				>
-					<span style={{ fontSize: "1.25rem" }}>
-						{versionInfo.updateAvailable ? "⬆️" : "✅"}
+					<span className="version-banner-icon" aria-hidden="true">
+						{versionInfo.updateAvailable ? (
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							>
+								<line x1="12" y1="19" x2="12" y2="5" />
+								<polyline points="5 12 12 5 19 12" />
+							</svg>
+						) : (
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							>
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+						)}
 					</span>
-					<div style={{ flex: 1 }}>
-						<strong>ywai {versionInfo.current}</strong>
-						{versionInfo.updateAvailable && versionInfo.latest && (
-							<span>
-								{" "}
-								→{" "}
+					<div className="version-banner-body">
+						<span className="version-banner-current">
+							ywai {versionInfo.current}
+						</span>
+						{versionInfo.updateAvailable && versionInfo.latest ? (
+							<>
+								<span className="version-banner-arrow">→</span>
 								<a
+									className="version-banner-latest"
 									href={`https://github.com/YoizenSA/dev-ai-workflow/releases/tag/${versionInfo.latest}`}
 									target="_blank"
 									rel="noopener noreferrer"
-									style={{ color: "var(--color-primary, #3b82f6)" }}
 								>
 									{versionInfo.latest}
-								</a>{" "}
-								available
-							</span>
-						)}
-						{!versionInfo.updateAvailable && (
-							<span className="muted"> — up to date</span>
+								</a>
+								<span className="version-banner-status">available</span>
+							</>
+						) : (
+							<span className="version-banner-status">up to date</span>
 						)}
 					</div>
 					{versionInfo.updateAvailable && (
-						<code
-							style={{
-								fontSize: "0.8rem",
-								padding: "0.25rem 0.5rem",
-								borderRadius: "4px",
-								background: "var(--color-code-bg, #f1f5f9)",
-							}}
-						>
-							ywai update
-						</code>
+						<code className="version-banner-cmd">ywai update</code>
 					)}
 				</div>
 			)}

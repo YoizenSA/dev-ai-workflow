@@ -82,6 +82,11 @@ type Handlers struct {
 	store          *Store
 	hub            *Hub
 	opencodeClient opencode.Client
+
+	// toolCache memoizes the slow /api/config/tools assembly (MCP + plugin
+	// discovery spawns subprocesses and hits the network) with a
+	// stale-while-revalidate policy. The zero value is ready to use.
+	toolCache toolCache
 }
 
 var upgrader = websocket.Upgrader{
