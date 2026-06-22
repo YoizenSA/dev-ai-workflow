@@ -323,6 +323,7 @@ var installCmd = &cobra.Command{
 			sddMode = result.SDDMode
 			persona = result.Persona
 			groupFilter = result.GroupFilter
+			autostartFlag = result.Autostart
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag

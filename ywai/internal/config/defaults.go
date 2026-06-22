@@ -17,6 +17,7 @@ type TUIDefaults struct {
 	Persona    string   `json:"persona"`
 	MCP        bool     `json:"mcp"`
 	ADO        bool     `json:"ado"`
+	Autostart  bool     `json:"autostart"`
 	Groups     []string `json:"groups"`
 }
 
@@ -99,6 +100,7 @@ func BuiltInDefaults() *TUIDefaults {
 		Persona:    "neutral",
 		MCP:        false,
 		ADO:        false,
+		Autostart:  false,
 		Groups:     []string{},
 	}
 }

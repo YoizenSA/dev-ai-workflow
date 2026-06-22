@@ -113,8 +113,8 @@ const (
 )
 
 // optionsRowCount is the number of navigable rows on the Options step
-// (Preset, Scope, Global only, SDD Mode, Persona, Overwrite agents).
-const optionsRowCount = 6
+// (Preset, Scope, Global only, SDD Mode, Persona, Overwrite agents, Autostart).
+const optionsRowCount = 7
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Choices
@@ -165,6 +165,7 @@ type TUIResult struct {
 	Scope           string
 	SDDMode         string
 	Persona         string
+	Autostart       bool
 	GroupFilter     agents.GroupFilter
 }
 
@@ -199,6 +200,7 @@ type Model struct {
 	globalOnly    bool
 	sddModeIdx    int
 	personaIdx    int
+	autostart     bool
 
 	// MCP & ADO selection
 	installMicrosoftLearnMCP bool
@@ -266,6 +268,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		globalOnly:               defaults.GlobalOnly,
 		sddModeIdx:               sddModeIdx,
 		personaIdx:               personaIdx,
+		autostart:                defaults.Autostart,
 		installMicrosoftLearnMCP: defaults.MCP,
 		installADO:               defaults.ADO,
 		overwriteAgents:          true,
@@ -599,6 +602,8 @@ func (m *Model) cycleOption(dir int) {
 		m.personaIdx = (m.personaIdx + dir + len(personaChoices)) % len(personaChoices)
 	case 5:
 		m.overwriteAgents = !m.overwriteAgents
+	case 6:
+		m.autostart = !m.autostart
 	}
 }
 
@@ -965,6 +970,11 @@ func (m *Model) viewOptions() string {
 		overwriteLabel = "yes"
 	}
 
+	autostartLabel := "no"
+	if m.autostart {
+		autostartLabel = "yes"
+	}
+
 	rows := []optionRow{
 		{"Preset", presetChoices[m.presetIdx]},
 		{"Scope", scopeChoices[m.scopeIdx]},
@@ -972,6 +982,7 @@ func (m *Model) viewOptions() string {
 		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
 		{"Persona", personaChoices[m.personaIdx]},
 		{"Overwrite agents", overwriteLabel},
+		{"Autostart", autostartLabel},
 	}
 
 	maxLabel := 0
@@ -1037,6 +1048,12 @@ func (m *Model) viewOptions() string {
 			b.WriteString(helpStyle.Render("    " + sddModeDescs[sddModeChoices[m.sddModeIdx]]))
 		case 4:
 			b.WriteString(helpStyle.Render("    " + personaDescs[personaChoices[m.personaIdx]]))
+		case 6:
+			if m.autostart {
+				b.WriteString(helpStyle.Render("    Start the control server on boot (auto-updates first, then serves)"))
+			} else {
+				b.WriteString(helpStyle.Render("    Don't configure the control server to start on boot"))
+			}
 		}
 	}
 
@@ -1177,6 +1194,11 @@ func (m *Model) viewConfirm() string {
 		overwriteLabel = "yes"
 	}
 
+	autostartLabel := "no"
+	if m.autostart {
+		autostartLabel = "yes"
+	}
+
 	rows := [][2]string{
 		{"Agent", agentLabel},
 		{"Preset", presetChoices[m.presetIdx]},
@@ -1185,6 +1207,7 @@ func (m *Model) viewConfirm() string {
 		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
 		{"Persona", personaChoices[m.personaIdx]},
 		{"Overwrite agents", overwriteLabel},
+		{"Autostart", autostartLabel},
 		{"Skills", "all extra skills"},
 	}
 
@@ -1365,6 +1388,7 @@ func (m *Model) Result() TUIResult {
 		Scope:           scopeChoices[m.scopeIdx],
 		SDDMode:         sddModeChoices[m.sddModeIdx],
 		Persona:         personaChoices[m.personaIdx],
+		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),
 	}
 }
