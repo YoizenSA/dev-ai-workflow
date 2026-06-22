@@ -154,6 +154,14 @@ func (h *Handlers) PutOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 		merged[k] = v
 	}
 
+	// Strip provider if it's a flat string — the user wants model/small_model only.
+	if raw, ok := merged["provider"]; ok {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			delete(merged, "provider")
+		}
+	}
+
 	pretty, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

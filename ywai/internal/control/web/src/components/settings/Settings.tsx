@@ -316,7 +316,6 @@ function GeneralTab() {
 			// opencode.json instead of overwriting it, so we don't clobber
 			// fields we don't render.
 			const toSave: Record<string, unknown> = {};
-			if (config.provider !== undefined) toSave.provider = config.provider;
 			if (config.model) toSave.model = config.model;
 			if (config.smallModel) toSave["small_model"] = config.smallModel;
 			if (config.defaultAgent) toSave["default_agent"] = config.defaultAgent;
