@@ -16,6 +16,9 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "ado": "allow",
-  "mcp": "allow"
+  "ado": "deny",
+  "mcp": "allow",
+  "ywai-kanban_create_session": "deny",
+  "ywai-kanban_create_delegation": "deny",
+  "ywai-kanban_delete_session": "deny"
 }

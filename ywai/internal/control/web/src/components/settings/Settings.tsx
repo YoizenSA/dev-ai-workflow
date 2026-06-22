@@ -742,7 +742,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentModel(agentName, model);
 			setAgentModels((prev) => ({ ...prev, [agentName]: model }));
-			setMessage(null);
+			setMessage(model ? `Model set to ${model}` : "Model reset to default");
 		} catch (err) {
 			setMessage(`Error saving model: ${err}`);
 		} finally {
@@ -875,7 +875,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentPermissions(agentName, perms);
 			setPermissions((prev) => ({ ...prev, [agentName]: perms }));
-			setMessage(null);
+			setMessage("Permissions saved");
 		} catch (err) {
 			setMessage(`Error saving permission: ${err}`);
 		} finally {
@@ -896,7 +896,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentPermissions(agentName, perms);
 			setPermissions((prev) => ({ ...prev, [agentName]: perms }));
-			setMessage(null);
+			setMessage("Permissions saved");
 		} catch (err) {
 			setMessage(`Error saving permissions: ${err}`);
 		} finally {
@@ -918,7 +918,7 @@ function AgentsTab() {
 		try {
 			await configApi.updateAgentTaskPermissions(agentName, updated);
 			setTaskPerms((prev) => ({ ...prev, [agentName]: updated }));
-			setMessage(null);
+			setMessage("Delegation saved");
 		} catch (err) {
 			setMessage(`Error saving delegation: ${err}`);
 		} finally {

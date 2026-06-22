@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
 
 // --- Markdown Frontmatter Helpers ---
@@ -205,7 +207,9 @@ func extractPermissionsFromFrontmatter(fm string) map[string]string {
 		if len(parts) != 2 {
 			continue
 		}
-		key := strings.TrimSpace(parts[0])
+		// Strip surrounding quotes: expanded pattern keys (ado_*, ywai-kanban_*)
+		// are emitted quoted, so the on-disk key looks like "ado_*".
+		key := strings.Trim(strings.TrimSpace(parts[0]), `"'`)
 		val := strings.TrimSpace(parts[1])
 
 		if headerKey == "tools" {
@@ -238,13 +242,19 @@ func extractModeFromFrontmatter(fm string) string {
 // with the given permissions map. If no permission: block exists, it adds one.
 // Returns the updated full markdown content.
 func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
+	// Expand ywai's coarse buckets (ado, memory, intercom, mcp) into the
+	// opencode-native wildcard patterns opencode actually enforces. Without this
+	// the frontmatter would carry bare bucket names that opencode ignores,
+	// silently dropping the toggle — see agents.ExpandPermissionBuckets.
+	perms = agents.ExpandPermissionBuckets(perms)
+
 	fm, body := parseFrontmatter(content)
 	if fm == "" {
 		// No frontmatter at all — wrap content with new frontmatter
 		var b strings.Builder
 		b.WriteString("---\npermission:\n")
 		for _, k := range sortedKeys(perms) {
-			b.WriteString(fmt.Sprintf("  %s: %s\n", k, perms[k]))
+			b.WriteString(fmt.Sprintf("  %s: %s\n", yamlPermKey(k), perms[k]))
 		}
 		b.WriteString("---\n\n")
 		b.WriteString(body)
@@ -266,7 +276,7 @@ func updatePermissionsInFrontmatter(content string, perms map[string]string) str
 			// Insert new permission: block here
 			result = append(result, "permission:")
 			for _, k := range sortedKeys(perms) {
-				result = append(result, fmt.Sprintf("  %s: %s", k, perms[k]))
+				result = append(result, fmt.Sprintf("  %s: %s", yamlPermKey(k), perms[k]))
 			}
 			inserted = true
 			continue
@@ -290,7 +300,7 @@ func updatePermissionsInFrontmatter(content string, perms map[string]string) str
 		if !inserted && i == len(lines)-1 {
 			result = append(result, "permission:")
 			for _, k := range sortedKeys(perms) {
-				result = append(result, fmt.Sprintf("  %s: %s", k, perms[k]))
+				result = append(result, fmt.Sprintf("  %s: %s", yamlPermKey(k), perms[k]))
 			}
 			inserted = true
 		}
@@ -356,6 +366,21 @@ func setScalarFrontmatterField(content, key, value string) string {
 
 	newFM := strings.Join(result, "\n")
 	return "---\n" + newFM + "\n---\n\n" + body
+}
+
+// yamlPermKey quotes a permission key when it contains characters that are not
+// safe as a bare YAML key (e.g. the glob/hyphen chars in expanded patterns like
+// ado_* or ywai-kanban_*). Plain identifiers (read, edit, …) are emitted bare.
+// This matches the quoting buildOpenCodeMarkdown applies to expanded patterns.
+func yamlPermKey(k string) string {
+	for _, r := range k {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return fmt.Sprintf("%q", k)
+	}
+	return k
 }
 
 func sortedKeys(m map[string]string) []string {

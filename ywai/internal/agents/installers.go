@@ -407,6 +407,27 @@ var ywaiBucketPatterns = map[string][]string{
 	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*"},
 }
 
+// ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
+// buckets (ado, memory, intercom, mcp) expanded to the opencode-native wildcard
+// patterns that actually gate the underlying tools. Keys without a bucket mapping
+// pass through unchanged. This mirrors the expansion buildOpenCodeMarkdown applies
+// at install time so permissions written by any other path (e.g. the kanban
+// permissions API patching frontmatter in place) stay enforceable in opencode
+// instead of leaving bare bucket names that opencode silently ignores.
+func ExpandPermissionBuckets(perms map[string]string) map[string]string {
+	out := make(map[string]string, len(perms))
+	for key, val := range perms {
+		if patterns, ok := ywaiBucketPatterns[key]; ok {
+			for _, p := range patterns {
+				out[p] = val
+			}
+			continue
+		}
+		out[key] = val
+	}
+	return out
+}
+
 // buildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
 func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	var b strings.Builder
