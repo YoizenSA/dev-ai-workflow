@@ -23,6 +23,15 @@ fi
 # (peers included) — drop --external flags or it will fail to resolve at load.
 # Mirrors the npm fallback above: if bun is missing but a prior bundle exists,
 # reuse it; otherwise warn and ship without the plugin rather than fail.
+# Buscar bun en paths no estándar (CI, shells no interactivos, etc.)
+if ! command -v bun >/dev/null 2>&1; then
+    for candidate in "$HOME/.bun/bin/bun" "/opt/homebrew/bin/bun" "/usr/local/bin/bun"; do
+        if [ -x "$candidate" ]; then
+            export PATH="$(dirname "$candidate"):$PATH"
+            break
+        fi
+    done
+fi
 if command -v bun >/dev/null 2>&1; then
     echo "Building background-agents plugin (bun bundle)…"
     bun install --cwd "$BA_DIR"
@@ -49,5 +58,5 @@ fi
 
 skill_count=$(ls -d "$EMBED_DIR/skills"/*/ 2>/dev/null | wc -l)
 agent_count=$(find "$EMBED_DIR/agents" -name "AGENT.md" | wc -l)
-plugin_count=$(ls "$EMBED_DIR/plugins"/*.js 2>/dev/null | wc -l)
+plugin_count=$(ls "$EMBED_DIR/plugins"/*.js 2>/dev/null | wc -l || echo 0)
 echo "Prepared embedded data: $skill_count skills, $agent_count agent profiles, $plugin_count plugins, control UI (React)"
