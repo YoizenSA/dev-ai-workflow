@@ -78,6 +78,8 @@ func (h *Handlers) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	switch req.Status {
 	case "closed":
 		err = h.store.CloseSession(id)
+	case "active":
+		err = h.store.OpenSession(id)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status"})
 		return
@@ -101,6 +103,51 @@ func (h *Handlers) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 	h.broadcastUpdate("session.deleted", map[string]string{"session_id": id})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "session deleted"})
+}
+
+func (h *Handlers) DeleteSessions(w http.ResponseWriter, r *http.Request) {
+	project := r.URL.Query().Get("project")
+	if project == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "project is required"})
+		return
+	}
+	if err := h.store.DeleteSessionsByProject(project); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.broadcastUpdate("sessions.deleted", map[string]string{"project": project})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "sessions deleted"})
+}
+
+func (h *Handlers) UpdateSessions(w http.ResponseWriter, r *http.Request) {
+	project := r.URL.Query().Get("project")
+	if project == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "project is required"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	var err error
+	switch req.Status {
+	case "closed":
+		err = h.store.CloseSessionsByProject(project)
+	case "active":
+		err = h.store.OpenSessionsByProject(project)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	h.broadcastUpdate("sessions.status_changed", map[string]string{"project": project, "status": req.Status})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "sessions updated"})
 }
 
 // --- Board handler ---

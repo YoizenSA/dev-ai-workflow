@@ -573,11 +573,42 @@
   margin-bottom: var(--space-1);
 }
 
+/* Row that pairs the group header button with the bulk action buttons. The
+   header button takes the available space; the action cluster sits on the
+   right and is only revealed on hover / focus so the sidebar stays calm
+   when the user is just scanning the list. */
+.project-group-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.project-group-header-row:hover {
+  background: var(--surface-hover);
+}
+
+.project-group-header-row:hover .project-group-actions,
+.project-group-header-row:focus-within .project-group-actions {
+  opacity: 1;
+}
+
+.project-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--space-1);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
 .project-group-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: var(--space-2) var(--space-2);
   background: none;
   border: none;
@@ -589,6 +620,7 @@
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition: background 0.12s, color 0.12s;
+  text-align: left;
 }
 
 .project-group-header:hover {
@@ -775,6 +807,27 @@
   font-size: 0.75rem;
   color: var(--text-faint);
   margin: 0;
+}
+
+/* ─── Group action confirmation modal ────────────────────── */
+
+.group-action-summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface-soft);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+}
+
+.group-action-summary code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--surface);
+  padding: 0 0.35rem;
+  border-radius: 3px;
 }
 
 /* ─── Kanban Main Area ───────────────────────────────────── */

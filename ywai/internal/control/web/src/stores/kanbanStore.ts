@@ -9,6 +9,12 @@ import type {
 } from '../api/types'
 import { kanbanApi } from '../api/client'
 
+// Normalise a project name the same way the UI groups sessions: empty and
+// "(no project)" are folded into a single bucket so the user cannot end up
+// with two visually-identical groups that bulk actions wouldn't both touch.
+const projectKey = (project: string) =>
+  !project || project === '(no project)' ? '(no project)' : project
+
 interface KanbanState {
   sessions: Session[]
   activeSession: Session | null
@@ -32,6 +38,10 @@ interface KanbanState {
   moveDelegation: (delegationId: string, column: DelegationColumn) => Promise<void>
   fetchActivities: (delegationId: string) => Promise<void>
   resolveActivity: (delegationId: string, activityId: string, resolution: string) => Promise<void>
+  // Group-level bulk operations. Grouping key is `Session.project`.
+  archiveGroup: (project: string) => Promise<void>
+  unarchiveGroup: (project: string) => Promise<void>
+  deleteGroup: (project: string) => Promise<void>
   handleWSMessage: (msg: WSMessage) => void
 }
 
@@ -176,6 +186,64 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
     }))
   },
 
+  // Bulk-archive every session in a project (status -> "closed").
+  // Empties "active" group, leaves the row visible in the "Archived" section.
+  archiveGroup: async (project: string) => {
+    await kanbanApi.updateSessionsByProject(project, { status: 'closed' })
+    set((s) => {
+      const next = s.sessions.map((sess) =>
+        projectKey(sess.project) === projectKey(project)
+          ? { ...sess, status: 'closed' as const }
+          : sess,
+      )
+      return {
+        sessions: next,
+        activeSession:
+          s.activeSession && projectKey(s.activeSession.project) === projectKey(project)
+            ? { ...s.activeSession, status: 'closed' as const }
+            : s.activeSession,
+      }
+    })
+  },
+
+  // Bulk-restore every session in a project (status -> "active").
+  unarchiveGroup: async (project: string) => {
+    await kanbanApi.updateSessionsByProject(project, { status: 'active' })
+    set((s) => {
+      const next = s.sessions.map((sess) =>
+        projectKey(sess.project) === projectKey(project)
+          ? { ...sess, status: 'active' as const }
+          : sess,
+      )
+      return {
+        sessions: next,
+        activeSession:
+          s.activeSession && projectKey(s.activeSession.project) === projectKey(project)
+            ? { ...s.activeSession, status: 'active' as const }
+            : s.activeSession,
+      }
+    })
+  },
+
+  // Bulk-delete every session in a project (delegations/activities cascade).
+  deleteGroup: async (project: string) => {
+    await kanbanApi.deleteSessionsByProject(project)
+    set((s) => {
+      const next = s.sessions.filter(
+        (sess) => projectKey(sess.project) !== projectKey(project),
+      )
+      const activeDropped =
+        s.activeSession &&
+        projectKey(s.activeSession.project) === projectKey(project)
+      return {
+        sessions: next,
+        activeSession: activeDropped
+          ? next.find((sess) => sess.status === 'active') ?? null
+          : s.activeSession,
+      }
+    })
+  },
+
   handleWSMessage: (msg: WSMessage) => {
     const state = get()
     if (!state.board) return
@@ -254,6 +322,64 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
           newBoard[col] = board[col].filter((d) => d.id !== del.id)
         }
         set({ board: newBoard })
+        break
+      }
+      case 'session.created': {
+        const created = msg.payload as Session
+        set((s) =>
+          s.sessions.some((sess) => sess.id === created.id)
+            ? s
+            : { sessions: [...s.sessions, created] },
+        )
+        break
+      }
+      case 'session.status_changed': {
+        const updated = msg.payload as Session
+        set((s) => ({
+          sessions: s.sessions.map((sess) =>
+            sess.id === updated.id ? updated : sess,
+          ),
+          activeSession:
+            s.activeSession?.id === updated.id ? updated : s.activeSession,
+        }))
+        break
+      }
+      case 'session.deleted': {
+        const { session_id } = msg.payload as { session_id: string }
+        set((s) => {
+          const next = s.sessions.filter((sess) => sess.id !== session_id)
+          return {
+            sessions: next,
+            activeSession:
+              s.activeSession?.id === session_id
+                ? next.find((sess) => sess.status === 'active') ?? null
+                : s.activeSession,
+          }
+        })
+        break
+      }
+      case 'sessions.deleted': {
+        // Bulk delete by project — happens when another client runs
+        // deleteGroup. Just re-fetch; simpler and always correct.
+        void get().fetchSessions()
+        break
+      }
+      case 'sessions.status_changed': {
+        const { project, status } = msg.payload as {
+          project: string
+          status: 'active' | 'closed'
+        }
+        set((s) => ({
+          sessions: s.sessions.map((sess) =>
+            projectKey(sess.project) === projectKey(project)
+              ? { ...sess, status }
+              : sess,
+          ),
+          activeSession:
+            s.activeSession && projectKey(s.activeSession.project) === projectKey(project)
+              ? { ...s.activeSession, status }
+              : s.activeSession,
+        }))
         break
       }
       default:

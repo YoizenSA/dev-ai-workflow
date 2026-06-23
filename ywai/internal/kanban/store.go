@@ -234,6 +234,73 @@ func (s *Store) CloseSession(id string) error {
 	return nil
 }
 
+// OpenSession restores a closed session to active status.
+func (s *Store) OpenSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	session, ok := s.sessions[id]
+	if !ok {
+		return fmt.Errorf("session %s not found", id)
+	}
+	session.Status = "active"
+	return nil
+}
+
+// DeleteSessionsByProject removes all sessions and their delegations for a project.
+func (s *Store) DeleteSessionsByProject(project string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	target := normalizeProject(project)
+	for id, session := range s.sessions {
+		if normalizeProject(session.Project) != target {
+			continue
+		}
+		for dID, d := range s.delegations {
+			if d.SessionID == id {
+				delete(s.delegations, dID)
+				delete(s.activities, dID)
+			}
+		}
+		delete(s.sessions, id)
+	}
+	return nil
+}
+
+// CloseSessionsByProject archives every session that belongs to a project.
+func (s *Store) CloseSessionsByProject(project string) error {
+	return s.setSessionsStatusByProject(project, "closed")
+}
+
+// OpenSessionsByProject restores every session that belongs to a project.
+func (s *Store) OpenSessionsByProject(project string) error {
+	return s.setSessionsStatusByProject(project, "active")
+}
+
+func (s *Store) setSessionsStatusByProject(project, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.autoSave()
+
+	target := normalizeProject(project)
+	for _, session := range s.sessions {
+		if normalizeProject(session.Project) == target {
+			session.Status = status
+		}
+	}
+	return nil
+}
+
+func normalizeProject(project string) string {
+	if project == "" || project == "(no project)" {
+		return "(no project)"
+	}
+	return project
+}
+
 // DeleteSession removes a session and all its delegations from the store.
 func (s *Store) DeleteSession(id string) error {
 	s.mu.Lock()

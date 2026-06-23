@@ -86,6 +86,20 @@ export const kanbanApi = {
 		fetch(`${BASE}/api/sessions/${id}`, { method: "DELETE" }).then((r) => {
 			if (!r.ok) throw new Error(`${r.status}`);
 		}),
+	deleteSessionsByProject: (project: string) =>
+		fetch(`${BASE}/api/sessions?project=${encodeURIComponent(project)}`, {
+			method: "DELETE",
+		}).then((r) => {
+			if (!r.ok) throw new Error(`${r.status}`);
+		}),
+	updateSessionsByProject: (project: string, data: Partial<Session>) =>
+		request<Session>(
+			`/api/sessions?project=${encodeURIComponent(project)}`,
+			{
+				method: "PATCH",
+				body: JSON.stringify(data),
+			},
+		),
 
 	// Board — the API returns { session, columns }; the store wants the flat columns.
 	getBoard: async (sessionId: string): Promise<BoardView> => {
