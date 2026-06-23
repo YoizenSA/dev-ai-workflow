@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useMissionsStore } from "../../stores/missionsStore";
 import { SessionSidebar } from "../kanban/SessionSidebar";
+import { ThemeToggle } from "../shared/ThemeToggle";
 
 interface SidebarProps {
 	open: boolean;
@@ -145,7 +146,19 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 		<aside className={`sidebar${open ? " open" : ""}`}>
 			{/* Brand block */}
 			<div className="brand">
-				
+				<div className="brand-mark">
+					<img
+						src="/icon.svg"
+						alt="ywai"
+						className="brand-mark-img brand-mark-img-dark"
+					/>
+					<img
+						src="/icon-negro.svg"
+						alt=""
+						className="brand-mark-img brand-mark-img-light"
+						aria-hidden="true"
+					/>
+				</div>
 				<span className="brand-name"><span className="grad-text">y</span>wai</span>
 				<span className="brand-sub">Control Dashboard</span>
 			</div>
@@ -201,6 +214,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 					<SessionSidebar />
 				</div>
 			)}
+
+			{/* Sidebar foot: user chip (placeholder) + footer tools (theme toggle).
+			    Pushed to the bottom by .sidebar-foot { margin-top: auto } in shell.css. */}
+			<div className="sidebar-foot">
+				<button className="user-chip" type="button" aria-label="User menu">
+					<span className="user-avatar" aria-hidden="true">U</span>
+					<span className="user-meta">
+						<span className="user-name">User</span>
+					</span>
+				</button>
+				<div className="foot-tools">
+					<ThemeToggle />
+				</div>
+			</div>
 		</aside>
 	);
 }
