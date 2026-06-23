@@ -719,4 +719,310 @@ describe('handleUninstall', () => {
 		);
 	});
 });
+
+// ============================================================================
+// Slice 8 — target_agent dropdown (RED TDD specs)
+// ============================================================================
+//
+// These tests pin the behavior of the new target_agent selector:
+//   1. A control (select / radio group / button group) renders 3 options
+//      with values "opencode", "pi", "claude-code".
+//   2. The default selection is "opencode".
+//   3. The currently selected target is visible in the UI.
+//   4-5. The user can change the selection to "pi" or "claude-code".
+//   6-8. The install POST body uses the selected target_agent.
+//   9. The target persists across multiple installs (different servers).
+//   10. The target persists across re-renders (React state, not localStorage).
+//
+// The helper `findTargetControl` abstracts over the 3 possible implementations
+// the dev may pick (<select>, radio group, button group with aria-pressed).
+// If none is found, the helper throws — which is exactly the RED state we want
+// for tests 1-5 and 7-10. Test 6 (default opencode) is a regression guard: it
+// passes against the current hardcoded "opencode" body, but would fail if the
+// dev removed the default and the selector didn't render.
+//
+// API pinned (read before changing):
+//   - A target control with exactly 3 options: "opencode", "pi", "claude-code".
+//   - Default selection is "opencode".
+//   - The install POST body includes `target_agent: <selected value>`.
+//   - The selected target persists across installs and re-renders within the
+//     same component instance (no need for localStorage between sessions).
+//
+// Ambiguities documented:
+//   - Control kind: the dev may implement a `<select>`, a radio group, or a
+//     button group. The helper handles all three. If the dev picks something
+//     exotic (e.g. a custom combobox without standard ARIA roles), the helper
+//     throws and the test will need adjustment.
+//   - "Visible" for test 3: for a <select>, the current value is always
+//     visible (it's the displayed option in the closed select). For a radio
+//     group, the checked radio's label is visible. For a button group, the
+//     pressed button shows its state. The test pins "the opencode element is
+//     the current one AND is in the DOM".
+//   - Install response: tests use a 200 response (not 202) to avoid triggering
+//     the polling flow. The POST body assertion works regardless of the
+//     response status. This keeps the test deterministic and fast.
+
+// ----- Target control helper -------------------------------------------------
+
+type TargetValue = 'opencode' | 'pi' | 'claude-code';
+
+type TargetControl = {
+	kind: 'select' | 'radio' | 'button';
+	values: TargetValue[];
+	current: () => TargetValue | null;
+	select: (value: TargetValue) => Promise<void>;
+};
+
+async function findTargetControl(
+	user: ReturnType<typeof userEvent.setup>
+): Promise<TargetControl> {
+	// Strategy 1: <select> (with or without aria-label)
+	const selectEl =
+		(document.querySelector(
+			'select[aria-label*="target" i], select[name*="target" i]'
+		) as HTMLSelectElement | null) ??
+		(screen.queryByRole('combobox') as HTMLSelectElement | null);
+	if (selectEl && selectEl.tagName === 'SELECT') {
+		const opts = Array.from(
+			selectEl.querySelectorAll('option')
+		) as HTMLOptionElement[];
+		return {
+			kind: 'select',
+			values: opts.map((o) => o.value as TargetValue),
+			current: () => (selectEl.value || null) as TargetValue | null,
+			select: async (v) => {
+				await user.selectOptions(selectEl, v);
+			},
+		};
+	}
+
+	// Strategy 2: radio group
+	const radios = screen.queryAllByRole('radio');
+	if (radios.length >= 3) {
+		return {
+			kind: 'radio',
+			values: radios.map((r) => (r as HTMLInputElement).value as TargetValue),
+			current: () => {
+				const checked = radios.find((r) => (r as HTMLInputElement).checked);
+				return checked
+					? ((checked as HTMLInputElement).value as TargetValue)
+					: null;
+			},
+			select: async (v) => {
+				const radio = radios.find((r) => (r as HTMLInputElement).value === v);
+				if (radio) await user.click(radio);
+			},
+		};
+	}
+
+	// Strategy 3: button group with data-target-agent attribute
+	const buttons = Array.from(
+		document.querySelectorAll('button[data-target-agent]')
+	);
+	if (buttons.length >= 3) {
+		return {
+			kind: 'button',
+			values: buttons.map(
+				(b) => b.getAttribute('data-target-agent') as TargetValue
+			),
+			current: () => {
+				const active = buttons.find(
+					(b) => b.getAttribute('aria-pressed') === 'true'
+				);
+				return active
+					? (active.getAttribute('data-target-agent') as TargetValue)
+					: null;
+			},
+			select: async (v) => {
+				const btn = buttons.find(
+					(b) => b.getAttribute('data-target-agent') === v
+				);
+				if (btn) await user.click(btn);
+			},
+		};
+	}
+
+	throw new Error(
+		'Target selector not found — expected <select>, radio group, or button group with data-target-agent'
+	);
+}
+
+// ----- 1-3. Rendering and default state --------------------------------------
+
+describe('TargetSelector — rendering and default state', () => {
+	it('TestTargetSelector_RendersThreeOptions: renders a control with 3 options (opencode, pi, claude-code)', async () => {
+		const user = userEvent.setup();
+		await renderWithCatalog([makeServer()]);
+		const control = await findTargetControl(user);
+		expect(control.values).toEqual(
+			expect.arrayContaining(['opencode', 'pi', 'claude-code'])
+		);
+		expect(control.values.length).toBe(3);
+	});
+
+	it('TestTargetSelector_DefaultsToOpencode: default selection is opencode', async () => {
+		const user = userEvent.setup();
+		await renderWithCatalog([makeServer()]);
+		const control = await findTargetControl(user);
+		expect(control.current()).toBe('opencode');
+	});
+
+	it('TestTargetSelector_CurrentSelectionVisible: the currently selected target is visible/active in the UI', async () => {
+		const user = userEvent.setup();
+		await renderWithCatalog([makeServer()]);
+		const control = await findTargetControl(user);
+		// The opencode option/button/radio is the current selection.
+		expect(control.current()).toBe('opencode');
+		// And it is present in the DOM and not hidden.
+		if (control.kind === 'select') {
+			const opencodeOption = screen.getByRole('option', { name: /opencode/i });
+			expect(opencodeOption).toBeInTheDocument();
+		} else if (control.kind === 'radio') {
+			const opencodeRadio = screen.getByRole('radio', { name: /opencode/i });
+			expect(opencodeRadio).toBeChecked();
+		} else {
+			// button group
+			const opencodeBtn = document.querySelector(
+				'button[data-target-agent="opencode"]'
+			);
+			expect(opencodeBtn).not.toBeNull();
+			expect(opencodeBtn?.getAttribute('aria-pressed')).toBe('true');
+		}
+	});
+});
+
+// ----- 4-5. Changing selection -----------------------------------------------
+
+describe('TargetSelector — changing selection', () => {
+	it('TestTargetSelector_ChangeToPi: user changes selection to pi', async () => {
+		const user = userEvent.setup();
+		await renderWithCatalog([makeServer()]);
+		const control = await findTargetControl(user);
+		await control.select('pi');
+		expect(control.current()).toBe('pi');
+	});
+
+	it('TestTargetSelector_ChangeToClaudeCode: user changes selection to claude-code', async () => {
+		const user = userEvent.setup();
+		await renderWithCatalog([makeServer()]);
+		const control = await findTargetControl(user);
+		await control.select('claude-code');
+		expect(control.current()).toBe('claude-code');
+	});
+});
+
+// ----- 6-9. handleInstall — uses selected target_agent -----------------------
+
+describe('handleInstall — uses selected target_agent', () => {
+	it('TestHandleInstall_UsesSelectedTarget_Opencode: default opencode is sent in POST body', async () => {
+		const user = userEvent.setup();
+		const server = makeServer({ id: 'github', name: 'GitHub' });
+		mockFetchSequence([
+			jsonResponse(200, [server]),
+			jsonResponse(200, { ok: true }),
+		]);
+		render(<McpStore />);
+		await waitFor(() => {
+			expect(screen.queryByText(/Loading MCP catalog/i)).not.toBeInTheDocument();
+		});
+		await user.click(screen.getByRole('button', { name: /^install$/i }));
+		const body = getInstallPostBody();
+		expect(body.target_agent).toBe('opencode');
+	});
+
+	it('TestHandleInstall_UsesSelectedTarget_Pi: selected pi is sent in POST body', async () => {
+		const user = userEvent.setup();
+		const server = makeServer({ id: 'github', name: 'GitHub' });
+		mockFetchSequence([
+			jsonResponse(200, [server]),
+			jsonResponse(200, { ok: true }),
+		]);
+		render(<McpStore />);
+		await waitFor(() => {
+			expect(screen.queryByText(/Loading MCP catalog/i)).not.toBeInTheDocument();
+		});
+		const control = await findTargetControl(user);
+		await control.select('pi');
+		await user.click(screen.getByRole('button', { name: /^install$/i }));
+		const body = getInstallPostBody();
+		expect(body.target_agent).toBe('pi');
+	});
+
+	it('TestHandleInstall_UsesSelectedTarget_ClaudeCode: selected claude-code is sent in POST body', async () => {
+		const user = userEvent.setup();
+		const server = makeServer({ id: 'github', name: 'GitHub' });
+		mockFetchSequence([
+			jsonResponse(200, [server]),
+			jsonResponse(200, { ok: true }),
+		]);
+		render(<McpStore />);
+		await waitFor(() => {
+			expect(screen.queryByText(/Loading MCP catalog/i)).not.toBeInTheDocument();
+		});
+		const control = await findTargetControl(user);
+		await control.select('claude-code');
+		await user.click(screen.getByRole('button', { name: /^install$/i }));
+		const body = getInstallPostBody();
+		expect(body.target_agent).toBe('claude-code');
+	});
+
+	it('TestHandleInstall_TargetPersistsAcrossServers: pi selected → 2 installs both send pi', async () => {
+		const user = userEvent.setup();
+		const server1 = makeServer({ id: 'github', name: 'GitHub' });
+		const server2 = makeServer({ id: 'playwright', name: 'Playwright' });
+		mockFetchSequence([
+			jsonResponse(200, [server1, server2]),
+			jsonResponse(200, { ok: true }), // install 1
+			jsonResponse(200, { ok: true }), // install 2
+		]);
+		render(<McpStore />);
+		await waitFor(() => {
+			expect(screen.queryByText(/Loading MCP catalog/i)).not.toBeInTheDocument();
+		});
+		const control = await findTargetControl(user);
+		await control.select('pi');
+		const installButtons = screen.getAllByRole('button', { name: /^install$/i });
+		expect(installButtons.length).toBe(2);
+		await user.click(installButtons[0]);
+		await user.click(installButtons[1]);
+		// Both POST bodies should have target_agent: 'pi'
+		const installCalls = getFetchMock().mock.calls.filter(
+			([url, init]) =>
+				typeof url === 'string' &&
+				url.endsWith('/api/mcp/install') &&
+				(init as RequestInit | undefined)?.method === 'POST'
+		);
+		expect(installCalls.length).toBe(2);
+		const bodies = installCalls.map(
+			([, init]) => JSON.parse((init as RequestInit).body as string)
+		);
+		expect(bodies[0].target_agent).toBe('pi');
+		expect(bodies[1].target_agent).toBe('pi');
+	});
+});
+
+// ----- 10. Persistence across re-renders -------------------------------------
+
+describe('TargetSelector — persistence across re-renders', () => {
+	it('TestTargetSelector_PersistsAcrossReRenders: selected target survives re-render (no reset to opencode)', async () => {
+		const user = userEvent.setup();
+		const server = makeServer({ id: 'github', name: 'GitHub' });
+		mockFetchSequence([
+			jsonResponse(200, [server]),
+			jsonResponse(200, { ok: true }),
+		]);
+		render(<McpStore />);
+		await waitFor(() => {
+			expect(screen.queryByText(/Loading MCP catalog/i)).not.toBeInTheDocument();
+		});
+		const control = await findTargetControl(user);
+		await control.select('pi');
+		expect(control.current()).toBe('pi');
+		// Trigger a re-render by clicking install (updates installStates).
+		await user.click(screen.getByRole('button', { name: /^install$/i }));
+		// After re-render, the target should still be 'pi' (not reset to 'opencode').
+		const newControl = await findTargetControl(user);
+		expect(newControl.current()).toBe('pi');
+	});
+});
 });

@@ -35,6 +35,8 @@ type InstallState = {
 
 const categories = ['All', 'Documentation', 'Browser', 'Testing', 'Memory', 'Code Analysis', 'Core', 'Integration', 'Database', 'DevOps'];
 
+type TargetAgent = 'opencode' | 'pi' | 'claude-code';
+
 function CredentialsForm({
 	server,
 	values,
@@ -195,6 +197,7 @@ export function McpStore() {
 	const [actionMessage, setActionMessage] = useState<string | null>(null);
 	const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
 	const [credentials, setCredentials] = useState<Record<string, Record<string, string>>>({});
+	const [selectedTarget, setSelectedTarget] = useState<TargetAgent>('opencode');
 	const intervalsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
 	useEffect(() => {
@@ -287,7 +290,7 @@ export function McpStore() {
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					id,
-					target_agent: 'opencode',
+					target_agent: selectedTarget,
 					credentials: creds,
 				}),
 			});
@@ -428,6 +431,21 @@ export function McpStore() {
 				<p className="mcp-store-subtitle">
 					Browse and install Model Context Protocol servers
 				</p>
+			</div>
+
+			<div className="mcp-store-target-selector">
+				<label htmlFor="mcp-target">Target agent:</label>
+				<select
+					id="mcp-target"
+					name="mcp-target-agent"
+					value={selectedTarget}
+					onChange={(e) => setSelectedTarget(e.target.value as TargetAgent)}
+					aria-label="Target agent"
+				>
+					<option value="opencode">OpenCode</option>
+					<option value="pi">Pi</option>
+					<option value="claude-code">Claude Code</option>
+				</select>
 			</div>
 
 			<div className="mcp-store-controls">
