@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { AlertCircle, Check, ChevronLeft, Folder, Zap } from "lucide-react";
 import { useMissionsStore } from "../../stores/missionsStore";
 import { missionsApi, configApi } from "../../api/client";
 import type { Project, ModelInfo, PlanMission, FSEntry, GitInfo } from "../../api/types";
@@ -601,9 +602,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 					>
 						<div className="wizard-step-circle">
 							{isDone ? (
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
+								<Check size={16} strokeWidth={3} />
 							) : (
 								s.num
 							)}
@@ -640,9 +639,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							<div className="project-card-head">
 								<span className="project-card-name">{p.name}</span>
 								{isSelected && (
-									<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-										<polyline points="20 6 9 17 4 12" />
-									</svg>
+									<Check size={20} strokeWidth={3} style={{ color: "var(--accent)" }} />
 								)}
 							</div>
 							<span className="project-card-path" data-tip={p.path}>{p.path}</span>
@@ -665,11 +662,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 			{/* Git init offer when the selected project is not a git repo */}
 			{state.selectedProject && state.gitInfo && !state.gitInfo.isGitRepo && (
 				<div className="alert alert-warning" style={{ marginTop: "var(--space-3)" }}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="8" x2="12" y2="12" />
-						<line x1="12" y1="16" x2="12.01" y2="16" />
-					</svg>
+					<AlertCircle size={20} />
 					<span>
 						This project is not a git repository. Worktree-based execution needs git.
 					</span>
@@ -734,9 +727,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 						{state.browseError && <p className="fs-empty fs-error">{state.browseError}</p>}
 						{!state.browseLoading && !state.browseError && state.browsePath !== "/" && (
 							<button type="button" className="fs-entry fs-entry-up" onClick={handleBrowseUp}>
-								<svg className="fs-entry-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-									<polyline points="15 18 9 12 15 6" />
-								</svg>
+								<ChevronLeft className="fs-entry-icon" size={20} />
 								<span>..</span>
 							</button>
 						)}
@@ -760,9 +751,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 											className={`fs-entry${isHidden ? " fs-entry-hidden" : ""}`}
 											onClick={() => handleBrowseTo(childPath)}
 										>
-											<svg className="fs-entry-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-												<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-											</svg>
+											<Folder className="fs-entry-icon" size={20} />
 											<span>{e.name}</span>
 										</button>
 									);
@@ -954,7 +943,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 							{state.submitting ? (
 								<><div className="spinner"></div> Starting…</>
 							) : (
-								"⚡ Auto-run"
+								<><Zap size={16} /> Auto-run</>
 							)}
 						</button>
 					</div>
@@ -1000,9 +989,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 
 			{state.goalAccepted && (
 				<div className="alert alert-success" style={{ marginTop: "var(--space-3)" }}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
+					<Check size={20} />
 					Goal accepted! You can review it in the next step.
 				</div>
 			)}
@@ -1018,11 +1005,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 			{/* Models & Agents Error Banners */}
 			{state.modelsError && (
 				<div className="alert alert-warning" style={{ marginBottom: "var(--space-3)" }}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="8" x2="12" y2="12" />
-						<line x1="12" y1="16" x2="12.01" y2="16" />
-					</svg>
+					<AlertCircle size={20} />
 					{state.modelsError} — check opencode connection.
 					<button type="button" className="btn btn-ghost btn-sm" onClick={handleRetryModelsAgents} style={{ marginLeft: "var(--space-2)" }}>
 						Retry
@@ -1034,11 +1017,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 			)}
 			{state.agentsError && (
 				<div className="alert alert-warning" style={{ marginBottom: "var(--space-3)" }}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="8" x2="12" y2="12" />
-						<line x1="12" y1="16" x2="12.01" y2="16" />
-					</svg>
+					<AlertCircle size={20} />
 					{state.agentsError} — check opencode connection.
 					<button type="button" className="btn btn-ghost btn-sm" onClick={handleRetryModelsAgents} style={{ marginLeft: "var(--space-2)" }}>
 						Retry
@@ -1209,11 +1188,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 
 			{state.error && (
 				<div className="alert alert-danger" style={{ marginTop: "var(--space-3)" }}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="8" x2="12" y2="12" />
-						<line x1="12" y1="16" x2="12.01" y2="16" />
-					</svg>
+					<AlertCircle size={20} />
 					{state.error}
 				</div>
 			)}

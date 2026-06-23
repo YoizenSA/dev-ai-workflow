@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
 import YdSelect from "../shared/YdSelect";
 import type {
@@ -288,8 +289,9 @@ function FallbackChips({ value, models, onChange }: FallbackChipsProps) {
 						type="button"
 						className="btn btn-sm btn-danger"
 						onClick={() => remove(idx)}
+						aria-label="Remove"
 					>
-						✕
+						<X size={16} />
 					</button>
 				</div>
 			))}

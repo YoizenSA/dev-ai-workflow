@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { Settings as SettingsIcon, Zap } from 'lucide-react'
 import { useUrlTab } from '../../hooks/useUrlTab'
 import { useMemoriesStore } from '../../stores/memoriesStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
@@ -337,8 +338,9 @@ export default function Memories() {
 						className="btn btn-ghost"
 						onClick={() => setShowSettings(true)}
 						title="Export, import, merge"
+						aria-label="Settings"
 					>
-						⚙
+						<SettingsIcon size={16} />
 					</button>
 					<button
 						className="btn btn-outline"
@@ -354,7 +356,7 @@ export default function Memories() {
 							!connected ? 'Engram is not available' : 'Consolidate memories'
 						}
 					>
-						⚡ Consolidate
+						<Zap size={16} /> Consolidate
 					</button>
 				</div>
 			</header>
@@ -420,10 +422,10 @@ export default function Memories() {
 			{tab === 'memories' && (
 				<section className="memories-section">
 					<div className="memories-toolbar">
-						<input
-							ref={searchInputRef}
-							className="input memories-search"
-							placeholder="🔍 search memories…  (⌘K)"
+					<input
+						ref={searchInputRef}
+						className="input memories-search"
+						placeholder="search memories…  (⌘K)"
 							value={filters.query}
 							onChange={(e) => setFilter('query', e.target.value)}
 							onKeyDown={(e) => {
@@ -605,7 +607,7 @@ export default function Memories() {
 					<div className="memories-toolbar">
 						<input
 							className="input"
-							placeholder="🔍 search topic keys…"
+							placeholder="search topic keys…"
 							value={topicQuery}
 							onChange={(e) => setTopicQuery(e.target.value)}
 						/>
@@ -615,7 +617,7 @@ export default function Memories() {
 						<div className="card card-pad candidates-card">
 							<div className="candidates-head">
 								<h3 className="candidates-title">
-									⚡ Consolidation candidates
+									<Zap size={16} /> Consolidation candidates
 								</h3>
 								<span className="muted small">
 									Topics with the most revisions/duplicates
@@ -645,7 +647,7 @@ export default function Memories() {
 											onClick={() => openConsolidateForTopic(c.topic_key)}
 											disabled={!connected}
 										>
-											⚡ Consolidate
+											<Zap size={16} /> Consolidate
 										</button>
 									</div>
 								))}
@@ -705,8 +707,9 @@ export default function Memories() {
 													}}
 													disabled={!connected}
 													title="Consolidate this topic only"
+													aria-label="Consolidate this topic"
 												>
-													⚡
+													<Zap size={16} />
 												</button>
 											)}
 										</div>
@@ -836,7 +839,7 @@ export default function Memories() {
 					<div className="memories-toolbar">
 						<input
 							className="input"
-							placeholder="🔍 search prompts…"
+							placeholder="search prompts…"
 							value={promptQuery}
 							onChange={(e) => setPromptQuery(e.target.value)}
 						/>
@@ -872,7 +875,7 @@ export default function Memories() {
 					<div className="memories-toolbar">
 						<input
 							className="input"
-							placeholder="🔍 search empty sessions…"
+							placeholder="search empty sessions…"
 							value={emptyQuery}
 							onChange={(e) => setEmptyQuery(e.target.value)}
 						/>

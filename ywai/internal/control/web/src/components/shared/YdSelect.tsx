@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { ChevronDown } from "lucide-react";
 import { useAnchored } from "../../hooks/useAnchored";
 
 export interface SelectOption {
@@ -88,18 +89,7 @@ export default function YdSelect({
         <span className={`yd-select-label${!hasSelection ? " is-ph" : ""}`}>
           {selectedLabel}
         </span>
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <ChevronDown size={16} strokeWidth={2.5} />
       </button>
       {open && (
         <div ref={menuRef} className="yd-pop yd-select-menu yd-menu-docked">

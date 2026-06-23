@@ -1,4 +1,11 @@
 import { useMemo, useState } from 'react'
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { useKanbanStore } from '../../stores/kanbanStore'
 import type { Session } from '../../api/types'
 
@@ -90,17 +97,7 @@ export function SessionSidebar() {
           onClick={handleNewSession}
           data-tip="New session" aria-label="New session"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <Plus size={16} strokeWidth={2.5} />
         </button>
       </div>
 
@@ -115,19 +112,10 @@ export function SessionSidebar() {
                 className="project-group-header"
                 onClick={() => toggleGroup(project)}
               >
-                <svg
+                <ChevronDown
                   className={`project-group-chevron ${isCollapsed ? 'collapsed' : ''}`}
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
+                  size={16}
+                />
                 <span className="project-group-name">{project}</span>
                 <span className="project-group-count">
                   {groupSessions.length}
@@ -159,20 +147,7 @@ export function SessionSidebar() {
                           }}
                           data-tip="Archive" aria-label="Archive"
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="21 8 21 21 3 21 3 8" />
-                            <rect x="1" y="3" width="22" height="5" />
-                            <line x1="10" y1="12" x2="14" y2="12" />
-                          </svg>
+                          <Archive size={16} />
                         </button>
                         <button
                           className="session-action-btn danger"
@@ -182,19 +157,7 @@ export function SessionSidebar() {
                           }}
                           data-tip="Delete" aria-label="Delete"
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>
@@ -212,19 +175,10 @@ export function SessionSidebar() {
               className="archived-toggle"
               onClick={() => setShowArchived(!showArchived)}
             >
-              <svg
+              <ChevronDown
                 className={`project-group-chevron ${showArchived ? '' : 'collapsed'}`}
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+                size={16}
+              />
               <span>Archived</span>
               <span className="project-group-count">
                 {archivedSessions.length}
@@ -253,20 +207,7 @@ export function SessionSidebar() {
                         }}
                         data-tip="Restore" aria-label="Restore"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="21 16 21 3 3 3 3 16" />
-                          <rect x="1" y="16" width="22" height="5" />
-                          <line x1="10" y1="11" x2="14" y2="11" />
-                        </svg>
+                        <ArchiveRestore size={16} />
                       </button>
                       <button
                         className="session-action-btn danger"
@@ -276,19 +217,7 @@ export function SessionSidebar() {
                         }}
                         data-tip="Delete" aria-label="Delete"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>

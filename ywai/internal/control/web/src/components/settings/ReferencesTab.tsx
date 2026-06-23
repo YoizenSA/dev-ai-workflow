@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle, Book, Folder, Link } from "lucide-react";
 import { configApi } from "../../api/client";
 import type { OpenCodeConfig, Reference } from "../../api/types";
 
@@ -275,12 +276,9 @@ export default function ReferencesTab() {
 			{/* Empty state */}
 			{references.length === 0 && !showForm && (
 				<div className="empty-state">
-					<div className="empty-icon">
-						<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-							<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-							<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-						</svg>
-					</div>
+				<div className="empty-icon">
+					<Book size={24} />
+				</div>
 					<span className="empty-title">No references configured</span>
 					<span className="empty-desc">
 						Add references to give agents access to local directories or git repositories
@@ -298,8 +296,8 @@ export default function ReferencesTab() {
 							<div key={entry.alias} className="mcp-card">
 								<div className="mcp-card-header">
 									<div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-										<span style={{ fontSize: "1.1rem" }} title={isLocal ? "Local directory" : "Git repository"}>
-											{isLocal ? "📁" : "🔗"}
+										<span style={{ display: "inline-flex" }} title={isLocal ? "Local directory" : "Git repository"}>
+											{isLocal ? <Folder size={16} /> : <Link size={16} />}
 										</span>
 										<h3>{entry.alias}</h3>
 									</div>
@@ -327,8 +325,9 @@ export default function ReferencesTab() {
 										{entry.ref.description}
 									</p>
 								) : (
-									<p style={{ margin: "var(--space-1) 0 0", fontSize: "0.8rem", color: "var(--warning-text, #856404)", fontStyle: "italic" }}>
-										⚠ No description — agents won't see this
+									<p style={{ margin: "var(--space-1) 0 0", fontSize: "0.8rem", color: "var(--warning-text, #856404)", fontStyle: "italic", display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
+										<AlertTriangle size={16} />
+										No description — agents won't see this
 									</p>
 								)}
 								<div className="mcp-actions-row" style={{ marginTop: "var(--space-3)" }}>

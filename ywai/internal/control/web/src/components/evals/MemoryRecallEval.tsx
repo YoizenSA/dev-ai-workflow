@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Check, X } from 'lucide-react'
 import { memoriesApi } from '../../api/client'
 import type { MemoryEvalResult } from '../../api/types'
 import { useMemoriesStore } from '../../stores/memoriesStore'
@@ -224,7 +225,7 @@ export default function MemoryRecallEval() {
 										.slice(0, 100)
 										.map((s) => (
 											<tr key={s.prompt_id}>
-												<td>{s.hit ? '✅' : '❌'}</td>
+												<td>{s.hit ? <Check size={16} /> : <X size={16} />}</td>
 												<td className="tnum">
 													{s.hit_rank > 0 ? s.hit_rank : '—'}
 												</td>

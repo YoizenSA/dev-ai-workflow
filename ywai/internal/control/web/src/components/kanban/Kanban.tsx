@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
@@ -80,19 +81,10 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 						<span className="dot"></span>
 						{delegation.agent}
 					</span>
-					<svg
+					<ChevronDown
 						className={`delegation-chevron${expanded ? " open" : ""}`}
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-					>
-						<polyline points="6 9 12 15 18 9" />
-					</svg>
+						size={16}
+					/>
 				</div>
 				<p className="delegation-summary">{delegation.task_summary}</p>
 			</div>
