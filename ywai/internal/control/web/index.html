@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>ywai — Control Dashboard</title>
+    <!--
+      FOUC-prevention bootstrap. Sets <html data-theme> BEFORE the first paint
+      so the page never flashes the wrong theme on hard reload. KEEP IN SYNC
+      with applyThemeFromStorage() in src/stores/themeStore.ts (the React app
+      also exports it so the unit test can re-run the same logic in jsdom).
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('yd-theme');
+          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

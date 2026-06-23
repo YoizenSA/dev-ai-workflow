@@ -94,6 +94,40 @@ textarea:focus-visible, [tabindex]:focus-visible {
 ::view-transition-old(root),
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 
+/* The sun/moon icon morphs on its own snapshot during the wipe. The name is
+   shared because only one toggle is visible at a time (shell xor login). No
+   reduced-motion guard needed: themeStore.toggle() short-circuits the whole
+   View Transition in that case. inline-flex gives the icon its own box so
+   view-transition-name is robust (an inline can fragment and ignore the name). */
+.theme-toggle .theme-toggle-icon,
+.theme-toggle lucide-icon {
+  display: inline-flex;
+  view-transition-name: theme-icon;
+}
+::view-transition-old(theme-icon),
+::view-transition-new(theme-icon) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-out);
+}
+::view-transition-old(theme-icon) {
+  animation-name: theme-icon-out;
+}
+::view-transition-new(theme-icon) {
+  animation-name: theme-icon-in;
+}
+@keyframes theme-icon-out {
+  to {
+    opacity: 0;
+    transform: rotate(-160deg) scale(0.3);
+  }
+}
+@keyframes theme-icon-in {
+  from {
+    opacity: 0;
+    transform: rotate(160deg) scale(0.3);
+  }
+}
+
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

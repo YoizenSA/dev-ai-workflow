@@ -22,6 +22,12 @@
   border: 1px solid rgba(var(--slate-rgb),0.22); flex-shrink: 0; overflow: hidden;
 }
 .brand-mark img { width: 30px; height: 30px; }
+/* Brand mark swap: dark icon by default, light icon when [data-theme="light"].
+   Two <img> elements with display: none toggled by CSS — keeps the choice
+   driven by the actual app theme (data-theme) rather than the OS preference. */
+.brand-mark-img-light { display: none; }
+:root[data-theme="light"] .brand-mark-img-dark { display: none; }
+:root[data-theme="light"] .brand-mark-img-light { display: initial; }
 .brand-name { font-size: 1.85rem; font-weight: 760; letter-spacing: -0.02em; line-height: 1; }
 .brand-sub { font-size: 0.64rem; letter-spacing: 0.26em; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
 .brand-abbr { display: none; }
@@ -128,6 +134,43 @@
 }
 .collapse-btn:hover { background: var(--surface-hover); color: var(--text); }
 .collapsed .collapse-btn { justify-content: center; }
+
+/* Sidebar footer tools: row of compact icon-buttons (theme + collapse).
+   Mirrors yz-ui shell.css L120-128 (.foot-tools / .foot-icon pattern) with
+   the canonical .theme-toggle class for the button itself (base.css targets
+   that class to wire up the icon morph keyframes). */
+.foot-tools {
+  display: flex;
+  gap: var(--space-2);
+}
+.theme-toggle {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.theme-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--panel-border-strong);
+}
+.theme-toggle-icon {
+  display: inline-flex;
+  line-height: 1;
+}
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.collapsed .foot-tools {
+  flex-direction: column;
+}
 
 /* ---- Topbar ---- */
 .main-col { min-width: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
