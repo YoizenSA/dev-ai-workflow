@@ -40,7 +40,10 @@ if command -v bun >/dev/null 2>&1; then
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
 else
-    echo "bun not found and no prebuilt bundle — background-agents plugin will NOT be embedded"
+    echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
+    echo "       The background-agents plugin is required; refusing to ship a release without it." >&2
+    echo "       Install bun (https://bun.sh) or commit plugins/background-agents/dist/background-agents.js." >&2
+    exit 1
 fi
 
 rm -rf "$EMBED_DIR"

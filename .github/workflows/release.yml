@@ -31,6 +31,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ywai/internal/control/web/package-lock.json
 
+      # bun is required by prepare-embedded.sh to bundle the background-agents
+      # plugin. Without it the embedded plugins dir is empty and every release
+      # ships without the plugin. See scripts/prepare-embedded.sh.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Build control UI (React SPA)
         working-directory: ywai/internal/control/web
         run: |
