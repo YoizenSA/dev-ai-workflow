@@ -7,15 +7,6 @@
 	line-height: 1;
 }
 
-/* Grad-text helper for brand name (bright gradient on dark) */
-.grad-text {
-	background: var(--grad-text);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-	filter: drop-shadow(0 0 12px rgba(110, 163, 255, 0.25));
-}
-
 /* ── Sidebar section labels ── */
 .sidebar-section-label {
 	display: block;
