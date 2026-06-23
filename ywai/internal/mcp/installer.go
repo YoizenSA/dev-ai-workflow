@@ -27,7 +27,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -140,16 +139,8 @@ func Install(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]st
 		cmd.Stdout = &out
 		cmd.Stderr = &out
 
-		// Poner el árbol en su propio process group para que SIGKILL al líder
-		// propague al grupo completo y no queden nietos huérfanos sosteniendo
-		// los write-ends de stdout/stderr (causa hang de cmd.Wait).
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error {
-			if p := cmd.Process; p != nil {
-				_ = syscall.Kill(-p.Pid, syscall.SIGKILL)
-			}
-			return os.ErrProcessDone
-		}
+		configureProcessGroup(cmd)
+
 		// Red de seguridad: si por alguna razón el grupo no muere, forzar
 		// que cmd.Wait retorne después de un corto período.
 		cmd.WaitDelay = 2 * time.Second
