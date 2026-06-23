@@ -57,7 +57,7 @@ export default function Modal({
 						{subtitle && <p className="modal-subtitle">{subtitle}</p>}
 					</div>
 					<button className="modal-close" onClick={onClose} aria-label="Close">
-						<X size={18} strokeWidth={2.5} />
+						<X size={20} strokeWidth={2.5} />
 					</button>
 				</div>
 				<div className="modal-body">{children}</div>

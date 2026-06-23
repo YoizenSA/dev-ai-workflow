@@ -326,7 +326,7 @@ export default function ReferencesTab() {
 									</p>
 								) : (
 									<p style={{ margin: "var(--space-1) 0 0", fontSize: "0.8rem", color: "var(--warning-text, #856404)", fontStyle: "italic", display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
-										<AlertTriangle size={14} />
+										<AlertTriangle size={16} />
 										No description — agents won't see this
 									</p>
 								)}
