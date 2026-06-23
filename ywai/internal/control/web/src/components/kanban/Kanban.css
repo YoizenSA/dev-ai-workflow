@@ -557,6 +557,10 @@
   justify-content: center;
 }
 
+.sessions-sidebar-new.sessions-sidebar-new:hover:not(:disabled) {
+  transform: none;
+}
+
 .sessions-sidebar-body {
   flex: 1;
   overflow-y: auto;

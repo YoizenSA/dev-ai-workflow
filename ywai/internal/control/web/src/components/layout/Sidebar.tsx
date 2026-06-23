@@ -143,15 +143,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 				</div>
 			)}
 
-			{/* Sidebar foot: user chip (placeholder) + footer tools (theme toggle).
+			{/* Sidebar foot: footer tools (theme toggle).
 			    Pushed to the bottom by .sidebar-foot { margin-top: auto } in shell.css. */}
 			<div className="sidebar-foot">
-				<button className="user-chip" type="button" aria-label="User menu">
-					<span className="user-avatar" aria-hidden="true">U</span>
-					<span className="user-meta">
-						<span className="user-name">User</span>
-					</span>
-				</button>
 				<div className="foot-tools">
 					<ThemeToggle />
 				</div>
