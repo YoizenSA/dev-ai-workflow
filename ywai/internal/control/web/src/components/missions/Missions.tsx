@@ -1,5 +1,13 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import {
+	Activity,
+	Check,
+	CheckCircle2,
+	Pause,
+	Plus,
+	Sparkles,
+} from "lucide-react";
 import { useMissionsStore } from "../../stores/missionsStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Mission, WSMessage } from "../../api/types";
@@ -359,21 +367,9 @@ function MissionDetail({ mission }: { mission: Mission }) {
 					</table>
 				) : (
 					<div className="empty-state">
-						<div className="empty-icon">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-								<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-							</svg>
-						</div>
+					<div className="empty-icon">
+						<Sparkles size={20} />
+					</div>
 						<span className="empty-title">No features yet</span>
 						<span className="empty-desc">
 							Features will appear as the mission progresses
@@ -529,18 +525,7 @@ export default function Missions() {
 						className="btn btn-primary"
 						onClick={() => setShowNewMission(true)}
 					>
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2.5"
-							strokeLinecap="round"
-						>
-							<line x1="12" y1="5" x2="12" y2="19" />
-							<line x1="5" y1="12" x2="19" y2="12" />
-						</svg>
+						<Plus size={16} strokeWidth={2.5} />
 						New Mission
 					</button>
 				</div>
@@ -560,19 +545,7 @@ export default function Missions() {
 				>
 					<div className="kpi-top">
 						<div className="kpi-icon">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-								<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-							</svg>
+							<Sparkles size={20} />
 						</div>
 					</div>
 					<div className="kpi-value tnum">{missions.length}</div>
@@ -591,18 +564,7 @@ export default function Missions() {
 				>
 					<div className="kpi-top">
 						<div className="kpi-icon">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-							</svg>
+							<Activity size={20} />
 						</div>
 					</div>
 					<div className="kpi-value tnum">{runningCount}</div>
@@ -621,19 +583,7 @@ export default function Missions() {
 				>
 					<div className="kpi-top">
 						<div className="kpi-icon">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<rect x="6" y="4" width="4" height="16" rx="1" />
-								<rect x="14" y="4" width="4" height="16" rx="1" />
-							</svg>
+							<Pause size={20} />
 						</div>
 					</div>
 					<div className="kpi-value tnum">{pausedCount}</div>
@@ -652,19 +602,7 @@ export default function Missions() {
 				>
 					<div className="kpi-top">
 						<div className="kpi-icon">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-								<polyline points="22 4 12 14.01 9 11.01" />
-							</svg>
+							<CheckCircle2 size={20} />
 						</div>
 					</div>
 					<div className="kpi-value tnum">{completedMissions.length}</div>
@@ -714,21 +652,9 @@ export default function Missions() {
 			{/* Empty state */}
 			{missions.length === 0 && (
 				<div className="empty-state">
-					<div className="empty-icon">
-						<svg
-							width="26"
-							height="26"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						>
-							<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-							<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-						</svg>
-					</div>
+				<div className="empty-icon">
+					<Sparkles size={24} />
+				</div>
 					<span className="empty-title">No missions yet</span>
 					<span className="empty-desc">
 						Create a mission to get started with automated workflows
@@ -759,9 +685,7 @@ export default function Missions() {
 						animation: "fadeIn 0.3s ease",
 					}}
 				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
+					<Check size={20} />
 					{toast}
 				</div>
 			)}

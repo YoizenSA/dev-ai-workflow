@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Globe, Search, Star } from 'lucide-react';
 import './McpStore.css';
 
 interface McpServer {
@@ -144,10 +145,7 @@ export function McpStore() {
 
 			<div className="mcp-store-controls">
 				<div className="mcp-store-search-wrapper">
-					<svg className="mcp-store-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="11" cy="11" r="8" />
-						<path d="m21 21-4.3-4.3" />
-					</svg>
+					<Search className="mcp-store-search-icon" size={16} />
 					<input
 						className="mcp-store-search-input"
 						type="text"
@@ -197,9 +195,7 @@ export function McpStore() {
 						{customMcps.length > 0 && (
 							<div className="mcp-store-section">
 								<h2 className="mcp-store-section-title">
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-										<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-									</svg>
+									<Star size={16} fill="currentColor" />
 									Recommended
 								</h2>
 								<div className="mcp-store-section-grid">
@@ -278,11 +274,7 @@ export function McpStore() {
 						{registryMcps.length > 0 && (
 							<div className="mcp-store-section">
 								<h2 className="mcp-store-section-title">
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-										<circle cx="12" cy="12" r="10" />
-										<path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-										<path d="M2 12h20" />
-									</svg>
+									<Globe size={16} />
 									Community
 								</h2>
 								<div className="mcp-store-section-grid">

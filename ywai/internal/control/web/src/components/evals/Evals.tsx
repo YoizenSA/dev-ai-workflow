@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Check, FileText, SquareCheck, X } from "lucide-react";
 import MemoryRecallEval from "./MemoryRecallEval";
 import "./Evals.css";
 
@@ -119,7 +120,7 @@ export default function Evals() {
       ) : runs.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+            <FileText size={24} />
           </div>
           <p className="empty-title">No eval runs yet</p>
           <p className="empty-desc">Run <code>ywai eval run</code> to get started</p>
@@ -131,7 +132,7 @@ export default function Evals() {
             <div className="kpi">
               <div className="kpi-top">
                 <div className="kpi-icon" style={{ '--kpi-icon-bg': 'rgba(var(--info-rgb), 0.16)', '--kpi-icon-color': 'var(--tint-info)' } as React.CSSProperties}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <FileText size={20} />
                 </div>
               </div>
               <div className="kpi-value tnum">{runs.length}</div>
@@ -140,7 +141,7 @@ export default function Evals() {
             <div className="kpi">
               <div className="kpi-top">
                 <div className="kpi-icon" style={{ '--kpi-icon-bg': 'var(--success-soft)', '--kpi-icon-color': 'var(--tint-success)' } as React.CSSProperties}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  <Check size={20} />
                 </div>
               </div>
               <div className="kpi-value tnum" style={{ color: passRateColor(latest?.summary.passRate ?? 0) }}>
@@ -151,7 +152,7 @@ export default function Evals() {
             <div className="kpi">
               <div className="kpi-top">
                 <div className="kpi-icon" style={{ '--kpi-icon-bg': 'rgba(var(--yz-primary-2-rgb), 0.16)', '--kpi-icon-color': 'var(--tint-purple)' } as React.CSSProperties}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+                  <SquareCheck size={20} />
                 </div>
               </div>
               <div className="kpi-value" style={{ fontSize: 'var(--text-lg)' }}>
@@ -241,7 +242,7 @@ export default function Evals() {
                   <tbody>
                     {selectedRun.results.map((r) => (
                       <tr key={r.taskId}>
-                        <td>{r.passed ? "✅" : "❌"}</td>
+                        <td>{r.passed ? <Check size={16} /> : <X size={16} />}</td>
                         <td className="cell-mono">{r.taskId}</td>
                         <td className="tnum">{formatDuration(r.duration)}</td>
                         <td className="eval-error">{r.error || "—"}</td>
