@@ -2,12 +2,15 @@ package control
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
 // McpCatalogEntry represents a single MCP server in the catalog.
@@ -228,6 +231,7 @@ func (s *Server) registerMcpStoreRoutes() {
 	s.mux.HandleFunc("GET /api/mcp/catalog", s.handleMcpCatalog)
 	s.mux.HandleFunc("GET /api/mcp/installed", s.handleMcpInstalled)
 	s.mux.HandleFunc("POST /api/mcp/install", s.handleMcpInstall)
+	s.mux.HandleFunc("GET /api/mcp/install/{id}", s.handleMcpInstallStatus)
 	s.mux.HandleFunc("POST /api/mcp/uninstall", s.handleMcpUninstall)
 	s.mux.HandleFunc("POST /api/mcp/toggle", s.handleMcpToggle)
 	s.mux.HandleFunc("GET /api/mcp/status/{id}", s.handleMcpStatus)
@@ -290,7 +294,30 @@ func (s *Server) handleMcpInstalled(w http.ResponseWriter, r *http.Request) {
 
 // mcpInstallRequest is the POST body for install.
 type mcpInstallRequest struct {
-	ID string `json:"id"`
+	ID          string            `json:"id"`
+	TargetAgent string            `json:"target_agent"`
+	Credentials map[string]string `json:"credentials"`
+}
+
+// mcpInstallResponse is the 202 body returned by handleMcpInstall.
+type mcpInstallResponse struct {
+	InstallID   string `json:"install_id"`
+	StatusURL   string `json:"status_url"`
+	WSChannel   string `json:"ws_channel"`
+	EntryID     string `json:"entry_id"`
+	TargetAgent string `json:"target_agent"`
+}
+
+// mcpErrorResponse is the JSON shape used by the install / status
+// handlers for non-2xx outcomes. Code is the machine-readable identifier
+// ("install_in_progress", "missing_credentials", ...). Required lists
+// the names of missing required env vars for the 422 path. ExistingID
+// is the in-progress job's id for the 409 path.
+type mcpErrorResponse struct {
+	Error      string   `json:"error"`
+	Code       string   `json:"code,omitempty"`
+	Required   []string `json:"required,omitempty"`
+	ExistingID string   `json:"existing_id,omitempty"`
 }
 
 // mcpToggleRequest is the POST body for toggle.
@@ -299,62 +326,92 @@ type mcpToggleRequest struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// handleMcpInstall installs an MCP server by adding it to opencode.json.
+// handleMcpInstall enqueues an MCP install job. The actual install runs
+// in a background goroutine driven by the JobManager; the response is
+// always 202 on success so the client can poll /api/mcp/install/{id} or
+// subscribe to the WS channel for progress. Validation errors
+// (unknown id, bad target, missing required creds) are still returned
+// synchronously.
 func (s *Server) handleMcpInstall(w http.ResponseWriter, r *http.Request) {
 	var req mcpInstallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, mcpErrorResponse{Error: "invalid request body: " + err.Error()})
 		return
 	}
+
 	if req.ID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		writeJSON(w, http.StatusBadRequest, mcpErrorResponse{Error: "id is required"})
 		return
 	}
 
-	// Find the catalog entry.
-	fullCatalog := getFullCatalog()
-	var entry *McpCatalogEntry
-	for i := range fullCatalog {
-		if fullCatalog[i].ID == req.ID {
-			entry = &fullCatalog[i]
-			break
+	entry, ok := mcp.CatalogByID(req.ID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, mcpErrorResponse{Error: "unknown MCP id: " + req.ID})
+		return
+	}
+
+	target := req.TargetAgent
+	if target == "" {
+		target = "opencode"
+	}
+	if target != "opencode" && target != "pi" && target != "claude-code" {
+		writeJSON(w, http.StatusBadRequest, mcpErrorResponse{Error: "invalid target_agent: " + target})
+		return
+	}
+
+	missing := mcp.ValidateCreds(entry.RequiredEnv, req.Credentials)
+	if len(missing) > 0 {
+		names := make([]string, 0, len(missing))
+		for _, s := range missing {
+			names = append(names, s.Name)
 		}
-	}
-	if entry == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("MCP %q not found in catalog", req.ID)})
+		writeJSON(w, http.StatusUnprocessableEntity, mcpErrorResponse{
+			Error:    "missing_credentials",
+			Code:     "missing_credentials",
+			Required: names,
+		})
 		return
 	}
 
-	mcpConfig, err := readMcpConfig()
+	job, err := s.jobs.Start(r.Context(), entry, target, req.Credentials)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+		if errors.Is(err, mcp.ErrJobInProgress) {
+			existingID := ""
+			var jpErr *mcp.JobInProgressError
+			if errors.As(err, &jpErr) {
+				existingID = jpErr.JobID
+			}
+			writeJSON(w, http.StatusConflict, mcpErrorResponse{
+				Error:      "install_in_progress",
+				Code:       "install_in_progress",
+				ExistingID: existingID,
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, mcpErrorResponse{Error: err.Error()})
 		return
 	}
 
-	// Build the new entry.
-	newEntry := map[string]interface{}{
-		"enabled": true,
-		"type":    entry.Type,
-	}
-	if entry.Type == "local" && len(entry.Command) > 0 {
-		newEntry["command"] = entry.Command
-	}
-	if entry.Type == "remote" && entry.URL != "" {
-		newEntry["url"] = entry.URL
-	}
-
-	mcpConfig[entry.ID] = newEntry
-
-	if err := writeMcpConfig(mcpConfig); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("MCP %q installed successfully", entry.ID),
-		"entry":   newEntry,
+	writeJSON(w, http.StatusAccepted, mcpInstallResponse{
+		InstallID:   job.ID,
+		StatusURL:   "/api/mcp/install/" + job.ID,
+		WSChannel:   "mcp-install",
+		EntryID:     entry.ID,
+		TargetAgent: target,
 	})
+}
+
+// handleMcpInstallStatus is the GET /api/mcp/install/{id} polling
+// endpoint. It returns the serialized *mcp.Job (which includes state,
+// progress, result, and error). Unknown ids produce 404.
+func (s *Server) handleMcpInstallStatus(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	job, ok := s.jobs.Get(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, mcpErrorResponse{Error: "unknown install id: " + id})
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
 }
 
 // handleMcpUninstall removes an MCP server from opencode.json.

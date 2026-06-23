@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Globe, Search, Star } from 'lucide-react';
 import './McpStore.css';
 
@@ -11,14 +11,177 @@ interface McpServer {
 	installed: boolean;
 	enabled: boolean;
 	popular: boolean;
-	type: string;
+	type: 'local' | 'remote';
 	source: 'custom' | 'registry';
 	tools: string[];
-	url: string;
+	url?: string;
 	docs?: string;
+	requiredEnv?: Array<{
+		name: string;
+		description: string;
+		required: boolean;
+		secret: boolean;
+	}>;
+	installCmd?: string;
 }
 
+type InstallState = {
+	state: 'idle' | 'pending' | 'installing' | 'probing' | 'done' | 'failed';
+	installId?: string;
+	errorCode?: string;
+	errorMessage?: string;
+	tools?: string[];
+};
+
 const categories = ['All', 'Documentation', 'Browser', 'Testing', 'Memory', 'Code Analysis', 'Core', 'Integration', 'Database', 'DevOps'];
+
+function CredentialsForm({
+	server,
+	values,
+	onChange,
+	error,
+}: {
+	server: McpServer;
+	values: Record<string, string>;
+	onChange: (name: string, value: string) => void;
+	error?: string;
+}) {
+	if (!server.requiredEnv || server.requiredEnv.length === 0) return null;
+	return (
+		<div className="mcp-store-creds-form">
+			{server.requiredEnv.map((env) => (
+				<div key={env.name} className="mcp-store-creds-field">
+					<label htmlFor={`cred-${server.id}-${env.name}`}>
+						{env.name}
+						{env.required && <span className="required">*</span>}
+					</label>
+					<input
+						id={`cred-${server.id}-${env.name}`}
+						name={env.name}
+						type={env.secret ? 'password' : 'text'}
+						value={values[env.name] || ''}
+						onChange={(e) => onChange(env.name, e.target.value)}
+						placeholder={env.description}
+						aria-invalid={error ? 'true' : undefined}
+						data-env={env.name}
+					/>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function McpCard({
+	server,
+	expanded,
+	onToggleExpand,
+	onInstall,
+	onUninstall,
+	credentials,
+	onCredentialChange,
+	installState,
+}: {
+	server: McpServer;
+	expanded: boolean;
+	onToggleExpand: () => void;
+	onInstall: () => void;
+	onUninstall: () => void;
+	credentials: Record<string, string>;
+	onCredentialChange: (name: string, value: string) => void;
+	installState?: InstallState;
+}) {
+	const isInstalled = server.installed;
+	const credsError =
+		installState?.errorCode === 'missing_credentials' ? 'missing_credentials' : undefined;
+
+	return (
+		<div
+			className={`mcp-store-card ${isInstalled ? 'installed' : ''} ${expanded ? 'expanded' : ''}`}
+			onClick={onToggleExpand}
+		>
+			<div className="mcp-store-card-header">
+				<span className="mcp-store-card-icon">{server.icon}</span>
+				<div className="mcp-store-card-info">
+					<div className="mcp-store-card-name-row">
+						<h3 className="mcp-store-card-name">{server.name}</h3>
+						{isInstalled && (
+							<span className="mcp-store-card-installed-badge">Installed</span>
+						)}
+					</div>
+					<span className="mcp-store-card-category">{server.category}</span>
+				</div>
+			</div>
+
+			<p className="mcp-store-card-description">{server.description}</p>
+
+			{!isInstalled && (
+				<CredentialsForm
+					server={server}
+					values={credentials}
+					onChange={onCredentialChange}
+					error={credsError}
+				/>
+			)}
+
+			{expanded && (
+				<div className="mcp-store-card-details">
+					{server.tools && server.tools.length > 0 && (
+						<div className="mcp-store-card-tools">
+							<span className="mcp-store-card-tools-label">Tools:</span>
+							{server.tools.map((tool) => (
+								<span key={tool} className="mcp-store-card-tool">
+									{tool}
+								</span>
+							))}
+						</div>
+					)}
+					{server.url && (
+						<a
+							className="mcp-store-card-link"
+							href={server.url}
+							target="_blank"
+							rel="noopener noreferrer"
+							onClick={(e) => e.stopPropagation()}
+						>
+							Documentation
+						</a>
+					)}
+				</div>
+			)}
+
+			{installState?.state === 'installing' && (
+				<div className="mcp-store-install-progress">Installing...</div>
+			)}
+			{installState?.state === 'probing' && (
+				<div className="mcp-store-install-progress">Probing...</div>
+			)}
+			{installState?.state === 'done' && (
+				<div className="mcp-store-install-success">
+					✓ Installed ({installState.tools?.length || 0} tools)
+				</div>
+			)}
+			{installState?.state === 'failed' && (
+				<div className="mcp-store-install-error">✗ {installState.errorMessage}</div>
+			)}
+
+			<div className="mcp-store-card-actions">
+				<button
+					className={`mcp-store-install-btn ${isInstalled ? 'uninstall' : ''}`}
+					onClick={(e) => {
+						e.stopPropagation();
+						if (isInstalled) {
+							onUninstall();
+						} else {
+							onInstall();
+						}
+					}}
+				>
+					{isInstalled ? 'Uninstall' : 'Install'}
+				</button>
+			</div>
+		</div>
+	);
+}
 
 export function McpStore() {
 	const [servers, setServers] = useState<McpServer[]>([]);
@@ -30,6 +193,9 @@ export function McpStore() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [actionMessage, setActionMessage] = useState<string | null>(null);
+	const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
+	const [credentials, setCredentials] = useState<Record<string, Record<string, string>>>({});
+	const intervalsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
 	useEffect(() => {
 		fetch('/api/mcp/catalog')
@@ -44,6 +210,15 @@ export function McpStore() {
 			});
 	}, []);
 
+	// Clear any poll intervals when the component unmounts so timers don't
+	// fire against a torn-down React tree.
+	useEffect(() => {
+		return () => {
+			intervalsRef.current.forEach(clearInterval);
+			intervalsRef.current.clear();
+		};
+	}, []);
+
 	// Auto-dismiss action messages after 3s
 	useEffect(() => {
 		if (!actionMessage) return;
@@ -51,21 +226,116 @@ export function McpStore() {
 		return () => clearTimeout(timer);
 	}, [actionMessage]);
 
+	const stopPolling = (interval: ReturnType<typeof setInterval>) => {
+		clearInterval(interval);
+		intervalsRef.current.delete(interval);
+	};
+
+	const pollStatus = (serverId: string, installId: string) => {
+		const interval = setInterval(async () => {
+			try {
+				const res = await fetch(`/api/mcp/install/${installId}`);
+				if (!res.ok) {
+					stopPolling(interval);
+					return;
+				}
+				const job = (await res.json()) as {
+					state?: 'pending' | 'installing' | 'probing' | 'done' | 'failed';
+					result?: { tools?: string[] };
+					error?: { code?: string; message?: string };
+				};
+				if (job.state === 'done') {
+					stopPolling(interval);
+					setInstallStates((prev) => ({
+						...prev,
+						[serverId]: { state: 'done', tools: job.result?.tools },
+					}));
+					setServers((prev) =>
+						prev.map((s) => (s.id === serverId ? { ...s, installed: true } : s))
+					);
+				} else if (job.state === 'failed') {
+					stopPolling(interval);
+					setInstallStates((prev) => ({
+						...prev,
+						[serverId]: {
+							state: 'failed',
+							errorCode: job.error?.code,
+							errorMessage: job.error?.message,
+						},
+					}));
+				} else {
+					setInstallStates((prev) => ({
+						...prev,
+						[serverId]: { state: job.state ?? 'installing', installId },
+					}));
+				}
+			} catch {
+				stopPolling(interval);
+			}
+		}, 1000);
+		intervalsRef.current.add(interval);
+	};
+
 	const handleInstall = async (id: string) => {
+		const creds = credentials[id] || {};
+
+		setInstallStates((prev) => ({ ...prev, [id]: { state: 'pending' } }));
+
 		try {
 			const res = await fetch('/api/mcp/install', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ id }),
+				body: JSON.stringify({
+					id,
+					target_agent: 'opencode',
+					credentials: creds,
+				}),
 			});
-			if (!res.ok) throw new Error('Install failed');
-			const result = await res.json();
-			setServers((prev) =>
-				prev.map((s) => (s.id === id ? { ...s, installed: true, enabled: true } : s))
-			);
-			setActionMessage(`[OK] ${result.name} installed`);
-		} catch {
-			setActionMessage(`[ERROR] Failed to install ${id}`);
+
+			if (res.status === 202) {
+				const body = (await res.json()) as { install_id?: string };
+				setInstallStates((prev) => ({
+					...prev,
+					[id]: { state: 'installing', installId: body.install_id },
+				}));
+				if (body.install_id) {
+					pollStatus(id, body.install_id);
+				}
+			} else if (res.status === 422) {
+				setInstallStates((prev) => ({
+					...prev,
+					[id]: {
+						state: 'failed',
+						errorCode: 'missing_credentials',
+						errorMessage: 'Missing required credentials',
+					},
+				}));
+			} else if (res.status === 409) {
+				setInstallStates((prev) => ({
+					...prev,
+					[id]: {
+						state: 'failed',
+						errorCode: 'install_in_progress',
+						errorMessage: 'Another install is in progress',
+					},
+				}));
+			} else {
+				setInstallStates((prev) => ({
+					...prev,
+					[id]: {
+						state: 'failed',
+						errorMessage: `Server error: ${res.status}`,
+					},
+				}));
+			}
+		} catch (err) {
+			setInstallStates((prev) => ({
+				...prev,
+				[id]: {
+					state: 'failed',
+					errorMessage: String(err),
+				},
+			}));
 		}
 	};
 
@@ -106,8 +376,8 @@ export function McpStore() {
 
 	const installedCount = servers.filter((s) => s.installed).length;
 
-	const customMcps = filteredServers.filter(s => s.source === 'custom');
-	const registryMcps = filteredServers.filter(s => s.source === 'registry');
+	const customMcps = filteredServers.filter((s) => s.source === 'custom');
+	const registryMcps = filteredServers.filter((s) => s.source === 'registry');
 
 	if (loading) {
 		return (
@@ -125,13 +395,30 @@ export function McpStore() {
 		);
 	}
 
+	const renderCard = (server: McpServer) => (
+		<McpCard
+			key={server.id}
+			server={server}
+			expanded={expandedServer === server.id}
+			onToggleExpand={() =>
+				setExpandedServer(expandedServer === server.id ? null : server.id)
+			}
+			onInstall={() => handleInstall(server.id)}
+			onUninstall={() => handleUninstall(server.id)}
+			credentials={credentials[server.id] || {}}
+			onCredentialChange={(name, value) =>
+				setCredentials((prev) => ({
+					...prev,
+					[server.id]: { ...(prev[server.id] || {}), [name]: value },
+				}))
+			}
+			installState={installStates[server.id]}
+		/>
+	);
+
 	return (
 		<div className="mcp-store">
-			{actionMessage && (
-				<div className="mcp-store-message">
-					{actionMessage}
-				</div>
-			)}
+			{actionMessage && <div className="mcp-store-message">{actionMessage}</div>}
 
 			<div className="mcp-store-header">
 				<div className="mcp-store-title-row">
@@ -198,76 +485,7 @@ export function McpStore() {
 									<Star size={16} fill="currentColor" />
 									Recommended
 								</h2>
-								<div className="mcp-store-section-grid">
-									{customMcps.map((server) => (
-										<div
-											key={server.id}
-											className={`mcp-store-card ${server.installed ? 'installed' : ''} ${expandedServer === server.id ? 'expanded' : ''}`}
-											onClick={() =>
-												setExpandedServer(expandedServer === server.id ? null : server.id)
-											}
-										>
-											<div className="mcp-store-card-header">
-												<span className="mcp-store-card-icon">{server.icon}</span>
-												<div className="mcp-store-card-info">
-													<div className="mcp-store-card-name-row">
-														<h3 className="mcp-store-card-name">{server.name}</h3>
-														{server.installed && (
-															<span className="mcp-store-card-installed-badge">
-																Installed
-															</span>
-														)}
-													</div>
-													<span className="mcp-store-card-category">{server.category}</span>
-												</div>
-											</div>
-
-											<p className="mcp-store-card-description">{server.description}</p>
-
-											{expandedServer === server.id && (
-												<div className="mcp-store-card-details">
-													{server.tools && server.tools.length > 0 && (
-														<div className="mcp-store-card-tools">
-															<span className="mcp-store-card-tools-label">Tools:</span>
-															{server.tools.map((tool) => (
-																<span key={tool} className="mcp-store-card-tool">
-																	{tool}
-																</span>
-															))}
-														</div>
-													)}
-													{server.url && (
-														<a
-															className="mcp-store-card-link"
-															href={server.url}
-															target="_blank"
-															rel="noopener noreferrer"
-															onClick={(e) => e.stopPropagation()}
-														>
-															Documentation
-														</a>
-													)}
-												</div>
-											)}
-
-											<div className="mcp-store-card-actions">
-												<button
-													className={`mcp-store-install-btn ${server.installed ? 'uninstall' : ''}`}
-													onClick={(e) => {
-														e.stopPropagation();
-														if (server.installed) {
-															handleUninstall(server.id);
-														} else {
-															handleInstall(server.id);
-														}
-													}}
-												>
-													{server.installed ? 'Uninstall' : 'Install'}
-												</button>
-											</div>
-										</div>
-									))}
-								</div>
+								<div className="mcp-store-section-grid">{customMcps.map(renderCard)}</div>
 							</div>
 						)}
 
@@ -278,74 +496,7 @@ export function McpStore() {
 									Community
 								</h2>
 								<div className="mcp-store-section-grid">
-									{registryMcps.map((server) => (
-										<div
-											key={server.id}
-											className={`mcp-store-card ${server.installed ? 'installed' : ''} ${expandedServer === server.id ? 'expanded' : ''}`}
-											onClick={() =>
-												setExpandedServer(expandedServer === server.id ? null : server.id)
-											}
-										>
-											<div className="mcp-store-card-header">
-												<span className="mcp-store-card-icon">{server.icon}</span>
-												<div className="mcp-store-card-info">
-													<div className="mcp-store-card-name-row">
-														<h3 className="mcp-store-card-name">{server.name}</h3>
-														{server.installed && (
-															<span className="mcp-store-card-installed-badge">
-																Installed
-															</span>
-														)}
-													</div>
-													<span className="mcp-store-card-category">{server.category}</span>
-												</div>
-											</div>
-
-											<p className="mcp-store-card-description">{server.description}</p>
-
-											{expandedServer === server.id && (
-												<div className="mcp-store-card-details">
-													{server.tools && server.tools.length > 0 && (
-														<div className="mcp-store-card-tools">
-															<span className="mcp-store-card-tools-label">Tools:</span>
-															{server.tools.map((tool) => (
-																<span key={tool} className="mcp-store-card-tool">
-																	{tool}
-																</span>
-															))}
-														</div>
-													)}
-													{server.url && (
-														<a
-															className="mcp-store-card-link"
-															href={server.url}
-															target="_blank"
-															rel="noopener noreferrer"
-															onClick={(e) => e.stopPropagation()}
-														>
-															Documentation
-														</a>
-													)}
-												</div>
-											)}
-
-											<div className="mcp-store-card-actions">
-												<button
-													className={`mcp-store-install-btn ${server.installed ? 'uninstall' : ''}`}
-													onClick={(e) => {
-														e.stopPropagation();
-														if (server.installed) {
-															handleUninstall(server.id);
-														} else {
-															handleInstall(server.id);
-														}
-													}}
-												>
-													{server.installed ? 'Uninstall' : 'Install'}
-												</button>
-											</div>
-										</div>
-									))}
+									{registryMcps.map(renderCard)}
 								</div>
 							</div>
 						)}

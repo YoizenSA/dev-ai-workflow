@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -46,6 +47,7 @@ type Server struct {
 	startedAt time.Time
 	mu        sync.Mutex
 	startErr  error
+	jobs      *mcp.JobManager
 }
 
 // New creates a new control server.
@@ -73,6 +75,12 @@ func New(port int) (*Server, error) {
 		portReady: make(chan struct{}),
 		startedAt: time.Now(),
 	}
+
+	// Reuse the kanban WebSocket hub as the install-job broadcaster. The
+	// JobManager only calls Hub.Broadcast, so a nil hub is a safe no-op;
+	// wiring the kanban hub here means a single WS endpoint fans out
+	// both kanban and install events to the UI.
+	s.jobs = mcp.NewJobManager(s.kanban.Hub())
 
 	// Wire the missions→kanban event bridge
 	projector := NewKanbanProjector(kServer, missionsStore)

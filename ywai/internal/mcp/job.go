@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 )
 
@@ -45,8 +46,58 @@ var ErrJobInProgress = errors.New("install_in_progress")
 
 // installFn is a package-level seam used by tests to substitute the
 // production Install pipeline with a fake. Tests assign to it via
-// withInstallFn; production code never mutates it.
-var installFn func(context.Context, CatalogEntry, InstallOptions) ([]string, error) = Install
+// withInstallFn; production code never mutates it. installFnMu guards
+// concurrent reads (in the install goroutine) and writes (in test
+// setup / teardown) so the install pipeline pointer is race-free.
+var (
+	installFnMu sync.RWMutex
+	installFn   func(context.Context, CatalogEntry, InstallOptions) ([]string, error) = Install
+)
+
+// loadInstallFn returns the current installFn under the read lock. The
+// returned function value is a value copy; calling it does not touch
+// the package variable, so the call is race-free even if a writer
+// swaps installFn concurrently.
+func loadInstallFn() func(context.Context, CatalogEntry, InstallOptions) ([]string, error) {
+	installFnMu.RLock()
+	defer installFnMu.RUnlock()
+	return installFn
+}
+
+// setInstallFn atomically replaces installFn (used by tests).
+func setInstallFn(fn func(context.Context, CatalogEntry, InstallOptions) ([]string, error)) {
+	installFnMu.Lock()
+	defer installFnMu.Unlock()
+	installFn = fn
+}
+
+// JobInProgressError is returned by JobManager.Start when another install
+// for the same (entryID, target) is still active. JobID is the id of the
+// in-progress job, so callers can point the user at the existing run.
+// errors.Is(err, ErrJobInProgress) still matches because Unwrap returns
+// the base sentinel.
+type JobInProgressError struct {
+	JobID string
+}
+
+func (e *JobInProgressError) Error() string {
+	return fmt.Sprintf("install_in_progress: job %s is already active", e.JobID)
+}
+
+func (e *JobInProgressError) Unwrap() error {
+	return ErrJobInProgress
+}
+
+// WithInstallFn temporarily replaces the package installFn and restores
+// it on test cleanup. Intended for tests in other packages that need to
+// stub the install pipeline; the in-package withInstallFn in job_test.go
+// uses the defer-restore pattern instead.
+func WithInstallFn(t *testing.T, fn func(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]string, error)) {
+	t.Helper()
+	orig := loadInstallFn()
+	setInstallFn(fn)
+	t.Cleanup(func() { setInstallFn(orig) })
+}
 
 type Broadcaster interface {
 	Broadcast(msg []byte)
@@ -65,6 +116,19 @@ type Job struct {
 
 	mu     sync.RWMutex
 	cancel context.CancelFunc
+}
+
+// Snapshot returns the job's current state under the job's read lock.
+// It exists so polling / status callers can read state without racing
+// the runJob goroutine that mutates it. Returns the empty State if the
+// job has been GC'd between the Get() and the Snapshot() call.
+func (j *Job) Snapshot() State {
+	if j == nil {
+		return ""
+	}
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.State
 }
 
 type JobManager struct {
@@ -100,7 +164,7 @@ func (m *JobManager) Start(ctx context.Context, entry CatalogEntry, target strin
 			st := existing.State
 			existing.mu.RUnlock()
 			if st != StateDone && st != StateFailed {
-				return nil, ErrJobInProgress
+				return nil, &JobInProgressError{JobID: existingID}
 			}
 		}
 	} else {
@@ -233,7 +297,7 @@ func (m *JobManager) runJob(ctx context.Context, job *Job, entry CatalogEntry, t
 		Target:      target,
 		EntryID:     entry.ID,
 	}
-	tools, err := installFn(ctx, entry, opts)
+	tools, err := loadInstallFn()(ctx, entry, opts)
 
 	job.mu.Lock()
 	job.UpdatedAt = time.Now()
