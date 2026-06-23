@@ -98,6 +98,49 @@ interface MemoriesState {
 	handleWSMessage: (msg: WSMessage) => void
 }
 
+// pollConsolidation is the WebSocket-independent fallback for consolidation
+// runs. It fetches the run periodically until it settles (review/failed/applied/
+// discarded) so a missed WS event can never leave the UI spinning. The poller
+// self-clears on a terminal state and tolerates transient fetch errors.
+const CONSOLIDATION_POLL_MS = 3000
+let consolidationPollId: ReturnType<typeof setInterval> | null = null
+
+function stopConsolidationPoll() {
+	if (consolidationPollId !== null) {
+		clearInterval(consolidationPollId)
+		consolidationPollId = null
+	}
+}
+
+function pollConsolidation(runId: string) {
+	stopConsolidationPoll()
+	const active = new Set(['running', 'applying'])
+	consolidationPollId = setInterval(async () => {
+		const c = useMemoriesStore.getState().consolidation
+		// Stop if the run was cleared (discard/apply) or no longer tracked.
+		if (!c || c.id !== runId) {
+			stopConsolidationPoll()
+			return
+		}
+		if (!active.has(c.status)) {
+			stopConsolidationPoll()
+			return
+		}
+		try {
+			const run = await memoriesApi.getConsolidation(runId)
+			// Only advance — never regress a non-active status we already have.
+			if (active.has(c.status)) {
+				useMemoriesStore.setState({ consolidation: run })
+				if (!active.has(run.status)) {
+					stopConsolidationPoll()
+				}
+			}
+		} catch {
+			// Network blips are fine; keep polling until the run settles.
+		}
+	}, CONSOLIDATION_POLL_MS)
+}
+
 export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	observations: [],
 	selectedObservation: null,
@@ -282,6 +325,11 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 						scope && (scope.topic_key || scope.project) ? scope : undefined,
 				},
 			})
+			// WebSocket is the fast path, but it's not guaranteed — the socket may
+			// drop, the tab may be backgrounded, or the event may simply be missed.
+			// Poll the run until it leaves an active state so the UI can never hang
+			// on "Consolidating…" forever (e.g. when the run failed instantly).
+			pollConsolidation(run_id)
 			return run_id
 		} catch (err) {
 			set({ error: String(err) })
@@ -291,6 +339,7 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 
 	applyConsolidation: async (id, sel) => {
 		await memoriesApi.applyConsolidation(id, sel)
+		stopConsolidationPoll()
 		set({ consolidation: null })
 		await get().fetchObservations()
 		await get().fetchStats()
@@ -298,6 +347,7 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 
 	discardConsolidation: async (id) => {
 		await memoriesApi.discardConsolidation(id)
+		stopConsolidationPoll()
 		set({ consolidation: null })
 	},
 

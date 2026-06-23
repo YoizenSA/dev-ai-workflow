@@ -1,6 +1,9 @@
 package opencode
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // ─── Session API Interface ─────────────────────────────────────────────────
 
@@ -56,14 +59,45 @@ type ModelInput struct {
 }
 
 // Session represents an opencode session.
+//
+// Model mirrors the session-creation request shape: a {id, providerID, variant}
+// object. Older opencode servers (and some list endpoints) emit it as a bare
+// string or omit it; json.RawMessage lets us decode leniently without failing
+// the whole response. Use SessionModel() to read a normalised string.
 type Session struct {
-	ID        string `json:"id"`
-	Title     string `json:"title,omitempty"`
-	Agent     string `json:"agent,omitempty"`
-	Model     string `json:"model,omitempty"`
-	ParentID  string `json:"parentID,omitempty"`
-	CreatedAt int64  `json:"createdAt,omitempty"`
-	UpdatedAt int64  `json:"updatedAt,omitempty"`
+	ID        string          `json:"id"`
+	Title     string          `json:"title,omitempty"`
+	Agent     string          `json:"agent,omitempty"`
+	Model     json.RawMessage `json:"model,omitempty"`
+	ParentID  string          `json:"parentID,omitempty"`
+	CreatedAt int64           `json:"createdAt,omitempty"`
+	UpdatedAt int64           `json:"updatedAt,omitempty"`
+}
+
+// SessionModel returns the session's model as a "providerID/id" style string,
+// tolerating the three shapes opencode emits: omitted/null, a bare string, or
+// a {id, providerID} object. Returns "" when there is no model.
+func (s Session) SessionModel() string {
+	if len(s.Model) == 0 {
+		return ""
+	}
+	// Object form: {"id": "...", "providerID": "..."}
+	var obj struct {
+		ID         string `json:"id"`
+		ProviderID string `json:"providerID"`
+	}
+	if err := json.Unmarshal(s.Model, &obj); err == nil && obj.ID != "" {
+		if obj.ProviderID != "" {
+			return obj.ProviderID + "/" + obj.ID
+		}
+		return obj.ID
+	}
+	// Bare-string form.
+	var s2 string
+	if err := json.Unmarshal(s.Model, &s2); err == nil {
+		return s2
+	}
+	return ""
 }
 
 // SessionStatusResult holds the result of GET /session/status.

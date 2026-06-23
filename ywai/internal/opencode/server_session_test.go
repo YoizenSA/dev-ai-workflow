@@ -48,6 +48,62 @@ func TestServerSession_Create(t *testing.T) {
 	}
 }
 
+// TestServerSession_Create_ModelObject is a regression test for the
+// "json: cannot unmarshal object into Go struct field Session.model of type
+// string" failure. opencode >= 1.17 returns `model` as an {id, providerID}
+// object; the session must decode that without error and expose it via
+// SessionModel().
+func TestServerSession_Create_ModelObject(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// This is the shape opencode 1.17.9 emits (mirrored from a live probe).
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":    "sess-obj",
+			"title": "probe",
+			"agent": "memory",
+			"model": map[string]interface{}{
+				"id":         "deepseek-v4-flash",
+				"providerID": "fireworks-ai",
+				"variant":    "",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	api := newServerSessionAPI(srv.URL)
+	session, err := api.Create(context.Background(), SessionCreateOpts{
+		Title: "probe", Agent: "memory",
+	})
+	if err != nil {
+		t.Fatalf("Create with object model: %v", err)
+	}
+	if got := session.SessionModel(); got != "fireworks-ai/deepseek-v4-flash" {
+		t.Errorf("SessionModel: want %q, got %q", "fireworks-ai/deepseek-v4-flash", got)
+	}
+}
+
+// TestSessionModel_Shapes covers the tolerant reader across all three shapes.
+func TestSessionModel_Shapes(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"object", `{"id":"m","providerID":"p"}`, "p/m"},
+		{"object_no_provider", `{"id":"m"}`, "m"},
+		{"bare_string", `"provider/model"`, "provider/model"},
+		{"empty", ``, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := Session{Model: json.RawMessage(c.raw)}
+			if got := s.SessionModel(); got != c.want {
+				t.Errorf("want %q, got %q", c.want, got)
+			}
+		})
+	}
+}
+
 // TestServerSession_Create_OmitsEmptyFields verifies that empty optional fields
 // (agent, directory, workspace, parentID) are NOT sent in the request body.
 // The opencode server rejects requests that include these as empty strings with
