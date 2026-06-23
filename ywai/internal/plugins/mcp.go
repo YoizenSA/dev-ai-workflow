@@ -16,8 +16,53 @@ func mcpConfigKey(agentName string) string {
 	}
 }
 
+// hasLegacyDaemonToken reports whether argv (a JSON-decoded []any) contains
+// the literal "daemon" used by pre-rename ywai versions. It is the detection
+// signal for entries that need migration to the "serve --mcp-only" command.
+func hasLegacyDaemonToken(argv []any) bool {
+	for _, tok := range argv {
+		if s, _ := tok.(string); s == "daemon" {
+			return true
+		}
+	}
+	return false
+}
+
+// migrateKanbanEntry rewrites entry in place if it holds the legacy
+// "ywai daemon [--mcp]" argv. It returns true when a rewrite happened.
+//
+// Two shapes are supported:
+//   - opencode format: command is a full []any argv.
+//   - claude-code / pi format: command is the string "ywai" and args is the
+//     []any argv. Only the argv is rewritten; the string command is left
+//     untouched so we don't churn unrelated fields.
+//
+// Sibling keys inside the entry (type, enabled, url, ...) are not touched:
+// only the argv-bearing field is replaced.
+func migrateKanbanEntry(agentName string, entry map[string]any) bool {
+	if agentName == "claude-code" || agentName == "pi" {
+		args, ok := entry["args"].([]any)
+		if !ok || !hasLegacyDaemonToken(args) {
+			return false
+		}
+		entry["args"] = []any{"serve", "--mcp-only"}
+		return true
+	}
+	cmd, ok := entry["command"].([]any)
+	if !ok || !hasLegacyDaemonToken(cmd) {
+		return false
+	}
+	entry["command"] = []any{"ywai", "serve", "--mcp-only"}
+	return true
+}
+
 // InstallKanbanMCP adds the ywai-kanban MCP server to the agent's config file.
 // This enables the Kanban board UI and tracking for orchestrator agents.
+//
+// If a previous install left a legacy "ywai daemon [--mcp]" entry, the existing
+// argv is rewritten in place to the current "ywai serve --mcp-only" form so
+// the MCP server starts cleanly after upgrade. Sibling MCP entries and
+// unrelated top-level keys are preserved.
 func InstallKanbanMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
@@ -26,36 +71,31 @@ func InstallKanbanMCP(configPath, agentName string) error {
 
 	key := mcpConfigKey(agentName)
 
-	if key == "mcpServers" {
-		// Claude Code format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
+	mcp, _ := root[key].(map[string]any)
+	if mcp == nil {
+		mcp = map[string]any{}
+	}
+
+	existing, exists := mcp["ywai-kanban"]
+	if exists {
+		if entry, ok := existing.(map[string]any); ok {
+			migrateKanbanEntry(agentName, entry)
 		}
-		if _, exists := mcp["ywai-kanban"]; !exists {
-			mcp["ywai-kanban"] = map[string]any{
-				"command": "ywai",
-				"args":    []any{"serve", "--mcp-only"},
-			}
-			root[key] = mcp
+	} else if key == "mcpServers" {
+		// Claude Code / pi format
+		mcp["ywai-kanban"] = map[string]any{
+			"command": "ywai",
+			"args":    []any{"serve", "--mcp-only"},
 		}
 	} else {
 		// opencode format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
-		}
-		if _, exists := mcp["ywai-kanban"]; !exists {
-			mcp["ywai-kanban"] = map[string]any{
-				"type":    "local",
-				"command": []any{"ywai", "serve", "--mcp-only"},
-				"enabled": true,
-			}
-			root[key] = mcp
+		mcp["ywai-kanban"] = map[string]any{
+			"type":    "local",
+			"command": []any{"ywai", "serve", "--mcp-only"},
+			"enabled": true,
 		}
 	}
+	root[key] = mcp
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)

@@ -14,8 +14,13 @@ var (
 	getEmbeddedSkillsFS   func() fs.FS
 	getEmbeddedAgentsFS   func() fs.FS
 	getEmbeddedDefaultsFS func() fs.FS
+	getEmbeddedPluginsFS  func() fs.FS
 	fsMutex               sync.Mutex
 )
+
+// BackgroundAgentsBundleName is the filename of the bundled opencode
+// background-agents plugin, both in the embedded FS and once seeded to disk.
+const BackgroundAgentsBundleName = "background-agents.js"
 
 func EnsureDataDir() error {
 	fsMutex.Lock()
@@ -71,6 +76,10 @@ func RegisterEmbeddedAgents(agentsFS func() fs.FS) {
 
 func RegisterEmbeddedDefaults(defaultsFS func() fs.FS) {
 	getEmbeddedDefaultsFS = defaultsFS
+}
+
+func RegisterEmbeddedPlugins(pluginsFS func() fs.FS) {
+	getEmbeddedPluginsFS = pluginsFS
 }
 
 // GetEmbeddedDefaults reads the defaults.jsonc from embedded FS.
@@ -177,6 +186,64 @@ func SeedSkillsFromEmbedded() error {
 		"  Reinstall with:\n" +
 		"    macOS/Linux: curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash\n" +
 		"    Source:      cd ywai && bash scripts/prepare-embedded.sh && go install -tags embedded ./cmd/ywai")
+}
+
+// SeedPluginsFromEmbedded extracts the embedded plugin bundles (flat .js files)
+// into DataPluginsDir so source-less binaries can install them.
+func SeedPluginsFromEmbedded() error {
+	if err := os.MkdirAll(DataPluginsDir(), 0o755); err != nil {
+		return fmt.Errorf("failed to create data plugins directory: %w", err)
+	}
+
+	if fn := getEmbeddedPluginsFS; fn != nil {
+		if fsys := fn(); fsys != nil {
+			count := 0
+			if err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					count++
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("failed to walk embedded plugins: %w", err)
+			}
+			if count > 0 {
+				if err := extractFS(fsys, ".", DataPluginsDir()); err != nil {
+					return fmt.Errorf("failed to extract embedded plugins: %w", err)
+				}
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("no embedded plugins data available")
+}
+
+// BackgroundAgentsBundlePath resolves the path to the bundled background-agents
+// plugin JS. It prefers the source checkout (ywai/plugins/background-agents/
+// dist/), falls back to the seeded copy under DataPluginsDir, and seeds from the
+// embedded FS on demand. Returns an error when no bundle exists (e.g. a source
+// build where `bun` was unavailable at prepare-embedded time).
+func BackgroundAgentsBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/background-agents/dist/background-agents.js
+	srcBundle := filepath.Join(PluginsSourceDir(), "background-agents", "dist", BackgroundAgentsBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), BackgroundAgentsBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("background-agents plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

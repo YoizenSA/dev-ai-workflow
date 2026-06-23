@@ -406,6 +406,12 @@ var ywaiBucketPatterns = map[string][]string{
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
 	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*"},
+	// "delegate" launches an async sub-agent (background-agents plugin); the
+	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
+	// status, peek, steer, stop). Without the glob, an agent whitelisted for
+	// "delegate" under the "*: deny" pattern could start a delegation but never
+	// read or control it.
+	"delegate": {"delegate", "delegation_*"},
 }
 
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
@@ -480,7 +486,7 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		// Emit "*: deny" first (blocks everything by default).
 		emitPermission("*", "deny")
 		// Then emit only the "allow" rules (whitelist).
-		allowOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
+		allowOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
 		written := map[string]bool{}
 		for _, key := range allowOrder {
 			if val, ok := profile.Permission[key]; ok && val == "allow" {
@@ -501,7 +507,7 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		}
 	} else {
 		// No deny rules — emit all permissions as-is (full access agent).
-		permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
+		permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
 		written := map[string]bool{}
 		for _, key := range permOrder {
 			if val, ok := profile.Permission[key]; ok {

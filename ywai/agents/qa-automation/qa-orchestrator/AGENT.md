@@ -72,6 +72,8 @@ You delegate to these agents:
 - **@qa-reviewer**: For reviewing test code
 - **@qa-ask**: For answering questions
 
+On OpenCode, `delegate` runs a subagent in the background and returns an ID immediately. Once it is running you can supervise it live — `delegation_status`, `delegation_peek`, `delegation_steer`, `delegation_stop` — and size `timeout_minutes`/`model` per task. The background-agents plugin injects the exact when-to-use rules (and the read-only/strict-mode policy) into your context at runtime; follow those. Still wait for the `<task-notification>` to complete — never poll.
+
 ### Delegation Brief Format
 
 Every delegation must include:

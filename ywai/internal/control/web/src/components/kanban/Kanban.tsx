@@ -1,10 +1,11 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
 import DelegationDetailModal from "./DelegationDetailModal";
+import HandoffModal from "./HandoffModal";
 import "./Kanban.css";
 
 const COLUMNS: { id: DelegationColumn; label: string; color: string }[] = [
@@ -48,7 +49,9 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 	const { fetchActivities, resolveActivity, moveDelegation } = useKanbanStore();
 	const [expanded, setExpanded] = useState(false);
 	const [showDetail, setShowDetail] = useState(false);
+	const [showHandoff, setShowHandoff] = useState(false);
 	const [dragging, setDragging] = useState(false);
+	const handoffTriggerRef = useRef<HTMLButtonElement>(null);
 	const activities = useKanbanStore((s) => s.activities[delegation.id]);
 
 	const handleDragStart = (e: React.DragEvent) => {
@@ -90,11 +93,23 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 			</div>
 
 			{delegation.handoff_preview && (
-				<div className="delegation-handoff">
+				<button
+					type="button"
+					ref={handoffTriggerRef}
+					className="delegation-handoff"
+					onClick={(e) => {
+						// Don't let the click bubble to the card's drag handler
+						// or trigger any other card-level behavior.
+						e.stopPropagation();
+						setShowHandoff(true);
+					}}
+					aria-label="View full handoff"
+					title="Click to view the full handoff"
+				>
 					<span className="delegation-handoff-text">
 						{delegation.handoff_preview}
 					</span>
-				</div>
+				</button>
 			)}
 
 			{delegation.blocker && (
@@ -189,6 +204,15 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 				delegation={delegation}
 				open={showDetail}
 				onClose={() => setShowDetail(false)}
+			/>
+
+			<HandoffModal
+				open={showHandoff}
+				onClose={() => setShowHandoff(false)}
+				triggerRef={handoffTriggerRef}
+				title={delegation.task_summary}
+				subtitle={delegation.agent}
+				handoff={delegation.handoff || delegation.handoff_preview || ""}
 			/>
 		</div>
 	);

@@ -228,7 +228,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		removeQuotaForAgents(agents, opts.DryRun)
 
 		fmt.Println("\n[3.9/3] Setting default_agent...")
-		if err := setDefaultAgent("gentle-orchestrator", opts.DryRun); err != nil {
+		if err := setDefaultAgent("orchestrator", opts.DryRun); err != nil {
 			fmt.Printf("  Warning: failed to set default_agent: %v\n", err)
 		}
 	}
@@ -451,8 +451,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 			continue
 		}
 
+		// background-agents is an opencode plugin (delegate/delegation_* async
+		// tools); it only applies to opencode-format configs (opencode/kilocode).
+		supportsOpenCodePlugins := a.Name == "opencode" || a.Name == "kilocode"
+
 		if dryRun {
 			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
+			if supportsOpenCodePlugins {
+				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
+			}
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
 			}
@@ -467,6 +474,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
 		} else {
 			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
+		}
+
+		// Install background-agents plugin (async delegation) for opencode-format configs.
+		if supportsOpenCodePlugins {
+			if err := plugins.InstallBackgroundAgents(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Installed background-agents plugin\n", a.Name)
+			}
 		}
 
 		// Install Microsoft Learn MCP if requested

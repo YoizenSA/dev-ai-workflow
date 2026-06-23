@@ -11,6 +11,7 @@
   "webfetch": "deny",
   "code_search": "allow",
   "task": "allow",
+  "todowrite": "allow",
   "delegate": "allow",
   "question": "allow",
   "skill": "allow",

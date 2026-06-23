@@ -235,11 +235,34 @@
 	overflow: visible;
 }
 
-/* Preview line when collapsed */
+/* Preview line when collapsed — a button (not a div) so it's keyboard
+   focusable and announces as a clickable element. Styles reset to look
+   identical to the original text preview. */
 .delegation-handoff {
 	margin-top: var(--space-2);
-	padding-top: var(--space-2);
+	padding: var(--space-2) var(--space-2);
 	border-top: 1px solid var(--panel-border);
+	background: transparent;
+	border-left: 0;
+	border-right: 0;
+	border-bottom: 0;
+	width: 100%;
+	display: block;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+	transition: background 140ms ease, color 140ms ease;
+}
+
+.delegation-handoff:hover {
+	background: var(--surface-hover);
+	color: var(--text-soft);
+}
+
+.delegation-handoff:hover .delegation-handoff-text {
+	color: var(--text-soft);
 }
 
 .delegation-handoff-text {
@@ -426,6 +449,35 @@
 .activity-progress .activity-type-tag {
 	background: var(--info-soft);
 	color: var(--tint-info);
+}
+
+/* ─── Handoff modal (full handoff viewer) ─────────────────────────────── */
+
+.handoff-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.handoff-modal-text {
+	margin: 0;
+	padding: var(--space-3) var(--space-4);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	font-family: var(--font-sans);
+	font-size: 0.82rem;
+	line-height: 1.55;
+	color: var(--text-soft);
+	/* Preserve markdown-style lists and code-block indentation from the
+	   handoff. `pre-wrap` keeps line breaks; `pre` is the element so the
+	   browser doesn't collapse whitespace. */
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	max-height: 60vh;
+	overflow-y: auto;
+	/* Reset <pre> defaults so it doesn't look like a code block. */
 }
 
 /* ─── Quick move buttons ──────────────────────────────────────────────── */

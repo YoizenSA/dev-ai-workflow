@@ -30,8 +30,13 @@ func init() {
 		sub, _ := fs.Sub(embeddedFS, "embedded_data/ui")
 		return sub
 	}
+	pluginsFS := func() fs.FS {
+		sub, _ := fs.Sub(embeddedFS, "embedded_data/plugins")
+		return sub
+	}
 	config.RegisterEmbeddedProviders(skillsFS)
 	config.RegisterEmbeddedAgents(agentsFS)
 	config.RegisterEmbeddedDefaults(defaultsFS)
+	config.RegisterEmbeddedPlugins(pluginsFS)
 	control.RegisterEmbeddedUI(uiFS)
 }

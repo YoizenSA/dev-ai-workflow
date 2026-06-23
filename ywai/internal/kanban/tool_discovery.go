@@ -1,59 +1,33 @@
 package kanban
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
+// discoverMCPTools probes a remote MCP endpoint over HTTP and returns the
+// tool names it advertises. Thin wrapper around mcp.DiscoverHTTP — the probe
+// implementation lives in the mcp package now so the install flow can share
+// it. ctx is background: the kanban handler invokes this from a request
+// handler whose lifetime we don't propagate here (matches the prior behavior
+// of the old unexported implementation, which used a 3s client timeout).
 func discoverMCPTools(urlStr string) ([]string, error) {
-	// JSON-RPC request for tools/list
-	reqBody := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "tools/list",
-		"params":  map[string]interface{}{},
-	}
-	payload, _ := json.Marshal(reqBody)
+	return mcp.DiscoverHTTP(context.Background(), urlStr)
+}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Post(urlStr, "application/json", strings.NewReader(string(payload)))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	var rpcResp struct {
-		Result struct {
-			Tools []struct {
-				Name string `json:"name"`
-			} `json:"tools"`
-		} `json:"result"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		return nil, err
-	}
-
-	names := []string{}
-	for _, t := range rpcResp.Result.Tools {
-		if t.Name != "" {
-			names = append(names, t.Name)
-		}
-	}
-	return names, nil
+// discoverStdioMCPTools spawns a stdio MCP server subprocess, runs the
+// initialize + tools/list handshake, and returns the discovered tool names.
+// Thin wrapper around mcp.DiscoverStdio — see internal/mcp/discovery.go for
+// the transport. ctx is background: the old unexported implementation
+// layered an 8s timeout via context.WithTimeout, and that cap is preserved
+// inside mcp.DiscoverStdio.
+func discoverStdioMCPTools(command []string, env map[string]string) ([]string, error) {
+	return mcp.DiscoverStdio(context.Background(), command, env)
 }
 
 func sortStrings(a []string) {
@@ -64,138 +38,6 @@ func sortStrings(a []string) {
 			}
 		}
 	}
-}
-
-// discoverStdioMCPTools starts a stdio MCP server process, sends initialize
-// + tools/list JSON-RPC requests, and returns the discovered tool names.
-// The process is killed after discovery.
-func discoverStdioMCPTools(command []string, env map[string]string) ([]string, error) {
-	if len(command) == 0 {
-		return nil, fmt.Errorf("empty command")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("stdin pipe: %w", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("stdout pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start: %w", err)
-	}
-	defer func() {
-		_ = stdin.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}()
-
-	reader := bufio.NewReader(stdout)
-
-	// Send initialize request
-	initReq := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "initialize",
-		"params": map[string]interface{}{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    map[string]interface{}{},
-			"clientInfo": map[string]interface{}{
-				"name":    "ywai-kanban",
-				"version": "1.0.0",
-			},
-		},
-	}
-	if err := sendJSONRPC(stdin, initReq); err != nil {
-		return nil, fmt.Errorf("send initialize: %w", err)
-	}
-
-	// Read initialize response (skip any notifications)
-	if _, err := readJSONRPCResponse(reader); err != nil {
-		return nil, fmt.Errorf("read initialize: %w", err)
-	}
-
-	// Send initialized notification
-	initialized := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "notifications/initialized",
-	}
-	_ = sendJSONRPC(stdin, initialized)
-
-	// Send tools/list request
-	toolsReq := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  "tools/list",
-		"params":  map[string]interface{}{},
-	}
-	if err := sendJSONRPC(stdin, toolsReq); err != nil {
-		return nil, fmt.Errorf("send tools/list: %w", err)
-	}
-
-	// Read tools/list response
-	resp, err := readJSONRPCResponse(reader)
-	if err != nil {
-		return nil, fmt.Errorf("read tools/list: %w", err)
-	}
-
-	// Parse tool names from result
-	var names []string
-	if result, ok := resp["result"].(map[string]interface{}); ok {
-		if tools, ok := result["tools"].([]interface{}); ok {
-			for _, t := range tools {
-				if tool, ok := t.(map[string]interface{}); ok {
-					if name, ok := tool["name"].(string); ok && name != "" {
-						names = append(names, name)
-					}
-				}
-			}
-		}
-	}
-	return names, nil
-}
-
-func sendJSONRPC(w io.Writer, msg map[string]interface{}) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(w, "%s\n", data)
-	return err
-}
-
-func readJSONRPCResponse(reader *bufio.Reader) (map[string]interface{}, error) {
-	for i := 0; i < 50; i++ {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, err
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var resp map[string]interface{}
-		if err := json.Unmarshal([]byte(line), &resp); err != nil {
-			continue
-		}
-		// Skip notifications (no id field)
-		if _, ok := resp["id"]; !ok {
-			continue
-		}
-		return resp, nil
-	}
-	return nil, fmt.Errorf("no response after 50 lines")
 }
 
 // discoverPluginTools parses plugin source code to find tool registrations.

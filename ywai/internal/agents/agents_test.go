@@ -532,6 +532,54 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	}
 }
 
+// TestExpandPermissionBuckets_Delegate verifies the "delegate" bucket expands to
+// both the launch tool ("delegate") and the supervisor/retrieval glob
+// ("delegation_*"). Without this, an agent whitelisted for "delegate" could
+// start an async delegation but never read, peek, steer, or stop it.
+func TestExpandPermissionBuckets_Delegate(t *testing.T) {
+	out := ExpandPermissionBuckets(map[string]string{"delegate": "allow"})
+
+	if out["delegate"] != "allow" {
+		t.Errorf("delegate = %v, want allow", out["delegate"])
+	}
+	if out["delegation_*"] != "allow" {
+		t.Errorf("delegation_* = %v, want allow", out["delegation_*"])
+	}
+}
+
+// TestBuildOpenCodeMarkdown_DelegateBucket checks the rendered frontmatter: an
+// agent allowed "delegate" gets both keys whitelisted; an agent denied
+// "delegate" gets neither (blocked by "*: deny").
+func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
+	// Real orchestrators carry denies (edit/write/bash), so rendering goes
+	// through the "*: deny" + whitelist branch — exercise that path here.
+	allow := buildOpenCodeMarkdown("orchestrator", AgentProfile{
+		Description: "Orchestrator",
+		Prompt:      "# Orchestrator",
+		Mode:        "all",
+		Permission:  map[string]string{"read": "allow", "write": "deny", "delegate": "allow"},
+	})
+	if !strings.Contains(allow, `"*": deny`) {
+		t.Fatalf("expected whitelist branch ('*: deny'), got:\n%s", allow)
+	}
+	if !strings.Contains(allow, `"delegate": allow`) {
+		t.Errorf("allowed delegate should emit '\"delegate\": allow', got:\n%s", allow)
+	}
+	if !strings.Contains(allow, `"delegation_*": allow`) {
+		t.Errorf("allowed delegate should expand to 'delegation_*: allow', got:\n%s", allow)
+	}
+
+	deny := buildOpenCodeMarkdown("reviewer", AgentProfile{
+		Description: "Reviewer",
+		Prompt:      "# Reviewer",
+		Mode:        "subagent",
+		Permission:  map[string]string{"read": "allow", "delegate": "deny"},
+	})
+	if strings.Contains(deny, "delegate") {
+		t.Errorf("denied delegate should not be whitelisted, got:\n%s", deny)
+	}
+}
+
 func TestInstallOpenCodeMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "agents")

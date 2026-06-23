@@ -119,6 +119,8 @@ Each capability maps to host-specific tools. Use the mapped tool, or fall back t
 
 On OpenCode, use `task` for sync phases and `delegate` for fan-out. On other hosts, use the mapped tool or the fallback.
 
+On OpenCode, once an async `delegate` is running you can supervise it live — `delegation_status`, `delegation_peek`, `delegation_steer`, `delegation_stop` — and size `timeout_minutes`/`model` per task. The background-agents plugin injects the exact when-to-use rules (and the read-only/strict-mode policy) into your context at runtime; follow those. Still wait for the `<task-notification>` to complete — never poll.
+
 ### Caveats (async delegation)
 - Async delegations run in **isolated sessions**. Writes by `@dev`/`@devops` there are **not tracked by OpenCode's undo/branching** or equivalent host undo. Prefer sync for write-heavy phases.
 - A delegated subagent **cannot delegate further** (anti-recursion). Keep briefs self-contained.

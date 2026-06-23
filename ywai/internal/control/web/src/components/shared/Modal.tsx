@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -10,6 +10,9 @@ interface ModalProps {
 	children: ReactNode;
 	footer?: ReactNode;
 	width?: string;
+	// Optional ref forwarded to the X close button. Lets callers move focus
+	// into the modal on open (a11y) without re-implementing the modal.
+	closeButtonRef?: RefObject<HTMLButtonElement>;
 }
 
 export default function Modal({
@@ -20,8 +23,11 @@ export default function Modal({
 	children,
 	footer,
 	width,
+	closeButtonRef,
 }: ModalProps) {
 	const overlayRef = useRef<HTMLDivElement>(null);
+	const internalCloseRef = useRef<HTMLButtonElement>(null);
+	const closeRef = closeButtonRef ?? internalCloseRef;
 
 	useEffect(() => {
 		const handleEsc = (e: KeyboardEvent) => {
@@ -56,7 +62,7 @@ export default function Modal({
 						<h2 className="modal-title">{title}</h2>
 						{subtitle && <p className="modal-subtitle">{subtitle}</p>}
 					</div>
-					<button className="modal-close" onClick={onClose} aria-label="Close">
+					<button ref={closeRef} className="modal-close" onClick={onClose} aria-label="Close">
 						<X size={20} strokeWidth={2.5} />
 					</button>
 				</div>
