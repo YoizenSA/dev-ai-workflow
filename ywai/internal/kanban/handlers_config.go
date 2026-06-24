@@ -970,6 +970,70 @@ func (h *Handlers) GetRoleDefaults(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// GetOrchestratorProfiles returns all orchestrator profiles plus the active profile name.
+// GET /api/config/user/orchestrator-profiles
+func (h *Handlers) GetOrchestratorProfiles(w http.ResponseWriter, r *http.Request) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"profiles": cfg.OrchestratorProfiles,
+		"active":   cfg.ActiveOrchestratorProfile,
+	})
+}
+
+// SetActiveOrchestratorProfile sets the active orchestrator profile by name.
+// PUT /api/config/user/orchestrator-profiles/active
+func (h *Handlers) SetActiveOrchestratorProfile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "expected JSON body: " + err.Error()})
+		return
+	}
+	if req.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, ok := cfg.OrchestratorProfiles[req.Name]; !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "profile not found: " + req.Name})
+		return
+	}
+	cfg.ActiveOrchestratorProfile = req.Name
+	if err := userconfig.SaveConfig(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// ResyncOrchestratorProfiles restores profiles from the embedded seed.
+// POST /api/config/user/orchestrator-profiles/resync
+func (h *Handlers) ResyncOrchestratorProfiles(w http.ResponseWriter, r *http.Request) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	cfg.ResyncOrchestratorModelProfiles()
+	if err := userconfig.SaveConfig(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"profiles": cfg.OrchestratorProfiles,
+		"active":   cfg.ActiveOrchestratorProfile,
+	})
+}
+
 // BrowseDirectory opens a native OS directory picker dialog and returns the selected path.
 func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	var selectedPath string

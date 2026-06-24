@@ -81,42 +81,34 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 		}
 	}
 	rd := cfg.GetRoleDefault(role)
-	// Profile defaults fill missing role defaults only — explicit feature/mission
-	// values always take precedence (see switch below).
-	if profileRD, ok := cfg.GetOrchestratorRoleDefault(role); ok {
-		if profileRD.Model != "" && rd.Model == "" {
-			rd.Model = profileRD.Model
-		}
-		if profileRD.Agent != "" && rd.Agent == "" {
-			rd.Agent = profileRD.Agent
-		}
-		if len(profileRD.Fallbacks) > 0 && len(rd.Fallbacks) == 0 {
-			rd.Fallbacks = append([]string(nil), profileRD.Fallbacks...)
-		}
-	}
+	profileRD, hasProfile := cfg.GetOrchestratorRoleDefault(role)
 
-	// Precedence: feature override → mission-wide setting → role/profile default
+	// Precedence: feature override → orchestrator profile → mission → plain role default
 	switch {
 	case feat != nil && feat.Model != "":
 		model = feat.Model
+	case hasProfile && profileRD.Model != "":
+		model = profileRD.Model
 	case mission != nil && mission.Model != "":
 		model = mission.Model
-	default:
+	case rd.Model != "":
 		model = rd.Model
 	}
 
 	switch {
 	case feat != nil && feat.Agent != "":
 		agent = feat.Agent
+	case hasProfile && profileRD.Agent != "":
+		agent = profileRD.Agent
 	case mission != nil && mission.ExecutionAgent != "":
 		agent = mission.ExecutionAgent
 	case mission != nil && mission.Agent != "":
 		agent = mission.Agent
-	default:
+	case rd.Agent != "":
 		agent = rd.Agent
 	}
 
-	// Build chain: primary, then feature fallbacks (if any), then role fallbacks.
+	// Build chain: primary, then feature fallbacks (if any), then role/profile fallbacks.
 	chain = []string{}
 	if model != "" {
 		chain = append(chain, model)
@@ -128,7 +120,11 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 			}
 		}
 	}
-	for _, m := range rd.Fallbacks {
+	fallbackSrc := rd.Fallbacks
+	if hasProfile {
+		fallbackSrc = profileRD.Fallbacks
+	}
+	for _, m := range fallbackSrc {
 		if m == "" {
 			continue
 		}

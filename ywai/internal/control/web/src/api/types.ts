@@ -580,3 +580,21 @@ export interface ApplySelection {
   deletes: PlanDelete[]
   new_summaries: PlanSummary[]
 }
+
+export interface OrchestratorModelMapping {
+  agent: string;
+  model: string;
+}
+
+export interface OrchestratorProfile {
+  name: string;
+  display_name?: string;
+  description?: string;
+  is_seed?: boolean;
+  role_defaults?: Record<string, OrchestratorModelMapping>;
+}
+
+export interface OrchestratorProfilesResponse {
+  profiles: Record<string, OrchestratorProfile>;
+  active: string;
+}

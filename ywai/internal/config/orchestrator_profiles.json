@@ -2,27 +2,71 @@
   "profiles": {
     "balanced": {
       "display_name": "Balanced",
-      "description": "Default profile balancing speed and reasoning depth for orchestration tasks.",
+      "description": "Default profile — balanced for all orchestrator roles",
       "role_defaults": {
-        "explore": {
+        "default": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-pro"
+        },
+        "planning": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-pro"
+        },
+        "ask": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
+        },
+        "research": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
         },
         "scout": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-flash"
         },
         "finder": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-flash"
+        },
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "implement": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-pro"
+        },
+        "test": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
+        },
+        "review": {
+          "agent": "opencode-admin",
+          "model": "qwen3.7-max"
+        },
+        "deploy": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
         }
       }
     },
     "fast": {
       "display_name": "Fast",
-      "description": "Lower-latency profile for discovery and routing work.",
+      "description": "Speed-optimized profile — uses flash models for all roles",
       "role_defaults": {
-        "explore": {
+        "default": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "planning": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "ask": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "research": {
           "agent": "opencode-admin",
           "model": "deepseek-v4-flash"
         },
@@ -31,6 +75,26 @@
           "model": "deepseek-v4-flash"
         },
         "finder": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "implement": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "test": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "review": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "deploy": {
           "agent": "opencode-admin",
           "model": "deepseek-v4-flash"
         }
@@ -38,19 +102,51 @@
     },
     "deep": {
       "display_name": "Deep",
-      "description": "Higher-reasoning profile for complex orchestration tasks.",
+      "description": "Higher-reasoning profile for complex orchestration tasks",
       "role_defaults": {
-        "explore": {
+        "default": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-pro"
+        },
+        "planning": {
+          "agent": "opencode-admin",
+          "model": "kimi-k2.7-code"
+        },
+        "ask": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
+        },
+        "research": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
         },
         "scout": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-flash"
         },
         "finder": {
           "agent": "opencode-admin",
-          "model": "openai/gpt-5.5"
+          "model": "deepseek-v4-flash"
+        },
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "implement": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-pro"
+        },
+        "test": {
+          "agent": "opencode-admin",
+          "model": "mimo-v2.5-pro"
+        },
+        "review": {
+          "agent": "opencode-admin",
+          "model": "qwen3.7-max"
+        },
+        "deploy": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
         }
       }
     }

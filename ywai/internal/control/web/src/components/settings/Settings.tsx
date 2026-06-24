@@ -26,6 +26,7 @@ import type {
 import RoleDefaultsTab from "./RoleDefaultsTab";
 import ReferencesTab from "./ReferencesTab";
 import OrchestratorTab from "./OrchestratorTab";
+import ProfilesTab from "./ProfilesTab";
 import SearchSelect from "../shared/SearchSelect";
 import ModelCombobox from "../missions/ModelCombobox";
 import Modal from "../shared/Modal";
@@ -40,7 +41,8 @@ type Tab =
 	| "mcp"
 	| "providers"
 	| "tools"
-	| "references";
+	| "references"
+	| "profiles";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	{
@@ -62,6 +64,11 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "orchestrator",
 		label: "Orchestrator",
 		icon: <Share2 size={16} />,
+	},
+	{
+		id: "profiles",
+		label: "Profiles",
+		icon: <Server size={16} />,
 	},
 	{
 		id: "skills",
@@ -125,6 +132,7 @@ export default function Settings() {
 				{activeTab === "roles" && <RoleDefaultsTab />}
 				{activeTab === "agents" && <AgentsTab />}
 				{activeTab === "orchestrator" && <OrchestratorTab />}
+				{activeTab === "profiles" && <ProfilesTab />}
 				{activeTab === "skills" && <SkillsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}

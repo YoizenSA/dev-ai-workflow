@@ -33,6 +33,7 @@ import type {
 	EngramImportResult,
 	EngramMergeResult,
 	MemoryEvalRequest,
+	OrchestratorProfilesResponse,
 	MemoryEvalResult,
 	ConsolidationRun,
 	ApplySelection,
@@ -409,6 +410,12 @@ export const configApi = {
 		}),
 	getRoleDefaults: () =>
 		request<RoleDefaults>("/api/config/user/role-defaults"),
+	getOrchestratorProfiles: () =>
+		request<OrchestratorProfilesResponse>("/api/config/user/orchestrator-profiles"),
+	setActiveOrchestratorProfile: (name: string) =>
+		request<{ status: string }>("/api/config/user/orchestrator-profiles/active", { method: "PUT", body: JSON.stringify({ name }) }),
+	resyncOrchestratorProfiles: () =>
+		request<OrchestratorProfilesResponse>("/api/config/user/orchestrator-profiles/resync", { method: "POST" }),
 
 	// Native directory picker
 	browseDirectory: () =>

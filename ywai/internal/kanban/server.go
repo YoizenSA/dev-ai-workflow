@@ -106,6 +106,9 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("GET /api/config/user", handlers.GetUserConfig)
 	mux.HandleFunc("PUT /api/config/user", handlers.PutUserConfig)
 	mux.HandleFunc("GET /api/config/user/role-defaults", handlers.GetRoleDefaults)
+	mux.HandleFunc("GET /api/config/user/orchestrator-profiles", handlers.GetOrchestratorProfiles)
+	mux.HandleFunc("PUT /api/config/user/orchestrator-profiles/active", handlers.SetActiveOrchestratorProfile)
+	mux.HandleFunc("POST /api/config/user/orchestrator-profiles/resync", handlers.ResyncOrchestratorProfiles)
 
 	// Native directory picker
 	mux.HandleFunc("POST /api/browse-directory", handlers.BrowseDirectory)
