@@ -1029,6 +1029,70 @@ func (h *Handlers) SetActiveOrchestratorProfile(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "saved", "agents_applied": applied})
 }
 
+// UpdateOrchestratorProfile replaces a profile's editable fields (display name,
+// description, per-agent models). If the edited profile is the active one, the
+// new models are applied to each agent immediately.
+// PUT /api/config/user/orchestrator-profiles/{name}
+func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "profile name is required"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body struct {
+		DisplayName string                            `json:"display_name"`
+		Description string                            `json:"description"`
+		Agents      map[string]userconfig.RoleDefault `json:"agents"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if cfg.OrchestratorProfiles == nil {
+		cfg.OrchestratorProfiles = map[string]userconfig.OrchestratorModelProfile{}
+	}
+	existing := cfg.OrchestratorProfiles[name]
+	if body.DisplayName != "" {
+		existing.DisplayName = body.DisplayName
+	}
+	existing.Description = body.Description
+	existing.Agents = userconfig.RoleDefaults(body.Agents)
+	cfg.OrchestratorProfiles[name] = existing
+
+	if err := userconfig.SaveConfig(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// If editing the active profile, apply the new per-agent models right away.
+	applied := 0
+	if cfg.ActiveOrchestratorProfile == name {
+		for agentName, rd := range existing.Agents {
+			if rd.Model == "" {
+				continue
+			}
+			if applyAgentModel(agentName, rd.Model) {
+				applied++
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":         "saved",
+		"agents_applied": applied,
+		"profiles":       cfg.OrchestratorProfiles,
+		"active":         cfg.ActiveOrchestratorProfile,
+	})
+}
+
 // ResyncOrchestratorProfiles restores profiles from the embedded seed.
 // POST /api/config/user/orchestrator-profiles/resync
 func (h *Handlers) ResyncOrchestratorProfiles(w http.ResponseWriter, r *http.Request) {

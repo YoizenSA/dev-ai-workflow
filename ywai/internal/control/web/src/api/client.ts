@@ -416,6 +416,14 @@ export const configApi = {
 		request<{ status: string }>("/api/config/user/orchestrator-profiles/active", { method: "PUT", body: JSON.stringify({ name }) }),
 	resyncOrchestratorProfiles: () =>
 		request<OrchestratorProfilesResponse>("/api/config/user/orchestrator-profiles/resync", { method: "POST" }),
+	updateOrchestratorProfile: (
+		name: string,
+		profile: { display_name?: string; description?: string; agents: Record<string, { model: string }> },
+	) =>
+		request<OrchestratorProfilesResponse & { agents_applied: number }>(
+			`/api/config/user/orchestrator-profiles/${encodeURIComponent(name)}`,
+			{ method: "PUT", body: JSON.stringify(profile) },
+		),
 
 	// Native directory picker
 	browseDirectory: () =>
