@@ -10,13 +10,23 @@ import (
 	"testing"
 )
 
+// setTestHomeDir redirects the user home directory for the duration of the
+// test. os.UserHomeDir() reads HOME on unix and USERPROFILE on Windows, so
+// both must be set for these tests to resolve config paths under the temp
+// dir on every CI runner.
+func setTestHomeDir(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+}
+
 // TestGetAgentGraph builds a fake ~/.config/opencode layout under a temp HOME
 // and asserts the static delegation graph is derived correctly from each
 // agent's permission.task map.
 func TestGetAgentGraph(t *testing.T) {
 	// HOME drives opencodeConfigPath() and agentsDir() (both read os.UserHomeDir).
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 
 	// opencode.json: a primary orchestrator with a dense task allow/deny map
 	// (mirrors the gentle-orchestrator shape), a subagent "dev", and an "ask"
@@ -132,7 +142,7 @@ func TestGetAgentGraph(t *testing.T) {
 // agent becomes a ghost node instead of a dangling reference.
 func TestGetAgentGraph_GhostTarget(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 
 	config := `{
   "agent": {
@@ -191,7 +201,7 @@ func TestGetAgentGraph_GhostTarget(t *testing.T) {
 func writeSidecar(t *testing.T, payload string) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
 	os.MkdirAll(agentsDir, 0o755)
 	os.WriteFile(filepath.Join(agentsDir, "delegations.json"), []byte(payload), 0o644)
@@ -265,7 +275,7 @@ func TestGetDelegationRules_PerAgentOverride(t *testing.T) {
 
 func TestGetDelegationRules_NoSidecar(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	os.MkdirAll(filepath.Join(home, ".config", "opencode", "agents"), 0o755)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/orchestrator/delegation-rules", nil)
@@ -282,7 +292,7 @@ func TestGetDelegationRules_NoSidecar(t *testing.T) {
 
 func TestPutDelegationRules_WritesSidecarAndRendersMarkdown(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
 	os.MkdirAll(agentsDir, 0o755)
 	// Seed an agent markdown so the PUT can render into it.

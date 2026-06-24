@@ -71,6 +71,16 @@ import (
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
+// setTestHomeDir redirects the user home directory for the duration of the
+// test. os.UserHomeDir() reads HOME on unix and USERPROFILE on Windows, so
+// both must be set for these tests to resolve config paths under the temp
+// dir on every CI runner.
+func setTestHomeDir(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+}
+
 // shapeHasKey reports whether the shape map has the given top-level key.
 // Used for the "must NOT have X" assertions on BuildEntryShape output.
 func shapeHasKey(shape map[string]any, key string) bool {
@@ -145,7 +155,7 @@ func writeJSONFile(t *testing.T, path string, content string) {
 // macOS users have XDG unset, defaulting to ~/.config).
 func TestEntryTargetPath_Opencode_Default(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	// Explicitly clear XDG_CONFIG_HOME even if the surrounding test
 	// environment has it set — this test asserts the default path.
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -189,7 +199,7 @@ func TestEntryTargetPath_Opencode_WithXDG(t *testing.T) {
 // installer pins the location, so we mirror it exactly.
 func TestEntryTargetPath_Claude(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	// XDG must not redirect the claude path.
 	t.Setenv("XDG_CONFIG_HOME", "/this/xdg/is/ignored/for/claude")
 
@@ -207,7 +217,7 @@ func TestEntryTargetPath_Claude(t *testing.T) {
 // Same fixed-path contract as claude: no XDG redirection.
 func TestEntryTargetPath_Pi(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "/this/xdg/is/ignored/for/pi")
 
 	got, err := EntryTargetPath("pi")
@@ -483,7 +493,7 @@ func TestBuildEntryShape_NoCreds_OmitsEnv(t *testing.T) {
 // unrelated keys.
 func TestWriteAgentConfig_Opencode_PreservesSiblings(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -529,7 +539,7 @@ func TestWriteAgentConfig_Opencode_PreservesSiblings(t *testing.T) {
 // the second write fully replaces the first.
 func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -573,7 +583,7 @@ func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 // the file must exist and contain the new entry.
 func TestWriteAgentConfig_Opencode_CreatesFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -613,7 +623,7 @@ func TestWriteAgentConfig_Opencode_CreatesFile(t *testing.T) {
 // case on a fresh $HOME.
 func TestWriteAgentConfig_Opencode_CreatesDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -647,7 +657,7 @@ func TestWriteAgentConfig_Opencode_CreatesDir(t *testing.T) {
 // (perm.Perm()&0o004 == 0).
 func TestWriteAgentConfig_Opencode_FilePerms(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -685,7 +695,7 @@ func TestWriteAgentConfig_Opencode_FilePerms(t *testing.T) {
 // the entry on its next start.
 func TestWriteAgentConfig_Claude_TopKey(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".claude.json")
@@ -730,7 +740,7 @@ func TestWriteAgentConfig_Claude_TopKey(t *testing.T) {
 // the write actually completed, not just landed on a no-op).
 func TestWriteAgentConfig_Atomic(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -808,7 +818,7 @@ func TestWriteAgentConfig_Atomic(t *testing.T) {
 // "already installed" badges on the catalog rows.
 func TestReadAgentConfig_Opencode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -843,7 +853,7 @@ func TestReadAgentConfig_Opencode(t *testing.T) {
 // exists to prevent.
 func TestReadAgentConfig_NoFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	section, err := ReadAgentConfig("opencode")
@@ -866,7 +876,7 @@ func TestReadAgentConfig_NoFile(t *testing.T) {
 // it can prompt the user to repair or back it up.
 func TestReadAgentConfig_MalformedJSONC(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -885,7 +895,7 @@ func TestReadAgentConfig_MalformedJSONC(t *testing.T) {
 // must end with exactly one entry.
 func TestRemoveAgentConfig_Opencode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -919,7 +929,7 @@ func TestRemoveAgentConfig_Opencode(t *testing.T) {
 // error.
 func TestRemoveAgentConfig_NonExistent(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -947,7 +957,7 @@ func TestRemoveAgentConfig_NonExistent(t *testing.T) {
 // "theme", plugin config).
 func TestRemoveAgentConfig_PreservesSiblings(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -1000,7 +1010,7 @@ func TestRemoveAgentConfig_PreservesSiblings(t *testing.T) {
 // between).
 func TestConcurrentWrites_Opencode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -1088,7 +1098,7 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 // it, so losing it would mean a torn read picked up an earlier state).
 func TestConcurrentReadWrite_Opencode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
