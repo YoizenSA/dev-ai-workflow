@@ -160,7 +160,15 @@ func ReadAgentConfig(target string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Serialize against WriteAgentConfig's atomic rename. On POSIX the
+	// rename is atomic and readers never tear, but Windows uses mandatory
+	// locking: opening the target while a concurrent write is mid-rename
+	// fails with a sharing violation. Sharing the per-target lock makes
+	// reads and writes mutually exclusive on every platform.
+	mu := lockFor(target)
+	mu.Lock()
 	data, err := os.ReadFile(path)
+	mu.Unlock()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return map[string]any{}, nil
