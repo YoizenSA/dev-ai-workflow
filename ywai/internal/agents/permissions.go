@@ -195,6 +195,15 @@ func (c MCPConfig) Enforce(toolName string) bool {
 		return val == "allow"
 	}
 
+	// 1b. Baseline tools every agent may call (unless overridden per-tool
+	// above). Mirrors the always-allow whitelist in buildOpenCodeMarkdown so
+	// ywai's own enforcement agrees with the generated opencode frontmatter.
+	for _, t := range AlwaysAllowedMCPTools {
+		if toolName == t {
+			return true
+		}
+	}
+
 	// 2. Classify the tool to determine its category
 	cat := ClassifyMCPTool(toolName)
 

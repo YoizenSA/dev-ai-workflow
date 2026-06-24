@@ -401,6 +401,16 @@ func removeLegacyGroupDirs(agentsDir string) {
 // The blanket "mcp" bucket enumerates every MCP server not covered by a
 // dedicated bucket above. Kept explicit (one pattern per server) so a new MCP
 // server is a visible, deliberate addition rather than a silent catch-all.
+// AlwaysAllowedMCPTools are MCP tools every agent may call regardless of its
+// coarse mcp bucket permission. Updating a kanban delegation is a self-reporting
+// action (an agent moving its own card / status); the board is decoupled from
+// the mission FSM, so it is low-risk and must not be gated behind the "mcp"
+// bucket. An explicit per-tool deny in the agent's own permission map still
+// wins (see buildOpenCodeMarkdown), so this is a default, not a hard override.
+var AlwaysAllowedMCPTools = []string{
+	"ywai-kanban_update_delegation",
+}
+
 var ywaiBucketPatterns = map[string][]string{
 	"ado":      {"ado_*"},
 	"memory":   {"engram_*"},
@@ -504,6 +514,17 @@ func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		sort.Strings(remaining)
 		for _, key := range remaining {
 			emitPermission(key, profile.Permission[key])
+		}
+		// Baseline MCP tools every agent may call. Under the "*: deny"
+		// whitelist these would otherwise be blocked for agents without the
+		// "mcp" bucket allowed. Skip any the agent set explicitly per-tool
+		// (an explicit allow was already emitted above; an explicit deny is
+		// an intentional override we must honor).
+		for _, tool := range AlwaysAllowedMCPTools {
+			if _, ok := profile.Permission[tool]; ok {
+				continue
+			}
+			emitPermission(tool, "allow")
 		}
 	} else {
 		// No deny rules — emit all permissions as-is (full access agent).

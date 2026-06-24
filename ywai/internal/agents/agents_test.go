@@ -532,6 +532,35 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	}
 }
 
+// TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed verifies that an
+// agent which denies the whole mcp bucket still gets the kanban
+// update_delegation tool whitelisted, so every agent can report its own card
+// status.
+func TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed(t *testing.T) {
+	profile := AgentProfile{
+		Description: "Restricted subagent",
+		Prompt:      "# Sub\n\nWork.",
+		Mode:        "subagent",
+		Permission: map[string]string{
+			"edit": "deny",
+			"mcp":  "deny",
+		},
+	}
+
+	md := buildOpenCodeMarkdown("dev", profile)
+
+	if !strings.Contains(md, `"*": deny`) {
+		t.Fatalf(`expected "*": deny whitelist pattern, got:\n%s`, md)
+	}
+	if !strings.Contains(md, "ywai-kanban_update_delegation: allow") {
+		t.Errorf("update_delegation must be whitelisted even when mcp is denied, got:\n%s", md)
+	}
+	// The mcp bucket was denied, so the broad kanban glob must NOT be allowed.
+	if strings.Contains(md, `"ywai-kanban_*": allow`) {
+		t.Error(`mcp:deny must not whitelist the broad "ywai-kanban_*" glob`)
+	}
+}
+
 // TestExpandPermissionBuckets_Delegate verifies the "delegate" bucket expands to
 // both the launch tool ("delegate") and the supervisor/retrieval glob
 // ("delegation_*"). Without this, an agent whitelisted for "delegate" could

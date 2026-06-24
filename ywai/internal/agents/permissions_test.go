@@ -262,6 +262,29 @@ func TestMCPEnforce_ExplicitDenyBeatsExplicitAllow_PerToolOverride(t *testing.T)
 	}
 }
 
+func TestMCPEnforce_UpdateDelegation_AllowedDespiteMCPDeny(t *testing.T) {
+	// Every agent must be able to report its own card status, even when the
+	// whole mcp bucket (and write category) is denied.
+	perms := map[string]string{
+		"mcp":       "deny",
+		"mcp:write": "deny",
+	}
+	if !MCPEnforce(perms, "ywai-kanban_update_delegation") {
+		t.Error("MCPEnforce: ywai-kanban_update_delegation must be allowed for every agent")
+	}
+}
+
+func TestMCPEnforce_UpdateDelegation_ExplicitPerToolDenyStillWins(t *testing.T) {
+	// The baseline allow is a default, not a hard override: an explicit
+	// per-tool deny in the agent's own config still takes precedence.
+	perms := map[string]string{
+		"ywai-kanban_update_delegation": "deny",
+	}
+	if MCPEnforce(perms, "ywai-kanban_update_delegation") {
+		t.Error("MCPEnforce: explicit per-tool deny should override the baseline allow")
+	}
+}
+
 func TestMCPEnforce_ToolClassifiedWrite_MCPWriteDeny(t *testing.T) {
 	// mcp:write is deny, tool is classified as Write → deny
 	perms := map[string]string{

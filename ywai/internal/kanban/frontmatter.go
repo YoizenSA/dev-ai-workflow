@@ -248,6 +248,16 @@ func updatePermissionsInFrontmatter(content string, perms map[string]string) str
 	// silently dropping the toggle — see agents.ExpandPermissionBuckets.
 	perms = agents.ExpandPermissionBuckets(perms)
 
+	// Baseline MCP tools every agent may call (e.g. reporting its own kanban
+	// card status). Inject an explicit allow unless the agent set this tool
+	// explicitly, so an mcp:deny expanded to "ywai-kanban_*: deny" does not
+	// also block update_delegation. Mirrors buildOpenCodeMarkdown.
+	for _, tool := range agents.AlwaysAllowedMCPTools {
+		if _, ok := perms[tool]; !ok {
+			perms[tool] = "allow"
+		}
+	}
+
 	fm, body := parseFrontmatter(content)
 	if fm == "" {
 		// No frontmatter at all — wrap content with new frontmatter
