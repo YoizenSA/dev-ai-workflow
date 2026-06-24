@@ -137,13 +137,8 @@ export default function ProfilesTab() {
 
 			{message && (
 				<div
-					className="pill"
-					style={{
-						marginBottom: "1rem",
-						background: message.startsWith("Error")
-							? "var(--color-danger-bg, #fee)"
-							: "var(--color-success-bg, #efe)",
-					}}
+					className={`alert ${message.startsWith("Error") ? "alert-danger" : "alert-success"}`}
+					style={{ marginBottom: "1rem" }}
 				>
 					{message}
 				</div>
