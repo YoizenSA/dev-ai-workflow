@@ -170,12 +170,6 @@ echo "fake npx install failed: missing dependency" >&2
 exit 1
 `
 
-// fakeNpxHang is the probe-side hang for the probe-fails test: it never
-// responds to MCP stdio, so DiscoverStdio's ctx times out.
-const fakeNpxHang = `#!/bin/sh
-while true; do sleep 1; done
-`
-
 // fakeGoInstall imitates `go install <pkg>@<ver>` by copying mcpfake to
 // $GOPATH/bin/<basename(pkg)>. The test uses this together with a
 // CatalogEntry whose Command[0] is the basename, so the probe runs the

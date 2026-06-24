@@ -26,9 +26,6 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
 
-// tuiLogoEmbeddedSubpath is the logo's path within the embedded plugins FS.
-const tuiLogoEmbeddedSubpath = "tui/" + TuiLogoBundleName
-
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
