@@ -339,6 +339,14 @@ func buildToolsResponse() (map[string]interface{}, error) {
 		}
 	}
 
+	// Authoritative completeness pass: opencode itself enumerates every tool
+	// ID (built-ins + dynamically registered plugin tools). When the server
+	// is up this guarantees nothing is missing from "all"; when it is down we
+	// keep the static config/bundle discovery above. Best-effort.
+	for _, id := range discoverOpencodeToolIDs() {
+		toolSet[id] = true
+	}
+
 	// Convert set to sorted slice
 	var allTools []string
 	for t := range toolSet {

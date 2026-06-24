@@ -2,13 +2,47 @@ package kanban
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
+
+// opencodeToolIDsURL is opencode's authoritative tool catalog: it returns
+// every tool ID, including built-ins and tools registered dynamically by
+// plugins. It requires a running opencode server, so callers must treat a
+// failure as "server not up" and fall back to static discovery.
+const opencodeToolIDsURL = "http://127.0.0.1:4096/experimental/tool/ids"
+
+// discoverOpencodeToolIDs asks the running opencode server for the complete
+// list of tool IDs. Best-effort: returns nil if opencode is not reachable so
+// the caller can fall back to scanning config + bundles.
+func discoverOpencodeToolIDs() []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opencodeToolIDsURL, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var ids []string
+	if err := json.NewDecoder(resp.Body).Decode(&ids); err != nil {
+		return nil
+	}
+	return ids
+}
 
 // discoverMCPTools probes a remote MCP endpoint over HTTP and returns the
 // tool names it advertises. Thin wrapper around mcp.DiscoverHTTP — the probe
