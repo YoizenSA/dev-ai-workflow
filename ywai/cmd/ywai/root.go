@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -17,6 +18,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tui"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/versionfile"
 	"github.com/spf13/cobra"
 )
 
@@ -72,6 +74,10 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
+
+		// Keep ~/.ywai/version.json's installed version current for the TUI logo.
+		// No network here (see versionfile.Touch); cheap enough for every command.
+		_ = versionfile.Touch(version)
 	},
 }
 
@@ -230,6 +236,13 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		fmt.Println("\n[3.9/3] Setting default_agent...")
 		if err := setDefaultAgent("orchestrator", opts.DryRun); err != nil {
 			fmt.Printf("  Warning: failed to set default_agent: %v\n", err)
+		}
+
+		// Refresh ~/.ywai/version.json so the TUI logo can show the installed
+		// version and flag updates. Throttled network check (once/day); failures
+		// are non-fatal.
+		if err := versionfile.Refresh(version, 24*time.Hour); err != nil {
+			fmt.Printf("  Warning: failed to write version info: %v\n", err)
 		}
 	}
 
