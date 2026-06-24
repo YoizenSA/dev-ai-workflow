@@ -785,6 +785,9 @@ Prompt body
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
+	// Tool permissions are written only to the frontmatter (single source of
+	// truth). opencode.json is reserved for the task delegation object and must
+	// not gain a scalar tool-permission block from this endpoint.
 	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
 	if err != nil {
 		t.Fatalf("read opencode.json: %v", err)
@@ -797,8 +800,8 @@ Prompt body
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("parse opencode.json: %v", err)
 	}
-	if cfg.Agent["test"].Permission["edit"] != "deny" {
-		t.Errorf("opencode.json permission not updated: got %q", cfg.Agent["test"].Permission["edit"])
+	if cfg.Agent["test"].Permission["edit"] != "" {
+		t.Errorf("opencode.json should not carry scalar tool permissions, got edit=%q", cfg.Agent["test"].Permission["edit"])
 	}
 
 	mdData, err := os.ReadFile(mdPath)

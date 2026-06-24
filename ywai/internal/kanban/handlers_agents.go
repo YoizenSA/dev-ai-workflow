@@ -319,45 +319,12 @@ func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try opencode.json first
-	path, err := opencodeConfigPath()
-	if err == nil {
-		if data, err := os.ReadFile(path); err == nil {
-			var config map[string]json.RawMessage
-			if err := json.Unmarshal(data, &config); err == nil {
-				if agentRaw, ok := config["agent"]; ok {
-					var agents map[string]json.RawMessage
-					if err := json.Unmarshal(agentRaw, &agents); err == nil {
-						if agentData, ok := agents[name]; ok {
-							var agent map[string]json.RawMessage
-							if err := json.Unmarshal(agentData, &agent); err == nil {
-								if permRaw, ok := agent["permission"]; ok {
-									// permission.task may be a nested object (per-subagent
-									// map) that does not fit map[string]string. Decode into
-									// raw values and keep only scalar-string entries; the
-									// task object is surfaced via the task-permissions endpoint.
-									var rawPerm map[string]json.RawMessage
-									if err := json.Unmarshal(permRaw, &rawPerm); err == nil {
-										permission := make(map[string]string, len(rawPerm))
-										for k, v := range rawPerm {
-											var s string
-											if json.Unmarshal(v, &s) == nil {
-												permission[k] = s
-											}
-										}
-										writeJSON(w, http.StatusOK, permission)
-										return
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Fallback: read from markdown frontmatter
+	// Tool permissions (read/glob/engram_*/...) have a single source of truth:
+	// the markdown frontmatter, which is what opencode actually enforces. The
+	// opencode.json `permission` block carries only the `task` delegation
+	// object, surfaced separately via the task-permissions endpoint. Reading
+	// tool permissions from opencode.json would yield an empty map (the task
+	// object is not a scalar) and the UI would render every tool as denied.
 	mdPath := readAgentMarkdownPath(name)
 	if mdPath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -477,62 +444,10 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 
 	found := false
 
-	// Write to opencode.json (primary source for GetAgentPermissions)
-	if path, err := opencodeConfigPath(); err == nil {
-		if data, err := os.ReadFile(path); err == nil {
-			var config map[string]json.RawMessage
-			if err := json.Unmarshal(data, &config); err == nil {
-				var agents map[string]json.RawMessage
-				if agentRaw, ok := config["agent"]; ok {
-					if err := json.Unmarshal(agentRaw, &agents); err == nil {
-						if existingRaw, exists := agents[name]; exists {
-							var agentCfg map[string]json.RawMessage
-							if err := json.Unmarshal(existingRaw, &agentCfg); err == nil {
-								// Build the new permission block from the incoming
-								// scalar map, but preserve any existing object-valued
-								// entries (e.g. permission.task as a per-subagent map)
-								// that the flat editor cannot represent and must not clobber.
-								merged := make(map[string]json.RawMessage, len(body))
-								for k, v := range body {
-									vJSON, _ := json.Marshal(v)
-									merged[k] = vJSON
-								}
-								if prevRaw, ok := agentCfg["permission"]; ok {
-									var prev map[string]json.RawMessage
-									if json.Unmarshal(prevRaw, &prev) == nil {
-										for k, v := range prev {
-											if _, sent := merged[k]; sent {
-												continue
-											}
-											var s string
-											if json.Unmarshal(v, &s) != nil {
-												// Non-scalar (object) entry — preserve it.
-												merged[k] = v
-											}
-										}
-									}
-								}
-								permJSON, _ := json.Marshal(merged)
-								agentCfg["permission"] = permJSON
-								agentJSON, _ := json.Marshal(agentCfg)
-								agents[name] = agentJSON
-								agentsJSON, _ := json.Marshal(agents)
-								config["agent"] = agentsJSON
-
-								pretty, _ := json.MarshalIndent(config, "", "  ")
-								_ = os.WriteFile(path+".bak", data, 0644)
-								if err := os.WriteFile(path, pretty, 0644); err == nil {
-									found = true
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Also update markdown if it exists (backward compat)
+	// Tool permissions are written only to the markdown frontmatter, the single
+	// source of truth opencode enforces. The opencode.json `permission` block is
+	// reserved for the `task` delegation object (managed by the task-permissions
+	// endpoint) and is intentionally left untouched here.
 	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
 		found = true
 		mdContent, err := os.ReadFile(mdPath)
