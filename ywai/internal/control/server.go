@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -161,12 +162,42 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize away the leading "v" GitHub prepends to tags so "8.6.1" and
-	// "v8.6.1" compare as the same version (the update flow already does this).
-	latestNorm := strings.TrimPrefix(latest, "v")
-	updateAvail := current != latestNorm && !strings.HasPrefix(current, "dev")
+	// Only offer an update when the latest published release is strictly NEWER
+	// than the running version. A plain inequality check wrongly flagged an
+	// update when GitHub's "latest" release lagged behind a newer local build
+	// (e.g. running v8.8.8 while the latest published release is still v8.8.6).
+	updateAvail := !strings.HasPrefix(current, "dev") && isNewerVersion(latest, current)
 	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
 		current, latest, updateAvail)
+}
+
+// isNewerVersion reports whether semver `latest` is strictly greater than
+// `current`. Both may carry a leading "v" and a pre-release/build suffix, which
+// are ignored; only MAJOR.MINOR.PATCH are compared.
+func isNewerVersion(latest, current string) bool {
+	l := parseSemver(latest)
+	c := parseSemver(current)
+	for i := 0; i < 3; i++ {
+		if l[i] != c[i] {
+			return l[i] > c[i]
+		}
+	}
+	return false
+}
+
+func parseSemver(v string) [3]int {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		v = v[:i]
+	}
+	var out [3]int
+	for i, part := range strings.Split(v, ".") {
+		if i >= 3 {
+			break
+		}
+		out[i], _ = strconv.Atoi(strings.TrimSpace(part))
+	}
+	return out
 }
 
 // updateHandler spawns a detached `ywai update` process and returns
