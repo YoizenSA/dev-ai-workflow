@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -100,6 +101,9 @@ func (s *Server) buildRoutes() {
 	// Version check
 	s.mux.HandleFunc("GET /api/version", s.versionHandler)
 
+	// Self-update trigger: spawns a detached `ywai update` process.
+	s.mux.HandleFunc("POST /api/update", s.updateHandler)
+
 	// ─── Kanban API ──────────────────────────────────────────────
 	s.mux.HandleFunc("/api/", s.kanbanHandler)
 
@@ -163,6 +167,46 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 	updateAvail := current != latestNorm && !strings.HasPrefix(current, "dev")
 	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
 		current, latest, updateAvail)
+}
+
+// updateHandler spawns a detached `ywai update` process and returns
+// immediately. The update pipeline self-replaces this binary and, in its
+// final step, kills and relaunches this very server — so we must NOT run it
+// in-process. The child is detached (Setsid on Unix) so it survives the
+// parent server being killed mid-update. The frontend polls /health until
+// the relaunched server answers, then reloads.
+func (s *Server) updateHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if strings.HasPrefix(AppVersion, "dev") {
+		w.WriteHeader(http.StatusConflict)
+		fmt.Fprintf(w, `{"started":false,"error":%q}`,
+			"self-update is disabled for dev builds")
+		return
+	}
+
+	exe, err := selfupdate.ResolvedExecutable()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"started":false,"error":%q}`, err.Error())
+		return
+	}
+
+	cmd := exec.Command(exe, "update")
+	cmd.SysProcAttr = detachedSysProcAttr()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"started":false,"error":%q}`, err.Error())
+		return
+	}
+	// Release so the child is not reaped when this process exits during the
+	// update's restart step.
+	_ = cmd.Process.Release()
+
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintf(w, `{"started":true,"pid":%d}`, cmd.Process.Pid)
 }
 
 // serveSPA serves all non-API requests: static assets or SPA index.html.

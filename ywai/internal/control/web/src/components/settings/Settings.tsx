@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
 	Activity,
-	ArrowUp,
 	Book,
 	Check,
 	Monitor,
@@ -145,12 +144,6 @@ function GeneralTab() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
-	// Version state
-	const [versionInfo, setVersionInfo] = useState<{
-		current: string;
-		latest: string | null;
-		updateAvailable: boolean;
-	} | null>(null);
 	// AGENTS.md state
 	const [agentsMd, setAgentsMd] = useState<string>("");
 	const [agentsMdPath, setAgentsMdPath] = useState<string>("");
@@ -190,12 +183,6 @@ function GeneralTab() {
 				setAgentsMdPath("");
 			})
 			.finally(() => setAgentsMdLoading(false));
-
-		// Load version info
-		configApi
-			.getVersion()
-			.then((v) => setVersionInfo(v))
-			.catch(() => {});
 	}, []);
 
 	// Helper to read the current provider / agent identifier no matter whether
@@ -262,43 +249,6 @@ function GeneralTab() {
 
 	return (
 		<div>
-			{versionInfo && (
-				<div
-					className={`version-banner${versionInfo.updateAvailable ? " update" : ""}`}
-				>
-					<span className="version-banner-icon" aria-hidden="true">
-						{versionInfo.updateAvailable ? (
-							<ArrowUp size={16} />
-						) : (
-							<Check size={16} />
-						)}
-					</span>
-					<div className="version-banner-body">
-						<span className="version-banner-current">
-							ywai {versionInfo.current}
-						</span>
-						{versionInfo.updateAvailable && versionInfo.latest ? (
-							<>
-								<span className="version-banner-arrow">→</span>
-								<a
-									className="version-banner-latest"
-									href={`https://github.com/YoizenSA/dev-ai-workflow/releases/tag/${versionInfo.latest}`}
-									target="_blank"
-									rel="noopener noreferrer"
-								>
-									{versionInfo.latest}
-								</a>
-								<span className="version-banner-status">available</span>
-							</>
-						) : (
-							<span className="version-banner-status">up to date</span>
-						)}
-					</div>
-					{versionInfo.updateAvailable && (
-						<code className="version-banner-cmd">ywai update</code>
-					)}
-				</div>
-			)}
 			<div className="card card-pad">
 				<div className="form-grid">
 				<ModelCombobox

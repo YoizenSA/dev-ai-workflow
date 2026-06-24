@@ -280,6 +280,9 @@ export const missionsApi = {
 export const configApi = {
 	// Version check
 	getVersion: () => request<{ current: string; latest: string | null; updateAvailable: boolean; error?: string }>("/api/version"),
+	// Trigger a detached `ywai update`. The server relaunches itself, so the
+	// caller should poll health and reload once it comes back.
+	triggerUpdate: () => request<{ started: boolean; pid?: number; error?: string }>("/api/update", { method: "POST" }),
 
 	// OpenCode general config
 	getConfig: () => request<OpenCodeConfig>("/api/config/opencode"),

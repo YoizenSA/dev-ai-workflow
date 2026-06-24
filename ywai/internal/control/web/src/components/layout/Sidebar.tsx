@@ -10,6 +10,7 @@ import { useKanbanStore } from "../../stores/kanbanStore";
 import { useMissionsStore } from "../../stores/missionsStore";
 import { SessionSidebar } from "../kanban/SessionSidebar";
 import { ThemeToggle } from "../shared/ThemeToggle";
+import { VersionUpdate } from "./VersionUpdate";
 
 interface SidebarProps {
 	open: boolean;
@@ -146,6 +147,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 			{/* Sidebar foot: footer tools (theme toggle).
 			    Pushed to the bottom by .sidebar-foot { margin-top: auto } in shell.css. */}
 			<div className="sidebar-foot">
+				<VersionUpdate />
 				<div className="foot-tools">
 					<ThemeToggle />
 				</div>

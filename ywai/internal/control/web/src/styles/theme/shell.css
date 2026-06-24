@@ -126,6 +126,81 @@
   flex-direction: column;
 }
 
+/* Version update card: shows in the sidebar foot only when an update is
+   available. The "Update now" button triggers a detached `ywai update`. */
+.version-update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-2) 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--primary-soft);
+  background: var(--primary-soft);
+}
+.version-update-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--primary);
+}
+.version-update-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+.version-update-versions {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.version-update-btn {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--primary);
+  color: var(--on-primary, #fff);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.version-update-btn:hover {
+  filter: brightness(1.08);
+}
+.version-update.is-updating {
+  flex-direction: row;
+  align-items: center;
+  color: var(--primary);
+}
+.version-update.is-updating .version-update-text {
+  font-weight: 500;
+  color: var(--text);
+}
+.version-update-error {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--danger, #e5484d);
+}
+.version-update-spin {
+  animation: version-update-spin 900ms linear infinite;
+  flex-shrink: 0;
+}
+@keyframes version-update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.collapsed .version-update {
+  display: none;
+}
+
 /* ---- Topbar ---- */
 .main-col { min-width: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .topbar {
