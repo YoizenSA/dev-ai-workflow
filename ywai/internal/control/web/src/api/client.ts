@@ -395,8 +395,10 @@ export const configApi = {
 			},
 		),
 
-	// Tools
-	listTools: () => request<ToolsResponse>("/api/config/tools"),
+	// Tools. Pass refresh=true to bypass the server cache and force a fresh
+	// rediscovery (used by the resync button after adding a plugin/MCP).
+	listTools: (refresh = false) =>
+		request<ToolsResponse>(`/api/config/tools${refresh ? "?refresh=1" : ""}`),
 
 	// User config (role defaults)
 	getUserConfig: () => request<UserConfig>("/api/config/user"),

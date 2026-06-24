@@ -164,6 +164,21 @@
 	line-height: 1.4;
 }
 
+/* --- Tools tab header (resync button row) --- */
+.tools-header {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: var(--space-3);
+}
+.tools-header .btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+.spin {
+	animation: spin 900ms linear infinite;
+}
+
 /* --- Interactive card hover --- */
 .card-pad > .tools-section {
 	background: var(--surface-soft);

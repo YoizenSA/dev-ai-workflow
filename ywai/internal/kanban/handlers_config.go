@@ -15,7 +15,11 @@ import (
 )
 
 // toolCacheTTL is how long an assembled tools payload is considered fresh.
-const toolCacheTTL = 60 * time.Second
+// The tool catalog only changes when plugins or MCP servers are added/removed,
+// and assembling it is expensive (stdio MCP probes, the opencode HTTP call,
+// file scans), so a long TTL is appropriate. A manual resync (?refresh=1)
+// bypasses it when the user actually changes their setup.
+const toolCacheTTL = 10 * time.Minute
 
 // toolCache caches the /api/config/tools payload with a stale-while-revalidate
 // policy: the first request pays the slow discovery cost, later requests return
@@ -53,6 +57,23 @@ func (c *toolCache) get(
 	c.mu.Unlock()
 
 	// Cold cache: this request must block on the assembly.
+	resp, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.resp = resp
+	c.fetchedAt = time.Now()
+	c.mu.Unlock()
+	return resp, nil
+}
+
+// forceGet bypasses the freshness check, runs the assembly synchronously, and
+// replaces the cache. Used by the manual resync button so a user who just
+// added a plugin/MCP sees the change immediately instead of waiting out the TTL.
+func (c *toolCache) forceGet(
+	fetch func() (map[string]interface{}, error),
+) (map[string]interface{}, error) {
 	resp, err := fetch()
 	if err != nil {
 		return nil, err
@@ -182,7 +203,13 @@ type MCPToolGroup struct {
 
 // GET /api/config/tools
 func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.toolCache.get(buildToolsResponse)
+	var resp map[string]interface{}
+	var err error
+	if r.URL.Query().Get("refresh") == "1" {
+		resp, err = h.toolCache.forceGet(buildToolsResponse)
+	} else {
+		resp, err = h.toolCache.get(buildToolsResponse)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

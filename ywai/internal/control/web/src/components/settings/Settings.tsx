@@ -6,6 +6,7 @@ import {
 	Monitor,
 	Package,
 	Plug,
+	RefreshCw,
 	Server,
 	Settings as SettingsIcon,
 	Share2,
@@ -1593,16 +1594,23 @@ function ToolsTab() {
 		plugin_tools: Record<string, string[]>;
 	} | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [resyncing, setResyncing] = useState(false);
 
-	useEffect(() => {
+	const load = useCallback((refresh: boolean) => {
+		if (refresh) setResyncing(true);
 		configApi
-			.listTools()
+			.listTools(refresh)
 			.then((data) => {
 				setTools(data);
 				setLoading(false);
 			})
-			.catch(() => setLoading(false));
+			.catch(() => setLoading(false))
+			.finally(() => setResyncing(false));
 	}, []);
+
+	useEffect(() => {
+		load(false);
+	}, [load]);
 
 	if (loading) {
 		return (
@@ -1638,6 +1646,22 @@ function ToolsTab() {
 
 	return (
 		<div className="card card-pad">
+			<div className="tools-header">
+				<button
+					type="button"
+					className="btn btn-sm"
+					onClick={() => load(true)}
+					disabled={resyncing}
+					title="Re-scan tools (built-in, MCP servers, and plugins)"
+				>
+					<RefreshCw
+						size={14}
+						className={resyncing ? "spin" : undefined}
+						aria-hidden="true"
+					/>
+					{resyncing ? "Resyncing…" : "Resync"}
+				</button>
+			</div>
 			{sections.length === 0 && <p className="muted">No tools found</p>}
 			{sections.map((section) => {
 				const toolsList = Array.isArray(section.data) ? section.data : [];

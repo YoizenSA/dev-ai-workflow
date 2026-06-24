@@ -81,14 +81,22 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 		}
 	}
 	rd := cfg.GetRoleDefault(role)
-	profileRD, hasProfileRD := cfg.GetOrchestratorRoleDefault(role)
-	if hasProfileRD {
-		rd = profileRD
+	// Profile defaults fill missing role defaults only — explicit feature/mission
+	// values always take precedence (see switch below).
+	if profileRD, ok := cfg.GetOrchestratorRoleDefault(role); ok {
+		if profileRD.Model != "" && rd.Model == "" {
+			rd.Model = profileRD.Model
+		}
+		if profileRD.Agent != "" && rd.Agent == "" {
+			rd.Agent = profileRD.Agent
+		}
+		if len(profileRD.Fallbacks) > 0 && len(rd.Fallbacks) == 0 {
+			rd.Fallbacks = append([]string(nil), profileRD.Fallbacks...)
+		}
 	}
 
+	// Precedence: feature override → mission-wide setting → role/profile default
 	switch {
-	case hasProfileRD && profileRD.Model != "":
-		model = profileRD.Model
 	case feat != nil && feat.Model != "":
 		model = feat.Model
 	case mission != nil && mission.Model != "":
@@ -98,8 +106,6 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 	}
 
 	switch {
-	case hasProfileRD && profileRD.Agent != "":
-		agent = profileRD.Agent
 	case feat != nil && feat.Agent != "":
 		agent = feat.Agent
 	case mission != nil && mission.ExecutionAgent != "":
