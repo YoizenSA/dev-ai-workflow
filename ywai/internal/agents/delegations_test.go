@@ -244,6 +244,55 @@ func TestApplyDelegations_PersistsSidecar(t *testing.T) {
 	}
 }
 
+func TestApplyDelegations_WritesTaskMapIntoMarkdownFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	agentsDir := filepath.Join(dir, "agents")
+	os.MkdirAll(agentsDir, 0o755)
+	// Realistic installed frontmatter: a scalar "task: allow" bucket, no sub-map.
+	md := "---\ndescription: orch\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n  task: allow\n---\n\nbody.\n"
+	os.WriteFile(filepath.Join(agentsDir, "orchestrator.md"), []byte(md), 0o644)
+
+	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
+		"orchestrator": {Task: map[string]string{"*": "deny", "dev": "allow", "qa": "allow"}},
+	}}
+	ApplyDelegations(configPath, agentsDir, doc)
+
+	out, _ := os.ReadFile(filepath.Join(agentsDir, "orchestrator.md"))
+	got := string(out)
+	// The scalar task bucket must become a nested allow/deny map.
+	if strings.Contains(got, "  task: allow\n") {
+		t.Errorf("scalar task bucket was not replaced:\n%s", got)
+	}
+	for _, want := range []string{"  task:\n", "    \"*\": deny", "    dev: allow", "    qa: allow"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("frontmatter missing %q in:\n%s", want, got)
+		}
+	}
+	// Other permission keys must be preserved.
+	if !strings.Contains(got, "  read: allow") {
+		t.Errorf("existing permission key lost:\n%s", got)
+	}
+}
+
+func TestInjectTaskPermission_InsertsWhenMissing(t *testing.T) {
+	md := "---\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n---\n\nbody."
+	out, ok := injectTaskPermission(md, map[string]string{"*": "deny", "finder": "allow"})
+	if !ok {
+		t.Fatal("expected injection to succeed")
+	}
+	if !strings.Contains(out, "  task:\n") || !strings.Contains(out, "    finder: allow") {
+		t.Errorf("task block not inserted:\n%s", out)
+	}
+}
+
+func TestInjectTaskPermission_NoPermissionBlock(t *testing.T) {
+	md := "---\nmode: primary\n---\n\nbody."
+	if _, ok := injectTaskPermission(md, map[string]string{"*": "deny"}); ok {
+		t.Error("expected no-op when there is no permission block")
+	}
+}
+
 func TestRenderRulesSection_EscapesPipes(t *testing.T) {
 	out := renderRulesSection(
 		[]DelegationRule{{Action: "a | b", Inline: "Yes", Delegate: "No"}},

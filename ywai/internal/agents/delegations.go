@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -111,6 +112,13 @@ func ApplyDelegations(configPath, agentsDir string, doc *DelegationsDoc) error {
 	if err := applyTaskMaps(configPath, doc); err != nil {
 		return err
 	}
+	// opencode enforces agent permissions from the markdown frontmatter, not
+	// the opencode.json agent.<name> entry (that is only the UI's canonical
+	// store). The delegation task graph must live in the .md to actually gate
+	// who each agent may delegate to.
+	if err := applyTaskMapsToMarkdown(agentsDir, doc); err != nil {
+		return err
+	}
 	if err := applyRulesToMarkdown(agentsDir, doc); err != nil {
 		return err
 	}
@@ -200,6 +208,159 @@ func applyTaskMaps(configPath string, doc *DelegationsDoc) error {
 	}
 	fmt.Printf("  Applied delegation graph to %d agents\n", applied)
 	return nil
+}
+
+// applyTaskMapsToMarkdown injects the per-agent permission.task delegation map
+// into each agent's .md frontmatter. This is the location opencode actually
+// enforces; the opencode.json copy (applyTaskMaps) is only what the UI reads.
+func applyTaskMapsToMarkdown(agentsDir string, doc *DelegationsDoc) error {
+	applied := 0
+	for name, ad := range doc.Agents {
+		if len(ad.Task) == 0 {
+			continue
+		}
+		path := filepath.Join(agentsDir, name+".md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // agent markdown not installed yet; skip
+		}
+		updated, ok := injectTaskPermission(string(data), ad.Task)
+		if !ok || updated == string(data) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			fmt.Printf("  Warning: failed to write task map to %s: %v\n", path, err)
+			continue
+		}
+		applied++
+	}
+	if applied > 0 {
+		fmt.Printf("  Applied delegation task maps into %d agent prompts\n", applied)
+	}
+	return nil
+}
+
+// injectTaskPermission rewrites the "task" key inside the frontmatter
+// "permission:" block as a nested allow/deny map. It replaces an existing
+// scalar/nested task entry or inserts one as the first permission child.
+// Returns (content, false) when there is no frontmatter permission block to
+// patch.
+func injectTaskPermission(content string, task map[string]string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content, false
+	}
+	fmEnd := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			fmEnd = i
+			break
+		}
+	}
+	if fmEnd < 0 {
+		return content, false
+	}
+	permIdx := -1
+	for i := 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "permission:" {
+			permIdx = i
+			break
+		}
+	}
+	if permIdx < 0 {
+		return content, false
+	}
+	permIndent := leadingSpaces(lines[permIdx])
+	childIndent := permIndent + 2
+
+	// Locate an existing "task" child and the extent of its (possibly nested) block.
+	taskStart, taskEnd := -1, -1
+	for i := permIdx + 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		ind := leadingSpaces(lines[i])
+		if ind <= permIndent {
+			break // end of permission block
+		}
+		if ind == childIndent && permKeyName(lines[i]) == "task" {
+			taskStart = i
+			taskEnd = i + 1
+			for j := i + 1; j < fmEnd; j++ {
+				if strings.TrimSpace(lines[j]) == "" || leadingSpaces(lines[j]) > childIndent {
+					taskEnd = j + 1
+					continue
+				}
+				break
+			}
+			break
+		}
+	}
+
+	block := renderTaskBlock(childIndent, task)
+	var out []string
+	if taskStart >= 0 {
+		out = append(out, lines[:taskStart]...)
+		out = append(out, block...)
+		out = append(out, lines[taskEnd:]...)
+	} else {
+		out = append(out, lines[:permIdx+1]...)
+		out = append(out, block...)
+		out = append(out, lines[permIdx+1:]...)
+	}
+	return strings.Join(out, "\n"), true
+}
+
+// renderTaskBlock renders the nested "task:" YAML block at the given child
+// indent. Keys are sorted with the "*" catch-all first; keys with YAML-special
+// characters are quoted.
+func renderTaskBlock(childIndent int, task map[string]string) []string {
+	ind := strings.Repeat(" ", childIndent)
+	sub := strings.Repeat(" ", childIndent+2)
+	out := []string{ind + "task:"}
+
+	keys := make([]string, 0, len(task))
+	for k := range task {
+		if k != "*" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	ordered := make([]string, 0, len(task))
+	if _, ok := task["*"]; ok {
+		ordered = append(ordered, "*")
+	}
+	ordered = append(ordered, keys...)
+
+	for _, k := range ordered {
+		key := k
+		if k == "*" || strings.ContainsAny(k, "*:#&!|>',[]{}%`@ ") {
+			key = fmt.Sprintf("%q", k)
+		}
+		out = append(out, fmt.Sprintf("%s%s: %s", sub, key, task[k]))
+	}
+	return out
+}
+
+func leadingSpaces(s string) int {
+	n := 0
+	for _, c := range s {
+		if c == ' ' {
+			n++
+		} else {
+			break
+		}
+	}
+	return n
+}
+
+func permKeyName(line string) string {
+	t := strings.TrimSpace(line)
+	idx := strings.Index(t, ":")
+	if idx < 0 {
+		return ""
+	}
+	return strings.Trim(strings.TrimSpace(t[:idx]), `"'`)
 }
 
 // applyRulesToMarkdown renders the rules table + triggers list into each agent's
