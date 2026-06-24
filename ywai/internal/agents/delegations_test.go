@@ -286,6 +286,40 @@ func TestInjectTaskPermission_InsertsWhenMissing(t *testing.T) {
 	}
 }
 
+func TestReadTaskPermission_Nested(t *testing.T) {
+	md := "---\npermission:\n  \"*\": deny\n  task:\n    \"*\": deny\n    dev: allow\n---\n\nbody."
+	got, ok := ReadTaskPermission(md)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if got["*"] != "deny" || got["dev"] != "allow" {
+		t.Errorf("unexpected task map: %v", got)
+	}
+}
+
+func TestReadTaskPermission_Scalar(t *testing.T) {
+	md := "---\npermission:\n  task: allow\n---\n\nbody."
+	got, _ := ReadTaskPermission(md)
+	if got["*"] != "allow" {
+		t.Errorf("scalar task should map to {*: allow}, got %v", got)
+	}
+}
+
+func TestInjectThenReadTaskPermission_RoundTrip(t *testing.T) {
+	md := "---\npermission:\n  \"*\": deny\n  task: allow\n---\n\nbody."
+	want := map[string]string{"*": "deny", "qa": "allow", "finder": "allow"}
+	injected, ok := InjectTaskPermission(md, want)
+	if !ok {
+		t.Fatal("inject failed")
+	}
+	got, _ := ReadTaskPermission(injected)
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("round-trip mismatch for %q: got %q want %q\n%s", k, got[k], v, injected)
+		}
+	}
+}
+
 func TestInjectTaskPermission_NoPermissionBlock(t *testing.T) {
 	md := "---\nmode: primary\n---\n\nbody."
 	if _, ok := injectTaskPermission(md, map[string]string{"*": "deny"}); ok {

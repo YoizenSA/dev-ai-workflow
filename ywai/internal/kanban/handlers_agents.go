@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
 
 // GET /api/config/agents
@@ -484,6 +486,19 @@ func (h *Handlers) GetAgentTaskPermissions(w http.ResponseWriter, r *http.Reques
 
 	result := map[string]string{}
 
+	// The markdown frontmatter is the single source of truth opencode enforces
+	// (opencode merges markdown agents on top of opencode.json, markdown wins),
+	// so read the task map from the .md. Fall back to opencode.json only when
+	// there is no markdown agent.
+	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
+		if data, err := os.ReadFile(mdPath); err == nil {
+			if m, ok := agents.ReadTaskPermission(string(data)); ok {
+				writeJSON(w, http.StatusOK, m)
+				return
+			}
+		}
+	}
+
 	path, err := opencodeConfigPath()
 	if err == nil {
 		if data, err := os.ReadFile(path); err == nil {
@@ -540,64 +555,32 @@ func (h *Handlers) PutAgentTaskPermissions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	path, err := opencodeConfigPath()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	// Write the delegation task map into the agent's markdown frontmatter —
+	// the single source of truth opencode enforces. (Tool permissions use the
+	// same path via PutAgentPermissions.)
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent markdown not found"})
 		return
 	}
-	data, err := os.ReadFile(path)
+	mdContent, err := os.ReadFile(mdPath)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "opencode.json not found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent markdown not found"})
 		return
 	}
 
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+	task := body
+	if len(task) == 0 {
+		// Empty map clears the delegation restriction: allow delegating to all.
+		task = map[string]string{"*": "allow"}
 	}
-	var agents map[string]json.RawMessage
-	if agentRaw, ok := config["agent"]; !ok || json.Unmarshal(agentRaw, &agents) != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no agents in opencode.json"})
-		return
-	}
-	existingRaw, ok := agents[name]
+	updated, ok := agents.InjectTaskPermission(string(mdContent), task)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "agent markdown has no permission block"})
 		return
 	}
-
-	var agentCfg map[string]json.RawMessage
-	if err := json.Unmarshal(existingRaw, &agentCfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Merge into the existing permission block so scalar tool permissions are kept.
-	var perm map[string]json.RawMessage
-	if permRaw, ok := agentCfg["permission"]; ok {
-		_ = json.Unmarshal(permRaw, &perm)
-	}
-	if perm == nil {
-		perm = map[string]json.RawMessage{}
-	}
-	if len(body) == 0 {
-		// Empty map clears the delegation restriction.
-		delete(perm, "task")
-	} else {
-		taskJSON, _ := json.Marshal(body)
-		perm["task"] = taskJSON
-	}
-	permJSON, _ := json.Marshal(perm)
-	agentCfg["permission"] = permJSON
-	agentJSON, _ := json.Marshal(agentCfg)
-	agents[name] = agentJSON
-	agentsJSON, _ := json.Marshal(agents)
-	config["agent"] = agentsJSON
-
-	pretty, _ := json.MarshalIndent(config, "", "  ")
-	_ = os.WriteFile(path+".bak", data, 0644)
-	if err := os.WriteFile(path, pretty, 0644); err != nil {
+	_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+	if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

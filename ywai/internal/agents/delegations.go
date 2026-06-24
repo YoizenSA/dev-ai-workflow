@@ -240,6 +240,92 @@ func applyTaskMapsToMarkdown(agentsDir string, doc *DelegationsDoc) error {
 	return nil
 }
 
+// InjectTaskPermission is the exported entry point for writing a delegation
+// task map into an agent's markdown frontmatter. opencode merges markdown
+// agents on top of opencode.json (markdown wins), so the .md is the only
+// reliably-enforced location for permission.task.
+func InjectTaskPermission(content string, task map[string]string) (string, bool) {
+	return injectTaskPermission(content, task)
+}
+
+// ReadTaskPermission extracts the permission.task map from an agent's markdown
+// frontmatter. A scalar `task: allow` yields {"*": "allow"}; a missing task key
+// yields an empty map. ok is false only when there is no frontmatter at all.
+func ReadTaskPermission(content string) (map[string]string, bool) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil, false
+	}
+	fmEnd := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			fmEnd = i
+			break
+		}
+	}
+	if fmEnd < 0 {
+		return nil, false
+	}
+	permIdx := -1
+	for i := 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "permission:" {
+			permIdx = i
+			break
+		}
+	}
+	result := map[string]string{}
+	if permIdx < 0 {
+		return result, true
+	}
+	permIndent := leadingSpaces(lines[permIdx])
+	childIndent := permIndent + 2
+	for i := permIdx + 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		ind := leadingSpaces(lines[i])
+		if ind <= permIndent {
+			break
+		}
+		if ind == childIndent && permKeyName(lines[i]) == "task" {
+			val := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[i]), permKeyRaw(lines[i])))
+			val = strings.TrimSpace(strings.TrimPrefix(val, ":"))
+			if val != "" {
+				// scalar form: task: allow
+				result["*"] = strings.Trim(val, `"'`)
+				return result, true
+			}
+			// nested form: collect deeper-indented children
+			for j := i + 1; j < fmEnd; j++ {
+				if strings.TrimSpace(lines[j]) == "" {
+					continue
+				}
+				if leadingSpaces(lines[j]) <= childIndent {
+					break
+				}
+				k := permKeyName(lines[j])
+				v := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[j]), permKeyRaw(lines[j])))
+				v = strings.TrimSpace(strings.TrimPrefix(v, ":"))
+				if k != "" {
+					result[k] = strings.Trim(v, `"'`)
+				}
+			}
+			return result, true
+		}
+	}
+	return result, true
+}
+
+// permKeyRaw returns the raw (quoted) key token of a "key: value" line.
+func permKeyRaw(line string) string {
+	t := strings.TrimSpace(line)
+	idx := strings.Index(t, ":")
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(t[:idx])
+}
+
 // injectTaskPermission rewrites the "task" key inside the frontmatter
 // "permission:" block as a nested allow/deny map. It replaces an existing
 // scalar/nested task entry or inserts one as the first permission child.
