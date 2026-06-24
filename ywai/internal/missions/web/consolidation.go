@@ -251,7 +251,7 @@ func (m *ConsolidationManager) drive(parent context.Context, run *ConsolidationR
 	m.emit(run.ID, StatusRunning, map[string]any{"stage": "session_created"})
 
 	// 4. Prompt + wait.
-	if _, err := sess.Prompt(ctx, session.ID, opencode.PromptInput{Text: prompt, Delivery: "immediate"}); err != nil {
+	if _, err := sess.Prompt(ctx, session.ID, opencode.PromptInput{Text: prompt, Delivery: "steer"}); err != nil {
 		m.fail(run.ID, fmt.Sprintf("prompt: %v", err))
 		return
 	}

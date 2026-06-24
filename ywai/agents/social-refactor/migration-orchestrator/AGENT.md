@@ -5,6 +5,7 @@ description: >
   Trigger: Migration workflow, "migrate", legacy modernization.
 role: orchestrator
 mode: all
+sections: [delegation-rules]
 ---
 
 # Migration Orchestrator Agent

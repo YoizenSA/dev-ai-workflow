@@ -77,6 +77,9 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("GET /api/config/opencode", handlers.GetOpenCodeConfig)
 	mux.HandleFunc("PUT /api/config/opencode", handlers.PutOpenCodeConfig)
 	mux.HandleFunc("GET /api/config/agents", handlers.ListAgents)
+	// Register the literal "graph" path BEFORE the {name} routes so Go 1.22's
+	// ServeMux matches it as the static segment rather than an agent named "graph".
+	mux.HandleFunc("GET /api/config/agents/graph", handlers.GetAgentGraph)
 	mux.HandleFunc("GET /api/config/agents/{name}", handlers.GetAgent)
 	mux.HandleFunc("PUT /api/config/agents/{name}", handlers.PutAgent)
 	mux.HandleFunc("POST /api/config/agents", handlers.CreateAgent)
@@ -87,6 +90,8 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("PUT /api/config/agents/{name}/task-permissions", handlers.PutAgentTaskPermissions)
 	mux.HandleFunc("GET /api/config/agents/{name}/model", handlers.GetAgentModel)
 	mux.HandleFunc("PUT /api/config/agents/{name}/model", handlers.PutAgentModel)
+	mux.HandleFunc("GET /api/config/agents/{name}/delegation-rules", handlers.GetDelegationRules)
+	mux.HandleFunc("PUT /api/config/agents/{name}/delegation-rules", handlers.PutDelegationRules)
 	mux.HandleFunc("GET /api/config/tools", handlers.ListTools)
 	mux.HandleFunc("GET /api/config/skills", handlers.ListSkills)
 	mux.HandleFunc("GET /api/config/skills/{name}", handlers.GetSkill)

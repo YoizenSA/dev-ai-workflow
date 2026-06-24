@@ -240,6 +240,57 @@ export interface AgentDetail {
   content: string
 }
 
+// ─── Agent Delegation Graph ────────────────────────────────────────────────
+// Static capability graph derived from each agent's permission.task map.
+// Nodes are agents (or ghost targets referenced by an edge but not defined);
+// edges run source -> target for task keys whose value is allow/ask. The "*"
+// catch-all is surfaced as node attributes, not an edge.
+
+export interface AgentGraphNode {
+  id: string
+  name: string
+  mode?: string
+  model?: string
+  group?: string
+  hasWildcard?: boolean
+  wildcardValue?: string
+  ghost?: boolean
+}
+
+export interface AgentGraphEdge {
+  id: string
+  source: string
+  target: string
+  value: 'allow' | 'ask'
+}
+
+export interface AgentGraph {
+  nodes: AgentGraphNode[]
+  edges: AgentGraphEdge[]
+}
+
+// ─── Delegation Rules (prompt-body section editor) ─────────────────────────
+// The "Delegation Rules" markdown table + "Mandatory Delegation Triggers"
+// list that live in an orchestrator agent's prompt body. Edited as structured
+// data via GET/PUT /api/config/agents/{name}/delegation-rules.
+
+export interface DelegationRule {
+  action: string
+  inline: 'Yes' | 'No'
+  delegate: string
+}
+
+export interface DelegationTrigger {
+  name: string
+  description: string
+}
+
+export interface DelegationRulesResp {
+  rules: DelegationRule[]
+  triggers: DelegationTrigger[]
+  hasRules: boolean
+}
+
 export interface MCPToolGroup {
   tools: string[]
   enabled: boolean

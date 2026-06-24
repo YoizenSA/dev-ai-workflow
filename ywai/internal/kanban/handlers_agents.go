@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -443,6 +444,14 @@ var ValidPermissionValues = map[string]bool{
 	"deny":  true,
 }
 
+// triggerLineRegex matches a numbered delegation trigger item, capturing the
+// bold name and its description. Accepts ":", " -", or " —" separators.
+// Examples matched:
+//
+//	1. **4-file rule**: if understanding requires reading 4+ files...
+//	2. **PR rule** - before commit, push...
+var triggerLineRegex = regexp.MustCompile(`^\d+\.\s+\*\*(.+?)\*\*\s*[:\-—]\s*(.+)$`)
+
 // PUT /api/config/agents/{name}/permissions
 // Writes permissions to opencode.json (primary) and markdown frontmatter (backward compat).
 func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
@@ -799,6 +808,154 @@ func (h *Handlers) PutAgentModel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"model": model})
 }
 
+// GET /api/config/agents/graph
+//
+// Returns the static delegation graph derived from each agent's
+// permission.task map: nodes are agents (from opencode.json + the agents dir),
+// edges run source->target for every task key whose value is allow/ask (except
+// "*", which is a catch-all surfaced as a node attribute). Targets referenced
+// by a task map but not themselves defined become "ghost" nodes so the diagram
+// never shows dangling edges. This is the capability graph (what an agent MAY
+// delegate), distinct from the runtime delegation DAG at
+// GET /api/sessions/{id}/graph.
+func (h *Handlers) GetAgentGraph(w http.ResponseWriter, r *http.Request) {
+	names := collectAgentNames()
+
+	// Config bytes are read once and reused for field/task lookups. When there
+	// is no opencode.json we still build the graph from the agents dir alone
+	// (with empty per-agent delegation).
+	var configData []byte
+	if path, err := opencodeConfigPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			configData = data
+		}
+	}
+
+	agentsDirPath, _ := agentsDir()
+
+	// Deterministic node order.
+	ordered := make([]string, 0, len(names))
+	for n := range names {
+		ordered = append(ordered, n)
+	}
+	sort.Strings(ordered)
+
+	// Index of which nodes exist (by name) so we can flag ghost targets.
+	existing := make(map[string]bool, len(ordered))
+	for _, n := range ordered {
+		existing[n] = true
+	}
+
+	nodes := make([]agentGraphNode, 0, len(ordered))
+	edges := make([]agentGraphEdge, 0)
+
+	for _, name := range ordered {
+		node := agentGraphNode{ID: name, Name: name}
+
+		// mode: prefer opencode.json, fall back to markdown frontmatter.
+		if raw := lookupAgentField(configData, name, "mode"); len(raw) > 0 {
+			_ = json.Unmarshal(raw, &node.Mode)
+		}
+		if node.Mode == "" {
+			if mdPath := resolveAgentFile(agentsDirPath, name); mdPath != "" {
+				if data, err := os.ReadFile(mdPath); err == nil {
+					fm, _ := parseFrontmatter(string(data))
+					node.Mode = extractModeFromFrontmatter(fm)
+					node.Group = extractFrontmatterField(data, "group")
+				}
+			}
+		}
+		if node.Group == "" {
+			node.Group = resolveTeam(name, agentsDirPath)
+		}
+
+		// model: opencode.json first, then markdown frontmatter.
+		if raw := lookupAgentField(configData, name, "model"); len(raw) > 0 {
+			_ = json.Unmarshal(raw, &node.Model)
+		}
+		if node.Model == "" {
+			if mdPath := resolveAgentFile(agentsDirPath, name); mdPath != "" {
+				if data, err := os.ReadFile(mdPath); err == nil {
+					node.Model = getScalarFrontmatterField(string(data), "model")
+				}
+			}
+		}
+
+		// task delegation map -> edges + wildcard attribute.
+		taskRaw := lookupAgentPermissionKey(configData, name, "task")
+		if len(taskRaw) > 0 {
+			var asMap map[string]string
+			if json.Unmarshal(taskRaw, &asMap) == nil {
+				for target, val := range asMap {
+					if target == "*" {
+						node.HasWildcard = true
+						node.WildcardValue = val
+						continue
+					}
+					if val == "allow" || val == "ask" {
+						edges = append(edges, agentGraphEdge{
+							ID:     name + "->" + target,
+							Source: name,
+							Target: target,
+							Value:  val,
+						})
+					}
+				}
+			} else {
+				// Scalar form: "allow"/"ask"/"deny" applies to all targets.
+				var asStr string
+				if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
+					node.HasWildcard = true
+					node.WildcardValue = asStr
+				}
+			}
+		}
+
+		nodes = append(nodes, node)
+	}
+
+	// Ghost nodes: targets referenced by an edge but not defined as an agent.
+	seenGhost := map[string]bool{}
+	for _, e := range edges {
+		if existing[e.Target] || seenGhost[e.Target] {
+			continue
+		}
+		seenGhost[e.Target] = true
+		nodes = append(nodes, agentGraphNode{
+			ID:    e.Target,
+			Name:  e.Target,
+			Ghost: true,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, agentGraphResp{Nodes: nodes, Edges: edges})
+}
+
+// agentGraphNode is a single agent (or a ghost target) in the delegation graph.
+type agentGraphNode struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Mode          string `json:"mode,omitempty"`
+	Model         string `json:"model,omitempty"`
+	Group         string `json:"group,omitempty"`
+	HasWildcard   bool   `json:"hasWildcard,omitempty"`
+	WildcardValue string `json:"wildcardValue,omitempty"`
+	Ghost         bool   `json:"ghost,omitempty"` // referenced by an edge but not defined
+}
+
+// agentGraphEdge is a delegation permission source -> target.
+type agentGraphEdge struct {
+	ID     string `json:"id"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Value  string `json:"value"` // allow | ask
+}
+
+type agentGraphResp struct {
+	Nodes []agentGraphNode `json:"nodes"`
+	Edges []agentGraphEdge `json:"edges"`
+}
+
 // lookupAgentField returns the raw JSON value of agent.<name>.<key> from
 // opencode.json config bytes, or nil if any level is missing.
 func lookupAgentField(configData []byte, name, key string) json.RawMessage {
@@ -857,4 +1014,266 @@ func lookupAgentPermissionKey(configData []byte, name, key string) json.RawMessa
 		return nil
 	}
 	return perm[key]
+}
+
+// --- Delegation Rules (prompt-body section editor) ---
+//
+// "Delegation Rules" is a prose section of an orchestrator agent's prompt that
+// lives as a markdown table (Action | Inline | Delegate) plus a numbered list
+// of "Mandatory Delegation Triggers". It is distinct from the permission.task
+// map (which is structured config). These handlers parse/serialize the section
+// so the UI can edit it as structured data without the user hand-writing
+// markdown tables.
+
+// delegationRule is one row of the "Delegation Rules" table.
+type delegationRule struct {
+	Action   string `json:"action"`
+	Inline   string `json:"inline"`   // "Yes" | "No"
+	Delegate string `json:"delegate"` // free text, e.g. "Yes" or "Yes, together with the write"
+}
+
+// delegationTrigger is one item of the "Mandatory Delegation Triggers" list.
+type delegationTrigger struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// delegationRulesResp is the GET /delegation-rules payload.
+type delegationRulesResp struct {
+	Rules    []delegationRule    `json:"rules"`
+	Triggers []delegationTrigger `json:"triggers"`
+	HasRules bool                `json:"hasRules"` // false when the section is absent
+}
+
+const (
+	delegationRulesHeader   = "Delegation Rules"
+	delegationTriggersHeader = "Mandatory Delegation Triggers"
+)
+
+// GET /api/config/agents/{name}/delegation-rules
+//
+// Extracts the "Delegation Rules" table and the "Mandatory Delegation
+// Triggers" list from the agent's prompt body. Returns hasRules=false when the
+// section is absent (the UI then offers to seed it).
+func (h *Handlers) GetDelegationRules(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	data, err := os.ReadFile(mdPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	_, body := parseFrontmatter(string(data))
+	rulesSection, hasRules := extractMarkdownSection(body, delegationRulesHeader, false)
+
+	resp := delegationRulesResp{Rules: []delegationRule{}, Triggers: []delegationTrigger{}}
+	if hasRules {
+		resp.HasRules = true
+		resp.Rules = parseDelegationRulesTable(rulesSection)
+
+		// Triggers live as a nested sub-heading under Delegation Rules.
+		triggersSection, hasTriggers := extractMarkdownSection(body, delegationTriggersHeader, true)
+		if hasTriggers {
+			resp.Triggers = parseDelegationTriggers(triggersSection)
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// PUT /api/config/agents/{name}/delegation-rules
+//
+// Serializes the rules table + triggers list back into the prompt body,
+// replacing the existing section (or appending if absent). Frontmatter is left
+// untouched.
+func (h *Handlers) PutDelegationRules(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isValidName(name) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent name"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body struct {
+		Rules    []delegationRule    `json:"rules"`
+		Triggers []delegationTrigger `json:"triggers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	mdPath := readAgentMarkdownPath(name)
+	if mdPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	data, err := os.ReadFile(mdPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	fm, mdBody := parseFrontmatter(string(data))
+
+	// Rebuild the Delegation Rules section content (table + optional triggers).
+	rulesMarkdown := serializeDelegationRulesTable(body.Rules)
+	if len(body.Triggers) > 0 {
+		rulesMarkdown += "\n\n#### " + delegationTriggersHeader + "\n\n" + serializeDelegationTriggers(body.Triggers)
+	}
+
+	newBody := replaceMarkdownSection(mdBody, delegationRulesHeader, "###", rulesMarkdown, true)
+
+	// Re-join frontmatter (untouched) with the modified body.
+	var out string
+	if fm == "" {
+		out = newBody
+	} else {
+		out = "---\n" + fm + "\n---\n\n" + newBody
+	}
+
+	_ = os.WriteFile(mdPath+".bak", data, 0644)
+	if err := os.WriteFile(mdPath, []byte(out), 0644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, delegationRulesResp{Rules: body.Rules, Triggers: body.Triggers, HasRules: true})
+}
+
+// parseDelegationRulesTable extracts rows from a markdown table of the form
+//
+//	| Action | Inline | Delegate |
+//	| ------ | ------ | -------- |
+//	| Read to decide | Yes | No |
+//
+// Header and separator rows are skipped.
+func parseDelegationRulesTable(section string) []delegationRule {
+	var rules []delegationRule
+	seenSeparator := false
+	for _, line := range strings.Split(section, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
+			continue
+		}
+		inner := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+		// Skip the separator row (---, :---, etc.).
+		if !seenSeparator {
+			if isTableSeparator(inner) {
+				seenSeparator = true
+			}
+			continue // skip header row + separator
+		}
+		cols := splitTableRow(inner)
+		if len(cols) >= 3 {
+			rules = append(rules, delegationRule{
+				Action:   strings.TrimSpace(cols[0]),
+				Inline:   strings.TrimSpace(cols[1]),
+				Delegate: strings.TrimSpace(cols[2]),
+			})
+		}
+	}
+	return rules
+}
+
+// isTableSeparator reports whether a table inner line is the markdown
+// alignment row (only dashes, colons, pipes, spaces).
+func isTableSeparator(inner string) bool {
+	for _, r := range inner {
+		if r != '-' && r != ':' && r != '|' && r != ' ' {
+			return false
+		}
+	}
+	return strings.Contains(inner, "-")
+}
+
+// splitTableRow splits "a | b | c" into ["a"," b"," c"] respecting the pipe as
+// a column delimiter (cells may contain escaped pipes "\|").
+func splitTableRow(inner string) []string {
+	var cols []string
+	var cur strings.Builder
+	for i := 0; i < len(inner); i++ {
+		if i+1 < len(inner) && inner[i] == '\\' && inner[i+1] == '|' {
+			cur.WriteByte('|')
+			i++
+			continue
+		}
+		if inner[i] == '|' {
+			cols = append(cols, cur.String())
+			cur.Reset()
+			continue
+		}
+		cur.WriteByte(inner[i])
+	}
+	cols = append(cols, cur.String())
+	return cols
+}
+
+// serializeDelegationRulesTable renders the rules as a markdown table.
+func serializeDelegationRulesTable(rules []delegationRule) string {
+	var b strings.Builder
+	b.WriteString("| Action | Inline | Delegate |\n")
+	b.WriteString("| ------ | ------ | -------- |\n")
+	for _, r := range rules {
+		action := strings.ReplaceAll(r.Action, "|", "\\|")
+		delegate := strings.ReplaceAll(r.Delegate, "|", "\\|")
+		b.WriteString("| ")
+		b.WriteString(action)
+		b.WriteString(" | ")
+		b.WriteString(orDefault(r.Inline, "No"))
+		b.WriteString(" | ")
+		b.WriteString(orDefault(delegate, "No"))
+		b.WriteString(" |\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// parseDelegationTriggers extracts the numbered trigger list, each item being
+// "**Name**: description." (bold name, colon, description, until the next
+// numbered item or blank).
+func parseDelegationTriggers(section string) []delegationTrigger {
+	var triggers []delegationTrigger
+	for _, line := range strings.Split(section, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Match "N. **Name**: description" or "N. **Name** - description".
+		m := triggerLineRegex.FindStringSubmatch(trimmed)
+		if m == nil {
+			continue
+		}
+		triggers = append(triggers, delegationTrigger{
+			Name:        strings.TrimSpace(m[1]),
+			Description: strings.TrimSpace(m[2]),
+		})
+	}
+	return triggers
+}
+
+// serializeDelegationTriggers renders triggers as a numbered list.
+func serializeDelegationTriggers(triggers []delegationTrigger) string {
+	var b strings.Builder
+	for i, t := range triggers {
+		name := strings.TrimSpace(t.Name)
+		desc := strings.TrimSpace(t.Description)
+		if name == "" && desc == "" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("%d. **%s**: %s\n", i+1, orDefault(name, "Trigger"), desc))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func orDefault(v, def string) string {
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return v
 }

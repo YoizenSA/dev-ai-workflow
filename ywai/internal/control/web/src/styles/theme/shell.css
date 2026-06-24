@@ -89,53 +89,7 @@
   color: var(--primary);
   line-height: 1;
 }
-
-.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); position: relative; }
-.user-chip {
-  display: flex; align-items: center; gap: 0.65rem;
-  padding: 0.6rem 0.7rem; border-radius: var(--radius-md);
-  background: var(--surface-soft); border: 1px solid var(--panel-border);
-  width: 100%; text-align: left; cursor: pointer;
-  transition: background 140ms ease, border-color 140ms ease;
-}
-.user-chip:hover { background: var(--surface-hover); border-color: var(--panel-border-strong); }
-.user-chip .chev { margin-left: auto; color: var(--text-faint); flex-shrink: 0; transition: transform 160ms ease; }
-.sidebar-foot.menu-open .user-chip .chev { transform: rotate(180deg); }
-.collapsed .user-chip .chev { display: none; }
-
-/* User menu popover (replaces the old topbar account controls) */
-.user-menu {
-  position: absolute; left: var(--space-1); right: var(--space-1); bottom: calc(100% - 46px);
-  display: none; flex-direction: column; gap: 3px; padding: 6px;
-  border-radius: var(--radius-md); border: 1px solid var(--panel-border-strong);
-  background: linear-gradient(165deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
-  box-shadow: var(--shadow-glass); z-index: var(--z-fab); animation: popIn 0.16s ease;
-}
-.sidebar-foot.menu-open .user-menu { display: flex; }
-.user-menu-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.6rem 0.6rem; border-bottom: 1px solid var(--panel-border); margin-bottom: 4px; }
-.user-menu-role { padding: 0.1rem 0.6rem 0.45rem; }
-.collapsed .user-menu { left: calc(100% + 10px); right: auto; bottom: 0; min-width: 230px; }
-.collapsed .user-chip { justify-content: center; padding: 0.5rem; }
-.collapsed .user-meta, .collapsed .collapse-label { display: none; }
-/* …but the user-menu popover header always shows name + email */
-.collapsed .user-menu .user-meta { display: flex; }
-.user-avatar {
-  width: 34px; height: 34px; border-radius: 50%; background: var(--grad-brand);
-  display: grid; place-items: center; font-size: 0.85rem; font-weight: 700; color: #fff; flex-shrink: 0;
-}
-.user-meta { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
-.user-name { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-mail { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.collapse-btn {
-  display: flex; align-items: center; gap: 0.6rem; width: 100%;
-  padding: 0.5rem 0.7rem; border-radius: var(--radius-sm);
-  background: transparent; border: 1px solid var(--panel-border); color: var(--text-muted);
-  font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 140ms ease;
-}
-.collapse-btn:hover { background: var(--surface-hover); color: var(--text); }
-.collapsed .collapse-btn { justify-content: center; }
-
-/* Sidebar footer tools: row of compact icon-buttons (theme + collapse).
+/* Sidebar footer tools: row of compact icon-buttons (theme toggle).
    Mirrors yz-ui shell.css L120-128 (.foot-tools / .foot-icon pattern) with
    the canonical .theme-toggle class for the button itself (base.css targets
    that class to wire up the icon morph keyframes). */

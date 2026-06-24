@@ -413,3 +413,155 @@ func sortedPermissionKeys() []string {
 	}
 	return keys
 }
+
+// --- Markdown body section helpers (operate on the prompt body, NOT frontmatter) ---
+//
+// These let the delegation-rules endpoint read/write a specific "### Header"
+// section of an agent's prompt body without touching frontmatter or the rest
+// of the prose. A "section" is the heading line itself plus every line until
+// the next heading of equal-or-higher level (e.g. a "#### Sub" is owned by the
+// preceding "### Parent" until another "### " appears).
+
+// headingLevel returns the number of leading '#' of a markdown ATX heading
+// (1..6), or 0 if the line is not a heading.
+func headingLevel(line string) int {
+	trimmed := strings.TrimSpace(line)
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '#' && n < 6 {
+		n++
+	}
+	if n == 0 || n >= len(trimmed) || trimmed[n] != ' ' {
+		return 0
+	}
+	return n
+}
+
+// headingText returns the title of an ATX heading line (without the '#') and a
+// trailing "#### Mandatory..." -> "Mandatory...". Returns "" for non-headings.
+func headingText(line string) string {
+	level := headingLevel(line)
+	if level == 0 {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimSpace(line)[level:])
+}
+
+// extractMarkdownSection returns the body text under the first heading whose
+// title equals headerText (compared case-insensitively, ignoring the leading
+// "### " markers). The returned content is the section body WITHOUT the heading
+// line and WITHOUT nested sub-sections: it stops at the next heading of equal
+// or higher level. The boolean reports whether the heading was found.
+//
+// Example: for body
+//
+//	### Delegation Rules
+//	core principle ...
+//	| Action | Inline | Delegate |
+//	#### Mandatory Triggers
+//	...
+//	### Cost
+//
+// extractMarkdownSection(body, "Delegation Rules", false) returns the lines
+// between "### Delegation Rules" and "#### Mandatory Triggers" (the table),
+// because a "####" is a higher numeric level (shallower depth) ... wait:
+// includeSubsections=false stops at the NEXT heading of equal-or-HIGHER level
+// (same or fewer '#'). "####" has more '#', so it is a sub-section and is NOT
+// a stop boundary when includeSubsections is false only in the "equal-or-fewer"
+// sense — see the implementation: stop when nextLevel>0 && nextLevel<=level.
+//
+// Concretely:
+//   - includeSubsections=false returns only the direct content (stops at any
+//     heading with level <= the section's level, i.e. same-or-shallower).
+//   - includeSubsections=true returns the direct content PLUS nested headings
+//     (stops only at headings of the same-or-shallower level as the section).
+func extractMarkdownSection(body, headerText string, includeSubsections bool) (string, bool) {
+	target := strings.ToLower(strings.TrimSpace(headerText))
+	level := 0
+	startLine := -1
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if headingLevel(line) == 0 {
+			continue
+		}
+		if strings.ToLower(headingText(line)) == target {
+			level = headingLevel(line)
+			startLine = i + 1
+			break
+		}
+	}
+	if startLine < 0 {
+		return "", false
+	}
+
+	var out []string
+	for _, line := range lines[startLine:] {
+		lvl := headingLevel(line)
+		if lvl > 0 && lvl <= level {
+			// A heading at the same level or shallower ends the section.
+			break
+		}
+		if !includeSubsections && lvl > level {
+			// Caller asked for direct content only — a nested heading is a stop
+			// boundary for the *direct* slice.
+			break
+		}
+		out = append(out, line)
+	}
+	return strings.TrimRight(strings.Join(out, "\n"), "\n"), true
+}
+
+// replaceMarkdownSection replaces the body content under the heading
+// headerText with newContent. If the heading does not exist, the section
+// (heading + "\n\n" + newContent) is appended at the end of the body.
+//
+// The heading line itself is preserved; only the lines between it and the next
+// same-or-shallower heading are replaced. Nested sub-sections (deeper headings)
+// are preserved as-is when includeSubsections is false.
+func replaceMarkdownSection(body, headerText, headingPrefix, newContent string, includeSubsections bool) string {
+	target := strings.ToLower(strings.TrimSpace(headerText))
+	lines := strings.Split(body, "\n")
+	level := 0
+	headingLineIdx := -1
+	for i, line := range lines {
+		if headingLevel(line) == 0 {
+			continue
+		}
+		if strings.ToLower(headingText(line)) == target {
+			level = headingLevel(line)
+			headingLineIdx = i
+			break
+		}
+	}
+
+	// Section absent → append at end.
+	if headingLineIdx < 0 {
+		prefix := strings.TrimSpace(headingPrefix)
+		if prefix == "" {
+			prefix = "###"
+		}
+		sep := "\n\n"
+		if body == "" || strings.HasSuffix(body, "\n") {
+			sep = "\n"
+		}
+		return body + sep + prefix + " " + headerText + "\n\n" + newContent + "\n"
+	}
+
+	// Find the end of the existing section (next same-or-shallower heading).
+	endIdx := len(lines)
+	for j := headingLineIdx + 1; j < len(lines); j++ {
+		lvl := headingLevel(lines[j])
+		if lvl > 0 && lvl <= level {
+			endIdx = j
+			break
+		}
+	}
+
+	var rebuilt []string
+	rebuilt = append(rebuilt, lines[:headingLineIdx+1]...)
+	rebuilt = append(rebuilt, "") // blank line after heading
+	for _, l := range strings.Split(newContent, "\n") {
+		rebuilt = append(rebuilt, l)
+	}
+	rebuilt = append(rebuilt, lines[endIdx:]...)
+	return strings.Join(rebuilt, "\n")
+}

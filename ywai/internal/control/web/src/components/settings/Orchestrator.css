@@ -1,0 +1,550 @@
+/* =========================================================
+   Orchestrator tab — delegation graph canvas + agent detail
+   ========================================================= */
+
+.orchestrator-tab {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	width: 100%;
+}
+
+/* --- Toolbar --- */
+.orchestrator-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.orchestrator-toolbar .spacer {
+	flex: 1;
+}
+
+.orch-legend {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+}
+
+.legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+.orch-legend .dot {
+	width: 8px;
+	height: 8px;
+
+	/* 50% is the canonical value for a round dot, not a design token. */
+	/* stylelint-disable-next-line scale-unlimited/declaration-strict-value */
+	border-radius: 50%;
+	display: inline-block;
+}
+
+.orch-legend .dot.allow {
+	background: var(--success);
+}
+
+.orch-legend .dot.ask {
+	background: var(--warning);
+}
+
+.orch-hint {
+	color: var(--text-faint);
+}
+
+.orch-error {
+	margin: 0;
+	font-size: var(--text-xs);
+}
+
+/* --- Body layout: canvas + detail panel --- */
+.orchestrator-body {
+	display: grid;
+	grid-template-columns: 1fr 420px;
+	gap: var(--space-3);
+	min-height: 70vh;
+}
+
+.orchestrator-canvas .empty-state {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	text-align: center;
+	color: var(--text-muted);
+	padding: var(--space-6);
+}
+
+.orchestrator-detail {
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	padding: var(--space-4);
+	overflow-y: auto;
+}
+
+.orch-detail-empty {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+}
+
+/* --- xyflow theming ---
+   xyflow ships BEM-style class names with "__" separators that this repo's
+   selector-class-pattern rule (kebab-case) flags. These selectors must match
+   the library's emitted classes verbatim, so they are disabled locally. */
+/* stylelint-disable selector-class-pattern */
+.react-flow__background {
+	background: var(--surface);
+}
+
+.react-flow__controls {
+	box-shadow: var(--shadow-glass);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+
+.react-flow__controls-button {
+	background: var(--surface-strong);
+	border-color: var(--panel-border);
+	color: var(--text);
+	fill: var(--text);
+}
+
+.react-flow__controls-button:hover {
+	background: var(--surface-hover);
+}
+
+.react-flow__minimap {
+	background: var(--surface-soft) !important;
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+
+.react-flow__edge-path {
+	stroke-width: 2;
+}
+
+.react-flow__edge.agent-edge-allow .react-flow__edge-path {
+	stroke: var(--success);
+}
+
+.react-flow__edge.agent-edge-ask .react-flow__edge-path {
+	stroke: var(--warning);
+	stroke-dasharray: 5 3;
+}
+
+.react-flow__handle {
+	width: 8px;
+	height: 8px;
+	background: var(--yz-primary-1);
+	border: 2px solid var(--surface);
+}
+/* stylelint-enable selector-class-pattern */
+
+/* --- Agent node card --- */
+.agent-card {
+	min-width: 180px;
+	max-width: 220px;
+	padding: var(--space-2) var(--space-3);
+	background: var(--surface-strong);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-glass);
+	font-size: var(--text-sm);
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.agent-card:hover {
+	border-color: var(--panel-border-strong);
+}
+
+.agent-card.is-selected {
+	border-color: var(--yz-primary-1);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--yz-primary-1) 35%, transparent);
+}
+
+.agent-card.agent-mode-primary {
+	border-left: 3px solid var(--yz-primary-1);
+}
+
+.agent-card.agent-mode-subagent {
+	border-left: 3px solid var(--tint-purple);
+}
+
+.agent-card.agent-mode-all {
+	border-left: 3px solid var(--yz-accent);
+}
+
+.agent-card.agent-mode-ghost {
+	border-left: 3px dashed var(--text-faint);
+	opacity: 0.7;
+	background: var(--surface-soft);
+}
+
+.agent-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.agent-card-name {
+	font-weight: 600;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+}
+
+.agent-mode-pill.agent-mode-primary {
+	background: color-mix(in srgb, var(--yz-primary-1) 22%, transparent);
+	color: var(--tint-primary);
+}
+
+.agent-mode-pill.agent-mode-subagent {
+	background: color-mix(in srgb, var(--yz-primary-2) 22%, transparent);
+	color: var(--tint-purple);
+}
+
+.agent-mode-pill.agent-mode-all {
+	background: color-mix(in srgb, var(--yz-accent) 22%, transparent);
+	color: var(--tint-accent);
+}
+
+.agent-mode-pill.agent-mode-ghost {
+	background: var(--surface-hover);
+	color: var(--text-faint);
+}
+
+.agent-card-model {
+	font-size: var(--text-2xs);
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	margin-top: var(--space-1);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.agent-card-wildcard {
+	font-size: var(--text-2xs);
+	color: var(--text-muted);
+	margin-top: var(--space-1);
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+.wildcard-allow {
+	background: color-mix(in srgb, var(--success) 22%, transparent);
+	color: var(--success);
+}
+
+.wildcard-deny {
+	background: color-mix(in srgb, var(--danger) 22%, transparent);
+	color: var(--danger);
+}
+
+.wildcard-ask {
+	background: color-mix(in srgb, var(--warning) 22%, transparent);
+	color: var(--warning);
+}
+
+/* --- Detail panel --- */
+.agent-detail {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.agent-detail-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.agent-detail-name {
+	font-family: var(--font-mono);
+	font-size: var(--text-md);
+	margin: 0 0 var(--space-1) 0;
+}
+
+.orch-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding-top: var(--space-3);
+	margin-top: var(--space-2);
+	border-top: 1px solid var(--panel-border);
+}
+
+.orch-section:first-child {
+	border-top: none;
+	padding-top: 0;
+	margin-top: 0;
+}
+
+.orch-section-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.orch-wildcard-row {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.orch-delegations {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.orch-delegation {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-2);
+	background: var(--surface-soft);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-sm);
+}
+
+.orch-deleg-target {
+	flex: 1;
+	font-family: var(--font-mono);
+	color: var(--text);
+}
+
+.orch-delegation .pill {
+	cursor: pointer;
+	border: none;
+}
+
+.orch-deleg-remove {
+	padding: 2px;
+	line-height: 1;
+}
+
+.orch-empty {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+	padding: var(--space-1) var(--space-2);
+}
+
+.orch-add-target {
+	display: flex;
+	gap: var(--space-1);
+	margin-top: var(--space-1);
+}
+
+.orch-add-target .input {
+	font-size: var(--text-sm);
+}
+
+/* --- Import modal --- */
+.orch-import-preview {
+	margin-top: var(--space-3);
+}
+
+.orch-preview-list {
+	list-style: none;
+	margin: var(--space-1) 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.orch-preview-list li {
+	font-size: var(--text-sm);
+	color: var(--text);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.orch-import-result {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+/* --- Responsive: collapse detail panel under canvas on narrow screens --- */
+@media (width <= 960px) {
+	.orchestrator-body {
+		grid-template-columns: 1fr;
+	}
+
+	.orchestrator-canvas {
+		min-height: 50vh;
+	}
+}
+
+/* --- Group zones (#1) --- */
+.orchestrator-canvas-wrap {
+	display: flex;
+	gap: var(--space-2);
+	min-height: 70vh;
+}
+
+.orch-group-sidebar {
+	flex: 0 0 160px;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	padding: var(--space-3);
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	max-height: 70vh;
+	overflow-y: auto;
+}
+
+.orch-group-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: var(--text-xs);
+	color: var(--text);
+	cursor: pointer;
+	padding: var(--space-1) 0;
+}
+
+.orch-group-toggle input {
+	margin: 0;
+	accent-color: var(--yz-primary-1);
+}
+
+.orch-group-toggle span:nth-child(2) {
+	flex: 1;
+	font-family: var(--font-mono);
+}
+
+.orchestrator-canvas {
+	position: relative;
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	overflow: hidden;
+	flex: 1;
+	min-height: 70vh;
+}
+
+/* xyflow group lane container node */
+.group-zone {
+	width: 100%;
+	height: 100%;
+	background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+	border: 1px dashed var(--panel-border);
+	border-radius: var(--radius-lg);
+	box-sizing: border-box;
+}
+
+.group-zone-header {
+	padding: var(--space-2) var(--space-3);
+	font-size: var(--text-xs);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	border-bottom: 1px dashed var(--panel-border);
+}
+
+.group-zone-body {
+	width: 100%;
+	height: 100%;
+}
+
+/* --- Delegation Rules editor (#2.B) --- */
+.input-sm {
+	padding: 6px 8px;
+	font-size: var(--text-sm);
+}
+
+.orch-rules-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm);
+	margin-top: var(--space-2);
+}
+
+.orch-rules-table th {
+	text-align: left;
+	padding: var(--space-2);
+	color: var(--text-muted);
+	font-weight: 600;
+	border-bottom: 1px solid var(--panel-border);
+	background: var(--surface-soft);
+}
+
+.orch-rules-table td {
+	padding: var(--space-2);
+	border-bottom: 1px solid var(--panel-border);
+	vertical-align: middle;
+}
+
+.orch-rules-table td:first-child {
+	width: 50%;
+}
+
+.orch-rules-table td:nth-child(2) {
+	width: 80px;
+	text-align: center;
+}
+
+.orch-rules-table .input-sm {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.orch-triggers-head {
+	margin-top: var(--space-3);
+}
+
+.orch-triggers {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.orch-trigger {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.orch-trigger-name {
+	flex: 0 0 35%;
+	font-weight: 600;
+}
+
+.orch-trigger-desc {
+	flex: 1;
+}
+
+.orch-rules-actions {
+	margin-top: var(--space-2);
+	display: flex;
+	justify-content: flex-end;
+}

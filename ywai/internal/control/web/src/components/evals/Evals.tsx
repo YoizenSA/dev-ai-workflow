@@ -111,9 +111,10 @@ export default function Evals() {
       {kind === "recall" ? (
         <MemoryRecallEval />
       ) : loading ? (
-        <div className="loading-inline">
-          <span className="spinner" />
-          Loading eval runs…
+        <div className="skeleton skel-card" style={{ margin: 'var(--space-4)' }} aria-busy="true">
+          <div className="skel-line title" />
+          <div className="skel-line desc" />
+          <div className="skel-line desc sm" />
         </div>
       ) : error ? (
         <div className="alert alert-danger">Error: {error}</div>

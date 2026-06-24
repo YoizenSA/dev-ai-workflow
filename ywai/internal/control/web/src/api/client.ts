@@ -10,6 +10,8 @@ import type {
 	GitInfo,
 	AgentInfo,
 	AgentDetail,
+	AgentGraph,
+	DelegationRulesResp,
 	SkillInfo,
 	MCPServer,
 	ProviderInfo,
@@ -287,8 +289,9 @@ export const configApi = {
 			body: JSON.stringify(data),
 		}),
 
-	// Agents
-	listAgents: () => request<AgentInfo[]>("/api/config/agents"),
+		// Agents
+		listAgents: () => request<AgentInfo[]>("/api/config/agents"),
+		getAgentGraph: () => request<AgentGraph>("/api/config/agents/graph"),
 	getAgent: (name: string) =>
 		request<AgentDetail>(`/api/config/agents/${name}`),
 	getAgentPermissions: (name: string) =>
@@ -313,6 +316,18 @@ export const configApi = {
 		request<void>(`/api/config/agents/${name}/task-permissions`, {
 			method: "PUT",
 			body: JSON.stringify(perms),
+		}),
+	getDelegationRules: (name: string) =>
+		request<DelegationRulesResp>(
+			`/api/config/agents/${name}/delegation-rules`,
+		),
+	updateDelegationRules: (
+		name: string,
+		data: { rules: DelegationRulesResp["rules"]; triggers: DelegationRulesResp["triggers"] },
+	) =>
+		request<void>(`/api/config/agents/${name}/delegation-rules`, {
+			method: "PUT",
+			body: JSON.stringify(data),
 		}),
 
 	createAgent: (name: string, content: string) =>

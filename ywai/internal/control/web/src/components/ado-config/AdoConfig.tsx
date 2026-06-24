@@ -221,8 +221,23 @@ export function AdoConfig() {
 
 	if (loading) {
 		return (
-			<div className="ado-config">
-				<p style={{ color: 'var(--text-secondary)' }}>Loading ADO configuration...</p>
+			<div className="ado-config" aria-busy="true">
+				<div className="ado-config-header">
+					<div className="ado-config-title-section">
+						<h2>Azure DevOps Plugin</h2>
+						<p className="text-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>Loading configuration...</p>
+					</div>
+				</div>
+				<div className="ado-config-profiles" aria-busy="true">
+					{[...Array(2)].map((_, i) => (
+						<div key={i} className="skeleton skel-card" style={{ minHeight: 140 }}>
+							<div className="skel-line title" />
+							<div className="skel-line desc" />
+							<div className="skel-line desc sm" />
+							<div className="skel-line tag" />
+						</div>
+					))}
+				</div>
 			</div>
 		);
 	}

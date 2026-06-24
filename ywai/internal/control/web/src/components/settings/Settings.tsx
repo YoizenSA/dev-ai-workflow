@@ -9,6 +9,7 @@ import {
 	Plug,
 	Server,
 	Settings as SettingsIcon,
+	Share2,
 	Star,
 	User,
 	Users,
@@ -24,6 +25,7 @@ import type {
 } from "../../api/types";
 import RoleDefaultsTab from "./RoleDefaultsTab";
 import ReferencesTab from "./ReferencesTab";
+import OrchestratorTab from "./OrchestratorTab";
 import SearchSelect from "../shared/SearchSelect";
 import ModelCombobox from "../missions/ModelCombobox";
 import Modal from "../shared/Modal";
@@ -33,6 +35,7 @@ type Tab =
 	| "general"
 	| "roles"
 	| "agents"
+	| "orchestrator"
 	| "skills"
 	| "mcp"
 	| "providers"
@@ -54,6 +57,11 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "agents",
 		label: "Agents",
 		icon: <User size={16} />,
+	},
+	{
+		id: "orchestrator",
+		label: "Orchestrator",
+		icon: <Share2 size={16} />,
 	},
 	{
 		id: "skills",
@@ -116,6 +124,7 @@ export default function Settings() {
 				{activeTab === "general" && <GeneralTab />}
 				{activeTab === "roles" && <RoleDefaultsTab />}
 				{activeTab === "agents" && <AgentsTab />}
+				{activeTab === "orchestrator" && <OrchestratorTab />}
 				{activeTab === "skills" && <SkillsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
@@ -241,9 +250,10 @@ function GeneralTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading config…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
 			</div>
 		);
 	}
@@ -379,6 +389,7 @@ function GeneralTab() {
 				className="btn btn-primary"
 				onClick={handleSave}
 				disabled={saving}
+				aria-busy={saving || undefined}
 			>
 				{saving ? (
 					<>
@@ -426,6 +437,7 @@ function GeneralTab() {
 							className="btn btn-primary"
 							onClick={handleAgentsMdSave}
 							disabled={agentsMdSaving}
+							aria-busy={agentsMdSaving || undefined}
 							style={{ marginTop: "0.5rem" }}
 						>
 							{agentsMdSaving ? (
@@ -690,9 +702,11 @@ function AgentsTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading agents…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
+				<div className="skel-line tag" />
 			</div>
 		);
 	}
@@ -1018,6 +1032,7 @@ function AgentsTab() {
 									className="btn btn-primary"
 									onClick={handleSavePrompt}
 									disabled={saving}
+									aria-busy={saving || undefined}
 								>
 									{saving ? (
 										<>
@@ -1190,9 +1205,11 @@ function SkillsTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading skills…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
+				<div className="skel-line tag" />
 			</div>
 		);
 	}
@@ -1350,9 +1367,10 @@ function MCPTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading MCP servers…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
 			</div>
 		);
 	}
@@ -1395,6 +1413,7 @@ function MCPTab() {
 								className={`btn btn-sm ${server.enabled ? "btn-ghost" : "btn-primary"}`}
 								onClick={() => toggleEnabled(server)}
 								disabled={toggling === server.name}
+								aria-busy={toggling === server.name || undefined}
 							>
 								{toggling === server.name ? (
 									<div className="spinner"></div>
@@ -1491,9 +1510,10 @@ function ProvidersTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading providers…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
 			</div>
 		);
 	}
@@ -1636,9 +1656,10 @@ function ToolsTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading tools…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
 			</div>
 		);
 	}

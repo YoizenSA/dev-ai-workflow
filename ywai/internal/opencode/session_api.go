@@ -117,7 +117,7 @@ type SessionStatusEntry struct {
 // PromptInput is the request body for sending a message to a session.
 type PromptInput struct {
 	Text     string `json:"text"`
-	Delivery string `json:"delivery,omitempty"` // "immediate" | "deferred"
+	Delivery string `json:"delivery,omitempty"` // "steer" (default) | "queue"
 }
 
 // PromptResult is returned after sending a prompt.

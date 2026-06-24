@@ -172,6 +172,11 @@ func TestServerSession_Prompt(t *testing.T) {
 		if prompt["text"] != "Implement feature X" {
 			t.Errorf("expected prompt.text 'Implement feature X', got %v", prompt["text"])
 		}
+		// delivery must be a value opencode accepts ("steer" | "queue"); the
+		// legacy "immediate" is now a 400. Guard against accidental regression.
+		if body["delivery"] != "steer" {
+			t.Errorf("expected delivery 'steer', got %v", body["delivery"])
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -186,7 +191,7 @@ func TestServerSession_Prompt(t *testing.T) {
 	api := newServerSessionAPI(srv.URL)
 	result, err := api.Prompt(context.Background(), "sess-123", PromptInput{
 		Text:     "Implement feature X",
-		Delivery: "immediate",
+		Delivery: "steer",
 	})
 	if err != nil {
 		t.Fatalf("Prompt: %v", err)

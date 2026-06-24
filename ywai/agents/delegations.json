@@ -1,0 +1,77 @@
+{
+  "_comment": "Source of truth for agent delegations + prompt rules. Applied on every `ywai install`: the `task` map goes to opencode.json (agent.<name>.permission.task); the `rules` table + `triggers` are rendered into the agent's markdown prompt body. Edit this file and re-run `ywai install` to propagate. The Orchestrator UI reads/writes the installed copies.",
+  "defaults": {
+    "_comment": "rules + triggers applied to every agent listed below that does not override them. Overridable per-agent.",
+    "rules": [
+      { "action": "Read to decide/verify (1-3 files)", "inline": "Yes", "delegate": "No" },
+      { "action": "Read to explore/understand (4+ files)", "inline": "No", "delegate": "Yes" },
+      { "action": "Read as preparation for writing", "inline": "No", "delegate": "Yes, together with the write" },
+      { "action": "Write atomic (one file, mechanical, you already know what)", "inline": "Yes", "delegate": "No" },
+      { "action": "Write with analysis (multiple files, new logic)", "inline": "No", "delegate": "Yes" },
+      { "action": "Bash for state (git, gh)", "inline": "Yes", "delegate": "No" },
+      { "action": "Bash for execution (test, install, external tooling)", "inline": "No", "delegate": "Yes" }
+    ],
+    "triggers": [
+      { "name": "4-file rule", "description": "if understanding requires reading 4+ files, delegate a narrow exploration/mapping task." },
+      { "name": "Multi-file write rule", "description": "if implementation will touch 2+ non-trivial files, delegate one writer." },
+      { "name": "PR rule", "description": "before commit, push, or PR after code changes, run a fresh-context review unless the diff is trivial docs/text." },
+      { "name": "Incident rule", "description": "after wrong cwd, accidental repo/worktree mutation, merge recovery, confusing test command, or environment workaround, stop and run a fresh audit before continuing." },
+      { "name": "Long-session rule", "description": "after roughly 20 tool calls, 5 exploratory file reads, or 2 non-mechanical edits without delegation and growing complexity, pause and delegate the remaining work." },
+      { "name": "Fresh review rule", "description": "use fresh context for adversarial review of diffs, conflicts, PR readiness, and incidents." }
+    ]
+  },
+  "agents": {
+    "orchestrator": {
+      "task": {
+        "*": "deny",
+        "ask": "allow",
+        "architect": "allow",
+        "dev": "allow",
+        "qa": "allow",
+        "reviewer": "allow",
+        "devops": "allow",
+        "finder": "allow",
+        "memory": "allow"
+      }
+    },
+    "ask": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
+    "architect": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
+    "dev": { "task": { "*": "deny", "qa": "allow", "finder": "allow" }, "skip_rules": true },
+    "qa": { "task": { "*": "deny", "reviewer": "allow" }, "skip_rules": true },
+    "reviewer": { "task": { "*": "deny", "devops": "allow" }, "skip_rules": true },
+    "devops": { "task": { "*": "deny" }, "skip_rules": true },
+    "finder": { "task": { "*": "deny" }, "skip_rules": true },
+    "memory": { "task": { "*": "deny" }, "skip_rules": true },
+
+    "qa-orchestrator": {
+      "task": {
+        "*": "deny",
+        "qa-analyst": "allow",
+        "qa-ask": "allow",
+        "qa-dev": "allow",
+        "qa-finder": "allow",
+        "qa-reviewer": "allow"
+      }
+    },
+    "qa-analyst": { "task": { "*": "deny", "qa-finder": "allow" }, "skip_rules": true },
+    "qa-dev": { "task": { "*": "deny", "qa-reviewer": "allow" }, "skip_rules": true },
+    "qa-ask": { "task": { "*": "deny" }, "skip_rules": true },
+    "qa-finder": { "task": { "*": "deny" }, "skip_rules": true },
+    "qa-reviewer": { "task": { "*": "deny" }, "skip_rules": true },
+
+    "migration-orchestrator": {
+      "task": {
+        "*": "deny",
+        "migration-planner": "allow",
+        "migration-scope": "allow",
+        "migration-validator": "allow",
+        "migration-validator-focused": "allow",
+        "finder": "allow"
+      }
+    },
+    "migration-planner": { "task": { "*": "deny", "migration-scope": "allow", "finder": "allow" }, "skip_rules": true },
+    "migration-validator": { "task": { "*": "deny", "migration-validator-focused": "allow" }, "skip_rules": true },
+    "migration-scope": { "task": { "*": "deny" }, "skip_rules": true },
+    "migration-validator-focused": { "task": { "*": "deny" }, "skip_rules": true }
+  }
+}

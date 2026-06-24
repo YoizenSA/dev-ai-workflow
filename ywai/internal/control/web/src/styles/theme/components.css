@@ -142,6 +142,19 @@
 @keyframes skel-shimmer { 100% { transform: translateX(100%); } }
 .skel-line { display: block; height: 0.82rem; }
 .skel-line.sm { height: 0.62rem; }
+.skel-line.title { height: 1rem; width: 60%; margin-bottom: var(--space-2); }
+.skel-line.desc { width: 85%; }
+.skel-line.tag { width: 30%; }
+
+/* Skeleton card — for card-grid loading placeholders */
+.skel-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-5); }
+.skel-card .skel-avatar { width: 36px; height: 36px; border-radius: 8px; margin-bottom: var(--space-1); }
+
+/* Skeleton row — for list loading placeholders */
+.skel-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); }
+.skel-row .skel-avatar { width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0; }
+.skel-row .skel-body { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); }
+
 .skel-tr td { padding: 0.85rem 1rem; }
 @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
 

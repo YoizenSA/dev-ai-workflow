@@ -303,6 +303,17 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				fmt.Printf("  [%s] Agent profiles installed (markdown)\n", a.Name)
 			}
 
+			// Apply the default delegation graph (agents/delegations.json) into
+			// opencode.json so the Orchestrator UI shows the per-agent
+			// permission.task edges out of the box. Idempotent + safe to re-run.
+			if delegations, err := agentprofiles.LoadDelegations(sourceDir); err != nil {
+				fmt.Printf("  [%s] Warning: failed to load delegations: %v\n", a.Name, err)
+			} else if len(delegations) > 0 {
+				if err := agentprofiles.ApplyDelegations(configPath, delegations); err != nil {
+					fmt.Printf("  [%s] Warning: failed to apply delegations: %v\n", a.Name, err)
+				}
+			}
+
 		case "kilocode":
 			configPath := ""
 			settingsPaths := agent.SettingsPaths()

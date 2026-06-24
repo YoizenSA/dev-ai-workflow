@@ -152,10 +152,10 @@ function McpCard({
 			)}
 
 			{installState?.state === 'installing' && (
-				<div className="mcp-store-install-progress">Installing...</div>
+				<div className="mcp-store-install-progress" aria-busy="true">Installing...</div>
 			)}
 			{installState?.state === 'probing' && (
-				<div className="mcp-store-install-progress">Probing...</div>
+				<div className="mcp-store-install-progress" aria-busy="true">Probing...</div>
 			)}
 			{installState?.state === 'done' && (
 				<div className="mcp-store-install-success">
@@ -384,8 +384,23 @@ export function McpStore() {
 
 	if (loading) {
 		return (
-			<div className="mcp-store">
-				<div className="mcp-store-loading">Loading MCP catalog...</div>
+			<div className="mcp-store" aria-busy="true">
+				<div className="mcp-store-header">
+					<div className="mcp-store-title-row">
+						<h2 className="mcp-store-title">MCP Store</h2>
+					</div>
+				</div>
+				<div className="mcp-store-section-grid" aria-busy="true">
+					{[...Array(6)].map((_, i) => (
+						<div key={i} className="skeleton skel-card">
+							<div className="skel-avatar" />
+							<div className="skel-line title" />
+							<div className="skel-line desc" />
+							<div className="skel-line desc sm" />
+							<div className="skel-line tag" />
+						</div>
+					))}
+				</div>
 			</div>
 		);
 	}

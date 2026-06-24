@@ -243,8 +243,12 @@ export default function ReferencesTab() {
 
 	if (loading) {
 		return (
-			<div className="card card-pad">
-				<div className="spinner" />
+			<div className="card card-pad" aria-busy="true">
+				<div className="skeleton skel-card">
+					<div className="skel-line title" />
+					<div className="skel-line desc" />
+					<div className="skel-line desc sm" />
+				</div>
 			</div>
 		);
 	}
@@ -260,7 +264,7 @@ export default function ReferencesTab() {
 			)}
 
 			{saving && (
-				<div className="alert" style={{ marginBottom: "var(--space-3)" }}>
+				<div className="alert" style={{ marginBottom: "var(--space-3)" }} aria-busy="true">
 					<div className="spinner" style={{ display: "inline-block", marginRight: "var(--space-2)" }} />
 					Saving…
 				</div>

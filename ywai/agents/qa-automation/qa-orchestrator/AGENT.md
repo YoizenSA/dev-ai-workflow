@@ -5,7 +5,7 @@ description: >
   Trigger: QA automation workflow, "guide me through", "help me automate".
 role: orchestrator
 mode: all
-sections: [handoff]
+sections: [handoff, delegation-rules]
 ---
 
 # QA Orchestrator Agent

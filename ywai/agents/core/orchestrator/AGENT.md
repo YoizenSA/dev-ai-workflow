@@ -7,6 +7,7 @@ description: >
   Trigger: A goal or feature request, "build X", "implement and ship", multi-step tasks, "coordinate".
 role: orchestrator
 mode: all
+sections: [delegation-rules]
 ---
 
 # Orchestrator Agent (Technical Lead)

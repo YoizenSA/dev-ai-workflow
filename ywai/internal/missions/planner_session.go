@@ -100,7 +100,7 @@ func (ps *PlannerSession) prompt(ctx context.Context, text string) (string, erro
 	sessions := ps.client.Sessions()
 	if _, err := sessions.Prompt(stageCtx, ps.sessionID, opencode.PromptInput{
 		Text:     text,
-		Delivery: "immediate",
+		Delivery: "steer",
 	}); err != nil {
 		if stageCtx.Err() == context.DeadlineExceeded {
 			return "", context.DeadlineExceeded

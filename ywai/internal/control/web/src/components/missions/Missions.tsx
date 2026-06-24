@@ -177,7 +177,7 @@ function MissionReport({ missionId }: { missionId: string }) {
 			{open && (
 				<div className="card" style={{ marginTop: "var(--space-3)", width: "100%" }} onClick={(e) => e.stopPropagation()}>
 					{reportLoading ? (
-						<div className="loading-inline">
+						<div className="loading-inline" aria-busy="true">
 							<div className="spinner"></div>
 							<span>Loading report…</span>
 						</div>
@@ -501,9 +501,18 @@ export default function Missions() {
 
 	if (loading && missions.length === 0) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading missions…</span>
+			<div className="missions" aria-busy="true">
+				<header className="page-header">
+					<div className="page-heading">
+						<span className="page-eyebrow">Missions</span>
+						<h1 className="page-title">Mission Control</h1>
+					</div>
+				</header>
+				<div className="skeleton skel-card" style={{ margin: 'var(--space-4)', padding: 'var(--space-6)' }}>
+					<div className="skel-line title" style={{ width: '40%' }} />
+					<div className="skel-line desc" style={{ width: '70%' }} />
+					<div className="skel-line desc sm" style={{ width: '50%' }} />
+				</div>
 			</div>
 		);
 	}

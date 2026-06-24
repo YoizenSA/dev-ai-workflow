@@ -96,9 +96,10 @@ export default function RoleDefaultsTab() {
 
 	if (loading) {
 		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading role defaults…</span>
+			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
+				<div className="skel-line title" />
+				<div className="skel-line desc" />
+				<div className="skel-line desc sm" />
 			</div>
 		);
 	}
@@ -194,6 +195,7 @@ export default function RoleDefaultsTab() {
 				className="btn btn-primary"
 				onClick={handleSave}
 				disabled={saving || !dirty}
+				aria-busy={saving || undefined}
 				style={{ marginTop: "var(--space-3)" }}
 			>
 				{saving ? (
@@ -202,7 +204,7 @@ export default function RoleDefaultsTab() {
 						Saving…
 					</>
 				) : (
-					"Save Role Defaults"
+					"Save Changes"
 				)}
 			</button>
 		</div>

@@ -1081,7 +1081,7 @@ func (wm *WorkerManager) executeViaAPI(mission *Mission, featureID string) (*Wor
 
 			if _, err := sessions.Prompt(ctx, session.ID, opencode.PromptInput{
 				Text:     promptContent,
-				Delivery: "immediate",
+				Delivery: "steer",
 			}); err != nil {
 				return fmt.Errorf("send prompt: %w", err)
 			}

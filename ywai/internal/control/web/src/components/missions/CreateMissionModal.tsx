@@ -1238,6 +1238,7 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 						className="btn btn-primary"
 						disabled={state.planGenerating}
 						onClick={handleGeneratePlan}
+						aria-busy={state.planGenerating || undefined}
 					>
 						{state.planGenerating ? (
 							<><div className="spinner"></div> Generating Plan…</>
@@ -1255,14 +1256,15 @@ export default function CreateMissionModal({ open, onClose }: Props) {
 						>
 							Discard Plan
 						</button>
-						<button
-							type="button"
-							className="btn btn-primary"
-							disabled={state.submitting}
-							onClick={handleApprovePlan}
-						>
-							{state.submitting ? (
-								<><div className="spinner"></div> Creating…</>
+							<button
+								type="button"
+								className="btn btn-primary"
+								disabled={state.submitting}
+								onClick={handleApprovePlan}
+								aria-busy={state.submitting || undefined}
+							>
+								{state.submitting ? (
+									<><div className="spinner"></div> Creating…</>
 							) : (
 								"Approve & Create Mission"
 							)}
