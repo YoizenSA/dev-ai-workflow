@@ -30,14 +30,13 @@ package mcp
 //
 // Test strategy:
 //
-//   - Install-side fakes (npx, go) are shell scripts written to t.TempDir().
-//     This keeps the test fixtures cross-platform-friendly: the existing
-//     fake_mcp_test.go uses a compiled Go binary for the probe side because
-//     exec.Command cannot launch a bare .sh on Windows, but the install
-//     side runs via `sh -c <InstallCmd>`, so the platform handling lives
-//     in the implementation, not the test.
+//   - Install-side fakes (npx, go, fakebin) are compiled Go binaries written
+//     to t.TempDir() via writeFakeCmd. A compiled binary — not a shell
+//     script — is required because the probe step execs the catalog Command
+//     directly via exec.LookPath, which cannot launch a bare shebang script
+//     on Windows (same precedent as fake_mcp_test.go's compiled mcpfake).
 //   - Probe-side fake is the existing mcpfake binary (compiled Go program
-//     from fake_mcp_test.go). The shell scripts delegate to it via the
+//     from fake_mcp_test.go). The fake commands delegate to it via the
 //     MCPFAKE_SRC env var, so the same binary is reused across tests with
 //     different per-test JSON spec files.
 //   - Tests use stdlib only (no testify), live in `package mcp` so they
@@ -49,10 +48,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -107,18 +108,63 @@ func (r *progressRecorder) snapshot() []progressCall {
 	return out
 }
 
-// writeShellScript writes content to dir/name with mode 0o755 (executable).
-// It is the single entry point for materializing install-side fakes: a
-// shell stub that imitates the real binary it replaces (npx, go, etc.) for
-// the duration of one test.
-func writeShellScript(t *testing.T, dir, name, content string) string {
+// writeFakeCmd materializes an install-side fake command (npx, go, fakebin,
+// …) as a compiled Go binary copied into dir under name, plus a "<name>.mode"
+// file that selects the runtime behavior. A compiled binary — not a shell
+// script — is required because the probe step execs the catalog Command
+// directly via exec.LookPath, which cannot launch a bare shebang script on
+// Windows (same precedent as fake_mcp_test.go's compiled mcpfake stub).
+func writeFakeCmd(t *testing.T, dir, name, mode string) string {
 	t.Helper()
-	path := filepath.Join(dir, name)
+	stub, err := buildFakeCmdStub()
+	if err != nil {
+		t.Fatalf("compile fake cmd stub: %v", err)
+	}
+	path := filepath.Join(dir, name+exeSuffix())
 	// #nosec G306 — test fixture must be executable on POSIX.
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
-		t.Fatalf("write shell script %s: %v", path, err)
+	if err := copyFile(stub, path, 0o755); err != nil {
+		t.Fatalf("copy fake cmd %s: %v", path, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".mode"), []byte(mode), 0o644); err != nil {
+		t.Fatalf("write fake cmd mode for %s: %v", name, err)
 	}
 	return path
+}
+
+var (
+	fakeCmdOnce    sync.Once
+	fakeCmdBinPath string
+	fakeCmdBinErr  error
+)
+
+// buildFakeCmdStub compiles the install-side fake command stub once per test
+// binary run and caches the resulting executable path. Same pattern as
+// buildFakeMCPStub.
+func buildFakeCmdStub() (string, error) {
+	fakeCmdOnce.Do(func() {
+		buildDir, err := os.MkdirTemp("", "ywai-fake-cmd-build-*")
+		if err != nil {
+			fakeCmdBinErr = err
+			return
+		}
+		if err := os.WriteFile(filepath.Join(buildDir, "main.go"), []byte(fakeCmdStubSource), 0o644); err != nil {
+			fakeCmdBinErr = err
+			return
+		}
+		if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), []byte("module fakecmd\n\ngo 1.21\n"), 0o644); err != nil {
+			fakeCmdBinErr = err
+			return
+		}
+		exePath := filepath.Join(buildDir, "fakecmd"+exeSuffix())
+		cmd := exec.Command("go", "build", "-o", exePath, ".")
+		cmd.Dir = buildDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			fakeCmdBinErr = fmt.Errorf("build fake cmd stub: %w: %s", err, out)
+			return
+		}
+		fakeCmdBinPath = exePath
+	})
+	return fakeCmdBinPath, fakeCmdBinErr
 }
 
 // exeSuffix returns the platform-appropriate suffix for an executable file
@@ -133,11 +179,11 @@ func exeSuffix() string {
 
 // installMcpfakeEnv sets MCPFAKE_SRC to the path of a freshly-built
 // mcpfake binary whose behavior is described by spec. The install-side
-// shell scripts read this env var to exec mcpfake for the probe-side
+// fake commands read this env var to exec mcpfake for the probe-side
 // MCP stdio behavior. Returns the temp dir the binary was written to.
 //
 // The mcpfake binary itself is NOT prepended to PATH here — only the
-// shell scripts need to be in PATH. The implementation finds mcpfake
+// fake commands need to be in PATH. The implementation finds mcpfake
 // via the full path stored in MCPFAKE_SRC.
 func installMcpfakeEnv(t *testing.T, spec fakeMCPSpec) string {
 	t.Helper()
@@ -146,57 +192,126 @@ func installMcpfakeEnv(t *testing.T, spec fakeMCPSpec) string {
 	return dir
 }
 
-// ─── shell-script templates ───────────────────────────────────────────────
+// ─── compiled fake-command stub ───────────────────────────────────────────
 
-// fakeNpxOK delegates every call to mcpfake. mcpfake performs the MCP
-// stdio handshake and exits 0, so the install command ("npx -y @server")
-// succeeds naturally. The probe then runs the same command and discovers
-// the tools mcpfake was configured to advertise.
-const fakeNpxOK = `#!/bin/sh
-exec "$MCPFAKE_SRC" "$@"
-`
+// fakeCmdStubSource is the Go program compiled into the install-side fake
+// command. Its behavior is selected at runtime by a "<exe-basename>.mode"
+// file written next to the executable, so a single compiled binary backs
+// every install-side fake (npx, go, fakebin, …) across all tests.
+//
+// Modes:
+//   - "ok": delegate to mcpfake (via MCPFAKE_SRC) so the install command
+//     succeeds and the probe discovers tools.
+//   - "sleep": block for 30s so the install ctx (2s) fires ErrInstallTimeout.
+//   - "exit1": print a recognizable stderr line and exit 1 (ErrInstallNonZero).
+//   - "go-install": copy mcpfake to $GOPATH/bin/<basename(pkg)> + its spec,
+//     exit 0 — imitates `go install <pkg>@<ver>`.
+//   - "fakebin-install": exit 0 when argv[1]=="--install" (install time),
+//     otherwise hang forever (probe time) for the probe-fails test.
+const fakeCmdStubSource = `package main
 
-// fakeNpxSleep blocks for 30 seconds. The install ctx (2s) fires first,
-// surfacing ErrInstallTimeout.
-const fakeNpxSleep = `#!/bin/sh
-sleep 30
-`
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+)
 
-// fakeNpxExit1 exits with code 1 and writes a recognizable stderr message.
-// The test pins that ErrInstallNonZero's Error() contains the stderr text
-// so the install UI can show the user what went wrong.
-const fakeNpxExit1 = `#!/bin/sh
-echo "fake npx install failed: missing dependency" >&2
-exit 1
-`
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
 
-// fakeGoInstall imitates `go install <pkg>@<ver>` by copying mcpfake to
-// $GOPATH/bin/<basename(pkg)>. The test uses this together with a
-// CatalogEntry whose Command[0] is the basename, so the probe runs the
-// created binary and gets MCP stdio.
-const fakeGoInstall = `#!/bin/sh
-pkg=""
-for arg in "$@"; do
-    pkg="$arg"
-done
-name=$(basename "${pkg%%@*}")
-src_dir=$(dirname "$MCPFAKE_SRC")
-mkdir -p "$GOPATH/bin"
-cp "$MCPFAKE_SRC" "$GOPATH/bin/$name"
-cp "$src_dir/mcp-fake-spec.json" "$GOPATH/bin/mcp-fake-spec.json"
-chmod +x "$GOPATH/bin/$name"
-exit 0
-`
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
 
-// fakeFakebinInstall is used by the probe-fails test. It distinguishes
-// install-time (argv contains --install → exit 0) from probe-time (no
-// args → hang forever). The CatalogEntry pins the install command as
-// "fakebin --install" and the probe command as just "fakebin".
-const fakeFakebinInstall = `#!/bin/sh
-if [ "$1" = "--install" ]; then
-    exit 0
-fi
-while true; do sleep 1; done
+func main() {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fakecmd: cannot resolve executable:", err)
+		os.Exit(2)
+	}
+	dir := filepath.Dir(exe)
+	base := strings.TrimSuffix(filepath.Base(exe), ".exe")
+	modeData, err := os.ReadFile(filepath.Join(dir, base+".mode"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fakecmd: cannot read mode file:", err)
+		os.Exit(2)
+	}
+
+	switch strings.TrimSpace(string(modeData)) {
+	case "ok":
+		cmd := exec.Command(os.Getenv("MCPFAKE_SRC"), os.Args[1:]...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = os.Environ()
+		if err := cmd.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				os.Exit(ee.ExitCode())
+			}
+			fmt.Fprintln(os.Stderr, "fakecmd ok: exec mcpfake:", err)
+			os.Exit(1)
+		}
+	case "sleep":
+		time.Sleep(30 * time.Second)
+	case "exit1":
+		fmt.Fprintln(os.Stderr, "fake npx install failed: missing dependency")
+		os.Exit(1)
+	case "go-install":
+		args := os.Args[1:]
+		if len(args) == 0 {
+			os.Exit(0)
+		}
+		pkg := args[len(args)-1]
+		name := filepath.Base(strings.SplitN(pkg, "@", 2)[0])
+		src := os.Getenv("MCPFAKE_SRC")
+		gobin := filepath.Join(os.Getenv("GOPATH"), "bin")
+		if err := os.MkdirAll(gobin, 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, "fakecmd go-install: mkdir:", err)
+			os.Exit(1)
+		}
+		if err := copyFile(src, filepath.Join(gobin, name+exeSuffix())); err != nil {
+			fmt.Fprintln(os.Stderr, "fakecmd go-install: copy bin:", err)
+			os.Exit(1)
+		}
+		if err := copyFile(filepath.Join(filepath.Dir(src), "mcp-fake-spec.json"), filepath.Join(gobin, "mcp-fake-spec.json")); err != nil {
+			fmt.Fprintln(os.Stderr, "fakecmd go-install: copy spec:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "fakebin-install":
+		if len(os.Args) > 1 && os.Args[1] == "--install" {
+			os.Exit(0)
+		}
+		for {
+			time.Sleep(time.Second)
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "fakecmd: unknown mode")
+		os.Exit(2)
+	}
+}
 `
 
 // ─── Test 1: TestInstall_LocalNpx_HappyPath ──────────────────────────────
@@ -214,7 +329,7 @@ func TestInstall_LocalNpx_HappyPath(t *testing.T) {
 	})
 
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxOK)
+	writeFakeCmd(t, binDir, "npx", "ok")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -259,7 +374,7 @@ func TestInstall_LocalGoInstall_HappyPath(t *testing.T) {
 	t.Setenv("GOPATH", gopath)
 
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "go", fakeGoInstall)
+	writeFakeCmd(t, binDir, "go", "go-install")
 	// $GOPATH/bin must be in PATH so exec.LookPath("myserver") resolves
 	// the binary that fake go install just created.
 	t.Setenv("PATH",
@@ -380,7 +495,7 @@ func TestInstall_PrereqMissing(t *testing.T) {
 // respect the ctx.
 func TestInstall_InstallTimeout(t *testing.T) {
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxSleep)
+	writeFakeCmd(t, binDir, "npx", "sleep")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -426,7 +541,7 @@ func TestInstall_InstallTimeout(t *testing.T) {
 // silent "exit code 1" without context would be a UX regression.
 func TestInstall_InstallNonZero(t *testing.T) {
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxExit1)
+	writeFakeCmd(t, binDir, "npx", "exit1")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -473,7 +588,7 @@ func TestInstall_InstallNonZero(t *testing.T) {
 // slice 4 brief.
 func TestInstall_ProbeFails(t *testing.T) {
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "fakebin", fakeFakebinInstall)
+	writeFakeCmd(t, binDir, "fakebin", "fakebin-install")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -603,7 +718,7 @@ func TestInstall_ProgressCallback(t *testing.T) {
 	})
 
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxOK)
+	writeFakeCmd(t, binDir, "npx", "ok")
 	prependFakeMCPPath(t, binDir)
 
 	rec := newProgressRecorder()
@@ -694,7 +809,7 @@ func TestInstall_EnvInjection(t *testing.T) {
 	})
 
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxOK)
+	writeFakeCmd(t, binDir, "npx", "ok")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -736,7 +851,7 @@ func TestInstall_TargetRequired(t *testing.T) {
 	installMcpfakeEnv(t, fakeMCPSpec{Mode: "ok", Tools: []string{"tool1"}})
 
 	binDir := t.TempDir()
-	writeShellScript(t, binDir, "npx", fakeNpxOK)
+	writeFakeCmd(t, binDir, "npx", "ok")
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
