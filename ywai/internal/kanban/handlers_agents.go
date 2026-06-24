@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -443,14 +442,6 @@ var ValidPermissionValues = map[string]bool{
 	"ask":   true,
 	"deny":  true,
 }
-
-// triggerLineRegex matches a numbered delegation trigger item, capturing the
-// bold name and its description. Accepts ":", " -", or " —" separators.
-// Examples matched:
-//
-//	1. **4-file rule**: if understanding requires reading 4+ files...
-//	2. **PR rule** - before commit, push...
-var triggerLineRegex = regexp.MustCompile(`^\d+\.\s+\*\*(.+?)\*\*\s*[:\-—]\s*(.+)$`)
 
 // PUT /api/config/agents/{name}/permissions
 // Writes permissions to opencode.json (primary) and markdown frontmatter (backward compat).
@@ -1016,20 +1007,19 @@ func lookupAgentPermissionKey(configData []byte, name, key string) json.RawMessa
 	return perm[key]
 }
 
-// --- Delegation Rules (prompt-body section editor) ---
+// --- Delegation Rules (structured JSON sidecar) ---
 //
-// "Delegation Rules" is a prose section of an orchestrator agent's prompt that
-// lives as a markdown table (Action | Inline | Delegate) plus a numbered list
-// of "Mandatory Delegation Triggers". It is distinct from the permission.task
-// map (which is structured config). These handlers parse/serialize the section
-// so the UI can edit it as structured data without the user hand-writing
-// markdown tables.
+// The "Delegation Rules" table + "Mandatory Delegation Triggers" are stored as
+// structured JSON in a sidecar file (agentsDir/delegations.json) — NOT parsed
+// from markdown. The .md is GENERATED from the JSON (by agents.ApplyDelegations
+// on install, and re-rendered on PUT here). The JSON is the single source of
+// truth, so there is no fragile markdown parser to break.
 
 // delegationRule is one row of the "Delegation Rules" table.
 type delegationRule struct {
 	Action   string `json:"action"`
-	Inline   string `json:"inline"`   // "Yes" | "No"
-	Delegate string `json:"delegate"` // free text, e.g. "Yes" or "Yes, together with the write"
+	Inline   string `json:"inline"`
+	Delegate string `json:"delegate"`
 }
 
 // delegationTrigger is one item of the "Mandatory Delegation Triggers" list.
@@ -1042,19 +1032,59 @@ type delegationTrigger struct {
 type delegationRulesResp struct {
 	Rules    []delegationRule    `json:"rules"`
 	Triggers []delegationTrigger `json:"triggers"`
-	HasRules bool                `json:"hasRules"` // false when the section is absent
+	HasRules bool                `json:"hasRules"`
 }
 
-const (
-	delegationRulesHeader   = "Delegation Rules"
-	delegationTriggersHeader = "Mandatory Delegation Triggers"
-)
+// delegationSidecar is the on-disk shape of agentsDir/delegations.json. It
+// mirrors agents.DelegationsDoc but lives in the kanban package to avoid an
+// import cycle, and only carries the fields the UI needs.
+type delegationSidecar struct {
+	Defaults struct {
+		Rules    []delegationRule    `json:"rules"`
+		Triggers []delegationTrigger `json:"triggers"`
+	} `json:"defaults"`
+	Agents map[string]struct {
+		Rules     []delegationRule    `json:"rules,omitempty"`
+		Triggers  []delegationTrigger `json:"triggers,omitempty"`
+		SkipRules bool                `json:"skip_rules,omitempty"`
+	} `json:"agents"`
+}
+
+// loadDelegationSidecar reads agentsDir/delegations.json. Returns an empty doc
+// (hasRules=false) when absent so the UI offers to seed via Enable.
+func loadDelegationSidecar() (*delegationSidecar, bool) {
+	dir, err := agentsDir()
+	if err != nil {
+		return &delegationSidecar{Agents: map[string]struct {
+			Rules     []delegationRule    `json:"rules,omitempty"`
+			Triggers  []delegationTrigger `json:"triggers,omitempty"`
+			SkipRules bool                `json:"skip_rules,omitempty"`
+		}{}}, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "delegations.json"))
+	if err != nil {
+		return &delegationSidecar{Agents: map[string]struct {
+			Rules     []delegationRule    `json:"rules,omitempty"`
+			Triggers  []delegationTrigger `json:"triggers,omitempty"`
+			SkipRules bool                `json:"skip_rules,omitempty"`
+		}{}}, false
+	}
+	var sc delegationSidecar
+	if json.Unmarshal(data, &sc) != nil {
+		return &delegationSidecar{Agents: map[string]struct {
+			Rules     []delegationRule    `json:"rules,omitempty"`
+			Triggers  []delegationTrigger `json:"triggers,omitempty"`
+			SkipRules bool                `json:"skip_rules,omitempty"`
+		}{}}, false
+	}
+	return &sc, true
+}
 
 // GET /api/config/agents/{name}/delegation-rules
 //
-// Extracts the "Delegation Rules" table and the "Mandatory Delegation
-// Triggers" list from the agent's prompt body. Returns hasRules=false when the
-// section is absent (the UI then offers to seed it).
+// Returns the rules + triggers for an agent from the sidecar JSON. Falls back
+// to defaults when the agent has no override, and reports hasRules=false when
+// the agent opts out (skip_rules) or the sidecar is absent.
 func (h *Handlers) GetDelegationRules(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -1062,39 +1092,38 @@ func (h *Handlers) GetDelegationRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mdPath := readAgentMarkdownPath(name)
-	if mdPath == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
-		return
-	}
-	data, err := os.ReadFile(mdPath)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	_, body := parseFrontmatter(string(data))
-	rulesSection, hasRules := extractMarkdownSection(body, delegationRulesHeader, false)
-
+	sc, _ := loadDelegationSidecar()
 	resp := delegationRulesResp{Rules: []delegationRule{}, Triggers: []delegationTrigger{}}
-	if hasRules {
-		resp.HasRules = true
-		resp.Rules = parseDelegationRulesTable(rulesSection)
 
-		// Triggers live as a nested sub-heading under Delegation Rules.
-		triggersSection, hasTriggers := extractMarkdownSection(body, delegationTriggersHeader, true)
-		if hasTriggers {
-			resp.Triggers = parseDelegationTriggers(triggersSection)
-		}
+	a, ok := sc.Agents[name]
+	if ok && a.SkipRules {
+		writeJSON(w, http.StatusOK, resp) // hasRules=false
+		return
+	}
+
+	rules := a.Rules
+	if len(rules) == 0 {
+		rules = sc.Defaults.Rules
+	}
+	triggers := a.Triggers
+	if len(triggers) == 0 {
+		triggers = sc.Defaults.Triggers
+	}
+
+	if len(rules) > 0 || len(triggers) > 0 {
+		resp.HasRules = true
+		resp.Rules = rules
+		resp.Triggers = triggers
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
 // PUT /api/config/agents/{name}/delegation-rules
 //
-// Serializes the rules table + triggers list back into the prompt body,
-// replacing the existing section (or appending if absent). Frontmatter is left
-// untouched.
+// Writes the rules + triggers for an agent into the sidecar JSON (creating the
+// agent entry + overriding defaults) AND re-renders the markdown section into
+// the agent's .md prompt body so the two stay in sync. The JSON is the source
+// of truth; the .md is a generated artifact.
 func (h *Handlers) PutDelegationRules(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -1112,168 +1141,95 @@ func (h *Handlers) PutDelegationRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mdPath := readAgentMarkdownPath(name)
-	if mdPath == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
-		return
-	}
-	data, err := os.ReadFile(mdPath)
+	dir, err := agentsDir()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	fm, mdBody := parseFrontmatter(string(data))
-
-	// Rebuild the Delegation Rules section content (table + optional triggers).
-	rulesMarkdown := serializeDelegationRulesTable(body.Rules)
-	if len(body.Triggers) > 0 {
-		rulesMarkdown += "\n\n#### " + delegationTriggersHeader + "\n\n" + serializeDelegationTriggers(body.Triggers)
+	sc, _ := loadDelegationSidecar()
+	if sc.Agents == nil {
+		sc.Agents = map[string]struct {
+			Rules     []delegationRule    `json:"rules,omitempty"`
+			Triggers  []delegationTrigger `json:"triggers,omitempty"`
+			SkipRules bool                `json:"skip_rules,omitempty"`
+		}{}
 	}
+	entry := sc.Agents[name]
+	entry.SkipRules = false
+	entry.Rules = body.Rules
+	entry.Triggers = body.Triggers
+	sc.Agents[name] = entry
 
-	newBody := replaceMarkdownSection(mdBody, delegationRulesHeader, "###", rulesMarkdown, true)
-
-	// Re-join frontmatter (untouched) with the modified body.
-	var out string
-	if fm == "" {
-		out = newBody
-	} else {
-		out = "---\n" + fm + "\n---\n\n" + newBody
-	}
-
-	_ = os.WriteFile(mdPath+".bak", data, 0644)
-	if err := os.WriteFile(mdPath, []byte(out), 0644); err != nil {
+	// Persist the sidecar JSON.
+	sidecarData, _ := json.MarshalIndent(sc, "", "  ")
+	sidecarPath := filepath.Join(dir, "delegations.json")
+	if err := os.WriteFile(sidecarPath, append(sidecarData, '\n'), 0o644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, delegationRulesResp{Rules: body.Rules, Triggers: body.Triggers, HasRules: true})
-}
-
-// parseDelegationRulesTable extracts rows from a markdown table of the form
-//
-//	| Action | Inline | Delegate |
-//	| ------ | ------ | -------- |
-//	| Read to decide | Yes | No |
-//
-// Header and separator rows are skipped.
-func parseDelegationRulesTable(section string) []delegationRule {
-	var rules []delegationRule
-	seenSeparator := false
-	for _, line := range strings.Split(section, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
-			continue
-		}
-		inner := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
-		// Skip the separator row (---, :---, etc.).
-		if !seenSeparator {
-			if isTableSeparator(inner) {
-				seenSeparator = true
+	// Re-render the markdown section so the .md the agent reads stays in sync.
+	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
+		if mdContent, err := os.ReadFile(mdPath); err == nil {
+			rendered := renderRulesMarkdown(body.Rules, body.Triggers)
+			updated := replaceKanbanMarkdownSection(string(mdContent), "Delegation Rules", "###", rendered, true)
+			if updated != string(mdContent) {
+				_ = os.WriteFile(mdPath+".bak", mdContent, 0o644)
+				_ = os.WriteFile(mdPath, []byte(updated), 0o644)
 			}
-			continue // skip header row + separator
-		}
-		cols := splitTableRow(inner)
-		if len(cols) >= 3 {
-			rules = append(rules, delegationRule{
-				Action:   strings.TrimSpace(cols[0]),
-				Inline:   strings.TrimSpace(cols[1]),
-				Delegate: strings.TrimSpace(cols[2]),
-			})
 		}
 	}
-	return rules
+
+	writeJSON(w, http.StatusOK, delegationRulesResp{
+		Rules: body.Rules, Triggers: body.Triggers, HasRules: true,
+	})
 }
 
-// isTableSeparator reports whether a table inner line is the markdown
-// alignment row (only dashes, colons, pipes, spaces).
-func isTableSeparator(inner string) bool {
-	for _, r := range inner {
-		if r != '-' && r != ':' && r != '|' && r != ' ' {
-			return false
-		}
-	}
-	return strings.Contains(inner, "-")
-}
-
-// splitTableRow splits "a | b | c" into ["a"," b"," c"] respecting the pipe as
-// a column delimiter (cells may contain escaped pipes "\|").
-func splitTableRow(inner string) []string {
-	var cols []string
-	var cur strings.Builder
-	for i := 0; i < len(inner); i++ {
-		if i+1 < len(inner) && inner[i] == '\\' && inner[i+1] == '|' {
-			cur.WriteByte('|')
-			i++
-			continue
-		}
-		if inner[i] == '|' {
-			cols = append(cols, cur.String())
-			cur.Reset()
-			continue
-		}
-		cur.WriteByte(inner[i])
-	}
-	cols = append(cols, cur.String())
-	return cols
-}
-
-// serializeDelegationRulesTable renders the rules as a markdown table.
-func serializeDelegationRulesTable(rules []delegationRule) string {
+// renderRulesMarkdown renders the rules table + triggers list as markdown body
+// (the content that goes under the "### Delegation Rules" heading). Mirrors
+// agents.renderRulesSection.
+func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) string {
 	var b strings.Builder
-	b.WriteString("| Action | Inline | Delegate |\n")
-	b.WriteString("| ------ | ------ | -------- |\n")
-	for _, r := range rules {
-		action := strings.ReplaceAll(r.Action, "|", "\\|")
-		delegate := strings.ReplaceAll(r.Delegate, "|", "\\|")
-		b.WriteString("| ")
-		b.WriteString(action)
-		b.WriteString(" | ")
-		b.WriteString(orDefault(r.Inline, "No"))
-		b.WriteString(" | ")
-		b.WriteString(orDefault(delegate, "No"))
-		b.WriteString(" |\n")
+	b.WriteString("Core principle: **does this inflate my context without need?** If yes -> delegate. If no -> do it inline.\n\n")
+
+	if len(rules) > 0 {
+		b.WriteString("| Action | Inline | Delegate |\n")
+		b.WriteString("| ------ | ------ | -------- |\n")
+		for _, r := range rules {
+			action := strings.ReplaceAll(r.Action, "|", "\\|")
+			delegate := strings.ReplaceAll(r.Delegate, "|", "\\|")
+			inline := r.Inline
+			if inline == "" {
+				inline = "No"
+			}
+			if delegate == "" {
+				delegate = "No"
+			}
+			b.WriteString(fmt.Sprintf("| %s | %s | %s |\n", action, inline, delegate))
+		}
+		b.WriteString("\nUse OpenCode's native `task` tool for delegated work.\n")
+	}
+
+	if len(triggers) > 0 {
+		b.WriteString("\n#### Mandatory Delegation Triggers\n\n")
+		b.WriteString("These gates are **non-skippable hard gates**, not recommendations.\n\n")
+		b.WriteString("Semantic guard: **delegate** means using OpenCode's native `task` tool to invoke a configured sub-agent. Running local scripts, Python, or Bash inline is execution, not delegation.\n\n")
+		for i, t := range triggers {
+			n := strings.TrimSpace(t.Name)
+			if n == "" {
+				n = "Trigger"
+			}
+			b.WriteString(fmt.Sprintf("%d. **%s**: %s\n", i+1, n, strings.TrimSpace(t.Description)))
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// parseDelegationTriggers extracts the numbered trigger list, each item being
-// "**Name**: description." (bold name, colon, description, until the next
-// numbered item or blank).
-func parseDelegationTriggers(section string) []delegationTrigger {
-	var triggers []delegationTrigger
-	for _, line := range strings.Split(section, "\n") {
-		trimmed := strings.TrimSpace(line)
-		// Match "N. **Name**: description" or "N. **Name** - description".
-		m := triggerLineRegex.FindStringSubmatch(trimmed)
-		if m == nil {
-			continue
-		}
-		triggers = append(triggers, delegationTrigger{
-			Name:        strings.TrimSpace(m[1]),
-			Description: strings.TrimSpace(m[2]),
-		})
-	}
-	return triggers
-}
-
-// serializeDelegationTriggers renders triggers as a numbered list.
-func serializeDelegationTriggers(triggers []delegationTrigger) string {
-	var b strings.Builder
-	for i, t := range triggers {
-		name := strings.TrimSpace(t.Name)
-		desc := strings.TrimSpace(t.Description)
-		if name == "" && desc == "" {
-			continue
-		}
-		b.WriteString(fmt.Sprintf("%d. **%s**: %s\n", i+1, orDefault(name, "Trigger"), desc))
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-func orDefault(v, def string) string {
-	if strings.TrimSpace(v) == "" {
-		return def
-	}
-	return v
+// replaceKanbanMarkdownSection replaces the body content under a heading. Local
+// copy (the kanban package already has extractMarkdownSection/replaceMarkdownSection
+// in frontmatter.go; this is that same helper, kept here to avoid duplication
+// confusion — it delegates to the frontmatter.go implementation).
+func replaceKanbanMarkdownSection(content, headerText, headingPrefix, newContent string, includeSubsections bool) string {
+	return replaceMarkdownSection(content, headerText, headingPrefix, newContent, includeSubsections)
 }

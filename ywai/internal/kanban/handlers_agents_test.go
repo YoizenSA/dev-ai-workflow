@@ -185,189 +185,131 @@ func TestGetAgentGraph_GhostTarget(t *testing.T) {
 	}
 }
 
-// Fixture mirroring the gentle-orchestrator Delegation Rules + Triggers section.
-const delegationRulesFixture = `---
-description: test orchestrator
-mode: primary
-permission:
-  question: allow
----
+// --- Delegation Rules (sidecar JSON) tests ---
 
-# Orchestrator
-
-intro.
-
-### Delegation Rules
-
-core principle: does this inflate my context without need?
-
-| Action | Inline | Delegate |
-| ------ | ------ | -------- |
-| Read to decide/verify (1-3 files) | Yes | No |
-| Read to explore/understand (4+ files) | No | Yes |
-| Write with analysis (multiple files, new logic) | No | Yes |
-
-#### Mandatory Delegation Triggers
-
-1. **4-file rule**: if understanding requires reading 4+ files, delegate.
-2. **Multi-file write rule**: if implementation touches 2+ files, delegate one writer.
-3. **PR rule**: before commit/push, run a fresh-context review.
-
-### Cost and Context Balance
-
-other content.`
-
-// writeAgentFixture writes the delegationRulesFixture under a temp HOME agents
-// dir and returns the agent name.
-func writeAgentFixture(t *testing.T, name string) {
+// writeSidecar writes a delegations.json sidecar under the temp HOME agents dir.
+func writeSidecar(t *testing.T, payload string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
-	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(agentsDir, name+".md"), []byte(delegationRulesFixture), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	os.MkdirAll(agentsDir, 0o755)
+	os.WriteFile(filepath.Join(agentsDir, "delegations.json"), []byte(payload), 0o644)
 }
 
-func TestGetDelegationRules_ParsesTableAndTriggers(t *testing.T) {
-	const name = "test-orch"
-	writeAgentFixture(t, name)
+const sidecarWithDefaults = `{
+  "defaults": {
+    "rules": [
+      {"action":"Read to decide/verify (1-3 files)","inline":"Yes","delegate":"No"},
+      {"action":"Write with analysis","inline":"No","delegate":"Yes"}
+    ],
+    "triggers": [
+      {"name":"4-file rule","description":"delegate exploration"},
+      {"name":"PR rule","description":"fresh review before PR"}
+    ]
+  },
+  "agents": {
+    "orchestrator": {"skip_rules": false},
+    "dev": {"skip_rules": true},
+    "architect": {"rules":[{"action":"Custom","inline":"No","delegate":"Yes"}]}
+  }
+}`
 
-	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/"+name+"/delegation-rules", nil)
-	req.SetPathValue("name", name)
+func TestGetDelegationRules_FromSidecar_Defaults(t *testing.T) {
+	writeSidecar(t, sidecarWithDefaults)
+	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/orchestrator/delegation-rules", nil)
+	req.SetPathValue("name", "orchestrator")
 	w := httptest.NewRecorder()
 	(&Handlers{}).GetDelegationRules(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
 	var resp delegationRulesResp
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
 	if !resp.HasRules {
-		t.Error("expected HasRules=true")
+		t.Fatal("expected HasRules=true (defaults apply)")
 	}
-	if len(resp.Rules) != 3 {
-		t.Fatalf("expected 3 rules, got %d: %+v", len(resp.Rules), resp.Rules)
+	if len(resp.Rules) != 2 {
+		t.Errorf("expected 2 default rules, got %d", len(resp.Rules))
 	}
-	if resp.Rules[0].Action != "Read to decide/verify (1-3 files)" {
-		t.Errorf("rule 0 action = %q", resp.Rules[0].Action)
-	}
-	if resp.Rules[0].Inline != "Yes" || resp.Rules[0].Delegate != "No" {
-		t.Errorf("rule 0 inline/delegate = %q/%q", resp.Rules[0].Inline, resp.Rules[0].Delegate)
-	}
-	if len(resp.Triggers) != 3 {
-		t.Fatalf("expected 3 triggers, got %d: %+v", len(resp.Triggers), resp.Triggers)
-	}
-	if resp.Triggers[0].Name != "4-file rule" {
-		t.Errorf("trigger 0 name = %q", resp.Triggers[0].Name)
+	if len(resp.Triggers) != 2 {
+		t.Errorf("expected 2 default triggers, got %d", len(resp.Triggers))
 	}
 }
 
-func TestGetDelegationRules_AbsentSection(t *testing.T) {
-	const name = "no-rules-agent"
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
-	os.MkdirAll(agentsDir, 0o755)
-	os.WriteFile(filepath.Join(agentsDir, name+".md"), []byte("---\nmode: subagent\n---\n\njust a prompt."), 0o644)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/"+name+"/delegation-rules", nil)
-	req.SetPathValue("name", name)
+func TestGetDelegationRules_SkipRules(t *testing.T) {
+	writeSidecar(t, sidecarWithDefaults)
+	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/dev/delegation-rules", nil)
+	req.SetPathValue("name", "dev")
 	w := httptest.NewRecorder()
 	(&Handlers{}).GetDelegationRules(w, req)
 
 	var resp delegationRulesResp
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.HasRules {
-		t.Error("expected HasRules=false when section absent")
+		t.Error("expected HasRules=false for skip_rules agent")
 	}
 }
 
-func TestPutDelegationRules_RoundTrip(t *testing.T) {
-	const name = "roundtrip-orch"
-	writeAgentFixture(t, name)
+func TestGetDelegationRules_PerAgentOverride(t *testing.T) {
+	writeSidecar(t, sidecarWithDefaults)
+	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/architect/delegation-rules", nil)
+	req.SetPathValue("name", "architect")
+	w := httptest.NewRecorder()
+	(&Handlers{}).GetDelegationRules(w, req)
 
-	in := struct {
-		Rules    []delegationRule    `json:"rules"`
-		Triggers []delegationTrigger `json:"triggers"`
-	}{
-		Rules: []delegationRule{
-			{Action: "Read 1 file", Inline: "Yes", Delegate: "No"},
-			{Action: "Write multi-file", Inline: "No", Delegate: "Yes, together with the write"},
-		},
-		Triggers: []delegationTrigger{
-			{Name: "4-file rule", Description: "delegate exploration when 4+ files."},
-			{Name: "PR rule", Description: "fresh review before PR."},
-		},
+	var resp delegationRulesResp
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Rules) != 1 || resp.Rules[0].Action != "Custom" {
+		t.Errorf("expected 1 override rule 'Custom', got %+v", resp.Rules)
 	}
-	bodyBytes, _ := json.Marshal(in)
-	req := httptest.NewRequest(http.MethodPut, "/api/config/agents/"+name+"/delegation-rules", strings.NewReader(string(bodyBytes)))
-	req.SetPathValue("name", name)
+}
+
+func TestGetDelegationRules_NoSidecar(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".config", "opencode", "agents"), 0o755)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/config/agents/orchestrator/delegation-rules", nil)
+	req.SetPathValue("name", "orchestrator")
+	w := httptest.NewRecorder()
+	(&Handlers{}).GetDelegationRules(w, req)
+
+	var resp delegationRulesResp
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.HasRules {
+		t.Error("expected HasRules=false when no sidecar exists")
+	}
+}
+
+func TestPutDelegationRules_WritesSidecarAndRendersMarkdown(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	agentsDir := filepath.Join(home, ".config", "opencode", "agents")
+	os.MkdirAll(agentsDir, 0o755)
+	// Seed an agent markdown so the PUT can render into it.
+	os.WriteFile(filepath.Join(agentsDir, "orchestrator.md"), []byte("---\nmode: primary\n---\n\nprompt body."), 0o644)
+
+	body := `{"rules":[{"action":"Read 1 file","inline":"Yes","delegate":"No"}],"triggers":[{"name":"4-file rule","description":"delegate"}]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config/agents/orchestrator/delegation-rules", strings.NewReader(body))
+	req.SetPathValue("name", "orchestrator")
 	w := httptest.NewRecorder()
 	(&Handlers{}).PutDelegationRules(w, req)
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT failed: %d %s", w.Code, w.Body.String())
 	}
 
-	// Re-read and verify the rules persisted.
-	req2 := httptest.NewRequest(http.MethodGet, "/api/config/agents/"+name+"/delegation-rules", nil)
-	req2.SetPathValue("name", name)
-	w2 := httptest.NewRecorder()
-	(&Handlers{}).GetDelegationRules(w2, req2)
-	var resp delegationRulesResp
-	json.Unmarshal(w2.Body.Bytes(), &resp)
-	if len(resp.Rules) != 2 {
-		t.Fatalf("expected 2 rules after round-trip, got %d", len(resp.Rules))
-	}
-	if resp.Rules[1].Delegate != "Yes, together with the write" {
-		t.Errorf("delegate text not preserved: %q", resp.Rules[1].Delegate)
-	}
-	if len(resp.Triggers) != 2 {
-		t.Fatalf("expected 2 triggers, got %d", len(resp.Triggers))
+	// Sidecar written.
+	sidecarData, _ := os.ReadFile(filepath.Join(agentsDir, "delegations.json"))
+	if !strings.Contains(string(sidecarData), "Read 1 file") {
+		t.Errorf("sidecar missing the rule: %s", sidecarData)
 	}
 
-	// Sibling section (Cost and Context Balance) must survive.
-	mdPath := readAgentMarkdownPath(name)
-	data, _ := os.ReadFile(mdPath)
-	if !strings.Contains(string(data), "Cost and Context Balance") {
-		t.Error("sibling section should survive the PUT")
+	// Markdown re-rendered with the table.
+	mdData, _ := os.ReadFile(filepath.Join(agentsDir, "orchestrator.md"))
+	if !strings.Contains(string(mdData), "### Delegation Rules") {
+		t.Errorf("markdown missing the section")
 	}
-	// Frontmatter must survive.
-	if !strings.HasPrefix(string(data), "---") {
-		t.Error("frontmatter should be preserved")
-	}
-}
-
-func TestParseDelegationRulesTable_PipeEscape(t *testing.T) {
-	section := `| Action | Inline | Delegate |
-| ------ | ------ | -------- |
-| a \| b | Yes | No |`
-	rules := parseDelegationRulesTable(section)
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 rule, got %d", len(rules))
-	}
-	if rules[0].Action != "a | b" {
-		t.Errorf("escaped pipe not handled: %q", rules[0].Action)
-	}
-}
-
-func TestTriggerLineRegex(t *testing.T) {
-	cases := map[string]bool{
-		`1. **4-file rule**: if understanding requires...`: true,
-		`2. **PR rule** - before commit`:                  true,
-		`3. **Incident rule** — after wrong cwd`:          true,
-		`- not a trigger`:                                 false,
-		`plain text`:                                      false,
-	}
-	for line, want := range cases {
-		got := triggerLineRegex.MatchString(line)
-		if got != want {
-			t.Errorf("MatchString(%q) = %v, want %v", line, got, want)
-		}
+	if !strings.Contains(string(mdData), "Read 1 file") {
+		t.Errorf("markdown missing the rule row")
 	}
 }

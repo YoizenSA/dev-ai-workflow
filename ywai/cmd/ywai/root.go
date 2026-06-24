@@ -303,13 +303,14 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				fmt.Printf("  [%s] Agent profiles installed (markdown)\n", a.Name)
 			}
 
-			// Apply the default delegation graph (agents/delegations.json) into
-			// opencode.json so the Orchestrator UI shows the per-agent
-			// permission.task edges out of the box. Idempotent + safe to re-run.
-			if delegations, err := agentprofiles.LoadDelegations(sourceDir); err != nil {
+			// Apply the default delegation graph (agents/delegations.json): the
+			// task map goes to opencode.json (permission.task) and the rules +
+			// triggers are rendered into each agent's markdown prompt body.
+			// Idempotent + safe to re-run.
+			if doc, err := agentprofiles.LoadDelegations(sourceDir); err != nil {
 				fmt.Printf("  [%s] Warning: failed to load delegations: %v\n", a.Name, err)
-			} else if len(delegations) > 0 {
-				if err := agentprofiles.ApplyDelegations(configPath, delegations); err != nil {
+			} else if len(doc.Agents) > 0 {
+				if err := agentprofiles.ApplyDelegations(configPath, agentsDir, doc); err != nil {
 					fmt.Printf("  [%s] Warning: failed to apply delegations: %v\n", a.Name, err)
 				}
 			}
