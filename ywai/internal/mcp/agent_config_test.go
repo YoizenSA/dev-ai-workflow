@@ -64,6 +64,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"sync"
 	"testing"
@@ -677,7 +678,10 @@ func TestWriteAgentConfig_Opencode_FilePerms(t *testing.T) {
 	mode := info.Mode().Perm()
 	// The file MUST NOT be world-readable. A token-bearing file
 	// that another local user can read is a credential leak.
-	if mode&0o004 != 0 {
+	// Windows does not implement Unix permission bits (os.Stat reports
+	// 0666/0444 regardless of the mode passed to OpenFile), so this
+	// assertion is meaningful only on POSIX platforms.
+	if runtime.GOOS != "windows" && mode&0o004 != 0 {
 		t.Errorf("cfg file mode = %o, want no world-read bit (token leak risk)", mode)
 	}
 	// And the file MUST be readable/writable by the owner. 0o600
