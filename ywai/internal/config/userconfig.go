@@ -216,14 +216,14 @@ func (c *UserConfig) GetActiveOrchestratorProfile() OrchestratorModelProfile {
 	return DefaultOrchestratorModelProfiles()[DefaultOrchestratorModelProfileName]
 }
 
-// GetOrchestratorRoleDefault returns a role default from the active profile.
-func (c *UserConfig) GetOrchestratorRoleDefault(role string) (RoleDefault, bool) {
+// GetOrchestratorAgentModel returns the active profile's model for an agent,
+// or "" when the agent is not listed in the profile.
+func (c *UserConfig) GetOrchestratorAgentModel(agent string) string {
 	profile := c.GetActiveOrchestratorProfile()
-	if profile.RoleDefaults == nil {
-		return RoleDefault{}, false
+	if profile.Agents == nil {
+		return ""
 	}
-	rd, ok := profile.RoleDefaults[role]
-	return rd, ok && !rd.isEmpty()
+	return profile.Agents[agent].Model
 }
 
 // ResyncOrchestratorModelProfiles restores profiles from the embedded seed and

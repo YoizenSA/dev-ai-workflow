@@ -22,43 +22,35 @@ func TestDefaultOrchestratorModelProfiles_SeedsThreeProfiles(t *testing.T) {
 		if profile.DisplayName == "" {
 			t.Fatalf("expected profile %q to have a display name", name)
 		}
-		if profile.RoleDefaults["explore"].Model == "" {
-			t.Fatalf("expected profile %q to define an explore model", name)
-		}
-		if profile.RoleDefaults["scout"].Model == "" {
-			t.Fatalf("expected profile %q to define a scout model", name)
-		}
-		if profile.RoleDefaults["finder"].Model == "" {
-			t.Fatalf("expected profile %q to define a finder model", name)
+		// Profiles are keyed by agent name; spot-check core agents.
+		for _, agent := range []string{"dev", "qa", "reviewer"} {
+			if profile.Agents[agent].Model == "" {
+				t.Fatalf("expected profile %q to define a model for agent %q", name, agent)
+			}
 		}
 	}
 }
 
-func TestDefaultOrchestratorModelProfiles_IncludesRequestedFastScoutMapping(t *testing.T) {
+func TestDefaultOrchestratorModelProfiles_FastUsesFlashEverywhere(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 
-	got := profiles["fast"].RoleDefaults["scout"]
-	if got.Agent != "opencode-admin" {
-		t.Fatalf("expected fast scout agent opencode-admin, got %q", got.Agent)
-	}
-	if got.Model != "deepseek-v4-flash" {
-		t.Fatalf("expected fast scout model deepseek-v4-flash, got %q", got.Model)
+	got := profiles["fast"].Agents["dev"]
+	if got.Model != "opencode-admin/deepseek-v4-flash" {
+		t.Fatalf("expected fast dev model opencode-admin/deepseek-v4-flash, got %q", got.Model)
 	}
 }
 
 func TestOrchestratorProfiles_UserOverridePersistsAndWinsForActiveProfile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
 	cfg.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
-	cfg.OrchestratorProfiles["fast"].RoleDefaults["scout"] = RoleDefault{
-		Agent: "custom-agent",
-		Model: "custom/model",
-	}
+	cfg.OrchestratorProfiles["fast"].Agents["dev"] = RoleDefault{Model: "opencode-admin/custom-model"}
 
 	if err := os.MkdirAll(DataDir(), 0o755); err != nil {
 		t.Fatalf("create data dir: %v", err)
@@ -73,9 +65,8 @@ func TestOrchestratorProfiles_UserOverridePersistsAndWinsForActiveProfile(t *tes
 	}
 
 	active := loaded.GetActiveOrchestratorProfile()
-	got := active.RoleDefaults["scout"]
-	if got.Agent != "custom-agent" || got.Model != "custom/model" {
-		t.Fatalf("expected persisted active profile override, got agent=%q model=%q", got.Agent, got.Model)
+	if got := active.Agents["dev"].Model; got != "opencode-admin/custom-model" {
+		t.Fatalf("expected persisted active profile override, got model=%q", got)
 	}
 }
 
@@ -83,17 +74,17 @@ func TestResyncOrchestratorModelProfiles_RestoresSeedsAndPreservesValidActivePro
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
 	cfg.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
-	cfg.OrchestratorProfiles["fast"].RoleDefaults["scout"] = RoleDefault{Agent: "custom-agent", Model: "custom/model"}
+	cfg.OrchestratorProfiles["fast"].Agents["dev"] = RoleDefault{Model: "opencode-admin/custom-model"}
 
 	cfg.ResyncOrchestratorModelProfiles()
 
 	if cfg.ActiveOrchestratorProfile != "fast" {
 		t.Fatalf("expected valid active profile to be preserved, got %q", cfg.ActiveOrchestratorProfile)
 	}
-	got := cfg.OrchestratorProfiles["fast"].RoleDefaults["scout"]
-	seed := DefaultOrchestratorModelProfiles()["fast"].RoleDefaults["scout"]
+	got := cfg.OrchestratorProfiles["fast"].Agents["dev"]
+	seed := DefaultOrchestratorModelProfiles()["fast"].Agents["dev"]
 	if !reflect.DeepEqual(got, seed) {
-		t.Fatalf("expected resync to restore seeded fast scout mapping, got %+v want %+v", got, seed)
+		t.Fatalf("expected resync to restore seeded fast dev mapping, got %+v want %+v", got, seed)
 	}
 }
 
@@ -103,8 +94,8 @@ func TestResyncOrchestratorModelProfiles_FallsBackDeterministicallyWhenActivePro
 	cfg.OrchestratorProfiles = map[string]OrchestratorModelProfile{
 		"experimental": {
 			DisplayName: "Experimental",
-			RoleDefaults: RoleDefaults{
-				"scout": {Agent: "custom-agent", Model: "custom/model"},
+			Agents: RoleDefaults{
+				"dev": {Model: "opencode-admin/custom-model"},
 			},
 		},
 	}
@@ -116,5 +107,16 @@ func TestResyncOrchestratorModelProfiles_FallsBackDeterministicallyWhenActivePro
 	}
 	if _, ok := cfg.OrchestratorProfiles["experimental"]; ok {
 		t.Fatalf("expected resync to drop non-seed experimental profile")
+	}
+}
+
+func TestGetOrchestratorAgentModel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ActiveOrchestratorProfile = "fast"
+	if got := cfg.GetOrchestratorAgentModel("dev"); got != "opencode-admin/deepseek-v4-flash" {
+		t.Fatalf("expected fast dev model, got %q", got)
+	}
+	if got := cfg.GetOrchestratorAgentModel("nonexistent-agent"); got != "" {
+		t.Fatalf("expected empty model for unknown agent, got %q", got)
 	}
 }

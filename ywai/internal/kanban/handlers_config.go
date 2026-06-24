@@ -1012,7 +1012,21 @@ func (h *Handlers) SetActiveOrchestratorProfile(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+
+	// Apply the profile: write each agent's model into its config (opencode.json
+	// + markdown frontmatter). The markdown is what opencode enforces, so it
+	// takes effect both when the agent runs directly and when it is delegated to.
+	applied := 0
+	for agentName, rd := range cfg.OrchestratorProfiles[req.Name].Agents {
+		if rd.Model == "" {
+			continue
+		}
+		if applyAgentModel(agentName, rd.Model) {
+			applied++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "saved", "agents_applied": applied})
 }
 
 // ResyncOrchestratorProfiles restores profiles from the embedded seed.

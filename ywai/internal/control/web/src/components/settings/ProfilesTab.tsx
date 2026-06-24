@@ -3,23 +3,18 @@ import { RefreshCw, Check } from "lucide-react";
 import { configApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile } from "../../api/types";
 
-type Group = "agents" | "tasks";
+// Group an agent name by its family for readable sectioning.
+function agentGroup(name: string): string {
+	if (name.startsWith("qa-")) return "qa-automation";
+	if (name.startsWith("migration-")) return "social-refactor";
+	return "core";
+}
 
-const AGENT_ROLES = ["default", "scout", "finder", "explore", "implement", "review", "deploy"];
-const TASK_ROLES = ["planning", "ask", "research", "test"];
-
-const ROLE_LABELS: Record<string, string> = {
-	default: "Default / Orchestrator",
-	scout: "Scout / Finder",
-	finder: "Finder",
-	explore: "Explore",
-	implement: "Implement (Dev)",
-	review: "Reviewer",
-	deploy: "Devops / Deploy",
-	planning: "Planning",
-	ask: "Ask / Research",
-	research: "Research",
-	test: "Test (QA)",
+const GROUP_ORDER = ["core", "qa-automation", "social-refactor"];
+const GROUP_LABELS: Record<string, string> = {
+	core: "Core",
+	"qa-automation": "QA Automation",
+	"social-refactor": "Social Refactor",
 };
 
 export default function ProfilesTab() {
@@ -28,18 +23,13 @@ export default function ProfilesTab() {
 	const [saving, setSaving] = useState(false);
 	const [resyncing, setResyncing] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
-	const [group, setGroup] = useState<Group>("agents");
 
 	const fetchProfiles = () => {
 		setLoading(true);
 		configApi
 			.getOrchestratorProfiles()
-			.then((res) => {
-				setData(res);
-			})
-			.catch((err) => {
-				setMessage(`Error loading profiles: ${err.message}`);
-			})
+			.then((res) => setData(res))
+			.catch((err) => setMessage(`Error loading profiles: ${err.message}`))
 			.finally(() => setLoading(false));
 	};
 
@@ -54,11 +44,9 @@ export default function ProfilesTab() {
 			.setActiveOrchestratorProfile(name)
 			.then(() => {
 				setData((prev) => (prev ? { ...prev, active: name } : prev));
-				setMessage("Active profile updated");
+				setMessage("Active profile applied — each agent's model written to its config");
 			})
-			.catch((err) => {
-				setMessage(`Error: ${err.message}`);
-			})
+			.catch((err) => setMessage(`Error: ${err.message}`))
 			.finally(() => setSaving(false));
 	};
 
@@ -71,9 +59,7 @@ export default function ProfilesTab() {
 				setData(res);
 				setMessage("Profiles resynced from seed");
 			})
-			.catch((err) => {
-				setMessage(`Error: ${err.message}`);
-			})
+			.catch((err) => setMessage(`Error: ${err.message}`))
 			.finally(() => setResyncing(false));
 	};
 
@@ -93,8 +79,12 @@ export default function ProfilesTab() {
 	const currentProfile: OrchestratorProfile | null =
 		data && data.profiles[activeProfile] ? data.profiles[activeProfile] : null;
 
-	const filteredRoles =
-		group === "agents" ? AGENT_ROLES : TASK_ROLES;
+	const agents = currentProfile?.agents ?? {};
+	const agentNames = Object.keys(agents).sort((a, b) => {
+		const ga = GROUP_ORDER.indexOf(agentGroup(a));
+		const gb = GROUP_ORDER.indexOf(agentGroup(b));
+		return ga !== gb ? ga - gb : a.localeCompare(b);
+	});
 
 	return (
 		<div className="card card-pad">
@@ -138,75 +128,53 @@ export default function ProfilesTab() {
 				</div>
 			</div>
 
-			{/* Current profile info */}
 			{currentProfile && (
-				<div style={{ marginBottom: "1.5rem" }}>
-					<p className="muted" style={{ margin: "0 0 0.25rem" }}>
-						{currentProfile.description}
-					</p>
-				</div>
+				<p className="muted" style={{ margin: "0 0 1rem" }}>
+					{currentProfile.description}
+				</p>
 			)}
 
-			{/* Group tabs */}
-			<div className="tabs" style={{ marginBottom: "1rem" }}>
-				<button
-					type="button"
-					className={`tab ${group === "agents" ? "active" : ""}`}
-					onClick={() => setGroup("agents")}
-				>
-					Agents
-				</button>
-				<button
-					type="button"
-					className={`tab ${group === "tasks" ? "active" : ""}`}
-					onClick={() => setGroup("tasks")}
-				>
-					Tasks
-				</button>
-			</div>
-
-			{/* Mappings table */}
-			{currentProfile && currentProfile.role_defaults ? (
+			{/* Per-agent model table */}
+			{agentNames.length > 0 ? (
 				<table style={{ width: "100%", borderCollapse: "collapse" }}>
 					<thead>
 						<tr>
-							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Role</th>
 							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Agent</th>
 							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Model</th>
 						</tr>
 					</thead>
 					<tbody>
-						{filteredRoles.map((role) => {
-							const mapping = currentProfile.role_defaults?.[role];
-							if (!mapping) return null;
-							return (
-								<tr key={role}>
-									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)", verticalAlign: "top" }}>
-										{ROLE_LABELS[role] ?? role}
+						{agentNames.flatMap((name, i) => {
+							const group = agentGroup(name);
+							const prevGroup = i > 0 ? agentGroup(agentNames[i - 1]) : null;
+							const rows = [];
+							if (group !== prevGroup) {
+								rows.push(
+									<tr key={`grp-${group}`}>
+										<td colSpan={2} style={{ padding: "0.6rem 0.75rem 0.2rem", fontWeight: 600 }} className="muted">
+											{GROUP_LABELS[group] ?? group}
+										</td>
+									</tr>,
+								);
+							}
+							rows.push(
+								<tr key={name}>
+									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
+										{name}
 									</td>
 									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
-										<span className="pill pill-muted">{mapping.agent}</span>
+										<span className="pill pill-muted">{agents[name].model}</span>
 									</td>
-									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
-										<span className="pill pill-muted">{mapping.model}</span>
-									</td>
-								</tr>
+								</tr>,
 							);
+							return rows;
 						})}
-						{filteredRoles.every((r) => !currentProfile.role_defaults?.[r]) && (
-							<tr>
-								<td colSpan={3} style={{ padding: "1rem", textAlign: "center" }} className="muted">
-									No {group} role mappings defined
-								</td>
-							</tr>
-						)}
 					</tbody>
 				</table>
 			) : (
-				<p className="muted">No role mappings for this profile</p>
+				<p className="muted">No agent model mappings for this profile</p>
 			)}
 
-			{/* Resync button */}
 			<div style={{ marginTop: "1.5rem" }}>
 				<button
 					type="button"

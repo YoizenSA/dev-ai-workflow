@@ -642,9 +642,22 @@ func (h *Handlers) PutAgentModel(w http.ResponseWriter, r *http.Request) {
 	}
 	model := strings.TrimSpace(body.Model)
 
+	if !applyAgentModel(name, model) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"model": model})
+}
+
+// applyAgentModel writes an agent's model into opencode.json (agent.<name>.model)
+// and its markdown frontmatter (the source of truth opencode enforces). An empty
+// model clears the override. Returns true if the agent was found in either
+// location. Shared by PutAgentModel and orchestrator-profile activation.
+func applyAgentModel(name, model string) bool {
+	model = strings.TrimSpace(model)
 	found := false
 
-	// Write to opencode.json if the agent is configured there.
 	if path, err := opencodeConfigPath(); err == nil {
 		if data, err := os.ReadFile(path); err == nil {
 			var config map[string]json.RawMessage
@@ -676,25 +689,17 @@ func (h *Handlers) PutAgentModel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Also update markdown frontmatter (backward compat / source of truth on disk).
 	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
 		if mdContent, err := os.ReadFile(mdPath); err == nil {
 			updated := setScalarFrontmatterField(string(mdContent), "model", model)
 			_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
-			if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-				return
+			if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
+				found = true
 			}
-			found = true
 		}
 	}
 
-	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found in opencode.json or markdown files"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"model": model})
+	return found
 }
 
 // GET /api/config/agents/graph

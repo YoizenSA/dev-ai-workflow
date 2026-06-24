@@ -81,14 +81,13 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 		}
 	}
 	rd := cfg.GetRoleDefault(role)
-	profileRD, hasProfile := cfg.GetOrchestratorRoleDefault(role)
 
-	// Precedence: feature override → orchestrator profile → mission → plain role default
+	// Precedence: feature override → mission → plain role default.
+	// Orchestrator profiles are applied per-agent to each agent's config (see
+	// UserConfig.GetOrchestratorAgentModel and the profile-apply path), not here.
 	switch {
 	case feat != nil && feat.Model != "":
 		model = feat.Model
-	case hasProfile && profileRD.Model != "":
-		model = profileRD.Model
 	case mission != nil && mission.Model != "":
 		model = mission.Model
 	case rd.Model != "":
@@ -98,8 +97,6 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 	switch {
 	case feat != nil && feat.Agent != "":
 		agent = feat.Agent
-	case hasProfile && profileRD.Agent != "":
-		agent = profileRD.Agent
 	case mission != nil && mission.ExecutionAgent != "":
 		agent = mission.ExecutionAgent
 	case mission != nil && mission.Agent != "":
@@ -108,7 +105,7 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 		agent = rd.Agent
 	}
 
-	// Build chain: primary, then feature fallbacks (if any), then role/profile fallbacks.
+	// Build chain: primary, then feature fallbacks (if any), then role fallbacks.
 	chain = []string{}
 	if model != "" {
 		chain = append(chain, model)
@@ -120,11 +117,7 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 			}
 		}
 	}
-	fallbackSrc := rd.Fallbacks
-	if hasProfile {
-		fallbackSrc = profileRD.Fallbacks
-	}
-	for _, m := range fallbackSrc {
+	for _, m := range rd.Fallbacks {
 		if m == "" {
 			continue
 		}

@@ -2,152 +2,80 @@
   "profiles": {
     "balanced": {
       "display_name": "Balanced",
-      "description": "Default profile — balanced for all orchestrator roles",
-      "role_defaults": {
-        "default": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-pro"
-        },
-        "planning": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-pro"
-        },
-        "ask": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "research": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "scout": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "finder": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "explore": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "implement": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-pro"
-        },
-        "test": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "review": {
-          "agent": "opencode-admin",
-          "model": "qwen3.7-max"
-        },
-        "deploy": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        }
+      "description": "Sensible cost/quality tradeoff per agent",
+      "agents": {
+        "orchestrator": { "model": "opencode-admin/deepseek-v4-pro" },
+        "architect": { "model": "opencode-admin/deepseek-v4-pro" },
+        "ask": { "model": "opencode-admin/minimax-m3" },
+        "dev": { "model": "opencode-admin/kimi-k2.7-code" },
+        "devops": { "model": "opencode-admin/deepseek-v4-flash" },
+        "finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "memory": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa": { "model": "opencode-admin/minimax-m3" },
+        "reviewer": { "model": "opencode-admin/deepseek-v4-pro" },
+        "qa-orchestrator": { "model": "opencode-admin/deepseek-v4-pro" },
+        "qa-analyst": { "model": "opencode-admin/minimax-m3" },
+        "qa-ask": { "model": "opencode-admin/minimax-m3" },
+        "qa-dev": { "model": "opencode-admin/kimi-k2.7-code" },
+        "qa-finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-reviewer": { "model": "opencode-admin/deepseek-v4-pro" },
+        "migration-orchestrator": { "model": "opencode-admin/deepseek-v4-pro" },
+        "migration-planner": { "model": "opencode-admin/deepseek-v4-pro" },
+        "migration-scope": { "model": "opencode-admin/minimax-m3" },
+        "migration-validator": { "model": "opencode-admin/minimax-m3" },
+        "migration-validator-focused": { "model": "opencode-admin/minimax-m3" }
       }
     },
     "fast": {
       "display_name": "Fast",
-      "description": "Speed-optimized profile — uses flash models for all roles",
-      "role_defaults": {
-        "default": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "planning": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "ask": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "research": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "scout": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "finder": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "explore": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "implement": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "test": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "review": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "deploy": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        }
+      "description": "Speed/cost-optimized — flash model for every agent",
+      "agents": {
+        "orchestrator": { "model": "opencode-admin/deepseek-v4-flash" },
+        "architect": { "model": "opencode-admin/deepseek-v4-flash" },
+        "ask": { "model": "opencode-admin/deepseek-v4-flash" },
+        "dev": { "model": "opencode-admin/deepseek-v4-flash" },
+        "devops": { "model": "opencode-admin/deepseek-v4-flash" },
+        "finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "memory": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa": { "model": "opencode-admin/deepseek-v4-flash" },
+        "reviewer": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-orchestrator": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-analyst": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-ask": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-dev": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-reviewer": { "model": "opencode-admin/deepseek-v4-flash" },
+        "migration-orchestrator": { "model": "opencode-admin/deepseek-v4-flash" },
+        "migration-planner": { "model": "opencode-admin/deepseek-v4-flash" },
+        "migration-scope": { "model": "opencode-admin/deepseek-v4-flash" },
+        "migration-validator": { "model": "opencode-admin/deepseek-v4-flash" },
+        "migration-validator-focused": { "model": "opencode-admin/deepseek-v4-flash" }
       }
     },
     "deep": {
       "display_name": "Deep",
-      "description": "Higher-reasoning profile for complex orchestration tasks",
-      "role_defaults": {
-        "default": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-pro"
-        },
-        "planning": {
-          "agent": "opencode-admin",
-          "model": "kimi-k2.7-code"
-        },
-        "ask": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "research": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "scout": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "finder": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "explore": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        },
-        "implement": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-pro"
-        },
-        "test": {
-          "agent": "opencode-admin",
-          "model": "mimo-v2.5-pro"
-        },
-        "review": {
-          "agent": "opencode-admin",
-          "model": "qwen3.7-max"
-        },
-        "deploy": {
-          "agent": "opencode-admin",
-          "model": "deepseek-v4-flash"
-        }
+      "description": "Higher-reasoning — top models for design/review, strong elsewhere",
+      "agents": {
+        "orchestrator": { "model": "opencode-admin/qwen3.7-max" },
+        "architect": { "model": "opencode-admin/qwen3.7-max" },
+        "ask": { "model": "opencode-admin/mimo-v2.5-pro" },
+        "dev": { "model": "opencode-admin/deepseek-v4-pro" },
+        "devops": { "model": "opencode-admin/deepseek-v4-pro" },
+        "finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "memory": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa": { "model": "opencode-admin/deepseek-v4-pro" },
+        "reviewer": { "model": "opencode-admin/qwen3.7-max" },
+        "qa-orchestrator": { "model": "opencode-admin/qwen3.7-max" },
+        "qa-analyst": { "model": "opencode-admin/deepseek-v4-pro" },
+        "qa-ask": { "model": "opencode-admin/mimo-v2.5-pro" },
+        "qa-dev": { "model": "opencode-admin/deepseek-v4-pro" },
+        "qa-finder": { "model": "opencode-admin/deepseek-v4-flash" },
+        "qa-reviewer": { "model": "opencode-admin/qwen3.7-max" },
+        "migration-orchestrator": { "model": "opencode-admin/qwen3.7-max" },
+        "migration-planner": { "model": "opencode-admin/qwen3.7-max" },
+        "migration-scope": { "model": "opencode-admin/deepseek-v4-pro" },
+        "migration-validator": { "model": "opencode-admin/deepseek-v4-pro" },
+        "migration-validator-focused": { "model": "opencode-admin/deepseek-v4-pro" }
       }
     }
   }

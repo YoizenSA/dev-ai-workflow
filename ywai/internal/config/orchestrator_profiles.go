@@ -7,11 +7,16 @@ import (
 
 const DefaultOrchestratorModelProfileName = "balanced"
 
-// OrchestratorModelProfile groups model defaults for orchestrator-specific roles.
+// OrchestratorModelProfile is a named preset of per-agent model assignments.
+// Keys of Agents are agent names (dev, qa, architect, qa-analyst, …); each
+// entry's Model is a full opencode model id (e.g. "opencode-admin/deepseek-v4-pro").
+// Activating a profile writes each agent's model into that agent's markdown
+// config, so it applies both when the agent runs directly and when it is
+// delegated to (the delegate tool falls back to the agent's configured model).
 type OrchestratorModelProfile struct {
-	DisplayName  string       `yaml:"display_name,omitempty" json:"display_name,omitempty"`
-	Description  string       `yaml:"description,omitempty" json:"description,omitempty"`
-	RoleDefaults RoleDefaults `yaml:"role_defaults,omitempty" json:"role_defaults,omitempty"`
+	DisplayName string       `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	Description string       `yaml:"description,omitempty" json:"description,omitempty"`
+	Agents      RoleDefaults `yaml:"agents,omitempty" json:"agents,omitempty"`
 }
 
 type orchestratorProfilesDoc struct {
@@ -39,7 +44,7 @@ func cloneOrchestratorProfiles(src map[string]OrchestratorModelProfile) map[stri
 }
 
 func (p OrchestratorModelProfile) Clone() OrchestratorModelProfile {
-	p.RoleDefaults = cloneRoleDefaults(p.RoleDefaults)
+	p.Agents = cloneRoleDefaults(p.Agents)
 	return p
 }
 

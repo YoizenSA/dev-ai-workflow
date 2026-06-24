@@ -582,7 +582,7 @@ export interface ApplySelection {
 }
 
 export interface OrchestratorModelMapping {
-  agent: string;
+  agent?: string;
   model: string;
 }
 
@@ -591,7 +591,8 @@ export interface OrchestratorProfile {
   display_name?: string;
   description?: string;
   is_seed?: boolean;
-  role_defaults?: Record<string, OrchestratorModelMapping>;
+  // Keyed by agent name (dev, qa, architect, qa-analyst, migration-planner, …).
+  agents?: Record<string, OrchestratorModelMapping>;
 }
 
 export interface OrchestratorProfilesResponse {
