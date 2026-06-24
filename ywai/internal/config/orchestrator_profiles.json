@@ -1,0 +1,58 @@
+{
+  "profiles": {
+    "balanced": {
+      "display_name": "Balanced",
+      "description": "Default profile balancing speed and reasoning depth for orchestration tasks.",
+      "role_defaults": {
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        },
+        "scout": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        },
+        "finder": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        }
+      }
+    },
+    "fast": {
+      "display_name": "Fast",
+      "description": "Lower-latency profile for discovery and routing work.",
+      "role_defaults": {
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "scout": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        },
+        "finder": {
+          "agent": "opencode-admin",
+          "model": "deepseek-v4-flash"
+        }
+      }
+    },
+    "deep": {
+      "display_name": "Deep",
+      "description": "Higher-reasoning profile for complex orchestration tasks.",
+      "role_defaults": {
+        "explore": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        },
+        "scout": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        },
+        "finder": {
+          "agent": "opencode-admin",
+          "model": "openai/gpt-5.5"
+        }
+      }
+    }
+  }
+}

@@ -82,6 +82,12 @@ type UserConfig struct {
 
 	// RoleDefaults assigns default agent + model + fallbacks + skills per mission role.
 	RoleDefaults RoleDefaults `yaml:"role_defaults,omitempty" json:"role_defaults,omitempty"`
+
+	// ActiveOrchestratorProfile selects which orchestrator model profile is used at runtime.
+	ActiveOrchestratorProfile string `yaml:"active_orchestrator_profile,omitempty" json:"active_orchestrator_profile,omitempty"`
+
+	// OrchestratorProfiles contains user-overridable model profiles for orchestrator roles.
+	OrchestratorProfiles map[string]OrchestratorModelProfile `yaml:"orchestrator_profiles,omitempty" json:"orchestrator_profiles,omitempty"`
 }
 
 // ServerConfig contains configuration for the control server
@@ -123,6 +129,7 @@ func LoadConfig() (*UserConfig, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+	config.ensureDefaults()
 
 	return &config, nil
 }
@@ -151,15 +158,35 @@ func SaveConfig(config *UserConfig) error {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *UserConfig {
 	return &UserConfig{
-		DefaultPreset:  "full-gentleman",
-		DefaultSDDMode: "single",
-		DefaultPersona: "gentleman",
-		DefaultScope:   "global",
-		DefaultTUI:     true,
-		DefaultMCP:     false,
-		ColoredOutput:  func() *bool { b := true; return &b }(),
-		LogLevel:       "info",
-		RoleDefaults:   DefaultRoleDefaults(),
+		DefaultPreset:             "full-gentleman",
+		DefaultSDDMode:            "single",
+		DefaultPersona:            "gentleman",
+		DefaultScope:              "global",
+		DefaultTUI:                true,
+		DefaultMCP:                false,
+		ColoredOutput:             func() *bool { b := true; return &b }(),
+		LogLevel:                  "info",
+		RoleDefaults:              DefaultRoleDefaults(),
+		ActiveOrchestratorProfile: DefaultOrchestratorModelProfileName,
+		OrchestratorProfiles:      DefaultOrchestratorModelProfiles(),
+	}
+}
+
+func (c *UserConfig) ensureDefaults() {
+	if c == nil {
+		return
+	}
+	if c.RoleDefaults == nil {
+		c.RoleDefaults = DefaultRoleDefaults()
+	}
+	if c.OrchestratorProfiles == nil {
+		c.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
+	}
+	if c.ActiveOrchestratorProfile == "" {
+		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
+	}
+	if _, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; !ok {
+		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 	}
 }
 
@@ -176,6 +203,42 @@ func (c *UserConfig) GetRoleDefault(role string) RoleDefault {
 		return rd
 	}
 	return RoleDefault{}
+}
+
+// GetActiveOrchestratorProfile returns the active orchestrator profile,
+// falling back to the seeded default when config is missing or invalid.
+func (c *UserConfig) GetActiveOrchestratorProfile() OrchestratorModelProfile {
+	if c != nil {
+		if profile, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; ok {
+			return profile.Clone()
+		}
+	}
+	return DefaultOrchestratorModelProfiles()[DefaultOrchestratorModelProfileName]
+}
+
+// GetOrchestratorRoleDefault returns a role default from the active profile.
+func (c *UserConfig) GetOrchestratorRoleDefault(role string) (RoleDefault, bool) {
+	profile := c.GetActiveOrchestratorProfile()
+	if profile.RoleDefaults == nil {
+		return RoleDefault{}, false
+	}
+	rd, ok := profile.RoleDefaults[role]
+	return rd, ok && !rd.isEmpty()
+}
+
+// ResyncOrchestratorModelProfiles restores profiles from the embedded seed and
+// removes user-created profiles. The active selection is preserved when still valid.
+func (c *UserConfig) ResyncOrchestratorModelProfiles() {
+	if c == nil {
+		return
+	}
+	active := c.ActiveOrchestratorProfile
+	c.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
+	if _, ok := c.OrchestratorProfiles[active]; ok {
+		c.ActiveOrchestratorProfile = active
+		return
+	}
+	c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 }
 
 func (rd RoleDefault) isEmpty() bool {

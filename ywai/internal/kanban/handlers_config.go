@@ -316,8 +316,23 @@ func buildToolsResponse() (map[string]interface{}, error) {
 		}
 	}
 
-	// Plugin discovery — scan .cache/opencode/packages for tool registrations
+	// Plugin discovery — scan .cache/opencode/packages for npm plugin tools.
 	pluginTools := discoverAllPluginTools()
+
+	// Also discover plugins referenced from the opencode "plugin" array: ywai
+	// seeds local bundles (e.g. background-agents.js) there, which the npm
+	// packages scan above never sees.
+	if pluginRaw, ok := config["plugin"]; ok {
+		var entries []string
+		if err := json.Unmarshal(pluginRaw, &entries); err == nil {
+			for name, tools := range discoverConfigPluginTools(entries) {
+				if _, exists := pluginTools[name]; !exists {
+					pluginTools[name] = tools
+				}
+			}
+		}
+	}
+
 	for _, tools := range pluginTools {
 		for _, t := range tools {
 			toolSet[t] = true

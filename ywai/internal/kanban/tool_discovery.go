@@ -85,6 +85,83 @@ func discoverPluginTools(pluginDir string) []string {
 	return tools
 }
 
+// knownBundleTools maps a seeded plugin bundle filename to the tools it
+// exposes. ywai ships its own plugins as minified bundles (e.g.
+// background-agents.js, ~500KB); regex-scanning a minified file yields false
+// positives, so we declare their stable tool sets explicitly. These bundles
+// are seeded next to the opencode config and referenced from its "plugin"
+// array, so discoverAllPluginTools (which only scans the npm packages dir)
+// never sees them.
+var knownBundleTools = map[string][]string{
+	"background-agents.js": {
+		"delegate",
+		"delegation_read",
+		"delegation_list",
+		"delegation_status",
+		"delegation_peek",
+		"delegation_steer",
+		"delegation_stop",
+	},
+}
+
+// scanPluginFile parses a single plugin source/bundle file for tool
+// registrations. Best-effort: used for non-ywai local plugins where we have
+// no declared tool set.
+func scanPluginFile(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	content := string(data)
+	toolSet := map[string]bool{}
+	toolPattern := regexp.MustCompile(`(?:"|')?([a-z][a-z0-9_]*)(?:"|')?:\s*tool\s*\(`)
+	for _, m := range toolPattern.FindAllStringSubmatch(content, -1) {
+		if len(m) > 1 && m[1] != "" {
+			toolSet[m[1]] = true
+		}
+	}
+	namePattern := regexp.MustCompile(`name\s*:\s*["']([a-z][a-z0-9_]*)["']`)
+	for _, m := range namePattern.FindAllStringSubmatch(content, -1) {
+		if len(m) > 1 && m[1] != "" {
+			toolSet[m[1]] = true
+		}
+	}
+	var tools []string
+	for t := range toolSet {
+		tools = append(tools, t)
+	}
+	sortStrings(tools)
+	return tools
+}
+
+// discoverConfigPluginTools resolves the tools exposed by every plugin listed
+// in opencode's "plugin" array. Entries are local file paths (ywai seeds
+// bundles next to the opencode config) optionally prefixed with "file:".
+// ywai bundles use knownBundleTools; other local JS files fall back to a
+// best-effort source scan. npm-package plugins are covered by
+// discoverAllPluginTools instead. Keyed by a friendly plugin name.
+func discoverConfigPluginTools(entries []string) map[string][]string {
+	result := map[string][]string{}
+	for _, raw := range entries {
+		path := strings.TrimPrefix(raw, "file://")
+		path = strings.TrimPrefix(path, "file:")
+		base := filepath.Base(path)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+		if name == "" || name == "." {
+			continue
+		}
+
+		if tools, ok := knownBundleTools[base]; ok {
+			result[name] = append([]string(nil), tools...)
+			continue
+		}
+		if tools := scanPluginFile(path); len(tools) > 0 {
+			result[name] = tools
+		}
+	}
+	return result
+}
+
 // discoverAllPluginTools scans the opencode packages directory for plugin tools.
 func discoverAllPluginTools() map[string][]string {
 	result := map[string][]string{}

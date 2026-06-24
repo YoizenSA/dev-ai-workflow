@@ -81,8 +81,14 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 		}
 	}
 	rd := cfg.GetRoleDefault(role)
+	profileRD, hasProfileRD := cfg.GetOrchestratorRoleDefault(role)
+	if hasProfileRD {
+		rd = profileRD
+	}
 
 	switch {
+	case hasProfileRD && profileRD.Model != "":
+		model = profileRD.Model
 	case feat != nil && feat.Model != "":
 		model = feat.Model
 	case mission != nil && mission.Model != "":
@@ -92,6 +98,8 @@ func ResolveExecution(feat *Feature, mission *Mission, cfg *config.UserConfig) (
 	}
 
 	switch {
+	case hasProfileRD && profileRD.Agent != "":
+		agent = profileRD.Agent
 	case feat != nil && feat.Agent != "":
 		agent = feat.Agent
 	case mission != nil && mission.ExecutionAgent != "":
