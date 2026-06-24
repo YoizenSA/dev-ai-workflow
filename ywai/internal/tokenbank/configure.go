@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // ---------------------------------------------------------------------------
@@ -95,9 +96,12 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 			entry["limit"] = limit
 		}
 
-		// Inject additional capability flags
+		// Inject additional capability flags.
+		// Kimi models (Moonshot upstream) reject the `temperature` parameter
+		// and respond 502 Bad Gateway, so disable it for them while keeping
+		// reasoning/variants intact. All other models accept temperature.
 		entry["reasoning"] = true
-		entry["temperature"] = true
+		entry["temperature"] = !isKimiModel(m.ID)
 		entry["tool_call"] = true
 		entry["attachment"] = true
 		entry["modalities"] = map[string]interface{}{
@@ -105,6 +109,12 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 			"output": []string{"text"},
 		}
 	}
+}
+
+// isKimiModel reports whether a model ID belongs to the Kimi (Moonshot)
+// family, whose upstream gateway returns 502 when `temperature` is sent.
+func isKimiModel(id string) bool {
+	return strings.HasPrefix(strings.ToLower(id), "kimi")
 }
 
 // ---------------------------------------------------------------------------
