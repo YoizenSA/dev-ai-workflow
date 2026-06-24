@@ -22,6 +22,13 @@ var (
 // background-agents plugin, both in the embedded FS and once seeded to disk.
 const BackgroundAgentsBundleName = "background-agents.js"
 
+// TuiLogoBundleName is the filename of the ywai TUI logo plugin, both in the
+// embedded FS (under plugins/tui/) and once seeded/installed to disk.
+const TuiLogoBundleName = "ywai-logo.tsx"
+
+// tuiLogoEmbeddedSubpath is the logo's path within the embedded plugins FS.
+const tuiLogoEmbeddedSubpath = "tui/" + TuiLogoBundleName
+
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
@@ -244,6 +251,34 @@ func BackgroundAgentsBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("background-agents plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// TuiLogoBundlePath resolves the path to the ywai TUI logo plugin source. It
+// prefers the source checkout (ywai/plugins/tui/ywai-logo.tsx), falls back to
+// the seeded copy under DataPluginsDir()/tui/, and seeds from the embedded FS
+// on demand. Unlike the background-agents bundle the logo is a plain .tsx file
+// (no build step), so it ships as source.
+func TuiLogoBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/tui/ywai-logo.tsx
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", TuiLogoBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), "tui", TuiLogoBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("ywai TUI logo plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

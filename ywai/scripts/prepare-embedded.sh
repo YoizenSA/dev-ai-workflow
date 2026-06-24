@@ -59,6 +59,12 @@ if [ -f "$BA_BUNDLE" ]; then
     cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"
 fi
 
+# ywai TUI logo (home_logo slot). Plain .tsx source — no build step.
+if [ -d "$REPO_ROOT/plugins/tui" ]; then
+    mkdir -p "$EMBED_DIR/plugins/tui"
+    cp -a "$REPO_ROOT/plugins/tui/." "$EMBED_DIR/plugins/tui/"
+fi
+
 skill_count=$(ls -d "$EMBED_DIR/skills"/*/ 2>/dev/null | wc -l)
 agent_count=$(find "$EMBED_DIR/agents" -name "AGENT.md" | wc -l)
 plugin_count=$(ls "$EMBED_DIR/plugins"/*.js 2>/dev/null | wc -l || echo 0)

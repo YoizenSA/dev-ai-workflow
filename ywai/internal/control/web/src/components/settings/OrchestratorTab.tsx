@@ -516,9 +516,15 @@ export default function OrchestratorTab() {
 									<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
 									<Controls />
 									<MiniMap
+										pannable
+										zoomable
 										nodeColor={(n) => {
 											const d = n.data as AgentNodeData | GroupNodeData;
-											if (n.id.startsWith("group:")) return "var(--surface-hover)";
+											// Group lane containers are large; a solid fill would
+											// blanket the whole minimap and hide the agent nodes
+											// painted on top. Keep them transparent so the colored
+											// agent nodes are what actually reads in the minimap.
+											if (n.id.startsWith("group:")) return "transparent";
 											const ad = d as AgentNodeData;
 											if (ad?.ghost) return "var(--text-faint)";
 											return ad?.mode === "primary"

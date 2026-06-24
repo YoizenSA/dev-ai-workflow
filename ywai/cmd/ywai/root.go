@@ -471,6 +471,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
 			if supportsOpenCodePlugins {
 				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
+				fmt.Printf("  [%s] Would install ywai TUI logo\n", a.Name)
 			}
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
@@ -494,6 +495,14 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Installed background-agents plugin\n", a.Name)
+			}
+
+			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
+			// from tui-plugins/, so no config patching is needed.
+			if err := plugins.InstallTuiLogo(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Installed ywai TUI logo\n", a.Name)
 			}
 		}
 
