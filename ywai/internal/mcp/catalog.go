@@ -78,10 +78,10 @@ var catalog = []CatalogEntry{
 		ID: "playwright", Name: "Playwright",
 		Description: "Cross-browser end-to-end testing via Playwright",
 		Category:    "testing", Icon: "🎭", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "@anthropic-ai/playwright-mcp"},
-		InstallCmd: "npx -y @anthropic-ai/playwright-mcp",
+		Type: "local", Command: []string{"npx", "-y", "@playwright/mcp@latest"},
+		InstallCmd: "npx -y @playwright/mcp@latest",
 		Tools:      []string{"browser_navigate", "browser_snapshot", "browser_click", "browser_screenshot"},
-		Docs:       "https://playwright.dev",
+		Docs:       "https://github.com/microsoft/playwright-mcp",
 	},
 	{
 		ID: "git", Name: "Git",

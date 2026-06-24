@@ -13,6 +13,10 @@ interface McpServer {
 	popular: boolean;
 	type: 'local' | 'remote';
 	source: 'custom' | 'registry';
+	status?: 'available' | 'connected' | 'disabled' | 'missing_executable' | 'connection_error';
+	statusLabel?: string;
+	statusMessage?: string;
+	fixAction?: string;
 	tools: string[];
 	url?: string;
 	docs?: string;
@@ -93,6 +97,7 @@ function McpCard({
 	installState?: InstallState;
 }) {
 	const isInstalled = server.installed;
+	const statusClass = server.status ? ` status-${server.status}` : '';
 	const credsError =
 		installState?.errorCode === 'missing_credentials' ? 'missing_credentials' : undefined;
 
@@ -106,7 +111,12 @@ function McpCard({
 				<div className="mcp-store-card-info">
 					<div className="mcp-store-card-name-row">
 						<h3 className="mcp-store-card-name">{server.name}</h3>
-						{isInstalled && (
+						{server.statusLabel && (
+							<span className={`mcp-store-card-status-badge${statusClass}`}>
+								{server.statusLabel}
+							</span>
+						)}
+						{isInstalled && !server.statusLabel && (
 							<span className="mcp-store-card-installed-badge">Installed</span>
 						)}
 					</div>
@@ -115,6 +125,13 @@ function McpCard({
 			</div>
 
 			<p className="mcp-store-card-description">{server.description}</p>
+
+			{server.statusMessage && (
+				<div className={`mcp-store-card-status-message${statusClass}`}>
+					<span>{server.statusMessage}</span>
+					{server.fixAction && <strong>{server.fixAction.replace(/_/g, ' ')}</strong>}
+				</div>
+			)}
 
 			{!isInstalled && (
 				<CredentialsForm

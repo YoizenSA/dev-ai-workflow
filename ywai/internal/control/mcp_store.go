@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
@@ -32,9 +34,13 @@ type McpCatalogEntry struct {
 // McpCatalogItem combines a catalog entry with its installed status.
 type McpCatalogItem struct {
 	McpCatalogEntry
-	Installed bool   `json:"installed"`
-	Enabled   bool   `json:"enabled"`
-	Source    string `json:"source"`
+	Installed     bool   `json:"installed"`
+	Enabled       bool   `json:"enabled"`
+	Source        string `json:"source"`
+	Status        string `json:"status"`
+	StatusLabel   string `json:"statusLabel"`
+	StatusMessage string `json:"statusMessage,omitempty"`
+	FixAction     string `json:"fixAction,omitempty"`
 }
 
 // mcpConfigMu guards concurrent reads/writes to the config file.
@@ -80,10 +86,10 @@ var customMcpCatalog = []McpCatalogEntry{
 		Icon:        "BRW",
 		Popular:     true,
 		Type:        "local",
-		Command:     []string{"npx", "-y", "@anthropic-ai/playwright-mcp"},
-		InstallCmd:  "npx -y @anthropic-ai/playwright-mcp",
+		Command:     []string{"npx", "-y", "@playwright/mcp@latest"},
+		InstallCmd:  "npx -y @playwright/mcp@latest",
 		Tools:       []string{"browser-navigate", "browser-click", "browser-type", "browser-screenshot", "browser-evaluate", "browser-select"},
-		Docs:        "https://github.com/anthropics/playwright-mcp",
+		Docs:        "https://github.com/microsoft/playwright-mcp",
 	},
 	{
 		ID:          "engram",
@@ -258,8 +264,10 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 	items := make([]McpCatalogItem, len(fullCatalog))
 	for i, entry := range fullCatalog {
 		installed, enabled := false, true
-		if cfg, ok := mcpConfig[entry.ID]; ok {
-			if m, ok := cfg.(map[string]interface{}); ok {
+		var cfg map[string]interface{}
+		if rawCfg, ok := mcpConfig[entry.ID]; ok {
+			if m, ok := rawCfg.(map[string]interface{}); ok {
+				cfg = m
 				installed = true
 				// If enabled field is missing, default to true
 				if enabledVal, hasEnabled := m["enabled"]; hasEnabled {
@@ -270,15 +278,68 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		source := "custom"
+		status, label, message, action := mcpCatalogStatus(entry, installed, enabled, cfg)
 		items[i] = McpCatalogItem{
 			McpCatalogEntry: entry,
 			Installed:       installed,
 			Enabled:         enabled,
 			Source:          source,
+			Status:          status,
+			StatusLabel:     label,
+			StatusMessage:   message,
+			FixAction:       action,
 		}
 	}
 
 	writeJSON(w, http.StatusOK, items)
+}
+
+func mcpCatalogStatus(entry McpCatalogEntry, installed, enabled bool, cfg map[string]interface{}) (string, string, string, string) {
+	if !installed {
+		return "available", "Available", "", "install"
+	}
+	if !enabled {
+		return "disabled", "Disabled", "This MCP is configured but disabled in opencode.json.", "enable"
+	}
+
+	if entry.Type == "local" {
+		command := entry.Command
+		if rawCommand, ok := cfg["command"].([]string); ok && len(rawCommand) > 0 {
+			command = rawCommand
+		} else if rawCommand, ok := cfg["command"].([]interface{}); ok && len(rawCommand) > 0 {
+			command = commandFromInterfaceSlice(rawCommand)
+		}
+		if entry.ID == "playwright" && commandContains(command, "@anthropic-ai/playwright-mcp") {
+			return "connection_error", "Connection error", "This Playwright MCP entry uses the deprecated @anthropic-ai package. Reinstall it to use @playwright/mcp@latest.", "reinstall"
+		}
+		if len(command) == 0 {
+			return "connection_error", "Configuration issue", "Local MCP has no command configured.", "reinstall"
+		}
+		if _, err := exec.LookPath(command[0]); err != nil {
+			return "missing_executable", "Missing executable", fmt.Sprintf("%q is not available in $PATH.", command[0]), "install_dependency"
+		}
+	}
+
+	return "connected", "Connected", "Configuration is enabled and prerequisites are available.", ""
+}
+
+func commandContains(command []string, needle string) bool {
+	for _, part := range command {
+		if strings.Contains(part, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func commandFromInterfaceSlice(values []interface{}) []string {
+	command := make([]string, 0, len(values))
+	for _, value := range values {
+		if s, ok := value.(string); ok && s != "" {
+			command = append(command, s)
+		}
+	}
+	return command
 }
 
 // handleMcpInstalled returns currently installed MCPs from opencode.json.

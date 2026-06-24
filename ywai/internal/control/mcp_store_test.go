@@ -77,6 +77,64 @@ type captureHub struct {
 	msgs [][]byte
 }
 
+func TestMcpCatalogStatus_DisabledIsActionable(t *testing.T) {
+	entry := McpCatalogEntry{ID: "jam", Type: "remote", URL: "https://example.test/mcp"}
+
+	state, label, message, action := mcpCatalogStatus(entry, true, false, nil)
+
+	if state != "disabled" {
+		t.Fatalf("state = %q, want disabled", state)
+	}
+	if label != "Disabled" {
+		t.Fatalf("label = %q, want Disabled", label)
+	}
+	if !strings.Contains(message, "disabled") {
+		t.Fatalf("message = %q, want disabled guidance", message)
+	}
+	if action != "enable" {
+		t.Fatalf("action = %q, want enable", action)
+	}
+}
+
+func TestMcpCatalogStatus_MissingExecutableIsActionable(t *testing.T) {
+	entry := McpCatalogEntry{ID: "somebin", Type: "local", Command: []string{"definitely-missing-ywai-mcp-test-bin"}}
+
+	state, label, message, action := mcpCatalogStatus(entry, true, true, map[string]interface{}{})
+
+	if state != "missing_executable" {
+		t.Fatalf("state = %q, want missing_executable", state)
+	}
+	if label != "Missing executable" {
+		t.Fatalf("label = %q, want Missing executable", label)
+	}
+	if !strings.Contains(message, "definitely-missing-ywai-mcp-test-bin") {
+		t.Fatalf("message = %q, want executable name", message)
+	}
+	if action != "install_dependency" {
+		t.Fatalf("action = %q, want install_dependency", action)
+	}
+}
+
+func TestMcpCatalogStatus_DeprecatedPlaywrightCommandNeedsReinstall(t *testing.T) {
+	entry := McpCatalogEntry{ID: "playwright", Type: "local", Command: []string{"npx", "-y", "@playwright/mcp@latest"}}
+	cfg := map[string]interface{}{"command": []interface{}{"npx", "-y", "@anthropic-ai/playwright-mcp"}}
+
+	state, label, message, action := mcpCatalogStatus(entry, true, true, cfg)
+
+	if state != "connection_error" {
+		t.Fatalf("state = %q, want connection_error", state)
+	}
+	if label != "Connection error" {
+		t.Fatalf("label = %q, want Connection error", label)
+	}
+	if !strings.Contains(message, "@playwright/mcp@latest") {
+		t.Fatalf("message = %q, want reinstall guidance", message)
+	}
+	if action != "reinstall" {
+		t.Fatalf("action = %q, want reinstall", action)
+	}
+}
+
 func (h *captureHub) Broadcast(b []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

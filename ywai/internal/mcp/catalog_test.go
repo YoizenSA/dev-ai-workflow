@@ -258,7 +258,7 @@ func TestCatalogByID_LocalWithCommand_Playwright(t *testing.T) {
 	if entry.Type != "local" {
 		t.Errorf("playwright.Type = %q, want \"local\"", entry.Type)
 	}
-	wantCmd := []string{"npx", "-y", "@anthropic-ai/playwright-mcp"}
+	wantCmd := []string{"npx", "-y", "@playwright/mcp@latest"}
 	if !slices.Equal(entry.Command, wantCmd) {
 		t.Errorf("playwright.Command = %v, want %v", entry.Command, wantCmd)
 	}

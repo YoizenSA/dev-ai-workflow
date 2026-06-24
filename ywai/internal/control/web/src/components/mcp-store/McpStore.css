@@ -297,6 +297,61 @@
 	letter-spacing: 0.03em;
 }
 
+.mcp-store-card-status-badge {
+	font-size: 0.6rem;
+	font-weight: 700;
+	padding: 1px 6px;
+	border-radius: var(--radius-full);
+	background: var(--surface-soft);
+	color: var(--text-muted);
+	white-space: nowrap;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.mcp-store-card-status-badge.status-connected {
+	background: var(--success-soft, color-mix(in srgb, var(--success, #22c55e) 18%, transparent));
+	color: var(--success, #22c55e);
+}
+
+.mcp-store-card-status-badge.status-disabled {
+	background: color-mix(in srgb, var(--warning, #f59e0b) 16%, transparent);
+	color: var(--warning, #f59e0b);
+}
+
+.mcp-store-card-status-badge.status-missing_executable,
+.mcp-store-card-status-badge.status-connection_error {
+	background: color-mix(in srgb, var(--danger, #ef4444) 16%, transparent);
+	color: var(--danger, #ef4444);
+}
+
+.mcp-store-card-status-message {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+	margin-top: var(--space-3);
+	padding: var(--space-3);
+	border: 1px solid var(--border-muted);
+	border-radius: var(--radius-md);
+	background: var(--surface-soft);
+	color: var(--text-muted);
+	font-size: var(--font-size-sm);
+}
+
+.mcp-store-card-status-message strong {
+	white-space: nowrap;
+	color: var(--text);
+	font-size: var(--font-size-xs);
+	text-transform: capitalize;
+}
+
+.mcp-store-card-status-message.status-missing_executable,
+.mcp-store-card-status-message.status-connection_error {
+	border-color: color-mix(in srgb, var(--danger, #ef4444) 32%, transparent);
+	background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
 .mcp-store-card-category {
 	font-size: 0.7rem;
 	color: var(--text-muted);
