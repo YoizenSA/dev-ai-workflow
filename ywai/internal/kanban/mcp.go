@@ -95,7 +95,7 @@ type MCPAdapter struct {
 func NewMCPAdapter() *MCPAdapter {
 	// First, check if control server is running
 	if port := serverutil.GetRunningPort(); port != 0 {
-		client := &http.Client{Timeout: 2 * time.Second}
+		client := &http.Client{Timeout: 10 * time.Second}
 		return &MCPAdapter{
 			server: nil, // No kanban server needed when using control
 			port:   port,
@@ -108,7 +108,7 @@ func NewMCPAdapter() *MCPAdapter {
 	if err != nil {
 		log.Fatalf("kanban: failed to start server: %v", err)
 	}
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	return &MCPAdapter{
 		server: s,
 		port:   s.Port(),
@@ -501,7 +501,54 @@ func (m *MCPAdapter) errorResponse(id int, code int, message string) *JSONRPCRes
 
 // --- HTTP Helpers ---
 
+// doRequest issues a request to the control/kanban server and retries on
+// transient failures so a kanban update never dies in the gap where the
+// control server is restarting (the long-lived --mcp-only adapter would
+// otherwise hit a refused/timed-out connection and fail the whole tool call).
+// Between attempts the port is re-resolved, because a restarted control server
+// can come back on a different port than the one cached at adapter startup.
+// 4xx responses (e.g. 404 not found) are returned immediately — retrying a
+// client error cannot help.
 func (m *MCPAdapter) doRequest(method, path string, body []byte) ([]byte, error) {
+	const maxAttempts = 6
+	var lastErr error
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			// Backoff 200ms, 400ms, 800ms, 1.6s, capped at 2s.
+			backoff := time.Duration(200*(1<<uint(attempt-1))) * time.Millisecond
+			if backoff > 2*time.Second {
+				backoff = 2 * time.Second
+			}
+			time.Sleep(backoff)
+			// Re-resolve the control server's port when we proxy to it
+			// (server == nil); it may have rebound after a restart.
+			if m.server == nil {
+				if p := serverutil.GetRunningPort(); p != 0 {
+					m.port = p
+				}
+			}
+		}
+
+		respBody, status, err := m.doRequestOnce(method, path, body)
+		if err != nil {
+			lastErr = err // transport error (refused/timeout) → retry
+			continue
+		}
+		if status >= 500 {
+			lastErr = fmt.Errorf("HTTP %d: %s", status, string(respBody))
+			continue // server-side transient → retry
+		}
+		if status >= 400 {
+			return nil, fmt.Errorf("HTTP %d: %s", status, string(respBody))
+		}
+		return respBody, nil
+	}
+
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+func (m *MCPAdapter) doRequestOnce(method, path string, body []byte) ([]byte, int, error) {
 	url := fmt.Sprintf("http://localhost:%d%s", m.port, path)
 	var bodyReader io.Reader
 	if body != nil {
@@ -510,7 +557,7 @@ func (m *MCPAdapter) doRequest(method, path string, body []byte) ([]byte, error)
 
 	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -518,20 +565,16 @@ func (m *MCPAdapter) doRequest(method, path string, body []byte) ([]byte, error)
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
+	return respBody, resp.StatusCode, nil
 }
 
 func (m *MCPAdapter) callCreateSession(args json.RawMessage) (*ToolsCallResult, error) {
