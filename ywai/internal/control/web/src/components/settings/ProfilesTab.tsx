@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Check, Save } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
-import type { OrchestratorProfilesResponse, OrchestratorProfile } from "../../api/types";
+import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
+import ModelCombobox from "../missions/ModelCombobox";
 
 // Group an agent name by its family for readable sectioning.
 function agentGroup(name: string): string {
@@ -19,7 +20,7 @@ const GROUP_LABELS: Record<string, string> = {
 
 export default function ProfilesTab() {
 	const [data, setData] = useState<OrchestratorProfilesResponse | null>(null);
-	const [models, setModels] = useState<string[]>([]);
+	const [models, setModels] = useState<ModelInfo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [resyncing, setResyncing] = useState(false);
@@ -41,7 +42,7 @@ export default function ProfilesTab() {
 		fetchProfiles();
 		missionsApi
 			.listModels()
-			.then((r) => setModels(Object.values(r.modelsByProvider ?? {}).flat().map((m) => m.id)))
+			.then((r) => setModels(Object.values(r.modelsByProvider ?? {}).flat()))
 			.catch(() => setModels([]));
 	}, []);
 
@@ -170,12 +171,6 @@ export default function ProfilesTab() {
 				</p>
 			)}
 
-			<datalist id="orch-profile-model-ids">
-				{models.map((m) => (
-					<option key={m} value={m} />
-				))}
-			</datalist>
-
 			{/* Editable per-agent model table */}
 			{agentNames.length > 0 ? (
 				<table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -203,14 +198,13 @@ export default function ProfilesTab() {
 								<tr key={name}>
 									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>{name}</td>
 									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
-										<input
-											list="orch-profile-model-ids"
-											className="input"
-											style={{ width: "100%", minWidth: "16rem" }}
+										<ModelCombobox
+											id={`orch-profile-model-${name}`}
+											label=""
 											value={draft[name] ?? ""}
-											placeholder="provider/model"
-											onChange={(e) => {
-												setDraft((prev) => ({ ...prev, [name]: e.target.value }));
+											models={models}
+											onChange={(v) => {
+												setDraft((prev) => ({ ...prev, [name]: v }));
 												setDirty(true);
 											}}
 										/>
