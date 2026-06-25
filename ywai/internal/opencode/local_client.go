@@ -29,6 +29,34 @@ func resolveOpencodeBin() string {
 	return "opencode"
 }
 
+// opencodeEnv returns the environment for opencode child processes with
+// XDG_DATA_HOME corrected when it points inside a snap sandbox. A VS Code
+// (or other) snap leaks XDG_DATA_HOME=~/snap/<app>/.../.local/share into the
+// terminal it spawns. opencode resolves its auth.json under
+// $XDG_DATA_HOME/opencode, so a snap-confined value hides every authenticated
+// provider — only the free gateway and inline-keyed providers survive, and
+// `opencode models` lists a fraction of the real models. Pointing it back at
+// the real ~/.local/share lets opencode see all configured providers.
+func opencodeEnv() []string {
+	env := os.Environ()
+	xdg := os.Getenv("XDG_DATA_HOME")
+	if xdg == "" || !strings.Contains(xdg, "/snap/") {
+		return env
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return env
+	}
+	corrected := "XDG_DATA_HOME=" + filepath.Join(home, ".local", "share")
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "XDG_DATA_HOME=") {
+			env[i] = corrected
+			return env
+		}
+	}
+	return append(env, corrected)
+}
+
 // runOpencodeModels runs `opencode models` cross-platform and returns its
 // stdout. On Windows a .cmd/.bat shim is run via `cmd /c` (and .ps1 via
 // PowerShell) so the model list — including free models the HTTP API omits —
@@ -37,14 +65,17 @@ func resolveOpencodeBin() string {
 func runOpencodeModels(ctx context.Context) ([]byte, error) {
 	bin := resolveOpencodeBin()
 	lower := strings.ToLower(bin)
+	var cmd *exec.Cmd
 	switch {
 	case runtime.GOOS == "windows" && (strings.HasSuffix(lower, ".cmd") || strings.HasSuffix(lower, ".bat")):
-		return exec.CommandContext(ctx, "cmd", "/c", bin, "models").Output()
+		cmd = exec.CommandContext(ctx, "cmd", "/c", bin, "models")
 	case runtime.GOOS == "windows" && strings.HasSuffix(lower, ".ps1"):
-		return exec.CommandContext(ctx, "powershell", "-NoProfile", "-File", bin, "models").Output()
+		cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-File", bin, "models")
 	default:
-		return exec.CommandContext(ctx, bin, "models").Output()
+		cmd = exec.CommandContext(ctx, bin, "models")
 	}
+	cmd.Env = opencodeEnv()
+	return cmd.Output()
 }
 
 // LocalClient implements Client by reading opencode config files directly.

@@ -255,3 +255,30 @@ func TestParseCLIModels(t *testing.T) {
 		t.Errorf("bare model should have empty provider, got %q", models[0].Provider)
 	}
 }
+
+func TestOpencodeEnv_CorrectsSnapXDG(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	want := "XDG_DATA_HOME=" + filepath.Join(home, ".local", "share")
+
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "snap", "code", "247", ".local", "share"))
+	env := opencodeEnv()
+	if !envContains(env, want) {
+		t.Errorf("snap XDG_DATA_HOME not corrected; want %q in env", want)
+	}
+
+	// A non-snap value must be left untouched.
+	custom := "XDG_DATA_HOME=" + filepath.Join(home, "custom", "data")
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "custom", "data"))
+	if env := opencodeEnv(); !envContains(env, custom) {
+		t.Errorf("non-snap XDG_DATA_HOME should be preserved; want %q", custom)
+	}
+}
+
+func envContains(env []string, kv string) bool {
+	for _, e := range env {
+		if e == kv {
+			return true
+		}
+	}
+	return false
+}
