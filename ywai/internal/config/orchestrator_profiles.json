@@ -23,19 +23,19 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "migration-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-planner": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-scope": {
           "model": "opencode-admin/minimax-m3"
         },
         "migration-validator": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-validator-focused": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
           "model": "opencode-admin/glm-5.2"
@@ -50,16 +50,16 @@
           "model": "opencode-admin/minimax-m3"
         },
         "qa-dev": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-finder": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/glm-5.2"
         },
         "qa-reviewer": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/glm-5.2"
         },
         "reviewer": {
           "model": "opencode-admin/glm-5.2"
@@ -158,16 +158,16 @@
           "model": "opencode-admin/qwen3.7-max"
         },
         "migration-planner": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-scope": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/mimo-v2.5-pro"
         },
         "migration-validator": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/kimi-k2.7-code"
         },
         "migration-validator-focused": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/kimi-k2.7-code"
         },
         "orchestrator": {
           "model": "opencode-admin/qwen3.7-max"
@@ -176,22 +176,22 @@
           "model": "opencode-admin/deepseek-v4-pro"
         },
         "qa-analyst": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/mimo-v2.5-pro"
         },
         "qa-ask": {
           "model": "opencode-admin/mimo-v2.5-pro"
         },
         "qa-dev": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/kimi-k2.7-code"
         },
         "qa-finder": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/minimax-m3"
         },
         "qa-orchestrator": {
           "model": "opencode-admin/qwen3.7-max"
         },
         "qa-reviewer": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/kimi-k2.7-code"
         },
         "reviewer": {
           "model": "opencode-admin/kimi-k2.7-code"
