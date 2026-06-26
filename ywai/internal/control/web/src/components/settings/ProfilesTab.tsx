@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Check, Save } from "lucide-react";
+import { RefreshCw, Check, Save, Plus } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
 import ModelCombobox from "../missions/ModelCombobox";
@@ -95,6 +95,40 @@ export default function ProfilesTab() {
 			.finally(() => setSaving(false));
 	};
 
+	// Create a new profile, seeded from the current profile's agent models so it
+	// has rows to edit. The backend creates the profile when the name is new; it
+	// does not activate it — the user selects it afterward to apply and edit.
+	const handleAddProfile = () => {
+		const input = window.prompt("New profile name (e.g. 'Cheap', 'GPT-only'):");
+		if (input === null) return;
+		const displayName = input.trim();
+		if (!displayName) return;
+		const key = displayName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+		if (!key) {
+			setMessage("Error: invalid profile name");
+			return;
+		}
+		if (data?.profiles[key]) {
+			setMessage(`Error: profile "${key}" already exists`);
+			return;
+		}
+		setSaving(true);
+		setMessage(null);
+		const agents = Object.fromEntries(Object.entries(draft).map(([n, m]) => [n, { model: m }]));
+		configApi
+			.updateOrchestratorProfile(key, {
+				display_name: displayName,
+				description: `${displayName} profile`,
+				agents,
+			})
+			.then((res) => {
+				setData({ profiles: res.profiles, active: res.active });
+				setMessage(`Profile "${displayName}" created — select it to activate and edit`);
+			})
+			.catch((err) => setMessage(`Error: ${err.message}`))
+			.finally(() => setSaving(false));
+	};
+
 	const handleResync = () => {
 		setResyncing(true);
 		setMessage(null);
@@ -162,6 +196,17 @@ export default function ProfilesTab() {
 							{data?.profiles[name]?.display_name ?? name}
 						</button>
 					))}
+					<button
+						type="button"
+						className="pill pill-muted"
+						style={{ cursor: "pointer" }}
+						onClick={handleAddProfile}
+						disabled={saving}
+						title="Create a new profile seeded from the current one"
+					>
+						<Plus size={12} style={{ marginRight: 4 }} />
+						Add profile
+					</button>
 				</div>
 			</div>
 
