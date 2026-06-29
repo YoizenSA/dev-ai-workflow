@@ -393,8 +393,9 @@ function WorkflowEditorInner() {
 			<Modal open={newOpen} onClose={() => setNewOpen(false)} title="New workflow">
 				<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 					<div className="field">
-						<label>Name (lowercase, [a-z0-9_-])</label>
+						<label className="field-label">Name (lowercase, [a-z0-9_-])</label>
 						<input
+							className="input"
 							value={newName}
 							onChange={(e) => setNewName(e.target.value)}
 							placeholder="e.g. daily-task"
@@ -402,8 +403,8 @@ function WorkflowEditorInner() {
 						/>
 					</div>
 					<div className="field">
-						<label>Description</label>
-						<input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+						<label className="field-label">Description</label>
+						<input className="input" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
 					</div>
 				</div>
 				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -417,8 +418,9 @@ function WorkflowEditorInner() {
 			{/* Import modal */}
 			<Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import workflow JSON" width="640px">
 				<div className="field">
-					<label>Paste a cc-wf-studio workflow.json below</label>
+					<label className="field-label">Paste a cc-wf-studio workflow.json below</label>
 					<textarea
+						className="textarea mono"
 						value={importText}
 						onChange={(e) => setImportText(e.target.value)}
 						style={{ minHeight: 260 }}

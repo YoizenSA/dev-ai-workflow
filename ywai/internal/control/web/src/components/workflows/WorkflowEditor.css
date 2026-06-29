@@ -190,23 +190,58 @@
 	font-weight: 600;
 }
 
+/* Match the app design system (forms.css .input/.select/.textarea) so the
+   editor's inputs look identical to the rest of the app. */
 .workflow-detail input,
 .workflow-detail textarea,
 .workflow-detail select {
+	appearance: none;
 	width: 100%;
-	padding: var(--space-1) var(--space-2);
-	border: 1px solid var(--border);
+	padding: 0.55rem 0.8rem;
+	border: 1px solid var(--panel-border);
 	border-radius: var(--radius-sm);
-	background: var(--bg);
+	background: var(--input-bg);
 	color: var(--text);
-	font-size: var(--text-sm);
+	font-size: 0.9rem;
 	font-family: inherit;
+	transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.workflow-detail input::placeholder,
+.workflow-detail textarea::placeholder {
+	color: var(--text-faint);
+}
+
+.workflow-detail input:hover,
+.workflow-detail textarea:hover,
+.workflow-detail select:hover {
+	border-color: var(--panel-border-strong);
+}
+
+.workflow-detail input:focus,
+.workflow-detail textarea:focus,
+.workflow-detail select:focus {
+	border-color: rgba(var(--info-rgb), 0.6);
+	background: rgba(var(--surf-input-rgb), 0.85);
+}
+
+.workflow-detail select {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 0.7rem center;
+	padding-right: 2.1rem;
+	cursor: pointer;
+}
+
+.workflow-detail select option {
+	background: var(--option-bg);
+	color: var(--text);
 }
 
 .workflow-detail textarea {
 	min-height: 80px;
 	resize: vertical;
-	font-family: var(--font-mono, monospace);
+	line-height: 1.5;
 }
 
 .workflow-detail .row {

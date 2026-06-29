@@ -1,6 +1,26 @@
+import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import type { WorkflowNode, WorkflowNodeData } from '../../api/types'
+import { missionsApi } from '../../api/client'
+import type { ModelInfo, WorkflowNode, WorkflowNodeData } from '../../api/types'
+
+// Shared cache so every node editor reuses one opencode model fetch.
+let modelCache: ModelInfo[] | null = null
+
+function useOpencodeModels(): ModelInfo[] {
+	const [models, setModels] = useState<ModelInfo[]>(modelCache ?? [])
+	useEffect(() => {
+		if (modelCache) return
+		missionsApi
+			.listModels()
+			.then((r) => {
+				modelCache = Object.values(r.modelsByProvider ?? {}).flat()
+				setModels(modelCache)
+			})
+			.catch(() => undefined)
+	}, [])
+	return models
+}
 
 // NodeDetail renders a per-type editor for the currently selected node.
 export default function NodeDetail() {
@@ -11,10 +31,18 @@ export default function NodeDetail() {
 	const node = current?.nodes.find((n) => n.id === selectedId) || null
 
 	if (!current) {
-		return <div className="empty">No workflow loaded.</div>
+		return (
+			<div className="workflow-detail">
+				<div className="empty">No workflow loaded.</div>
+			</div>
+		)
 	}
 	if (!node) {
-		return <div className="empty">Select a node to edit its fields, or drag a node type from the palette onto the canvas.</div>
+		return (
+			<div className="workflow-detail">
+				<div className="empty">Select a node to edit its fields, or drag a node type from the palette onto the canvas.</div>
+			</div>
+		)
 	}
 
 	return (
@@ -43,6 +71,7 @@ export default function NodeDetail() {
 
 // NodeFields switches on the node type to render the relevant inputs.
 function NodeFields({ node }: { node: WorkflowNode }) {
+	const models = useOpencodeModels()
 	switch (node.type) {
 		case 'start':
 		case 'end':
@@ -90,9 +119,19 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 								onChange={(e) => update(node, { model: e.target.value })}
 							>
 								<option value="inherit">inherit</option>
-								<option value="sonnet">sonnet</option>
-								<option value="opus">opus</option>
-								<option value="haiku">haiku</option>
+								{models.length === 0 ? (
+									<>
+										<option value="sonnet">sonnet</option>
+										<option value="opus">opus</option>
+										<option value="haiku">haiku</option>
+									</>
+								) : (
+									models.map((m) => (
+										<option key={m.id} value={m.id}>
+											{m.provider}/{m.name}
+										</option>
+									))
+								)}
 							</select>
 						</div>
 						<div className="field">
