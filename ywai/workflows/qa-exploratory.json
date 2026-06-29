@@ -27,7 +27,7 @@
       "data": {
         "name": "feature-summary",
         "description": "Summarize the implemented functionality and its use cases for QA.",
-        "agentDefinition": "You are a feature analyst. Read the implemented feature and its diff, then write a QA-ready summary: inputs, main flows, side effects, and edge cases — anchored to the code, not the ticket.\nDone when every changed behavior is captured and a QA could design exploratory tests from your summary alone. Read-only: never modify code.",
+        "agentDefinition": "Read the implemented feature and its diff, then write a QA-ready summary: inputs, main flows, side effects, and edge cases — anchored to the code, not the ticket.\nDone when every changed behavior is captured and a QA could design exploratory tests from your summary alone. Read-only: never modify code.",
         "prompt": "The feature is implemented. Produce the QA-ready summary of functionality and use cases.",
         "model": "inherit",
         "mode": "all",
@@ -45,7 +45,7 @@
       "data": {
         "name": "test-author",
         "description": "Create an Azure DevOps Exploratory Test child work item and write Gherkin scenarios.",
-        "agentDefinition": "You are a QA test author. From the feature summary, create an Azure DevOps Exploratory Test work item linked to the user story and write its scenarios in Gherkin (Given/When/Then), using the Azure DevOps CLI/skill to create and attach it.\nDone when every use case and edge case in the summary maps to at least one scenario on the work item. Author tests only — never implement the feature.",
+        "agentDefinition": "From the feature summary, create an Azure DevOps Exploratory Test work item linked to the user story and write its scenarios in Gherkin (Given/When/Then), using the Azure DevOps CLI/skill to create and attach it.\nDone when every use case and edge case in the summary maps to at least one scenario on the work item. Author tests only — never implement the feature.",
         "prompt": "Using the feature summary, create the Azure DevOps Exploratory Test work item linked to the user story and write the scenarios in Gherkin.\n\nSkills available (use the `skill` tool): azure-devops, playwright-e2e-testing.",
         "model": "inherit",
         "mode": "all",
@@ -87,7 +87,7 @@
       "data": {
         "name": "dev-fix",
         "description": "Dev applies QA feedback and pushes the fix with an agent comment.",
-        "agentDefinition": "You are a developer handling QA feedback. Reproduce each reported issue, apply the minimal correct fix, and push it with a comment naming what changed and why.\nDone when every reported issue is fixed and verified green. Scope: the reported feedback only — no redesign.",
+        "agentDefinition": "Reproduce each reported issue, apply the minimal correct fix, and push it with a comment naming what changed and why.\nDone when every reported issue is fixed and verified green. Scope: the reported feedback only — no redesign.",
         "prompt": "Apply QA's reported feedback and push the fix with a clear comment on what was fixed.\n\nSkills available (use the `skill` tool): git-commit, diagnosing-bugs.",
         "model": "inherit",
         "mode": "all",
