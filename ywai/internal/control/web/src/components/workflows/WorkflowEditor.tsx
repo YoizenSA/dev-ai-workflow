@@ -6,9 +6,12 @@ import {
 	BackgroundVariant,
 	Controls,
 	MiniMap,
+	useReactFlow,
+	applyNodeChanges as applyRfNodeChanges,
 	type Node,
 	type Edge,
 	type Connection,
+	type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
@@ -23,10 +26,12 @@ import {
 	X,
 	FileCode2,
 	RefreshCw,
+	LayoutGrid,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
 import type { WorkflowConnection, WorkflowNodeType } from '../../api/types'
 import Modal from '../shared/Modal'
+import YdSelect from '../shared/YdSelect'
 import { NODE_META, nodeTypes, toFlowNode } from './nodes'
 import NodeDetail from './NodeDetail'
 import './WorkflowEditor.css'
@@ -77,6 +82,9 @@ function WorkflowEditorInner() {
 	const selectNode = useWorkflowStore((s) => s.selectNode)
 	const connect = useWorkflowStore((s) => s.connect)
 	const disconnect = useWorkflowStore((s) => s.disconnect)
+	const applyNodeChanges = useWorkflowStore((s) => s.applyNodeChanges)
+	const autoLayout = useWorkflowStore((s) => s.autoLayout)
+	const { fitView } = useReactFlow()
 
 	// local UI state
 	const [selectedName, setSelectedName] = useState('')
@@ -145,14 +153,34 @@ function WorkflowEditorInner() {
 
 	const mermaid = useMemo(() => buildMermaidPreview(current), [current])
 
-	// ─── xyflow derived nodes/edges ────────────────────────────────────────
-	const flowNodes: Node[] = useMemo(() => {
-		if (!current) return []
-		return current.nodes.map((n) => {
-			const fn = toFlowNode(n)
-			return { ...fn, selected: n.id === selectedNodeId }
-		})
-	}, [current, selectedNodeId])
+	// ─── xyflow nodes/edges ────────────────────────────────────────────────
+	// The canvas owns its own node state so React Flow can move nodes (drag,
+	// dimensions). It is resynced from the store whenever the workflow itself
+	// changes (load / add / import / delete), but NOT on every store tick —
+	// otherwise dragging would fight the store and snap back.
+	const [flowNodes, setFlowNodes] = useState<Node[]>([])
+
+	// Serial of the underlying workflow nodes, to detect when we must resync
+	// (different nodes/edges, not just moved positions).
+	const nodeSignature = useMemo(
+		() => current?.nodes.map((n) => n.id + n.type).join('|') ?? '',
+		[current],
+	)
+
+	useEffect(() => {
+		if (!current) {
+			setFlowNodes([])
+			return
+		}
+		setFlowNodes(current.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+		// Only resync on structural changes, not on selection/position ticks.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [nodeSignature])
+
+	// Keep the `selected` flag in sync with selection without resyncing positions.
+	useEffect(() => {
+		setFlowNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === selectedNodeId })))
+	}, [selectedNodeId])
 
 	const flowEdges: Edge[] = useMemo(() => {
 		if (!current) return []
@@ -183,6 +211,22 @@ function WorkflowEditorInner() {
 		[connect],
 	)
 
+	// Apply React Flow node changes to the local canvas state (so dragging is
+	// fluid) and mirror position changes into the store for persistence.
+	const onNodesChange = useCallback(
+		(changes: NodeChange[]) => {
+			setFlowNodes((prev) => applyRfNodeChanges(changes, prev))
+			// Only persist final position changes (drag end) to avoid thrashing
+			// the store on every pointermove.
+			const moved = changes.filter(
+				(c): c is Extract<NodeChange, { type: 'position' }> =>
+					c.type === 'position' && c.dragging === false,
+			)
+			if (moved.length) applyNodeChanges(moved)
+		},
+		[applyNodeChanges],
+	)
+
 	// drag-drop from palette
 	const onDragStart = useCallback((e: React.DragEvent, type: WorkflowNodeType) => {
 		e.dataTransfer.setData('application/workflow-node-type', type)
@@ -203,6 +247,16 @@ function WorkflowEditorInner() {
 		[],
 	)
 
+	// Auto-layout recomputes store positions, then pushes them into the canvas
+	// (which owns its own node state and won't resync on position-only changes)
+	// and fits the view with a readable zoom cap.
+	const handleAutoLayout = useCallback(() => {
+		autoLayout()
+		const laid = useWorkflowStore.getState().current
+		if (laid) setFlowNodes(laid.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+		requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }))
+	}, [autoLayout, fitView, selectedNodeId])
+
 	const showMermaid = useCallback(async () => {
 		setMermaidLoading(true)
 		// The Mermaid is derived client-side (buildMermaidPreview); no round-trip.
@@ -214,18 +268,17 @@ function WorkflowEditorInner() {
 		<div className="workflow-page">
 			{/* Toolbar */}
 			<div className="workflow-toolbar">
-				<select
+				<YdSelect
 					className="workflow-select"
+					options={summaries.map((s) => ({
+						value: s.name,
+						label: `${s.name} (${s.nodeCount} nodes)`,
+					}))}
 					value={selectedName}
-					onChange={(e) => onSelect(e.target.value)}
-				>
-					<option value="">— select workflow —</option>
-					{summaries.map((s) => (
-						<option key={s.name} value={s.name}>
-							{s.name} ({s.nodeCount} nodes)
-						</option>
-					))}
-				</select>
+					onChange={(v) => onSelect(v)}
+					placeholder="— select workflow —"
+					ariaLabel="Select workflow"
+				/>
 
 				<button className="btn" onClick={() => setNewOpen(true)}>
 					<Plus size={14} /> New
@@ -278,6 +331,14 @@ function WorkflowEditorInner() {
 					title="Write opencode artifacts to ~/.config/opencode"
 				>
 					<Play size={14} /> Export to opencode
+				</button>
+				<button
+					className="btn"
+					onClick={handleAutoLayout}
+					disabled={!current}
+					title="Auto-arrange nodes in a left-to-right layout"
+				>
+					<LayoutGrid size={14} /> Auto-layout
 				</button>
 				<button
 					className="btn"
@@ -372,6 +433,7 @@ function WorkflowEditorInner() {
 							nodes={flowNodes}
 							edges={flowEdges}
 							nodeTypes={nodeTypes}
+							onNodesChange={onNodesChange}
 							onConnect={onConnect}
 							onEdgeClick={(_, edge) => disconnect(edge.id)}
 							onNodeClick={(_, n) => selectNode(n.id)}

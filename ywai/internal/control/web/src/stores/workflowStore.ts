@@ -22,6 +22,62 @@ function normalizeWorkflow(wf: Workflow): Workflow {
 	return { ...wf, nodes: wf.nodes ?? [], connections: wf.connections ?? [] }
 }
 
+// ─── auto-layout ──────────────────────────────────────────────────────────
+// Layered DAG layout: column = longest-path depth from a root, nodes sharing a
+// depth are stacked vertically and centered. Workflows are validated as acyclic,
+// so Kahn's algorithm terminates; any leftover nodes (e.g. an unreachable group)
+// fall back to depth 0 so they still get a position.
+const LAYOUT_X_GAP = 300
+const LAYOUT_Y_GAP = 150
+const LAYOUT_X0 = 80
+const LAYOUT_Y0 = 80
+function layoutNodes(wf: Workflow): WorkflowNode[] {
+	const adj = new Map<string, string[]>()
+	const indeg = new Map<string, number>()
+	for (const n of wf.nodes) {
+		adj.set(n.id, [])
+		indeg.set(n.id, 0)
+	}
+	for (const c of wf.connections) {
+		if (!adj.has(c.from) || !indeg.has(c.to)) continue
+		adj.get(c.from)!.push(c.to)
+		indeg.set(c.to, (indeg.get(c.to) ?? 0) + 1)
+	}
+	const depth = new Map<string, number>()
+	const queue: string[] = []
+	for (const n of wf.nodes) {
+		if ((indeg.get(n.id) ?? 0) === 0) {
+			depth.set(n.id, 0)
+			queue.push(n.id)
+		}
+	}
+	while (queue.length) {
+		const cur = queue.shift()!
+		const d = depth.get(cur) ?? 0
+		for (const next of adj.get(cur) ?? []) {
+			depth.set(next, Math.max(depth.get(next) ?? 0, d + 1))
+			const left = (indeg.get(next) ?? 0) - 1
+			indeg.set(next, left)
+			if (left === 0) queue.push(next)
+		}
+	}
+	// Group by depth, preserving node order for stable stacking.
+	const byDepth = new Map<number, WorkflowNode[]>()
+	for (const n of wf.nodes) {
+		const d = depth.get(n.id) ?? 0
+		const col = byDepth.get(d) ?? []
+		col.push(n)
+		byDepth.set(d, col)
+	}
+	const positioned = new Map<string, { x: number; y: number }>()
+	for (const [d, col] of byDepth) {
+		col.forEach((n, i) => {
+			positioned.set(n.id, { x: LAYOUT_X0 + d * LAYOUT_X_GAP, y: LAYOUT_Y0 + i * LAYOUT_Y_GAP })
+		})
+	}
+	return wf.nodes.map((n) => ({ ...n, position: positioned.get(n.id) ?? n.position }))
+}
+
 let idCounter = 0
 function newId(prefix: string): string {
 	idCounter += 1
@@ -98,6 +154,12 @@ interface WorkflowState {
 	removeNode: (id: string) => void
 	connect: (c: WorkflowConnection) => void
 	disconnect: (id: string) => void
+	// Apply React Flow node changes (drag position, dimensions) back into the
+	// store so nodes can be moved on the canvas.
+	applyNodeChanges: (changes: import('@xyflow/react').NodeChange[]) => void
+	// Re-position every node into a left-to-right layered layout derived from
+	// the graph (column = longest-path depth, stacked within a column).
+	autoLayout: () => void
 
 	clearError: () => void
 }
@@ -224,6 +286,27 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	clearExport: () => set({ exportPlan: null }),
 
 	selectNode: (id) => set({ selectedNodeId: id }),
+
+	applyNodeChanges: (changes) => {
+		const { current } = get()
+		if (!current) return
+		const posById = new Map<string, { x: number; y: number }>()
+		for (const ch of changes) {
+			if (ch.type === 'position' && ch.position) posById.set(ch.id, { x: ch.position.x, y: ch.position.y })
+		}
+		if (!posById.size) return
+		const nodes = current.nodes.map((n) => {
+			const p = posById.get(n.id)
+			return p ? { ...n, position: p } : n
+		})
+		set({ current: { ...current, nodes }, dirty: true })
+	},
+
+	autoLayout: () => {
+		const { current } = get()
+		if (!current) return
+		set({ current: { ...current, nodes: layoutNodes(current) }, dirty: true })
+	},
 
 	addNode: (type, x, y) => {
 		const id = newId(type)
