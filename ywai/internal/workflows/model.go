@@ -40,9 +40,12 @@ type Workflow struct {
 
 // Node is a single step in the graph. Type selects which fields of Data apply.
 type Node struct {
-	ID       string   `json:"id"`
-	Type     string   `json:"type"`
-	Name     string   `json:"name"`
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	// ParentID, when set, is the id of a group node this node belongs to. Its
+	// Position is then relative to that group's origin (React Flow parent extent).
+	ParentID string   `json:"parentId,omitempty"`
 	Position Position `json:"position"`
 	Data     NodeData `json:"data"`
 }

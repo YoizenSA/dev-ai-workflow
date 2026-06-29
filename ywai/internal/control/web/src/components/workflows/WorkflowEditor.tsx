@@ -102,9 +102,10 @@ function WorkflowEditorInner() {
 	const aiEditing = useWorkflowStore((s) => s.aiEditing)
 	const undo = useWorkflowStore((s) => s.undo)
 	const redo = useWorkflowStore((s) => s.redo)
+	const setNodeParent = useWorkflowStore((s) => s.setNodeParent)
 	const canUndo = useWorkflowStore((s) => s.past.length > 0)
 	const canRedo = useWorkflowStore((s) => s.future.length > 0)
-	const { fitView } = useReactFlow()
+	const { fitView, getIntersectingNodes, getInternalNode } = useReactFlow()
 
 	// local UI state
 	const [selectedName, setSelectedName] = useState('')
@@ -128,10 +129,24 @@ function WorkflowEditorInner() {
 	const [showMinimap, setShowMinimap] = useState(true)
 	const importRaw = useWorkflowStore((s) => s.importRaw)
 	const fileInput = useRef<HTMLInputElement>(null)
+	// Node id from a deep link (?node=), applied once the workflow has loaded.
+	const pendingNode = useRef<string | null>(null)
 
 	useEffect(() => {
 		if (mounted) list()
 	}, [mounted, list])
+
+	// Deep link: on mount, honor ?wf=<name>&node=<id> from the URL.
+	useEffect(() => {
+		const sp = new URLSearchParams(window.location.search)
+		const wf = sp.get('wf')
+		pendingNode.current = sp.get('node')
+		if (wf) {
+			setSelectedName(wf)
+			load(wf)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// auto-load first workflow when the list arrives and nothing is selected.
 	useEffect(() => {
@@ -140,6 +155,23 @@ function WorkflowEditorInner() {
 			load(summaries[0].name)
 		}
 	}, [mounted, summaries, selectedName, current, load])
+
+	// Once the deep-linked workflow is loaded, select its node (one-shot).
+	useEffect(() => {
+		if (pendingNode.current && current?.name === selectedName) {
+			if (current.nodes.some((n) => n.id === pendingNode.current)) selectNode(pendingNode.current)
+			pendingNode.current = null
+		}
+	}, [current, selectedName, selectNode])
+
+	// Reflect the selected workflow + node in the URL (shareable deep link).
+	useEffect(() => {
+		const sp = new URLSearchParams(window.location.search)
+		selectedName ? sp.set('wf', selectedName) : sp.delete('wf')
+		selectedNodeId ? sp.set('node', selectedNodeId) : sp.delete('node')
+		const qs = sp.toString()
+		window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+	}, [selectedName, selectedNodeId])
 
 	const onSelect = useCallback(
 		(name: string) => {
@@ -197,7 +229,7 @@ function WorkflowEditorInner() {
 	// subtitles, group size — repaint the canvas live. Position is excluded so a
 	// drag in progress (persisted only on drag-end) doesn't fight the store.
 	const nodeSignature = useMemo(
-		() => current?.nodes.map((n) => n.id + n.type + JSON.stringify(n.data)).join('|') ?? '',
+		() => current?.nodes.map((n) => n.id + n.type + (n.parentId ?? '') + JSON.stringify(n.data)).join('|') ?? '',
 		[current],
 	)
 
@@ -215,6 +247,16 @@ function WorkflowEditorInner() {
 	useEffect(() => {
 		setFlowNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === selectedNodeId })))
 	}, [selectedNodeId])
+
+	// Fit the view to ALL nodes whenever a different workflow loads, so wide
+	// graphs (e.g. grouped PLANNING/IMPLEMENTATION/TESTING) aren't cut off at the
+	// edge. Keyed by name so it doesn't refit on every edit.
+	const loadedName = current?.name
+	useEffect(() => {
+		if (!loadedName) return
+		const id = requestAnimationFrame(() => fitView({ padding: 0.15, maxZoom: 1, duration: 250 }))
+		return () => cancelAnimationFrame(id)
+	}, [loadedName, fitView])
 
 	const flowEdges: Edge[] = useMemo(() => {
 		if (!current) return []
@@ -304,6 +346,31 @@ function WorkflowEditorInner() {
 		const wf = useWorkflowStore.getState().current
 		if (wf) setFlowNodes(wf.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
 	}, [selectedNodeId])
+
+	// On drag end, (re-)assign the node to whatever group it was dropped into —
+	// real grouping: a member is confined to and moves with its group. Positions
+	// are converted to/from the group's coordinate space.
+	const handleNodeDragStop = useCallback(
+		(_e: MouseEvent | TouchEvent, node: Node) => {
+			if ((node.data as { __type?: string })?.__type === 'group') return // don't nest groups
+			const groups = getIntersectingNodes(node).filter(
+				(n) => (n.data as { __type?: string })?.__type === 'group',
+			)
+			const target = groups[0]
+			const currentParent = node.parentId ?? undefined
+			if (target?.id === currentParent) return
+
+			const abs = getInternalNode(node.id)?.internals.positionAbsolute ?? node.position
+			if (target) {
+				const gAbs = getInternalNode(target.id)?.internals.positionAbsolute ?? target.position
+				setNodeParent(node.id, target.id, { x: abs.x - gAbs.x, y: abs.y - gAbs.y })
+			} else {
+				setNodeParent(node.id, null, { x: abs.x, y: abs.y })
+			}
+			resyncCanvas()
+		},
+		[getIntersectingNodes, getInternalNode, setNodeParent, resyncCanvas],
+	)
 
 	const handleUndo = useCallback(() => {
 		undo()
@@ -564,6 +631,7 @@ function WorkflowEditorInner() {
 							edges={flowEdges}
 							nodeTypes={nodeTypes}
 							onNodesChange={onNodesChange}
+							onNodeDragStop={handleNodeDragStop}
 							onConnect={onConnect}
 							onEdgeClick={(_, edge) => disconnect(edge.id)}
 							onNodeClick={(_, n) => selectNode(n.id)}

@@ -171,7 +171,8 @@ func (a *workflowsAPI) handleSkillsList(w http.ResponseWriter, r *http.Request) 
 	}
 	skills := []skillInfo{}
 	for _, e := range entries {
-		if !e.IsDir() {
+		// Skip non-dirs and internal/hidden dirs (e.g. _shared, .git).
+		if !e.IsDir() || strings.HasPrefix(e.Name(), "_") || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		info := skillInfo{Name: e.Name()}

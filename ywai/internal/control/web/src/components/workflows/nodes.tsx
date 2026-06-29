@@ -153,10 +153,7 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 	// the other nodes. Not a React Flow parent — membership is purely visual.
 	if (d.__type === 'group') {
 		return (
-			<div
-				className={`wf-group ${selected ? 'is-selected' : ''}`}
-				style={{ width: d.width ?? 360, height: d.height ?? 240 }}
-			>
+			<div className={`wf-group ${selected ? 'is-selected' : ''}`} style={{ width: '100%', height: '100%' }}>
 				<div className="wf-group-title">
 					<Box size={12} /> {title(d)}
 				</div>
@@ -231,6 +228,11 @@ export function toFlowNode(n: WorkflowNode) {
 		position: n.position,
 		// Groups sit behind everything else so they read as containers.
 		zIndex: isGroup ? 0 : 1,
+		// React Flow needs explicit parent dimensions so `extent: 'parent'`
+		// constrains children correctly (without them children clamp to 0,0).
+		...(isGroup ? { style: { width: n.data.width ?? 360, height: n.data.height ?? 240 } } : {}),
+		// Real grouping: children are confined to and move with their parent group.
+		...(n.parentId ? { parentId: n.parentId, extent: 'parent' as const } : {}),
 		data: { ...n.data, __type: n.type, name: n.name } as WorkflowNodePayload,
 	}
 }

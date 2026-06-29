@@ -699,6 +699,8 @@ export interface WorkflowNode {
 	id: string;
 	type: WorkflowNodeType;
 	name: string;
+	/** Group node id this node belongs to; position is then relative to it. */
+	parentId?: string;
 	position: WorkflowPosition;
 	data: WorkflowNodeData;
 }

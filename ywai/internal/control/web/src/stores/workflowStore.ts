@@ -168,6 +168,9 @@ interface WorkflowState {
 	// the graph (column = longest-path depth, stacked within a column).
 	autoLayout: () => void
 
+	// Assign/clear a node's group parent (with its converted position).
+	setNodeParent: (id: string, parentId: string | null, position: { x: number; y: number }) => void
+
 	// undo/redo
 	undo: () => void
 	redo: () => void
@@ -417,6 +420,21 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		snapshot()
 		set({
 			current: { ...current, connections: current.connections.filter((e) => edgeId(e) !== id) },
+			dirty: true,
+		})
+	},
+
+	setNodeParent: (id, parentId, position) => {
+		const { current } = get()
+		if (!current) return
+		snapshot()
+		set({
+			current: {
+				...current,
+				nodes: current.nodes.map((n) =>
+					n.id === id ? { ...n, parentId: parentId ?? undefined, position } : n,
+				),
+			},
 			dirty: true,
 		})
 	},
