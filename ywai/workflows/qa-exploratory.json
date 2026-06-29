@@ -65,33 +65,10 @@
         "options": [
           {
             "id": "passed",
-            "label": "All passed",
-            "description": "Scenarios pass."
-          },
-          {
-            "id": "issues",
-            "label": "Found issues",
-            "description": "QA reports feedback; dev fixes."
+            "label": "Reported",
+            "description": "Exploratory Test work item + Gherkin scenarios reported on the user story."
           }
         ]
-      }
-    },
-    {
-      "id": "devfix",
-      "type": "subAgent",
-      "name": "dev-fix",
-      "position": {
-        "x": 1220,
-        "y": 420
-      },
-      "data": {
-        "name": "dev-fix",
-        "description": "Dev applies QA feedback and pushes the fix with an agent comment.",
-        "agentDefinition": "Reproduce each reported issue, apply the minimal correct fix, and push it with a comment naming what changed and why.\nDone when every reported issue is fixed and verified green. Scope: the reported feedback only — no redesign.",
-        "prompt": "Apply QA's reported feedback and push the fix with a clear comment on what was fixed.\n\nSkills available (use the `skill` tool): git-commit, diagnosing-bugs.",
-        "model": "inherit",
-        "mode": "all",
-        "tools": "read, edit, write, bash, grep, glob, codegraph_*, skill"
       }
     },
     {
@@ -99,7 +76,7 @@
       "type": "end",
       "name": "end",
       "position": {
-        "x": 1560,
+        "x": 1220,
         "y": 300
       },
       "data": {
@@ -124,15 +101,6 @@
       "from": "qa-review",
       "to": "end",
       "fromPort": "passed"
-    },
-    {
-      "from": "qa-review",
-      "to": "devfix",
-      "fromPort": "issues"
-    },
-    {
-      "from": "devfix",
-      "to": "end"
     }
   ],
   "createdAt": "2026-06-29T21:00:00.000Z",
