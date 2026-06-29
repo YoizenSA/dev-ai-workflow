@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	AppName        = "ywai"
-	GentleAIBin    = "gentle-ai"
-	SkillsDirName  = "skills"
-	AgentsDirName  = "agents"
-	PluginsDirName = "plugins"
+	AppName         = "ywai"
+	GentleAIBin     = "gentle-ai"
+	SkillsDirName   = "skills"
+	AgentsDirName   = "agents"
+	PluginsDirName  = "plugins"
+	WorkflowsDirName = "workflows"
 )
 
 var repoRootOverride string
@@ -42,6 +43,44 @@ func DataAgentsDir() string {
 
 func DataPluginsDir() string {
 	return filepath.Join(DataDir(), PluginsDirName)
+}
+
+// DataWorkflowsDir is the source-of-truth directory for visual workflows
+// authored in the Workflow Studio editor. Each workflow is a single JSON file
+// named <name>.json. The exported opencode artifacts (commands/, agents/) are
+// generated from these files, mirroring the agents/<group>/<name>/AGENT.md →
+// ~/.config/opencode/agents/<name>.md source/output split.
+func DataWorkflowsDir() string {
+	return filepath.Join(DataDir(), WorkflowsDirName)
+}
+
+// OpenCodeConfigDir returns the opencode config directory (~/.config/opencode).
+// opencode stores its agents, commands, skills, and config here. Several
+// packages hardcode this path; these helpers centralize it.
+func OpenCodeConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".config", "opencode")
+}
+
+// OpenCodeAgentsDir is where opencode loads agent personas from (one flat .md
+// per agent; the filename minus .md is the agent id).
+func OpenCodeAgentsDir() string {
+	return filepath.Join(OpenCodeConfigDir(), "agents")
+}
+
+// OpenCodeCommandsDir is where opencode loads slash commands from (one flat
+// .md per command; the filename minus .md is the /<name> command).
+func OpenCodeCommandsDir() string {
+	return filepath.Join(OpenCodeConfigDir(), "commands")
+}
+
+// OpenCodeSkillsDir is where opencode loads Agent Skills from (one directory
+// per skill, each holding a SKILL.md).
+func OpenCodeSkillsDir() string {
+	return filepath.Join(OpenCodeConfigDir(), "skills")
 }
 
 func RepoRoot() string {

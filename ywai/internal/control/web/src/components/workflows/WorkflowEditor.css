@@ -1,0 +1,310 @@
+/* =========================================================
+   Workflow Studio — visual multi-agent workflow editor
+   ========================================================= */
+
+.workflow-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	width: 100%;
+	height: 100%;
+}
+
+/* --- Toolbar --- */
+.workflow-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.workflow-toolbar .spacer {
+	flex: 1;
+}
+
+.workflow-select {
+	min-width: 220px;
+}
+
+/* --- Layout: palette + canvas + detail --- */
+.workflow-body {
+	display: flex;
+	gap: var(--space-3);
+	flex: 1;
+	min-height: 0;
+}
+
+.workflow-palette {
+	width: 180px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	padding: var(--space-2);
+	background: var(--bg-elevated, var(--bg-secondary));
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	font-size: var(--text-sm);
+}
+
+.workflow-palette h4 {
+	margin: 0 0 var(--space-1) 0;
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.palette-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--bg);
+	cursor: grab;
+	user-select: none;
+	font-size: var(--text-sm);
+}
+
+.palette-item:hover {
+	border-color: var(--accent);
+}
+
+.palette-item .palette-icon {
+	display: inline-flex;
+	color: var(--accent);
+}
+
+/* --- Canvas wrapper --- */
+.workflow-canvas-wrap {
+	flex: 1;
+	min-width: 0;
+	min-height: 480px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg);
+	overflow: hidden;
+	position: relative;
+}
+
+.workflow-canvas-wrap .react-flow {
+	background: var(--bg);
+}
+
+/* --- Custom nodes --- */
+.wf-node {
+	min-width: 160px;
+	max-width: 240px;
+	border: 2px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-elevated, var(--bg));
+	padding: var(--space-2);
+	font-size: var(--text-sm);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.wf-node.is-selected {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px var(--accent);
+}
+
+.wf-node-head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	margin-bottom: 2px;
+}
+
+.wf-node-icon {
+	display: inline-flex;
+	color: var(--accent);
+}
+
+.wf-node-title {
+	font-weight: 600;
+	font-size: var(--text-sm);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wf-node-sub {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* type accents */
+.wf-node.type-start,
+.wf-node.type-end {
+	background: var(--bg-secondary);
+}
+.wf-node.type-subAgent {
+	border-left: 4px solid var(--accent);
+}
+.wf-node.type-askUserQuestion,
+.wf-node.type-ifElse,
+.wf-node.type-switch,
+.wf-node.type-branch {
+	border-left: 4px solid var(--warning, #f59e0b);
+}
+.wf-node.type-skill {
+	border-left: 4px solid var(--success);
+}
+.wf-node.type-mcp {
+	border-left: 4px solid var(--info, #3b82f6);
+}
+
+/* --- Detail side panel --- */
+.workflow-detail {
+	width: 360px;
+	flex-shrink: 0;
+	overflow-y: auto;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-elevated, var(--bg));
+	padding: var(--space-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.workflow-detail h3 {
+	margin: 0;
+	font-size: var(--text-md);
+}
+
+.workflow-detail .field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.workflow-detail label {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	font-weight: 600;
+}
+
+.workflow-detail input,
+.workflow-detail textarea,
+.workflow-detail select {
+	width: 100%;
+	padding: var(--space-1) var(--space-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--bg);
+	color: var(--text);
+	font-size: var(--text-sm);
+	font-family: inherit;
+}
+
+.workflow-detail textarea {
+	min-height: 80px;
+	resize: vertical;
+	font-family: var(--font-mono, monospace);
+}
+
+.workflow-detail .row {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.workflow-detail .row > * {
+	flex: 1;
+}
+
+.workflow-detail .option-row {
+	display: flex;
+	gap: var(--space-1);
+	align-items: center;
+}
+
+.workflow-detail .empty {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+	padding: var(--space-3);
+	text-align: center;
+}
+
+/* --- Validation badge / list --- */
+.validation-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.validation-issue {
+	display: flex;
+	gap: var(--space-2);
+	font-size: var(--text-xs);
+	padding: var(--space-1);
+	border-radius: var(--radius-sm);
+}
+
+.validation-issue.error {
+	background: rgba(239, 68, 68, 0.08);
+	color: var(--danger, #ef4444);
+}
+
+.validation-issue.warning {
+	background: rgba(245, 158, 11, 0.08);
+	color: var(--warning, #f59e0b);
+}
+
+/* --- Export plan modal --- */
+.export-plan {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	font-size: var(--text-sm);
+}
+
+.export-plan .artifact {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	padding: var(--space-1) var(--space-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font-family: var(--font-mono, monospace);
+	font-size: var(--text-xs);
+	word-break: break-all;
+}
+
+.export-plan .artifact .kind {
+	font-weight: 700;
+	text-transform: uppercase;
+	font-size: 10px;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--bg-secondary);
+}
+
+.export-plan .artifact.kind-command .kind {
+	color: var(--accent);
+}
+.export-plan .artifact.kind-agent .kind {
+	color: var(--success);
+}
+.export-plan .artifact.kind-skill .kind {
+	color: var(--info, #3b82f6);
+}
+
+.mermaid-preview {
+	background: var(--bg-secondary);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: var(--space-2);
+	font-family: var(--font-mono, monospace);
+	font-size: var(--text-xs);
+	white-space: pre-wrap;
+	max-height: 60vh;
+	overflow: auto;
+}

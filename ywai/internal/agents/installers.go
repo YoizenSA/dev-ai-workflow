@@ -345,7 +345,7 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 		}
 
 		// Build OpenCode-style markdown with YAML frontmatter
-		content := buildOpenCodeMarkdown(name, profile)
+		content := BuildOpenCodeMarkdown(name, profile)
 
 		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
@@ -390,6 +390,45 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
+// RemoveAgentsWithoutDescription deletes every flat .md in agentsDir whose
+// frontmatter has no description (or an empty one). opencode rejects such files
+// with "Expected string | undefined, got null description", so leaving them in
+// place poisons the whole config. This sweeps up orphans left by past installs
+// (e.g. stubs from the delegation bug, hand-edited files, half-written exports).
+//
+// Only top-level .md files are scanned — subdirectories are removed wholesale by
+// removeLegacyGroupDirs. Returns the number of files removed.
+func RemoveAgentsWithoutDescription(agentsDir string) int {
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return 0
+	}
+	removed := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(agentsDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		// frontmatterDescription returns "" when there is no description field, no
+		// frontmatter at all, or the value (inline or block scalar) is empty. All
+		// three mean opencode will see null/undefined and refuse to load the agent.
+		if strings.TrimSpace(frontmatterDescription(string(data))) != "" {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			fmt.Printf("  Warning: failed to remove agent without description %s: %v\n", path, err)
+			continue
+		}
+		removed++
+		fmt.Printf("  Removed agent without description: %s\n", e.Name())
+	}
+	return removed
+}
+
 // ywaiBucketPatterns maps ywai's coarse permission buckets to the opencode-native
 // wildcard patterns that actually gate the underlying MCP tools. opencode matches
 // permission keys as globs against real tool names, so the bare bucket names
@@ -406,7 +445,7 @@ func removeLegacyGroupDirs(agentsDir string) {
 // action (an agent moving its own card / status); the board is decoupled from
 // the mission FSM, so it is low-risk and must not be gated behind the "mcp"
 // bucket. An explicit per-tool deny in the agent's own permission map still
-// wins (see buildOpenCodeMarkdown), so this is a default, not a hard override.
+// wins (see BuildOpenCodeMarkdown), so this is a default, not a hard override.
 var AlwaysAllowedMCPTools = []string{
 	"ywai-kanban_update_delegation",
 }
@@ -427,7 +466,7 @@ var ywaiBucketPatterns = map[string][]string{
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
 // buckets (ado, memory, intercom, mcp) expanded to the opencode-native wildcard
 // patterns that actually gate the underlying tools. Keys without a bucket mapping
-// pass through unchanged. This mirrors the expansion buildOpenCodeMarkdown applies
+// pass through unchanged. This mirrors the expansion BuildOpenCodeMarkdown applies
 // at install time so permissions written by any other path (e.g. the kanban
 // permissions API patching frontmatter in place) stay enforceable in opencode
 // instead of leaving bare bucket names that opencode silently ignores.
@@ -445,13 +484,25 @@ func ExpandPermissionBuckets(perms map[string]string) map[string]string {
 	return out
 }
 
-// buildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
-func buildOpenCodeMarkdown(name string, profile AgentProfile) string {
+// BuildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
+// Exported so the workflows exporter can reuse the single source of truth for
+// permission rendering and bucket expansion (the workflow's sub-agent nodes
+// become opencode agents, and must follow the exact same frontmatter rules).
+func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	var b strings.Builder
 
-	// YAML frontmatter
+	// YAML frontmatter. A bare "description:" (empty value) parses as YAML null,
+	// which opencode rejects with "Expected string | undefined, got null
+	// description". Fall back to the agent name so the field is always a non-empty
+	// string regardless of how the profile was built (loader, migration,
+	// workflows exporter, kanban).
+	description := strings.TrimSpace(profile.Description)
+	if description == "" {
+		description = name
+	}
+
 	b.WriteString("---\n")
-	b.WriteString(fmt.Sprintf("description: %s\n", profile.Description))
+	b.WriteString(fmt.Sprintf("description: %s\n", description))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
 	b.WriteString("temperature: 0.1\n")
 	if profile.Group != "" {

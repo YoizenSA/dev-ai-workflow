@@ -61,7 +61,7 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 			continue
 		}
 
-		content := buildOpenCodeMarkdown(name, profile)
+		content := BuildOpenCodeMarkdown(name, profile)
 		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 			fmt.Printf("  Warning: failed to migrate agent %s: %v\n", name, err)
 			continue

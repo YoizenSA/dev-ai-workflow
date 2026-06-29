@@ -37,6 +37,11 @@ import type {
 	MemoryEvalResult,
 	ConsolidationRun,
 	ApplySelection,
+	Workflow,
+	WorkflowSummary,
+	WorkflowValidationResult,
+	WorkflowExportPlan,
+	WorkflowImportResult,
 } from "./types";
 
 const BASE = "";
@@ -575,6 +580,51 @@ export const memoriesApi = {
 	discardConsolidation: (id: string) =>
 		request<{ status: string }>(
 			`/missions/api/engram/consolidations/${id}/discard`,
+			{ method: "POST" },
+		),
+};
+
+// ─── Workflow Studio API ───────────────────────────────────────────────────
+
+export const workflowApi = {
+	// List + create.
+	list: () =>
+		request<{ workflows: WorkflowSummary[] }>("/api/workflows"),
+	get: (name: string) => request<Workflow>(`/api/workflows/${name}`),
+	create: (wf: Workflow) =>
+		request<Workflow>("/api/workflows", {
+			method: "POST",
+			body: JSON.stringify(wf),
+		}),
+	save: (name: string, wf: Workflow) =>
+		request<Workflow>(`/api/workflows/${name}`, {
+			method: "PUT",
+			body: JSON.stringify(wf),
+		}),
+	delete: (name: string) =>
+		fetch(`${BASE}/api/workflows/${name}`, { method: "DELETE" }).then((r) => {
+			if (!r.ok) throw new Error(`${r.status}`);
+		}),
+
+	// Import cc-wf-studio JSON. Accepts raw JSON or {json, name}.
+	import: (raw: unknown, name?: string) =>
+		request<WorkflowImportResult>("/api/workflows/import", {
+			method: "POST",
+			body: JSON.stringify(name !== undefined ? { json: raw, name } : raw),
+		}),
+
+	// Validate the stored workflow.
+	validate: (name: string) =>
+		request<WorkflowValidationResult>(
+			`/api/workflows/${name}/validate`,
+			{ method: "POST" },
+		),
+
+	// Export. Dry-run (preview the file plan) by default; pass apply:true to
+	// actually write the opencode artifacts to ~/.config/opencode.
+	export: (name: string, apply = false) =>
+		request<WorkflowExportPlan>(
+			`/api/workflows/${name}/export${apply ? "?apply=true" : ""}`,
 			{ method: "POST" },
 		),
 };

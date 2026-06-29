@@ -30,7 +30,7 @@ func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
 
-	dirs := []string{DataDir(), DataSkillsDir(), DataAgentsDir()}
+	dirs := []string{DataDir(), DataSkillsDir(), DataAgentsDir(), DataWorkflowsDir()}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("failed to create data directory: %w", err)

@@ -38,9 +38,14 @@ func TestLoadDelegations_Parses(t *testing.T) {
 
 func applyTaskDelegationsForTest(t *testing.T, configPath, agentsDir string, tasks map[string]map[string]string) error {
 	t.Helper()
+	// ApplyDelegations only touches agents whose markdown is installed, so write
+	// a stub .md per agent to model a real install. This mirrors the production
+	// precondition: delegations follow agent profiles, never precede them.
+	os.MkdirAll(agentsDir, 0o755)
 	doc := &DelegationsDoc{Agents: make(map[string]AgentDelegation, len(tasks))}
 	for agent, task := range tasks {
 		doc.Agents[agent] = AgentDelegation{Task: task}
+		os.WriteFile(filepath.Join(agentsDir, agent+".md"), []byte("---\nmode: primary\n---\n\nbody."), 0o644)
 	}
 	return ApplyDelegations(configPath, agentsDir, doc)
 }
@@ -169,6 +174,55 @@ func TestApplyDelegations_EmptyInputNoop(t *testing.T) {
 	}
 }
 
+// TestApplyDelegations_SkipsUninstalledAgents guards the regression where a
+// default core-only install still applied delegations.json entries for agents
+// from other groups (qa-reviewer, migration-*, ...). That created stub entries
+// in opencode.json with no description/prompt, which opencode rejects with
+// "Expected string | undefined, got null description". Only the installed agent
+// (qa is seeded as the .md) must be touched; qa-reviewer must be ignored.
+func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	agentsDir := filepath.Join(dir, "agents")
+	os.MkdirAll(agentsDir, 0o755)
+	// Only "qa" is installed; "qa-reviewer" (a different group) is NOT.
+	os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("---\nmode: primary\npermission:\n  task: allow\n---\n\nbody."), 0o644)
+
+	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
+		"qa":          {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
+		"qa-reviewer": {Task: map[string]string{"*": "deny"}},
+	}}
+	if err := ApplyDelegations(configPath, agentsDir, doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// qa-reviewer must NOT be created in opencode.json.
+	root, _ := loadJSON(t, configPath)
+	if agents, ok := root["agent"].(map[string]any); ok {
+		if _, exists := agents["qa-reviewer"]; exists {
+			t.Errorf("uninstalled agent qa-reviewer was written to opencode.json: %+v", agents["qa-reviewer"])
+		}
+	}
+
+	// The sidecar must only contain the installed agent.
+	sidecar, err := os.ReadFile(filepath.Join(agentsDir, DelegationsFile))
+	if err != nil {
+		t.Fatalf("sidecar not written: %v", err)
+	}
+	if strings.Contains(string(sidecar), "qa-reviewer") {
+		t.Errorf("sidecar must not list uninstalled agent qa-reviewer: %s", sidecar)
+	}
+	if !strings.Contains(string(sidecar), "qa") {
+		t.Errorf("sidecar missing installed agent qa: %s", sidecar)
+	}
+
+	// The installed agent's markdown task map must still be applied.
+	qaMD, _ := os.ReadFile(filepath.Join(agentsDir, "qa.md"))
+	if !strings.Contains(string(qaMD), "reviewer: allow") {
+		t.Errorf("installed agent qa did not get its delegation: %s", qaMD)
+	}
+}
+
 func TestRulesFor_Override(t *testing.T) {
 	doc := &DelegationsDoc{
 		Agents: map[string]AgentDelegation{
@@ -228,6 +282,7 @@ func TestApplyDelegations_PersistsSidecar(t *testing.T) {
 	configPath := filepath.Join(dir, "opencode.json")
 	agentsDir := filepath.Join(dir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
+	os.WriteFile(filepath.Join(agentsDir, "orchestrator.md"), []byte("---\nmode: primary\n---\n\nbody."), 0o644)
 
 	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
 		"orchestrator": {Task: map[string]string{"*": "deny"}},
@@ -317,6 +372,23 @@ func TestInjectThenReadTaskPermission_RoundTrip(t *testing.T) {
 		if got[k] != v {
 			t.Errorf("round-trip mismatch for %q: got %q want %q\n%s", k, got[k], v, injected)
 		}
+	}
+}
+
+func TestInjectTaskPermission_EmptyMapRendersScalarAllow(t *testing.T) {
+	// An empty task map must never produce a bare "task:" (YAML null) — opencode
+	// rejects it with "Expected PermissionRuleConfig, got null".
+	md := "---\npermission:\n  \"*\": deny\n  task: allow\n---\n\nbody."
+	injected, ok := InjectTaskPermission(md, map[string]string{})
+	if !ok {
+		t.Fatal("inject failed")
+	}
+	if strings.Contains(injected, "task:\n") || strings.HasSuffix(strings.SplitN(injected, "---", 3)[1], "task:") {
+		t.Errorf("empty map produced null task value:\n%s", injected)
+	}
+	got, _ := ReadTaskPermission(injected)
+	if got["*"] != "allow" {
+		t.Errorf("empty map should render allow-all, got %v\n%s", got, injected)
 	}
 }
 

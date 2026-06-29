@@ -457,7 +457,7 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 		Mode:        "subagent",
 	}
 
-	markdown := buildOpenCodeMarkdown("dev", profile)
+	markdown := BuildOpenCodeMarkdown("dev", profile)
 
 	if !strings.Contains(markdown, "---") {
 		t.Error("markdown should start with frontmatter delimiter")
@@ -482,6 +482,31 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	}
 }
 
+// TestBuildOpenCodeMarkdown_EmptyDescriptionFallsBackToName guards the
+// regression where a bare "description:" (empty value) parses as YAML null and
+// opencode rejects the whole config with "Expected string | undefined, got null
+// description". When the profile has no description, the agent name is used so
+// the field is always a non-empty string.
+func TestBuildOpenCodeMarkdown_EmptyDescriptionFallsBackToName(t *testing.T) {
+	for _, desc := range []string{"", "   ", "\n\t"} {
+		profile := AgentProfile{
+			Name:        "qa-reviewer",
+			Description: desc,
+			Prompt:      "body",
+			Permission:  map[string]string{"read": "allow"},
+			Mode:        "all",
+		}
+		markdown := BuildOpenCodeMarkdown("qa-reviewer", profile)
+		// Must never emit a bare "description:" with nothing after the colon.
+		if strings.Contains(markdown, "description:\n") || strings.Contains(markdown, "description: \n") {
+			t.Errorf("description rendered as null for input %q:\n%s", desc, markdown)
+		}
+		if !strings.Contains(markdown, "description: qa-reviewer") {
+			t.Errorf("expected fallback to agent name, got:\n%s", markdown)
+		}
+	}
+}
+
 func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	profile := AgentProfile{
 		Description: "Orchestrator",
@@ -495,7 +520,7 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 		},
 	}
 
-	md := buildOpenCodeMarkdown("orchestrator", profile)
+	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
 	// With the "*: deny" + whitelist pattern, denied tools are NOT emitted
 	// individually — instead "*: deny" blocks everything and only "allow"
@@ -547,7 +572,7 @@ func TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed(t *testing.T) {
 		},
 	}
 
-	md := buildOpenCodeMarkdown("dev", profile)
+	md := BuildOpenCodeMarkdown("dev", profile)
 
 	if !strings.Contains(md, `"*": deny`) {
 		t.Fatalf(`expected "*": deny whitelist pattern, got:\n%s`, md)
@@ -582,7 +607,7 @@ func TestExpandPermissionBuckets_Delegate(t *testing.T) {
 func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
 	// Real orchestrators carry denies (edit/write/bash), so rendering goes
 	// through the "*: deny" + whitelist branch — exercise that path here.
-	allow := buildOpenCodeMarkdown("orchestrator", AgentProfile{
+	allow := BuildOpenCodeMarkdown("orchestrator", AgentProfile{
 		Description: "Orchestrator",
 		Prompt:      "# Orchestrator",
 		Mode:        "all",
@@ -598,7 +623,7 @@ func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
 		t.Errorf("allowed delegate should expand to 'delegation_*: allow', got:\n%s", allow)
 	}
 
-	deny := buildOpenCodeMarkdown("reviewer", AgentProfile{
+	deny := BuildOpenCodeMarkdown("reviewer", AgentProfile{
 		Description: "Reviewer",
 		Prompt:      "# Reviewer",
 		Mode:        "subagent",
@@ -1604,5 +1629,53 @@ func TestInstallPiOverwriteExisting(t *testing.T) {
 	}
 	if !strings.Contains(content, "Should overwrite") {
 		t.Error("overwritten file should contain new prompt")
+	}
+}
+
+// TestRemoveAgentsWithoutDescription verifies the install-time sweep that
+// deletes orphan .md files whose frontmatter has no description. opencode
+// rejects such files ("Expected string | undefined, got null description"), so
+// they must be pruned before delegations are applied. Subdirectories are left
+// for removeLegacyGroupDirs; only flat .md files are considered.
+func TestRemoveAgentsWithoutDescription(t *testing.T) {
+	dir := t.TempDir()
+
+	// Valid agent — must be kept.
+	os.WriteFile(filepath.Join(dir, "dev.md"),
+		[]byte("---\ndescription: Developer agent\nmode: primary\n---\n\nbody."), 0o644)
+	// Block-scalar description — also valid, must be kept.
+	os.WriteFile(filepath.Join(dir, "qa.md"),
+		[]byte("---\ndescription: >\n  QA agent\nmode: primary\n---\n\nbody."), 0o644)
+	// Orphan 1: bare empty description (YAML null) — the exact bug shape.
+	os.WriteFile(filepath.Join(dir, "qa-reviewer.md"),
+		[]byte("---\ndescription:\nmode: primary\n---\n\nbody."), 0o644)
+	// Orphan 2: no description field at all.
+	os.WriteFile(filepath.Join(dir, "ghost.md"),
+		[]byte("---\nmode: primary\n---\n\nbody."), 0o644)
+	// Non-markdown file — ignored.
+	os.WriteFile(filepath.Join(dir, "delegations.json"), []byte("{}"), 0o644)
+	// Subdirectory — ignored here (removeLegacyGroupDirs owns it).
+	os.MkdirAll(filepath.Join(dir, "core"), 0o755)
+	os.WriteFile(filepath.Join(dir, "core", "nested.md"),
+		[]byte("---\nmode: primary\n---\n\nbody."), 0o644)
+
+	removed := RemoveAgentsWithoutDescription(dir)
+	if removed != 2 {
+		t.Fatalf("expected 2 removals, got %d", removed)
+	}
+
+	for _, kept := range []string{"dev.md", "qa.md"} {
+		if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+			t.Errorf("valid agent %s was removed", kept)
+		}
+	}
+	for _, gone := range []string{"qa-reviewer.md", "ghost.md"} {
+		if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
+			t.Errorf("orphan %s should have been removed", gone)
+		}
+	}
+	// Nested file untouched.
+	if _, err := os.Stat(filepath.Join(dir, "core", "nested.md")); err != nil {
+		t.Error("nested .md should not be removed by the description sweep")
 	}
 }

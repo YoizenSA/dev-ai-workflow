@@ -50,6 +50,7 @@ type Server struct {
 	mu        sync.Mutex
 	startErr  error
 	jobs      *mcp.JobManager
+	workflows *workflowsAPI
 }
 
 // New creates a new control server.
@@ -120,6 +121,9 @@ func (s *Server) buildRoutes() {
 
 	// ─── Agents.md API ──────────────────────────────────────────
 	s.registerAgentsMdRoutes()
+
+	// ─── Workflows API (Workflow Studio) ────────────────────────
+	s.registerWorkflowsRoutes()
 
 	// ─── React SPA ──────────────────────────────────────────────
 	// Everything else (/, /missions, /settings, /app.js, etc.)
@@ -245,7 +249,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	// Root or known SPA routes → index.html
-	if path == "/" || path == "/missions" || path == "/settings" || path == "/memories" {
+	if path == "/" || path == "/missions" || path == "/settings" || path == "/memories" || path == "/workflows" {
 		s.serveSPAIndex(w, r)
 		return
 	}

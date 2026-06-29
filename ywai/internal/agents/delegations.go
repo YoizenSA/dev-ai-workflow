@@ -104,8 +104,22 @@ func (d *DelegationsDoc) TriggersFor(agent string) []DelegationTrigger {
 //
 // configPath is the opencode.json/.jsonc path. agentsDir is where the .md files
 // live (e.g. ~/.config/opencode/agents).
+//
+// Only agents whose markdown is already installed (<agentsDir>/<name>.md exists)
+// are touched. This matters because a default `ywai install` ships just the core
+// group, but delegations.json lists agents from other groups (qa-automation,
+// migration-*, social-refactor). Writing a delegation task map for an agent with
+// no installed .md would create a stub entry in opencode.json with no
+// description/prompt, which opencode rejects ("Expected string | undefined, got
+// null description"). The markdown application paths already skip missing files;
+// this filter extends the same guard to the opencode.json write and the sidecar.
 func ApplyDelegations(configPath, agentsDir string, doc *DelegationsDoc) error {
 	if doc == nil || len(doc.Agents) == 0 {
+		return nil
+	}
+
+	doc = filterToInstalledAgents(agentsDir, doc)
+	if len(doc.Agents) == 0 {
 		return nil
 	}
 
@@ -123,6 +137,36 @@ func ApplyDelegations(configPath, agentsDir string, doc *DelegationsDoc) error {
 		return err
 	}
 	return persistDelegationsSidecar(agentsDir, doc)
+}
+
+// filterToInstalledAgents returns a copy of doc restricted to agents whose
+// markdown file exists in agentsDir. The original doc is returned unchanged
+// when every agent is installed (the common case), so re-applying delegations
+// after a full --all-groups install stays a zero-allocation pass-through.
+func filterToInstalledAgents(agentsDir string, doc *DelegationsDoc) *DelegationsDoc {
+	if len(doc.Agents) == 0 {
+		return doc
+	}
+	installed := make(map[string]bool, len(doc.Agents))
+	missing := 0
+	for name := range doc.Agents {
+		if _, err := os.Stat(filepath.Join(agentsDir, name+".md")); err == nil {
+			installed[name] = true
+		} else {
+			missing++
+		}
+	}
+	if missing == 0 {
+		return doc
+	}
+	filtered := &DelegationsDoc{Agents: make(map[string]AgentDelegation, len(installed))}
+	filtered.Defaults = doc.Defaults
+	for name, ad := range doc.Agents {
+		if installed[name] {
+			filtered.Agents[name] = ad
+		}
+	}
+	return filtered
 }
 
 // persistDelegationsSidecar writes the full doc to agentsDir/delegations.json
@@ -403,6 +447,15 @@ func injectTaskPermission(content string, task map[string]string) (string, bool)
 func renderTaskBlock(childIndent int, task map[string]string) []string {
 	ind := strings.Repeat(" ", childIndent)
 	sub := strings.Repeat(" ", childIndent+2)
+
+	// An empty map would otherwise emit a bare "task:" (YAML null), which
+	// opencode rejects ("Expected PermissionRuleConfig, got null"). Empty
+	// means "no delegation restriction" — render the scalar allow-all form,
+	// matching ReadTaskPermission's scalar handling and the handler default.
+	if len(task) == 0 {
+		return []string{ind + "task: allow"}
+	}
+
 	out := []string{ind + "task:"}
 
 	keys := make([]string, 0, len(task))

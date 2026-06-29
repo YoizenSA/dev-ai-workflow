@@ -5,6 +5,7 @@ import {
 	LineChart,
 	Settings,
 	Sparkles,
+	Workflow,
 } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useMissionsStore } from "../../stores/missionsStore";
@@ -27,6 +28,11 @@ const NAV_ITEMS = [
 		path: "/missions",
 		label: "Missions",
 		icon: <Sparkles size={20} />,
+	},
+	{
+		path: "/workflows",
+		label: "Workflows",
+		icon: <Workflow size={20} />,
 	},
 	{
 		path: "/memories",
@@ -95,7 +101,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 			{/* Navigation */}
 			<nav className="nav">
 				<span className="sidebar-section-label">CORE</span>
-				{NAV_ITEMS.slice(0, 5).map((item) => {
+				{NAV_ITEMS.slice(0, 6).map((item) => {
 					const isActive = location.pathname === item.path;
 					const badge =
 						item.path === "/"
@@ -119,7 +125,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 				})}
 
 				<span className="sidebar-section-label">PLUGINS</span>
-				{NAV_ITEMS.slice(5).map((item) => {
+				{NAV_ITEMS.slice(6).map((item) => {
 					const isActive = location.pathname === item.path;
 
 					return (

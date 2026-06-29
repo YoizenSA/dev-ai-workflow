@@ -599,3 +599,156 @@ export interface OrchestratorProfilesResponse {
   profiles: Record<string, OrchestratorProfile>;
   active: string;
 }
+
+// ─── Workflow Studio Types ─────────────────────────────────────────────────
+// Mirrors internal/workflows/model.go. JSON shapes are compatible with
+// cc-wf-studio's workflow.json so files round-trip between the two tools.
+
+export type WorkflowNodeType =
+	| 'start'
+	| 'end'
+	| 'prompt'
+	| 'subAgent'
+	| 'askUserQuestion'
+	| 'ifElse'
+	| 'switch'
+	| 'branch' // legacy alias of switch
+	| 'skill'
+	| 'mcp'
+	| 'subAgentFlow'
+	| 'codex'
+	| 'group';
+
+export interface WorkflowPosition {
+	x: number;
+	y: number;
+}
+
+export interface WorkflowQuestionOption {
+	id?: string;
+	label?: string;
+	description?: string;
+}
+
+export interface WorkflowSwitchBranch {
+	id?: string;
+	label?: string;
+	value?: string;
+}
+
+// Per-type payload. Fields are optional; only the subset relevant to a node's
+// type is populated. Matches NodeData in model.go.
+export interface WorkflowNodeData {
+	// common
+	label?: string;
+	outputPorts?: number;
+
+	// subAgent
+	name?: string;
+	description?: string;
+	agentDefinition?: string;
+	prompt?: string;
+	agentType?: string;
+	tools?: string;
+	model?: string;
+	memory?: string;
+	color?: string;
+	mode?: string;
+	commandFilePath?: string;
+	commandScope?: string;
+	pluginName?: string;
+	builtInType?: string;
+
+	// askUserQuestion
+	questionText?: string;
+	options?: WorkflowQuestionOption[];
+
+	// prompt
+	variables?: Record<string, string>;
+
+	// ifElse
+	condition?: string;
+
+	// switch
+	expression?: string;
+	branches?: WorkflowSwitchBranch[];
+
+	// skill
+	skillPath?: string;
+	scope?: string;
+	allowedTools?: string;
+	validationStatus?: string;
+	source?: string;
+	executionMode?: string;
+	executionPrompt?: string;
+
+	// mcp
+	server?: string;
+	tool?: string;
+
+	// subAgentFlow
+	flowId?: string;
+}
+
+export interface WorkflowNode {
+	id: string;
+	type: WorkflowNodeType;
+	name: string;
+	position: WorkflowPosition;
+	data: WorkflowNodeData;
+}
+
+export interface WorkflowConnection {
+	from: string;
+	to: string;
+	fromPort?: string;
+	toPort?: string;
+}
+
+export interface Workflow {
+	id: string;
+	name: string;
+	description?: string;
+	version: string;
+	nodes: WorkflowNode[];
+	connections: WorkflowConnection[];
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface WorkflowSummary {
+	name: string;
+	description: string;
+	version: string;
+	nodeCount: number;
+	updatedAt: string;
+}
+
+export interface WorkflowValidationIssue {
+	severity: 'error' | 'warning';
+	nodeId?: string;
+	message: string;
+}
+
+export interface WorkflowValidationResult {
+	valid: boolean;
+	errors: WorkflowValidationIssue[];
+	warnings: WorkflowValidationIssue[];
+}
+
+export interface WorkflowExportArtifact {
+	path: string;
+	kind: 'command' | 'agent' | 'skill';
+	name: string;
+}
+
+export interface WorkflowExportPlan {
+	workflowName: string;
+	files: WorkflowExportArtifact[];
+	dryRun: boolean;
+}
+
+export interface WorkflowImportResult {
+	workflow: Workflow;
+	warnings?: string[];
+}

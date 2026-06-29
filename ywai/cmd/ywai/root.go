@@ -316,6 +316,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				fmt.Printf("  [%s] Agent profiles installed (markdown)\n", a.Name)
 			}
 
+			// Sweep up orphans from past installs: any .md whose frontmatter has no
+			// description makes opencode reject the whole config ("Expected string |
+			// undefined, got null description"). Run before applying delegations so
+			// the delegation filter sees only valid installed agents.
+			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
+
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json (permission.task) and the rules +
 			// triggers are rendered into each agent's markdown prompt body.

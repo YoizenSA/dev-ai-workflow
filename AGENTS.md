@@ -165,8 +165,11 @@ ywai/
 ├── cmd/ywai/             # CLI entry point
 ├── internal/
 │   ├── agent/            # Agent detection (15 supported agents)
+│   ├── agents/           # Profile loader, installers, delegations
+│   ├── control/          # Unified web server (kanban + missions + workflows)
 │   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade, doctor)
 │   ├── skills/           # Symlink extra skills to agent dirs
+│   ├── workflows/        # Workflow Studio: model, store, validator, exporter
 │   └── config/           # Paths, constants
 ├── skills/               # Extra skills not in gentle-ai
 │   ├── angular/
@@ -184,6 +187,36 @@ ywai/
 ├── AGENTS.md
 └── README.md
 ```
+
+---
+
+## Workflow Studio
+
+A visual multi-agent workflow editor (inspired by [cc-wf-studio](https://github.com/breaking-brake/cc-wf-studio)) that designs workflows on a React Flow canvas and **exports them to opencode's native primitives**.
+
+**Where it lives:** the `/workflows` route in the control UI (`http://localhost:5768/workflows`).
+
+**How it works:**
+
+1. **Design** a workflow on the canvas: drag nodes (SubAgent, AskUserQuestion, Prompt, If/Else, Switch, Skill, MCP, Group) from the palette and connect them.
+2. **Edit** each node's fields in the side panel (system prompt, task prompt, tools, model, options, conditions…).
+3. **Validate** the graph (structural rules ported from cc-wf-studio: one start/end, no cycles, field limits, reachability).
+4. **Export** to opencode — the workflow becomes real, runnable artifacts:
+
+| Workflow element | opencode primitive | Output |
+|---|---|---|
+| Whole workflow (entry point) | Slash command | `~/.config/opencode/commands/<name>.md` (invoked as `/<name>`) |
+| Orchestrator persona | Agent | `~/.config/opencode/agents/<name>-orchestrator.md` (Mermaid diagram + execution steps; delegates via native `task` tool) |
+| `subAgent` nodes | Agents | `~/.config/opencode/agents/<name>-<slug>.md` (system prompt + permissions + task) |
+| `askUserQuestion` / `ifElse` / `switch` | Routing instructions | embedded in the orchestrator's prompt body |
+
+**Source of truth vs. generated output** (mirrors the agents profile split):
+- Source (editable JSON): `~/.ywai/workflows/<name>.json`
+- Generated (what opencode reads): `~/.config/opencode/{commands,agents}/`
+
+**Import:** paste or upload a cc-wf-studio `workflow.json` — the formats are compatible and round-trip. Missing start/end nodes are added automatically.
+
+**Backend:** `internal/workflows/` (model, store, validator, exporter, importer) + `internal/control/workflows.go` (REST API at `/api/workflows`).
 
 ---
 

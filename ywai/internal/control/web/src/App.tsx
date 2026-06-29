@@ -7,6 +7,7 @@ import AdoConfig from './components/ado-config/AdoConfig'
 import Evals from './components/evals/Evals'
 import Settings from './components/settings/Settings'
 import McpStore from './components/mcp-store/McpStore'
+import WorkflowEditor from './components/workflows/WorkflowEditor'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Kanban />} />
           <Route path="/missions" element={<Missions />} />
+          <Route path="/workflows" element={<WorkflowEditor />} />
           <Route path="/memories" element={<Memories />} />
           <Route path="/evals" element={<Evals />} />
           <Route path="/settings" element={<Settings />} />
