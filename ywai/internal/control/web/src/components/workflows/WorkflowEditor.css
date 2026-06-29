@@ -26,6 +26,20 @@
 	min-width: 220px;
 }
 
+/* The export-target select is a compact inline control, not a full-width bar. */
+.workflow-target-select {
+	width: auto;
+	min-width: 140px;
+	flex: 0 0 auto;
+}
+.workflow-target-select .yd-select-trigger {
+	width: 100%;
+}
+/* The toolbar selector is a YdSelect; ensure its trigger fills the min-width. */
+.workflow-select .yd-select-trigger {
+	width: 100%;
+}
+
 /* --- Layout: palette + canvas + detail --- */
 .workflow-body {
 	display: flex;
@@ -93,6 +107,27 @@
 	background: var(--bg);
 }
 
+/* --- Floating canvas view-option toggles --- */
+.wf-canvas-tools {
+	position: absolute;
+	top: var(--space-2);
+	right: var(--space-2);
+	z-index: 5;
+	display: flex;
+	gap: 4px;
+	padding: 4px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-elevated, var(--bg-secondary));
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.wf-canvas-tools .btn.is-active {
+	color: var(--accent);
+	border-color: var(--accent);
+	background: rgba(var(--info-rgb, 59 130 246), 0.12);
+}
+
 /* --- Custom nodes --- */
 .wf-node {
 	min-width: 160px;
@@ -138,6 +173,70 @@
 	white-space: nowrap;
 }
 
+/* per-type field chips */
+.wf-node-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+}
+
+.wf-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: var(--bg-secondary);
+	border: 1px solid var(--border);
+	font-size: 10px;
+	line-height: 1.6;
+}
+
+.wf-chip-k {
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.wf-chip-v {
+	color: var(--text);
+	font-family: var(--font-mono, monospace);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 140px;
+}
+
+/* labeled output ports for branching nodes */
+.wf-node-ports {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-top: 8px;
+	border-top: 1px solid var(--border);
+	padding-top: 4px;
+}
+
+.wf-port {
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding-right: 6px;
+}
+
+.wf-port-label {
+	font-size: 10px;
+	color: var(--text-muted);
+	font-family: var(--font-mono, monospace);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 180px;
+}
+
 /* type accents */
 .wf-node.type-start,
 .wf-node.type-end {
@@ -178,70 +277,12 @@
 	font-size: var(--text-md);
 }
 
-.workflow-detail .field {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-1);
-}
-
-.workflow-detail label {
-	font-size: var(--text-xs);
-	color: var(--text-muted);
-	font-weight: 600;
-}
-
-/* Match the app design system (forms.css .input/.select/.textarea) so the
-   editor's inputs look identical to the rest of the app. */
-.workflow-detail input,
-.workflow-detail textarea,
-.workflow-detail select {
-	appearance: none;
-	width: 100%;
-	padding: 0.55rem 0.8rem;
-	border: 1px solid var(--panel-border);
-	border-radius: var(--radius-sm);
-	background: var(--input-bg);
-	color: var(--text);
-	font-size: 0.9rem;
-	font-family: inherit;
-	transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
-}
-
-.workflow-detail input::placeholder,
-.workflow-detail textarea::placeholder {
-	color: var(--text-faint);
-}
-
-.workflow-detail input:hover,
-.workflow-detail textarea:hover,
-.workflow-detail select:hover {
-	border-color: var(--panel-border-strong);
-}
-
-.workflow-detail input:focus,
-.workflow-detail textarea:focus,
-.workflow-detail select:focus {
-	border-color: rgba(var(--info-rgb), 0.6);
-	background: rgba(var(--surf-input-rgb), 0.85);
-}
-
-.workflow-detail select {
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-	background-repeat: no-repeat;
-	background-position: right 0.7rem center;
-	padding-right: 2.1rem;
-	cursor: pointer;
-}
-
-.workflow-detail select option {
-	background: var(--option-bg);
-	color: var(--text);
-}
+/* The editor's inputs/textareas/selects now carry the yz-ui classes
+   (.input / .textarea / YdSelect). Their styling lives in theme/forms.css and
+   theme/components.css — do NOT duplicate it here. */
 
 .workflow-detail textarea {
 	min-height: 80px;
-	resize: vertical;
-	line-height: 1.5;
 }
 
 .workflow-detail .row {
@@ -332,14 +373,44 @@
 	color: var(--info, #3b82f6);
 }
 
+/* Container for a rendered Mermaid SVG diagram. The SVG comes from mermaid's
+   dark theme, so we only provide framing + scroll here. */
 .mermaid-preview {
 	background: var(--bg-secondary);
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
-	padding: var(--space-2);
+	padding: var(--space-3);
+	min-height: 120px;
+	max-height: 60vh;
+	overflow: auto;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+/* The SVG fills its container width; mermaid sets useMaxWidth so it scales. */
+.mermaid-preview > svg {
+	max-width: 100%;
+	height: auto;
+}
+
+/* Error fallback: show the message + the raw source as a <pre>. */
+.mermaid-preview.mermaid-error {
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	gap: var(--space-2);
+}
+
+.mermaid-error-msg {
+	color: var(--danger, #ef4444);
+	font-size: var(--text-sm);
+}
+
+.mermaid-error pre {
 	font-family: var(--font-mono, monospace);
 	font-size: var(--text-xs);
 	white-space: pre-wrap;
-	max-height: 60vh;
-	overflow: auto;
+	margin: 0;
+	color: var(--text-muted);
 }

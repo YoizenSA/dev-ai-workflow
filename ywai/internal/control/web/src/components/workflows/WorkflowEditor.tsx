@@ -27,13 +27,22 @@ import {
 	FileCode2,
 	RefreshCw,
 	LayoutGrid,
+	Undo2,
+	Redo2,
+	Sparkles,
+	Zap,
+	Grid3x3,
+	Mouse,
+	Highlighter,
+	Map as MapIcon,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
 import type { WorkflowConnection, WorkflowNodeType } from '../../api/types'
 import Modal from '../shared/Modal'
 import YdSelect from '../shared/YdSelect'
+import MermaidDiagram from '../shared/MermaidDiagram'
 import { NODE_META, nodeTypes, toFlowNode } from './nodes'
-import NodeDetail from './NodeDetail'
+import NodeDetail, { useOpencodeModels } from './NodeDetail'
 import './WorkflowEditor.css'
 
 const PALETTE_TYPES: WorkflowNodeType[] = [
@@ -84,6 +93,12 @@ function WorkflowEditorInner() {
 	const disconnect = useWorkflowStore((s) => s.disconnect)
 	const applyNodeChanges = useWorkflowStore((s) => s.applyNodeChanges)
 	const autoLayout = useWorkflowStore((s) => s.autoLayout)
+	const aiEdit = useWorkflowStore((s) => s.aiEdit)
+	const aiEditing = useWorkflowStore((s) => s.aiEditing)
+	const undo = useWorkflowStore((s) => s.undo)
+	const redo = useWorkflowStore((s) => s.redo)
+	const canUndo = useWorkflowStore((s) => s.past.length > 0)
+	const canRedo = useWorkflowStore((s) => s.future.length > 0)
 	const { fitView } = useReactFlow()
 
 	// local UI state
@@ -95,6 +110,17 @@ function WorkflowEditorInner() {
 	const [importText, setImportText] = useState('')
 	const [mermaidPreview, setMermaidPreview] = useState<string | null>(null)
 	const [mermaidLoading, setMermaidLoading] = useState(false)
+	const [aiOpen, setAiOpen] = useState(false)
+	const [aiText, setAiText] = useState('')
+	const [aiModel, setAiModel] = useState('')
+	const aiModels = useOpencodeModels()
+	const [exportTarget, setExportTarget] = useState('opencode')
+	// Canvas view options.
+	const [animatedEdges, setAnimatedEdges] = useState(false)
+	const [snapGrid, setSnapGrid] = useState(false)
+	const [scrollPan, setScrollPan] = useState(false)
+	const [highlight, setHighlight] = useState(false)
+	const [showMinimap, setShowMinimap] = useState(true)
 	const importRaw = useWorkflowStore((s) => s.importRaw)
 	const fileInput = useRef<HTMLInputElement>(null)
 
@@ -184,19 +210,24 @@ function WorkflowEditorInner() {
 
 	const flowEdges: Edge[] = useMemo(() => {
 		if (!current) return []
+		// Highlight: when a node is selected and highlighting is on, dim every
+		// edge not touching it so the selected node's wiring stands out.
+		const dim = highlight && !!selectedNodeId
 		return current.connections.map((c) => {
 			const id = disconnectEdgeId(c as WorkflowConnection)
+			const touches = c.from === selectedNodeId || c.to === selectedNodeId
 			return {
 				id,
 				source: c.from,
 				target: c.to,
 				sourceHandle: c.fromPort || undefined,
 				targetHandle: c.toPort || undefined,
-				animated: false,
+				animated: animatedEdges,
+				style: dim && !touches ? { opacity: 0.15 } : undefined,
 				markerEnd: { type: 'arrowclosed' as const },
 			}
 		})
-	}, [current])
+	}, [current, animatedEdges, highlight, selectedNodeId])
 
 	const onConnect = useCallback(
 		(params: Connection) => {
@@ -257,6 +288,51 @@ function WorkflowEditorInner() {
 		requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }))
 	}, [autoLayout, fitView, selectedNodeId])
 
+	// Undo/redo swap `current`; since the canvas owns its node state and only
+	// resyncs on structural (id/type) changes, push the restored nodes in
+	// explicitly so position-only undo steps also repaint.
+	const resyncCanvas = useCallback(() => {
+		const wf = useWorkflowStore.getState().current
+		if (wf) setFlowNodes(wf.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+	}, [selectedNodeId])
+
+	const handleUndo = useCallback(() => {
+		undo()
+		resyncCanvas()
+	}, [undo, resyncCanvas])
+
+	const handleRedo = useCallback(() => {
+		redo()
+		resyncCanvas()
+	}, [redo, resyncCanvas])
+
+	// Keyboard: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redo. Ignored
+	// while typing in a field so text-edit undo stays native to the input.
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			const mod = e.ctrlKey || e.metaKey
+			if (!mod || e.key.toLowerCase() !== 'z' && e.key.toLowerCase() !== 'y') return
+			const t = e.target as HTMLElement | null
+			if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+			e.preventDefault()
+			if (e.key.toLowerCase() === 'y' || e.shiftKey) handleRedo()
+			else handleUndo()
+		}
+		window.addEventListener('keydown', onKey)
+		return () => window.removeEventListener('keydown', onKey)
+	}, [handleUndo, handleRedo])
+
+	const handleAiEdit = useCallback(async () => {
+		if (!aiText.trim()) return
+		await aiEdit(aiText.trim(), aiModel || undefined)
+		// If the store recorded an error the modal stays open; otherwise apply.
+		if (!useWorkflowStore.getState().error) {
+			resyncCanvas()
+			setAiOpen(false)
+			setAiText('')
+		}
+	}, [aiEdit, aiText, aiModel, resyncCanvas])
+
 	const showMermaid = useCallback(async () => {
 		setMermaidLoading(true)
 		// The Mermaid is derived client-side (buildMermaidPreview); no round-trip.
@@ -316,21 +392,47 @@ function WorkflowEditorInner() {
 				>
 					<CheckCircle2 size={14} /> Validate
 				</button>
+				<YdSelect
+					className="workflow-target-select"
+					options={[
+						{ value: 'opencode', label: 'opencode' },
+						{ value: 'claude-code', label: 'Claude Code' },
+					]}
+					value={exportTarget}
+					onChange={setExportTarget}
+					ariaLabel="Export target"
+				/>
 				<button
 					className="btn"
-					onClick={() => exportCurrent(false)}
+					onClick={() => exportCurrent(false, exportTarget)}
 					disabled={!current || exporting}
-					title="Preview the opencode export (dry-run)"
+					title="Preview the export (dry-run)"
 				>
 					<FileCode2 size={14} /> Export preview
 				</button>
 				<button
 					className="btn btn-primary"
-					onClick={() => exportCurrent(true)}
+					onClick={() => exportCurrent(true, exportTarget)}
 					disabled={!current || exporting}
-					title="Write opencode artifacts to ~/.config/opencode"
+					title={exportTarget === 'claude-code' ? 'Write artifacts to ~/.claude' : 'Write artifacts to ~/.config/opencode'}
 				>
-					<Play size={14} /> Export to opencode
+					<Play size={14} /> Export to {exportTarget === 'claude-code' ? 'Claude' : 'opencode'}
+				</button>
+				<button
+					className="btn btn-icon"
+					onClick={handleUndo}
+					disabled={!canUndo}
+					title="Undo (Ctrl+Z)"
+				>
+					<Undo2 size={14} />
+				</button>
+				<button
+					className="btn btn-icon"
+					onClick={handleRedo}
+					disabled={!canRedo}
+					title="Redo (Ctrl+Shift+Z)"
+				>
+					<Redo2 size={14} />
 				</button>
 				<button
 					className="btn"
@@ -339,6 +441,14 @@ function WorkflowEditorInner() {
 					title="Auto-arrange nodes in a left-to-right layout"
 				>
 					<LayoutGrid size={14} /> Auto-layout
+				</button>
+				<button
+					className="btn"
+					onClick={() => setAiOpen(true)}
+					disabled={!current}
+					title="Edit this workflow with natural language"
+				>
+					<Sparkles size={14} /> Edit with AI
 				</button>
 				<button
 					className="btn"
@@ -429,6 +539,25 @@ function WorkflowEditorInner() {
 						onDrop={onDrop}
 						onDragOver={(e) => e.preventDefault()}
 					>
+						<div className="wf-canvas-tools">
+							{([
+								['Animated edges', Zap, animatedEdges, () => setAnimatedEdges((v) => !v)],
+								['Snap to grid', Grid3x3, snapGrid, () => setSnapGrid((v) => !v)],
+								['Scroll to pan', Mouse, scrollPan, () => setScrollPan((v) => !v)],
+								['Highlight connections', Highlighter, highlight, () => setHighlight((v) => !v)],
+								['Minimap', MapIcon, showMinimap, () => setShowMinimap((v) => !v)],
+							] as const).map(([label, Icon, active, toggle]) => (
+								<button
+									key={label}
+									className={`btn btn-icon${active ? ' is-active' : ''}`}
+									aria-pressed={active}
+									title={label}
+									onClick={toggle}
+								>
+									<Icon size={14} />
+								</button>
+							))}
+						</div>
 						<ReactFlow
 							nodes={flowNodes}
 							edges={flowEdges}
@@ -439,11 +568,14 @@ function WorkflowEditorInner() {
 							onNodeClick={(_, n) => selectNode(n.id)}
 							onPaneClick={() => selectNode(null)}
 							fitView
+							snapToGrid={snapGrid}
+							snapGrid={[16, 16]}
+							panOnScroll={scrollPan}
 							proOptions={{ hideAttribution: true }}
 						>
 							<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
 							<Controls />
-							<MiniMap pannable zoomable />
+							{showMinimap && <MiniMap pannable zoomable />}
 						</ReactFlow>
 					</div>
 
@@ -503,20 +635,20 @@ function WorkflowEditorInner() {
 					<div className="export-plan">
 						<p>
 							{exportPlan.dryRun
-								? 'Dry-run preview. These files would be written to ~/.config/opencode:'
-								: '✅ Files written to ~/.config/opencode. Restart opencode to pick them up.'}
+								? `Dry-run preview. These files would be written for ${exportTarget === 'claude-code' ? 'Claude Code (~/.claude)' : 'opencode (~/.config/opencode)'}:`
+								: `✅ Files written. Restart ${exportTarget === 'claude-code' ? 'Claude Code' : 'opencode'} to pick them up.`}
 						</p>
 						{(exportPlan.files ?? []).map((f, i) => (
 							<div className={`artifact kind-${f.kind}`} key={i}>
 								<span className="kind">{f.kind}</span>
-								<span>{f.path.replace(/^.*opencode/, '~/.config/opencode')}</span>
+								<span>{f.path.replace(/^.*\.config\/opencode/, '~/.config/opencode').replace(/^.*\.claude/, '~/.claude')}</span>
 							</div>
 						))}
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
 							<button className="btn" onClick={clearExport}>Close</button>
 							<button
 								className="btn btn-primary"
-								onClick={() => exportCurrent(true)}
+								onClick={() => exportCurrent(true, exportTarget)}
 								disabled={exporting}
 							>
 								<RefreshCw size={14} /> {exportPlan.dryRun ? 'Apply (write files)' : 'Re-export'}
@@ -526,12 +658,51 @@ function WorkflowEditorInner() {
 				)}
 			</Modal>
 
+			{/* Edit with AI modal */}
+			<Modal open={aiOpen} onClose={() => setAiOpen(false)} title="Edit with AI" width="560px">
+				<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+					<div className="field">
+						<label className="field-label">What should the AI change?</label>
+						<textarea
+							className="textarea"
+							value={aiText}
+							onChange={(e) => setAiText(e.target.value)}
+							style={{ minHeight: 120 }}
+							placeholder="e.g. Add a reviewer sub-agent after dev, and connect it to the end node."
+							autoFocus
+							disabled={aiEditing}
+						/>
+					</div>
+					<div className="field">
+						<label className="field-label">Model (optional)</label>
+						<YdSelect
+							options={[
+								{ value: '', label: 'opencode default' },
+								...aiModels.map((m) => ({ value: m.id, label: `${m.provider}/${m.name}` })),
+							]}
+							value={aiModel}
+							onChange={setAiModel}
+							ariaLabel="Model"
+						/>
+					</div>
+					<p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+						The proposal loads into the editor (undoable). Review it, then Save to persist.
+					</p>
+				</div>
+				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+					<button className="btn" onClick={() => setAiOpen(false)} disabled={aiEditing}>Cancel</button>
+					<button className="btn btn-primary" onClick={handleAiEdit} disabled={aiEditing || !aiText.trim()}>
+						<Sparkles size={14} /> {aiEditing ? 'Thinking…' : 'Apply'}
+					</button>
+				</div>
+			</Modal>
+
 			{/* Mermaid preview modal */}
 			<Modal open={mermaidPreview !== null} onClose={() => setMermaidPreview(null)} title="Mermaid diagram" width="640px">
 				{mermaidLoading ? (
 					<div className="empty">Generating…</div>
 				) : (
-					<pre className="mermaid-preview">{mermaidPreview}</pre>
+					<MermaidDiagram code={mermaidPreview ?? ''} />
 				)}
 			</Modal>
 		</div>

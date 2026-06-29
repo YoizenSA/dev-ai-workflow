@@ -44,6 +44,13 @@ func (s *Server) registerWorkflowsRoutes() {
 	// Validate + export.
 	s.mux.HandleFunc("POST /api/workflows/{name}/validate", api.handleValidate)
 	s.mux.HandleFunc("POST /api/workflows/{name}/export", api.handleExport)
+
+	// Edit with AI (opencode CLI).
+	s.mux.HandleFunc("POST /api/workflows/{name}/ai-edit", api.handleAIEdit)
+
+	// Read-only catalogs the node editors populate from (skills live in the
+	// opencode skills dir; MCPs are served by the existing /api/mcp/catalog).
+	s.mux.HandleFunc("GET /api/workflows-meta/skills", api.handleSkillsList)
 }
 
 // ─── handlers ──────────────────────────────────────────────────────────────
@@ -171,9 +178,15 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Target dialect: opencode (default) or claude-code, via ?target=.
+	exporter := a.exporter
+	if t := r.URL.Query().Get("target"); t != "" && t != workflows.TargetOpenCode {
+		exporter = workflows.NewExporterForTarget(t)
+	}
+
 	// Dry-run preview unless ?apply=true.
 	if r.URL.Query().Get("apply") != "true" {
-		plan, _, err := a.exporter.Plan(wf)
+		plan, _, err := exporter.Plan(wf)
 		if err != nil {
 			writeWorkflowsError(w, http.StatusInternalServerError, err)
 			return
@@ -182,7 +195,7 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := a.exporter.Apply(wf)
+	plan, err := exporter.Apply(wf)
 	if err != nil {
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
 		return

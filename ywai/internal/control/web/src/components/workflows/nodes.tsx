@@ -25,8 +25,15 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	condition?: string
 	expression?: string
 	model?: string
+	mode?: string
 	tools?: string
 	agentType?: string
+	executionMode?: string
+	server?: string
+	tool?: string
+	flowId?: string
+	options?: { id?: string; label?: string }[]
+	branches?: { id?: string; label?: string; value?: string }[]
 }
 
 // nodeTypeIcon maps each node type to a lucide icon + one-word label.
@@ -52,10 +59,11 @@ function title(d: WorkflowNodePayload): string {
 	return NODE_META[d.__type].kind
 }
 
+// subtitle is the one-line summary directly under the title.
 function subtitle(d: WorkflowNodePayload): string {
 	switch (d.__type) {
 		case 'subAgent':
-			return d.description || d.model || ''
+			return d.description || ''
 		case 'askUserQuestion':
 			return d.questionText || ''
 		case 'ifElse':
@@ -64,31 +72,123 @@ function subtitle(d: WorkflowNodePayload): string {
 		case 'branch':
 			return d.expression || ''
 		case 'prompt':
-			return d.prompt ? d.prompt.slice(0, 48) : ''
+			return d.prompt ? d.prompt.slice(0, 64) : ''
 		case 'skill':
 			return d.name || ''
 		case 'mcp':
-			return [d.agentType, d.tools].filter(Boolean).join(' · ')
+			return [d.server, d.tool].filter(Boolean).join('/') || ''
+		case 'subAgentFlow':
+			return d.flowId || ''
 		default:
 			return ''
 	}
 }
 
+// chips returns the per-type key/value badges shown in the node body, so each
+// node type surfaces its defining fields directly on the canvas.
+function chips(d: WorkflowNodePayload): { k: string; v: string }[] {
+	switch (d.__type) {
+		case 'subAgent': {
+			const out: { k: string; v: string }[] = []
+			if (d.model) out.push({ k: 'model', v: d.model })
+			if (d.mode) out.push({ k: 'mode', v: d.mode })
+			if (d.tools) out.push({ k: 'tools', v: d.tools })
+			return out
+		}
+		case 'askUserQuestion':
+			return [{ k: 'options', v: String(d.options?.length ?? 0) }]
+		case 'switch':
+		case 'branch':
+			return [{ k: 'branches', v: String(d.branches?.length ?? 0) }]
+		case 'skill':
+			return d.executionMode ? [{ k: 'mode', v: d.executionMode }] : []
+		default:
+			return []
+	}
+}
+
+// outPorts lists the labeled source handles. Branching nodes expose one handle
+// per outcome (true/false, each option, each branch); everything else gets a
+// single unlabeled output. End nodes have none.
+function outPorts(d: WorkflowNodePayload): { id?: string; label: string }[] {
+	switch (d.__type) {
+		case 'ifElse':
+			return [
+				{ id: 'true', label: 'true' },
+				{ id: 'false', label: 'false' },
+			]
+		case 'askUserQuestion': {
+			const opts = d.options ?? []
+			if (!opts.length) return [{ label: '' }]
+			return opts.map((o, i) => ({ id: o.id || o.label || `opt-${i}`, label: o.label || `Option ${i + 1}` }))
+		}
+		case 'switch':
+		case 'branch': {
+			const br = d.branches ?? []
+			if (!br.length) return [{ label: '' }]
+			return br.map((b, i) => ({ id: b.id || b.value || b.label || `branch-${i}`, label: b.label || b.value || `Case ${i + 1}` }))
+		}
+		case 'end':
+			return []
+		default:
+			return [{ label: '' }]
+	}
+}
+
+// PORT_ROW_H must match the .wf-port row height in CSS so handles align to labels.
+const PORT_ROW_H = 22
+
 function WorkflowNodeView({ data, selected }: NodeProps) {
 	const d = data as WorkflowNodePayload
 	const meta = NODE_META[d.__type]
 	const Icon = meta.icon
+	const sub = subtitle(d)
+	const badges = chips(d)
+	const ports = outPorts(d)
+	const multiPort = ports.length > 1
+
 	return (
-		<div className={`wf-node type-${d.__type} ${selected ? 'is-selected' : ''}`}>
-			<Handle type="target" position={Position.Left} />
+		<div className={`wf-node type-${d.__type} ${selected ? 'is-selected' : ''} ${multiPort ? 'has-ports' : ''}`}>
+			{d.__type !== 'start' && <Handle type="target" position={Position.Left} />}
 			<div className="wf-node-head">
 				<span className="wf-node-icon">
 					<Icon size={14} />
 				</span>
 				<span className="wf-node-title">{title(d)}</span>
 			</div>
-			{subtitle(d) && <div className="wf-node-sub">{subtitle(d)}</div>}
-			<Handle type="source" position={Position.Right} />
+			{sub && <div className="wf-node-sub">{sub}</div>}
+			{badges.length > 0 && (
+				<div className="wf-node-chips">
+					{badges.map((b) => (
+						<span className="wf-chip" key={b.k} title={`${b.k}: ${b.v}`}>
+							<span className="wf-chip-k">{b.k}</span>
+							<span className="wf-chip-v">{b.v}</span>
+						</span>
+					))}
+				</div>
+			)}
+			{multiPort && (
+				<div className="wf-node-ports">
+					{ports.map((p) => (
+						<div className="wf-port" key={p.id ?? p.label}>
+							<span className="wf-port-label">{p.label}</span>
+						</div>
+					))}
+				</div>
+			)}
+			{/* Source handles. Single nodes use one centered handle; branching nodes
+			    align each labeled handle to its port row above. */}
+			{multiPort
+				? ports.map((p, i) => (
+						<Handle
+							key={p.id ?? i}
+							id={p.id}
+							type="source"
+							position={Position.Right}
+							style={{ top: `calc(100% - ${(ports.length - i) * PORT_ROW_H - PORT_ROW_H / 2}px)` }}
+						/>
+					))
+				: ports.length === 1 && <Handle id={ports[0].id} type="source" position={Position.Right} />}
 		</div>
 	)
 }

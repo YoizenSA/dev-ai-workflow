@@ -14,6 +14,10 @@ interface YdSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Accessible label for the trigger (when no visible <label htmlFor> exists). */
+  ariaLabel?: string;
+  /** Reference to a visible label id that names this control. */
+  ariaLabelledby?: string;
 }
 
 /**
@@ -29,6 +33,8 @@ export default function YdSelect({
   placeholder = "Seleccionar",
   disabled = false,
   className,
+  ariaLabel,
+  ariaLabelledby,
 }: YdSelectProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -85,6 +91,10 @@ export default function YdSelect({
         className="yd-select-trigger"
         disabled={disabled}
         onClick={toggle}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         <span className={`yd-select-label${!hasSelection ? " is-ph" : ""}`}>
           {selectedLabel}

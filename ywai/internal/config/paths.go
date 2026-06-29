@@ -83,6 +83,27 @@ func OpenCodeSkillsDir() string {
 	return filepath.Join(OpenCodeConfigDir(), "skills")
 }
 
+// ClaudeConfigDir returns the Claude Code config directory (~/.claude), where
+// Claude Code loads agents (~/.claude/agents) and slash commands
+// (~/.claude/commands), one flat .md per item.
+func ClaudeConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".claude")
+}
+
+// ClaudeAgentsDir is where Claude Code loads sub-agents from.
+func ClaudeAgentsDir() string {
+	return filepath.Join(ClaudeConfigDir(), "agents")
+}
+
+// ClaudeCommandsDir is where Claude Code loads slash commands from.
+func ClaudeCommandsDir() string {
+	return filepath.Join(ClaudeConfigDir(), "commands")
+}
+
 func RepoRoot() string {
 	if repoRootOverride != "" {
 		return repoRootOverride

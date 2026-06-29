@@ -248,3 +248,51 @@ func TestImportRejectsBadName(t *testing.T) {
 		t.Fatal("expected error for invalid name")
 	}
 }
+
+// TestExportClaudeCodeTarget verifies the claude-code dialect: native frontmatter
+// (name/description/tools/model) and a slash command without opencode's
+// agent:/subtask: keys.
+func TestExportClaudeCodeTarget(t *testing.T) {
+	wf := exportFixture()
+	cmdDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+
+	plan, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if plan.WorkflowName != "daily-task" {
+		t.Fatalf("workflow name: %q", plan.WorkflowName)
+	}
+
+	subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
+	sub, ok := files[subPath]
+	if !ok {
+		t.Fatalf("sub-agent file missing: %s (have %v)", subPath, keys(files))
+	}
+	for _, want := range []string{"name: daily-task-news-briefing", "description: News Briefing Agent", "tools: read,webfetch", "model: sonnet"} {
+		if !strings.Contains(sub, want) {
+			t.Errorf("claude sub-agent missing %q in:\n%s", want, sub)
+		}
+	}
+	if strings.Contains(sub, "permission") {
+		t.Errorf("claude sub-agent must not carry opencode permission block:\n%s", sub)
+	}
+
+	cmd, ok := files[filepath.Join(cmdDir, "daily-task.md")]
+	if !ok {
+		t.Fatal("command file missing")
+	}
+	if strings.Contains(cmd, "subtask:") || strings.Contains(cmd, "agent:") {
+		t.Errorf("claude command must omit agent:/subtask:\n%s", cmd)
+	}
+}
+
+func keys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

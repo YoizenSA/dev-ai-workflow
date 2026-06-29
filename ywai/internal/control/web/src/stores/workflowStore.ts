@@ -23,11 +23,11 @@ function normalizeWorkflow(wf: Workflow): Workflow {
 }
 
 // ─── auto-layout ──────────────────────────────────────────────────────────
-// Layered DAG layout: column = longest-path depth from a root, nodes sharing a
-// depth are stacked vertically and centered. Workflows are validated as acyclic,
-// so Kahn's algorithm terminates; any leftover nodes (e.g. an unreachable group)
-// fall back to depth 0 so they still get a position.
-const LAYOUT_X_GAP = 300
+// Compact serpentine grid: topologically order the nodes (so the sequence
+// follows the graph), then fill a grid row by row, alternating direction each
+// row. Consecutive nodes stay adjacent, so the chain entered as a single line
+// wraps into a roughly square block that fits the viewport at a readable zoom.
+const LAYOUT_X_GAP = 280
 const LAYOUT_Y_GAP = 150
 const LAYOUT_X0 = 80
 const LAYOUT_Y0 = 80
@@ -43,38 +43,35 @@ function layoutNodes(wf: Workflow): WorkflowNode[] {
 		adj.get(c.from)!.push(c.to)
 		indeg.set(c.to, (indeg.get(c.to) ?? 0) + 1)
 	}
-	const depth = new Map<string, number>()
-	const queue: string[] = []
-	for (const n of wf.nodes) {
-		if ((indeg.get(n.id) ?? 0) === 0) {
-			depth.set(n.id, 0)
-			queue.push(n.id)
-		}
-	}
-	while (queue.length) {
-		const cur = queue.shift()!
-		const d = depth.get(cur) ?? 0
+	// Kahn topological order, stable by original node order. Validated workflows
+	// are acyclic; if a cycle ever slips through, leftover nodes are appended in
+	// their original order so every node still gets placed.
+	const order: string[] = []
+	const placed = new Set<string>()
+	const ready = wf.nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id)
+	while (ready.length) {
+		const cur = ready.shift()!
+		if (placed.has(cur)) continue
+		order.push(cur)
+		placed.add(cur)
 		for (const next of adj.get(cur) ?? []) {
-			depth.set(next, Math.max(depth.get(next) ?? 0, d + 1))
 			const left = (indeg.get(next) ?? 0) - 1
 			indeg.set(next, left)
-			if (left === 0) queue.push(next)
+			if (left === 0) ready.push(next)
 		}
 	}
-	// Group by depth, preserving node order for stable stacking.
-	const byDepth = new Map<number, WorkflowNode[]>()
-	for (const n of wf.nodes) {
-		const d = depth.get(n.id) ?? 0
-		const col = byDepth.get(d) ?? []
-		col.push(n)
-		byDepth.set(d, col)
-	}
+	for (const n of wf.nodes) if (!placed.has(n.id)) order.push(n.id)
+
+	const cols = Math.max(1, Math.ceil(Math.sqrt(order.length)))
 	const positioned = new Map<string, { x: number; y: number }>()
-	for (const [d, col] of byDepth) {
-		col.forEach((n, i) => {
-			positioned.set(n.id, { x: LAYOUT_X0 + d * LAYOUT_X_GAP, y: LAYOUT_Y0 + i * LAYOUT_Y_GAP })
-		})
-	}
+	order.forEach((id, i) => {
+		const row = Math.floor(i / cols)
+		const colInRow = i % cols
+		// Snake: even rows left→right, odd rows right→left, so the node ending one
+		// row sits directly above the node starting the next.
+		const col = row % 2 === 0 ? colInRow : cols - 1 - colInRow
+		positioned.set(id, { x: LAYOUT_X0 + col * LAYOUT_X_GAP, y: LAYOUT_Y0 + row * LAYOUT_Y_GAP })
+	})
 	return wf.nodes.map((n) => ({ ...n, position: positioned.get(n.id) ?? n.position }))
 }
 
@@ -127,10 +124,17 @@ interface WorkflowState {
 	dirty: boolean
 	error: string | null
 
+	// undo/redo history of `current` snapshots
+	past: Workflow[]
+	future: Workflow[]
+
 	// validation + export
 	validation: WorkflowValidationResult | null
 	exportPlan: WorkflowExportPlan | null
 	exporting: boolean
+
+	// edit with AI
+	aiEditing: boolean
 
 	// selection
 	selectedNodeId: string | null
@@ -143,8 +147,11 @@ interface WorkflowState {
 	deleteCurrent: () => Promise<void>
 	importRaw: (raw: unknown, name?: string) => Promise<void>
 	validateCurrent: () => Promise<void>
-	exportCurrent: (apply: boolean) => Promise<void>
+	exportCurrent: (apply: boolean, target?: string) => Promise<void>
 	clearExport: () => void
+	// Apply a natural-language edit via the backend AI endpoint. The result is
+	// loaded into the editor (undoable) and left dirty for the user to Save.
+	aiEdit: (instruction: string, model?: string) => Promise<void>
 
 	// graph editing (optimistic, persisted on save)
 	selectNode: (id: string | null) => void
@@ -161,8 +168,15 @@ interface WorkflowState {
 	// the graph (column = longest-path depth, stacked within a column).
 	autoLayout: () => void
 
+	// undo/redo
+	undo: () => void
+	redo: () => void
+
 	clearError: () => void
 }
+
+// HISTORY_LIMIT caps retained snapshots so a long session never grows unbounded.
+const HISTORY_LIMIT = 50
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	summaries: [],
@@ -174,7 +188,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	validation: null,
 	exportPlan: null,
 	exporting: false,
+	aiEditing: false,
 	selectedNodeId: null,
+	past: [],
+	future: [],
 
 	list: async () => {
 		set({ loadingList: true, error: null })
@@ -188,7 +205,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	},
 
 	load: async (name) => {
-		set({ loading: true, error: null, current: null, dirty: false, selectedNodeId: null, validation: null })
+		set({ loading: true, error: null, current: null, dirty: false, selectedNodeId: null, validation: null, past: [], future: [] })
 		try {
 			const wf = await workflowApi.get(name)
 			set({ current: normalizeWorkflow(wf), loading: false })
@@ -213,7 +230,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 		try {
 			const created = await workflowApi.create(wf)
-			set({ current: normalizeWorkflow(created), dirty: false, error: null })
+			set({ current: normalizeWorkflow(created), dirty: false, error: null, past: [], future: [] })
 			await get().list()
 		} catch (err) {
 			set({ error: errMsg(err) })
@@ -251,7 +268,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		set({ loading: true, error: null })
 		try {
 			const result = await workflowApi.import(raw, name)
-			set({ current: normalizeWorkflow(result.workflow), loading: false, dirty: false })
+			set({ current: normalizeWorkflow(result.workflow), loading: false, dirty: false, past: [], future: [] })
 			await get().list()
 		} catch (err) {
 			set({ loading: false, error: errMsg(err) })
@@ -271,12 +288,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 	},
 
-	exportCurrent: async (apply) => {
+	exportCurrent: async (apply, target = 'opencode') => {
 		const { current } = get()
 		if (!current) return
 		set({ exporting: true, error: null })
 		try {
-			const plan = await workflowApi.export(current.name, apply)
+			const plan = await workflowApi.export(current.name, apply, target)
 			set({ exportPlan: plan, exporting: false })
 		} catch (err) {
 			set({ exporting: false, error: errMsg(err) })
@@ -284,6 +301,21 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	},
 
 	clearExport: () => set({ exportPlan: null }),
+
+	aiEdit: async (instruction, model) => {
+		const { current } = get()
+		if (!current) return
+		set({ aiEditing: true, error: null })
+		try {
+			const { workflow, validation } = await workflowApi.aiEdit(current.name, instruction, model)
+			// Snapshot the pre-edit state so the AI change is a single undo step,
+			// then load the proposal into the editor (kept dirty for the user to Save).
+			snapshot()
+			set({ current: normalizeWorkflow(workflow), validation, dirty: true, aiEditing: false })
+		} catch (err) {
+			set({ aiEditing: false, error: errMsg(err) })
+		}
+	},
 
 	selectNode: (id) => set({ selectedNodeId: id }),
 
@@ -295,6 +327,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 			if (ch.type === 'position' && ch.position) posById.set(ch.id, { x: ch.position.x, y: ch.position.y })
 		}
 		if (!posById.size) return
+		snapshot()
 		const nodes = current.nodes.map((n) => {
 			const p = posById.get(n.id)
 			return p ? { ...n, position: p } : n
@@ -305,6 +338,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	autoLayout: () => {
 		const { current } = get()
 		if (!current) return
+		snapshot()
 		set({ current: { ...current, nodes: layoutNodes(current) }, dirty: true })
 	},
 
@@ -319,6 +353,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 		const { current } = get()
 		if (!current) return id
+		snapshot()
 		set({ current: { ...current, nodes: [...current.nodes, node] }, dirty: true })
 		return id
 	},
@@ -326,6 +361,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	updateNode: (id, patch) => {
 		const { current } = get()
 		if (!current) return
+		snapshot('edit:' + id)
 		set({
 			current: {
 				...current,
@@ -340,6 +376,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	updateNodeData: (id, data) => {
 		const { current } = get()
 		if (!current) return
+		snapshot('edit:' + id)
 		set({
 			current: {
 				...current,
@@ -352,6 +389,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	removeNode: (id) => {
 		const { current, selectedNodeId } = get()
 		if (!current) return
+		snapshot()
 		set({
 			current: {
 				...current,
@@ -369,16 +407,44 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		// Avoid duplicate edges.
 		const key = edgeId(c)
 		if (current.connections.some((e) => edgeId(e) === key)) return
+		snapshot()
 		set({ current: { ...current, connections: [...current.connections, c] }, dirty: true })
 	},
 
 	disconnect: (id) => {
 		const { current } = get()
 		if (!current) return
+		snapshot()
 		set({
 			current: { ...current, connections: current.connections.filter((e) => edgeId(e) !== id) },
 			dirty: true,
 		})
+	},
+
+	undo: () => {
+		const { past, current, future } = get()
+		if (!past.length || !current) return
+		const prev = past[past.length - 1]
+		set({
+			current: prev,
+			past: past.slice(0, -1),
+			future: [current, ...future].slice(0, HISTORY_LIMIT),
+			dirty: true,
+		})
+		coalesceKey = ''
+	},
+
+	redo: () => {
+		const { past, current, future } = get()
+		if (!future.length || !current) return
+		const next = future[0]
+		set({
+			current: next,
+			past: [...past, current].slice(-HISTORY_LIMIT),
+			future: future.slice(1),
+			dirty: true,
+		})
+		coalesceKey = ''
 	},
 
 	clearError: () => set({ error: null }),
@@ -390,4 +456,36 @@ export function disconnectEdgeId(c: WorkflowConnection): string {
 
 function errMsg(err: unknown): string {
 	return err instanceof Error ? err.message : String(err)
+}
+
+// snapshot records the current workflow into the undo stack before a mutation.
+// Mutations always replace `current` with a fresh object, so the pushed
+// reference stays frozen as the pre-mutation state — no deep clone needed.
+// Any new edit clears the redo stack.
+//
+// A coalesce `key` collapses rapid repeat edits (e.g. typing in a field) into a
+// single undo entry: consecutive snapshots with the same key inside the window
+// reuse the first one. Structural ops pass no key, forcing a fresh entry.
+let coalesceKey = ''
+let coalesceAt = 0
+const COALESCE_MS = 700
+function snapshot(key?: string): void {
+	const s = useWorkflowStore.getState()
+	if (!s.current) return
+	if (key) {
+		const now = Date.now()
+		if (key === coalesceKey && now - coalesceAt < COALESCE_MS) {
+			coalesceAt = now
+			return
+		}
+		coalesceKey = key
+		coalesceAt = now
+	} else {
+		coalesceKey = ''
+		coalesceAt = 0
+	}
+	useWorkflowStore.setState({
+		past: [...s.past, s.current].slice(-HISTORY_LIMIT),
+		future: [],
+	})
 }

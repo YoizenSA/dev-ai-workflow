@@ -622,9 +622,37 @@ export const workflowApi = {
 
 	// Export. Dry-run (preview the file plan) by default; pass apply:true to
 	// actually write the opencode artifacts to ~/.config/opencode.
-	export: (name: string, apply = false) =>
-		request<WorkflowExportPlan>(
-			`/api/workflows/${name}/export${apply ? "?apply=true" : ""}`,
+	export: (name: string, apply = false, target = "opencode") => {
+		const params = new URLSearchParams();
+		if (apply) params.set("apply", "true");
+		if (target && target !== "opencode") params.set("target", target);
+		const qs = params.toString();
+		return request<WorkflowExportPlan>(
+			`/api/workflows/${name}/export${qs ? `?${qs}` : ""}`,
 			{ method: "POST" },
+		);
+	},
+
+	// Edit with AI. Applies a natural-language instruction via the opencode CLI
+	// and returns the proposed workflow (not saved) plus its validation.
+	aiEdit: (name: string, instruction: string, model?: string) =>
+		request<{ workflow: Workflow; validation: WorkflowValidationResult }>(
+			`/api/workflows/${name}/ai-edit`,
+			{ method: "POST", body: JSON.stringify({ instruction, model }) },
 		),
+
+	// Read-only catalogs the node editors populate from.
+	listSkills: () =>
+		request<{ name: string; description: string }[]>("/api/workflows-meta/skills"),
+	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
 };
+
+// McpCatalogItem mirrors the control server's MCP catalog entry (subset used by
+// the MCP node editor).
+export interface McpCatalogItem {
+	id: string;
+	name: string;
+	tools: string[];
+	installed: boolean;
+	enabled: boolean;
+}

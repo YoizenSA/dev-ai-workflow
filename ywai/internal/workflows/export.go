@@ -26,12 +26,21 @@ type ExportPlan struct {
 	DryRun       bool             `json:"dryRun"`
 }
 
-// Exporter renders a workflow into opencode artifacts. The target directories
-// are the opencode config dirs (commands/, agents/), resolved once at
-// construction so tests can inject temp dirs.
+// Export targets. opencode renders agents with opencode permission blocks under
+// ~/.config/opencode; claude-code renders Claude-native frontmatter under
+// ~/.claude. Both share the orchestrator + sub-agents + slash-command structure.
+const (
+	TargetOpenCode   = "opencode"
+	TargetClaudeCode = "claude-code"
+)
+
+// Exporter renders a workflow into a target's artifacts. The target directories
+// (commands/, agents/) are resolved once at construction so tests can inject
+// temp dirs.
 type Exporter struct {
-	commandsDir string // ~/.config/opencode/commands
-	agentsDir   string // ~/.config/opencode/agents
+	commandsDir string
+	agentsDir   string
+	target      string
 }
 
 // NewExporter builds an Exporter targeting the real opencode config dirs.
@@ -39,12 +48,33 @@ func NewExporter() *Exporter {
 	return &Exporter{
 		commandsDir: config.OpenCodeCommandsDir(),
 		agentsDir:   config.OpenCodeAgentsDir(),
+		target:      TargetOpenCode,
 	}
 }
 
-// NewExporterWithDirs is for tests and targets an explicit pair of dirs.
+// NewExporterForTarget builds an Exporter for the given target, pointing at that
+// runtime's real config dirs. Unknown targets fall back to opencode.
+func NewExporterForTarget(target string) *Exporter {
+	switch target {
+	case TargetClaudeCode:
+		return &Exporter{
+			commandsDir: config.ClaudeCommandsDir(),
+			agentsDir:   config.ClaudeAgentsDir(),
+			target:      TargetClaudeCode,
+		}
+	default:
+		return NewExporter()
+	}
+}
+
+// NewExporterWithDirs is for tests and targets an explicit pair of dirs (opencode).
 func NewExporterWithDirs(commandsDir, agentsDir string) *Exporter {
-	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir}
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: TargetOpenCode}
+}
+
+// NewExporterWithDirsForTarget is for tests: explicit dirs + target dialect.
+func NewExporterWithDirsForTarget(commandsDir, agentsDir, target string) *Exporter {
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: target}
 }
 
 // Plan renders the workflow into in-memory file contents and records the
@@ -81,7 +111,7 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	// 1. Orchestrator agent.
 	orchPath := filepath.Join(e.agentsDir, orchestratorID+".md")
 	orchBody := orchestratorBody(wf, subAgentIDs)
-	files[orchPath] = renderOrchestratorMarkdown(wf, orchestratorID, orchTaskTargets, orchBody)
+	files[orchPath] = e.renderOrchestratorMarkdown(wf, orchestratorID, orchTaskTargets, orchBody)
 	artifacts = append(artifacts, ExportArtifact{Path: orchPath, Kind: "agent", Name: orchestratorID})
 
 	// 2. One agent per subAgent node.
@@ -98,7 +128,7 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 
 	// 3. The slash command (entry point users invoke as /<name>).
 	cmdPath := filepath.Join(e.commandsDir, wf.Name+".md")
-	files[cmdPath] = renderCommandMarkdown(wf, orchestratorID)
+	files[cmdPath] = e.renderCommandMarkdown(wf, orchestratorID)
 	artifacts = append(artifacts, ExportArtifact{Path: cmdPath, Kind: "command", Name: wf.Name})
 
 	return &ExportPlan{
@@ -186,7 +216,10 @@ func sanitizeSlug(s string) string {
 // renderOrchestratorMarkdown builds the orchestrator agent frontmatter + body.
 // It reuses agents.BuildOpenCodeMarkdown so the permission block follows the
 // exact same rendering/bucket-expansion rules as every other ywai agent.
-func renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
+func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
+	if e.target == TargetClaudeCode {
+		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), "task, read, bash", "", body)
+	}
 	mode := "all"
 	perm := orchestratorPermissions(taskTargets)
 	// The orchestrator needs read/bash to inspect context and task/skill/question
@@ -197,7 +230,7 @@ func renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets
 		Prompt:      body,
 		Permission:  perm,
 		Mode:        mode,
-		Group:       "workflows",
+		Group:       wf.Name,
 	}
 	return agents.BuildOpenCodeMarkdown(orchestratorID, profile)
 }
@@ -250,13 +283,20 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string) stri
 	if strings.TrimSpace(prompt) == "" {
 		prompt = n.Data.Prompt
 	}
+	if e.target == TargetClaudeCode {
+		md := renderClaudeAgentMarkdown(id, desc, n.Data.Tools, n.Data.Model, prompt)
+		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
+			md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
+		}
+		return md
+	}
 	profile := agents.AgentProfile{
 		Name:        id,
 		Description: desc,
 		Prompt:      prompt,
 		Permission:  perm,
 		Mode:        mode,
-		Group:       "workflows",
+		Group:       wf.Name,
 	}
 	md := agents.BuildOpenCodeMarkdown(id, profile)
 
@@ -313,18 +353,51 @@ func subAgentPermissions(n *Node) map[string]string {
 	return perm
 }
 
+// renderClaudeAgentMarkdown builds a Claude Code agent .md: native frontmatter
+// (name/description/tools/model) followed by the system prompt body. Unlike the
+// opencode renderer there is no permission block — Claude scopes tools via the
+// comma-separated `tools` frontmatter key.
+func renderClaudeAgentMarkdown(id, description, tools, model, body string) string {
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("name: ")
+	b.WriteString(id)
+	b.WriteByte('\n')
+	b.WriteString("description: ")
+	b.WriteString(yamlQuote(description))
+	b.WriteByte('\n')
+	if t := strings.TrimSpace(tools); t != "" {
+		b.WriteString("tools: ")
+		b.WriteString(t)
+		b.WriteByte('\n')
+	}
+	if m := strings.TrimSpace(model); m != "" && m != "inherit" {
+		b.WriteString("model: ")
+		b.WriteString(m)
+		b.WriteByte('\n')
+	}
+	b.WriteString("---\n\n")
+	b.WriteString(strings.TrimSpace(body))
+	b.WriteByte('\n')
+	return b.String()
+}
+
 // renderCommandMarkdown builds the slash command file users invoke as /<name>.
 // It targets the workflow's orchestrator agent and forwards $ARGUMENTS.
-func renderCommandMarkdown(wf *Workflow, orchestratorID string) string {
+func (e *Exporter) renderCommandMarkdown(wf *Workflow, orchestratorID string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("description: ")
 	b.WriteString(yamlQuote(orchestratorDescription(wf)))
 	b.WriteByte('\n')
-	b.WriteString("agent: ")
-	b.WriteString(orchestratorID)
-	b.WriteByte('\n')
-	b.WriteString("subtask: true\n")
+	// Claude Code slash commands have no `agent:`/`subtask:` keys; the body just
+	// drives the conversation. opencode binds the command to its orchestrator agent.
+	if e.target != TargetClaudeCode {
+		b.WriteString("agent: ")
+		b.WriteString(orchestratorID)
+		b.WriteByte('\n')
+		b.WriteString("subtask: true\n")
+	}
 	b.WriteString("---\n\n")
 	desc := wf.Description
 	if desc == "" {
