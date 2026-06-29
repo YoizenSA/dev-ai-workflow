@@ -231,7 +231,8 @@ function WorkflowEditorInner() {
 				sourceHandle: c.fromPort || undefined,
 				targetHandle: c.toPort || undefined,
 				animated: animatedEdges,
-				style: dim && !touches ? { opacity: 0.15 } : undefined,
+				// cc-wf-studio look: dashed curved connectors.
+				style: { strokeDasharray: '6 4', strokeWidth: 1.5, opacity: dim && !touches ? 0.12 : 1 },
 				markerEnd: { type: 'arrowclosed' as const },
 			}
 		})
@@ -508,13 +509,13 @@ function WorkflowEditorInner() {
 			{current && (
 				<div className="workflow-body">
 					<aside className="workflow-palette">
-						<h4>Nodes</h4>
+						<h4>Node Palette</h4>
 						{PALETTE_TYPES.map((t) => {
 							const Icon = NODE_META[t].icon
 							return (
 								<div
 									key={t}
-									className="palette-item"
+									className={`palette-item palette-${t}`}
 									draggable
 									onDragStart={(e) => onDragStart(e, t)}
 									onDoubleClick={() =>
@@ -523,9 +524,12 @@ function WorkflowEditorInner() {
 									title={`Double-click or drag to add a ${NODE_META[t].kind} node`}
 								>
 									<span className="palette-icon">
-										<Icon size={14} />
+										<Icon size={16} />
 									</span>
-									{NODE_META[t].kind}
+									<span className="palette-text">
+										<span className="palette-kind">{NODE_META[t].kind}</span>
+										<span className="palette-desc">{NODE_META[t].desc}</span>
+									</span>
 								</div>
 							)
 						})}

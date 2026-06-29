@@ -39,21 +39,22 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	branches?: { id?: string; label?: string; value?: string }[]
 }
 
-// nodeTypeIcon maps each node type to a lucide icon + one-word label.
-export const NODE_META: Record<WorkflowNodeType, { icon: typeof Play; kind: string }> = {
-	start: { icon: Play, kind: 'Start' },
-	end: { icon: Square, kind: 'End' },
-	subAgent: { icon: Bot, kind: 'Sub-agent' },
-	askUserQuestion: { icon: HelpCircle, kind: 'Ask user' },
-	ifElse: { icon: GitBranch, kind: 'If/Else' },
-	switch: { icon: GitBranch, kind: 'Switch' },
-	branch: { icon: GitBranch, kind: 'Switch' },
-	prompt: { icon: FileText, kind: 'Prompt' },
-	skill: { icon: BookOpen, kind: 'Skill' },
-	mcp: { icon: Plug, kind: 'MCP' },
-	subAgentFlow: { icon: Blocks, kind: 'Sub-flow' },
-	codex: { icon: Box, kind: 'Codex' },
-	group: { icon: Box, kind: 'Group' },
+// NODE_META: icon, palette title (kind), the UPPERCASE type label shown in the
+// node's meta row, and a one-line palette subtitle — mirroring cc-wf-studio.
+export const NODE_META: Record<WorkflowNodeType, { icon: typeof Play; kind: string; type: string; desc: string }> = {
+	start: { icon: Play, kind: 'Start', type: 'START', desc: 'Workflow entry point' },
+	end: { icon: Square, kind: 'End', type: 'END', desc: 'Workflow exit point' },
+	subAgent: { icon: Bot, kind: 'Sub-Agent', type: 'SUB-AGENT', desc: 'Execute a specialized task' },
+	askUserQuestion: { icon: HelpCircle, kind: 'Ask User', type: 'ASK USER QUESTION', desc: 'Pause and ask the user' },
+	ifElse: { icon: GitBranch, kind: 'If/Else', type: 'IF/ELSE', desc: 'Two-way conditional branch' },
+	switch: { icon: GitBranch, kind: 'Switch', type: 'SWITCH', desc: 'Multi-way branch' },
+	branch: { icon: GitBranch, kind: 'Switch', type: 'SWITCH', desc: 'Multi-way branch' },
+	prompt: { icon: FileText, kind: 'Prompt', type: 'PROMPT', desc: 'Template with variables' },
+	skill: { icon: BookOpen, kind: 'Skill', type: 'SKILL', desc: 'Execute a Claude Code Skill' },
+	mcp: { icon: Plug, kind: 'MCP Tool', type: 'MCP TOOL', desc: 'Execute an MCP tool' },
+	subAgentFlow: { icon: Blocks, kind: 'Sub-Agent Flow', type: 'SUB-AGENT FLOW', desc: 'Execute a Sub-Agent flow' },
+	codex: { icon: Box, kind: 'Codex', type: 'CODEX', desc: 'Codex agent' },
+	group: { icon: Box, kind: 'Group', type: 'GROUP', desc: 'Visual container' },
 }
 
 function title(d: WorkflowNodePayload): string {
@@ -170,12 +171,14 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 	return (
 		<div className={`wf-node type-${d.__type} ${selected ? 'is-selected' : ''} ${multiPort ? 'has-ports' : ''}`}>
 			{d.__type !== 'start' && <Handle type="target" position={Position.Left} />}
-			<div className="wf-node-head">
+			<div className="wf-node-meta">
 				<span className="wf-node-icon">
-					<Icon size={14} />
+					<Icon size={12} />
 				</span>
-				<span className="wf-node-title">{title(d)}</span>
+				<span className="wf-node-type">{meta.type}</span>
+				{d.agentType && <span className="wf-badge">{d.agentType === 'claudeCode' ? 'CLAUDE CODE' : d.agentType}</span>}
 			</div>
+			<div className="wf-node-title">{title(d)}</div>
 			{sub && <div className="wf-node-sub">{sub}</div>}
 			{badges.length > 0 && (
 				<div className="wf-node-chips">
