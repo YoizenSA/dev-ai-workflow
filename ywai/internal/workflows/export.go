@@ -211,16 +211,16 @@ func orchestratorPermissions(taskTargets []string) map[string]string {
 	// task sub-map ourselves below and pass a coarse allow set here. The
 	// orchestrator gets task/skill/question allow plus the standard read/bash.
 	perm := map[string]string{
-		"read":    "allow",
-		"edit":    "allow",
-		"write":   "allow",
-		"bash":    "allow",
-		"glob":    "allow",
-		"grep":    "allow",
-		"task":    "allow",
-		"skill":   "allow",
-		"question": "allow",
-		"webfetch": "allow",
+		"read":      "allow",
+		"edit":      "allow",
+		"write":     "allow",
+		"bash":      "allow",
+		"glob":      "allow",
+		"grep":      "allow",
+		"task":      "allow",
+		"skill":     "allow",
+		"question":  "allow",
+		"webfetch":  "allow",
 		"websearch": "allow",
 	}
 	_ = taskTargets // referenced via the explicit task sub-map in the body

@@ -54,6 +54,11 @@ func (a *workflowsAPI) handleList(w http.ResponseWriter, r *http.Request) {
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Guarantee a non-null array: the frontend maps over this unconditionally,
+	// and a nil slice would JSON-serialize as `null`.
+	if summaries == nil {
+		summaries = []workflows.Summary{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"workflows": summaries})
 }
 

@@ -98,7 +98,7 @@ func TestHasCycle(t *testing.T) {
 	}
 	// Self-loop.
 	wf := &Workflow{
-		Nodes: []Node{{ID: "x", Type: NodeTypePrompt, Name: "x"}},
+		Nodes:       []Node{{ID: "x", Type: NodeTypePrompt, Name: "x"}},
 		Connections: []Connection{{From: "x", To: "x"}},
 	}
 	if !wf.hasCycle() {
@@ -113,7 +113,14 @@ func TestTopoOrder(t *testing.T) {
 		t.Fatalf("topoOrder: %v", err)
 	}
 	// start must come before a, a before end.
-	pos := func(id string) int { for i, n := range order { if n == id { return i } }; return -1 }
+	pos := func(id string) int {
+		for i, n := range order {
+			if n == id {
+				return i
+			}
+		}
+		return -1
+	}
 	if pos("s") >= pos("a") || pos("a") >= pos("e") {
 		t.Fatalf("topo order wrong: %v", order)
 	}

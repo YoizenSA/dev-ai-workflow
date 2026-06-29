@@ -19,3 +19,10 @@ linters:
 formatters:
   enable:
     - gofmt
+
+issues:
+  # node_modules can contain vendored Go (e.g. the flatted npm package ships a
+  # Go port). It is never our code and must not be linted.
+  exclude-dirs:
+    - internal/control/web/node_modules
+    - node_modules

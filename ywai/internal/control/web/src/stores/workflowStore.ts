@@ -112,7 +112,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		set({ loadingList: true, error: null })
 		try {
 			const { workflows } = await workflowApi.list()
-			set({ summaries: workflows, loadingList: false })
+			// Backend may return null for an empty list; normalize to [].
+			set({ summaries: workflows ?? [], loadingList: false })
 		} catch (err) {
 			set({ loadingList: false, error: errMsg(err) })
 		}

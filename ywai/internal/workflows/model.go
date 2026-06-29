@@ -10,32 +10,32 @@ import "time"
 
 // Node types, matching cc-wf-studio's NodeType enum. See workflow-definition.ts.
 const (
-	NodeTypeStart          = "start"
-	NodeTypeEnd            = "end"
-	NodeTypePrompt         = "prompt"
-	NodeTypeSubAgent       = "subAgent"
+	NodeTypeStart           = "start"
+	NodeTypeEnd             = "end"
+	NodeTypePrompt          = "prompt"
+	NodeTypeSubAgent        = "subAgent"
 	NodeTypeAskUserQuestion = "askUserQuestion"
-	NodeTypeIfElse         = "ifElse"
-	NodeTypeSwitch         = "switch"
-	NodeTypeBranch         = "branch" // legacy alias of switch
-	NodeTypeSkill          = "skill"
-	NodeTypeMCP            = "mcp"
-	NodeTypeSubAgentFlow   = "subAgentFlow"
-	NodeTypeCodex          = "codex"
-	NodeTypeGroup          = "group"
+	NodeTypeIfElse          = "ifElse"
+	NodeTypeSwitch          = "switch"
+	NodeTypeBranch          = "branch" // legacy alias of switch
+	NodeTypeSkill           = "skill"
+	NodeTypeMCP             = "mcp"
+	NodeTypeSubAgentFlow    = "subAgentFlow"
+	NodeTypeCodex           = "codex"
+	NodeTypeGroup           = "group"
 )
 
 // Workflow is a directed graph of nodes and connections. The JSON shape mirrors
 // cc-wf-studio's workflow.json so files round-trip between the two tools.
 type Workflow struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description,omitempty"`
-	Version     string        `json:"version"`
-	Nodes       []Node        `json:"nodes"`
-	Connections []Connection  `json:"connections"`
-	CreatedAt   time.Time     `json:"createdAt"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	Version     string       `json:"version"`
+	Nodes       []Node       `json:"nodes"`
+	Connections []Connection `json:"connections"`
+	CreatedAt   time.Time    `json:"createdAt"`
+	UpdatedAt   time.Time    `json:"updatedAt"`
 }
 
 // Node is a single step in the graph. Type selects which fields of Data apply.
@@ -67,30 +67,30 @@ type Connection struct {
 // stay interchangeable.
 type NodeData struct {
 	// common
-	Label      string `json:"label,omitempty"`
-	OutputPorts int   `json:"outputPorts,omitempty"`
+	Label       string `json:"label,omitempty"`
+	OutputPorts int    `json:"outputPorts,omitempty"`
 
 	// start / end
 	// (label only)
 
 	// subAgent
-	Name             string `json:"name,omitempty"`              // agent name (may differ from node Name)
-	AgentDescription string `json:"description,omitempty"`       // frontmatter description (≤200 chars)
-	AgentDefinition  string `json:"agentDefinition,omitempty"`   // system prompt / identity
-	Prompt           string `json:"prompt,omitempty"`            // task to perform
-	AgentType        string `json:"agentType,omitempty"`         // "claudeCode" | "other"
-	Tools            string `json:"tools,omitempty"`             // comma-separated tool names
-	Model            string `json:"model,omitempty"`             // sonnet|opus|haiku|inherit|provider/id
-	Memory           string `json:"memory,omitempty"`            // user|project|local
-	Color            string `json:"color,omitempty"`             // red|blue|green|...
-	Mode             string `json:"mode,omitempty"`              // all|primary
-	CommandFilePath  string `json:"commandFilePath,omitempty"`   // ref to existing agent .md
-	CommandScope     string `json:"commandScope,omitempty"`      // user|project
+	Name             string `json:"name,omitempty"`            // agent name (may differ from node Name)
+	AgentDescription string `json:"description,omitempty"`     // frontmatter description (≤200 chars)
+	AgentDefinition  string `json:"agentDefinition,omitempty"` // system prompt / identity
+	Prompt           string `json:"prompt,omitempty"`          // task to perform
+	AgentType        string `json:"agentType,omitempty"`       // "claudeCode" | "other"
+	Tools            string `json:"tools,omitempty"`           // comma-separated tool names
+	Model            string `json:"model,omitempty"`           // sonnet|opus|haiku|inherit|provider/id
+	Memory           string `json:"memory,omitempty"`          // user|project|local
+	Color            string `json:"color,omitempty"`           // red|blue|green|...
+	Mode             string `json:"mode,omitempty"`            // all|primary
+	CommandFilePath  string `json:"commandFilePath,omitempty"` // ref to existing agent .md
+	CommandScope     string `json:"commandScope,omitempty"`    // user|project
 	PluginName       string `json:"pluginName,omitempty"`
-	BuiltInType      string `json:"builtInType,omitempty"`       // general-purpose|explore|plan
+	BuiltInType      string `json:"builtInType,omitempty"` // general-purpose|explore|plan
 
 	// askUserQuestion
-	QuestionText string         `json:"questionText,omitempty"`
+	QuestionText string           `json:"questionText,omitempty"`
 	Options      []QuestionOption `json:"options,omitempty"`
 
 	// prompt
@@ -105,11 +105,11 @@ type NodeData struct {
 
 	// skill
 	SkillPath        string `json:"skillPath,omitempty"`
-	Scope            string `json:"scope,omitempty"`        // user|project|local
+	Scope            string `json:"scope,omitempty"` // user|project|local
 	AllowedTools     string `json:"allowedTools,omitempty"`
 	ValidationStatus string `json:"validationStatus,omitempty"` // valid|missing|invalid
-	Source           string `json:"source,omitempty"`       // claude|copilot
-	ExecutionMode    string `json:"executionMode,omitempty"` // load|execute
+	Source           string `json:"source,omitempty"`           // claude|copilot
+	ExecutionMode    string `json:"executionMode,omitempty"`    // load|execute
 	ExecutionPrompt  string `json:"executionPrompt,omitempty"`
 
 	// mcp

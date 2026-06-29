@@ -30,15 +30,20 @@ type ValidationIssue struct {
 
 // ValidationResult is the structured report returned to the UI.
 type ValidationResult struct {
-	Valid   bool              `json:"valid"`
-	Errors  []ValidationIssue `json:"errors"`
+	Valid    bool              `json:"valid"`
+	Errors   []ValidationIssue `json:"errors"`
 	Warnings []ValidationIssue `json:"warnings"`
 }
 
 // Validate checks a workflow against the structural rules. It returns a result
 // even when there are errors (callers inspect Valid before exporting).
 func Validate(wf *Workflow) ValidationResult {
-	res := ValidationResult{}
+	// Pre-initialize the slices as empty (not nil) so they JSON-serialize as
+	// `[]` rather than `null`. The frontend maps over these unconditionally.
+	res := ValidationResult{
+		Errors:   []ValidationIssue{},
+		Warnings: []ValidationIssue{},
+	}
 	if wf == nil {
 		res.Errors = append(res.Errors, ValidationIssue{Severity: "error", Message: "workflow is nil"})
 		res.Valid = false

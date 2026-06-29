@@ -309,24 +309,24 @@ function WorkflowEditorInner() {
 			{/* validation summary */}
 			{validation && (
 				<div className="validation-list">
-					{!validation.valid && validation.errors.length === 0 && (
+					{!validation.valid && (validation.errors?.length ?? 0) === 0 && (
 						<div className="validation-issue error">
 							<AlertTriangle size={14} /> Workflow has errors.
 						</div>
 					)}
-					{validation.errors.map((iss, i) => (
+					{(validation.errors ?? []).map((iss, i) => (
 						<div className="validation-issue error" key={`e${i}`}>
 							<AlertTriangle size={14} />
 							<span>{iss.nodeId ? `[${iss.nodeId}] ` : ''}{iss.message}</span>
 						</div>
 					))}
-					{validation.warnings.map((iss, i) => (
+					{(validation.warnings ?? []).map((iss, i) => (
 						<div className="validation-issue warning" key={`w${i}`}>
 							<AlertTriangle size={14} />
 							<span>{iss.nodeId ? `[${iss.nodeId}] ` : ''}{iss.message}</span>
 						</div>
 					))}
-					{validation.valid && validation.warnings.length === 0 && (
+					{validation.valid && (validation.warnings?.length ?? 0) === 0 && (
 						<div className="validation-issue" style={{ color: 'var(--success)' }}>
 							<CheckCircle2 size={14} /> Workflow is valid.
 						</div>
@@ -442,7 +442,7 @@ function WorkflowEditorInner() {
 								? 'Dry-run preview. These files would be written to ~/.config/opencode:'
 								: '✅ Files written to ~/.config/opencode. Restart opencode to pick them up.'}
 						</p>
-						{exportPlan.files.map((f, i) => (
+						{(exportPlan.files ?? []).map((f, i) => (
 							<div className={`artifact kind-${f.kind}`} key={i}>
 								<span className="kind">{f.kind}</span>
 								<span>{f.path.replace(/^.*opencode/, '~/.config/opencode')}</span>

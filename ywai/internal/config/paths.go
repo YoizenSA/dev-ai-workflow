@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	AppName         = "ywai"
-	GentleAIBin     = "gentle-ai"
-	SkillsDirName   = "skills"
-	AgentsDirName   = "agents"
-	PluginsDirName  = "plugins"
+	AppName          = "ywai"
+	GentleAIBin      = "gentle-ai"
+	SkillsDirName    = "skills"
+	AgentsDirName    = "agents"
+	PluginsDirName   = "plugins"
 	WorkflowsDirName = "workflows"
 )
 
