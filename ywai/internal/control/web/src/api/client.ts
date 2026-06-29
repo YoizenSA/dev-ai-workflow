@@ -644,6 +644,10 @@ export const workflowApi = {
 	// Read-only catalogs the node editors populate from.
 	listSkills: () =>
 		request<{ name: string; description: string }[]>("/api/workflows-meta/skills"),
+	// Real MCP servers configured in opencode.json (not the static catalog).
+	listMcpServers: () =>
+		request<{ id: string; enabled: boolean }[]>("/api/workflows-meta/mcps"),
+	// Static catalog (used to suggest known tools for a server, best-effort).
 	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
 };
 

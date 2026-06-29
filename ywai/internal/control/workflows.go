@@ -49,8 +49,9 @@ func (s *Server) registerWorkflowsRoutes() {
 	s.mux.HandleFunc("POST /api/workflows/{name}/ai-edit", api.handleAIEdit)
 
 	// Read-only catalogs the node editors populate from (skills live in the
-	// opencode skills dir; MCPs are served by the existing /api/mcp/catalog).
+	// opencode skills dir; MCP servers come from opencode.json).
 	s.mux.HandleFunc("GET /api/workflows-meta/skills", api.handleSkillsList)
+	s.mux.HandleFunc("GET /api/workflows-meta/mcps", api.handleMcpServersList)
 }
 
 // ─── handlers ──────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -185,4 +186,36 @@ func (a *workflowsAPI) handleSkillsList(w http.ResponseWriter, r *http.Request) 
 		skills = append(skills, info)
 	}
 	writeJSON(w, http.StatusOK, skills)
+}
+
+// mcpServerInfo is one MCP server configured in opencode.json.
+type mcpServerInfo struct {
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled"`
+}
+
+// handleMcpServersList lists the MCP servers actually configured in
+// opencode.json (the real installed ones, not the static catalog). Tools are
+// not enumerated — that needs a live MCP handshake — so the editor lets the user
+// type the tool name.
+func (a *workflowsAPI) handleMcpServersList(w http.ResponseWriter, r *http.Request) {
+	cfg, err := readMcpConfig()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []mcpServerInfo{})
+		return
+	}
+	servers := []mcpServerInfo{}
+	for id, raw := range cfg {
+		info := mcpServerInfo{ID: id, Enabled: true}
+		if m, ok := raw.(map[string]interface{}); ok {
+			if v, has := m["enabled"]; has {
+				if b, ok := v.(bool); ok {
+					info.Enabled = b
+				}
+			}
+		}
+		servers = append(servers, info)
+	}
+	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
+	writeJSON(w, http.StatusOK, servers)
 }

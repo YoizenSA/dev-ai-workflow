@@ -682,9 +682,14 @@ export interface WorkflowNodeData {
 	executionMode?: string;
 	executionPrompt?: string;
 
+	// group container size (visual only)
+	width?: number;
+	height?: number;
+
 	// mcp
 	server?: string;
 	tool?: string;
+	aiParams?: string;
 
 	// subAgentFlow
 	flowId?: string;

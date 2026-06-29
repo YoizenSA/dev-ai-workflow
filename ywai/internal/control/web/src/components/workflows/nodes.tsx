@@ -32,6 +32,9 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	server?: string
 	tool?: string
 	flowId?: string
+	aiParams?: string
+	width?: number
+	height?: number
 	options?: { id?: string; label?: string }[]
 	branches?: { id?: string; label?: string; value?: string }[]
 }
@@ -102,6 +105,8 @@ function chips(d: WorkflowNodePayload): { k: string; v: string }[] {
 			return [{ k: 'branches', v: String(d.branches?.length ?? 0) }]
 		case 'skill':
 			return d.executionMode ? [{ k: 'mode', v: d.executionMode }] : []
+		case 'mcp':
+			return d.aiParams ? [{ k: 'params', v: 'AI' }] : []
 		default:
 			return []
 	}
@@ -142,6 +147,21 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 	const d = data as WorkflowNodePayload
 	const meta = NODE_META[d.__type]
 	const Icon = meta.icon
+
+	// Group: a visual container box (sized via data.width/height) drawn behind
+	// the other nodes. Not a React Flow parent — membership is purely visual.
+	if (d.__type === 'group') {
+		return (
+			<div
+				className={`wf-group ${selected ? 'is-selected' : ''}`}
+				style={{ width: d.width ?? 360, height: d.height ?? 240 }}
+			>
+				<div className="wf-group-title">
+					<Box size={12} /> {title(d)}
+				</div>
+			</div>
+		)
+	}
 	const sub = subtitle(d)
 	const badges = chips(d)
 	const ports = outPorts(d)
@@ -201,10 +221,13 @@ export const nodeTypes = { workflow: WorkflowNodeRenderer }
 // toFlowNode converts a domain WorkflowNode into the xyflow node shape the
 // canvas renders. The __type discriminator lets the renderer switch on style.
 export function toFlowNode(n: WorkflowNode) {
+	const isGroup = n.type === 'group'
 	return {
 		id: n.id,
 		type: 'workflow',
 		position: n.position,
+		// Groups sit behind everything else so they read as containers.
+		zIndex: isGroup ? 0 : 1,
 		data: { ...n.data, __type: n.type, name: n.name } as WorkflowNodePayload,
 	}
 }

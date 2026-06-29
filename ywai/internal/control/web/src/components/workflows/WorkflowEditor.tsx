@@ -19,7 +19,6 @@ import {
 	Save,
 	Trash2,
 	Upload,
-	Play,
 	CheckCircle2,
 	AlertTriangle,
 	Network,
@@ -44,6 +43,12 @@ import MermaidDiagram from '../shared/MermaidDiagram'
 import { NODE_META, nodeTypes, toFlowNode } from './nodes'
 import NodeDetail, { useOpencodeModels } from './NodeDetail'
 import './WorkflowEditor.css'
+
+// Export targets shown as per-runtime buttons in the toolbar.
+const EXPORT_TARGETS = [
+	{ value: 'opencode', label: 'opencode', dir: '~/.config/opencode' },
+	{ value: 'claude-code', label: 'Claude Code', dir: '~/.claude' },
+] as const
 
 const PALETTE_TYPES: WorkflowNodeType[] = [
 	'subAgent',
@@ -188,8 +193,11 @@ function WorkflowEditorInner() {
 
 	// Serial of the underlying workflow nodes, to detect when we must resync
 	// (different nodes/edges, not just moved positions).
+	// Includes node data (not position) so field edits in the detail panel — chips,
+	// subtitles, group size — repaint the canvas live. Position is excluded so a
+	// drag in progress (persisted only on drag-end) doesn't fight the store.
 	const nodeSignature = useMemo(
-		() => current?.nodes.map((n) => n.id + n.type).join('|') ?? '',
+		() => current?.nodes.map((n) => n.id + n.type + JSON.stringify(n.data)).join('|') ?? '',
 		[current],
 	)
 
@@ -392,32 +400,21 @@ function WorkflowEditorInner() {
 				>
 					<CheckCircle2 size={14} /> Validate
 				</button>
-				<YdSelect
-					className="workflow-target-select"
-					options={[
-						{ value: 'opencode', label: 'opencode' },
-						{ value: 'claude-code', label: 'Claude Code' },
-					]}
-					value={exportTarget}
-					onChange={setExportTarget}
-					ariaLabel="Export target"
-				/>
-				<button
-					className="btn"
-					onClick={() => exportCurrent(false, exportTarget)}
-					disabled={!current || exporting}
-					title="Preview the export (dry-run)"
-				>
-					<FileCode2 size={14} /> Export preview
-				</button>
-				<button
-					className="btn btn-primary"
-					onClick={() => exportCurrent(true, exportTarget)}
-					disabled={!current || exporting}
-					title={exportTarget === 'claude-code' ? 'Write artifacts to ~/.claude' : 'Write artifacts to ~/.config/opencode'}
-				>
-					<Play size={14} /> Export to {exportTarget === 'claude-code' ? 'Claude' : 'opencode'}
-				</button>
+				<span className="wf-export-label">Export</span>
+				{EXPORT_TARGETS.map((t) => (
+					<button
+						key={t.value}
+						className="btn"
+						onClick={() => {
+							setExportTarget(t.value)
+							exportCurrent(false, t.value)
+						}}
+						disabled={!current || exporting}
+						title={`Export to ${t.label} (${t.dir}) — preview, then apply`}
+					>
+						<FileCode2 size={14} /> {t.label}
+					</button>
+				))}
 				<button
 					className="btn btn-icon"
 					onClick={handleUndo}
@@ -711,12 +708,15 @@ function WorkflowEditorInner() {
 
 // buildMermaidPreview renders a Mermaid flowchart LR from the current workflow,
 // mirroring the Go exporter's renderMermaid so the preview matches the export.
+// Node ids are stable short ids (N0, N1, …) because Mermaid v11 mis-parses ids
+// that contain dashes (it reads the `-` as an edge operator), which broke the
+// previous slug-based ids like `start-node-default`.
 function buildMermaidPreview(current: ReturnType<typeof useWorkflowStore.getState>['current']): string {
 	if (!current) return ''
 	const lines: string[] = ['flowchart LR']
 	const idMap: Record<string, string> = {}
 	current.nodes.forEach((n, i) => {
-		const mid = slug(n.id) || `N${i}`
+		const mid = `N${i}`
 		idMap[n.id] = mid
 		const label = (n.data.label || n.data.name || n.data.description || n.type).replace(/"/g, "'")
 		const shape = shapeFor(n.type)
@@ -728,10 +728,6 @@ function buildMermaidPreview(current: ReturnType<typeof useWorkflowStore.getStat
 		}
 	})
 	return lines.join('\n')
-}
-
-function slug(s: string): string {
-	return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 function shapeFor(type: string): { open: string; close: string } {

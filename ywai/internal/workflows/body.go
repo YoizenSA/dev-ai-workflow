@@ -254,7 +254,11 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		}
 		return fmt.Sprintf("**%s skill `%s`** using the `skill` tool.", strings.Title(mode), n.Data.Name)
 	case NodeTypeMCP:
-		return fmt.Sprintf("**Call MCP tool** `%s/%s`.", n.Data.Server, n.Data.Tool)
+		s := fmt.Sprintf("**Call MCP tool** `%s/%s`.", n.Data.Server, n.Data.Tool)
+		if p := strings.TrimSpace(n.Data.AIParams); p != "" {
+			s += " Infer its parameters from: " + p
+		}
+		return s
 	case NodeTypeSubAgentFlow:
 		return fmt.Sprintf("**Run sub-flow** `%s`.", n.Data.FlowID)
 	case NodeTypeGroup:

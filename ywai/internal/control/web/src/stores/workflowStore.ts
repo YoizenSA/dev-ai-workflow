@@ -107,7 +107,7 @@ function defaultData(type: WorkflowNodeType): WorkflowNode['data'] {
 		case 'subAgentFlow':
 			return { flowId: '' }
 		case 'group':
-			return { label: 'Group' }
+			return { label: 'Group', width: 360, height: 240 }
 		default:
 			return {}
 	}

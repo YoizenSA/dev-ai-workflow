@@ -70,6 +70,10 @@ type NodeData struct {
 	Label       string `json:"label,omitempty"`
 	OutputPorts int    `json:"outputPorts,omitempty"`
 
+	// group container size (visual only)
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+
 	// start / end
 	// (label only)
 
@@ -115,6 +119,9 @@ type NodeData struct {
 	// mcp
 	Server string `json:"server,omitempty"`
 	Tool   string `json:"tool,omitempty"`
+	// AIParams is a natural-language description of how the agent should fill the
+	// tool's parameters at runtime (cc-wf-studio's "AI Parameter Configuration").
+	AIParams string `json:"aiParams,omitempty"`
 
 	// subAgentFlow (reference to a reusable sub-flow defined in the same file)
 	FlowID string `json:"flowId,omitempty"`

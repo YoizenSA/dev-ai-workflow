@@ -42,6 +42,23 @@ export function useMcps(): McpCatalogItem[] {
 	return mcps
 }
 
+// Real MCP servers configured in opencode.json (not the static catalog).
+let mcpServerCache: { id: string; enabled: boolean }[] | null = null
+export function useMcpServers(): { id: string; enabled: boolean }[] {
+	const [servers, setServers] = useState(mcpServerCache ?? [])
+	useEffect(() => {
+		if (mcpServerCache) return
+		workflowApi
+			.listMcpServers()
+			.then((s) => {
+				mcpServerCache = s ?? []
+				setServers(mcpServerCache)
+			})
+			.catch(() => undefined)
+	}, [])
+	return servers
+}
+
 export function useOpencodeModels(): ModelInfo[] {
 	const [models, setModels] = useState<ModelInfo[]>(modelCache ?? [])
 	useEffect(() => {
@@ -189,7 +206,12 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 		case 'skill':
 			return <SkillFields node={node} />
 		case 'mcp':
-			return <McpFields node={node} />
+			return (
+				<>
+					<McpFields node={node} />
+					<McpAiParams node={node} />
+				</>
+			)
 
 		case 'subAgentFlow':
 			return (
@@ -205,15 +227,42 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 			)
 		case 'group':
 			return (
-				<div className="field">
-					<label className="field-label" htmlFor="wf-group-label">Label</label>
-					<input
-						id="wf-group-label"
-						className="input"
-						value={node.data.label ?? ''}
-						onChange={(e) => update(node, { label: e.target.value })}
-					/>
-				</div>
+				<>
+					<div className="field">
+						<label className="field-label" htmlFor="wf-group-label">Label</label>
+						<input
+							id="wf-group-label"
+							className="input"
+							value={node.data.label ?? ''}
+							onChange={(e) => update(node, { label: e.target.value })}
+						/>
+					</div>
+					<div className="row">
+						<div className="field">
+							<label className="field-label" htmlFor="wf-group-w">Width</label>
+							<input
+								id="wf-group-w"
+								className="input"
+								type="number"
+								min={160}
+								value={node.data.width ?? 360}
+								onChange={(e) => update(node, { width: Number(e.target.value) || 360 })}
+							/>
+						</div>
+						<div className="field">
+							<label className="field-label" htmlFor="wf-group-h">Height</label>
+							<input
+								id="wf-group-h"
+								className="input"
+								type="number"
+								min={120}
+								value={node.data.height ?? 240}
+								onChange={(e) => update(node, { height: Number(e.target.value) || 240 })}
+							/>
+						</div>
+					</div>
+					<span className="field-help">A visual container. Place it behind nodes to group them.</span>
+				</>
 			)
 		default:
 			return null
@@ -340,52 +389,71 @@ function AskUserFields({ node }: { node: WorkflowNode }) {
 	)
 }
 
-// McpFields — server + tool, populated from the installed MCP catalog. Falls
-// back to free text when the catalog is empty (e.g. no MCPs installed yet).
+// McpFields — server (from the real opencode.json MCP config) + tool. Tool is a
+// free text field with known catalog tools offered as suggestions, because the
+// live tool list of an MCP can't be enumerated without an MCP handshake.
 function McpFields({ node }: { node: WorkflowNode }) {
-	const mcps = useMcps()
-	const installed = mcps.filter((m) => m.installed)
-	const list = installed.length > 0 ? installed : mcps
-	const selected = list.find((m) => m.id === node.data.server)
-	const tools = selected?.tools ?? []
+	const servers = useMcpServers()
+	const catalog = useMcps()
+	// Tool suggestions: match the selected server id against the static catalog.
+	const suggested = catalog.find((m) => m.id === node.data.server)?.tools ?? []
+	// Ensure the current value is always selectable even if not in the live list.
+	const serverIds = servers.map((s) => s.id)
+	if (node.data.server && !serverIds.includes(node.data.server)) serverIds.unshift(node.data.server)
 
-	if (list.length === 0) {
-		return (
-			<div className="row">
-				<div className="field">
-					<label className="field-label" htmlFor="wf-server">Server</label>
-					<input id="wf-server" className="input" value={node.data.server ?? ''} onChange={(e) => update(node, { server: e.target.value })} />
-				</div>
-				<div className="field">
-					<label className="field-label" htmlFor="wf-tool">Tool</label>
-					<input id="wf-tool" className="input" value={node.data.tool ?? ''} onChange={(e) => update(node, { tool: e.target.value })} />
-				</div>
-			</div>
-		)
-	}
-
+	const datalistId = `mcp-tools-${node.id}`
 	return (
 		<div className="row">
 			<div className="field">
 				<label className="field-label" htmlFor="wf-server">Server</label>
-				<YdSelect
-					options={list.map((m) => ({ value: m.id, label: m.name }))}
-					value={node.data.server ?? ''}
-					onChange={(v) => update(node, { server: v, tool: '' })}
-					placeholder="— select MCP —"
-					ariaLabel="MCP server"
-				/>
+				{serverIds.length === 0 ? (
+					<input id="wf-server" className="input mono" value={node.data.server ?? ''} placeholder="no MCPs in opencode.json" onChange={(e) => update(node, { server: e.target.value, tool: '' })} />
+				) : (
+					<YdSelect
+						options={serverIds.map((id) => ({ value: id, label: id }))}
+						value={node.data.server ?? ''}
+						onChange={(v) => update(node, { server: v, tool: '' })}
+						placeholder="— select MCP —"
+						ariaLabel="MCP server"
+					/>
+				)}
 			</div>
 			<div className="field">
 				<label className="field-label" htmlFor="wf-tool">Tool</label>
-				<YdSelect
-					options={tools.map((t) => ({ value: t, label: t }))}
+				<input
+					id="wf-tool"
+					className="input mono"
 					value={node.data.tool ?? ''}
-					onChange={(v) => update(node, { tool: v })}
-					placeholder={selected ? '— select tool —' : 'pick a server first'}
-					ariaLabel="MCP tool"
+					placeholder="e.g. getJiraIssue"
+					list={suggested.length ? datalistId : undefined}
+					onChange={(e) => update(node, { tool: e.target.value })}
 				/>
+				{suggested.length > 0 && (
+					<datalist id={datalistId}>
+						{suggested.map((t) => (
+							<option key={t} value={t} />
+						))}
+					</datalist>
+				)}
 			</div>
+		</div>
+	)
+}
+
+// McpAiParams — the "AI Parameter Configuration": a NL description the agent
+// uses to infer the tool's params at runtime. Rendered below the server/tool row.
+function McpAiParams({ node }: { node: WorkflowNode }) {
+	return (
+		<div className="field">
+			<label className="field-label" htmlFor="wf-aiparams">AI Parameter Configuration</label>
+			<textarea
+				id="wf-aiparams"
+				className="textarea"
+				value={node.data.aiParams ?? ''}
+				placeholder="Describe how to fill the tool's params, e.g. 'Use the Jira ticket key from the user input.'"
+				onChange={(e) => update(node, { aiParams: e.target.value })}
+			/>
+			<span className="field-help">The agent infers the tool arguments from this at runtime.</span>
 		</div>
 	)
 }
