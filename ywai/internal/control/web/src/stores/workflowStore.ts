@@ -138,6 +138,8 @@ interface WorkflowState {
 
 	// selection
 	selectedNodeId: string | null
+	// node open in the Monaco focus editor (null = closed)
+	focusNodeId: string | null
 
 	// ── actions ──
 	list: () => Promise<void>
@@ -155,6 +157,7 @@ interface WorkflowState {
 
 	// graph editing (optimistic, persisted on save)
 	selectNode: (id: string | null) => void
+	setFocusNode: (id: string | null) => void
 	addNode: (type: WorkflowNodeType, x: number, y: number) => string
 	updateNode: (id: string, patch: Partial<WorkflowNode['data']>) => void
 	updateNodeData: (id: string, data: WorkflowNode['data']) => void
@@ -193,6 +196,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	exporting: false,
 	aiEditing: false,
 	selectedNodeId: null,
+	focusNodeId: null,
 	past: [],
 	future: [],
 
@@ -321,6 +325,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	},
 
 	selectNode: (id) => set({ selectedNodeId: id }),
+
+	setFocusNode: (id) => set({ focusNodeId: id }),
 
 	applyNodeChanges: (changes) => {
 		const { current } = get()

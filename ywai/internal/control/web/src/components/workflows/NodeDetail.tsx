@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
 import { missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
 import type { ModelInfo, WorkflowNode, WorkflowNodeData } from '../../api/types'
@@ -40,6 +40,23 @@ export function useMcps(): McpCatalogItem[] {
 			.catch(() => undefined)
 	}, [])
 	return mcps
+}
+
+// Existing workflows, for the subAgentFlow (sub-workflow) selector.
+let workflowListCache: { name: string }[] | null = null
+export function useWorkflowList(): { name: string }[] {
+	const [wfs, setWfs] = useState(workflowListCache ?? [])
+	useEffect(() => {
+		if (workflowListCache) return
+		workflowApi
+			.list()
+			.then((r) => {
+				workflowListCache = (r.workflows ?? []).map((w) => ({ name: w.name }))
+				setWfs(workflowListCache)
+			})
+			.catch(() => undefined)
+	}, [])
+	return wfs
 }
 
 // Real MCP servers configured in opencode.json (not the static catalog).
@@ -95,6 +112,7 @@ export default function NodeDetail() {
 	const current = useWorkflowStore((s) => s.current)
 	const selectedId = useWorkflowStore((s) => s.selectedNodeId)
 	const removeNode = useWorkflowStore((s) => s.removeNode)
+	const setFocusNode = useWorkflowStore((s) => s.setFocusNode)
 
 	const node = current?.nodes.find((n) => n.id === selectedId) || null
 
@@ -117,7 +135,12 @@ export default function NodeDetail() {
 
 	return (
 		<div className="workflow-detail">
-			<h3>{node.type}</h3>
+			<div className="workflow-detail-head">
+				<h3>{node.type}</h3>
+				<button className="btn btn-sm" onClick={() => setFocusNode(node.id)} title="Open focus editor (Monaco)">
+					<Maximize2 size={13} /> Focus
+				</button>
+			</div>
 			<div className="field">
 				<label className="field-label" htmlFor="wf-node-name">Node name</label>
 				<input
@@ -148,6 +171,7 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 	const models = useOpencodeModels()
 	switch (node.type) {
 		case 'start':
+			return <StartFields node={node} models={models} />
 		case 'end':
 			return (
 				<div className="field">
@@ -214,17 +238,7 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 			)
 
 		case 'subAgentFlow':
-			return (
-				<div className="field">
-					<label className="field-label" htmlFor="wf-flowid">Flow ID</label>
-					<input
-						id="wf-flowid"
-						className="input"
-						value={node.data.flowId ?? ''}
-						onChange={(e) => update(node, { flowId: e.target.value })}
-					/>
-				</div>
-			)
+			return <SubFlowFields node={node} />
 		case 'group':
 			return (
 				<>
@@ -267,6 +281,53 @@ function NodeFields({ node }: { node: WorkflowNode }) {
 		default:
 			return null
 	}
+}
+
+// StartFields — the START node configures the orchestrator (parent agent) that
+// drives the whole workflow: its description, model and system prompt feed the
+// exported orchestrator agent.
+function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[] }) {
+	return (
+		<>
+			<div className="field">
+				<label className="field-label" htmlFor="wf-label">Label</label>
+				<input id="wf-label" className="input" value={node.data.label ?? ''} onChange={(e) => update(node, { label: e.target.value })} />
+			</div>
+			<div className="field">
+				<span className="field-label">Orchestrator (parent agent)</span>
+				<span className="field-help">This node IS the workflow's orchestrator. These configure the exported parent agent.</span>
+			</div>
+			<div className="field">
+				<label className="field-label" htmlFor="wf-orch-desc">Description (frontmatter)</label>
+				<input
+					id="wf-orch-desc"
+					className="input"
+					value={node.data.description ?? ''}
+					placeholder="What this orchestrator coordinates"
+					onChange={(e) => update(node, { description: e.target.value })}
+				/>
+			</div>
+			<div className="field">
+				<label className="field-label" htmlFor="wf-orch-model">Model</label>
+				<YdSelect
+					options={modelOptions(models)}
+					value={node.data.model ?? 'inherit'}
+					onChange={(v) => update(node, { model: v })}
+					ariaLabel="Orchestrator model"
+				/>
+			</div>
+			<div className="field">
+				<label className="field-label" htmlFor="wf-orch-prompt">System prompt / identity</label>
+				<textarea
+					id="wf-orch-prompt"
+					className="textarea mono"
+					value={node.data.agentDefinition ?? ''}
+					placeholder="Who the orchestrator IS (prepended to the generated flow instructions)…"
+					onChange={(e) => update(node, { agentDefinition: e.target.value })}
+				/>
+			</div>
+		</>
+	)
 }
 
 // SubAgentFields — the richest node: identity, prompts, model/mode, tools.
@@ -386,6 +447,30 @@ function AskUserFields({ node }: { node: WorkflowNode }) {
 				)}
 			</div>
 		</>
+	)
+}
+
+// SubFlowFields — pick another workflow to run as a sub-workflow at this step.
+function SubFlowFields({ node }: { node: WorkflowNode }) {
+	const wfs = useWorkflowList()
+	const current = useWorkflowStore((s) => s.current)
+	const options = wfs.filter((w) => w.name !== current?.name) // no self-reference
+	return (
+		<div className="field">
+			<label className="field-label" htmlFor="wf-flowid">Sub-workflow</label>
+			{options.length === 0 ? (
+				<input id="wf-flowid" className="input" value={node.data.flowId ?? ''} onChange={(e) => update(node, { flowId: e.target.value })} />
+			) : (
+				<YdSelect
+					options={options.map((w) => ({ value: w.name, label: w.name }))}
+					value={node.data.flowId ?? ''}
+					onChange={(v) => update(node, { flowId: v })}
+					placeholder="— select workflow —"
+					ariaLabel="Sub-workflow"
+				/>
+			)}
+			<span className="field-help">Runs the selected workflow's /slash-command at this step.</span>
+		</div>
 	)
 }
 

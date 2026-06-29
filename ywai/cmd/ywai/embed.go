@@ -34,9 +34,14 @@ func init() {
 		sub, _ := fs.Sub(embeddedFS, "embedded_data/plugins")
 		return sub
 	}
+	workflowsFS := func() fs.FS {
+		sub, _ := fs.Sub(embeddedFS, "embedded_data/workflows")
+		return sub
+	}
 	config.RegisterEmbeddedProviders(skillsFS)
 	config.RegisterEmbeddedAgents(agentsFS)
 	config.RegisterEmbeddedDefaults(defaultsFS)
 	config.RegisterEmbeddedPlugins(pluginsFS)
+	config.RegisterEmbeddedWorkflows(workflowsFS)
 	control.RegisterEmbeddedUI(uiFS)
 }

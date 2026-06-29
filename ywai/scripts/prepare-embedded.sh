@@ -51,9 +51,11 @@ mkdir -p "$EMBED_DIR/skills"
 mkdir -p "$EMBED_DIR/agents"
 mkdir -p "$EMBED_DIR/ui"
 mkdir -p "$EMBED_DIR/plugins"
+mkdir -p "$EMBED_DIR/workflows"
 
 cp -a "$REPO_ROOT/skills/." "$EMBED_DIR/skills/"
 cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
+cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"
 if [ -f "$BA_BUNDLE" ]; then
     cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"

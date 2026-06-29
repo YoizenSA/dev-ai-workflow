@@ -75,6 +75,17 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// Seed the bundled starter workflows (never overwrites user edits).
+		if isRealRepo {
+			if err := config.SeedWorkflowsFrom(repo); err != nil {
+				fmt.Printf("Warning: failed to seed workflows from repo: %v\n", err)
+			}
+		} else {
+			if err := config.SeedWorkflowsFromEmbedded(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to seed workflows: %v\n", err)
+			}
+		}
+
 		// Keep ~/.ywai/version.json's installed version current for the TUI logo.
 		// No network here (see versionfile.Touch); cheap enough for every command.
 		_ = versionfile.Touch(version)

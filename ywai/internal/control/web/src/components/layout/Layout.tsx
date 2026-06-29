@@ -9,10 +9,26 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	// Desktop collapse (icon rail) — persisted so it survives reloads.
+	const [collapsed, setCollapsed] = useState(
+		() => localStorage.getItem("ywai.sidebarCollapsed") === "1",
+	);
+	const toggleCollapse = () => {
+		setCollapsed((c) => {
+			const next = !c;
+			localStorage.setItem("ywai.sidebarCollapsed", next ? "1" : "0");
+			return next;
+		});
+	};
 
 	return (
-		<div className="app-shell">
-			<Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+		<div className={`app-shell${collapsed ? " collapsed" : ""}`}>
+			<Sidebar
+				open={sidebarOpen}
+				onClose={() => setSidebarOpen(false)}
+				collapsed={collapsed}
+				onToggleCollapse={toggleCollapse}
+			/>
 
 			{/* Scrim overlay for mobile */}
 			{sidebarOpen && (

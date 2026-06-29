@@ -147,6 +147,11 @@ func AgentsSourceDir() string {
 	return findSourceDir(AgentsDirName)
 }
 
+// WorkflowsSourceDir locates the bundled seed workflows (ywai/workflows/).
+func WorkflowsSourceDir() string {
+	return findSourceDir(WorkflowsDirName)
+}
+
 func PluginsSourceDir() string {
 	return findSourceDir(PluginsDirName)
 }

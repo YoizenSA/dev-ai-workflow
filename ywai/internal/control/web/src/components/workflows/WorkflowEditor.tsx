@@ -42,6 +42,7 @@ import YdSelect from '../shared/YdSelect'
 import MermaidDiagram from '../shared/MermaidDiagram'
 import { NODE_META, nodeTypes, toFlowNode } from './nodes'
 import NodeDetail, { useOpencodeModels } from './NodeDetail'
+import NodeFocusModal from './NodeFocusModal'
 import './WorkflowEditor.css'
 
 // Export targets shown as per-runtime buttons in the toolbar.
@@ -94,6 +95,8 @@ function WorkflowEditorInner() {
 	const clearExport = useWorkflowStore((s) => s.clearExport)
 	const clearError = useWorkflowStore((s) => s.clearError)
 	const selectNode = useWorkflowStore((s) => s.selectNode)
+	const focusNodeId = useWorkflowStore((s) => s.focusNodeId)
+	const setFocusNode = useWorkflowStore((s) => s.setFocusNode)
 	const connect = useWorkflowStore((s) => s.connect)
 	const disconnect = useWorkflowStore((s) => s.disconnect)
 	const applyNodeChanges = useWorkflowStore((s) => s.applyNodeChanges)
@@ -418,8 +421,11 @@ function WorkflowEditorInner() {
 
 	return (
 		<div className="workflow-page">
-			{/* Toolbar */}
+			{/* Toolbar — grouped by intent; one primary (Save), secondary actions
+			    icon-only with glass tooltips (data-tip + aria-label), destructive
+			    action isolated on the right. */}
 			<div className="workflow-toolbar">
+				{/* Workflow selector */}
 				<YdSelect
 					className="workflow-select"
 					options={summaries.map((s) => ({
@@ -432,102 +438,151 @@ function WorkflowEditorInner() {
 					ariaLabel="Select workflow"
 				/>
 
-				<button className="btn" onClick={() => setNewOpen(true)}>
-					<Plus size={14} /> New
-				</button>
-				<button
-					className="btn"
-					onClick={() => fileInput.current?.click()}
-					title="Import a cc-wf-studio workflow.json"
-				>
-					<Upload size={14} /> Import
-				</button>
-				<input
-					ref={fileInput}
-					type="file"
-					accept="application/json,.json"
-					style={{ display: 'none' }}
-					onChange={(e) => {
-						const f = e.target.files?.[0]
-						if (f) handleFileImport(f)
-						e.target.value = ''
-					}}
-				/>
+				<span className="wf-tb-sep" />
+
+				{/* File: new + import (icon-only) */}
+				<div className="wf-tb-group">
+					<button
+						className="btn btn-icon"
+						onClick={() => setNewOpen(true)}
+						data-tip="New workflow"
+						aria-label="New workflow"
+					>
+						<Plus />
+					</button>
+					<button
+						className="btn btn-icon"
+						onClick={() => fileInput.current?.click()}
+						data-tip="Import a cc-wf-studio workflow.json"
+						aria-label="Import workflow JSON"
+					>
+						<Upload />
+					</button>
+					<input
+						ref={fileInput}
+						type="file"
+						accept="application/json,.json"
+						style={{ display: 'none' }}
+						onChange={(e) => {
+							const f = e.target.files?.[0]
+							if (f) handleFileImport(f)
+							e.target.value = ''
+						}}
+					/>
+				</div>
+
+				<span className="wf-tb-sep" />
+
+				{/* Primary action */}
 				<button
 					className="btn btn-primary"
 					onClick={() => saveCurrent()}
 					disabled={!current || !dirty}
+					data-tip={current && dirty ? 'Save changes' : ''}
+					aria-label="Save workflow"
 				>
-					<Save size={14} /> Save {dirty ? '*' : ''}
+					<Save /> Save {dirty ? '*' : ''}
 				</button>
-				<button
-					className="btn"
-					onClick={() => validateCurrent()}
-					disabled={!current}
-					title="Validate the workflow graph"
-				>
-					<CheckCircle2 size={14} /> Validate
-				</button>
-				<span className="wf-export-label">Export</span>
-				{EXPORT_TARGETS.map((t) => (
+
+				<span className="wf-tb-sep" />
+
+				{/* Editing: validate · undo · redo · auto-layout (icon-only) */}
+				<div className="wf-tb-group">
 					<button
-						key={t.value}
-						className="btn"
-						onClick={() => {
-							setExportTarget(t.value)
-							exportCurrent(false, t.value)
-						}}
-						disabled={!current || exporting}
-						title={`Export to ${t.label} (${t.dir}) — preview, then apply`}
+						className="btn btn-icon"
+						onClick={() => validateCurrent()}
+						disabled={!current}
+						data-tip={current ? 'Validate the workflow graph' : ''}
+						aria-label="Validate workflow"
 					>
-						<FileCode2 size={14} /> {t.label}
+						<CheckCircle2 />
 					</button>
-				))}
-				<button
-					className="btn btn-icon"
-					onClick={handleUndo}
-					disabled={!canUndo}
-					title="Undo (Ctrl+Z)"
-				>
-					<Undo2 size={14} />
-				</button>
-				<button
-					className="btn btn-icon"
-					onClick={handleRedo}
-					disabled={!canRedo}
-					title="Redo (Ctrl+Shift+Z)"
-				>
-					<Redo2 size={14} />
-				</button>
-				<button
-					className="btn"
-					onClick={handleAutoLayout}
-					disabled={!current}
-					title="Auto-arrange nodes in a left-to-right layout"
-				>
-					<LayoutGrid size={14} /> Auto-layout
-				</button>
-				<button
-					className="btn"
-					onClick={() => setAiOpen(true)}
-					disabled={!current}
-					title="Edit this workflow with natural language"
-				>
-					<Sparkles size={14} /> Edit with AI
-				</button>
-				<button
-					className="btn"
-					onClick={() => showMermaid()}
-					disabled={!current}
-					title="Show the Mermaid diagram"
-				>
-					<Network size={14} /> Mermaid
-				</button>
+					<button
+						className="btn btn-icon"
+						onClick={handleUndo}
+						disabled={!canUndo}
+						data-tip={canUndo ? 'Undo (Ctrl+Z)' : ''}
+						aria-label="Undo"
+					>
+						<Undo2 />
+					</button>
+					<button
+						className="btn btn-icon"
+						onClick={handleRedo}
+						disabled={!canRedo}
+						data-tip={canRedo ? 'Redo (Ctrl+Shift+Z)' : ''}
+						aria-label="Redo"
+					>
+						<Redo2 />
+					</button>
+					<button
+						className="btn btn-icon"
+						onClick={handleAutoLayout}
+						disabled={!current}
+						data-tip={current ? 'Auto-arrange nodes (left-to-right)' : ''}
+						aria-label="Auto-layout"
+					>
+						<LayoutGrid />
+					</button>
+				</div>
+
+				<span className="wf-tb-sep" />
+
+				{/* Export: target matters, keep the label */}
+				<div className="wf-tb-group">
+					<span className="wf-export-label">Export</span>
+					{EXPORT_TARGETS.map((t) => (
+						<button
+							key={t.value}
+							className="btn btn-sm"
+							onClick={() => {
+								setExportTarget(t.value)
+								exportCurrent(false, t.value)
+							}}
+							disabled={!current || exporting}
+							data-tip={current && !exporting ? `Export to ${t.label} (${t.dir}) — preview, then apply` : ''}
+							aria-label={`Export to ${t.label}`}
+						>
+							<FileCode2 /> {t.label}
+						</button>
+					))}
+				</div>
+
+				<span className="wf-tb-sep" />
+
+				{/* Extend: AI edit + Mermaid (icon-only) */}
+				<div className="wf-tb-group">
+					<button
+						className="btn btn-icon"
+						onClick={() => setAiOpen(true)}
+						disabled={!current}
+						data-tip={current ? 'Edit with AI (natural language)' : ''}
+						aria-label="Edit with AI"
+					>
+						<Sparkles />
+					</button>
+					<button
+						className="btn btn-icon"
+						onClick={() => showMermaid()}
+						disabled={!current}
+						data-tip={current ? 'Show the Mermaid diagram' : ''}
+						aria-label="Mermaid diagram"
+					>
+						<Network />
+					</button>
+				</div>
 
 				<span className="spacer" />
 
-				<button className="btn btn-danger" onClick={() => deleteCurrent()} disabled={!current}>
-					<Trash2 size={14} /> Delete
+				{/* Destructive — isolated */}
+				<button
+					className="btn btn-icon danger"
+					onClick={() => deleteCurrent()}
+					disabled={!current}
+					data-tip={current ? 'Delete workflow' : ''}
+					aria-label="Delete workflow"
+				>
+					<Trash2 />
 				</button>
 			</div>
 
@@ -635,6 +690,13 @@ function WorkflowEditorInner() {
 							onConnect={onConnect}
 							onEdgeClick={(_, edge) => disconnect(edge.id)}
 							onNodeClick={(_, n) => selectNode(n.id)}
+							onNodeDoubleClick={(_, n) => {
+								// Double-clicking a sub-workflow node opens that workflow; any other
+								// node opens the Monaco focus editor.
+								const d = n.data as { __type?: string; flowId?: string }
+								if (d.__type === 'subAgentFlow' && d.flowId) onSelect(d.flowId)
+								else setFocusNode(n.id)
+							}}
 							onPaneClick={() => selectNode(null)}
 							fitView
 							snapToGrid={snapGrid}
@@ -774,6 +836,9 @@ function WorkflowEditorInner() {
 					<MermaidDiagram code={mermaidPreview ?? ''} />
 				)}
 			</Modal>
+
+			{/* Focus mode — Monaco editor for the node's long fields */}
+			<NodeFocusModal nodeId={focusNodeId} onClose={() => setFocusNode(null)} />
 		</div>
 	)
 }

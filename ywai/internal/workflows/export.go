@@ -218,7 +218,7 @@ func sanitizeSlug(s string) string {
 // exact same rendering/bucket-expansion rules as every other ywai agent.
 func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
 	if e.target == TargetClaudeCode {
-		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), "task, read, bash", "", body)
+		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), "task, read, bash", orchestratorModel(wf), body)
 	}
 	mode := "all"
 	perm := orchestratorPermissions(taskTargets)
@@ -261,10 +261,25 @@ func orchestratorPermissions(taskTargets []string) map[string]string {
 }
 
 func orchestratorDescription(wf *Workflow) string {
+	// The START node carries the orchestrator's own description when set.
+	if s := wf.findNode(NodeTypeStart); s != nil && strings.TrimSpace(s.Data.AgentDescription) != "" {
+		return s.Data.AgentDescription
+	}
 	if wf.Description != "" {
 		return wf.Description
 	}
 	return "Orchestrator for the " + wf.Name + " workflow."
+}
+
+// orchestratorModel returns the model configured on the START node (the
+// orchestrator parent), or "" to inherit.
+func orchestratorModel(wf *Workflow) string {
+	if s := wf.findNode(NodeTypeStart); s != nil {
+		if m := strings.TrimSpace(s.Data.Model); m != "" && m != "inherit" {
+			return m
+		}
+	}
+	return ""
 }
 
 // renderSubAgentMarkdown builds a sub-agent's .md via BuildOpenCodeMarkdown,

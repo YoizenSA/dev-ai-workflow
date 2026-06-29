@@ -16,6 +16,14 @@ func orchestratorBody(wf *Workflow, subAgentIDs map[string]string) string {
 		b.WriteString(wf.Description + "\n\n")
 	}
 
+	// The START node configures the orchestrator's own identity: its system
+	// prompt (agentDefinition) is prepended as the parent agent's persona.
+	if s := wf.findNode(NodeTypeStart); s != nil {
+		if def := strings.TrimSpace(s.Data.AgentDefinition); def != "" {
+			b.WriteString(def + "\n\n")
+		}
+	}
+
 	// Mermaid diagram.
 	b.WriteString("## Flow\n\n```mermaid\n")
 	b.WriteString(renderMermaid(wf, subAgentIDs))
@@ -260,7 +268,8 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		}
 		return s
 	case NodeTypeSubAgentFlow:
-		return fmt.Sprintf("**Run sub-flow** `%s`.", n.Data.FlowID)
+		// A sub-workflow is invoked as its exported slash command.
+		return fmt.Sprintf("**Run the `/%s` sub-workflow** and wait for it to finish.", n.Data.FlowID)
 	case NodeTypeGroup:
 		return "" // visual only
 	}

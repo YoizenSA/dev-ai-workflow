@@ -12,15 +12,37 @@
 
 
 /* --- Toolbar --- */
+/* A glass bar: it reads as a toolbar (elevated above the ambient bg) rather
+   than a flat row of buttons. Actions group by intent with hairline separators. */
 .workflow-toolbar {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	flex-wrap: wrap;
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	padding: var(--space-2);
+	box-shadow: var(--shadow-glass);
 }
 
 .workflow-toolbar .spacer {
 	flex: 1;
+}
+
+/* A logical group of related actions inside the toolbar. */
+.wf-tb-group {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+/* Hairline divider between intent groups. */
+.wf-tb-sep {
+	width: 1px;
+	align-self: stretch;
+	margin: 4px 2px;
+	background: var(--panel-border);
 }
 
 .workflow-select {
@@ -33,7 +55,8 @@
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--text-muted);
-	margin-left: var(--space-1);
+	/* lives inside a .wf-tb-group now; the group's gap handles spacing */
+	margin-left: 0;
 }
 /* The toolbar selector is a YdSelect; ensure its trigger fills the min-width. */
 .workflow-select .yd-select-trigger {
@@ -504,4 +527,45 @@
 	white-space: pre-wrap;
 	margin: 0;
 	color: var(--text-muted);
+}
+
+/* --- Detail panel header (title + focus action) --- */
+.workflow-detail-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+/* --- Focus mode (Monaco) --- */
+.wf-focus {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.wf-focus-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.wf-focus-tabs .btn.is-active {
+	color: var(--yz-primary-1);
+	border-color: var(--yz-primary-1);
+	background: rgba(var(--yz-primary-1-rgb), 0.12);
+}
+
+.wf-focus-editor {
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+.wf-focus-err {
+	font-size: var(--text-xs);
+	color: var(--danger);
+	align-self: center;
+	margin-left: auto;
+	font-family: var(--font-mono);
 }

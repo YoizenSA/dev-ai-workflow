@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	getEmbeddedSkillsFS   func() fs.FS
-	getEmbeddedAgentsFS   func() fs.FS
-	getEmbeddedDefaultsFS func() fs.FS
-	getEmbeddedPluginsFS  func() fs.FS
-	fsMutex               sync.Mutex
+	getEmbeddedSkillsFS    func() fs.FS
+	getEmbeddedAgentsFS    func() fs.FS
+	getEmbeddedDefaultsFS  func() fs.FS
+	getEmbeddedPluginsFS   func() fs.FS
+	getEmbeddedWorkflowsFS func() fs.FS
+	fsMutex                sync.Mutex
 )
 
 // BackgroundAgentsBundleName is the filename of the bundled opencode
@@ -86,6 +87,41 @@ func RegisterEmbeddedPlugins(pluginsFS func() fs.FS) {
 	getEmbeddedPluginsFS = pluginsFS
 }
 
+func RegisterEmbeddedWorkflows(workflowsFS func() fs.FS) {
+	getEmbeddedWorkflowsFS = workflowsFS
+}
+
+// SeedWorkflowsFromEmbedded copies the embedded seed workflows into the user's
+// data dir, never overwriting an existing workflow.
+func SeedWorkflowsFromEmbedded() error {
+	if err := EnsureDataDir(); err != nil {
+		return err
+	}
+	fn := getEmbeddedWorkflowsFS
+	if fn == nil {
+		return fmt.Errorf("no embedded workflows data available")
+	}
+	fsys := fn()
+	if fsys == nil {
+		return fmt.Errorf("no embedded workflows data available")
+	}
+	dstDir := DataWorkflowsDir()
+	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
+			return nil
+		}
+		dstPath := filepath.Join(dstDir, filepath.Base(path))
+		if _, statErr := os.Stat(dstPath); statErr == nil {
+			return nil // never clobber a user's workflow
+		}
+		data, readErr := fs.ReadFile(fsys, path)
+		if readErr != nil {
+			return readErr
+		}
+		return os.WriteFile(dstPath, data, 0o644)
+	})
+}
+
 // GetEmbeddedDefaults reads the defaults.jsonc from embedded FS.
 func GetEmbeddedDefaults() ([]byte, error) {
 	if fn := getEmbeddedDefaultsFS; fn != nil {
@@ -126,6 +162,38 @@ func SeedAgentsFrom(repoRoot string) error {
 			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
 				return fmt.Errorf("failed to write %s: %w", dstPath, err)
 			}
+		}
+	}
+	return nil
+}
+
+// SeedWorkflowsFrom copies the bundled seed workflows (ywai/workflows/*.json)
+// into the user's data dir. It never overwrites an existing workflow, so a
+// user's own edits to a seeded workflow survive re-seeding.
+func SeedWorkflowsFrom(repoRoot string) error {
+	if err := EnsureDataDir(); err != nil {
+		return err
+	}
+	srcDir := WorkflowsSourceDir()
+	dstDir := DataWorkflowsDir()
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		dstPath := filepath.Join(dstDir, entry.Name())
+		if _, err := os.Stat(dstPath); err == nil {
+			continue // never clobber a user's workflow
+		}
+		data, err := os.ReadFile(filepath.Join(srcDir, entry.Name()))
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", entry.Name(), err)
+		}
+		if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", dstPath, err)
 		}
 	}
 	return nil

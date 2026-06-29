@@ -3,6 +3,8 @@ import {
 	Brain,
 	LayoutGrid,
 	LineChart,
+	PanelLeftClose,
+	PanelLeftOpen,
 	Settings,
 	Sparkles,
 	Workflow,
@@ -16,6 +18,8 @@ import { VersionUpdate } from "./VersionUpdate";
 interface SidebarProps {
 	open: boolean;
 	onClose: () => void;
+	collapsed?: boolean;
+	onToggleCollapse?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -65,7 +69,7 @@ const NAV_ITEMS = [
 	},
 ];
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
 	const location = useLocation();
 	const sessionCount = useKanbanStore(
 		(s) => (s.sessions ?? []).filter((sess) => sess.status === "active").length,
@@ -156,6 +160,16 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 				<VersionUpdate />
 				<div className="foot-tools">
 					<ThemeToggle />
+					{onToggleCollapse && (
+						<button
+							className="btn btn-icon"
+							onClick={onToggleCollapse}
+							aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+							title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+						>
+							{collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+						</button>
+					)}
 				</div>
 			</div>
 		</aside>
