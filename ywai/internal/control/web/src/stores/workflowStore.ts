@@ -16,6 +16,12 @@ function edgeId(c: WorkflowConnection): string {
 	return [c.from, c.fromPort ?? ''].join('|') + '->' + [c.to, c.toPort ?? ''].join('|')
 }
 
+// Backend may return null for nodes/connections on an empty or legacy
+// workflow; normalize to [] so the editor never maps over null.
+function normalizeWorkflow(wf: Workflow): Workflow {
+	return { ...wf, nodes: wf.nodes ?? [], connections: wf.connections ?? [] }
+}
+
 let idCounter = 0
 function newId(prefix: string): string {
 	idCounter += 1
@@ -123,7 +129,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		set({ loading: true, error: null, current: null, dirty: false, selectedNodeId: null, validation: null })
 		try {
 			const wf = await workflowApi.get(name)
-			set({ current: wf, loading: false })
+			set({ current: normalizeWorkflow(wf), loading: false })
 		} catch (err) {
 			set({ loading: false, error: errMsg(err) })
 		}
@@ -145,7 +151,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 		try {
 			const created = await workflowApi.create(wf)
-			set({ current: created, dirty: false, error: null })
+			set({ current: normalizeWorkflow(created), dirty: false, error: null })
 			await get().list()
 		} catch (err) {
 			set({ error: errMsg(err) })
@@ -183,7 +189,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		set({ loading: true, error: null })
 		try {
 			const result = await workflowApi.import(raw, name)
-			set({ current: result.workflow, loading: false, dirty: false })
+			set({ current: normalizeWorkflow(result.workflow), loading: false, dirty: false })
 			await get().list()
 		} catch (err) {
 			set({ loading: false, error: errMsg(err) })
