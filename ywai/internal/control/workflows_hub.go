@@ -120,14 +120,6 @@ func (h *wsHub) unregister(c *wsClient) {
 	}
 }
 
-func (h *wsHub) shutdown() {
-	select {
-	case <-h.done:
-	default:
-		close(h.done)
-	}
-}
-
 // wsClient is one WebSocket connection subscribed to workflow run events.
 type wsClient struct {
 	hub  *wsHub
