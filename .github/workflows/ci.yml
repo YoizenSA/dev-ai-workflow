@@ -74,7 +74,8 @@ jobs:
       - name: Build control UI (React SPA)
         working-directory: ywai/internal/control/web
         run: |
-          npm ci
+          npm ci --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=10000 || \
+          npm ci --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=10000
           npm run build
 
       - name: Prepare embedded data
