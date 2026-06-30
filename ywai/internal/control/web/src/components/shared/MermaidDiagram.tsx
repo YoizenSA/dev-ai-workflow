@@ -17,7 +17,10 @@ function ensureInit() {
 		startOnLoad: false,
 		theme: 'dark',
 		securityLevel: 'loose',
-		flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+		// useMaxWidth OFF: render the SVG at its natural size and let the
+		// container scroll/zoom instead of shrinking the diagram to an
+		// unreadable thumbnail inside a narrow modal.
+		flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' },
 	})
 	initialized = true
 }

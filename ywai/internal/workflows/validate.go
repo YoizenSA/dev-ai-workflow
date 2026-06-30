@@ -3,9 +3,10 @@ package workflows
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
-// Limits mirror cc-wf-studio's validation rules (workflow-definition.ts).
+// Limits mirror the validation rules in workflow-definition.ts.
 const (
 	maxNodes            = 100
 	descriptionMax      = 200   // subAgent description (frontmatter)
@@ -15,6 +16,7 @@ const (
 	askOptionsMax       = 4
 	switchMaxBranches   = 10
 	skillDescriptionMax = 1024
+	argumentHintMax     = 200 // slashCommandOptions.argumentHint
 )
 
 var versionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -68,6 +70,11 @@ func Validate(wf *Workflow) ValidationResult {
 	}
 	if len(wf.Nodes) > maxNodes {
 		addErr("", fmt.Sprintf("too many nodes: %d (max %d)", len(wf.Nodes), maxNodes))
+	}
+
+	// Top-level slash-command options (optional).
+	if wf.SlashCommandOptions != nil {
+		validateSlashCommandOptions(wf.SlashCommandOptions, addErr)
 	}
 
 	// Exactly one start and one end.
@@ -158,9 +165,86 @@ func validateNode(n *Node, addErr, addWarn func(string, string)) {
 		if len(n.Data.AgentDescription) > skillDescriptionMax {
 			addErr(n.ID, fmt.Sprintf("skill description too long: %d chars (max %d)", len(n.Data.AgentDescription), skillDescriptionMax))
 		}
-	case NodeTypeStart, NodeTypeEnd, NodeTypePrompt, NodeTypeIfElse, NodeTypeMCP, NodeTypeSubAgentFlow, NodeTypeCodex, NodeTypeGroup:
+	case NodeTypeMCP:
+		validateMCPNode(n, addErr, addWarn)
+	case NodeTypeStart, NodeTypeEnd, NodeTypePrompt, NodeTypeIfElse, NodeTypeSubAgentFlow, NodeTypeCodex, NodeTypeGroup:
 		// no mandatory per-type checks beyond presence
 	}
+}
+
+// validateMCPNode checks the MCP node's mode and the fields that mode requires.
+// Empty Mode is allowed (treated as aiParameterConfig for backward compat).
+func validateMCPNode(n *Node, addErr, addWarn func(string, string)) {
+	switch n.Data.McpMode {
+	case "", MCPModeManualParameterConfig, MCPModeAIParameterConfig, MCPModeAIToolSelection:
+		// valid mode
+	default:
+		addErr(n.ID, fmt.Sprintf("mcp node has invalid mode %q", n.Data.McpMode))
+		return
+	}
+	mode := n.Data.McpMode
+	if mode == "" {
+		mode = MCPModeAIParameterConfig
+	}
+	server := strings.TrimSpace(n.Data.Server)
+	if server == "" {
+		addErr(n.ID, "mcp node requires a server")
+	}
+	switch mode {
+	case MCPModeManualParameterConfig, MCPModeAIParameterConfig:
+		if strings.TrimSpace(n.Data.Tool) == "" {
+			addWarn(n.ID, "mcp node in manual/aiParameterConfig mode should specify a tool")
+		}
+	case MCPModeAIToolSelection:
+		if strings.TrimSpace(n.Data.TaskDescription) == "" {
+			addWarn(n.ID, "mcp node in aiToolSelection mode should describe the task")
+		}
+	}
+}
+
+// validateSlashCommandOptions checks the model/context enums and field lengths
+// of the optional slash-command options.
+func validateSlashCommandOptions(opt *SlashCommandOptions, addErr func(string, string)) {
+	switch m := strings.TrimSpace(opt.Model); m {
+	case "", "default", "sonnet", "opus", "haiku", "inherit":
+		// ok
+	default:
+		addErr("", fmt.Sprintf("slashCommandOptions.model %q is not a valid model", m))
+	}
+	switch c := strings.TrimSpace(opt.Context); c {
+	case "", "default", "fork":
+		// ok
+	default:
+		addErr("", fmt.Sprintf("slashCommandOptions.context %q is not valid (default|fork)", c))
+	}
+	if len(opt.ArgumentHint) > argumentHintMax {
+		addErr("", fmt.Sprintf("slashCommandOptions.argumentHint too long: %d chars (max %d)", len(opt.ArgumentHint), argumentHintMax))
+	}
+	if opt.Hooks != nil {
+		validateHooks(opt.Hooks, addErr)
+	}
+}
+
+// validateHooks checks hook entries have actions with a valid type.
+func validateHooks(h *WorkflowHooks, addErr func(string, string)) {
+	validateHookBucket := func(name string, entries []HookEntry) {
+		for _, e := range entries {
+			if len(e.Hooks) == 0 {
+				addErr("", fmt.Sprintf("hooks.%s entry has no actions", name))
+			}
+			for _, a := range e.Hooks {
+				switch a.Type {
+				case "command", "prompt":
+					// ok
+				default:
+					addErr("", fmt.Sprintf("hooks.%s action has invalid type %q (command|prompt)", name, a.Type))
+				}
+			}
+		}
+	}
+	validateHookBucket("PreToolUse", h.PreToolUse)
+	validateHookBucket("PostToolUse", h.PostToolUse)
+	validateHookBucket("Stop", h.Stop)
 }
 
 // reachableFrom returns the set of node ids reachable from start (excluding

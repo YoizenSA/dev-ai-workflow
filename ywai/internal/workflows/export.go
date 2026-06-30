@@ -23,7 +23,11 @@ type ExportArtifact struct {
 type ExportPlan struct {
 	WorkflowName string           `json:"workflowName"`
 	Files        []ExportArtifact `json:"files"`
-	DryRun       bool             `json:"dryRun"`
+	// EstimatedTokens is a rough size hint for the exported orchestrator prompt,
+	// using the chars/4 heuristic. Useful to flag oversized workflows in the UI
+	// before exporting.
+	EstimatedTokens int           `json:"estimatedTokens"`
+	DryRun          bool          `json:"dryRun"`
 }
 
 // Export targets. opencode renders agents with opencode permission blocks under
@@ -84,6 +88,23 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 		return nil, nil, fmt.Errorf("nil workflow")
 	}
 
+	// Drop duplicate connections so the exported Mermaid + steps stay clean even
+	// when the source workflow carries them (e.g. a branch with two outcomes
+	// routed to the same target). Works on a shallow copy to avoid mutating the
+	// caller's workflow.
+	wf = &Workflow{
+		ID:                  wf.ID,
+		Name:                wf.Name,
+		Description:         wf.Description,
+		Version:             wf.Version,
+		Nodes:               wf.Nodes,
+		Connections:         wf.dedupConnections(),
+		SlashCommandOptions: wf.SlashCommandOptions,
+		ConversationHistory: wf.ConversationHistory,
+		CreatedAt:           wf.CreatedAt,
+		UpdatedAt:           wf.UpdatedAt,
+	}
+
 	// Build the agent id for each subAgent node. The slug is the workflow name
 	// plus a per-node suffix derived from the node's Name/description, so a
 	// workflow never collides with the user's own agents and its sub-agents
@@ -131,10 +152,15 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	files[cmdPath] = e.renderCommandMarkdown(wf, orchestratorID)
 	artifacts = append(artifacts, ExportArtifact{Path: cmdPath, Kind: "command", Name: wf.Name})
 
+	// Token estimate for the orchestrator prompt body (chars/4 heuristic). Used
+	// by the UI to flag oversized workflows; not authoritative.
+	estimatedTokens := estimateTokens(orchBody)
+
 	return &ExportPlan{
-		WorkflowName: wf.Name,
-		Files:        artifacts,
-		DryRun:       true,
+		WorkflowName:    wf.Name,
+		Files:           artifacts,
+		EstimatedTokens: estimatedTokens,
+		DryRun:          true,
 	}, files, nil
 }
 
@@ -163,8 +189,7 @@ func (e *Exporter) Apply(wf *Workflow) (*ExportPlan, error) {
 
 // subAgentSlug derives a unique, filesystem-safe agent id for a subAgent node.
 // Format: <workflow>-<suffix> where suffix comes from the node's Name (the
-// cc-wf-studio node-level name is the agent name), falling back to the
-// description.
+// node-level Name is the agent name), falling back to the description.
 func subAgentSlug(workflow string, n *Node) string {
 	base := strings.ToLower(strings.TrimSpace(n.Name))
 	if base == "" {
@@ -398,13 +423,47 @@ func renderClaudeAgentMarkdown(id, description, tools, model, body string) strin
 }
 
 // renderCommandMarkdown builds the slash command file users invoke as /<name>.
-// It targets the workflow's orchestrator agent and forwards $ARGUMENTS.
+// It targets the workflow's orchestrator agent and forwards $ARGUMENTS. When
+// the workflow carries SlashCommandOptions, the advanced frontmatter fields
+// (allowed-tools, model, context, disable-model-invocation, argument-hint,
+// hooks) are emitted.
 func (e *Exporter) renderCommandMarkdown(wf *Workflow, orchestratorID string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("description: ")
 	b.WriteString(yamlQuote(orchestratorDescription(wf)))
 	b.WriteByte('\n')
+	// Advanced slash-command options (optional). Only emitted when set so the
+	// default output stays unchanged for workflows that don't use them.
+	if opt := wf.SlashCommandOptions; opt != nil {
+		if v := strings.TrimSpace(opt.AllowedTools); v != "" {
+			b.WriteString("allowed-tools: ")
+			b.WriteString(v)
+			b.WriteByte('\n')
+		}
+		// model only when set and not "default" (default is implicit).
+		if m := strings.TrimSpace(opt.Model); m != "" && m != "default" {
+			b.WriteString("model: ")
+			b.WriteString(m)
+			b.WriteByte('\n')
+		}
+		if c := strings.TrimSpace(opt.Context); c != "" && c != "default" {
+			b.WriteString("context: ")
+			b.WriteString(c)
+			b.WriteByte('\n')
+		}
+		if opt.DisableModelInvocation {
+			b.WriteString("disable-model-invocation: true\n")
+		}
+		if ah := strings.TrimSpace(opt.ArgumentHint); ah != "" {
+			b.WriteString("argument-hint: ")
+			b.WriteString(yamlQuote(ah))
+			b.WriteByte('\n')
+		}
+		if opt.Hooks != nil {
+			renderHooksFrontmatter(&b, opt.Hooks)
+		}
+	}
 	// Claude Code slash commands have no `agent:`/`subtask:` keys; the body just
 	// drives the conversation. opencode binds the command to its orchestrator agent.
 	if e.target != TargetClaudeCode {
@@ -414,18 +473,62 @@ func (e *Exporter) renderCommandMarkdown(wf *Workflow, orchestratorID string) st
 		b.WriteString("subtask: true\n")
 	}
 	b.WriteString("---\n\n")
-	desc := wf.Description
-	if desc == "" {
-		desc = "Run the " + wf.Name + " workflow."
-	}
-	b.WriteString(desc + "\n\n")
 	b.WriteString("Execute the **" + wf.Name + "** workflow")
 	if wf.Description != "" {
 		b.WriteString(": " + wf.Description)
+	} else {
+		b.WriteString(".")
 	}
-	b.WriteString(".\n\n")
-	b.WriteString("Arguments: `$ARGUMENTS`\n")
+	b.WriteString("\n\nArguments: `$ARGUMENTS`\n")
 	return b.String()
+}
+
+// renderHooksFrontmatter writes the `hooks:` YAML block for a slash command.
+// Mirrors Claude Code's hook frontmatter shape: PreToolUse/PostToolUse/Stop,
+// each a list of {matcher?, hooks: [{type, command, once?}]}.
+func renderHooksFrontmatter(b *strings.Builder, h *WorkflowHooks) {
+	b.WriteString("hooks:\n")
+	renderHookBucket(b, "PreToolUse", h.PreToolUse)
+	renderHookBucket(b, "PostToolUse", h.PostToolUse)
+	renderHookBucket(b, "Stop", h.Stop)
+}
+
+func renderHookBucket(b *strings.Builder, name string, entries []HookEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	b.WriteString("  ")
+	b.WriteString(name)
+	b.WriteString(":\n")
+	for _, e := range entries {
+		b.WriteString("    - matcher: ")
+		if m := strings.TrimSpace(e.Matcher); m != "" {
+			b.WriteString(yamlQuote(m))
+		} else {
+			b.WriteString(`""`)
+		}
+		b.WriteByte('\n')
+		b.WriteString("      hooks:\n")
+		for _, a := range e.Hooks {
+			b.WriteString("        - type: ")
+			b.WriteString(a.Type)
+			b.WriteByte('\n')
+			if c := strings.TrimSpace(a.Command); c != "" {
+				b.WriteString("          command: ")
+				b.WriteString(yamlQuote(c))
+				b.WriteByte('\n')
+			}
+			if a.Once {
+				b.WriteString("          once: true\n")
+			}
+		}
+	}
+}
+
+// estimateTokens is a coarse prompt-size heuristic: 1 token ≈ 4 characters.
+// It exists to surface oversized exports in the UI, not to be authoritative.
+func estimateTokens(s string) int {
+	return (len(s) + 3) / 4 // ceil(chars/4) without float math
 }
 
 // yamlQuote quotes a string for a YAML scalar value when needed.

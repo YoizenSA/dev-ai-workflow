@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { workflowApi } from '../api/client'
+import { useCommentaryStore } from './commentaryStore'
 import type {
 	Workflow,
 	WorkflowSummary,
@@ -8,6 +9,10 @@ import type {
 	WorkflowNodeType,
 	WorkflowValidationResult,
 	WorkflowExportPlan,
+	WorkflowRunLine,
+	WorkflowSlashCommandOptions,
+	WorkflowConversationHistory,
+	WorkflowConversationMessage,
 } from '../api/types'
 
 // ─── edge id helpers ──────────────────────────────────────────────────────
@@ -17,9 +22,21 @@ function edgeId(c: WorkflowConnection): string {
 }
 
 // Backend may return null for nodes/connections on an empty or legacy
-// workflow; normalize to [] so the editor never maps over null.
+// workflow; normalize to [] so the editor never maps over null. Duplicate
+// connections (same from/port -> to/port) are also dropped here so React Flow
+// never receives two edges with the same id (which triggers a React key warning
+// and can break edge selection/updates). Duplicates can sneak in via import or
+// AI edit, which bypass the connect() dedupe guard.
 function normalizeWorkflow(wf: Workflow): Workflow {
-	return { ...wf, nodes: wf.nodes ?? [], connections: wf.connections ?? [] }
+	const connections = wf.connections ?? []
+	const seen = new Set<string>()
+	const deduped = connections.filter((c) => {
+		const id = edgeId(c)
+		if (seen.has(id)) return false
+		seen.add(id)
+		return true
+	})
+	return { ...wf, nodes: wf.nodes ?? [], connections: deduped }
 }
 
 // ─── auto-layout ──────────────────────────────────────────────────────────
@@ -136,6 +153,11 @@ interface WorkflowState {
 	// edit with AI
 	aiEditing: boolean
 
+	// run (export + spawn the orchestrator). running lines stream into runOutput.
+	running: boolean
+	runId: string | null
+	runOutput: WorkflowRunLine[]
+
 	// selection
 	selectedNodeId: string | null
 	// node open in the Monaco focus editor (null = closed)
@@ -147,6 +169,8 @@ interface WorkflowState {
 	createNew: (name: string, description?: string) => Promise<void>
 	saveCurrent: () => Promise<void>
 	deleteCurrent: () => Promise<void>
+	// Rename the current workflow (renames the on-disk file + patches id/name).
+	renameCurrent: (newName: string) => Promise<void>
 	importRaw: (raw: unknown, name?: string) => Promise<void>
 	validateCurrent: () => Promise<void>
 	exportCurrent: (apply: boolean, target?: string) => Promise<void>
@@ -154,6 +178,18 @@ interface WorkflowState {
 	// Apply a natural-language edit via the backend AI endpoint. The result is
 	// loaded into the editor (undoable) and left dirty for the user to Save.
 	aiEdit: (instruction: string, model?: string) => Promise<void>
+
+	// Export + spawn the orchestrator via opencode. Opens a WebSocket to stream
+	// output; runOutput fills as lines arrive. The promise resolves once the run
+	// starts (status 202); output continues asynchronously.
+	runWorkflow: (args: string, model?: string) => Promise<void>
+
+	// Stop the active run (kills the opencode process server-side).
+	stopWorkflow: () => Promise<void>
+
+	// Set the workflow's slash-command options (allowed-tools, model, hooks…).
+	// Merges into `current` and marks dirty. Pass null to clear them.
+	setSlashCommandOptions: (opts: WorkflowSlashCommandOptions | null) => void
 
 	// graph editing (optimistic, persisted on save)
 	selectNode: (id: string | null) => void
@@ -195,6 +231,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	exportPlan: null,
 	exporting: false,
 	aiEditing: false,
+	running: false,
+	runId: null,
+	runOutput: [],
 	selectedNodeId: null,
 	focusNodeId: null,
 	past: [],
@@ -271,6 +310,18 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 	},
 
+	renameCurrent: async (newName) => {
+		const { current } = get()
+		if (!current) return
+		try {
+			const renamed = await workflowApi.rename(current.name, newName)
+			set({ current: normalizeWorkflow(renamed), dirty: false, selectedNodeId: null })
+			await get().list()
+		} catch (err) {
+			set({ error: errMsg(err) })
+		}
+	},
+
 	importRaw: async (raw, name) => {
 		set({ loading: true, error: null })
 		try {
@@ -313,15 +364,138 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		const { current } = get()
 		if (!current) return
 		set({ aiEditing: true, error: null })
+
+		// Build the conversation history: carry forward the workflow's existing
+		// history, append the user's new instruction, then call the AI with the
+		// recent turns as context (multi-turn refinement).
+		const now = new Date().toISOString()
+		const history = current.conversationHistory?.messages ?? []
+		const userMsg: WorkflowConversationMessage = {
+			id: `u${Date.now()}`,
+			sender: 'user',
+			content: instruction,
+			timestamp: now,
+		}
+
 		try {
-			const { workflow, validation } = await workflowApi.aiEdit(current.name, instruction, model)
-			// Snapshot the pre-edit state so the AI change is a single undo step,
-			// then load the proposal into the editor (kept dirty for the user to Save).
+			// Send the last few turns (capped server-side too) for context.
+			const recent = [...history, userMsg].slice(-6)
+			const { workflow, validation } = await workflowApi.aiEdit(
+				current.name,
+				instruction,
+				model,
+				recent,
+			)
+			// Snapshot the pre-edit state so the AI change is a single undo step.
 			snapshot()
-			set({ current: normalizeWorkflow(workflow), validation, dirty: true, aiEditing: false })
+			// Record the exchange in the workflow's conversation history so it
+			// survives reloads and feeds the next turn.
+			const aiMsg: WorkflowConversationMessage = {
+				id: `a${Date.now()}`,
+				sender: 'ai',
+				content: `Applied: "${instruction}"`,
+				timestamp: new Date().toISOString(),
+			}
+			const conv: WorkflowConversationHistory = current.conversationHistory
+				? { ...current.conversationHistory }
+				: {
+						schemaVersion: '1.0.0',
+						messages: [],
+						currentIteration: 0,
+						maxIterations: 20,
+						createdAt: now,
+						updatedAt: now,
+					}
+			conv.messages = [...conv.messages, userMsg, aiMsg]
+			conv.currentIteration = Math.min(conv.currentIteration + 1, conv.maxIterations)
+			conv.updatedAt = now
+			const edited: Workflow = {
+				...normalizeWorkflow(workflow),
+				conversationHistory: conv,
+			}
+			set({ current: edited, validation, dirty: true, aiEditing: false })
 		} catch (err) {
 			set({ aiEditing: false, error: errMsg(err) })
 		}
+	},
+
+	runWorkflow: async (args, model) => {
+		const { current } = get()
+		if (!current) return
+		set({ running: true, error: null, runOutput: [], runId: null })
+		try {
+			// Track the run id in a closure variable so the WS handler can see it
+			// the moment the POST returns — even before the component re-renders
+			// with the updated store. Using get().runId here would race: a fast run
+			// could emit output before the await resolves and runId is still null,
+			// dropping every line.
+			let runId = ''
+			const ws = openWorkflowSocket((msg) => {
+				if (msg.type === 'workflow_run_output') {
+					const p = msg.payload as { runId?: string; stream?: string; text?: string }
+					if (p.runId === runId) {
+						set({
+							runOutput: [
+								...get().runOutput,
+								{ stream: (p.stream as 'stdout' | 'stderr') ?? 'stdout', text: p.text ?? '', ts: Date.now() },
+							],
+						})
+						// Also feed the commentary panel (classified narration feed).
+						useCommentaryStore
+							.getState()
+							.pushLine((p.stream as 'stdout' | 'stderr') ?? 'stdout', p.text ?? '')
+					}
+				} else if (msg.type === 'workflow_run_done') {
+					const p = msg.payload as { runId?: string; exitCode?: number; error?: string }
+					if (p.runId === runId) {
+						if (p.exitCode && p.exitCode !== 0) {
+							set({ running: false, error: p.error || `run exited with code ${p.exitCode}` })
+							useCommentaryStore.getState().pushLine('stderr', p.error || `run exited with code ${p.exitCode}`)
+						} else {
+							set({ running: false })
+						}
+						useCommentaryStore.getState().markDone()
+						// Run is finished; close the stream socket.
+						closeWorkflowSocket()
+					}
+				}
+			})
+			const res = await workflowApi.run(current.name, args, model)
+			runId = res.runId
+			set({ runId: res.runId })
+			useCommentaryStore.getState().startRun(res.runId)
+			// If the backend reports already-running, reflect it; the WS still
+			// carries the active run's output.
+			if (res.status === 'already-running') {
+				set({ running: true })
+			}
+			// Keep a reference so a component unmount can also close it.
+			activeRunWS = ws
+		} catch (err) {
+			set({ running: false, error: errMsg(err) })
+		}
+	},
+
+	stopWorkflow: async () => {
+		const { current } = get()
+		if (!current || !get().running) return
+		try {
+			await workflowApi.stop(current.name)
+			// The backend kills the process; the WS will deliver workflow_run_done
+			// shortly and clear `running`. Set running=false optimistically so the
+			// UI reacts instantly even if the done event is slow.
+			set({ running: false })
+			closeWorkflowSocket()
+		} catch (err) {
+			set({ error: errMsg(err) })
+		}
+	},
+
+	setSlashCommandOptions: (opts) => {
+		const { current } = get()
+		if (!current) return
+		snapshot()
+		set({ current: { ...current, slashCommandOptions: opts ?? undefined }, dirty: true })
 	},
 
 	selectNode: (id) => set({ selectedNodeId: id }),
@@ -512,4 +686,44 @@ function snapshot(key?: string): void {
 		past: [...s.past, s.current].slice(-HISTORY_LIMIT),
 		future: [],
 	})
+}
+
+// ─── workflow run WebSocket ────────────────────────────────────────────────
+// A single on-demand socket for streaming run output. Unlike the missions
+// useWebSocket hook, this does NOT auto-reconnect: a run is a bounded event and
+// a dropped socket should surface an error rather than silently resync.
+
+// activeRunWS holds the socket for the in-progress run so it can be closed on
+// unmount or when the run completes.
+let activeRunWS: WebSocket | null = null
+
+export function closeWorkflowSocket(): void {
+	if (activeRunWS) {
+		activeRunWS.close()
+		activeRunWS = null
+	}
+}
+
+// openWorkflowSocket connects to the workflows hub and dispatches parsed events
+// to onMessage. Returns the socket so the caller can close it.
+function openWorkflowSocket(onMessage: (msg: { type: string; payload: unknown }) => void): WebSocket {
+	const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+	const url = `${proto}//${window.location.host}/api/workflows/ws`
+	const ws = new WebSocket(url)
+	ws.onmessage = (event) => {
+		try {
+			const msg = JSON.parse(event.data) as { type: string; payload: unknown }
+			onMessage(msg)
+		} catch {
+			// ignore malformed frames
+		}
+	}
+	ws.onerror = () => {
+		useWorkflowStore.setState({ running: false, error: 'lost connection to the run stream' })
+	}
+	ws.onclose = () => {
+		if (activeRunWS === ws) activeRunWS = null
+	}
+	activeRunWS = ws
+	return ws
 }

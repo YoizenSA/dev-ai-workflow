@@ -42,6 +42,7 @@ import type {
 	WorkflowValidationResult,
 	WorkflowExportPlan,
 	WorkflowImportResult,
+	WorkflowConversationMessage,
 } from "./types";
 
 const BASE = "";
@@ -605,8 +606,13 @@ export const workflowApi = {
 		fetch(`${BASE}/api/workflows/${name}`, { method: "DELETE" }).then((r) => {
 			if (!r.ok) throw new Error(`${r.status}`);
 		}),
+	rename: (oldName: string, newName: string) =>
+		request<Workflow>(`/api/workflows/${oldName}`, {
+			method: "PATCH",
+			body: JSON.stringify({ name: newName }),
+		}),
 
-	// Import cc-wf-studio JSON. Accepts raw JSON or {json, name}.
+	// Import  JSON. Accepts raw JSON or {json, name}.
 	import: (raw: unknown, name?: string) =>
 		request<WorkflowImportResult>("/api/workflows/import", {
 			method: "POST",
@@ -634,11 +640,43 @@ export const workflowApi = {
 	},
 
 	// Edit with AI. Applies a natural-language instruction via the opencode CLI
-	// and returns the proposed workflow (not saved) plus its validation.
-	aiEdit: (name: string, instruction: string, model?: string) =>
+	// and returns the proposed workflow (not saved) plus its validation. Pass the
+	// recent conversation history for multi-turn (conversational) refinement.
+	aiEdit: (
+		name: string,
+		instruction: string,
+		model?: string,
+		history?: WorkflowConversationMessage[],
+	) =>
 		request<{ workflow: Workflow; validation: WorkflowValidationResult }>(
 			`/api/workflows/${name}/ai-edit`,
-			{ method: "POST", body: JSON.stringify({ instruction, model }) },
+			{ method: "POST", body: JSON.stringify({ instruction, model, history }) },
+		),
+
+	// Run: export + spawn the orchestrator via opencode. Returns once the run has
+	// started (status 202); output is streamed over the workflows WebSocket hub.
+	run: (name: string, args: string, model?: string) =>
+		request<{ status: string; runId: string }>(`/api/workflows/${name}/run`, {
+			method: "POST",
+			body: JSON.stringify({ args, model }),
+		}),
+
+	// Stop: cancel an in-progress run (kills the opencode process).
+	stop: (name: string) =>
+		request<{ status: string }>(`/api/workflows/${name}/stop`, {
+			method: "POST",
+		}),
+
+	// MCP sync (opencode → claude-code). Preview shows what would be added;
+	// apply replicates the referenced servers into ~/.claude.json.
+	mcpSyncPreview: (name: string) =>
+		request<{ toSync: string[]; existing: string[]; missing: string[] }>(
+			`/api/workflows/${name}/mcp-sync/preview`,
+		),
+	mcpSyncApply: (name: string) =>
+		request<{ added: string[]; skipped: string[]; errors?: string[] }>(
+			`/api/workflows/${name}/mcp-sync`,
+			{ method: "POST" },
 		),
 
 	// Read-only catalogs the node editors populate from.
@@ -647,6 +685,12 @@ export const workflowApi = {
 	// Real MCP servers configured in opencode.json (not the static catalog).
 	listMcpServers: () =>
 		request<{ id: string; enabled: boolean }[]>("/api/workflows-meta/mcps"),
+	// Discover the tools a given MCP server exposes (live handshake). Returns an
+	// empty list when discovery fails — the editor then falls back to free-text.
+	listMcpServerTools: (server: string) =>
+		request<{ name: string }[]>(
+			`/api/workflows-meta/mcps/${encodeURIComponent(server)}/tools`,
+		),
 	// Static catalog (used to suggest known tools for a server, best-effort).
 	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
 };

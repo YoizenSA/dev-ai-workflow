@@ -192,7 +192,7 @@ ywai/
 
 ## Workflow Studio
 
-A visual multi-agent workflow editor (inspired by [cc-wf-studio](https://github.com/breaking-brake/cc-wf-studio)) that designs workflows on a React Flow canvas and **exports them to opencode's native primitives**.
+A visual multi-agent workflow editor that designs workflows on a React Flow canvas and **exports them to opencode's native primitives**.
 
 **Where it lives:** the `/workflows` route in the control UI (`http://localhost:5768/workflows`).
 
@@ -200,7 +200,7 @@ A visual multi-agent workflow editor (inspired by [cc-wf-studio](https://github.
 
 1. **Design** a workflow on the canvas: drag nodes (SubAgent, AskUserQuestion, Prompt, If/Else, Switch, Skill, MCP, Group) from the palette and connect them.
 2. **Edit** each node's fields in the side panel (system prompt, task prompt, tools, model, options, conditions…).
-3. **Validate** the graph (structural rules ported from cc-wf-studio: one start/end, no cycles, field limits, reachability).
+3. **Validate** the graph (structural rules: one start/end, no cycles, field limits, reachability).
 4. **Export** to opencode — the workflow becomes real, runnable artifacts:
 
 | Workflow element | opencode primitive | Output |
@@ -214,7 +214,7 @@ A visual multi-agent workflow editor (inspired by [cc-wf-studio](https://github.
 - Source (editable JSON): `~/.ywai/workflows/<name>.json`
 - Generated (what opencode reads): `~/.config/opencode/{commands,agents}/`
 
-**Import:** paste or upload a cc-wf-studio `workflow.json` — the formats are compatible and round-trip. Missing start/end nodes are added automatically.
+**Import:** paste or upload a `workflow.json` — the format round-trips on re-export. Missing start/end nodes are added automatically.
 
 **Backend:** `internal/workflows/` (model, store, validator, exporter, importer) + `internal/control/workflows.go` (REST API at `/api/workflows`).
 

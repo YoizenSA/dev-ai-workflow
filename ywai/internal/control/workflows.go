@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
@@ -15,12 +16,16 @@ import (
 type workflowsAPI struct {
 	store    *workflows.Store
 	exporter *workflows.Exporter
+	hub      *wsHub
+	runs     *runStore
 }
 
 func newWorkflowsAPI() *workflowsAPI {
 	return &workflowsAPI{
 		store:    workflows.NewStore(config.DataWorkflowsDir()),
 		exporter: workflows.NewExporter(),
+		hub:      newWsHub(),
+		runs:     newRunStore(config.DataWorkflowsDir() + "/runs"),
 	}
 }
 
@@ -33,12 +38,13 @@ func (s *Server) registerWorkflowsRoutes() {
 	s.mux.HandleFunc("GET /api/workflows", api.handleList)
 	s.mux.HandleFunc("POST /api/workflows", api.handleCreate)
 
-	// Import cc-wf-studio JSON.
+	
 	s.mux.HandleFunc("POST /api/workflows/import", api.handleImport)
 
 	// Per-workflow CRUD.
 	s.mux.HandleFunc("GET /api/workflows/{name}", api.handleGet)
 	s.mux.HandleFunc("PUT /api/workflows/{name}", api.handleSave)
+	s.mux.HandleFunc("PATCH /api/workflows/{name}", api.handleRename)
 	s.mux.HandleFunc("DELETE /api/workflows/{name}", api.handleDelete)
 
 	// Validate + export.
@@ -48,10 +54,25 @@ func (s *Server) registerWorkflowsRoutes() {
 	// Edit with AI (opencode CLI).
 	s.mux.HandleFunc("POST /api/workflows/{name}/ai-edit", api.handleAIEdit)
 
+	// Run: export + spawn the orchestrator via opencode, streaming output live.
+	s.mux.HandleFunc("POST /api/workflows/{name}/run", api.handleRun)
+	// Stop: cancel an in-progress run (kills the opencode process).
+	s.mux.HandleFunc("POST /api/workflows/{name}/stop", api.handleStop)
+	// Live run output stream (WebSocket) for the Run panel + Commentary.
+	s.mux.HandleFunc("GET /api/workflows/ws", api.handleWorkflowWS)
+
+	// MCP sync: replicate the workflow's referenced MCP servers from
+	// opencode.json into claude.json (append-only).
+	s.mux.HandleFunc("GET /api/workflows/{name}/mcp-sync/preview", api.handleMcpSyncPreview)
+	s.mux.HandleFunc("POST /api/workflows/{name}/mcp-sync", api.handleMcpSyncApply)
+
 	// Read-only catalogs the node editors populate from (skills live in the
 	// opencode skills dir; MCP servers come from opencode.json).
 	s.mux.HandleFunc("GET /api/workflows-meta/skills", api.handleSkillsList)
 	s.mux.HandleFunc("GET /api/workflows-meta/mcps", api.handleMcpServersList)
+	// Enumerate the tools a given MCP server exposes (live handshake). Used by
+	// the MCP node editor when configuring a tool (manual/aiParameterConfig mode).
+	s.mux.HandleFunc("GET /api/workflows-meta/mcps/{server}/tools", api.handleMcpServerTools)
 }
 
 // ─── handlers ──────────────────────────────────────────────────────────────
@@ -120,6 +141,34 @@ func (a *workflowsAPI) handleDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// handleRename renames a workflow. Body: {"name": "new-name"}. The store
+// renames the on-disk file and patches the workflow's Name/ID. Returns the
+// reloaded workflow under its new name.
+func (a *workflowsAPI) handleRename(w http.ResponseWriter, r *http.Request) {
+	old := r.PathValue("name")
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSONBody(r, &body); err != nil {
+		writeWorkflowsError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		writeWorkflowsError(w, http.StatusBadRequest, errors.New("name is required"))
+		return
+	}
+	if err := a.store.Rename(old, body.Name); err != nil {
+		writeWorkflowsError(w, statusForWorkflowError(err), err)
+		return
+	}
+	wf, err := a.store.Load(body.Name)
+	if err != nil {
+		writeWorkflowsError(w, statusForWorkflowError(err), err)
+		return
+	}
+	writeJSON(w, http.StatusOK, wf)
+}
+
 func (a *workflowsAPI) handleImport(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -129,7 +178,7 @@ func (a *workflowsAPI) handleImport(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	var opts workflows.ImportOptions
-	// The import endpoint accepts either raw cc-wf-studio JSON or a wrapper
+	// The import endpoint accepts either raw workflow JSON or a wrapper
 	// {"json": <raw>, "name": "..."}; detect the wrapper by probing for a
 	// top-level "json" key.
 	if wrapper := struct {

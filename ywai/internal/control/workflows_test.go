@@ -128,7 +128,7 @@ func TestWorkflowsE2E_Import(t *testing.T) {
 	defer server.Close()
 	client := server.Client()
 
-	// cc-wf-studio-style JSON without explicit name derivation needs.
+	// Workflow JSON without explicit name derivation needs.
 	raw := `{
 		"version": "1.0.0",
 		"nodes": [

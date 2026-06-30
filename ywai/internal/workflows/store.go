@@ -19,9 +19,9 @@ var (
 	ErrInvalidName      = errors.New("invalid workflow name")
 )
 
-// namePattern mirrors cc-wf-studio: lowercase letters, digits, hyphen,
-// underscore only, 1–100 chars. The name is used directly as a filename and as
-// the opencode command/agent slug, so it must be filesystem-safe.
+// namePattern: lowercase letters, digits, hyphen, underscore only, 1–100 chars.
+// The name is used directly as a filename and as the opencode command/agent
+// slug, so it must be filesystem-safe.
 var namePattern = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 // ValidateName checks a workflow name against the naming rules.
@@ -194,12 +194,13 @@ func (s *Store) Rename(oldName, newName string) error {
 		return fmt.Errorf("rename workflow: %w", err)
 	}
 
-	// Patch the stored name + timestamp to match the new filename.
+	// Patch the stored name + id + timestamp to match the new filename.
 	wf, err := s.readLocked(newName)
 	if err != nil {
 		return err
 	}
 	wf.Name = newName
+	wf.ID = newName
 	wf.UpdatedAt = time.Now().UTC()
 	return s.writeLocked(wf)
 }

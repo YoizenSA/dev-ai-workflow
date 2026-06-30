@@ -34,6 +34,14 @@ import {
 	Mouse,
 	Highlighter,
 	Map as MapIcon,
+	Play,
+	Terminal,
+	Settings2,
+	Plug,
+	HelpCircle,
+	MessageSquare,
+	Square,
+	Pencil,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
 import type { WorkflowConnection, WorkflowNodeType } from '../../api/types'
@@ -43,6 +51,11 @@ import MermaidDiagram from '../shared/MermaidDiagram'
 import { NODE_META, nodeTypes, toFlowNode } from './nodes'
 import NodeDetail, { useOpencodeModels } from './NodeDetail'
 import NodeFocusModal from './NodeFocusModal'
+import SlashCommandOptionsModal from './SlashCommandOptionsModal'
+import McpSyncModal from './McpSyncModal'
+import Tour from './Tour'
+import CommentaryPanel from './CommentaryPanel'
+import RefinementChatPanel from './RefinementChatPanel'
 import './WorkflowEditor.css'
 
 // Export targets shown as per-runtime buttons in the toolbar.
@@ -53,6 +66,7 @@ const EXPORT_TARGETS = [
 
 const PALETTE_TYPES: WorkflowNodeType[] = [
 	'subAgent',
+	'subAgentFlow',
 	'askUserQuestion',
 	'prompt',
 	'ifElse',
@@ -90,6 +104,7 @@ function WorkflowEditorInner() {
 	const createNew = useWorkflowStore((s) => s.createNew)
 	const saveCurrent = useWorkflowStore((s) => s.saveCurrent)
 	const deleteCurrent = useWorkflowStore((s) => s.deleteCurrent)
+	const renameCurrent = useWorkflowStore((s) => s.renameCurrent)
 	const validateCurrent = useWorkflowStore((s) => s.validateCurrent)
 	const exportCurrent = useWorkflowStore((s) => s.exportCurrent)
 	const clearExport = useWorkflowStore((s) => s.clearExport)
@@ -101,8 +116,11 @@ function WorkflowEditorInner() {
 	const disconnect = useWorkflowStore((s) => s.disconnect)
 	const applyNodeChanges = useWorkflowStore((s) => s.applyNodeChanges)
 	const autoLayout = useWorkflowStore((s) => s.autoLayout)
-	const aiEdit = useWorkflowStore((s) => s.aiEdit)
-	const aiEditing = useWorkflowStore((s) => s.aiEditing)
+	const runWorkflow = useWorkflowStore((s) => s.runWorkflow)
+	const stopWorkflow = useWorkflowStore((s) => s.stopWorkflow)
+	const running = useWorkflowStore((s) => s.running)
+	const runOutput = useWorkflowStore((s) => s.runOutput)
+	const setSlashCommandOptions = useWorkflowStore((s) => s.setSlashCommandOptions)
 	const undo = useWorkflowStore((s) => s.undo)
 	const redo = useWorkflowStore((s) => s.redo)
 	const setNodeParent = useWorkflowStore((s) => s.setNodeParent)
@@ -119,11 +137,28 @@ function WorkflowEditorInner() {
 	const [importText, setImportText] = useState('')
 	const [mermaidPreview, setMermaidPreview] = useState<string | null>(null)
 	const [mermaidLoading, setMermaidLoading] = useState(false)
-	const [aiOpen, setAiOpen] = useState(false)
-	const [aiText, setAiText] = useState('')
 	const [aiModel, setAiModel] = useState('')
 	const aiModels = useOpencodeModels()
 	const [exportTarget, setExportTarget] = useState('opencode')
+	// Run modal: args prompt before spawning the orchestrator.
+	const [runOpen, setRunOpen] = useState(false)
+	const [runArgs, setRunArgs] = useState('')
+	// Run output panel visibility.
+	const [runPanelOpen, setRunPanelOpen] = useState(false)
+	// Slash command options modal (workflow-level frontmatter).
+	const [slashOpen, setSlashOpen] = useState(false)
+	// MCP sync modal (opencode → claude-code).
+	const [mcpSyncOpen, setMcpSyncOpen] = useState(false)
+	// Rename modal.
+	const [renameOpen, setRenameOpen] = useState(false)
+	const [renameValue, setRenameValue] = useState('')
+	// Onboarding tour (driver.js). forceRun re-triggers it from the Help button.
+	const [tourRun, setTourRun] = useState(0)
+	const startTour = () => setTourRun((n) => n + 1)
+	// Commentary panel (live run feed) toggle.
+	const [commentaryOpen, setCommentaryOpen] = useState(false)
+	// Refinement chat panel (multi-turn Edit-with-AI) toggle.
+	const [chatOpen, setChatOpen] = useState(false)
 	// Canvas view options.
 	const [animatedEdges, setAnimatedEdges] = useState(false)
 	const [snapGrid, setSnapGrid] = useState(false)
@@ -266,21 +301,31 @@ function WorkflowEditorInner() {
 		// Highlight: when a node is selected and highlighting is on, dim every
 		// edge not touching it so the selected node's wiring stands out.
 		const dim = highlight && !!selectedNodeId
-		return current.connections.map((c) => {
+		// Dedupe by edge id: two connections with the same (from/port -> to/port)
+		// would render two edges with one React key. This can happen when a
+		// workflow saved with duplicates (or produced by import/AI) is loaded; the
+		// store also dedupes on normalize, but this keeps the canvas safe even for
+		// an in-flight unnormalized state.
+		const seen = new Set<string>()
+		const edges: Edge[] = []
+		for (const c of current.connections) {
 			const id = disconnectEdgeId(c as WorkflowConnection)
+			if (seen.has(id)) continue
+			seen.add(id)
 			const touches = c.from === selectedNodeId || c.to === selectedNodeId
-			return {
+			edges.push({
 				id,
 				source: c.from,
 				target: c.to,
 				sourceHandle: c.fromPort || undefined,
 				targetHandle: c.toPort || undefined,
 				animated: animatedEdges,
-				// cc-wf-studio look: dashed curved connectors.
+				// Dashed curved connectors.
 				style: { strokeDasharray: '6 4', strokeWidth: 1.5, opacity: dim && !touches ? 0.12 : 1 },
 				markerEnd: { type: 'arrowclosed' as const },
-			}
-		})
+			})
+		}
+		return edges
 	}, [current, animatedEdges, highlight, selectedNodeId])
 
 	const onConnect = useCallback(
@@ -401,16 +446,25 @@ function WorkflowEditorInner() {
 		return () => window.removeEventListener('keydown', onKey)
 	}, [handleUndo, handleRedo])
 
-	const handleAiEdit = useCallback(async () => {
-		if (!aiText.trim()) return
-		await aiEdit(aiText.trim(), aiModel || undefined)
-		// If the store recorded an error the modal stays open; otherwise apply.
-		if (!useWorkflowStore.getState().error) {
-			resyncCanvas()
-			setAiOpen(false)
-			setAiText('')
+	const handleRun = useCallback(async () => {
+		setRunOpen(false)
+		setRunPanelOpen(true)
+		await runWorkflow(runArgs, aiModel || undefined)
+	}, [runWorkflow, runArgs, aiModel])
+
+	const handleRename = useCallback(async () => {
+		const v = renameValue.trim()
+		if (!v || v === current?.name) {
+			setRenameOpen(false)
+			return
 		}
-	}, [aiEdit, aiText, aiModel, resyncCanvas])
+		await renameCurrent(v)
+		if (!useWorkflowStore.getState().error) {
+			setSelectedName(v)
+			setRenameOpen(false)
+			setRenameValue('')
+		}
+	}, [renameCurrent, renameValue, current])
 
 	const showMermaid = useCallback(async () => {
 		setMermaidLoading(true)
@@ -421,22 +475,27 @@ function WorkflowEditorInner() {
 
 	return (
 		<div className="workflow-page">
+			{/* Onboarding tour (driver.js). Auto-runs once; forceRun via Help button. */}
+			<Tour key={tourRun} forceRun={tourRun > 0} />
+
 			{/* Toolbar — grouped by intent; one primary (Save), secondary actions
 			    icon-only with glass tooltips (data-tip + aria-label), destructive
 			    action isolated on the right. */}
 			<div className="workflow-toolbar">
 				{/* Workflow selector */}
-				<YdSelect
-					className="workflow-select"
-					options={summaries.map((s) => ({
-						value: s.name,
-						label: `${s.name} (${s.nodeCount} nodes)`,
-					}))}
-					value={selectedName}
-					onChange={(v) => onSelect(v)}
-					placeholder="— select workflow —"
-					ariaLabel="Select workflow"
-				/>
+					<div data-tour="workflow-select">
+						<YdSelect
+							className="workflow-select"
+							options={summaries.map((s) => ({
+								value: s.name,
+								label: `${s.name} (${s.nodeCount} nodes)`,
+							}))}
+							value={selectedName}
+							onChange={(v) => onSelect(v)}
+							placeholder="— select workflow —"
+							ariaLabel="Select workflow"
+						/>
+					</div>
 
 				<span className="wf-tb-sep" />
 
@@ -453,7 +512,7 @@ function WorkflowEditorInner() {
 					<button
 						className="btn btn-icon"
 						onClick={() => fileInput.current?.click()}
-						data-tip="Import a cc-wf-studio workflow.json"
+						data-tip="Import a workflow.json"
 						aria-label="Import workflow JSON"
 					>
 						<Upload />
@@ -529,8 +588,8 @@ function WorkflowEditorInner() {
 				<span className="wf-tb-sep" />
 
 				{/* Export: target matters, keep the label */}
-				<div className="wf-tb-group">
-					<span className="wf-export-label">Export</span>
+					<div className="wf-tb-group" data-tour="export">
+						<span className="wf-export-label">Export</span>
 					{EXPORT_TARGETS.map((t) => (
 						<button
 							key={t.value}
@@ -550,17 +609,81 @@ function WorkflowEditorInner() {
 
 				<span className="wf-tb-sep" />
 
-				{/* Extend: AI edit + Mermaid (icon-only) */}
-				<div className="wf-tb-group">
+			{/* Extend: AI edit + Run + Mermaid (icon-only) */}
+			<div className="wf-tb-group">
+				<button
+					className={`btn btn-icon ${chatOpen ? 'is-active' : ''}`}
+					onClick={() => {
+						setChatOpen((v) => !v)
+						setCommentaryOpen(false)
+					}}
+					disabled={!current}
+					data-tip={current ? 'Edit with AI (multi-turn chat)' : ''}
+					aria-label="Edit with AI"
+					data-tour="ai-refine-button"
+				>
+					<Sparkles />
+				</button>
+				<button
+					className="btn btn-icon"
+					onClick={() => setSlashOpen(true)}
+					disabled={!current}
+					data-tip={current ? 'Slash command options (allowed-tools, model, hooks)' : ''}
+					aria-label="Slash command options"
+				>
+					<Settings2 />
+				</button>
+				<button
+					className="btn btn-icon"
+					onClick={() => setMcpSyncOpen(true)}
+					disabled={!current}
+					data-tip={current ? 'Sync MCP servers to Claude Code' : ''}
+					aria-label="Sync MCP servers"
+				>
+					<Plug />
+				</button>
+				{running ? (
+					<button
+						className="btn btn-icon danger is-running"
+						onClick={() => stopWorkflow()}
+						data-tip="Stop the running workflow"
+						aria-label="Stop workflow"
+					>
+						<Square />
+					</button>
+				) : (
 					<button
 						className="btn btn-icon"
-						onClick={() => setAiOpen(true)}
+						onClick={() => setRunOpen(true)}
 						disabled={!current}
-						data-tip={current ? 'Edit with AI (natural language)' : ''}
-						aria-label="Edit with AI"
+						data-tip={current ? 'Run the workflow' : ''}
+						aria-label="Run workflow"
+						data-tour="run-button"
 					>
-						<Sparkles />
+						<Play />
 					</button>
+				)}
+				<button
+					className={`btn btn-icon ${runOutput.length > 0 ? 'has-output' : ''}`}
+					onClick={() => setRunPanelOpen((v) => !v)}
+					disabled={runOutput.length === 0 && !running}
+					data-tip={runOutput.length > 0 || running ? 'Toggle the run output panel' : ''}
+					aria-label="Run output"
+				>
+					<Terminal />
+				</button>
+				<button
+					className={`btn btn-icon ${commentaryOpen ? 'is-active' : ''}`}
+					onClick={() => {
+						setCommentaryOpen((v) => !v)
+						setChatOpen(false)
+					}}
+					disabled={runOutput.length === 0 && !running}
+					data-tip={runOutput.length > 0 || running ? 'Toggle the commentary feed' : ''}
+					aria-label="Commentary"
+				>
+					<MessageSquare />
+				</button>
 					<button
 						className="btn btn-icon"
 						onClick={() => showMermaid()}
@@ -573,6 +696,30 @@ function WorkflowEditorInner() {
 				</div>
 
 				<span className="spacer" />
+
+				{/* Help — re-runs the onboarding tour. */}
+				<button
+					className="btn btn-icon"
+					onClick={startTour}
+					data-tip="Show the guided tour"
+					aria-label="Show tour"
+				>
+					<HelpCircle />
+				</button>
+
+				{/* Rename — next to Delete, both workflow-level ops */}
+				<button
+					className="btn btn-icon"
+					onClick={() => {
+						setRenameValue(current?.name ?? '')
+						setRenameOpen(true)
+					}}
+					disabled={!current}
+					data-tip={current ? 'Rename workflow' : ''}
+					aria-label="Rename workflow"
+				>
+					<Pencil />
+				</button>
 
 				{/* Destructive — isolated */}
 				<button
@@ -630,7 +777,7 @@ function WorkflowEditorInner() {
 			{/* Body: palette + canvas + detail */}
 			{current && (
 				<div className="workflow-body">
-					<aside className="workflow-palette">
+					<aside className="workflow-palette" data-tour="palette">
 						<h4>Node Palette</h4>
 						{PALETTE_TYPES.map((t) => {
 							const Icon = NODE_META[t].icon
@@ -681,7 +828,7 @@ function WorkflowEditorInner() {
 								</button>
 							))}
 						</div>
-						<ReactFlow
+						<ReactFlow data-tour="canvas"
 							nodes={flowNodes}
 							edges={flowEdges}
 							nodeTypes={nodeTypes}
@@ -743,7 +890,7 @@ function WorkflowEditorInner() {
 			{/* Import modal */}
 			<Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import workflow JSON" width="640px">
 				<div className="field">
-					<label className="field-label">Paste a cc-wf-studio workflow.json below</label>
+					<label className="field-label">Paste a workflow.json below</label>
 					<textarea
 						className="textarea mono"
 						value={importText}
@@ -769,6 +916,14 @@ function WorkflowEditorInner() {
 								? `Dry-run preview. These files would be written for ${exportTarget === 'claude-code' ? 'Claude Code (~/.claude)' : 'opencode (~/.config/opencode)'}:`
 								: `✅ Files written. Restart ${exportTarget === 'claude-code' ? 'Claude Code' : 'opencode'} to pick them up.`}
 						</p>
+						{exportPlan.dryRun && exportPlan.estimatedTokens > 0 && (
+							<p className="wf-token-hint">
+								Estimated orchestrator prompt size: <strong>≈ {exportPlan.estimatedTokens.toLocaleString()} tokens</strong>
+								{exportPlan.estimatedTokens > 30000 && (
+									<span className="wf-token-warn"> — large; consider splitting the workflow.</span>
+								)}
+							</p>
+						)}
 						{(exportPlan.files ?? []).map((f, i) => (
 							<div className={`artifact kind-${f.kind}`} key={i}>
 								<span className="kind">{f.kind}</span>
@@ -789,47 +944,8 @@ function WorkflowEditorInner() {
 				)}
 			</Modal>
 
-			{/* Edit with AI modal */}
-			<Modal open={aiOpen} onClose={() => setAiOpen(false)} title="Edit with AI" width="560px">
-				<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-					<div className="field">
-						<label className="field-label">What should the AI change?</label>
-						<textarea
-							className="textarea"
-							value={aiText}
-							onChange={(e) => setAiText(e.target.value)}
-							style={{ minHeight: 120 }}
-							placeholder="e.g. Add a reviewer sub-agent after dev, and connect it to the end node."
-							autoFocus
-							disabled={aiEditing}
-						/>
-					</div>
-					<div className="field">
-						<label className="field-label">Model (optional)</label>
-						<YdSelect
-							options={[
-								{ value: '', label: 'opencode default' },
-								...aiModels.map((m) => ({ value: m.id, label: `${m.provider}/${m.name}` })),
-							]}
-							value={aiModel}
-							onChange={setAiModel}
-							ariaLabel="Model"
-						/>
-					</div>
-					<p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-						The proposal loads into the editor (undoable). Review it, then Save to persist.
-					</p>
-				</div>
-				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-					<button className="btn" onClick={() => setAiOpen(false)} disabled={aiEditing}>Cancel</button>
-					<button className="btn btn-primary" onClick={handleAiEdit} disabled={aiEditing || !aiText.trim()}>
-						<Sparkles size={14} /> {aiEditing ? 'Thinking…' : 'Apply'}
-					</button>
-				</div>
-			</Modal>
-
 			{/* Mermaid preview modal */}
-			<Modal open={mermaidPreview !== null} onClose={() => setMermaidPreview(null)} title="Mermaid diagram" width="640px">
+			<Modal open={mermaidPreview !== null} onClose={() => setMermaidPreview(null)} title="Mermaid diagram" width="92vw">
 				{mermaidLoading ? (
 					<div className="empty">Generating…</div>
 				) : (
@@ -837,8 +953,153 @@ function WorkflowEditorInner() {
 				)}
 			</Modal>
 
+			{/* MCP sync modal (opencode → claude-code). */}
+			<McpSyncModal
+				open={mcpSyncOpen}
+				workflowName={current?.name ?? ''}
+				onClose={() => setMcpSyncOpen(false)}
+			/>
+
+			{/* Slash command options modal (workflow-level frontmatter). */}
+			<SlashCommandOptionsModal
+				open={slashOpen}
+				options={current?.slashCommandOptions}
+				onClose={() => setSlashOpen(false)}
+				onSave={(opts) => {
+					setSlashCommandOptions(opts)
+					setSlashOpen(false)
+				}}
+			/>
+
+			{/* Run args modal — prompts for the task before spawning. */}
+			<Modal open={runOpen} onClose={() => setRunOpen(false)} title={`Run "${current?.name ?? ''}"`} width="520px">
+				<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+					<p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+						Describe what you want the workflow to do. The agents will work through the steps and you'll see their output live.
+					</p>
+					<div className="field">
+						<label className="field-label">What should it do?</label>
+						<input
+							className="input"
+							value={runArgs}
+							onChange={(e) => setRunArgs(e.target.value)}
+							placeholder="e.g. Build a login form with validation"
+							autoFocus
+						/>
+						<span className="field-help">Leave empty to run with the workflow's default task.</span>
+					</div>
+					<div className="field">
+						<label className="field-label">Model (optional)</label>
+						<YdSelect
+							options={[
+								{ value: '', label: 'Default' },
+								...aiModels.map((m) => ({ value: m.id, label: `${m.provider}/${m.name}` })),
+							]}
+							value={aiModel}
+							onChange={setAiModel}
+							ariaLabel="Model"
+						/>
+					</div>
+				</div>
+				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+					<button className="btn" onClick={() => setRunOpen(false)}>Cancel</button>
+					<button className="btn btn-primary" onClick={handleRun}>
+						<Play size={14} /> Run
+					</button>
+				</div>
+			</Modal>
+
+			{/* Run output panel — live stream of the orchestrator's output. */}
+			{runPanelOpen && (runOutput.length > 0 || running) && (
+				<RunOutputPanel
+					lines={runOutput}
+					running={running}
+					onClose={() => setRunPanelOpen(false)}
+				/>
+			)}
+
+			{/* Commentary panel — classified narration feed of the run. */}
+			{commentaryOpen && (runOutput.length > 0 || running) && (
+				<CommentaryPanel onClose={() => setCommentaryOpen(false)} />
+			)}
+
+			{/* Refinement chat panel — multi-turn Edit-with-AI. */}
+			{chatOpen && current && (
+				<RefinementChatPanel onClose={() => setChatOpen(false)} />
+			)}
+
+			{/* Rename modal */}
+			<Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="Rename workflow" width="440px">
+				<div className="field">
+					<label className="field-label">New name</label>
+					<input
+						className="input mono"
+						value={renameValue}
+						onChange={(e) => setRenameValue(e.target.value)}
+						placeholder="my-workflow-name"
+						autoFocus
+						onKeyDown={(e) => {
+							if (e.key === 'Enter') handleRename()
+						}}
+					/>
+					<span className="field-help">Lowercase letters, digits, hyphens. Used as the slash command name.</span>
+				</div>
+				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+					<button className="btn" onClick={() => setRenameOpen(false)}>Cancel</button>
+					<button
+						className="btn btn-primary"
+						onClick={handleRename}
+						disabled={!renameValue.trim() || renameValue.trim() === current?.name}
+					>
+						<Pencil size={14} /> Rename
+					</button>
+				</div>
+			</Modal>
+
 			{/* Focus mode — Monaco editor for the node's long fields */}
 			<NodeFocusModal nodeId={focusNodeId} onClose={() => setFocusNode(null)} />
+		</div>
+	)
+}
+
+// RunOutputPanel is the live output console for a workflow run. Renders the
+// streamed stdout/stderr lines with simple stream coloring and a running badge.
+function RunOutputPanel({
+	lines,
+	running,
+	onClose,
+}: {
+	lines: { stream: string; text: string; ts: number }[]
+	running: boolean
+	onClose: () => void
+}) {
+	const endRef = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+	}, [lines.length])
+	return (
+		<div className="wf-run-panel" data-tour="run-output">
+			<div className="wf-run-panel-header">
+				<span className="wf-run-panel-title">
+					<Terminal size={14} /> Run output
+					{running && <span className="wf-run-live">● live</span>}
+				</span>
+				<button className="btn btn-icon" onClick={onClose} aria-label="Close output panel">
+					<X size={14} />
+				</button>
+			</div>
+			<div className="wf-run-panel-body">
+				{lines.length === 0 ? (
+					<div className="empty">Waiting for output…</div>
+				) : (
+					lines.map((l, i) => (
+						<div key={i} className={`wf-run-line wf-run-${l.stream}`}>
+							{l.text}
+						</div>
+					))
+				)}
+				<div ref={endRef} />
+			</div>
 		</div>
 	)
 }
@@ -848,22 +1109,66 @@ function WorkflowEditorInner() {
 // Node ids are stable short ids (N0, N1, …) because Mermaid v11 mis-parses ids
 // that contain dashes (it reads the `-` as an edge operator), which broke the
 // previous slug-based ids like `start-node-default`.
+//
+// Group nodes render as Mermaid `subgraph` blocks containing their children
+// (nodes whose parentId points at the group). Top-level nodes (no parentId)
+// render at the flowchart root.
 function buildMermaidPreview(current: ReturnType<typeof useWorkflowStore.getState>['current']): string {
 	if (!current) return ''
 	const lines: string[] = ['flowchart LR']
 	const idMap: Record<string, string> = {}
+
+	// Assign a stable short id to every node.
 	current.nodes.forEach((n, i) => {
-		const mid = `N${i}`
-		idMap[n.id] = mid
+		idMap[n.id] = `N${i}`
+	})
+
+	// Partition: top-level nodes vs groups vs grouped children.
+	const groups = current.nodes.filter((n) => n.type === 'group')
+	const groupIds = new Set(groups.map((g) => g.id))
+	const topNodes = current.nodes.filter((n) => !n.parentId && n.type !== 'group')
+	const childrenOf = (gid: string) =>
+		current.nodes.filter((n) => n.parentId === gid && n.type !== 'group')
+
+	const emitNode = (n: typeof current.nodes[number], indent = '  ') => {
+		const mid = idMap[n.id]
 		const label = (n.data.label || n.data.name || n.data.description || n.type).replace(/"/g, "'")
 		const shape = shapeFor(n.type)
-		lines.push(`  ${mid}${shape.open}"${label}"${shape.close}`)
+		lines.push(`${indent}${mid}${shape.open}"${label}"${shape.close}`)
+	}
+
+	// Top-level nodes first.
+	topNodes.forEach((n) => emitNode(n))
+
+	// Then each group as a subgraph with its children nested inside.
+	groups.forEach((g) => {
+		const gid = idMap[g.id]
+		const glabel = (g.data.label || g.name || g.id).replace(/"/g, "'")
+		lines.push(`  subgraph ${gid} ["${glabel}"]`)
+		childrenOf(g.id).forEach((c) => emitNode(c, '    '))
+		// If a group has no children, Mermaid still needs a member to render the
+		// subgraph box; emit an invisible placeholder.
+		if (childrenOf(g.id).length === 0) {
+			lines.push(`    ${gid}_empty[ ]:::hidden`)
+		}
+		lines.push('  end')
 	})
+
+	// Edges last (Mermaid resolves ids declared anywhere).
 	current.connections.forEach((c) => {
 		if (idMap[c.from] && idMap[c.to]) {
 			lines.push(`  ${idMap[c.from]} --> ${idMap[c.to]}`)
 		}
 	})
+
+	// Style the empty-group placeholders invisible so an empty group still shows
+	// its box but no stray node.
+	if (groups.some((g) => childrenOf(g.id).length === 0)) {
+		lines.push('  classDef hidden display:none;')
+	}
+
+	// Avoid an unused-var warning in strict builds when there are no groups.
+	void groupIds
 	return lines.join('\n')
 }
 

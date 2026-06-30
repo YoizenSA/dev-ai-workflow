@@ -19,6 +19,26 @@ func (wf *Workflow) adjacency() map[string][]string {
 	return adj
 }
 
+// dedupConnections returns the connections with duplicates removed. A
+// connection is a duplicate of another when they share the same (from, to)
+// pair — regardless of port. Two arrows from A to B add no information to the
+// graph, so collapsing them keeps the exported Mermaid diagram and execution
+// steps clean (no repeated edges) even when a branching node (if/else/switch)
+// routes two outcomes to the same target.
+func (wf *Workflow) dedupConnections() []Connection {
+	seen := make(map[string]bool, len(wf.Connections))
+	out := make([]Connection, 0, len(wf.Connections))
+	for _, c := range wf.Connections {
+		key := c.From + "->" + c.To
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, c)
+	}
+	return out
+}
+
 // nodeByID indexes the workflow's nodes by ID.
 func (wf *Workflow) nodeByID() map[string]*Node {
 	m := make(map[string]*Node, len(wf.Nodes))

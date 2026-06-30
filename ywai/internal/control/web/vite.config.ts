@@ -24,7 +24,13 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:5768',
+      // The workflows WebSocket lives at /api/workflows/ws, so the /api proxy
+      // must also handle the ws:// upgrade (not just HTTP). Without ws:true
+      // here, the socket connects but never receives frames.
+      '/api': {
+        target: 'http://localhost:5768',
+        ws: true,
+      },
       '/ws': {
         target: 'ws://localhost:5768',
         ws: true

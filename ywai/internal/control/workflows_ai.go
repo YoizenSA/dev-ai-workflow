@@ -14,20 +14,27 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 )
 
 // aiEditRequest is the body of POST /api/workflows/{name}/ai-edit.
 type aiEditRequest struct {
-	Instruction string `json:"instruction"`
-	Model       string `json:"model,omitempty"`
+	Instruction string                          `json:"instruction"`
+	Model       string                          `json:"model,omitempty"`
+	// History carries the recent refinement turns so the AI has conversational
+	// context (last few messages). Optional; omit for single-turn edits.
+	History []workflows.ConversationMessage `json:"history,omitempty"`
 }
 
 // handleAIEdit applies a natural-language edit to a workflow via the opencode
 // CLI and returns the proposed workflow plus its validation. It does NOT save —
 // the frontend applies the result into the editor (undoable) so the user can
 // review and Save explicitly.
+//
+// When History is provided, the prompt includes the last few turns so the AI
+// can refine the workflow conversationally (multi-turn Edit-with-AI).
 func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	wf, err := a.store.Load(name)
@@ -46,7 +53,7 @@ func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	edited, err := aiEditWorkflow(r.Context(), wf, req.Instruction, req.Model)
+	edited, err := aiEditWorkflow(r.Context(), wf, req.Instruction, req.Model, req.History)
 	if err != nil {
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
 		return
@@ -62,7 +69,10 @@ func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 // the HTTP session API has known issues processing prompts via REST) to rewrite
 // the workflow JSON per the instruction. Identity fields are preserved from the
 // source so the AI cannot rename or re-id the workflow.
-func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, model string) (*workflows.Workflow, error) {
+//
+// history carries recent turns (optional) so the AI can refine the workflow
+// conversationally; only the last few are passed to stay within prompt limits.
+func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, model string, history []workflows.ConversationMessage) (*workflows.Workflow, error) {
 	opencodePath, err := missions.DetectOpencode()
 	if err != nil {
 		return nil, fmt.Errorf("opencode is not available: %w", err)
@@ -72,7 +82,7 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 	if err != nil {
 		return nil, fmt.Errorf("marshal workflow: %w", err)
 	}
-	prompt := buildAIEditPrompt(string(cur), instruction)
+	prompt := buildAIEditPrompt(string(cur), instruction, history)
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
@@ -110,8 +120,9 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 }
 
 // buildAIEditPrompt frames the workflow-editing task so opencode returns ONLY a
-// JSON workflow object.
-func buildAIEditPrompt(currentJSON, instruction string) string {
+// JSON workflow object. When history is non-empty, the last few turns are
+// included so the AI can refine the workflow conversationally.
+func buildAIEditPrompt(currentJSON, instruction string, history []workflows.ConversationMessage) string {
 	var b strings.Builder
 	b.WriteString("You are a workflow editor. You are given a workflow as JSON and an instruction. ")
 	b.WriteString("Apply the instruction and return the COMPLETE updated workflow as a single JSON object.\n\n")
@@ -122,6 +133,28 @@ func buildAIEditPrompt(currentJSON, instruction string) string {
 	b.WriteString("- Keep exactly one start node and one end node. Every node needs a unique \"id\", a \"type\", a \"name\", a \"position\" {x,y}, and a \"data\" object.\n")
 	b.WriteString("- Connections are {\"from\": nodeId, \"to\": nodeId} with optional \"fromPort\"/\"toPort\".\n")
 	b.WriteString("- Preserve existing node ids and positions unless the instruction requires changing them.\n\n")
+	// Conversational context: include the last few turns (cap to ~6 messages =
+	// 3 rounds). This lets the user say "now make the reviewer stricter"
+	// without re-explaining the workflow.
+	if len(history) > 0 {
+		// Trim to the most recent turns and drop any loading/error placeholders.
+		recent := history
+		if len(recent) > 6 {
+			recent = recent[len(recent)-6:]
+		}
+		b.WriteString("Recent conversation (for context):\n")
+		for _, m := range recent {
+			if m.IsLoading || m.IsError {
+				continue
+			}
+			label := "User"
+			if m.Sender == "ai" {
+				label = "Assistant"
+			}
+			b.WriteString(label + ": " + strings.TrimSpace(m.Content) + "\n")
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("Current workflow:\n")
 	b.WriteString(currentJSON)
 	b.WriteString("\n\nInstruction:\n")
@@ -196,9 +229,7 @@ type mcpServerInfo struct {
 }
 
 // handleMcpServersList lists the MCP servers actually configured in
-// opencode.json (the real installed ones, not the static catalog). Tools are
-// not enumerated — that needs a live MCP handshake — so the editor lets the user
-// type the tool name.
+// opencode.json (the real installed ones, not the static catalog).
 func (a *workflowsAPI) handleMcpServersList(w http.ResponseWriter, r *http.Request) {
 	cfg, err := readMcpConfig()
 	if err != nil {
@@ -219,4 +250,106 @@ func (a *workflowsAPI) handleMcpServersList(w http.ResponseWriter, r *http.Reque
 	}
 	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
 	writeJSON(w, http.StatusOK, servers)
+}
+
+// mcpToolInfo is one tool exposed by an MCP server (discovered via live handshake).
+type mcpToolInfo struct {
+	Name string `json:"name"`
+}
+
+// handleMcpServerTools discovers the tools a given MCP server exposes by doing
+// a live handshake (stdio for local, HTTP for remote). Used by the MCP node
+// editor to populate the tool dropdown in manual/aiParameterConfig mode.
+//
+// Returns an empty list (200) when discovery fails: the editor falls back to a
+// free-text input so the user can still type a tool name. This mirrors how
+// kanban's tool discovery degrades gracefully.
+func (a *workflowsAPI) handleMcpServerTools(w http.ResponseWriter, r *http.Request) {
+	serverID := r.PathValue("server")
+	if serverID == "" {
+		writeJSON(w, http.StatusOK, []mcpToolInfo{})
+		return
+	}
+	cfg, err := readMcpConfig()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []mcpToolInfo{})
+		return
+	}
+	raw, ok := cfg[serverID]
+	if !ok {
+		writeJSON(w, http.StatusOK, []mcpToolInfo{})
+		return
+	}
+	server, ok := raw.(map[string]interface{})
+	if !ok {
+		writeJSON(w, http.StatusOK, []mcpToolInfo{})
+		return
+	}
+
+	tools := discoverServerTools(r.Context(), server)
+	out := make([]mcpToolInfo, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, mcpToolInfo{Name: t})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	writeJSON(w, http.StatusOK, out)
+}
+
+// discoverServerTools runs a live MCP probe against a server config entry (as
+// parsed from opencode.json) and returns the discovered tool names. It tries
+// HTTP first when a url is present, then falls back to a stdio spawn. Errors
+// yield an empty slice — discovery is best-effort.
+func discoverServerTools(ctx context.Context, server map[string]interface{}) []string {
+	// Remote server: POST tools/list to its url.
+	if urlStr, ok := server["url"].(string); ok && urlStr != "" {
+		if tools, err := mcp.DiscoverHTTP(ctx, urlStr); err == nil {
+			return tools
+		}
+	}
+	// Local stdio server: spawn command (+args) and handshake.
+	command := mcpServerCommand(server)
+	if len(command) == 0 {
+		return nil
+	}
+	env := map[string]string{}
+	if envRaw, ok := server["env"].(map[string]interface{}); ok {
+		for k, v := range envRaw {
+			if s, ok := v.(string); ok {
+				env[k] = s
+			}
+		}
+	}
+	tools, _ := mcp.DiscoverStdio(ctx, command, env)
+	return tools
+}
+
+// mcpServerCommand extracts the command argv from an opencode.json MCP entry.
+// opencode local servers use {command: [argv...]} (array); some entries use the
+// {command: "bin", args: [...]} shape instead. Both are handled.
+func mcpServerCommand(server map[string]interface{}) []string {
+	cmdRaw, ok := server["command"]
+	if !ok {
+		return nil
+	}
+	switch v := cmdRaw.(type) {
+	case []interface{}:
+		command := make([]string, 0, len(v))
+		for _, arg := range v {
+			if s, ok := arg.(string); ok {
+				command = append(command, s)
+			}
+		}
+		return command
+	case string:
+		command := strings.Fields(v)
+		if argsRaw, ok := server["args"].([]interface{}); ok {
+			for _, arg := range argsRaw {
+				if s, ok := arg.(string); ok {
+					command = append(command, s)
+				}
+			}
+		}
+		return command
+	}
+	return nil
 }

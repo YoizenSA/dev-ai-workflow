@@ -31,6 +31,8 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	executionMode?: string
 	server?: string
 	tool?: string
+	mcpMode?: string
+	taskDescription?: string
 	flowId?: string
 	aiParams?: string
 	width?: number
@@ -40,7 +42,7 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 }
 
 // NODE_META: icon, palette title (kind), the UPPERCASE type label shown in the
-// node's meta row, and a one-line palette subtitle — mirroring cc-wf-studio.
+// node's meta row, and a one-line palette subtitle.
 export const NODE_META: Record<WorkflowNodeType, { icon: typeof Play; kind: string; type: string; desc: string }> = {
 	start: { icon: Play, kind: 'Start', type: 'START', desc: 'Workflow entry point' },
 	end: { icon: Square, kind: 'End', type: 'END', desc: 'Workflow exit point' },
@@ -106,8 +108,18 @@ function chips(d: WorkflowNodePayload): { k: string; v: string }[] {
 			return [{ k: 'branches', v: String(d.branches?.length ?? 0) }]
 		case 'skill':
 			return d.executionMode ? [{ k: 'mode', v: d.executionMode }] : []
-		case 'mcp':
-			return d.aiParams ? [{ k: 'params', v: 'AI' }] : []
+		case 'mcp': {
+			const out: { k: string; v: string }[] = []
+			const mode = d.mcpMode ?? 'aiParameterConfig'
+			const label =
+				mode === 'aiToolSelection'
+					? 'tool: AI'
+					: mode === 'manualParameterConfig'
+						? 'tool: manual'
+						: 'params: AI'
+			out.push({ k: 'mode', v: label })
+			return out
+		}
 		default:
 			return []
 	}

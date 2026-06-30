@@ -2,13 +2,12 @@
 // workflow editor whose source-of-truth is JSON on disk and whose export
 // target is opencode's native primitives (slash commands + agents + skills).
 //
-// The on-disk workflow JSON mirrors the cc-wf-studio (Claude Code Workflow
-// Studio) format so existing workflows import unchanged.
+// The on-disk workflow JSON format is stable so existing workflows import unchanged.
 package workflows
 
 import "time"
 
-// Node types, matching cc-wf-studio's NodeType enum. See workflow-definition.ts.
+// Node types. See workflow-definition.ts.
 const (
 	NodeTypeStart           = "start"
 	NodeTypeEnd             = "end"
@@ -25,17 +24,21 @@ const (
 	NodeTypeGroup           = "group"
 )
 
-// Workflow is a directed graph of nodes and connections. The JSON shape mirrors
-// cc-wf-studio's workflow.json so files round-trip between the two tools.
+// Workflow is a directed graph of nodes and connections. The JSON shape is
+// stable so workflow JSON round-trips on import/export.
 type Workflow struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Description string       `json:"description,omitempty"`
-	Version     string       `json:"version"`
-	Nodes       []Node       `json:"nodes"`
-	Connections []Connection `json:"connections"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	UpdatedAt   time.Time    `json:"updatedAt"`
+	ID                 string                `json:"id"`
+	Name               string                `json:"name"`
+	Description        string                `json:"description,omitempty"`
+	Version            string                `json:"version"`
+	Nodes              []Node                `json:"nodes"`
+	Connections        []Connection          `json:"connections"`
+	SlashCommandOptions *SlashCommandOptions `json:"slashCommandOptions,omitempty"`
+	// ConversationHistory records the AI-refinement chat for this workflow
+	// (Edit-with-AI multi-turn). Persisted with the workflow JSON.
+	ConversationHistory *ConversationHistory `json:"conversationHistory,omitempty"`
+	CreatedAt           time.Time            `json:"createdAt"`
+	UpdatedAt           time.Time            `json:"updatedAt"`
 }
 
 // Node is a single step in the graph. Type selects which fields of Data apply.
@@ -66,8 +69,8 @@ type Connection struct {
 
 // NodeData holds the per-type payload of a node. Fields are optional and only
 // the subset relevant to the node's Type is populated. JSON tags use the
-// camelCase names from cc-wf-studio's workflow-definition.ts so the formats
-// stay interchangeable.
+// camelCase names from workflow-definition.ts so the formats stay
+// interchangeable.
 type NodeData struct {
 	// common
 	Label       string `json:"label,omitempty"`
@@ -122,9 +125,22 @@ type NodeData struct {
 	// mcp
 	Server string `json:"server,omitempty"`
 	Tool   string `json:"tool,omitempty"`
+	// Mode selects how the MCP node is configured at runtime. Default (empty)
+	// is treated as MCPModeAIParameterConfig so existing workflows keep their
+	// prior behaviour (they carried AIParams).
+	//   - manualParameterConfig: server + tool + explicit params
+	//   - aiParameterConfig:     server + tool, agent fills params from AIParams
+	//   - aiToolSelection:       server only, agent picks tool at runtime from
+	//                            TaskDescription
+	McpMode string `json:"mcpMode,omitempty"`
 	// AIParams is a natural-language description of how the agent should fill the
-	// tool's parameters at runtime (cc-wf-studio's "AI Parameter Configuration").
+	// tool's parameters at runtime ("AI Parameter Configuration" feature, used by
+	// manualParameterConfig and aiParameterConfig modes).
 	AIParams string `json:"aiParams,omitempty"`
+	// TaskDescription is the natural-language task used in aiToolSelection mode:
+	// the agent queries the MCP server at runtime, selects a tool, and fills its
+	// params from this description.
+	TaskDescription string `json:"taskDescription,omitempty"`
 
 	// subAgentFlow (reference to a reusable sub-flow defined in the same file)
 	FlowID string `json:"flowId,omitempty"`
@@ -142,4 +158,69 @@ type SwitchBranch struct {
 	ID    string `json:"id,omitempty"`
 	Label string `json:"label,omitempty"`
 	Value string `json:"value,omitempty"`
+}
+
+// MCP node configuration modes. See NodeData.Mode.
+const (
+	MCPModeManualParameterConfig = "manualParameterConfig"
+	MCPModeAIParameterConfig     = "aiParameterConfig"
+	MCPModeAIToolSelection       = "aiToolSelection"
+)
+
+// SlashCommandOptions configures the exported slash command's frontmatter so
+// the generated /<workflow> command carries allowed-tools, model, hooks, etc.
+// All fields optional; only set fields are emitted to the frontmatter.
+type SlashCommandOptions struct {
+	ArgumentHint          string         `json:"argumentHint,omitempty"`          // "[arg1] [arg2] | [alt1]"
+	AllowedTools          string         `json:"allowedTools,omitempty"`          // comma-separated
+	Model                 string         `json:"model,omitempty"`                 // default|sonnet|opus|haiku|inherit
+	Context               string         `json:"context,omitempty"`               // default|fork
+	DisableModelInvocation bool          `json:"disableModelInvocation,omitempty"` // emit disable-model-invocation: true
+	Hooks                 *WorkflowHooks `json:"hooks,omitempty"`
+}
+
+// WorkflowHooks is the three Claude Code hook buckets. Each holds a list of
+// HookEntry keyed by the hook type (PreToolUse/PostToolUse/Stop).
+type WorkflowHooks struct {
+	PreToolUse  []HookEntry `json:"PreToolUse,omitempty"`
+	PostToolUse []HookEntry `json:"PostToolUse,omitempty"`
+	Stop        []HookEntry `json:"Stop,omitempty"`
+}
+
+// HookEntry matches Claude Code's hook entry: an optional matcher and the
+// actions to run when it fires.
+type HookEntry struct {
+	Matcher string      `json:"matcher,omitempty"`
+	Hooks   []HookAction `json:"hooks"`
+}
+
+// HookAction is one runnable hook action.
+type HookAction struct {
+	Type string `json:"type"` // command | prompt
+	// Command is the shell command for type=="command".
+	Command string `json:"command,omitempty"`
+	// Once, when true, runs the action only once per session.
+	Once bool `json:"once,omitempty"`
+}
+
+// ConversationHistory records the AI-refinement chat (Edit-with-AI multi-turn)
+// for a workflow. Persisted with the workflow JSON so the conversation survives
+// reloads.
+type ConversationHistory struct {
+	SchemaVersion    string               `json:"schemaVersion"`
+	Messages         []ConversationMessage `json:"messages"`
+	CurrentIteration int                  `json:"currentIteration"`
+	MaxIterations    int                  `json:"maxIterations"`
+	CreatedAt        time.Time            `json:"createdAt"`
+	UpdatedAt        time.Time            `json:"updatedAt"`
+}
+
+// ConversationMessage is one turn in the refinement chat.
+type ConversationMessage struct {
+	ID        string    `json:"id"`
+	Sender    string    `json:"sender"` // user | ai
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
+	IsLoading bool      `json:"isLoading,omitempty"`
+	IsError   bool      `json:"isError,omitempty"`
 }

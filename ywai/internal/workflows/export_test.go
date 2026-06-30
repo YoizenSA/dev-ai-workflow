@@ -8,7 +8,7 @@ import (
 )
 
 // exportFixture builds a small but representative workflow exercising the main
-// node types, modeled on cc-wf-studio's daily-task-workflow.
+// node types.
 func exportFixture() *Workflow {
 	return &Workflow{
 		Name:        "daily-task",
@@ -189,7 +189,7 @@ func TestSanitizeSlug(t *testing.T) {
 }
 
 func TestImportDailyTaskWorkflow(t *testing.T) {
-	// Minimal cc-wf-studio-style JSON without a name to exercise derivation.
+	// Minimal workflow JSON without a name to exercise derivation.
 	raw := []byte(`{
 		"id": "workflow-123",
 		"version": "1.0.0",

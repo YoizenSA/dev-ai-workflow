@@ -601,8 +601,8 @@ export interface OrchestratorProfilesResponse {
 }
 
 // ─── Workflow Studio Types ─────────────────────────────────────────────────
-// Mirrors internal/workflows/model.go. JSON shapes are compatible with
-// cc-wf-studio's workflow.json so files round-trip between the two tools.
+// Mirrors internal/workflows/model.go. The JSON shape is stable so workflow
+// JSON round-trips on import/export.
 
 export type WorkflowNodeType =
 	| 'start'
@@ -689,6 +689,13 @@ export interface WorkflowNodeData {
 	// mcp
 	server?: string;
 	tool?: string;
+	/** MCP configuration mode. Empty = aiParameterConfig (backward compat).
+	 * NOTE: the Go field is McpMode to avoid clashing with the subAgent Mode;
+	 * the JSON tag is "mode" so it round-trips on import/export, but on the TS
+	 * side we keep mcpMode to stay type-safe. */
+	mcpMode?: 'manualParameterConfig' | 'aiParameterConfig' | 'aiToolSelection';
+	/** aiToolSelection mode: natural-language task; agent picks the tool at runtime. */
+	taskDescription?: string;
 	aiParams?: string;
 
 	// subAgentFlow
@@ -719,6 +726,8 @@ export interface Workflow {
 	version: string;
 	nodes: WorkflowNode[];
 	connections: WorkflowConnection[];
+	slashCommandOptions?: WorkflowSlashCommandOptions;
+	conversationHistory?: WorkflowConversationHistory;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -752,10 +761,72 @@ export interface WorkflowExportArtifact {
 export interface WorkflowExportPlan {
 	workflowName: string;
 	files: WorkflowExportArtifact[];
+	/** Rough orchestrator prompt size (chars/4 heuristic). 0 when not computed. */
+	estimatedTokens: number;
 	dryRun: boolean;
+}
+
+// ─── Slash command options (A1) ────────────────────────────────────────────
+// All optional; only set fields are emitted to the exported slash command
+// frontmatter.
+
+export interface WorkflowSlashCommandOptions {
+	argumentHint?: string;
+	allowedTools?: string;
+	model?: 'default' | 'sonnet' | 'opus' | 'haiku' | 'inherit';
+	context?: 'default' | 'fork';
+	disableModelInvocation?: boolean;
+	hooks?: WorkflowHooks;
+}
+
+export interface WorkflowHooks {
+	PreToolUse?: WorkflowHookEntry[];
+	PostToolUse?: WorkflowHookEntry[];
+	Stop?: WorkflowHookEntry[];
+}
+
+export interface WorkflowHookEntry {
+	matcher?: string;
+	hooks: WorkflowHookAction[];
+}
+
+export interface WorkflowHookAction {
+	type: 'command' | 'prompt';
+	command?: string;
+	once?: boolean;
+}
+
+// ─── Conversation history (D1) ─────────────────────────────────────────────
+// AI-refinement chat (Edit-with-AI multi-turn). Persisted with the workflow.
+
+export interface WorkflowConversationHistory {
+	schemaVersion: string;
+	messages: WorkflowConversationMessage[];
+	currentIteration: number;
+	maxIterations: number;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface WorkflowConversationMessage {
+	id: string;
+	sender: 'user' | 'ai';
+	content: string;
+	timestamp: string;
+	isLoading?: boolean;
+	isError?: boolean;
 }
 
 export interface WorkflowImportResult {
 	workflow: Workflow;
 	warnings?: string[];
+}
+
+// ─── Run (A3) ──────────────────────────────────────────────────────────────
+// One line of live output from a workflow run, streamed over the WebSocket hub.
+
+export interface WorkflowRunLine {
+	stream: 'stdout' | 'stderr';
+	text: string;
+	ts: number;
 }

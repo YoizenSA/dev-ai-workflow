@@ -488,24 +488,28 @@
 }
 
 /* Container for a rendered Mermaid SVG diagram. The SVG comes from mermaid's
-   dark theme, so we only provide framing + scroll here. */
+   dark theme, so we only provide framing + scroll here. The diagram renders at
+   its natural size (useMaxWidth is off); the container scrolls when it exceeds
+   the viewport rather than shrinking the diagram to an unreadable thumbnail. */
 .mermaid-preview {
 	background: var(--surface-soft);
 	border: 1px solid var(--panel-border);
 	border-radius: var(--radius);
-	padding: var(--space-3);
-	min-height: 120px;
-	max-height: 60vh;
+	padding: var(--space-4);
+	min-height: 200px;
+	max-height: 70vh;
 	overflow: auto;
 	display: flex;
-	justify-content: center;
-	align-items: center;
+	justify-content: flex-start;
+	align-items: flex-start;
 }
 
-/* The SVG fills its container width; mermaid sets useMaxWidth so it scales. */
+/* Render the SVG at natural size; it scrolls within the container when larger. */
 .mermaid-preview > svg {
-	max-width: 100%;
 	height: auto;
+	width: auto;
+	max-width: none;
+	flex-shrink: 0;
 }
 
 /* Error fallback: show the message + the raw source as a <pre>. */
@@ -568,4 +572,405 @@
 	align-self: center;
 	margin-left: auto;
 	font-family: var(--font-mono);
+}
+
+/* ─── MCP mode radio cards ────────────────────────────────────────────── */
+.wf-radio-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.wf-radio-card {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px;
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	cursor: pointer;
+	transition: border-color 0.12s, background 0.12s;
+}
+.wf-radio-card:hover {
+	border-color: var(--yz-primary-1);
+}
+.wf-radio-card.is-active {
+	border-color: var(--yz-primary-1);
+	background: rgba(var(--yz-primary-1-rgb), 0.1);
+}
+.wf-radio-card input[type='radio'] {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+.wf-radio-card-label {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+.wf-radio-card-hint {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+}
+
+/* ─── Run output panel ────────────────────────────────────────────────── */
+.wf-run-panel {
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+	/* Narrower than the commentary panel so the two never overlap in the right
+	   column. Both are fixed-position; keeping widths distinct avoids a clash. */
+	width: min(520px, 88vw);
+	max-height: 35vh;
+	display: flex;
+	flex-direction: column;
+	background: var(--panel-bg, var(--bg-elevated, #111));
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-lift);
+	z-index: 50;
+	overflow: hidden;
+}
+
+.wf-run-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--panel-border);
+	background: rgba(var(--yz-primary-1-rgb), 0.06);
+}
+
+.wf-run-panel-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.wf-run-live {
+	font-size: var(--text-xs);
+	color: var(--yz-primary-1);
+	animation: wf-run-pulse 1.4s ease-in-out infinite;
+}
+@keyframes wf-run-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.35; }
+}
+
+.wf-run-panel-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px 12px;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	line-height: 1.5;
+}
+
+.wf-run-line {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.wf-run-stderr {
+	color: var(--danger, #e06c75);
+}
+.wf-run-stdout {
+	color: var(--text, #d4d4d4);
+}
+
+/* The Run button pulses while a run is in flight. */
+.btn-icon.is-running {
+	color: var(--yz-primary-1);
+	animation: wf-run-pulse 1.2s ease-in-out infinite;
+}
+
+/* Checkbox row for option modals (slash command options, etc.). */
+.wf-check-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-sm);
+	cursor: pointer;
+}
+.wf-check-row input[type='checkbox'] {
+	cursor: pointer;
+}
+
+/* ─── MCP sync modal lists ────────────────────────────────────────────── */
+.wf-sync-count {
+	color: var(--text-muted);
+	font-weight: 400;
+}
+.wf-sync-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 160px;
+	overflow-y: auto;
+}
+.wf-sync-list li {
+	font-size: var(--text-xs);
+	padding: 3px 8px;
+	border-radius: var(--radius);
+	border-left: 3px solid var(--panel-border);
+}
+.wf-sync-add li {
+	border-left-color: var(--yz-primary-1);
+	background: rgba(var(--yz-primary-1-rgb), 0.08);
+}
+.wf-sync-skip li {
+	color: var(--text-muted);
+}
+.wf-sync-missing li {
+	border-left-color: var(--danger, #e06c75);
+	background: rgba(255, 80, 80, 0.08);
+}
+
+/* ─── Onboarding tour (driver.js) ────────────────────────────────────────
+   driver.js ships a light theme hardcoded (#fff bg, #2d2d2d text) and exposes
+   no CSS variables, so we override its real selectors (.driver-popover-title,
+   .driver-popover-footer-btn, …) with the app's semantic tokens so the popover
+   matches the dark/glass UI and stays readable. */
+.ywai-tour-popover.driver-popover {
+	background-color: var(--surface-strong, #161616);
+	color: var(--text, #f3f5fb);
+	border: 1px solid var(--panel-border-strong, #3a3a3a);
+	border-radius: var(--radius, 8px);
+	box-shadow: var(--shadow-lift, 0 6px 18px rgba(0, 0, 0, 0.4));
+}
+.ywai-tour-popover .driver-popover-title {
+	color: var(--text, #f3f5fb);
+	font-weight: 600;
+}
+.ywai-tour-popover .driver-popover-description {
+	color: var(--text-muted, #9aa3b2);
+}
+.ywai-tour-popover .driver-popover-progress-text {
+	color: var(--text-muted, #9aa3b2);
+}
+.ywai-tour-popover .driver-popover-close-btn {
+	color: var(--text-muted, #9aa3b2);
+}
+.ywai-tour-popover .driver-popover-close-btn:hover,
+.ywai-tour-popover .driver-popover-close-btn:focus {
+	color: var(--text, #f3f5fb);
+}
+.ywai-tour-popover .driver-popover-footer-btn {
+	background-color: var(--surface-soft, rgba(255, 255, 255, 0.06));
+	color: var(--text, #f3f5fb);
+	border: 1px solid var(--panel-border, #2a2a2a);
+	border-radius: var(--radius, 6px);
+}
+.ywai-tour-popover .driver-popover-footer-btn:hover,
+.ywai-tour-popover .driver-popover-footer-btn:focus {
+	background-color: var(--surface-hover, rgba(255, 255, 255, 0.12));
+}
+/* The arrow points at the highlighted element; match the popover bg. */
+.ywai-tour-popover .driver-popover-arrow {
+	border-color: var(--surface-strong, #161616);
+}
+
+/* ─── Commentary panel (live run feed) ────────────────────────────────── */
+.wf-commentary {
+	position: fixed;
+	right: 16px;
+	top: 80px;
+	width: min(380px, 92vw);
+	/* Leave room for the run output panel at the bottom (35vh + 16px margin). */
+	max-height: calc(65vh - 96px);
+	display: flex;
+	flex-direction: column;
+	background: var(--panel-bg, var(--bg-elevated, #111));
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-lift);
+	z-index: 49;
+	overflow: hidden;
+}
+
+.wf-commentary-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--panel-border);
+	background: rgba(var(--yz-primary-2-rgb), 0.1);
+}
+
+.wf-commentary-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.wf-commentary-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.wf-commentary-entry {
+	display: flex;
+	gap: 6px;
+	align-items: flex-start;
+	font-size: var(--text-xs);
+	line-height: 1.45;
+}
+
+.wf-ce-tag {
+	flex-shrink: 0;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--panel-border);
+	color: var(--text-muted);
+	min-width: 42px;
+	text-align: center;
+}
+
+.wf-ce-text {
+	color: var(--text, #d4d4d4);
+}
+
+.wf-ce-tool_use .wf-ce-tag {
+	background: rgba(var(--yz-primary-1-rgb), 0.2);
+	color: var(--yz-primary-1);
+}
+.wf-ce-summary .wf-ce-tag {
+	background: rgba(46, 160, 67, 0.2);
+	color: #2ea043;
+}
+.wf-ce-error .wf-ce-tag {
+	background: rgba(248, 81, 73, 0.2);
+	color: var(--danger, #e06c75);
+}
+.wf-ce-error .wf-ce-text {
+	color: var(--danger, #e06c75);
+}
+
+.wf-commentary-typing {
+	font-size: var(--text-sm);
+	color: var(--yz-primary-1);
+	animation: wf-run-pulse 1s ease-in-out infinite;
+	padding: 2px 4px;
+}
+
+/* ─── Refinement chat panel (multi-turn Edit-with-AI) ─────────────────── */
+.wf-chat-panel {
+	position: fixed;
+	right: 16px;
+	top: 80px;
+	width: min(420px, 92vw);
+	/* Leave room for the run output panel at the bottom. */
+	max-height: calc(65vh - 96px);
+	display: flex;
+	flex-direction: column;
+	background: var(--panel-bg, var(--bg-elevated, #111));
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-lift);
+	z-index: 51;
+	overflow: hidden;
+}
+
+.wf-chat-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--panel-border);
+	background: rgba(var(--yz-primary-1-rgb), 0.08);
+}
+.wf-chat-title {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+.wf-chat-count {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	margin-left: auto;
+}
+.wf-chat-header .btn-icon {
+	margin-left: 0;
+}
+
+.wf-chat-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.wf-chat-msg {
+	display: flex;
+}
+.wf-chat-msg.wf-chat-user {
+	justify-content: flex-end;
+}
+.wf-chat-msg.wf-chat-ai {
+	justify-content: flex-start;
+}
+
+.wf-chat-bubble {
+	max-width: 85%;
+	padding: 6px 10px;
+	border-radius: var(--radius);
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.wf-chat-user .wf-chat-bubble {
+	background: rgba(var(--yz-primary-1-rgb), 0.2);
+	color: var(--text, #fff);
+}
+.wf-chat-ai .wf-chat-bubble {
+	background: var(--panel-border);
+	color: var(--text, #d4d4d4);
+}
+.wf-chat-typing {
+	color: var(--yz-primary-1);
+	font-style: italic;
+}
+
+.wf-chat-input-row {
+	display: flex;
+	align-items: flex-end;
+	gap: 6px;
+	padding: 8px 12px;
+	border-top: 1px solid var(--panel-border);
+}
+.wf-chat-input {
+	flex: 1;
+	min-height: 38px;
+	resize: none;
+}
+
+/* ─── Token estimate badge (export preview) ───────────────────────────── */
+.wf-token-hint {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	margin: 0 0 8px 0;
+}
+.wf-token-warn {
+	color: var(--warning, #d29922);
+	font-weight: 600;
+}
+
+/* ─── Group members list ──────────────────────────────────────────────── */
+.wf-group-child-type {
+	color: var(--text-muted);
+	font-family: var(--font-sans);
 }

@@ -297,7 +297,7 @@
     },
     {
       "from": "gate",
-      "to": "end",
+      "to": "fe",
       "fromPort": "false"
     },
     {
@@ -315,20 +315,6 @@
     {
       "from": "qaflow",
       "to": "rev"
-    },
-    {
-      "from": "rev",
-      "to": "gate"
-    },
-    {
-      "from": "gate",
-      "to": "end",
-      "fromPort": "true"
-    },
-    {
-      "from": "gate",
-      "to": "end",
-      "fromPort": "false"
     }
   ],
   "createdAt": "2026-06-29T17:00:00Z",

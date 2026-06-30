@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// ImportOptions controls how raw cc-wf-studio JSON is normalized into a ywai
+// ImportOptions controls how raw workflow JSON is normalized into a ywai
 // Workflow during import.
 type ImportOptions struct {
 	Name string `json:"name,omitempty"` // override name; defaults to source name
@@ -19,10 +19,10 @@ type ImportResult struct {
 	Warnings []string  `json:"warnings,omitempty"`
 }
 
-// Import parses cc-wf-studio workflow JSON into a ywai Workflow. cc-wf-studio's
-// schema and ywai's model.go share the same field names (we mirrored them), so
-// in most cases this is a straight unmarshal plus normalization. We accept the
-// legacy "branch" node type and a few field aliases for forward-compat.
+// Import parses workflow JSON into a ywai Workflow. The schema and ywai's
+// model.go share the same field names (we mirrored them), so in most cases
+// this is a straight unmarshal plus normalization. We accept the legacy
+// "branch" node type and a few field aliases for forward-compat.
 func Import(raw []byte, opts ImportOptions) (*ImportResult, error) {
 	var wf Workflow
 	if err := json.Unmarshal(raw, &wf); err != nil {
@@ -66,10 +66,10 @@ func Import(raw []byte, opts ImportOptions) (*ImportResult, error) {
 			wf.Nodes[i].Type = NodeTypeSwitch
 			warnings = append(warnings, fmt.Sprintf("node %q: legacy 'branch' type converted to 'switch'", wf.Nodes[i].ID))
 		}
-		// cc-wf-studio uses "label" in prompt nodes; nothing to remap here.
+		// Prompt nodes carry "label"; nothing to remap here.
 	}
 
-	// Ensure the required graph scaffolding exists. cc-wf-studio always emits
+	// Ensure the required graph scaffolding exists. The format always emits
 	// start/end nodes; if absent we add them so the workflow is immediately
 	// exportable.
 	ensureEndpoints(&wf)

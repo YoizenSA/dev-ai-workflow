@@ -44,26 +44,70 @@ func orchestratorBody(wf *Workflow, subAgentIDs map[string]string) string {
 }
 
 // renderMermaid produces a Mermaid flowchart (LR) of the workflow graph.
-// Node ids are sanitized for Mermaid (no spaces/special chars).
+// Group nodes render as Mermaid `subgraph` blocks containing their children
+// (nodes whose ParentID points at the group); top-level nodes render at the
+// flowchart root. Node ids are sanitized for Mermaid (no spaces/special chars).
 func renderMermaid(wf *Workflow, subAgentIDs map[string]string) string {
 	var b strings.Builder
 	b.WriteString("flowchart LR\n")
 
-	byID := wf.nodeByID()
 	mermaidID := make(map[string]string, len(wf.Nodes))
-
-	// Emit node declarations with labels.
 	for i := range wf.Nodes {
 		n := &wf.Nodes[i]
-		mid := mermaidName(n.ID, i)
-		mermaidID[n.ID] = mid
-		label := mermaidLabel(n, subAgentIDs)
-		shape := mermaidShape(n.Type)
-		fmt.Fprintf(&b, "  %s%s%s\n", mid, shape.open, quoteMermaid(label, shape.open, shape.close))
-		_ = byID
+		mermaidID[n.ID] = mermaidName(n.ID, i)
 	}
 
-	// Emit edges.
+	// emitNode writes a non-group node declaration.
+	emitNode := func(n *Node, indent string) {
+		mid := mermaidID[n.ID]
+		label := mermaidLabel(n, subAgentIDs)
+		shape := mermaidShape(n.Type)
+		fmt.Fprintf(&b, "%s%s%s%s\n", indent, mid, shape.open, quoteMermaid(label, shape.open, shape.close))
+	}
+
+	hasEmptyGroup := false
+
+	// Top-level nodes (no parent, not a group themselves).
+	for i := range wf.Nodes {
+		n := &wf.Nodes[i]
+		if n.ParentID != "" || n.Type == NodeTypeGroup {
+			continue
+		}
+		emitNode(n, "  ")
+	}
+
+	// Each group as a subgraph with its children nested inside.
+	for i := range wf.Nodes {
+		n := &wf.Nodes[i]
+		if n.Type != NodeTypeGroup {
+			continue
+		}
+		gid := mermaidID[n.ID]
+		glabel := mermaidLabel(n, subAgentIDs)
+		// subgraph header: `subgraph <id> ["<label>"]`. Escape quotes in label.
+		glabel = strings.ReplaceAll(glabel, `"`, `'`)
+		fmt.Fprintf(&b, "  subgraph %s [\"%s\"]\n", gid, glabel)
+		children := 0
+		for j := range wf.Nodes {
+			c := &wf.Nodes[j]
+			if c.ParentID == n.ID && c.Type != NodeTypeGroup {
+				emitNode(c, "    ")
+				children++
+			}
+		}
+		if children == 0 {
+			// Mermaid needs a member to render the subgraph box.
+			fmt.Fprintf(&b, "    %s_empty[ ]:::hidden\n", gid)
+			hasEmptyGroup = true
+		}
+		b.WriteString("  end\n")
+	}
+
+	if hasEmptyGroup {
+		b.WriteString("  classDef hidden display:none;\n")
+	}
+
+	// Edges last (Mermaid resolves ids declared anywhere).
 	for _, c := range wf.Connections {
 		from, ok1 := mermaidID[c.From]
 		to, ok2 := mermaidID[c.To]
@@ -262,11 +306,7 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		}
 		return fmt.Sprintf("**%s skill `%s`** using the `skill` tool.", strings.Title(mode), n.Data.Name)
 	case NodeTypeMCP:
-		s := fmt.Sprintf("**Call MCP tool** `%s/%s`.", n.Data.Server, n.Data.Tool)
-		if p := strings.TrimSpace(n.Data.AIParams); p != "" {
-			s += " Infer its parameters from: " + p
-		}
-		return s
+		return mcpStep(n)
 	case NodeTypeSubAgentFlow:
 		// A sub-workflow is invoked as its exported slash command.
 		return fmt.Sprintf("**Run the `/%s` sub-workflow** and wait for it to finish.", n.Data.FlowID)
@@ -282,4 +322,47 @@ func quoteInline(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, "\n", " ")
 	return "\"" + s + "\""
+}
+
+// mcpStep renders a single MCP node's execution instruction based on its mode,
+// in one of three forms:
+//   - manualParameterConfig / aiParameterConfig: a specific tool is pinned; the
+//     agent calls it directly (params inferred from AIParams when present).
+//   - aiToolSelection: only the server is pinned; the agent must query the
+//     server at runtime (tools/list), pick the best tool for the task, and fill
+//     its parameters from the natural-language TaskDescription.
+//
+// Empty Mode defaults to aiParameterConfig so existing workflows keep working.
+func mcpStep(n *Node) string {
+	mode := n.Data.McpMode
+	if mode == "" {
+		mode = MCPModeAIParameterConfig
+	}
+	server := strings.TrimSpace(n.Data.Server)
+	if server == "" {
+		server = "<unspecified>"
+	}
+	switch mode {
+	case MCPModeAIToolSelection:
+		task := strings.TrimSpace(n.Data.TaskDescription)
+		if task == "" {
+			task = "(no task description provided)"
+		}
+		return fmt.Sprintf(
+			"**MCP (AI tool selection) — server `%s`.** At runtime, query the `%s` MCP "+
+				"server via `tools/list`, select the tool that best matches the task, and "+
+				"fill its parameters from this task description:\n\n    %s",
+			server, server, quoteInline(task),
+		)
+	default: // manualParameterConfig | aiParameterConfig
+		tool := strings.TrimSpace(n.Data.Tool)
+		if tool == "" {
+			tool = "<unspecified>"
+		}
+		s := fmt.Sprintf("**Call MCP tool** `%s/%s`.", server, tool)
+		if p := strings.TrimSpace(n.Data.AIParams); p != "" {
+			s += " Infer its parameters from: " + p
+		}
+		return s
+	}
 }
