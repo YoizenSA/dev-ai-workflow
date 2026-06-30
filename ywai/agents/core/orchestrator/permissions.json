@@ -17,6 +17,5 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "ado": "deny",
   "mcp": "allow"
 }

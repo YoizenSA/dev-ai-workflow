@@ -241,6 +241,9 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 			writeWorkflowsError(w, http.StatusInternalServerError, err)
 			return
 		}
+		// Preview sub-flow artifacts too so the user sees what would be written.
+		previewed := map[string]bool{name: true}
+		previewSubFlows(a.store, exporter, wf, plan, previewed)
 		writeJSON(w, http.StatusOK, plan)
 		return
 	}
@@ -250,7 +253,69 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	// Recursively export any sub-workflows referenced by subAgentFlow nodes.
+	// Without this, the orchestrator's "Run the /<flowId> sub-workflow" step
+	// points at a command that was never written and fails at runtime.
+	exported := map[string]bool{name: true}
+	exportSubFlows(a.store, exporter, wf, plan, exported)
+
 	writeJSON(w, http.StatusOK, plan)
+}
+
+// previewSubFlows is the dry-run counterpart of exportSubFlows: it plans (but
+// does not write) every referenced sub-flow so the preview shows them.
+func previewSubFlows(store *workflows.Store, exporter *workflows.Exporter, wf *workflows.Workflow, plan *workflows.ExportPlan, previewed map[string]bool) {
+	for _, n := range wf.Nodes {
+		if n.Type != workflows.NodeTypeSubAgentFlow {
+			continue
+		}
+		flowID := n.Data.FlowID
+		if flowID == "" || previewed[flowID] {
+			continue
+		}
+		previewed[flowID] = true
+		sub, err := store.Load(flowID)
+		if err != nil {
+			continue
+		}
+		subPlan, _, err := exporter.Plan(sub)
+		if err != nil {
+			continue
+		}
+		plan.Files = append(plan.Files, subPlan.Files...)
+		previewSubFlows(store, exporter, sub, plan, previewed)
+	}
+}
+
+// exportSubFlows recursively exports every subAgentFlow referenced by wf. Each
+// subflow is loaded from the store and applied with the same exporter/target so
+// its slash command + agents land on disk. Already-exported names are tracked
+// to avoid infinite loops on cyclic sub-flow references. The parent plan's
+// Files slice is extended with the subflow artifacts so the UI shows them.
+func exportSubFlows(store *workflows.Store, exporter *workflows.Exporter, wf *workflows.Workflow, plan *workflows.ExportPlan, exported map[string]bool) {
+	for _, n := range wf.Nodes {
+		if n.Type != workflows.NodeTypeSubAgentFlow {
+			continue
+		}
+		flowID := n.Data.FlowID
+		if flowID == "" || exported[flowID] {
+			continue
+		}
+		exported[flowID] = true
+		sub, err := store.Load(flowID)
+		if err != nil {
+			continue // sub-flow not on disk; skip silently (caller can import it)
+		}
+		subPlan, err := exporter.Apply(sub)
+		if err != nil {
+			continue
+		}
+		plan.Files = append(plan.Files, subPlan.Files...)
+		// Recurse into the subflow's own sub-flow references (one level of
+		// nesting is common; the exported map guards against cycles).
+		exportSubFlows(store, exporter, sub, plan, exported)
+	}
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────

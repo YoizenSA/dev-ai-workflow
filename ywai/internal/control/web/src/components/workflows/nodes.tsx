@@ -28,6 +28,7 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	mode?: string
 	tools?: string
 	agentType?: string
+	delegateTo?: string
 	executionMode?: string
 	server?: string
 	tool?: string

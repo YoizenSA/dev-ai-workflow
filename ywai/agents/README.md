@@ -142,7 +142,6 @@ Keys follow a canonical order for consistency:
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "ado": "allow",
   "mcp": "allow"
 }
 ```

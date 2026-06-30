@@ -16,7 +16,6 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "ado": "allow",
   "codegraph_*": "allow",
   "context7_*": "allow",
   "engram_mem_save": "deny",

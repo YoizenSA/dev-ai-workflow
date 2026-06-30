@@ -112,10 +112,10 @@ var customMcpCatalog = []McpCatalogEntry{
 		Icon:        "COD",
 		Popular:     true,
 		Type:        "local",
-		Command:     []string{"codegraph", "mcp"},
-		InstallCmd:  "go install github.com/nahuelyoizen/codegraph/cmd/codegraph@latest",
+		Command:     []string{"codegraph", "serve", "--mcp"},
+		InstallCmd:  "npm i -g @colbymchenry/codegraph",
 		Tools:       []string{"codegraph-search", "codegraph-node", "codegraph-callers", "codegraph-callees", "codegraph-trace", "codegraph-impact", "codegraph-context", "codegraph-explore", "codegraph-files", "codegraph-status"},
-		Docs:        "https://github.com/nahuelyoizen/codegraph",
+		Docs:        "https://github.com/colbymchenry/codegraph",
 	},
 	{
 		ID:          "git",

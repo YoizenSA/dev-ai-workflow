@@ -158,7 +158,6 @@ type agentOption struct {
 type TUIResult struct {
 	Agent           string
 	MCP             bool
-	ADO             bool
 	GlobalOnly      bool
 	OverwriteAgents bool
 	Preset          string
@@ -202,10 +201,8 @@ type Model struct {
 	personaIdx    int
 	autostart     bool
 
-	// MCP & ADO selection
+	// MCP selection
 	installMicrosoftLearnMCP bool
-	installADO               bool
-	mcpCursor                int // 0 = MCP, 1 = ADO
 
 	// Overwrite existing profiles
 	overwriteAgents bool
@@ -270,7 +267,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		personaIdx:               personaIdx,
 		autostart:                defaults.Autostart,
 		installMicrosoftLearnMCP: defaults.MCP,
-		installADO:               defaults.ADO,
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
@@ -459,7 +455,7 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	case stepOptions:
 		if m.showGroupOptions {
 			m.toggleGroup()
-		} else if m.shouldShowMCPStep() || m.shouldShowADOStep() {
+		} else if m.shouldShowMCPStep() {
 			m.step = stepMCP
 		} else {
 			m.step = stepConfirm
@@ -504,9 +500,7 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 			}
 		}
 	case stepMCP:
-		if m.mcpCursor > 0 {
-			m.mcpCursor--
-		}
+		// Single MCP toggle; nothing to navigate up/down.
 	}
 	return m, nil
 }
@@ -534,16 +528,7 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 			}
 		}
 	case stepMCP:
-		maxCursor := 0
-		if m.shouldShowMCPStep() {
-			maxCursor++
-		}
-		if m.shouldShowADOStep() {
-			maxCursor++
-		}
-		if m.mcpCursor < maxCursor-1 {
-			m.mcpCursor++
-		}
+		// Single MCP toggle; nothing to navigate up/down.
 	}
 	return m, nil
 }
@@ -573,18 +558,8 @@ func (m *Model) handleRight() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) toggleCurrentMCP() {
-	showMCP := m.shouldShowMCPStep()
-	showADO := m.shouldShowADOStep()
-	if showMCP && showADO {
-		if m.mcpCursor == 0 {
-			m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-		} else {
-			m.installADO = !m.installADO
-		}
-	} else if showMCP {
+	if m.shouldShowMCPStep() {
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-	} else if showADO {
-		m.installADO = !m.installADO
 	}
 }
 
@@ -621,23 +596,6 @@ func (m *Model) shouldShowMCPStep() bool {
 	if m.selectedAgent == "all" {
 		for _, a := range m.agents {
 			if a.Name == "opencode" || a.Name == "kilocode" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (m *Model) shouldShowADOStep() bool {
-	if m.selectedAgent == "" {
-		return false
-	}
-	if m.selectedAgent == "opencode" || m.selectedAgent == "kilocode" || m.selectedAgent == "pi" {
-		return true
-	}
-	if m.selectedAgent == "all" {
-		for _, a := range m.agents {
-			if a.Name == "opencode" || a.Name == "kilocode" || a.Name == "pi" {
 				return true
 			}
 		}
@@ -756,7 +714,7 @@ func (m *Model) renderBreadcrumbs() string {
 	var filteredLabels []string
 	var filteredSteps []step
 	for i, label := range labels {
-		if steps[i] == stepMCP && !m.shouldShowMCPStep() && !m.shouldShowADOStep() {
+		if steps[i] == stepMCP && !m.shouldShowMCPStep() {
 			continue
 		}
 		if steps[i] == stepOptions && m.quickInstall {
@@ -1100,7 +1058,7 @@ func (m *Model) viewOptions() string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MCP/ADO view
+// MCP view
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (m *Model) viewMCP() string {
@@ -1112,44 +1070,15 @@ func (m *Model) viewMCP() string {
 
 	b.WriteString("  Select plugins to install:\n\n")
 
-	showMCP := m.shouldShowMCPStep()
-	showADO := m.shouldShowADOStep()
-
-	if showMCP {
-		isCursor := m.mcpCursor == 0
-		cursor := "  "
-		if isCursor {
-			cursor = activeStyle.Render(">")
-		}
+	if m.shouldShowMCPStep() {
+		cursor := activeStyle.Render(">")
 
 		checkbox := dimStyle.Render("[ ]")
 		if m.installMicrosoftLearnMCP {
 			checkbox = checkStyle.Render("[✓]")
 		}
-		name := itemStyle.Render("Microsoft Learn MCP")
-		if isCursor {
-			name = activeStyle.Render("Microsoft Learn MCP")
-		}
+		name := activeStyle.Render("Microsoft Learn MCP")
 		desc := descStyle.Render("  Access to official Microsoft documentation")
-		b.WriteString(fmt.Sprintf("  %s %s %s%s\n", cursor, checkbox, name, desc))
-	}
-
-	if showADO {
-		isCursor := m.mcpCursor == 1
-		cursor := "  "
-		if isCursor {
-			cursor = activeStyle.Render(">")
-		}
-
-		checkbox := dimStyle.Render("[ ]")
-		if m.installADO {
-			checkbox = checkStyle.Render("[✓]")
-		}
-		name := itemStyle.Render("Azure DevOps Plugin")
-		if isCursor {
-			name = activeStyle.Render("Azure DevOps Plugin")
-		}
-		desc := descStyle.Render("  Azure DevOps integration (boards, PRs, pipelines)")
 		b.WriteString(fmt.Sprintf("  %s %s %s%s\n", cursor, checkbox, name, desc))
 	}
 
@@ -1231,14 +1160,6 @@ func (m *Model) viewConfirm() string {
 			mcpLabel = "yes"
 		}
 		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
-	}
-
-	if m.shouldShowADOStep() {
-		adoLabel := "no"
-		if m.installADO {
-			adoLabel = "yes"
-		}
-		rows = append(rows, [2]string{"Azure DevOps Plugin", adoLabel})
 	}
 
 	// Find max label width for alignment
@@ -1362,11 +1283,6 @@ func (m *Model) InstallMicrosoftLearnMCP() bool {
 	return m.installMicrosoftLearnMCP
 }
 
-// InstallADO returns whether ADO should be installed.
-func (m *Model) InstallADO() bool {
-	return m.installADO
-}
-
 // GlobalOnly returns whether global-only mode is enabled.
 func (m *Model) GlobalOnly() bool {
 	return m.globalOnly
@@ -1381,7 +1297,6 @@ func (m *Model) Result() TUIResult {
 	return TUIResult{
 		Agent:           m.selectedAgent,
 		MCP:             m.installMicrosoftLearnMCP,
-		ADO:             m.installADO,
 		GlobalOnly:      m.globalOnly,
 		OverwriteAgents: m.overwriteAgents,
 		Preset:          presetChoices[m.presetIdx],

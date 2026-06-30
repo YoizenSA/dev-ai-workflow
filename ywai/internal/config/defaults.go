@@ -16,7 +16,6 @@ type TUIDefaults struct {
 	SDDMode    string   `json:"sdd_mode"`
 	Persona    string   `json:"persona"`
 	MCP        bool     `json:"mcp"`
-	ADO        bool     `json:"ado"`
 	Autostart  bool     `json:"autostart"`
 	Groups     []string `json:"groups"`
 }
@@ -99,7 +98,6 @@ func BuiltInDefaults() *TUIDefaults {
 		SDDMode:    "multi",
 		Persona:    "neutral",
 		MCP:        false,
-		ADO:        false,
 		Autostart:  false,
 		Groups:     []string{},
 	}
@@ -124,7 +122,6 @@ func SaveDefaults(defaults *TUIDefaults) error {
 	b.WriteString(fmt.Sprintf("  \"sdd_mode\": %q,\n", defaults.SDDMode))
 	b.WriteString(fmt.Sprintf("  \"persona\": %q,\n", defaults.Persona))
 	b.WriteString(fmt.Sprintf("  \"mcp\": %v,\n", defaults.MCP))
-	b.WriteString(fmt.Sprintf("  \"ado\": %v,\n", defaults.ADO))
 
 	// Groups array
 	b.WriteString("  \"groups\": [")

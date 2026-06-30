@@ -187,16 +187,19 @@ func installEngramComponent(opts InstallOptions, extraEnv ...string) error {
 }
 
 // Components to install via gentle-ai (explicit list, no gga).
+//
+// sdd and persona are intentionally excluded: ywai writes its own curated
+// AGENTS.md (see internal/agents/agents_md.go) instead of letting gentle-ai's
+// sdd/persona components write the gentle-ai marker blocks. SDD and persona
+// remain opt-in via separate setup; they are no longer installed by default.
 var installComponents = []string{
-	"engram", "sdd", "skills", "context7",
-	"persona", "permissions",
+	"engram", "skills", "context7", "permissions",
 }
 
 // ecosystemComponents are all components except engram, which is installed
 // separately so its (Homebrew-based) failure cannot abort the others.
 var ecosystemComponents = []string{
-	"sdd", "skills", "context7",
-	"persona", "permissions",
+	"skills", "context7", "permissions",
 }
 
 func (o InstallOptions) effectivePersona() string {

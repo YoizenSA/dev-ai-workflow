@@ -171,7 +171,7 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	return tui.Run(tuiAgents)
 }
 
-func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, installADO bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool) {
+func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool) {
 	var agents []agent.Agent
 	if opts.AgentName != "" {
 		a, err := agent.FindByName(opts.AgentName)
@@ -238,8 +238,24 @@ func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly boo
 		fmt.Println("\n[3.6/3] Applying ywai overrides...")
 		_ = overrides.ApplyOpenSpecToSDDOverride(agentDirs)
 
+		// Write ywai's curated AGENTS.md (engram + skills + sub-agents + hooks).
+		// This replaces the AGENTS.md that gentle-ai's sdd/persona components
+		// used to write, and MUST run before installPluginsForAgents so codegraph
+		// can append its own marker-section to the freshly written file.
+		fmt.Println("\n[3.65/3] Writing curated AGENTS.md...")
+		if opts.DryRun {
+			fmt.Println("  Would write curated AGENTS.md (engram + skills + sub-agents + hooks)")
+		} else {
+			agentsMdPath := filepath.Join(config.OpenCodeConfigDir(), "AGENTS.md")
+			if err := agentprofiles.WriteAgentsMd(agentsMdPath); err != nil {
+				fmt.Printf("  Warning: failed to write AGENTS.md: %v\n", err)
+			} else {
+				fmt.Println("  ✓ AGENTS.md written (engram + skills + sub-agents + hooks)")
+			}
+		}
+
 		fmt.Println("\n[3.7/3] Installing plugins...")
-		installPluginsForAgents(agents, opts.DryRun, installMCP, installADO)
+		installPluginsForAgents(agents, opts.DryRun, installMCP)
 
 		fmt.Println("\n[3.8/3] Removing deprecated opencode-quota plugin...")
 		removeQuotaForAgents(agents, opts.DryRun)
@@ -469,7 +485,7 @@ func reseedData() {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool, installADO bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 
 	// Install sub-agent-statusline TUI plugin (global config, not per-agent)
@@ -506,9 +522,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 			if installMCP {
 				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
 			}
-			if installADO {
-				fmt.Printf("  [%s] Would install Azure DevOps plugin\n", a.Name)
-			}
+			fmt.Printf("  [%s] Would remove Azure DevOps plugin entries (legacy)\n", a.Name)
 			continue
 		}
 
@@ -544,53 +558,63 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool,
 				fmt.Printf("  [%s] Installed Microsoft Learn MCP\n", a.Name)
 			}
 		}
+
+		// Remove leftover Azure DevOps plugin entries from older installs. ywai
+		// now drives Azure DevOps through the `ado` skill (Bash CLI) instead of
+		// the in-process plugin, so its tools must not stay registered.
+		if err := plugins.RemoveAdoPluginFromConfig(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to remove Azure DevOps plugin entries: %v\n", a.Name, err)
+		}
 	}
 
-	// Install ADO plugin for opencode + pi
-	if installADO && !dryRun {
-		fmt.Println("\n  Configuring Azure DevOps plugin...")
-
-		// 1. Interactive setup (collects org, project, repos, PAT)
-		if err := plugins.InstallADOFromSetup(); err != nil {
-			fmt.Printf("  Warning: ADO setup failed: %v\n", err)
-			fmt.Println("  You can configure it later with: npx @nahuelcio/opencode-ado init")
+	// Delete the standalone ADO plugin config older ywai installs wrote next to
+	// opencode.json (~/.config/opencode/ado-plugin.json). Runs once, not per-agent.
+	if !dryRun {
+		if err := plugins.RemoveAdoPluginConfigFile(); err != nil {
+			fmt.Printf("  Warning: failed to remove ADO plugin config file: %v\n", err)
 		}
 
-		// 2. Read back the config we just wrote
-		adoConfig, _ := plugins.ReadExistingADOConfig()
-		if adoConfig == nil {
-			adoConfig = &plugins.ADOPluginConfig{}
-		}
-
-		// 3. Add to opencode config
-		for _, a := range agents {
-			if a.Name != "opencode" && a.Name != "kilocode" {
-				continue
-			}
-			if _, ok := agentSettingsPaths[a.Name]; !ok {
-				continue
-			}
-			if err := plugins.InstallADOOpenCode(*adoConfig); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ADO plugin: %v\n", a.Name, err)
+		// Install the `ado` CLI globally so the agent can drive Azure DevOps via
+		// the `ado` skill (Bash). Non-fatal: if npm is missing or it fails, the
+		// user can run `npm i -g @cioffinahuel/opencode-ado` manually later.
+		fmt.Println("\n  Installing Azure DevOps CLI (`ado`)...")
+		if err := plugins.InstallAdoCLI(); err != nil {
+			fmt.Printf("  Warning: %v\n", err)
+		} else if v, ok := plugins.AdoCLIInfo(); ok {
+			if v == "" {
+				fmt.Println("  ✓ ado CLI installed (version unknown)")
 			} else {
-				fmt.Printf("  [%s] ✓ Azure DevOps plugin installed\n", a.Name)
+				fmt.Printf("  ✓ ado CLI installed (v%s)\n", v)
 			}
 		}
 
-		// 4. Add to Pi
-		home, _ := os.UserHomeDir()
-		piSettingsPath := filepath.Join(home, ".pi", "agent", "settings.json")
-		if _, err := os.Stat(piSettingsPath); err == nil {
-			if err := plugins.InstallADOPi(piSettingsPath); err != nil {
-				fmt.Printf("  [pi] Warning: failed to install ADO plugin: %v\n", err)
+		// Install the `codegraph` CLI (CodeGraph from colbymchenry/codegraph).
+		// Non-fatal: if the curl-installer and npm fallback both fail, the user
+		// can run `npm i -g @colbymchenry/codegraph` manually later.
+		fmt.Println("\n  Installing CodeGraph CLI (`codegraph`)...")
+		if err := plugins.InstallCodegraphCLI(); err != nil {
+			fmt.Printf("  Warning: %v\n", err)
+		} else if v, ok := plugins.CodegraphInfo(); ok {
+			if v == "" {
+				fmt.Println("  ✓ codegraph CLI installed (version unknown)")
 			} else {
-				fmt.Println("  [pi] ✓ Azure DevOps plugin installed")
+				fmt.Printf("  ✓ codegraph CLI installed (v%s)\n", v)
 			}
+		}
+
+		// Wire the codegraph MCP server into the agent config by delegating to
+		// codegraph's own installer. codegraph owns its config shape AND its
+		// AGENTS.md marker section — ywai does NOT write either itself.
+		fmt.Println("  Wiring CodeGraph MCP into opencode via `codegraph install`...")
+		if err := plugins.WireCodegraphMCP(); err != nil {
+			fmt.Printf("  Warning: %v\n", err)
 		} else {
-			fmt.Println("  [pi] Skipped — Pi not configured yet")
+			fmt.Println("  ✓ codegraph MCP wired (opencode)")
 		}
-
-		fmt.Println("  Azure DevOps plugin setup complete!")
+	} else {
+		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
+		fmt.Println("  Would install CodeGraph CLI (`codegraph`)")
+		fmt.Println("  Would wire CodeGraph MCP into opencode")
 	}
 }
 

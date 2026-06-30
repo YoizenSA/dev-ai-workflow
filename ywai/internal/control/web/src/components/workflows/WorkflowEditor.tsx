@@ -19,6 +19,7 @@ import {
 	Save,
 	Trash2,
 	Upload,
+	Download,
 	CheckCircle2,
 	AlertTriangle,
 	Network,
@@ -251,6 +252,22 @@ function WorkflowEditorInner() {
 		},
 		[],
 	)
+
+	// Download the current workflow as <name>.json — the source-of-truth JSON,
+	// importable in another environment via the Upload button. Mirrors the
+	// client-side download pattern in OrchestratorTab/SettingsModal.
+	const handleDownload = useCallback(() => {
+		if (!current) return
+		const blob = new Blob([JSON.stringify(current, null, 2)], { type: 'application/json' })
+		const url = URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = `${current.name}.json`
+		document.body.appendChild(a)
+		a.click()
+		document.body.removeChild(a)
+		URL.revokeObjectURL(url)
+	}, [current])
 
 	const mermaid = useMemo(() => buildMermaidPreview(current), [current])
 
@@ -516,6 +533,15 @@ function WorkflowEditorInner() {
 						aria-label="Import workflow JSON"
 					>
 						<Upload />
+					</button>
+					<button
+						className="btn btn-icon"
+						onClick={handleDownload}
+						disabled={!current}
+						data-tip={current ? 'Download workflow.json' : ''}
+						aria-label="Download workflow JSON"
+					>
+						<Download />
 					</button>
 					<input
 						ref={fileInput}

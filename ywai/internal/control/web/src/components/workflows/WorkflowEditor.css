@@ -974,3 +974,108 @@
 	color: var(--text-muted);
 	font-family: var(--font-sans);
 }
+
+/* ─── Multi-select (tools + delegates picker) ─────────────────────────── */
+.wf-multiselect {
+	position: relative;
+}
+
+.wf-multiselect-trigger {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 7px 10px;
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-soft);
+	color: var(--text);
+	cursor: pointer;
+	font-size: var(--text-sm);
+	min-height: 36px;
+}
+.wf-multiselect-trigger:hover {
+	border-color: var(--panel-border-strong);
+}
+.wf-multiselect-trigger .is-open {
+	transform: rotate(180deg);
+	transition: transform 0.15s;
+}
+
+.wf-multiselect-summary {
+	flex: 1;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wf-multiselect-summary.is-empty {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.wf-multiselect-panel {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	max-height: 280px;
+	overflow-y: auto;
+	background: var(--surface-strong, #161616);
+	border: 1px solid var(--panel-border-strong);
+	border-radius: var(--radius-sm);
+	box-shadow: var(--shadow-lift);
+	z-index: 100;
+	padding: 4px 0;
+}
+
+.wf-multiselect-group {
+	padding: 2px 0;
+}
+.wf-multiselect-group + .wf-multiselect-group {
+	border-top: 1px solid var(--panel-border);
+}
+
+.wf-multiselect-group-label {
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+	padding: 4px 10px 2px;
+}
+
+.wf-multiselect-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 10px;
+	cursor: pointer;
+	font-size: var(--text-sm);
+	color: var(--text);
+}
+.wf-multiselect-item:hover {
+	background: var(--surface-hover);
+}
+.wf-multiselect-item input[type='checkbox'] {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+.wf-multiselect-check {
+	width: 16px;
+	height: 16px;
+	border: 1px solid var(--panel-border-strong);
+	border-radius: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	color: var(--text);
+}
+.wf-multiselect-item.is-checked .wf-multiselect-check {
+	background: var(--yz-primary-1);
+	border-color: var(--yz-primary-1);
+	color: #fff;
+}

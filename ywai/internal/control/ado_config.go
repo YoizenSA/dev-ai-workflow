@@ -3,47 +3,50 @@ package control
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 )
 
-// adoConfigMu guards concurrent reads/writes to the ADO plugin config.
+// adoConfigMu guards concurrent reads/writes of the ADO config section in
+// opencode.json.
 var adoConfigMu sync.Mutex
 
-// adoPluginName is the identifier used in the opencode "plugin" array.
-// Must match the name in internal/plugins/ado.go.
-const adoPluginName = "@nahuelcio/opencode-ado"
-
-// AdoProfile represents a single ADO profile configuration.
-type AdoProfile struct {
+// adoProfile mirrors the profile shape the `ado` CLI reads from opencode.json.
+// The PAT itself is never stored here — only the name of the env var that will
+// hold it at runtime. See adoPATStatus / adoSavePAT for PAT handling.
+type adoProfile struct {
 	Org       string   `json:"org"`
 	Project   string   `json:"project"`
 	PatEnvVar string   `json:"patEnvVar"`
 	Repos     []string `json:"repos"`
+	Default   bool     `json:"default,omitempty"`
 }
 
-// AdoPluginConfig represents the full ADO plugin configuration.
-type AdoPluginConfig struct {
-	Enabled        bool                  `json:"enabled"`
+// adoConfig is the value of the top-level "ado" key in opencode.json. The
+// `ado` CLI discovers profiles here WITHOUT registering the in-process plugin,
+// so its 22 tools are never loaded into the agent's context.
+type adoConfig struct {
 	DefaultProfile string                `json:"defaultProfile"`
-	Profiles       map[string]AdoProfile `json:"profiles"`
+	Profiles       map[string]adoProfile `json:"profiles"`
 }
 
-// registerAdoConfigRoutes registers all ADO config API routes.
-func (s *Server) registerAdoConfigRoutes() {
-	s.mux.HandleFunc("GET /api/ado/config", s.handleAdoGetConfig)
-	s.mux.HandleFunc("POST /api/ado/config", s.handleAdoSaveConfig)
-	s.mux.HandleFunc("POST /api/ado/profile", s.handleAdoAddProfile)
-	s.mux.HandleFunc("DELETE /api/ado/profile", s.handleAdoDeleteProfile)
-	s.mux.HandleFunc("POST /api/ado/toggle", s.handleAdoToggle)
+// adoProfileRequest is the body for add/update/delete profile endpoints.
+type adoProfileRequest struct {
+	Name    string     `json:"name"`
+	Profile adoProfile `json:"profile"`
 }
 
-// readAdoConfig reads the ADO plugin section from opencode.json.
-// The plugin config is stored in the "plugin" array as a tuple:
-//
-//	"plugin": [["@nahuelcio/opencode-ado", { "enabled": true, ... }]]
-func readAdoConfig() (*AdoPluginConfig, error) {
+// ─── Config helpers ───────────────────────────────────────────────────────
+
+// readAdoConfig reads the top-level "ado" key from opencode.json. Returns an
+// empty config (not an error) when the file or key is absent.
+func readAdoConfig() (*adoConfig, error) {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
 
@@ -55,332 +58,351 @@ func readAdoConfig() (*AdoPluginConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &AdoPluginConfig{
-				Enabled:        false,
-				DefaultProfile: "",
-				Profiles:       map[string]AdoProfile{},
-			}, nil
+			return &adoConfig{Profiles: map[string]adoProfile{}}, nil
 		}
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	var full map[string]interface{}
+	var full map[string]json.RawMessage
 	if err := json.Unmarshal(data, &full); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	adoRaw := findAdoInPluginArray(full)
-	if adoRaw == nil {
-		return &AdoPluginConfig{
-			Enabled:        false,
-			DefaultProfile: "",
-			Profiles:       map[string]AdoProfile{},
-		}, nil
+	raw, ok := full["ado"]
+	if !ok {
+		return &adoConfig{Profiles: map[string]adoProfile{}}, nil
 	}
 
-	// Marshal back and unmarshal into struct for clean parsing.
-	adoBytes, err := json.Marshal(adoRaw)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling ado section: %w", err)
-	}
-
-	cfg := &AdoPluginConfig{
-		Enabled:        false,
-		DefaultProfile: "",
-		Profiles:       map[string]AdoProfile{},
-	}
-	if err := json.Unmarshal(adoBytes, cfg); err != nil {
+	var cfg adoConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing ado config: %w", err)
 	}
-
-	return cfg, nil
+	if cfg.Profiles == nil {
+		cfg.Profiles = map[string]adoProfile{}
+	}
+	// Normalize the default flag onto the default profile so the UI can render
+	// the badge even if the file only set defaultProfile.
+	for name, p := range cfg.Profiles {
+		p.Default = name == cfg.DefaultProfile
+		cfg.Profiles[name] = p
+	}
+	return &cfg, nil
 }
 
-// findAdoInPluginArray searches the "plugin" array for the ADO plugin tuple.
-func findAdoInPluginArray(full map[string]interface{}) map[string]interface{} {
-	pluginRaw, ok := full["plugin"]
-	if !ok {
-		return nil
-	}
-
-	plugins, ok := pluginRaw.([]interface{})
-	if !ok {
-		return nil
-	}
-
-	for _, p := range plugins {
-		arr, ok := p.([]interface{})
-		if !ok || len(arr) < 2 {
-			continue
-		}
-		name, ok := arr[0].(string)
-		if !ok || name != adoPluginName {
-			continue
-		}
-		cfg, ok := arr[1].(map[string]interface{})
-		if ok {
-			return cfg
-		}
-	}
-	return nil
-}
-
-// writeAdoConfig writes the ADO plugin section back to opencode.json,
-// preserving all other config keys. Stores the config as a tuple in the
-// "plugin" array to match the opencode schema.
-func writeAdoConfig(cfg *AdoPluginConfig) error {
+// writeAdoConfig writes the top-level "ado" key back to opencode.json,
+// preserving every other top-level key.
+func writeAdoConfig(cfg *adoConfig) error {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
+
+	if cfg == nil {
+		cfg = &adoConfig{}
+	}
+	if cfg.Profiles == nil {
+		cfg.Profiles = map[string]adoProfile{}
+	}
 
 	path, err := configFilePath()
 	if err != nil {
 		return err
 	}
 
+	// Read-modify-write: parse the whole file, replace only the "ado" key.
 	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Create new config with just the ADO plugin.
-			full := map[string]interface{}{
-				"plugin": []interface{}{
-					[]interface{}{adoPluginName, cfg},
-				},
-			}
-			out, marshalErr := json.MarshalIndent(full, "", "  ")
-			if marshalErr != nil {
-				return fmt.Errorf("marshaling config: %w", marshalErr)
-			}
-			if writeErr := os.WriteFile(path, out, 0644); writeErr != nil {
-				return fmt.Errorf("writing config: %w", writeErr)
-			}
-			return nil
-		}
+	full := map[string]any{}
+	if err == nil {
+		_ = json.Unmarshal(data, &full)
+	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("reading config: %w", err)
 	}
 
-	var full map[string]interface{}
-	if err := json.Unmarshal(data, &full); err != nil {
-		return fmt.Errorf("parsing config: %w", err)
+	if len(cfg.Profiles) == 0 {
+		delete(full, "ado")
+	} else {
+		full["ado"] = cfg
 	}
 
-	// Get or create the "plugin" array.
-	pluginRaw := full["plugin"]
-	plugins, _ := pluginRaw.([]interface{})
-	if plugins == nil {
-		plugins = []interface{}{}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config dir: %w", err)
 	}
-
-	// Find and update existing ADO entry, or append a new tuple.
-	updated := false
-	for i, p := range plugins {
-		arr, ok := p.([]interface{})
-		if !ok || len(arr) < 2 {
-			continue
-		}
-		name, ok := arr[0].(string)
-		if !ok || name != adoPluginName {
-			continue
-		}
-		plugins[i] = []interface{}{adoPluginName, cfg}
-		updated = true
-		break
-	}
-	if !updated {
-		plugins = append(plugins, []interface{}{adoPluginName, cfg})
-	}
-
-	full["plugin"] = plugins
 
 	out, err := json.MarshalIndent(full, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
-
-	if err := os.WriteFile(path, out, 0644); err != nil {
+	if err := os.WriteFile(path, append(out, '\n'), 0o644); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
-
 	return nil
 }
 
-// handleAdoGetConfig returns the current ADO plugin config.
+// adoPATPath returns ~/.azure-devops-cli/pat — where the `ado` CLI stores its
+// PAT (chmod 0600). The CLI reads it as a fallback when AZURE_DEVOPS_PAT is
+// unset.
+func adoPATPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".azure-devops-cli", "pat"), nil
+}
+
+// ─── Route registration ───────────────────────────────────────────────────
+
+// registerAdoConfigRoutes registers the Azure DevOps config API. The config
+// lives under the top-level "ado" key of opencode.json (profiles) plus a PAT
+// file at ~/.azure-devops-cli/pat.
+func (s *Server) registerAdoConfigRoutes() {
+	s.mux.HandleFunc("GET /api/ado/config", s.handleAdoGetConfig)
+	s.mux.HandleFunc("POST /api/ado/config", s.handleAdoSaveConfig)
+	s.mux.HandleFunc("POST /api/ado/profile", s.handleAdoUpsertProfile)
+	s.mux.HandleFunc("DELETE /api/ado/profile", s.handleAdoDeleteProfile)
+	s.mux.HandleFunc("GET /api/ado/pat-status", s.handleAdoPATStatus)
+	s.mux.HandleFunc("POST /api/ado/pat", s.handleAdoSavePAT)
+	s.mux.HandleFunc("GET /api/ado/cli-status", s.handleAdoCLIStatus)
+	s.mux.HandleFunc("POST /api/ado/cli-update", s.handleAdoCLIUpdate)
+}
+
+// ─── Handlers ─────────────────────────────────────────────────────────────
+
+// handleAdoGetConfig returns the current ADO config (profiles + default).
 func (s *Server) handleAdoGetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := readAdoConfig()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-// handleAdoSaveConfig saves the full ADO config.
+// handleAdoSaveConfig replaces the whole ADO config.
 func (s *Server) handleAdoSaveConfig(w http.ResponseWriter, r *http.Request) {
-	var cfg AdoPluginConfig
+	var cfg adoConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-
-	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]AdoProfile{}
+	// Default patEnvVar so the CLI finds the PAT without extra config.
+	for name, p := range cfg.Profiles {
+		if strings.TrimSpace(p.PatEnvVar) == "" {
+			p.PatEnvVar = "AZURE_DEVOPS_PAT"
+		}
+		p.Default = name == cfg.DefaultProfile
+		cfg.Profiles[name] = p
 	}
-
 	if err := writeAdoConfig(&cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "ADO config saved successfully",
-		"config":  cfg,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"config": cfg})
 }
 
-// adoProfileRequest is the POST/DELETE body for profile operations.
-type adoProfileRequest struct {
-	Name    string     `json:"name"`
-	Profile AdoProfile `json:"profile"`
-}
-
-// handleAdoAddProfile adds or updates a profile.
-func (s *Server) handleAdoAddProfile(w http.ResponseWriter, r *http.Request) {
+// handleAdoUpsertProfile adds or updates a single profile.
+func (s *Server) handleAdoUpsertProfile(w http.ResponseWriter, r *http.Request) {
 	var req adoProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-
-	if req.Name == "" {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "profile name is required"})
 		return
 	}
-
-	if req.Profile.Org == "" {
+	if strings.TrimSpace(req.Profile.Org) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "organization is required"})
 		return
 	}
-
-	if req.Profile.Project == "" {
+	if strings.TrimSpace(req.Profile.Project) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "project is required"})
 		return
 	}
 
-	if req.Profile.PatEnvVar == "" {
-		req.Profile.PatEnvVar = "AZURE_DEVOPS_PAT"
-	}
-
-	if req.Profile.Repos == nil {
-		req.Profile.Repos = []string{}
-	}
-
 	cfg, err := readAdoConfig()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
+	p := req.Profile
+	if strings.TrimSpace(p.PatEnvVar) == "" {
+		p.PatEnvVar = "AZURE_DEVOPS_PAT"
+	}
+	if p.Repos == nil {
+		p.Repos = []string{}
+	}
+	// First profile becomes the default automatically.
+	if cfg.DefaultProfile == "" && len(cfg.Profiles) == 0 {
+		cfg.DefaultProfile = name
+	}
+	p.Default = name == cfg.DefaultProfile
 	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]AdoProfile{}
+		cfg.Profiles = map[string]adoProfile{}
 	}
-	cfg.Profiles[req.Name] = req.Profile
-
-	// If this is the first profile, set it as default.
-	if cfg.DefaultProfile == "" {
-		cfg.DefaultProfile = req.Name
-	}
+	cfg.Profiles[name] = p
 
 	if err := writeAdoConfig(cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Profile %q saved successfully", req.Name),
-		"config":  cfg,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"config": cfg})
 }
 
-// handleAdoDeleteProfile removes a profile.
+// handleAdoDeleteProfile removes a profile and recomputes the default if needed.
 func (s *Server) handleAdoDeleteProfile(w http.ResponseWriter, r *http.Request) {
-	var req adoProfileRequest
+	var req struct {
+		Name string `json:"name"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-
-	if req.Name == "" {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "profile name is required"})
 		return
 	}
 
 	cfg, err := readAdoConfig()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	if _, exists := cfg.Profiles[req.Name]; !exists {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("profile %q not found", req.Name)})
+	if _, ok := cfg.Profiles[name]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "profile not found"})
 		return
 	}
+	delete(cfg.Profiles, name)
 
-	delete(cfg.Profiles, req.Name)
-
-	// If we deleted the default profile, pick another one.
-	if cfg.DefaultProfile == req.Name {
+	// Pick a new default if we removed the current one.
+	if cfg.DefaultProfile == name {
 		cfg.DefaultProfile = ""
-		for name := range cfg.Profiles {
-			cfg.DefaultProfile = name
+		for n := range cfg.Profiles {
+			cfg.DefaultProfile = n
 			break
 		}
 	}
-
-	if err := writeAdoConfig(cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
-		return
+	for n, p := range cfg.Profiles {
+		p.Default = n == cfg.DefaultProfile
+		cfg.Profiles[n] = p
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Profile %q deleted successfully", req.Name),
-		"config":  cfg,
-	})
+	if err := writeAdoConfig(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"config": cfg})
 }
 
-// handleAdoToggle enables or disables the ADO plugin.
-func (s *Server) handleAdoToggle(w http.ResponseWriter, r *http.Request) {
+// handleAdoPATStatus reports whether a PAT is available, without exposing it.
+// source is "env" (AZURE_DEVOPS_PAT set) or "file" (~/.azure-devops-cli/pat).
+func (s *Server) handleAdoPATStatus(w http.ResponseWriter, r *http.Request) {
+	resp := map[string]any{"hasPat": false, "source": "none"}
+
+	if v := os.Getenv("AZURE_DEVOPS_PAT"); strings.TrimSpace(v) != "" {
+		resp["hasPat"] = true
+		resp["source"] = "env"
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	p, err := adoPATPath()
+	if err == nil {
+		if data, err := os.ReadFile(p); err == nil && strings.TrimSpace(string(data)) != "" {
+			resp["hasPat"] = true
+			resp["source"] = "file"
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleAdoSavePAT writes the PAT to ~/.azure-devops-cli/pat (chmod 0600).
+func (s *Server) handleAdoSavePAT(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Enabled bool `json:"enabled"`
+		PAT string `json:"pat"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+	pat := strings.TrimSpace(req.PAT)
+	if pat == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pat is required"})
+		return
+	}
 
-	cfg, err := readAdoConfig()
+	p, err := adoPATPath()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	cfg.Enabled = req.Enabled
-
-	if err := writeAdoConfig(cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("creating pat dir: %v", err)})
 		return
 	}
+	if err := os.WriteFile(p, []byte(pat), 0o600); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("writing pat: %v", err)})
+		return
+	}
+	// Best-effort chmod 0600 (already set on create, but enforce on overwrite).
+	_ = os.Chmod(p, 0o600)
 
-	state := map[bool]string{true: "enabled", false: "disabled"}[req.Enabled]
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("ADO plugin %s", state),
-		"config":  cfg,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// GetAdoConfig is an exported helper to get the ADO config from other packages.
-func GetAdoConfig() (*AdoPluginConfig, error) {
-	return readAdoConfig()
+// handleAdoCLIStatus reports whether the `ado` CLI is installed, its version,
+// the latest version published to npm, and whether an update is available.
+// Mirrors the shape of /api/version: on registry failure `latest` is null and
+// `updateAvailable` is false (non-fatal). The comparison reuses
+// isNewerVersion/parseSemver from server.go (same package).
+func (s *Server) handleAdoCLIStatus(w http.ResponseWriter, r *http.Request) {
+	version, installed := plugins.AdoCLIInfo()
+
+	resp := map[string]any{
+		"installed":       installed,
+		"version":         version,
+		"latest":          nil,
+		"updateAvailable": false,
+	}
+
+	latest, err := plugins.AdoCLILatestVersion()
+	if err != nil {
+		// Offline / npm missing — keep latest null, surface the reason.
+		resp["error"] = err.Error()
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	resp["latest"] = latest
+	resp["updateAvailable"] = installed && latest != "" && isNewerVersion(latest, version)
+	writeJSON(w, http.StatusOK, resp)
 }
+
+// handleAdoCLIUpdate runs `npm i -g @cioffinahuel/opencode-ado` synchronously
+// and returns the fresh CLI status. Unlike /api/update (ywai self-update), this
+// does NOT kill or restart the server — npm install is independent of this
+// process — so it can run inline and the frontend just refreshes its state.
+func (s *Server) handleAdoCLIUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := plugins.InstallAdoCLI(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"installed":       false,
+			"version":         "",
+			"latest":          nil,
+			"updateAvailable": false,
+			"error":           err.Error(),
+		})
+		return
+	}
+	version, installed := plugins.AdoCLIInfo()
+	resp := map[string]any{
+		"installed":       installed,
+		"version":         version,
+		"latest":          nil,
+		"updateAvailable": false,
+	}
+	if latest, err := plugins.AdoCLILatestVersion(); err == nil {
+		resp["latest"] = latest
+		resp["updateAvailable"] = installed && latest != "" && isNewerVersion(latest, version)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// init guards against the log import being dropped if no handler logs directly.
+var _ = log.Printf

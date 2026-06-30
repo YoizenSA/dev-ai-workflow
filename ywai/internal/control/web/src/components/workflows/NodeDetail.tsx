@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
 import { missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
 import type { ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
+import MultiSelect from './MultiSelect'
+import {
+	TOOL_OPTIONS,
+	DEFAULT_ORCHESTRATOR_TOOLS,
+	DEFAULT_DEV_TOOLS,
+	EXTERNAL_AGENTS,
+	csvToSet,
+	setToCsv,
+} from './toolCatalog'
 
 // Shared cache so every node editor reuses one opencode model fetch.
 let modelCache: ModelInfo[] | null = null
@@ -179,7 +188,7 @@ function NodeFields({ node, current }: { node: WorkflowNode; current: Workflow }
 				</div>
 			)
 		case 'subAgent':
-			return <SubAgentFields node={node} models={models} />
+			return <SubAgentFields node={node} models={models} current={current} />
 		case 'askUserQuestion':
 			return <AskUserFields node={node} />
 		case 'prompt':
@@ -331,6 +340,18 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 				/>
 			</div>
 			<div className="field">
+				<label className="field-label">Tools &amp; permissions</label>
+				<MultiSelect
+					options={TOOL_OPTIONS}
+					selected={csvToSet(node.data.tools)}
+					onChange={(set) => update(node, { tools: setToCsv(set) })}
+					placeholder="Coordinator defaults"
+					emptyIsDefault
+					defaultLabel={`Defaults (${DEFAULT_ORCHESTRATOR_TOOLS.length} tools)`}
+				/>
+				<span className="field-help">Leave empty for coordinator defaults. Uncheck to restrict.</span>
+			</div>
+			<div className="field">
 				<label className="field-label" htmlFor="wf-orch-prompt">System prompt / identity</label>
 				<textarea
 					id="wf-orch-prompt"
@@ -345,8 +366,28 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 }
 
 // SubAgentFields — the richest node: identity, prompts, model/mode, tools.
-function SubAgentFields({ node, models }: { node: WorkflowNode; models: ModelInfo[] }) {
+function SubAgentFields({ node, models, current }: { node: WorkflowNode; models: ModelInfo[]; current: Workflow }) {
 	const descMissing = !(node.data.description ?? '').trim()
+
+	// Build the delegate options: other subAgents in this workflow (by name) +
+	// known external agents. Exclude self.
+	const delegateOptions = useMemo(() => {
+		const opts: { value: string; label: string }[] = []
+		const seen = new Set<string>([node.id])
+		for (const n of current.nodes) {
+			if (n.type === 'subAgent' && !seen.has(n.id)) {
+				const label = n.data.name || n.data.label || n.id
+				opts.push({ value: n.id, label: `${label} (in workflow)` })
+				seen.add(n.id)
+			}
+		}
+		for (const a of EXTERNAL_AGENTS) {
+			if (!seen.has(a)) {
+				opts.push({ value: a, label: `${a} (external)` })
+			}
+		}
+		return opts
+	}, [current.nodes, node.id])
 	return (
 		<>
 			<div className="field">
@@ -392,29 +433,41 @@ function SubAgentFields({ node, models }: { node: WorkflowNode; models: ModelInf
 					/>
 				</div>
 				<div className="field">
-					<label className="field-label" htmlFor="wf-mode">Mode</label>
+					<label className="field-label" htmlFor="wf-mode">Visibility</label>
 					<YdSelect
 						options={[
-							{ value: 'all', label: 'all' },
-							{ value: 'primary', label: 'primary' },
+							{ value: 'subagent', label: 'subagent (only via task)' },
+							{ value: 'all', label: 'all (selectable)' },
+							{ value: 'primary', label: 'primary (default)' },
 						]}
-						value={node.data.mode ?? 'all'}
+						value={node.data.mode ?? 'subagent'}
 						onChange={(v) => update(node, { mode: v })}
 						ariaLabel="Mode"
 					/>
 				</div>
 			</div>
-			<div className="field">
-				<label className="field-label" htmlFor="wf-tools">Tools</label>
-				<input
-					id="wf-tools"
-					className="input mono"
-					value={node.data.tools ?? ''}
-					placeholder="read, edit, write, bash"
-					onChange={(e) => update(node, { tools: e.target.value })}
-				/>
-				<span className="field-help">Comma-separated.</span>
-			</div>
+				<div className="field">
+					<label className="field-label">Tools &amp; permissions</label>
+					<MultiSelect
+						options={TOOL_OPTIONS}
+						selected={csvToSet(node.data.tools)}
+						onChange={(set) => update(node, { tools: setToCsv(set) })}
+						placeholder="Dev defaults"
+						emptyIsDefault
+						defaultLabel={`Defaults (${DEFAULT_DEV_TOOLS.length} tools)`}
+					/>
+					<span className="field-help">Leave empty for dev defaults (read, edit, write, bash, …). Uncheck to restrict.</span>
+				</div>
+				<div className="field">
+					<label className="field-label">Can delegate to</label>
+					<MultiSelect
+						options={delegateOptions}
+						selected={csvToSet(node.data.delegateTo)}
+						onChange={(set) => update(node, { delegateTo: setToCsv(set) })}
+						placeholder="No extra delegates"
+					/>
+					<span className="field-help">Agents this one may delegate to (beyond graph edges). E.g. finder for code search.</span>
+				</div>
 		</>
 	)
 }

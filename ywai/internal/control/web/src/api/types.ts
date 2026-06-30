@@ -658,6 +658,8 @@ export interface WorkflowNodeData {
 	commandScope?: string;
 	pluginName?: string;
 	builtInType?: string;
+	/** Agents this sub-agent may delegate to without a visible edge (CSV: finder, memory). */
+	delegateTo?: string;
 
 	// askUserQuestion
 	questionText?: string;

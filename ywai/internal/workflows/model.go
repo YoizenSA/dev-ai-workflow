@@ -98,6 +98,11 @@ type NodeData struct {
 	CommandScope     string `json:"commandScope,omitempty"`    // user|project
 	PluginName       string `json:"pluginName,omitempty"`
 	BuiltInType      string `json:"builtInType,omitempty"` // general-purpose|explore|plan
+	// DelegateTo lists agent ids (comma-separated) this sub-agent may delegate
+	// to, BEYOND what the graph's outgoing edges imply. Use this for utility
+	// agents like "finder" that several sub-agents need but aren't part of the
+	// main execution flow (no visible edge). Mirrors delegations.json's task map.
+	DelegateTo string `json:"delegateTo,omitempty"`
 
 	// askUserQuestion
 	QuestionText string           `json:"questionText,omitempty"`

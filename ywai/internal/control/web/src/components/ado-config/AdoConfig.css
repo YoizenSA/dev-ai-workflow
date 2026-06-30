@@ -1,734 +1,569 @@
-/* ═══════════════════════════════════════════════════════════════════
-   Azure DevOps Plugin Config — yz-ui compliant
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* ─── Layout ──────────────────────────────────────────────────── */
-
 .ado-config {
-	padding: var(--space-5);
+	max-width: 880px;
+	margin: 0 auto;
+	padding: var(--space-6) var(--space-5);
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-4);
+	gap: var(--space-5);
 }
 
-.ado-config[aria-busy="true"] {
-	pointer-events: none;
-	opacity: 0.85;
+.ado-error {
+	color: var(--danger);
 }
 
-/* ─── Header / Title ──────────────────────────────────────────── */
+/* ─── Header ─────────────────────────────────────────────────────────── */
 
 .ado-config-header {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
-	flex-wrap: wrap;
 	gap: var(--space-3);
-	margin-bottom: var(--space-1);
 }
 
 .ado-config-title-section {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-1);
+	gap: var(--space-2);
 }
 
-.ado-config-title-section h2 {
-	font-size: 1.35rem;
+.ado-config-title {
+	font-size: 1.5rem;
 	font-weight: 700;
-	color: var(--text);
 	margin: 0;
+	color: var(--text);
 }
 
-.ado-config-title-group {
+.ado-config-cli-badge {
+	align-self: flex-start;
+	font-size: 0.78rem;
+	font-weight: 600;
+	padding: 0.15rem 0.6rem;
+	border-radius: var(--radius-full, 999px);
+	border: 1px solid var(--panel-border);
+}
+.ado-config-cli-badge.ok {
+	color: var(--success);
+	background: var(--success-soft);
+	border-color: var(--success-border);
+}
+.ado-config-cli-badge.missing {
+	color: var(--warning);
+	background: var(--warning-soft);
+	border-color: var(--warning-border);
+}
+/* Installed but a newer version is published — "update available". Uses the
+   --info triplet (mirrors .ok/.missing structure) to stay distinct from the
+   warning-amber "missing" state. */
+.ado-config-cli-badge.outdated {
+	color: var(--info);
+	background: var(--info-soft);
+	border-color: var(--info-border);
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+}
+.ado-config-cli-update-btn {
+	padding: 0.1rem 0.55rem;
+	border-radius: var(--radius-full, 999px);
+	border: 1px solid var(--info-border);
+	background: var(--info);
+	color: #fff;
+	font-size: 0.72rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: filter 0.15s ease;
+}
+.ado-config-cli-update-btn:hover:not(:disabled) {
+	filter: brightness(1.1);
+}
+.ado-config-cli-update-btn:disabled {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* ─── Message ────────────────────────────────────────────────────────── */
+
+.ado-config-message {
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-md, 8px);
+	font-size: 0.9rem;
+}
+.ado-config-message.success {
+	color: var(--success);
+	background: var(--success-soft);
+	border: 1px solid var(--success-border);
+}
+.ado-config-message.error {
+	color: var(--danger);
+	background: var(--danger-soft);
+	border: 1px solid var(--danger-border);
+}
+
+/* ─── PAT status ─────────────────────────────────────────────────────── */
+
+.ado-config-pat {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-4);
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg, 12px);
+	flex-wrap: wrap;
+}
+
+.ado-config-pat-info {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
 }
 
-.ado-config-title {
-	font-size: 1.35rem;
-	font-weight: 700;
-	color: var(--text);
-	margin: 0;
+.ado-config-pat-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.ado-config-pat-dot.ok {
+	background: var(--success);
+	box-shadow: 0 0 8px rgba(var(--success-rgb), 0.5);
+}
+.ado-config-pat-dot.missing {
+	background: var(--danger);
 }
 
-.ado-config-status {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-1);
-	font-size: var(--font-size-xs);
-	font-weight: 600;
-	padding: 2px 8px;
-	border-radius: var(--radius-full);
-}
-
-.ado-config-status.enabled {
-	background: var(--success-soft, color-mix(in srgb, var(--success, #22c55e) 18%, transparent));
-	color: var(--success, #22c55e);
-}
-
-.ado-config-status.disabled {
-	background: var(--surface-soft);
+.ado-config-pat-source {
 	color: var(--text-muted);
+	font-size: 0.88rem;
+}
+.ado-config-pat-source.missing {
+	color: var(--danger);
 }
 
-.ado-config-toggle {
+.ado-config-pat-actions {
 	display: flex;
-	align-items: center;
 	gap: var(--space-2);
 }
 
-.ado-config-toggle-label {
-	font-size: var(--font-size-sm);
-	color: var(--text-secondary);
+/* ─── Buttons ────────────────────────────────────────────────────────── */
+
+.ado-config-btn {
+	padding: 0.4rem 0.9rem;
+	border-radius: var(--radius-md, 8px);
+	border: 1px solid var(--panel-border);
+	background: var(--surface-soft);
+	color: var(--text-soft);
+	font-size: 0.85rem;
 	font-weight: 500;
-}
-
-/* ─── Toggle switch ───────────────────────────────────────────── */
-
-.toggle-switch {
-	position: relative;
-	display: inline-block;
-	width: 44px;
-	height: 24px;
 	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
 }
-
-.toggle-switch input {
-	opacity: 0;
-	width: 0;
-	height: 0;
-	position: absolute;
+.ado-config-btn:hover {
+	background: var(--surface-hover);
+	border-color: var(--panel-border-strong);
 }
-
-.toggle-slider {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background: var(--surface-dim);
-	border: 1px solid var(--border);
-	border-radius: 12px;
-	transition: background-color 0.2s ease, border-color 0.2s ease;
-}
-
-.toggle-slider::before {
-	content: "";
-	position: absolute;
-	width: 18px;
-	height: 18px;
-	left: 2px;
-	bottom: 2px;
-	background: var(--text-muted);
-	border-radius: 50%;
-	transition: transform 0.2s ease, background-color 0.2s ease;
-}
-
-.toggle-switch input:checked + .toggle-slider {
+.ado-config-btn.primary {
 	background: var(--yz-accent);
+	color: #fff;
 	border-color: var(--yz-accent);
 }
-
-.toggle-switch input:checked + .toggle-slider::before {
-	transform: translateX(20px);
-	background: white;
+.ado-config-btn.primary:hover {
+	filter: brightness(1.1);
 }
 
-.toggle-switch input:focus-visible + .toggle-slider {
-	outline: 2px solid var(--yz-accent);
-	outline-offset: 2px;
+.ado-config-add-btn {
+	padding: 0.4rem 0.8rem;
+	border-radius: var(--radius-md, 8px);
+	border: 1px dashed var(--panel-border-strong);
+	background: transparent;
+	color: var(--yz-accent);
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.ado-config-add-btn:hover {
+	background: var(--surface-soft);
 }
 
-/* ─── Messages ────────────────────────────────────────────────── */
+/* ─── Tutorial ───────────────────────────────────────────────────────── */
 
-.ado-config-message {
+.ado-config-tutorial {
+	padding: var(--space-4);
 	background: var(--surface);
-	border: 1px solid var(--border);
-	border-left: 3px solid var(--yz-accent);
-	border-radius: var(--radius-md);
-	padding: var(--space-3) var(--space-4);
-	font-size: var(--font-size-sm);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg, 12px);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+.ado-config-tutorial h3 {
+	margin: 0;
+	font-size: 1rem;
 	color: var(--text);
-	animation: ado-slide-in 0.3s ease;
+}
+.ado-config-tutorial p {
+	margin: 0;
+	color: var(--text-soft);
+	font-size: 0.9rem;
+	line-height: 1.5;
+}
+.ado-config-tutorial code {
+	background: var(--surface-soft);
+	padding: 0.1rem 0.35rem;
+	border-radius: 4px;
+	font-size: 0.85em;
+}
+.ado-config-tutorial-hint {
+	color: var(--text-muted) !important;
+	font-size: 0.82rem !important;
 }
 
-.ado-config-message.success {
-	border-left-color: var(--success, #22c55e);
-	color: var(--success, #22c55e);
+/* ─── Code blocks ────────────────────────────────────────────────────── */
+
+.ado-config-code-block {
+	background: var(--surface-strong);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md, 8px);
+	overflow: hidden;
+}
+.ado-config-code-label {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: 0.5rem 0.75rem;
+	font-size: 0.78rem;
+	color: var(--text-muted);
+	background: var(--surface-soft);
+	border-bottom: 1px solid var(--panel-border);
+}
+.ado-config-code-label code {
+	color: var(--yz-accent);
+}
+.ado-config-code-block pre {
+	margin: 0;
+	padding: var(--space-3);
+	overflow-x: auto;
+}
+.ado-config-code-block code {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.82rem;
+	color: var(--text-soft);
+	white-space: pre;
+}
+.ado-config-copy-btn {
+	padding: 0.2rem 0.6rem;
+	border-radius: var(--radius-sm, 6px);
+	border: 1px solid var(--panel-border);
+	background: var(--surface);
+	color: var(--yz-accent);
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+.ado-config-copy-btn:hover {
+	background: var(--surface-hover);
 }
 
-.ado-config-message.error {
-	border-left-color: var(--danger, #ef4444);
-	color: var(--danger, #ef4444);
-}
-
-@keyframes ado-slide-in {
-	from { opacity: 0; transform: translateY(-8px); }
-	to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ─── Default profile selector ────────────────────────────────── */
+/* ─── Default selector ───────────────────────────────────────────────── */
 
 .ado-config-default {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
-	padding: var(--space-4);
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
 }
-
 .ado-config-default-label {
-	font-size: var(--font-size-sm);
+	font-size: 0.9rem;
+	color: var(--text-soft);
 	font-weight: 500;
-	color: var(--text);
-	white-space: nowrap;
 }
-
 .ado-config-default-select {
-	padding: var(--space-1) var(--space-3);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	background: var(--input-bg, var(--surface));
+	padding: 0.35rem 0.6rem;
+	border-radius: var(--radius-md, 8px);
+	border: 1px solid var(--panel-border);
+	background: var(--input-bg);
 	color: var(--text);
-	font-size: var(--font-size-sm);
-	cursor: pointer;
-	min-width: 160px;
+	font-size: 0.88rem;
 }
 
-.ado-config-default-select:focus {
-	outline: none;
-	border-color: var(--yz-accent);
-	box-shadow: 0 0 0 2px var(--yz-accent-soft, rgba(var(--yz-primary-1-rgb), 0.15));
+/* ─── Section headers ────────────────────────────────────────────────── */
+
+.ado-config-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: var(--space-2);
+}
+.ado-config-section-title {
+	font-size: 1.1rem;
+	font-weight: 600;
+	margin: 0;
+	color: var(--text);
+}
+.ado-config-section-desc {
+	margin: calc(-1 * var(--space-2)) 0 0 0;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+}
+.ado-config-section-desc code {
+	background: var(--surface-soft);
+	padding: 0.1rem 0.3rem;
+	border-radius: 4px;
 }
 
-/* ─── Profiles grid ───────────────────────────────────────────── */
+/* ─── Empty state ────────────────────────────────────────────────────── */
+
+.ado-config-empty {
+	padding: var(--space-6);
+	text-align: center;
+	background: var(--surface);
+	border: 1px dashed var(--panel-border-strong);
+	border-radius: var(--radius-lg, 12px);
+}
+.ado-config-empty h3 {
+	margin: 0 0 var(--space-2) 0;
+	color: var(--text);
+}
+.ado-config-empty p {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+/* ─── Profile cards ──────────────────────────────────────────────────── */
 
 .ado-config-profiles {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-	gap: var(--space-4);
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: var(--space-3);
 }
 
-/* ─── Profile card ────────────────────────────────────────────── */
-
 .ado-config-card {
+	padding: var(--space-4);
 	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	padding: var(--space-5);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg, 12px);
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-3);
-	transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
-.ado-config-card:hover {
+.ado-config-card.default {
 	border-color: var(--yz-accent);
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+	box-shadow: 0 0 0 1px rgba(var(--yz-accent-rgb), 0.3);
 }
 
 .ado-config-card-header {
 	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
+	align-items: center;
 	gap: var(--space-2);
+	flex-wrap: wrap;
 }
-
 .ado-config-card-name {
-	font-size: 1rem;
 	font-weight: 600;
 	color: var(--text);
-	margin: 0;
+	font-size: 1rem;
 }
-
 .ado-config-card-default-badge {
-	display: inline-flex;
-	padding: var(--space-1) var(--space-2);
-	background: var(--yz-accent);
-	color: white;
-	border-radius: var(--radius-full);
-	font-size: var(--font-size-xs);
-	font-weight: 600;
-	letter-spacing: 0.02em;
+	font-size: 0.7rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	padding: 0.1rem 0.45rem;
+	border-radius: var(--radius-full, 999px);
+	background: rgba(var(--yz-accent-rgb), 0.2);
+	color: var(--yz-accent);
+}
+.ado-config-card-actions {
+	margin-left: auto;
+	display: flex;
+	gap: var(--space-1);
 }
 
 .ado-config-card-info {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-1);
-	font-size: var(--font-size-sm);
-	color: var(--text-secondary);
+	font-size: 0.88rem;
+	color: var(--text-soft);
 }
-
 .ado-config-card-info p {
 	margin: 0;
 }
-
 .ado-config-card-info strong {
-	color: var(--text);
-	font-weight: 600;
+	color: var(--text-muted);
+	font-weight: 500;
+	margin-right: var(--space-1);
+}
+.ado-config-card-info code {
+	background: var(--surface-soft);
+	padding: 0.1rem 0.3rem;
+	border-radius: 4px;
+	font-size: 0.85em;
 }
 
 .ado-config-card-repos {
 	display: flex;
+	align-items: center;
 	flex-wrap: wrap;
-	gap: var(--space-1);
-}
-
-.ado-config-card-actions {
-	display: flex;
-	gap: var(--space-2);
-	margin-top: auto;
-	padding-top: var(--space-2);
+	gap: 4px;
 }
 
 .ado-config-card-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: var(--space-1) var(--space-3);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
-	font-size: var(--font-size-xs);
-	font-weight: 600;
-	cursor: pointer;
+	padding: 0.2rem 0.55rem;
+	border-radius: var(--radius-sm, 6px);
+	border: 1px solid var(--panel-border);
 	background: transparent;
-	color: var(--text-secondary);
-	transition: all 0.2s ease;
+	color: var(--text-soft);
+	font-size: 0.78rem;
+	cursor: pointer;
 }
-
 .ado-config-card-btn:hover {
 	background: var(--surface-hover);
-	color: var(--text);
-	border-color: var(--yz-accent);
 }
-
 .ado-config-card-btn.danger {
-	color: var(--danger, #ef4444);
-	border-color: transparent;
+	color: var(--danger);
+	border-color: var(--danger-border);
 }
-
 .ado-config-card-btn.danger:hover {
-	border-color: var(--danger, #ef4444);
-	color: var(--danger, #ef4444);
-	background: var(--danger-soft, color-mix(in srgb, var(--danger, #ef4444) 10%, transparent));
+	background: var(--danger-soft);
 }
 
-/* ─── Section header (setup guide, etc) ───────────────────────── */
+/* ─── Repo pills ─────────────────────────────────────────────────────── */
 
-.ado-config-section-header {
-	display: flex;
+.ado-config-repo-pill {
+	display: inline-flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: var(--space-3);
-	margin: var(--space-2) 0 var(--space-3);
-}
-
-.ado-config-section-title {
-	font-size: 1rem;
-	font-weight: 600;
-	color: var(--text);
-	margin: 0;
-}
-
-.ado-setup-toggle {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	font-size: var(--font-size-sm);
-}
-
-/* ─── Setup guide ─────────────────────────────────────────────── */
-
-.ado-setup-guide {
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	padding: var(--space-5);
-	margin-bottom: var(--space-3);
-}
-
-.ado-setup-guide h3 {
-	font-size: 1rem;
-	font-weight: 600;
-	color: var(--text);
-	margin: 0 0 var(--space-2);
-}
-
-.ado-setup-guide h4 {
-	font-size: 0.875rem;
-	font-weight: 600;
-	color: var(--text-secondary);
-	margin: var(--space-3) 0 var(--space-1);
-}
-
-.ado-setup-content {
-	font-size: var(--font-size-sm);
-	color: var(--text-secondary);
-	line-height: 1.6;
-}
-
-.ado-setup-content ol,
-.ado-setup-content ul {
-	margin: var(--space-2) 0;
-	padding-left: var(--space-5);
-}
-
-.ado-setup-content li {
-	margin-bottom: var(--space-1);
-}
-
-.ado-script-block {
+	gap: 0.3rem;
+	padding: 0.12rem 0.5rem;
+	border-radius: var(--radius-full, 999px);
 	background: var(--surface-soft);
 	border: 1px solid var(--panel-border);
-	border-radius: var(--radius-md);
-	padding: var(--space-4);
-	margin: var(--space-2) 0;
-	overflow-x: auto;
-}
-
-.ado-script-block h4 {
-	font-size: 0.8rem;
-	font-weight: 600;
-	color: var(--text-secondary);
-	margin: 0 0 var(--space-2);
-}
-
-.ado-script-block pre {
-	margin: 0;
 	font-size: 0.78rem;
-	line-height: 1.5;
+	color: var(--text-soft);
 }
-
-.ado-script-block code {
-	color: var(--text-primary);
-	font-family: 'JetBrains Mono', monospace;
-}
-
-/* ─── Modal / Overlay ─────────────────────────────────────────── */
-
-.ado-config-modal-overlay {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 1000;
-	padding: var(--space-4);
-}
-
-.ado-config-modal {
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	width: 100%;
-	max-width: 520px;
-	max-height: 90vh;
-	overflow-y: auto;
-	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.ado-config-modal-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: var(--space-5);
-	border-bottom: 1px solid var(--border);
-}
-
-.ado-config-modal-title {
-	font-size: 1.1rem;
-	font-weight: 600;
-	color: var(--text);
-	margin: 0;
-}
-
-.ado-config-modal-close {
-	display: grid;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	border-radius: var(--radius-sm);
+.ado-config-repo-pill-remove {
+	background: none;
 	border: none;
-	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
-	transition: all 0.15s ease;
+	font-size: 1rem;
+	line-height: 1;
+	padding: 0;
+}
+.ado-config-repo-pill-remove:hover {
+	color: var(--danger);
 }
 
-.ado-config-modal-close:hover {
-	background: var(--surface-hover);
-	color: var(--text);
-}
-
-.ado-config-modal-body {
-	padding: var(--space-5);
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-4);
-}
-
-.ado-config-modal-footer {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: var(--space-2);
-	padding: var(--space-4) var(--space-5);
-	border-top: 1px solid var(--border);
-}
-
-/* ─── Form fields (inside modal) ──────────────────────────────── */
+/* ─── Form (modal) ───────────────────────────────────────────────────── */
 
 .ado-config-form-group {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-1);
+	margin-bottom: var(--space-3);
 }
-
 .ado-config-form-label {
-	font-size: var(--font-size-sm);
+	font-size: 0.85rem;
 	font-weight: 500;
-	color: var(--text-secondary);
+	color: var(--text-soft);
 }
-
 .ado-config-form-input {
-	width: 100%;
-	padding: 0.5rem 0.6rem;
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	background: var(--input-bg, var(--surface));
+	padding: 0.45rem 0.6rem;
+	border-radius: var(--radius-md, 8px);
+	border: 1px solid var(--panel-border);
+	background: var(--input-bg);
 	color: var(--text);
-	font-size: 0.875rem;
+	font-size: 0.9rem;
 }
-
 .ado-config-form-input:focus {
 	outline: none;
 	border-color: var(--yz-accent);
-	box-shadow: 0 0 0 2px var(--yz-accent-soft, rgba(var(--yz-primary-1-rgb), 0.15));
 }
-
 .ado-config-form-input:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
-
 .ado-config-form-hint {
-	font-size: var(--font-size-xs);
+	font-size: 0.78rem;
 	color: var(--text-muted);
-	margin: 0;
+}
+.ado-config-form-hint code {
+	background: var(--surface-soft);
+	padding: 0.1rem 0.3rem;
+	border-radius: 4px;
+}
+.ado-config-form-row {
+	flex-direction: row;
+	gap: var(--space-4);
+	flex-wrap: wrap;
+}
+.ado-config-form-row label {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.85rem;
+	color: var(--text-soft);
+	cursor: pointer;
 }
 
-/* ─── Tags / Repo pills ───────────────────────────────────────── */
+/* ─── Tag input ──────────────────────────────────────────────────────── */
 
 .ado-config-tag-input-wrapper {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-1);
-	padding: var(--space-1);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	background: var(--input-bg, var(--surface));
-	min-height: 36px;
+	gap: 0.3rem;
+	padding: 0.35rem 0.5rem;
+	border-radius: var(--radius-md, 8px);
+	border: 1px solid var(--panel-border);
+	background: var(--input-bg);
+	min-height: 2.4rem;
 	align-items: center;
 }
-
 .ado-config-tag-input-wrapper:focus-within {
 	border-color: var(--yz-accent);
-	box-shadow: 0 0 0 2px var(--yz-accent-soft, rgba(var(--yz-primary-1-rgb), 0.15));
 }
-
 .ado-config-tag-input {
 	flex: 1;
 	min-width: 120px;
 	border: none;
 	background: transparent;
 	color: var(--text);
-	font-size: var(--font-size-sm);
+	font-size: 0.88rem;
 	outline: none;
-	padding: var(--space-1);
 }
 
-.ado-config-repos {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-1);
-	align-items: center;
-}
+/* ─── TOML builder ───────────────────────────────────────────────────── */
 
-.ado-config-repo-pill {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	padding: 1px 6px;
-	font-size: 0.72rem;
-	border-radius: var(--radius-sm);
-	background: var(--surface-soft);
-	color: var(--text-secondary);
-	border: 1px solid var(--panel-border);
-}
-
-.ado-config-repo-pill-remove {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 14px;
-	height: 14px;
-	border-radius: 50%;
-	border: none;
-	background: transparent;
-	color: var(--text-muted);
-	cursor: pointer;
-	font-size: 0.6rem;
-	padding: 0;
-	line-height: 1;
-}
-
-.ado-config-repo-pill-remove:hover {
-	background: var(--danger-soft, color-mix(in srgb, var(--danger, #ef4444) 15%, transparent));
-	color: var(--danger, #ef4444);
-}
-
-/* ─── Empty state ─────────────────────────────────────────────── */
-
-.ado-config-empty {
+.ado-config-toml-builder {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	text-align: center;
-	padding: var(--space-8);
-	color: var(--text-muted);
-	gap: var(--space-2);
+	gap: var(--space-4);
+}
+.ado-config-toml-form {
+	padding: var(--space-4);
 	background: var(--surface);
-	border: 1px dashed var(--border);
-	border-radius: var(--radius-lg);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg, 12px);
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-3);
 }
-
-.ado-config-empty-title {
-	font-size: 1rem;
-	font-weight: 600;
-	color: var(--text);
-	margin: 0;
-}
-
-.ado-config-empty-desc {
-	font-size: var(--font-size-sm);
-	color: var(--text-secondary);
-	margin: 0;
-	max-width: 36ch;
-}
-
-/* ─── Field display (profile details) ─────────────────────────── */
-
-.ado-config-field {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	font-size: var(--font-size-sm);
-	color: var(--text-secondary);
-}
-
-.ado-config-field-badge {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 36px;
-	padding: 1px 6px;
-	font-size: 0.65rem;
-	font-weight: 700;
-	border-radius: var(--radius-sm);
-	background: var(--surface-soft);
-	color: var(--text-muted);
-	text-transform: uppercase;
-	letter-spacing: 0.03em;
-	font-family: 'JetBrains Mono', monospace;
-}
-
-.ado-config-field-value {
-	font-family: 'JetBrains Mono', monospace;
-	font-size: 0.82rem;
-	color: var(--text);
-}
-
-/* ─── Buttons ─────────────────────────────────────────────────── */
-
-.ado-config-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-1);
-	padding: var(--space-1) var(--space-3);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
-	font-size: var(--font-size-sm);
-	font-weight: 500;
-	cursor: pointer;
-	background: transparent;
-	color: var(--text-secondary);
-	transition: all 0.2s ease;
-}
-
-.ado-config-btn:hover {
-	background: var(--surface-hover);
-	color: var(--text);
-	border-color: var(--text-muted);
-}
-
-.ado-config-btn.primary {
-	background: var(--yz-accent);
-	border-color: var(--yz-accent);
-	color: white;
-}
-
-.ado-config-btn.primary:hover {
-	opacity: 0.9;
-}
-
-.ado-config-add-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-1);
-	padding: var(--space-2) var(--space-4);
-	border: 1px solid var(--yz-accent);
-	border-radius: var(--radius-md);
-	font-size: var(--font-size-sm);
-	font-weight: 600;
-	cursor: pointer;
-	background: var(--yz-accent);
-	color: white;
-	transition: all 0.2s ease;
-}
-
-.ado-config-add-btn:hover {
-	opacity: 0.9;
-	transform: translateY(-1px);
-}
-
-/* ─── Responsive ──────────────────────────────────────────────── */
-
-@media (max-width: 768px) {
-	.ado-config {
-		padding: var(--space-4);
+@media (max-width: 560px) {
+	.ado-config-toml-form {
+		grid-template-columns: 1fr;
 	}
+}
 
-	.ado-config-header {
-		flex-direction: column;
-		align-items: flex-start;
-	}
+/* ─── Responsive ─────────────────────────────────────────────────────── */
 
+@media (max-width: 600px) {
 	.ado-config-profiles {
 		grid-template-columns: 1fr;
 	}
-
-	.ado-config-default {
+	.ado-config-pat {
 		flex-direction: column;
-		align-items: flex-start;
+		align-items: stretch;
 	}
-
-	.ado-config-default-select {
-		width: 100%;
+	.ado-config-pat-actions {
+		justify-content: flex-end;
 	}
 }

@@ -8,7 +8,6 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "ado": "allow",
   "mcp": "allow",
   "edit": "deny",
   "write": "deny",

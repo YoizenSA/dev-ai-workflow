@@ -326,7 +326,6 @@ func TestResult_AllFields(t *testing.T) {
 	m.sddModeIdx = 1
 	m.personaIdx = 1
 	m.installMicrosoftLearnMCP = true
-	m.installADO = true
 	m.confirmed = true
 
 	r := m.Result()
@@ -350,9 +349,6 @@ func TestResult_AllFields(t *testing.T) {
 	}
 	if !r.MCP {
 		t.Fatal("MCP should be true")
-	}
-	if !r.ADO {
-		t.Fatal("ADO should be true")
 	}
 }
 
@@ -435,59 +431,6 @@ func TestMCPToggle(t *testing.T) {
 	sendKey(&m, " ") // space to toggle back
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should be false after second toggle")
-	}
-}
-
-func TestADOToggle(t *testing.T) {
-	m := NewModel(singleAgent("opencode"))
-	goToCustomInstall(&m)
-	sendKey(&m, "enter") // agent -> options
-	sendKey(&m, "enter") // options -> MCP
-	if m.step != stepMCP {
-		t.Fatalf("expected stepMCP, got %d", m.step)
-	}
-	if m.installADO {
-		t.Fatal("ADO should start as false")
-	}
-	sendKey(&m, "down") // navigate to ADO
-	sendKey(&m, " ")    // space to toggle
-	if !m.installADO {
-		t.Fatal("ADO should be true after space toggle")
-	}
-}
-
-func TestShouldShowADOStep_Opencode(t *testing.T) {
-	m := NewModel(singleAgent("opencode"))
-	m.selectedAgent = "opencode"
-	if !m.shouldShowADOStep() {
-		t.Fatal("shouldShowADOStep should be true for opencode")
-	}
-}
-
-func TestShouldShowADOStep_Pi(t *testing.T) {
-	m := NewModel(singleAgent("pi"))
-	m.selectedAgent = "pi"
-	if !m.shouldShowADOStep() {
-		t.Fatal("shouldShowADOStep should be true for pi")
-	}
-}
-
-func TestShouldShowADOStep_Windsurf(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
-	m.selectedAgent = "windsurf"
-	if m.shouldShowADOStep() {
-		t.Fatal("shouldShowADOStep should be false for windsurf")
-	}
-}
-
-func TestResult_ADOField(t *testing.T) {
-	m := NewModel(singleAgent("opencode"))
-	m.selectedAgent = "opencode"
-	m.installADO = true
-	m.confirmed = true
-	r := m.Result()
-	if !r.ADO {
-		t.Fatal("ADO should be true in result")
 	}
 }
 

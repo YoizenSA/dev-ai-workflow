@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -143,7 +144,7 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 		}
 		id := subAgentIDs[n.ID]
 		path := filepath.Join(e.agentsDir, id+".md")
-		files[path] = e.renderSubAgentMarkdown(wf, n, id)
+		files[path] = e.renderSubAgentMarkdown(wf, n, id, subAgentIDs)
 		artifacts = append(artifacts, ExportArtifact{Path: path, Kind: "agent", Name: id})
 	}
 
@@ -239,54 +240,44 @@ func sanitizeSlug(s string) string {
 // ─── markdown rendering ────────────────────────────────────────────────────
 
 // renderOrchestratorMarkdown builds the orchestrator agent frontmatter + body.
-// It reuses agents.BuildOpenCodeMarkdown so the permission block follows the
-// exact same rendering/bucket-expansion rules as every other ywai agent.
+// The orchestrator's tools come from the START node's `tools` field (CSV). When
+// empty, coordinator defaults are used (read/glob/grep/task/skill/question/
+// delegate). The permission.task sub-map restricts delegation to this
+// workflow's sub-agents only (one allow per subAgent node), matching the
+// preconfigured orchestrator's model.
 func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
-	if e.target == TargetClaudeCode {
-		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), "task, read, bash", orchestratorModel(wf), body)
+	orchTools := ""
+	if s := wf.findNode(NodeTypeStart); s != nil {
+		orchTools = s.Data.Tools
 	}
-	mode := "all"
-	perm := orchestratorPermissions(taskTargets)
-	// The orchestrator needs read/bash to inspect context and task/skill/question
-	// to drive the workflow. BuildOpenCodeMarkdown renders these consistently.
+	perm := toolsToPermissions(orchTools, defaultOrchestratorTools)
+	if e.target == TargetClaudeCode {
+		claudeTools := csvFromPermissions(perm)
+		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), claudeTools, orchestratorModel(wf), body)
+	}
 	profile := agents.AgentProfile{
 		Name:        orchestratorID,
 		Description: orchestratorDescription(wf),
 		Prompt:      body,
 		Permission:  perm,
-		Mode:        mode,
+		Mode:        "all",
 		Group:       wf.Name,
 	}
-	return agents.BuildOpenCodeMarkdown(orchestratorID, profile)
-}
+	md := agents.BuildOpenCodeMarkdown(orchestratorID, profile)
+	md = injectModel(md, orchestratorModel(wf))
 
-// orchestratorPermissions builds the permission map: read/bash/task/skill/
-// question allow, plus a `task` sub-map restricting delegation to the
-// workflow's own sub-agents. BuildOpenCodeMarkdown expands these.
-func orchestratorPermissions(taskTargets []string) map[string]string {
-	// We encode the task sub-map as a synthetic key "task:<id>" that
-	// buildOpenCodeMarkdown cannot interpret directly; instead we render the
-	// task sub-map ourselves below and pass a coarse allow set here. The
-	// orchestrator gets task/skill/question allow plus the standard read/bash.
-	perm := map[string]string{
-		"read":      "allow",
-		"edit":      "allow",
-		"write":     "allow",
-		"bash":      "allow",
-		"glob":      "allow",
-		"grep":      "allow",
-		"task":      "allow",
-		"skill":     "allow",
-		"question":  "allow",
-		"webfetch":  "allow",
-		"websearch": "allow",
+	// Delegation: orchestrator may delegate to every subAgent in the workflow.
+	taskMap := map[string]string{"*": "deny"}
+	for _, id := range taskTargets {
+		taskMap[id] = "allow"
 	}
-	_ = taskTargets // referenced via the explicit task sub-map in the body
-	return perm
+	if injected, ok := agents.InjectTaskPermission(md, taskMap); ok {
+		md = injected
+	}
+	return md
 }
 
 func orchestratorDescription(wf *Workflow) string {
-	// The START node carries the orchestrator's own description when set.
 	if s := wf.findNode(NodeTypeStart); s != nil && strings.TrimSpace(s.Data.AgentDescription) != "" {
 		return s.Data.AgentDescription
 	}
@@ -296,8 +287,6 @@ func orchestratorDescription(wf *Workflow) string {
 	return "Orchestrator for the " + wf.Name + " workflow."
 }
 
-// orchestratorModel returns the model configured on the START node (the
-// orchestrator parent), or "" to inherit.
 func orchestratorModel(wf *Workflow) string {
 	if s := wf.findNode(NodeTypeStart); s != nil {
 		if m := strings.TrimSpace(s.Data.Model); m != "" && m != "inherit" {
@@ -307,13 +296,18 @@ func orchestratorModel(wf *Workflow) string {
 	return ""
 }
 
-// renderSubAgentMarkdown builds a sub-agent's .md via BuildOpenCodeMarkdown,
-// mapping the node's tools/model to an AgentProfile.
-func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string) string {
-	perm := subAgentPermissions(n)
+// renderSubAgentMarkdown builds a sub-agent's .md. Its tools come from the
+// node's `tools` field; when empty, dev defaults apply (read/edit/write/bash/
+// glob/grep/skill). Delegation is derived from outgoing edges: a subAgent may
+// delegate to any subAgent node it has a direct connection to.
+func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subAgentIDs map[string]string) string {
+	perm := toolsToPermissions(n.Data.Tools, defaultSubAgentTools)
+	// Sub-agents default to "subagent" mode: they don't appear in the agent
+	// selector (only invocable via `task` by the orchestrator). The user can
+	// override with "all" if they want the agent selectable.
 	mode := n.Data.Mode
 	if mode == "" {
-		mode = "all"
+		mode = "subagent"
 	}
 	desc := n.Data.AgentDescription
 	if desc == "" {
@@ -324,7 +318,8 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string) stri
 		prompt = n.Data.Prompt
 	}
 	if e.target == TargetClaudeCode {
-		md := renderClaudeAgentMarkdown(id, desc, n.Data.Tools, n.Data.Model, prompt)
+		claudeTools := csvFromPermissions(perm)
+		md := renderClaudeAgentMarkdown(id, desc, claudeTools, n.Data.Model, prompt)
 		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
 			md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 		}
@@ -339,58 +334,156 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string) stri
 		Group:       wf.Name,
 	}
 	md := agents.BuildOpenCodeMarkdown(id, profile)
+	md = injectModel(md, n.Data.Model)
 
-	// Append the task instruction so the spawned agent knows what to do.
+	// Delegation: derived from the sub-agent's outgoing edges to other sub-agents.
+	taskMap := delegationMapFromOutgoing(wf, n.ID, subAgentIDs)
+	if injected, ok := agents.InjectTaskPermission(md, taskMap); ok {
+		md = injected
+	}
+
 	if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
 		md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 	}
 	return md
 }
 
-// subAgentPermissions maps a node's comma-separated tools string to the
-// opencode permission map. Empty tools → read-only baseline.
-func subAgentPermissions(n *Node) map[string]string {
-	perm := map[string]string{
-		"read": "allow",
-		"glob": "allow",
-		"grep": "allow",
+// ─── tools → permissions ───────────────────────────────────────────────────
+
+// defaultOrchestratorTools is applied when the START node has no tools set.
+// Coordinator-only: read + ask + skill + context (mcp bucket). No edit/write/
+// bash — the orchestrator never touches code directly. (delegate/delegation_*
+// are added by BuildOpenCodeMarkdown's AlwaysAllowed path when needed.)
+const defaultOrchestratorTools = "read,glob,grep,task,skill,question,mcp"
+
+// defaultSubAgentTools is applied when a subAgent node has no tools set.
+// Full implementer: read + write + edit + bash + skill + context (mcp bucket).
+const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
+
+// toolsToPermissions converts a comma-separated tools string into a permission
+// map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
+// Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
+// Coarse buckets (mcp, memory, delegate, codegraph, context7, ywai-kanban) are
+// expanded to opencode-native wildcards via ExpandPermissionBuckets so they
+// actually gate the underlying tools.
+func toolsToPermissions(csv, defaults string) map[string]string {
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		csv = defaults
 	}
-	for _, t := range strings.Split(n.Data.Tools, ",") {
-		t = strings.ToLower(strings.TrimSpace(t))
-		switch t {
-		case "":
+	perm := map[string]string{}
+	for _, entry := range strings.Split(csv, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry == "" {
 			continue
-		case "bash", "execute_bash":
-			perm["bash"] = "allow"
-		case "edit":
-			perm["edit"] = "allow"
-		case "write":
-			perm["write"] = "allow"
-		case "read":
-			perm["read"] = "allow"
-		case "webfetch", "fetch":
-			perm["webfetch"] = "allow"
-		case "websearch", "search":
-			perm["websearch"] = "allow"
-		case "task", "delegate":
-			perm["task"] = "allow"
-		case "skill":
-			perm["skill"] = "allow"
-		case "question", "askuserquestion":
-			perm["question"] = "allow"
-		case "glob":
-			perm["glob"] = "allow"
-		case "grep":
-			perm["grep"] = "allow"
-		case "lsp":
-			perm["lsp"] = "allow"
-		default:
-			// Pass through unknown tool names verbatim (e.g. MCP tools).
-			perm[t] = "allow"
+		}
+		val := "allow"
+		// ":deny" suffix → this tool is explicitly blocked.
+		if idx := strings.Index(entry, ":deny"); idx >= 0 {
+			entry = strings.TrimSpace(entry[:idx])
+			val = "deny"
+		}
+		if entry == "" {
+			continue
+		}
+		perm[entry] = val
+	}
+	return agents.ExpandPermissionBuckets(perm)
+}
+
+// csvFromPermissions renders a permission map as a comma-separated string of
+// allowed tool names (for the claude-code `tools:` frontmatter key).
+func csvFromPermissions(perm map[string]string) string {
+	var allowed []string
+	for k, v := range perm {
+		if v == "allow" {
+			allowed = append(allowed, k)
 		}
 	}
-	// Sub-agents with tools that mutate get edit/write; pure-research ones stay read-only.
-	return perm
+	sort.Strings(allowed)
+	return strings.Join(allowed, ",")
+}
+
+// delegationMapFromOutgoing builds the permission.task map for a subAgent node.
+// Delegation targets come from TWO sources:
+//  1. Outgoing edges to other subAgent nodes in the graph (the visible flow).
+//  2. The node's `delegateTo` field — explicit agent ids (comma-separated) this
+//     agent may delegate to, even without a visible edge. Use this for utility
+//     agents like "finder" that several sub-agents need but aren't part of the
+//     main execution flow.
+//
+// delegateTo entries resolve against subAgentIDs first (so "finder" → the
+// workflow's finder slug), then pass through verbatim (so external agent names
+// like "memory" or "ask" also work). Everything not listed is denied.
+func delegationMapFromOutgoing(wf *Workflow, nodeID string, subAgentIDs map[string]string) map[string]string {
+	taskMap := map[string]string{"*": "deny"}
+
+	// 1. Outgoing edges to subAgents.
+	for _, c := range wf.Connections {
+		if c.From != nodeID {
+			continue
+		}
+		if slug, ok := subAgentIDs[c.To]; ok {
+			taskMap[slug] = "allow"
+		}
+	}
+
+	// 2. Explicit delegateTo field (utility agents without visible edges).
+	byID := wf.nodeByID()
+	if n, ok := byID[nodeID]; ok {
+		for _, entry := range strings.Split(n.Data.DelegateTo, ",") {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			// Resolve to the workflow-scoped slug if it's a subAgent node id.
+			if slug, ok := subAgentIDs[entry]; ok {
+				taskMap[slug] = "allow"
+			} else {
+				// External agent name (e.g. "finder", "memory", "ask") — pass
+				// through verbatim.
+				taskMap[entry] = "allow"
+			}
+		}
+	}
+
+	return taskMap
+}
+
+// injectModel writes a `model:` key into the agent markdown frontmatter after
+// `description:`. No-op when model is empty or already present.
+func injectModel(md, model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" || model == "inherit" {
+		return md
+	}
+	lines := strings.Split(md, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return md
+	}
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			break
+		}
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "model:") {
+			return md // already present
+		}
+	}
+	var out []string
+	inserted := false
+	for i, line := range lines {
+		if !inserted && i > 0 && strings.HasPrefix(strings.TrimSpace(line), "description:") {
+			out = append(out, line)
+			out = append(out, "model: "+model)
+			inserted = true
+			continue
+		}
+		out = append(out, line)
+	}
+	if !inserted {
+		return md
+	}
+	return strings.Join(out, "\n")
 }
 
 // renderClaudeAgentMarkdown builds a Claude Code agent .md: native frontmatter

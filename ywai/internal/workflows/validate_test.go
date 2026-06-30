@@ -54,11 +54,12 @@ func TestValidateCycle(t *testing.T) {
 	// Create a cycle a -> e -> a.
 	wf.Connections = append(wf.Connections, Connection{From: "e", To: "a"})
 	res := Validate(wf)
-	if res.Valid {
-		t.Fatal("expected invalid for cyclic graph")
+	// A cycle is a warning (review→fix loops are valid), not an error.
+	if !res.Valid {
+		t.Fatal("cyclic graph should still be valid (cycle is a warning)")
 	}
-	if !hasIssueContaining(res.Errors, "cycle") {
-		t.Fatalf("expected cycle error, got: %+v", res.Errors)
+	if !hasIssueContaining(res.Warnings, "cycle") {
+		t.Fatalf("expected cycle warning, got: %+v", res.Warnings)
 	}
 }
 

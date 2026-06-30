@@ -285,7 +285,6 @@ var installCmd = &cobra.Command{
 		}
 
 		var installMCP bool
-		var installADO bool
 		var globalOnly bool
 		var preset, scope, sddMode, persona string
 		var groupFilter agentprofiles.GroupFilter
@@ -315,7 +314,6 @@ var installCmd = &cobra.Command{
 				agentFlag = result.Agent
 			}
 			installMCP = result.MCP
-			installADO = result.ADO
 			globalOnly = result.GlobalOnly
 			overwriteAgents = result.OverwriteAgents
 			preset = result.Preset
@@ -349,12 +347,7 @@ var installCmd = &cobra.Command{
 			DryRun:    dryRun,
 		}
 
-		// When the TUI ran it already collected ADO and overwrite choices.
-		// Only fall back to flag/prompt when the TUI did not run.
-		if !ranTUI {
-			installADO = getBoolFlag(cmd, "ado")
-		}
-
+		// Only prompt for overwrite when the TUI did not collect it.
 		if !ranTUI {
 			fmt.Print("  Overwrite existing agent profiles? [Y/n] ")
 			var response string
@@ -362,7 +355,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		executeInstall(installOpts, installMCP, globalOnly, installADO, groupFilter, overwriteAgents)
+		executeInstall(installOpts, installMCP, globalOnly, groupFilter, overwriteAgents)
 
 		// Configure autostart if requested
 		if autostartFlag && !dryRun {
@@ -1145,7 +1138,6 @@ func init() {
 	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
 	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
 	installCmd.Flags().Bool("autostart", false, "Configure control server to start automatically on system boot")
-	installCmd.Flags().Bool("ado", false, "Install Azure DevOps plugin (opencode + pi)")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 

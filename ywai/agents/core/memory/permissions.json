@@ -16,7 +16,6 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "deny",
-  "ado": "deny",
   "engram_mem_save": "deny",
   "engram_mem_save_prompt": "deny",
   "engram_mem_update": "deny",

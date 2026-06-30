@@ -1,12 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
 import {
 	Brain,
+	Cloud,
 	LayoutGrid,
 	LineChart,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Settings,
 	Sparkles,
+	Store,
 	Workflow,
 } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
@@ -56,16 +58,12 @@ const NAV_ITEMS = [
 	{
 		path: "/mcp-store",
 		label: "MCP Store",
-		icon: (
-			<span className="sidebar-icon-badge">MCP</span>
-		),
+		icon: <Store size={20} />,
 	},
 	{
-		path: "/ado-config",
+		path: "/ado",
 		label: "Azure DevOps",
-		icon: (
-			<span className="sidebar-icon-badge">ADO</span>
-		),
+		icon: <Cloud size={20} />,
 	},
 ];
 
@@ -104,7 +102,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 
 			{/* Navigation */}
 			<nav className="nav">
-				<span className="sidebar-section-label">CORE</span>
+				<span className="nav-section-label">CORE</span>
 				{NAV_ITEMS.slice(0, 6).map((item) => {
 					const isActive = location.pathname === item.path;
 					const badge =
@@ -128,7 +126,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 					);
 				})}
 
-				<span className="sidebar-section-label">PLUGINS</span>
+				<span className="nav-section-label">PLUGINS</span>
 				{NAV_ITEMS.slice(6).map((item) => {
 					const isActive = location.pathname === item.path;
 

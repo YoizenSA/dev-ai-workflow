@@ -79,16 +79,6 @@
 }
 .collapsed .nav-badge { display: none; }
 
-.sidebar-icon-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.35rem;
-  border-radius: var(--radius-sm);
-  background: var(--primary-soft);
-  color: var(--primary);
-  line-height: 1;
-}
 /* Sidebar footer tools: row of compact icon-buttons (theme toggle).
    Mirrors yz-ui shell.css L120-128 (.foot-tools / .foot-icon pattern) with
    the canonical .theme-toggle class for the button itself (base.css targets
@@ -109,6 +99,18 @@
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
+/* Collapsed: foot-tools becomes a column, so drop flex:1 (it would stretch the
+   toggle vertically into a tall strip) and give both tools a fixed square size
+   so they align as matching icon buttons. */
+.collapsed .foot-tools { flex-direction: column; align-items: center; }
+.collapsed .theme-toggle,
+.collapsed .foot-tools .btn-icon {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+}
 .theme-toggle:hover {
   background: var(--surface-hover);
   color: var(--text);
@@ -122,9 +124,7 @@
   width: 20px;
   height: 20px;
 }
-.collapsed .foot-tools {
-  flex-direction: column;
-}
+/* Column layout for the collapsed rail is set above with the size rules. */
 
 /* Version update card: shows in the sidebar foot only when an update is
    available. The "Update now" button triggers a detached `ywai update`. */

@@ -265,3 +265,244 @@ func TestConversationHistoryRoundTrips(t *testing.T) {
 		t.Fatalf("conversation history not preserved: %+v", loaded.ConversationHistory)
 	}
 }
+
+// TestToolsToPermissions verifies the CSV → permission map conversion, including
+// bucket expansion and the :deny suffix.
+func TestToolsToPermissions(t *testing.T) {
+	cases := []struct {
+		name     string
+		csv      string
+		defaults string
+		want     map[string]string
+	}{
+		{
+			name:     "empty uses defaults",
+			csv:      "",
+			defaults: "read,task",
+			want:     map[string]string{"read": "allow", "task": "allow"},
+		},
+		{
+			name:     "explicit tools override defaults",
+			csv:      "read,edit,bash",
+			defaults: "read,task",
+			want:     map[string]string{"read": "allow", "edit": "allow", "bash": "allow"},
+		},
+		{
+			name:     "deny suffix blocks a tool",
+			csv:      "read,edit,bash:deny",
+			defaults: "read",
+			want:     map[string]string{"read": "allow", "edit": "allow", "bash": "deny"},
+		},
+		{
+			name:     "mcp bucket expands to wildcards",
+			csv:      "read,mcp",
+			defaults: "read",
+			want: map[string]string{
+				"read":          "allow",
+				"codegraph_*":   "allow",
+				"context7_*":    "allow",
+				"ywai-kanban_*": "allow",
+			},
+		},
+		{
+			name:     "delegate bucket expands",
+			csv:      "read,delegate",
+			defaults: "read",
+			want: map[string]string{
+				"read":          "allow",
+				"delegate":      "allow",
+				"delegation_*":  "allow",
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := toolsToPermissions(c.csv, c.defaults)
+			if len(got) != len(c.want) {
+				t.Fatalf("len mismatch: got %d (%+v), want %d (%+v)", len(got), got, len(c.want), c.want)
+			}
+			for k, v := range c.want {
+				if got[k] != v {
+					t.Errorf("perm[%q] = %q, want %q (full: %+v)", k, got[k], v, got)
+				}
+			}
+		})
+	}
+}
+
+// TestDelegationMapFromOutgoing verifies that a subAgent's delegation map is
+// derived from its outgoing edges to other subAgents.
+func TestDelegationMapFromOutgoing(t *testing.T) {
+	wf := &Workflow{
+		Name: "w",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart},
+			{ID: "dev", Type: NodeTypeSubAgent},
+			{ID: "qa", Type: NodeTypeSubAgent},
+			{ID: "rev", Type: NodeTypeSubAgent},
+			{ID: "e", Type: NodeTypeEnd},
+		},
+		Connections: []Connection{
+			{From: "dev", To: "qa"},   // dev → qa: allowed
+			{From: "dev", To: "rev"},  // dev → rev: allowed
+			{From: "qa", To: "e"},     // qa → end: not a subAgent, ignored
+			{From: "rev", To: "e"},    // rev → end: no subAgent targets
+		},
+	}
+	subAgentIDs := map[string]string{
+		"dev": "w-dev",
+		"qa":  "w-qa",
+		"rev": "w-rev",
+	}
+
+	// dev has edges to qa + rev → both allowed.
+	devMap := delegationMapFromOutgoing(wf, "dev", subAgentIDs)
+	if devMap["*"] != "deny" || devMap["w-qa"] != "allow" || devMap["w-rev"] != "allow" {
+		t.Errorf("dev map wrong: %+v", devMap)
+	}
+
+	// rev has no edges to subAgents → only deny.
+	revMap := delegationMapFromOutgoing(wf, "rev", subAgentIDs)
+	if revMap["*"] != "deny" || len(revMap) != 1 {
+		t.Errorf("rev map should be deny-only: %+v", revMap)
+	}
+}
+
+// TestDelegationMapWithDelegateTo verifies the border case: a sub-agent with
+// delegateTo="finder" can delegate to finder even without a visible edge.
+func TestDelegationMapWithDelegateTo(t *testing.T) {
+	wf := &Workflow{
+		Name: "w",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart},
+			{ID: "dev", Type: NodeTypeSubAgent, Data: NodeData{DelegateTo: "finder"}},
+			{ID: "finder", Type: NodeTypeSubAgent},
+			{ID: "e", Type: NodeTypeEnd},
+		},
+		Connections: []Connection{
+			{From: "s", To: "dev"},
+			{From: "dev", To: "e"}, // no edge to finder
+		},
+	}
+	subAgentIDs := map[string]string{
+		"dev":    "w-dev",
+		"finder": "w-finder",
+	}
+	// dev has no edge to finder, but delegateTo="finder" grants it.
+	devMap := delegationMapFromOutgoing(wf, "dev", subAgentIDs)
+	if devMap["w-finder"] != "allow" {
+		t.Errorf("dev should delegate to finder via delegateTo: %+v", devMap)
+	}
+	if devMap["*"] != "deny" {
+		t.Errorf("dev should still deny everything else: %+v", devMap)
+	}
+}
+
+// TestDelegationMapWithExternalAgent verifies delegateTo with an external agent
+// name (not a workflow node) passes through verbatim.
+func TestDelegationMapWithExternalAgent(t *testing.T) {
+	wf := &Workflow{
+		Name: "w",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart},
+			{ID: "dev", Type: NodeTypeSubAgent, Data: NodeData{DelegateTo: "memory, ask"}},
+			{ID: "e", Type: NodeTypeEnd},
+		},
+		Connections: []Connection{
+			{From: "s", To: "dev"},
+			{From: "dev", To: "e"},
+		},
+	}
+	subAgentIDs := map[string]string{"dev": "w-dev"}
+	devMap := delegationMapFromOutgoing(wf, "dev", subAgentIDs)
+	if devMap["memory"] != "allow" || devMap["ask"] != "allow" {
+		t.Errorf("dev should delegate to external memory+ask: %+v", devMap)
+	}
+}
+
+// TestOrchestratorExportHasDelegationMap verifies the exported orchestrator .md
+// contains a nested permission.task with the workflow's sub-agents and "*": deny.
+func TestOrchestratorExportHasDelegationMap(t *testing.T) {
+	wf := &Workflow{
+		Name:    "deploy",
+		Version: "1.0.0",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart, Name: "s"},
+			{ID: "dev", Type: NodeTypeSubAgent, Name: "dev"},
+			{ID: "qa", Type: NodeTypeSubAgent, Name: "qa"},
+			{ID: "e", Type: NodeTypeEnd, Name: "e"},
+		},
+		Connections: []Connection{
+			{From: "s", To: "dev"},
+			{From: "dev", To: "qa"},
+			{From: "qa", To: "e"},
+		},
+	}
+	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	orchPath := ""
+	for p := range files {
+		if strings.HasSuffix(p, "deploy-orchestrator.md") {
+			orchPath = p
+		}
+	}
+	if orchPath == "" {
+		t.Fatal("orchestrator file not found")
+	}
+	orch := files[orchPath]
+	for _, want := range []string{
+		`"*": deny`,
+		"task:",
+		"deploy-dev: allow",
+		"deploy-qa: allow",
+	} {
+		if !strings.Contains(orch, want) {
+			t.Errorf("orchestrator missing %q:\n%s", want, orch)
+		}
+	}
+}
+
+// TestSubAgentExportHasDelegationFromEdges verifies that a subAgent's delegation
+// map reflects its outgoing edges (not all subAgents).
+func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
+	wf := &Workflow{
+		Name:    "w",
+		Version: "1.0.0",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart, Name: "s"},
+			{ID: "dev", Type: NodeTypeSubAgent, Name: "dev"},
+			{ID: "qa", Type: NodeTypeSubAgent, Name: "qa"},
+			{ID: "rev", Type: NodeTypeSubAgent, Name: "rev"},
+			{ID: "e", Type: NodeTypeEnd, Name: "e"},
+		},
+		Connections: []Connection{
+			{From: "dev", To: "qa"},
+			{From: "qa", To: "rev"},
+		},
+	}
+	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	// dev should be able to delegate to qa (w-qa) but NOT to rev.
+	devPath := ""
+	for p := range files {
+		if strings.HasSuffix(p, "w-dev.md") {
+			devPath = p
+		}
+	}
+	if devPath == "" {
+		t.Fatal("dev agent file not found")
+	}
+	dev := files[devPath]
+	if !strings.Contains(dev, "w-qa: allow") {
+		t.Errorf("dev should delegate to qa:\n%s", dev)
+	}
+	if strings.Contains(dev, "w-rev: allow") {
+		t.Errorf("dev should NOT delegate to rev (no edge):\n%s", dev)
+	}
+}

@@ -15,8 +15,8 @@ func TestInstallOptions_BuildArgs_Minimal(t *testing.T) {
 
 	want := []string{
 		"install", "--agent", "opencode", "--persona", "neutral", "--scope", "global",
-		"--component", "engram", "--component", "sdd", "--component", "skills",
-		"--component", "context7", "--component", "persona", "--component", "permissions",
+		"--component", "engram", "--component", "skills",
+		"--component", "context7", "--component", "permissions",
 	}
 	if !slices.Equal(args, want) {
 		t.Fatalf("args = %v, want %v", args, want)
@@ -37,8 +37,8 @@ func TestInstallOptions_BuildArgs_AllFlags(t *testing.T) {
 	want := []string{
 		"install", "--agent", "claude-code",
 		"--persona", "gentleman", "--scope", "workspace",
-		"--component", "engram", "--component", "sdd", "--component", "skills",
-		"--component", "context7", "--component", "persona", "--component", "permissions",
+		"--component", "engram", "--component", "skills",
+		"--component", "context7", "--component", "permissions",
 		"--sdd-mode", "multi", "--dry-run",
 	}
 	if !slices.Equal(args, want) {

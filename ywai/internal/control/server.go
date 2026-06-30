@@ -116,7 +116,7 @@ func (s *Server) buildRoutes() {
 	// ─── MCP Store API ──────────────────────────────────────────
 	s.registerMcpStoreRoutes()
 
-	// ─── ADO Config API ─────────────────────────────────────────
+	// ─── Azure DevOps Config API ────────────────────────────────
 	s.registerAdoConfigRoutes()
 
 	// ─── Agents.md API ──────────────────────────────────────────

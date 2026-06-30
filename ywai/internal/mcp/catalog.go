@@ -144,10 +144,10 @@ var catalog = []CatalogEntry{
 		ID: "codegraph", Name: "CodeGraph",
 		Description: "Semantic code search and dependency context across the repo",
 		Category:    "memory", Icon: "🕸️",
-		Type: "local", Command: []string{"codegraph", "mcp"},
-		InstallCmd: "go install github.com/nahuelyoizen/codegraph/cmd/codegraph@latest",
+		Type: "local", Command: []string{"codegraph", "serve", "--mcp"},
+		InstallCmd: "npm i -g @colbymchenry/codegraph",
 		Tools:      []string{"codegraph_search", "codegraph_context", "codegraph_dependencies"},
-		Docs:       "https://github.com/nahuelyoizen/codegraph",
+		Docs:       "https://github.com/colbymchenry/codegraph",
 	},
 	{
 		ID: "ywai-kanban", Name: "ywai Kanban",

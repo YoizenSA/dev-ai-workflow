@@ -109,8 +109,11 @@ func Validate(wf *Workflow) ValidationResult {
 	}
 
 	// Graph-level: cycles and reachability.
+	// A cycle is a warning, not an error — a review→fix loop (e.g. gate false
+	// → dev → qa → reviewer → gate) is a legitimate workflow pattern. The
+	// orchestrator prompt handles it via its routing instructions.
 	if wf.hasCycle() {
-		addErr("", "graph contains a cycle")
+		addWarn("", "graph contains a cycle (loops like review→fix are valid; ensure the orchestrator can exit)")
 	}
 	if start := wf.findNode(NodeTypeStart); start != nil {
 		reachable := wf.reachableFrom(start.ID)

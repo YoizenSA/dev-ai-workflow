@@ -109,7 +109,6 @@ cd ywai && bash scripts/dev.sh kanban
 | `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
 | `--persona` | Persona: `gentleman`, `neutral`, `custom` |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
-| `--ado` | Install Azure DevOps plugin (opencode + pi) |
 | `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
 
 ### Update flags
