@@ -27,8 +27,8 @@ type ExportPlan struct {
 	// EstimatedTokens is a rough size hint for the exported orchestrator prompt,
 	// using the chars/4 heuristic. Useful to flag oversized workflows in the UI
 	// before exporting.
-	EstimatedTokens int           `json:"estimatedTokens"`
-	DryRun          bool          `json:"dryRun"`
+	EstimatedTokens int  `json:"estimatedTokens"`
+	DryRun          bool `json:"dryRun"`
 }
 
 // Export targets. opencode renders agents with opencode permission blocks under

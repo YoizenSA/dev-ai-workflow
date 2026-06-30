@@ -27,12 +27,12 @@ const (
 // Workflow is a directed graph of nodes and connections. The JSON shape is
 // stable so workflow JSON round-trips on import/export.
 type Workflow struct {
-	ID                 string                `json:"id"`
-	Name               string                `json:"name"`
-	Description        string                `json:"description,omitempty"`
-	Version            string                `json:"version"`
-	Nodes              []Node                `json:"nodes"`
-	Connections        []Connection          `json:"connections"`
+	ID                  string               `json:"id"`
+	Name                string               `json:"name"`
+	Description         string               `json:"description,omitempty"`
+	Version             string               `json:"version"`
+	Nodes               []Node               `json:"nodes"`
+	Connections         []Connection         `json:"connections"`
 	SlashCommandOptions *SlashCommandOptions `json:"slashCommandOptions,omitempty"`
 	// ConversationHistory records the AI-refinement chat for this workflow
 	// (Edit-with-AI multi-turn). Persisted with the workflow JSON.
@@ -176,12 +176,12 @@ const (
 // the generated /<workflow> command carries allowed-tools, model, hooks, etc.
 // All fields optional; only set fields are emitted to the frontmatter.
 type SlashCommandOptions struct {
-	ArgumentHint          string         `json:"argumentHint,omitempty"`          // "[arg1] [arg2] | [alt1]"
-	AllowedTools          string         `json:"allowedTools,omitempty"`          // comma-separated
-	Model                 string         `json:"model,omitempty"`                 // default|sonnet|opus|haiku|inherit
-	Context               string         `json:"context,omitempty"`               // default|fork
-	DisableModelInvocation bool          `json:"disableModelInvocation,omitempty"` // emit disable-model-invocation: true
-	Hooks                 *WorkflowHooks `json:"hooks,omitempty"`
+	ArgumentHint           string         `json:"argumentHint,omitempty"`           // "[arg1] [arg2] | [alt1]"
+	AllowedTools           string         `json:"allowedTools,omitempty"`           // comma-separated
+	Model                  string         `json:"model,omitempty"`                  // default|sonnet|opus|haiku|inherit
+	Context                string         `json:"context,omitempty"`                // default|fork
+	DisableModelInvocation bool           `json:"disableModelInvocation,omitempty"` // emit disable-model-invocation: true
+	Hooks                  *WorkflowHooks `json:"hooks,omitempty"`
 }
 
 // WorkflowHooks is the three Claude Code hook buckets. Each holds a list of
@@ -195,7 +195,7 @@ type WorkflowHooks struct {
 // HookEntry matches Claude Code's hook entry: an optional matcher and the
 // actions to run when it fires.
 type HookEntry struct {
-	Matcher string      `json:"matcher,omitempty"`
+	Matcher string       `json:"matcher,omitempty"`
 	Hooks   []HookAction `json:"hooks"`
 }
 
@@ -212,12 +212,12 @@ type HookAction struct {
 // for a workflow. Persisted with the workflow JSON so the conversation survives
 // reloads.
 type ConversationHistory struct {
-	SchemaVersion    string               `json:"schemaVersion"`
+	SchemaVersion    string                `json:"schemaVersion"`
 	Messages         []ConversationMessage `json:"messages"`
-	CurrentIteration int                  `json:"currentIteration"`
-	MaxIterations    int                  `json:"maxIterations"`
-	CreatedAt        time.Time            `json:"createdAt"`
-	UpdatedAt        time.Time            `json:"updatedAt"`
+	CurrentIteration int                   `json:"currentIteration"`
+	MaxIterations    int                   `json:"maxIterations"`
+	CreatedAt        time.Time             `json:"createdAt"`
+	UpdatedAt        time.Time             `json:"updatedAt"`
 }
 
 // ConversationMessage is one turn in the refinement chat.

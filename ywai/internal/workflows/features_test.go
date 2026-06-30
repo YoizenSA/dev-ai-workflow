@@ -16,10 +16,10 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 
 	wf := exportFixture()
 	wf.SlashCommandOptions = &SlashCommandOptions{
-		AllowedTools:          "read,webfetch",
-		Model:                 "sonnet",
-		Context:               "fork",
-		ArgumentHint:          "[topic]",
+		AllowedTools:           "read,webfetch",
+		Model:                  "sonnet",
+		Context:                "fork",
+		ArgumentHint:           "[topic]",
 		DisableModelInvocation: true,
 		Hooks: &WorkflowHooks{
 			Stop: []HookEntry{{
@@ -176,10 +176,10 @@ func TestValidateMCPModeAcceptsValidAndRejectsInvalid(t *testing.T) {
 // TestValidateSlashCommandOptions checks model/context enums.
 func TestValidateSlashCommandOptions(t *testing.T) {
 	bad := &Workflow{
-		Name:               "w",
-		Version:            "1.0.0",
-		Nodes:              []Node{{ID: "s", Type: NodeTypeStart, Name: "s"}, {ID: "e", Type: NodeTypeEnd, Name: "e"}},
-		Connections:        []Connection{{From: "s", To: "e"}},
+		Name:                "w",
+		Version:             "1.0.0",
+		Nodes:               []Node{{ID: "s", Type: NodeTypeStart, Name: "s"}, {ID: "e", Type: NodeTypeEnd, Name: "e"}},
+		Connections:         []Connection{{From: "s", To: "e"}},
 		SlashCommandOptions: &SlashCommandOptions{Model: "bogus", Context: "bogus"},
 	}
 	res := Validate(bad)
@@ -309,9 +309,9 @@ func TestToolsToPermissions(t *testing.T) {
 			csv:      "read,delegate",
 			defaults: "read",
 			want: map[string]string{
-				"read":          "allow",
-				"delegate":      "allow",
-				"delegation_*":  "allow",
+				"read":         "allow",
+				"delegate":     "allow",
+				"delegation_*": "allow",
 			},
 		},
 	}
@@ -343,10 +343,10 @@ func TestDelegationMapFromOutgoing(t *testing.T) {
 			{ID: "e", Type: NodeTypeEnd},
 		},
 		Connections: []Connection{
-			{From: "dev", To: "qa"},   // dev → qa: allowed
-			{From: "dev", To: "rev"},  // dev → rev: allowed
-			{From: "qa", To: "e"},     // qa → end: not a subAgent, ignored
-			{From: "rev", To: "e"},    // rev → end: no subAgent targets
+			{From: "dev", To: "qa"},  // dev → qa: allowed
+			{From: "dev", To: "rev"}, // dev → rev: allowed
+			{From: "qa", To: "e"},    // qa → end: not a subAgent, ignored
+			{From: "rev", To: "e"},   // rev → end: no subAgent targets
 		},
 	}
 	subAgentIDs := map[string]string{
