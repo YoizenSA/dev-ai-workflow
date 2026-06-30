@@ -4,41 +4,34 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-// writeMockCodegraph writes a tiny executable at dir/codegraph that prints the
-// given stdout when invoked. Used to exercise codegraphVersionFromBinary
-// without depending on a real install.
-func writeMockCodegraph(t *testing.T, dir, out string) string {
-	t.Helper()
-	bin := filepath.Join(dir, "codegraph")
-	// A minimal shell script: ignore args, print the canned output.
-	script := "#!/bin/sh\ncat <<'EOF'\n" + out + "\nEOF\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write mock codegraph: %v", err)
-	}
-	return bin
-}
-
-func TestCodegraphVersionFromBinary_ParsesFirstLine(t *testing.T) {
-	dir := t.TempDir()
+func TestParseCodegraphVersion_FirstLine(t *testing.T) {
 	// codegraph version prints the bare version first; newer builds append an
 	// "Update available" banner line that must NOT be parsed as the version.
-	bin := writeMockCodegraph(t, dir, "0.9.6\nUpdate available: run `codegraph upgrade`\n")
-	got, err := codegraphVersionFromBinary(bin)
+	got, err := parseCodegraphVersion([]byte("0.9.6\nUpdate available: run `codegraph upgrade`\n"))
 	if err != nil {
-		t.Fatalf("codegraphVersionFromBinary error: %v", err)
+		t.Fatalf("parseCodegraphVersion error: %v", err)
 	}
 	if got != "0.9.6" {
 		t.Fatalf("version = %q, want 0.9.6", got)
 	}
 }
 
-func TestCodegraphVersionFromBinary_EmptyOutput(t *testing.T) {
-	dir := t.TempDir()
-	bin := writeMockCodegraph(t, dir, "")
-	if _, err := codegraphVersionFromBinary(bin); err == nil {
+func TestParseCodegraphVersion_SkipsLeadingBlankLines(t *testing.T) {
+	got, err := parseCodegraphVersion([]byte("\n\n   \n1.2.3\n"))
+	if err != nil {
+		t.Fatalf("parseCodegraphVersion error: %v", err)
+	}
+	if got != "1.2.3" {
+		t.Fatalf("version = %q, want 1.2.3", got)
+	}
+}
+
+func TestParseCodegraphVersion_EmptyOutput(t *testing.T) {
+	if _, err := parseCodegraphVersion([]byte("   \n\n")); err == nil {
 		t.Fatal("expected error for empty version output, got nil")
 	}
 }
@@ -54,6 +47,10 @@ func TestCodegraphResolveBin_FallbackSymlink(t *testing.T) {
 	// even when a real codegraph is (or is not) on PATH.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		// os.UserHomeDir reads USERPROFILE on Windows, not HOME.
+		t.Setenv("USERPROFILE", home)
+	}
 
 	// Place a file at the fallback path and assert it resolves there.
 	binDir := filepath.Join(home, ".local", "bin")

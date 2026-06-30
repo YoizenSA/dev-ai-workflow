@@ -260,7 +260,11 @@ func TestOpencodeEnv_CorrectsSnapXDG(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	want := "XDG_DATA_HOME=" + filepath.Join(home, ".local", "share")
 
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "snap", "code", "247", ".local", "share"))
+	// Real snap sandbox paths are always POSIX-style; the leaked value contains
+	// a literal "/snap/" regardless of the host OS, which is what the correction
+	// keys off. Build it with forward slashes so the test exercises that on every
+	// platform, not just Unix.
+	t.Setenv("XDG_DATA_HOME", home+"/snap/code/247/.local/share")
 	env := opencodeEnv()
 	if !envContains(env, want) {
 		t.Errorf("snap XDG_DATA_HOME not corrected; want %q in env", want)

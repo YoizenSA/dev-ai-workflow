@@ -40,6 +40,14 @@ func codegraphVersionFromBinary(exe string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return parseCodegraphVersion(out)
+}
+
+// parseCodegraphVersion returns the first non-empty line of `codegraph version`
+// output. Newer builds append an "Update available" banner that must not be
+// parsed as the version. Kept separate from the exec call so it stays unit
+// testable without a platform-specific mock binary.
+func parseCodegraphVersion(out []byte) (string, error) {
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -48,7 +56,7 @@ func codegraphVersionFromBinary(exe string) (string, error) {
 		}
 		return line, nil
 	}
-	return "", fmt.Errorf("no version line from %s version", exe)
+	return "", fmt.Errorf("no version line in codegraph version output")
 }
 
 // codegraphResolveBin returns the `codegraph` binary to invoke. It prefers the
