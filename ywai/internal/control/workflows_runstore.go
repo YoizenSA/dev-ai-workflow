@@ -55,7 +55,7 @@ func (rs *runStore) start(workflow, runID string, cancel context.CancelFunc) (*r
 		RunID:     runID,
 		Status:    "running",
 		StartedAt: time.Now(),
-		cancel:     cancel,
+		cancel:    cancel,
 	}
 	rs.runs[workflow] = rec
 	return rec, nil

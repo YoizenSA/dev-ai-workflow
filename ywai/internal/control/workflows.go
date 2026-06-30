@@ -38,7 +38,6 @@ func (s *Server) registerWorkflowsRoutes() {
 	s.mux.HandleFunc("GET /api/workflows", api.handleList)
 	s.mux.HandleFunc("POST /api/workflows", api.handleCreate)
 
-	
 	s.mux.HandleFunc("POST /api/workflows/import", api.handleImport)
 
 	// Per-workflow CRUD.

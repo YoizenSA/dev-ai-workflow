@@ -21,8 +21,8 @@ import (
 
 // aiEditRequest is the body of POST /api/workflows/{name}/ai-edit.
 type aiEditRequest struct {
-	Instruction string                          `json:"instruction"`
-	Model       string                          `json:"model,omitempty"`
+	Instruction string `json:"instruction"`
+	Model       string `json:"model,omitempty"`
 	// History carries the recent refinement turns so the AI has conversational
 	// context (last few messages). Optional; omit for single-turn edits.
 	History []workflows.ConversationMessage `json:"history,omitempty"`

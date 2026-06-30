@@ -51,10 +51,10 @@ type wsHub struct {
 }
 
 const (
-	wfWsWriteWait    = 10 * time.Second
-	wfWsPongWait     = 60 * time.Second
-	wfWsPingPeriod   = (wfWsPongWait * 9) / 10
-	wfWsMaxMessage   = 4096
+	wfWsWriteWait     = 10 * time.Second
+	wfWsPongWait      = 60 * time.Second
+	wfWsPingPeriod    = (wfWsPongWait * 9) / 10
+	wfWsMaxMessage    = 4096
 	wfWsCloseShutdown = 1001
 )
 
