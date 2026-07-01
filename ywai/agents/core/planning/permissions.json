@@ -1,0 +1,21 @@
+{
+  "read": "allow",
+  "edit": "deny",
+  "write": "allow",
+  "bash": "deny",
+  "glob": "allow",
+  "grep": "allow",
+  "lsp": "allow",
+  "ast_grep": "allow",
+  "websearch": "allow",
+  "webfetch": "allow",
+  "code_search": "allow",
+  "task": "allow",
+  "delegate": "allow",
+  "question": "allow",
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "codegraph_*": "allow",
+  "context7_*": "allow"
+}

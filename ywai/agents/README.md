@@ -15,6 +15,7 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 | `reviewer` | Code Reviewer | PR reviews, code quality, security audits |
 | `devops` | DevOps Engineer | CI/CD, deployments, infrastructure, monitoring |
 | `memory` | Memory Specialist | Memory consolidation, deduplication, structured plans |
+| `planning` | Planning | Plan mode: research → clarify → draft plan → approval gate (read-only until approved) |
 
 ## Delegation Flow
 
