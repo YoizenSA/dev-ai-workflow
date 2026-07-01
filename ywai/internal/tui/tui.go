@@ -113,8 +113,10 @@ const (
 )
 
 // optionsRowCount is the number of navigable rows on the Options step
-// (Preset, Scope, Global only, SDD Mode, Persona, Overwrite agents, Autostart).
-const optionsRowCount = 7
+// (Preset, Scope, Global only, Overwrite agents, Autostart).
+// SDD Mode and Persona were removed: ywai no longer installs the sdd/persona
+// components and writes its own curated AGENTS.md instead.
+const optionsRowCount = 5
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Choices
@@ -131,16 +133,6 @@ var (
 	scopeDescs   = map[string]string{
 		"global":    "Skills shared across all your projects (~/.local)",
 		"workspace": "Skills only in this project (current directory)",
-	}
-	sddModeChoices = []string{"single", "multi"}
-	sddModeDescs   = map[string]string{
-		"single": "A single agent does all the work",
-		"multi":  "Split work across multiple agents (build, plan, etc.)",
-	}
-	personaChoices = []string{"neutral", "gentleman"}
-	personaDescs   = map[string]string{
-		"neutral":   "Direct, concise responses",
-		"gentleman": "More courteous and explanatory",
 	}
 )
 
@@ -162,8 +154,6 @@ type TUIResult struct {
 	OverwriteAgents bool
 	Preset          string
 	Scope           string
-	SDDMode         string
-	Persona         string
 	Autostart       bool
 	GroupFilter     agents.GroupFilter
 }
@@ -197,8 +187,6 @@ type Model struct {
 	presetIdx     int
 	scopeIdx      int
 	globalOnly    bool
-	sddModeIdx    int
-	personaIdx    int
 	autostart     bool
 
 	// MCP selection
@@ -254,8 +242,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 	// Find indices for default values
 	presetIdx := findIndex(presetChoices, defaults.Preset)
 	scopeIdx := findIndex(scopeChoices, defaults.Scope)
-	sddModeIdx := findIndex(sddModeChoices, defaults.SDDMode)
-	personaIdx := findIndex(personaChoices, defaults.Persona)
 
 	return Model{
 		step:                     stepWelcome,
@@ -263,8 +249,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		presetIdx:                presetIdx,
 		scopeIdx:                 scopeIdx,
 		globalOnly:               defaults.GlobalOnly,
-		sddModeIdx:               sddModeIdx,
-		personaIdx:               personaIdx,
 		autostart:                defaults.Autostart,
 		installMicrosoftLearnMCP: defaults.MCP,
 		overwriteAgents:          true,
@@ -572,12 +556,8 @@ func (m *Model) cycleOption(dir int) {
 	case 2:
 		m.globalOnly = !m.globalOnly
 	case 3:
-		m.sddModeIdx = (m.sddModeIdx + dir + len(sddModeChoices)) % len(sddModeChoices)
-	case 4:
-		m.personaIdx = (m.personaIdx + dir + len(personaChoices)) % len(personaChoices)
-	case 5:
 		m.overwriteAgents = !m.overwriteAgents
-	case 6:
+	case 4:
 		m.autostart = !m.autostart
 	}
 }
@@ -841,8 +821,6 @@ func (m *Model) viewInstallMode() string {
 		defaults := [][2]string{
 			{"Preset", presetChoices[m.presetIdx]},
 			{"Scope", scopeChoices[m.scopeIdx]},
-			{"SDD Mode", sddModeChoices[m.sddModeIdx]},
-			{"Persona", personaChoices[m.personaIdx]},
 		}
 		for _, d := range defaults {
 			b.WriteString(fmt.Sprintf("    %s %s\n", dimStyle.Render(d[0]+":"), monoStyle.Render(d[1])))
@@ -937,8 +915,6 @@ func (m *Model) viewOptions() string {
 		{"Preset", presetChoices[m.presetIdx]},
 		{"Scope", scopeChoices[m.scopeIdx]},
 		{"Global only", globalLabel},
-		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
-		{"Persona", personaChoices[m.personaIdx]},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
 	}
@@ -996,17 +972,13 @@ func (m *Model) viewOptions() string {
 			} else {
 				b.WriteString(helpStyle.Render("    Global skills + AGENTS.md/REVIEW.md in the repo"))
 			}
-		case 5:
+		case 3:
 			if m.overwriteAgents {
 				b.WriteString(helpStyle.Render("    Overwrite existing agent profiles with fresh copies"))
 			} else {
 				b.WriteString(helpStyle.Render("    Keep existing agent profiles untouched"))
 			}
-		case 3:
-			b.WriteString(helpStyle.Render("    " + sddModeDescs[sddModeChoices[m.sddModeIdx]]))
 		case 4:
-			b.WriteString(helpStyle.Render("    " + personaDescs[personaChoices[m.personaIdx]]))
-		case 6:
 			if m.autostart {
 				b.WriteString(helpStyle.Render("    Start the control server on boot (auto-updates first, then serves)"))
 			} else {
@@ -1133,8 +1105,6 @@ func (m *Model) viewConfirm() string {
 		{"Preset", presetChoices[m.presetIdx]},
 		{"Scope", scopeChoices[m.scopeIdx]},
 		{"Global only", globalLabel},
-		{"SDD Mode", sddModeChoices[m.sddModeIdx]},
-		{"Persona", personaChoices[m.personaIdx]},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
 		{"Skills", "all extra skills"},
@@ -1301,8 +1271,6 @@ func (m *Model) Result() TUIResult {
 		OverwriteAgents: m.overwriteAgents,
 		Preset:          presetChoices[m.presetIdx],
 		Scope:           scopeChoices[m.scopeIdx],
-		SDDMode:         sddModeChoices[m.sddModeIdx],
-		Persona:         personaChoices[m.personaIdx],
 		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),
 	}

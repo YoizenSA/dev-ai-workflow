@@ -82,12 +82,6 @@ func TestNewModel_Defaults(t *testing.T) {
 	if m.globalOnly != true {
 		t.Fatal("globalOnly should default to true")
 	}
-	if m.sddModeIdx != 1 || sddModeChoices[1] != "multi" {
-		t.Fatal("default sddMode should be multi")
-	}
-	if m.personaIdx != 0 || personaChoices[0] != "neutral" {
-		t.Fatal("default persona should be neutral")
-	}
 }
 
 func TestStepFlow_WelcomeToInstallMode(t *testing.T) {
@@ -323,8 +317,6 @@ func TestResult_AllFields(t *testing.T) {
 	m.presetIdx = 1
 	m.scopeIdx = 1
 	m.globalOnly = true
-	m.sddModeIdx = 1
-	m.personaIdx = 1
 	m.installMicrosoftLearnMCP = true
 	m.confirmed = true
 
@@ -341,12 +333,6 @@ func TestResult_AllFields(t *testing.T) {
 	if !r.GlobalOnly {
 		t.Fatal("GlobalOnly should be true")
 	}
-	if r.SDDMode != "multi" {
-		t.Fatalf("SDDMode=%q, want multi", r.SDDMode)
-	}
-	if r.Persona != "gentleman" {
-		t.Fatalf("Persona=%q, want gentleman", r.Persona)
-	}
 	if !r.MCP {
 		t.Fatal("MCP should be true")
 	}
@@ -362,7 +348,7 @@ func TestViewConfirm_ShowsAllOptions(t *testing.T) {
 
 	view := m.viewConfirm()
 
-	checks := []string{"opencode", "full-gentleman", "global", "yes", "multi", "neutral", "all extra skills", "Microsoft Learn MCP"}
+	checks := []string{"opencode", "full-gentleman", "global", "yes", "all extra skills", "Microsoft Learn MCP"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewConfirm missing %q", c)
@@ -386,7 +372,7 @@ func TestViewOptions_Renders(t *testing.T) {
 	m.step = stepOptions
 	view := m.viewOptions()
 
-	checks := []string{"Preset", "Scope", "Global only", "SDD Mode", "Persona", "full-gentleman", "global", "yes", "multi", "neutral"}
+	checks := []string{"Preset", "Scope", "Global only", "full-gentleman", "global", "yes"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewOptions missing %q", c)

@@ -13,8 +13,6 @@ type TUIDefaults struct {
 	Preset     string   `json:"preset"`
 	Scope      string   `json:"scope"`
 	GlobalOnly bool     `json:"global_only"`
-	SDDMode    string   `json:"sdd_mode"`
-	Persona    string   `json:"persona"`
 	MCP        bool     `json:"mcp"`
 	Autostart  bool     `json:"autostart"`
 	Groups     []string `json:"groups"`
@@ -79,12 +77,6 @@ func parseDefaults(data []byte) (*TUIDefaults, error) {
 	if defaults.Scope == "" {
 		defaults.Scope = builtin.Scope
 	}
-	if defaults.SDDMode == "" {
-		defaults.SDDMode = builtin.SDDMode
-	}
-	if defaults.Persona == "" {
-		defaults.Persona = builtin.Persona
-	}
 
 	return &defaults, nil
 }
@@ -95,8 +87,6 @@ func BuiltInDefaults() *TUIDefaults {
 		Preset:     "full-gentleman",
 		Scope:      "global",
 		GlobalOnly: true,
-		SDDMode:    "multi",
-		Persona:    "neutral",
 		MCP:        false,
 		Autostart:  false,
 		Groups:     []string{},
@@ -119,8 +109,6 @@ func SaveDefaults(defaults *TUIDefaults) error {
 	b.WriteString(fmt.Sprintf("  \"preset\": %q,\n", defaults.Preset))
 	b.WriteString(fmt.Sprintf("  \"scope\": %q,\n", defaults.Scope))
 	b.WriteString(fmt.Sprintf("  \"global_only\": %v,\n", defaults.GlobalOnly))
-	b.WriteString(fmt.Sprintf("  \"sdd_mode\": %q,\n", defaults.SDDMode))
-	b.WriteString(fmt.Sprintf("  \"persona\": %q,\n", defaults.Persona))
 	b.WriteString(fmt.Sprintf("  \"mcp\": %v,\n", defaults.MCP))
 
 	// Groups array

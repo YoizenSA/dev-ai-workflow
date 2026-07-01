@@ -92,7 +92,7 @@ cd ywai && bash scripts/dev.sh kanban
 | Command | Description |
 |---------|-------------|
 | `ywai install` | Install gentle-ai + ecosystem + all extra skills |
-| `ywai update` | Upgrade gentle-ai + sync + re-link skills |
+| `ywai update` | Upgrade gentle-ai + re-seed + re-link skills |
 | `ywai skills` | List available extra skills |
 | `ywai agents` | List detected AI agents |
 | `ywai doctor` | Run gentle-ai health check |
@@ -106,19 +106,8 @@ cd ywai && bash scripts/dev.sh kanban
 | `--dry-run` | Preview changes without applying |
 | `--preset` | Install preset: `full-gentleman` (default), `ecosystem-only`, `minimal`, `custom` |
 | `--scope` | Install scope: `global` (default) or `workspace` |
-| `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
-| `--persona` | Persona: `gentleman`, `neutral`, `custom` |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
 | `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
-
-### Update flags
-
-| Flag | Description |
-|------|-------------|
-| `--sdd-mode` | SDD orchestrator mode: `single` or `multi` |
-| `--strict-tdd` | Enable Strict TDD Mode for SDD agents |
-| `--include-permissions` | Include permissions in sync |
-| `--include-theme` | Include theme in sync |
 
 ### Skill registry flags
 

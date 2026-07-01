@@ -111,8 +111,6 @@ type InstallOptions struct {
 	AgentName string
 	Preset    string // full-gentleman, ecosystem-only, minimal, custom
 	Scope     string // global, workspace
-	SDDMode   string // single, multi
-	Persona   string // gentleman, neutral, custom
 	WorkDir   string // working directory for gentle-ai (isolates workspace writes); empty = current dir
 	DryRun    bool
 }
@@ -202,13 +200,6 @@ var ecosystemComponents = []string{
 	"skills", "context7", "permissions",
 }
 
-func (o InstallOptions) effectivePersona() string {
-	if o.Persona == "" {
-		return "neutral"
-	}
-	return o.Persona
-}
-
 func (o InstallOptions) effectiveScope() string {
 	if o.Scope == "" {
 		return "global"
@@ -223,14 +214,10 @@ func (o InstallOptions) buildArgs(components []string) []string {
 	args := []string{
 		"install",
 		"--agent", o.AgentName,
-		"--persona", o.effectivePersona(),
 		"--scope", o.effectiveScope(),
 	}
 	for _, c := range components {
 		args = append(args, "--component", c)
-	}
-	if o.SDDMode != "" {
-		args = append(args, "--sdd-mode", o.SDDMode)
 	}
 	if o.DryRun {
 		args = append(args, "--dry-run")
@@ -303,62 +290,6 @@ func Upgrade() error {
 	}
 
 	return upgradeErr
-}
-
-// SyncOptions holds configurable options for gentle-ai sync.
-type SyncOptions struct {
-	SDDMode       string // single, multi
-	StrictTDD     bool
-	Profiles      []string // e.g. "cheap:openrouter/qwen/qwen3-30b-a3b:free"
-	ProfilePhases []string // e.g. "cheap:sdd-design:anthropic/claude-sonnet-4"
-	IncludePerms  bool
-	IncludeTheme  bool
-	DryRun        bool
-}
-
-func Sync(opts SyncOptions) error {
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed")
-	}
-
-	if version := CurrentVersion(); version != "" {
-		fmt.Printf("Syncing gentle-ai assets with gentle-ai %s...\n", version)
-	} else {
-		fmt.Println("Syncing gentle-ai assets...")
-	}
-
-	args := opts.buildArgs()
-
-	cmd := exec.Command(gentleAIBinaryPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (o SyncOptions) buildArgs() []string {
-	args := []string{"sync"}
-	if o.SDDMode != "" {
-		args = append(args, "--sdd-mode", o.SDDMode)
-	}
-	if o.StrictTDD {
-		args = append(args, "--strict-tdd")
-	}
-	for _, p := range o.Profiles {
-		args = append(args, "--profile", p)
-	}
-	for _, pp := range o.ProfilePhases {
-		args = append(args, "--profile-phase", pp)
-	}
-	if o.IncludePerms {
-		args = append(args, "--include-permissions")
-	}
-	if o.IncludeTheme {
-		args = append(args, "--include-theme")
-	}
-	if o.DryRun {
-		args = append(args, "--dry-run")
-	}
-	return args
 }
 
 // Doctor runs gentle-ai doctor for a read-only health check.

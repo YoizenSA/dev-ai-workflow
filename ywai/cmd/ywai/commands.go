@@ -286,7 +286,7 @@ var installCmd = &cobra.Command{
 
 		var installMCP bool
 		var globalOnly bool
-		var preset, scope, sddMode, persona string
+		var preset, scope string
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
 		ranTUI := false
@@ -318,8 +318,6 @@ var installCmd = &cobra.Command{
 			overwriteAgents = result.OverwriteAgents
 			preset = result.Preset
 			scope = result.Scope
-			sddMode = result.SDDMode
-			persona = result.Persona
 			groupFilter = result.GroupFilter
 			autostartFlag = result.Autostart
 			ranTUI = true
@@ -328,8 +326,6 @@ var installCmd = &cobra.Command{
 			globalOnly = globalFlag
 			preset = getStringFlag(cmd, "preset")
 			scope = getStringFlag(cmd, "scope")
-			sddMode = getStringFlag(cmd, "sdd-mode")
-			persona = getStringFlag(cmd, "persona")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -342,8 +338,6 @@ var installCmd = &cobra.Command{
 			AgentName: agentFlag,
 			Preset:    preset,
 			Scope:     scope,
-			SDDMode:   sddMode,
-			Persona:   persona,
 			DryRun:    dryRun,
 		}
 
@@ -371,7 +365,7 @@ var installCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Upgrade ywai + gentle-ai + re-seed + sync + copy skills",
+	Short: "Upgrade ywai + gentle-ai + re-seed + copy skills",
 	Run: func(cmd *cobra.Command, args []string) {
 		var warnings []string
 		warn := func(format string, args ...any) {
@@ -422,23 +416,7 @@ var updateCmd = &cobra.Command{
 			fmt.Println("  No supported agents detected; skipping pre-sync skill copy.")
 		}
 
-		fmt.Println("\n[5/7] Syncing ecosystem...")
-		if gentlai.IsInstalled() {
-			syncOpts := gentlai.SyncOptions{
-				SDDMode:      getStringFlag(cmd, "sdd-mode"),
-				StrictTDD:    getBoolFlag(cmd, "strict-tdd"),
-				IncludePerms: getBoolFlag(cmd, "include-permissions"),
-				IncludeTheme: getBoolFlag(cmd, "include-theme"),
-			}
-			if err := gentlai.Sync(syncOpts); err != nil {
-				warn("gentle-ai sync failed: %v", err)
-				fmt.Println("  Continuing with ywai cache, skill copies, and overrides.")
-			}
-		} else {
-			fmt.Println("  Skipping sync (gentle-ai not installed).")
-		}
-
-		fmt.Println("\n[6/7] Copying extra skills...")
+		fmt.Println("\n[5/7] Copying extra skills...")
 		if len(agents) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
 			os.Exit(1)
@@ -579,14 +557,6 @@ var configFields = map[string]configField{
 	"default_preset": {
 		Get: func(c *config.UserConfig) interface{} { return c.DefaultPreset },
 		Set: func(c *config.UserConfig, v string) error { c.DefaultPreset = v; return nil },
-	},
-	"default_sdd_mode": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultSDDMode },
-		Set: func(c *config.UserConfig, v string) error { c.DefaultSDDMode = v; return nil },
-	},
-	"default_persona": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultPersona },
-		Set: func(c *config.UserConfig, v string) error { c.DefaultPersona = v; return nil },
 	},
 	"default_scope": {
 		Get: func(c *config.UserConfig) interface{} { return c.DefaultScope },
@@ -855,8 +825,6 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("Error loading config: %v\n", err)
 		} else {
 			fmt.Printf("Default preset: %s\n", cfg.DefaultPreset)
-			fmt.Printf("Default SDD mode: %s\n", cfg.DefaultSDDMode)
-			fmt.Printf("Default persona: %s\n", cfg.DefaultPersona)
 		}
 	},
 }
@@ -1135,16 +1103,9 @@ func init() {
 	installCmd.Flags().Bool("global", false, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
 	installCmd.Flags().String("preset", "full-gentleman", "Install preset: full-gentleman, ecosystem-only, minimal, custom")
 	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
-	installCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
-	installCmd.Flags().String("persona", "", "Persona: gentleman, neutral, custom")
 	installCmd.Flags().Bool("autostart", false, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
-
-	updateCmd.Flags().String("sdd-mode", "", "SDD orchestrator mode: single or multi")
-	updateCmd.Flags().Bool("strict-tdd", false, "Enable Strict TDD Mode for SDD agents")
-	updateCmd.Flags().Bool("include-permissions", false, "Include permissions in sync")
-	updateCmd.Flags().Bool("include-theme", false, "Include theme in sync")
 
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(updateCmd)
