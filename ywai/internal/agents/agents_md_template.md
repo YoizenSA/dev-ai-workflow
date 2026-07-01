@@ -1,7 +1,5 @@
 # AGENTS.md
 
-Memoria persistente (engram), carga de skills, delegación a sub-agentes y trigger rules. Archivo manual, no gestionado por gentle-ai.
-
 ## Engram Persistent Memory — Protocol
 
 You have access to Engram, a persistent memory system that survives across sessions and compactions.

@@ -125,6 +125,9 @@ func (s *Server) buildRoutes() {
 	// ─── Workflows API (Workflow Studio) ────────────────────────
 	s.registerWorkflowsRoutes()
 
+	// ─── Settings maintenance API (SDD cleanup, etc.) ───────────
+	s.registerSettingsRoutes()
+
 	// ─── React SPA ──────────────────────────────────────────────
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)

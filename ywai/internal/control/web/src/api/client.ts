@@ -291,6 +291,13 @@ export const configApi = {
 	// caller should poll health and reload once it comes back.
 	triggerUpdate: () => request<{ started: boolean; pid?: number; error?: string }>("/api/update", { method: "POST" }),
 
+	// SDD maintenance: report how many SDD-managed assets each agent holds,
+	// and remove them (one-shot cleanup of what `gentle-ai sync` wrote).
+	getSddStatus: () =>
+		request<{ agents: { name: string; count: number }[]; total: number }>("/api/settings/sdd-status"),
+	removeSdd: () =>
+		request<{ removed: string[]; errors?: string[]; agents: number; total: number }>("/api/settings/remove-sdd", { method: "POST" }),
+
 	// OpenCode general config
 	getConfig: () => request<OpenCodeConfig>("/api/config/opencode"),
 	updateConfig: (data: Partial<OpenCodeConfig>) =>

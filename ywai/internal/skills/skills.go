@@ -301,3 +301,108 @@ func skillsSourceDir() string {
 	}
 	return config.SkillsSourceDir()
 }
+
+// sddAssetSubdirs are the sibling directories of an agent's skills dir where
+// gentle-ai writes SDD assets (commands, skills, and agent definitions).
+var sddAssetSubdirs = []string{"skills", "commands", "agents"}
+
+// sddPrefix is the filename prefix of all SDD-managed assets.
+const sddPrefix = "sdd-"
+
+// RemoveSddAssets deletes every SDD-managed asset from an agent's config
+// directory. agentSkillsDir is the agent's skills directory (e.g.
+// ~/.claude/skills); the config dir is its parent. It scans the skills,
+// commands, and agents subdirectories for entries named "sdd-*" and removes
+// them, as well as the "sdd-*.md" files inside skills/_shared. Extra skills
+// owned by ywai (angular, judgment-day, etc.) are never affected because they
+// do not match the "sdd-" prefix.
+//
+// Returns the sorted list of removed relative paths (e.g. "claude-code/skills/sdd-init").
+func RemoveSddAssets(agentSkillsDir string) ([]string, error) {
+	configDir := filepath.Clean(filepath.Dir(agentSkillsDir))
+	var removed []string
+
+	for _, sub := range sddAssetSubdirs {
+		subDir := filepath.Join(configDir, sub)
+		entries, err := os.ReadDir(subDir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return removed, fmt.Errorf("failed to read %s: %w", subDir, err)
+		}
+
+		for _, entry := range entries {
+			name := entry.Name()
+			if !strings.HasPrefix(name, sddPrefix) {
+				continue
+			}
+			path := filepath.Join(subDir, name)
+			if !isPathWithin(path, subDir) {
+				continue
+			}
+			if err := removeExistingSkillPath(path); err != nil {
+				return removed, fmt.Errorf("failed to remove %s: %w", path, err)
+			}
+			removed = append(removed, filepath.Join(sub, name))
+		}
+
+		// skills/_shared also holds sdd-*.md files written by gentle-ai.
+		if sub == "skills" {
+			sharedDir := filepath.Join(subDir, "_shared")
+			sharedEntries, err := os.ReadDir(sharedDir)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return removed, fmt.Errorf("failed to read %s: %w", sharedDir, err)
+			}
+			for _, entry := range sharedEntries {
+				name := entry.Name()
+				if entry.IsDir() || !strings.HasPrefix(name, sddPrefix) {
+					continue
+				}
+				path := filepath.Join(sharedDir, name)
+				if err := removeExistingSkillPath(path); err != nil {
+					return removed, fmt.Errorf("failed to remove %s: %w", path, err)
+				}
+				removed = append(removed, filepath.Join(sub, "_shared", name))
+			}
+		}
+	}
+
+	sort.Strings(removed)
+	return removed, nil
+}
+
+// CountSddAssets counts SDD-managed assets present in an agent's config
+// directory, using the same discovery rules as RemoveSddAssets. It is read-only.
+func CountSddAssets(agentSkillsDir string) int {
+	configDir := filepath.Clean(filepath.Dir(agentSkillsDir))
+	count := 0
+
+	for _, sub := range sddAssetSubdirs {
+		subDir := filepath.Join(configDir, sub)
+		entries, err := os.ReadDir(subDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), sddPrefix) {
+				count++
+			}
+		}
+		if sub == "skills" {
+			sharedEntries, err := os.ReadDir(filepath.Join(subDir, "_shared"))
+			if err != nil {
+				continue
+			}
+			for _, entry := range sharedEntries {
+				if !entry.IsDir() && strings.HasPrefix(entry.Name(), sddPrefix) {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}

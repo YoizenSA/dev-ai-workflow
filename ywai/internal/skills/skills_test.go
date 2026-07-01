@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -205,5 +206,129 @@ name: ` + name + `
 		if err := os.WriteFile(filepath.Join(dir, extraSkillMarkerFile), []byte("managed-by: ywai\n"), 0o644); err != nil {
 			t.Fatalf("write marker %s: %v", name, err)
 		}
+	}
+}
+
+// TestRemoveSddAssets verifies that RemoveSddAssets deletes every SDD-managed
+// entry (skills/sdd-*, skills/_shared/sdd-*.md, commands/sdd-*.md,
+// agents/sdd-*.md) while preserving unrelated skills (judgment-day, ywai
+// extra skills) and non-SDD shared files.
+func TestRemoveSddAssets(t *testing.T) {
+	// Layout: <configDir>/skills, <configDir>/commands, <configDir>/agents
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	commandsDir := filepath.Join(configDir, "commands")
+	agentsDir := filepath.Join(configDir, "agents")
+	sharedDir := filepath.Join(skillsDir, "_shared")
+
+	for _, dir := range []string{skillsDir, commandsDir, agentsDir, sharedDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	// SDD assets that must be removed.
+	sddDirs := []string{
+		filepath.Join(skillsDir, "sdd-init"), // skill dir
+		filepath.Join(skillsDir, "sdd-verify"),
+	}
+	sddFiles := []string{
+		filepath.Join(sharedDir, "sdd-phase-common.md"),
+		filepath.Join(sharedDir, "sdd-status-contract.md"),
+		filepath.Join(commandsDir, "sdd-new.md"),
+		filepath.Join(commandsDir, "sdd-status.md"),
+		filepath.Join(agentsDir, "sdd-spec.md"),
+	}
+	for _, p := range sddDirs {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+	for _, p := range sddFiles {
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+	mustRemove := append(append([]string{}, sddDirs...), sddFiles...)
+
+	// Non-SDD assets that must be preserved.
+	mustKeep := []string{
+		filepath.Join(skillsDir, "judgment-day"),
+		filepath.Join(skillsDir, "angular"),
+		filepath.Join(sharedDir, "engram-convention.md"),
+		filepath.Join(sharedDir, "SKILL.md"),
+		filepath.Join(commandsDir, "skill-creator.md"),
+		filepath.Join(agentsDir, "my-custom-agent.md"),
+	}
+	for _, p := range mustKeep {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatalf("create keep-dir %s: %v", p, err)
+		}
+	}
+
+	removed, err := RemoveSddAssets(skillsDir)
+	if err != nil {
+		t.Fatalf("RemoveSddAssets: %v", err)
+	}
+
+	// Every SDD entry should be gone.
+	for _, p := range mustRemove {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be removed, still exists", p)
+		}
+	}
+	// Every non-SDD entry should survive.
+	for _, p := range mustKeep {
+		if _, err := os.Lstat(p); err != nil {
+			t.Errorf("expected %s to be preserved, got error: %v", p, err)
+		}
+	}
+
+	// All reported removed paths must start with "sdd".
+	for _, r := range removed {
+		base := filepath.Base(r)
+		if !strings.HasPrefix(base, "sdd-") {
+			t.Errorf("removed entry %q is not an SDD asset", r)
+		}
+	}
+	wantCount := len(mustRemove)
+	if len(removed) != wantCount {
+		t.Errorf("removed count = %d, want %d (got %v)", len(removed), wantCount, removed)
+	}
+
+	// CountSddAssets should now report zero.
+	if got := CountSddAssets(skillsDir); got != 0 {
+		t.Errorf("CountSddAssets after removal = %d, want 0", got)
+	}
+}
+
+// TestCountSddAssetsMatchesRemoval verifies the count equals the number of
+// entries RemoveSddAssets will delete.
+func TestCountSddAssetsMatchesRemoval(t *testing.T) {
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	commandsDir := filepath.Join(configDir, "commands")
+	agentsDir := filepath.Join(configDir, "agents")
+	sharedDir := filepath.Join(skillsDir, "_shared")
+
+	for _, dir := range []string{skillsDir, commandsDir, agentsDir, sharedDir} {
+		os.MkdirAll(dir, 0o755)
+	}
+	os.MkdirAll(filepath.Join(skillsDir, "sdd-init"), 0o755)
+	os.MkdirAll(filepath.Join(skillsDir, "sdd-spec"), 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "sdd-phase-common.md"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(commandsDir, "sdd-apply.md"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "sdd-design.md"), []byte("x"), 0o644)
+	// Non-SDD entries that must not be counted.
+	os.MkdirAll(filepath.Join(skillsDir, "judgment-day"), 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "SKILL.md"), []byte("x"), 0o644)
+
+	count := CountSddAssets(skillsDir)
+	removed, err := RemoveSddAssets(skillsDir)
+	if err != nil {
+		t.Fatalf("RemoveSddAssets: %v", err)
+	}
+	if count != len(removed) {
+		t.Errorf("CountSddAssets = %d, but RemoveSddAssets removed %d", count, len(removed))
 	}
 }

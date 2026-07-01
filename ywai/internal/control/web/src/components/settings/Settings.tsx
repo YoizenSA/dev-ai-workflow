@@ -11,6 +11,7 @@ import {
 	Settings as SettingsIcon,
 	Share2,
 	Star,
+	Trash2,
 	User,
 	Users,
 	Wrench,
@@ -159,6 +160,11 @@ function GeneralTab() {
 	const [agentsMdLoading, setAgentsMdLoading] = useState(true);
 	const [agentsMdSaving, setAgentsMdSaving] = useState(false);
 	const [agentsMdMessage, setAgentsMdMessage] = useState<string | null>(null);
+	// SDD cleanup state
+	const [sddStatus, setSddStatus] = useState<{ agents: { name: string; count: number }[]; total: number } | null>(null);
+	const [sddLoading, setSddLoading] = useState(true);
+	const [sddRemoving, setSddRemoving] = useState(false);
+	const [sddMessage, setSddMessage] = useState<string | null>(null);
 
 	useEffect(() => {
 		// listProviders() only returns providers declared in opencode.json (3-ish).
@@ -192,6 +198,13 @@ function GeneralTab() {
 				setAgentsMdPath("");
 			})
 			.finally(() => setAgentsMdLoading(false));
+
+		// Load SDD asset status (count per agent)
+		configApi
+			.getSddStatus()
+			.then(setSddStatus)
+			.catch(() => setSddStatus({ agents: [], total: 0 }))
+			.finally(() => setSddLoading(false));
 	}, []);
 
 	// Helper to read the current provider / agent identifier no matter whether
@@ -241,6 +254,32 @@ function GeneralTab() {
 			setAgentsMdMessage(`Error: ${err}`);
 		} finally {
 			setAgentsMdSaving(false);
+		}
+	};
+
+	const handleRemoveSdd = async () => {
+		if (!sddStatus || sddStatus.total === 0) return;
+		const ok = confirm(
+			`Se van a borrar ${sddStatus.total} archivos SDD de ${sddStatus.agents.length} agente(s).\nSDD dejará de estar disponible en esos agentes. ¿Continuar?`,
+		);
+		if (!ok) return;
+		setSddRemoving(true);
+		setSddMessage(null);
+		try {
+			const res = await configApi.removeSdd();
+			const errCount = res.errors?.length ?? 0;
+			setSddMessage(
+				errCount > 0
+					? `Error: ${errCount} agente(s) con fallos: ${res.errors!.join(", ")}`
+					: `Eliminados ${res.total} assets SDD de ${res.agents} agente(s).`,
+			);
+			// Refresh status
+			const fresh = await configApi.getSddStatus();
+			setSddStatus(fresh);
+		} catch (err) {
+			setSddMessage(`Error: ${err}`);
+		} finally {
+			setSddRemoving(false);
 		}
 	};
 
@@ -414,9 +453,54 @@ function GeneralTab() {
 				)}
 				</div>
 			</div>
+
+			{/* ─── SDD Cleanup ───────────────────────────────────────────── */}
+			<div className="card card-pad" style={{ marginTop: "2rem" }}>
+				<div className="card-header">
+					<h3>Spec-Driven Development (SDD)</h3>
+					<span className="muted">
+						{sddLoading
+							? "Cargando…"
+							: sddStatus && sddStatus.total > 0
+								? `${sddStatus.total} archivos en ${sddStatus.agents.length} agente(s)`
+								: "Sin assets SDD"}
+					</span>
+				</div>
+				<p className="muted" style={{ marginBottom: "1rem" }}>
+					Los assets de SDD (skills, comandos y agentes) que gentle-ai sync escribió
+					en los directorios de los agentes. Eliminarlos desactiva SDD en esos agentes;
+					como ywai ya no ejecuta el sync, no vuelven a aparecer.
+				</p>
+				{sddMessage && (
+					<div
+						className={`alert ${sddMessage.startsWith("Error") ? "alert-danger" : "alert-success"}`}
+					>
+						{sddMessage}
+					</div>
+				)}
+				<button
+					type="button"
+					className="btn btn-danger"
+					onClick={handleRemoveSdd}
+					disabled={sddRemoving || sddLoading || !sddStatus || sddStatus.total === 0}
+					aria-busy={sddRemoving || undefined}
+				>
+					{sddRemoving ? (
+						<>
+							<div className="spinner"></div>
+							Eliminando…
+						</>
+					) : (
+						<>
+							<Trash2 size={14} />
+							Eliminar assets de SDD
+						</>
+					)}
+				</button>
+			</div>
 		</div>
-	);
-}
+		);
+	}
 
 // ─── Agents Tab ────────────────────────────────────────────────────────────
 
