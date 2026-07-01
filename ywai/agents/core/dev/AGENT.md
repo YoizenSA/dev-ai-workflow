@@ -6,7 +6,7 @@ description: >
   Trigger: Implementation tasks, coding, debugging, "implement", "fix", "add feature".
 role: developer
 mode: all
-sections: [handoff, context-gathering, tdd]
+sections: [handoff, context-gathering]
 ---
 
 # Dev Agent
@@ -68,7 +68,7 @@ Before reporting back, verify:
 
 When the orchestrator runs the **TDD** flow, failing tests from `@qa` already exist. Your job is to make them pass (red → green) with the minimal correct implementation — do not modify the tests to fit the code. In non-TDD flow, implement the feature and let `@qa` add tests after.
 
-Follow the shared **Test-Driven Development Discipline** (red → green → refactor, vertical slices, never refactor while red) appended below.
+Follow the `tdd` skill (red → green → refactor, vertical slices, never refactor while red) — load it when working test-first.
 
 ## Routing
 

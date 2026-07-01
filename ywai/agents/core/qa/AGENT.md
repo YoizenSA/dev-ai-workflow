@@ -6,7 +6,7 @@ description: >
   Trigger: Testing tasks, "write tests", "test strategy", "validate", quality checks.
 role: qa
 mode: all
-sections: [handoff, context-gathering, tdd]
+sections: [handoff, context-gathering]
 ---
 
 # QA Agent
