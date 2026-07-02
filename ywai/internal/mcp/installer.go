@@ -116,6 +116,28 @@ func Install(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]st
 		progress = func(string, int, string) {}
 	}
 
+	// 0. OAuth step — if the entry requires OAuth, ensure we have a valid
+	//    token before proceeding. The EnsureValidToken function handles
+	//    both fresh auth and token refresh.
+	if entry.HasOAuth() {
+		progress(StepPrereq, 5, fmt.Sprintf("checking OAuth for %s", entry.Name))
+		tok, err := EnsureValidToken(ctx, entry)
+		if err != nil {
+			return nil, fmt.Errorf("oauth: %w", err)
+		}
+		// Merge the Bearer token into the credentials so subsequent steps
+		// (probing, discovery) authenticate correctly.
+		if tok != nil && tok.AccessToken != "" {
+			if opts.Credentials == nil {
+				opts.Credentials = make(map[string]string)
+			}
+			// Don't override explicitly provided credentials.
+			if _, exists := opts.Credentials["AUTHORIZATION"]; !exists {
+				opts.Credentials["AUTHORIZATION"] = "Bearer " + tok.AccessToken
+			}
+		}
+	}
+
 	// 1. Prereq check.
 	binary := prereqBinary(entry)
 	if binary != "" {

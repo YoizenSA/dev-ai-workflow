@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
@@ -241,6 +243,7 @@ func (s *Server) registerMcpStoreRoutes() {
 	s.mux.HandleFunc("POST /api/mcp/uninstall", s.handleMcpUninstall)
 	s.mux.HandleFunc("POST /api/mcp/toggle", s.handleMcpToggle)
 	s.mux.HandleFunc("GET /api/mcp/status/{id}", s.handleMcpStatus)
+	s.mux.HandleFunc("GET /api/mcp/health", s.handleMcpHealth)
 }
 
 // handleMcpCatalog returns the full catalog with installed/enabled status.
@@ -604,6 +607,129 @@ func (s *Server) handleMcpStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// ─── Health check ─────────────────────────────────────────────────
+
+// mcpHealthItem represents the health status of a single MCP server.
+type mcpHealthItem struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"` // "healthy", "unhealthy", "unknown"
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// mcpHealthResponse is the response for GET /api/mcp/health.
+type mcpHealthResponse struct {
+	Servers []mcpHealthItem `json:"servers"`
+}
+
+// handleMcpHealth checks the health of all installed MCP servers.
+func (s *Server) handleMcpHealth(w http.ResponseWriter, r *http.Request) {
+	mcpConfig, err := readMcpConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, mcpErrorResponse{Error: err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	type result struct {
+		item mcpHealthItem
+	}
+	ch := make(chan result, len(mcpConfig))
+
+	for id := range mcpConfig {
+		go func(id string) {
+			ch <- result{checkMcpHealth(ctx, id)}
+		}(id)
+	}
+
+	items := make([]mcpHealthItem, 0, len(mcpConfig))
+	for range mcpConfig {
+		items = append(items, (<-ch).item)
+	}
+
+	writeJSON(w, http.StatusOK, mcpHealthResponse{Servers: items})
+}
+
+// checkMcpHealth checks health for a single MCP server by ID.
+func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
+	start := time.Now()
+
+	// Find the catalog entry to determine type and check params.
+	var entryType string
+	var command []string
+	var url string
+
+	fullCatalog := getFullCatalog()
+	for i := range fullCatalog {
+		if fullCatalog[i].ID == id {
+			entryType = fullCatalog[i].Type
+			command = fullCatalog[i].Command
+			url = fullCatalog[i].URL
+			break
+		}
+	}
+
+	// Fallback to mcp package catalog.
+	if entryType == "" {
+		if ce, ok := mcp.CatalogByID(id); ok {
+			entryType = ce.Type
+			command = ce.Command
+			url = ce.URL
+		}
+	}
+
+	item := mcpHealthItem{ID: id}
+
+	switch entryType {
+	case "local":
+		item.Status = "healthy"
+		if len(command) == 0 {
+			item.Status = "unknown"
+			break
+		}
+		if _, err := exec.LookPath(command[0]); err != nil {
+			item.Status = "unhealthy"
+			item.Error = fmt.Sprintf("binary %q not found: %v", command[0], err)
+		}
+		item.LatencyMs = time.Since(start).Milliseconds()
+
+	case "remote":
+		if url == "" {
+			item.Status = "unknown"
+			break
+		}
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+		if reqErr != nil {
+			item.Status = "unhealthy"
+			item.Error = reqErr.Error()
+			item.LatencyMs = time.Since(start).Milliseconds()
+			break
+		}
+		resp, doErr := http.DefaultClient.Do(req)
+		item.LatencyMs = time.Since(start).Milliseconds()
+		if doErr != nil {
+			item.Status = "unhealthy"
+			item.Error = doErr.Error()
+			break
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			item.Status = "healthy"
+		} else {
+			item.Status = "unhealthy"
+			item.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+
+	default:
+		item.Status = "unknown"
+		item.LatencyMs = time.Since(start).Milliseconds()
+	}
+
+	return item
 }
 
 // writeJSON is a local helper to write JSON responses with CORS headers.

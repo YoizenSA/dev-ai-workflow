@@ -18,6 +18,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -1012,6 +1013,40 @@ var tokenbankSetupCmd = &cobra.Command{
 	},
 }
 
+var mcpCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "Manage MCP server authentication",
+}
+
+var mcpAuthCmd = &cobra.Command{
+	Use:   "auth <server-id>",
+	Short: "Authenticate an MCP server via OAuth",
+	Long: `Starts the OAuth Authorization Code flow (with PKCE) for a remote MCP server.
+
+Opens your browser to the server's authorization URL, starts a local
+callback server on a random port, exchanges the code for tokens, and
+persists them in ~/.ywai/mcp-tokens/.
+
+Supported servers:
+  figma, github, gitlab, (any catalog entry with AuthType="oauth")
+
+Example:
+  ywai mcp auth figma
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+		entry, ok := mcp.CatalogByID(id)
+		if !ok {
+			return fmt.Errorf("unknown MCP server %q. Run 'ywai mcp auth' to see supported servers", id)
+		}
+		if !entry.HasOAuth() {
+			return fmt.Errorf("server %q does not require OAuth (AuthType=%q)", id, entry.AuthType)
+		}
+		return mcp.StartOAuthFlow(cmd.Context(), entry)
+	},
+}
+
 var tokenbankConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure agents to use TokenBank proxy",
@@ -1134,6 +1169,10 @@ func init() {
 	tokenbankCmd.AddCommand(tokenbankConfigureCmd)
 
 	rootCmd.AddCommand(tokenbankCmd)
+
+	// MCP commands
+	mcpCmd.AddCommand(mcpAuthCmd)
+	rootCmd.AddCommand(mcpCmd)
 }
 
 func isInteractiveTerminal() bool {

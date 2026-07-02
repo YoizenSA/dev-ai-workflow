@@ -86,6 +86,7 @@ function McpCard({
 	credentials,
 	onCredentialChange,
 	installState,
+	health,
 }: {
 	server: McpServer;
 	expanded: boolean;
@@ -95,9 +96,23 @@ function McpCard({
 	credentials: Record<string, string>;
 	onCredentialChange: (name: string, value: string) => void;
 	installState?: InstallState;
+	health?: { status: string; latency_ms?: number; error?: string };
 }) {
 	const isInstalled = server.installed;
 	const statusClass = server.status ? ` status-${server.status}` : '';
+
+	const healthDot = isInstalled && health ? (
+		<span
+			className={`mcp-store-health-dot ${health.status}`}
+			title={
+				health.status === 'healthy'
+					? `Healthy (${health.latency_ms ?? '?'}ms)`
+					: health.status === 'unhealthy'
+						? `Unhealthy: ${health.error ?? 'unknown error'}`
+						: 'Unknown'
+			}
+		/>
+	) : null;
 	const credsError =
 		installState?.errorCode === 'missing_credentials' ? 'missing_credentials' : undefined;
 
@@ -119,6 +134,7 @@ function McpCard({
 						{isInstalled && !server.statusLabel && (
 							<span className="mcp-store-card-installed-badge">Installed</span>
 						)}
+						{healthDot}
 					</div>
 					<span className="mcp-store-card-category">{server.category}</span>
 				</div>
@@ -213,6 +229,7 @@ export function McpStore() {
 	const [error, setError] = useState<string | null>(null);
 	const [actionMessage, setActionMessage] = useState<string | null>(null);
 	const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
+	const [healthData, setHealthData] = useState<Record<string, { status: string; latency_ms?: number; error?: string }>>({});
 	const [credentials, setCredentials] = useState<Record<string, Record<string, string>>>({});
 	const [selectedTarget, setSelectedTarget] = useState<TargetAgent>('opencode');
 	const intervalsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
@@ -228,6 +245,25 @@ export function McpStore() {
 				setError('Failed to load MCP catalog');
 				setLoading(false);
 			});
+	}, []);
+
+	// Health check: fetch on mount and every 30s.
+	useEffect(() => {
+		const fetchHealth = () => {
+			fetch('/api/mcp/health')
+				.then((res) => res.json())
+				.then((data: { servers: Array<{ id: string; status: string; latency_ms?: number; error?: string }> }) => {
+					const map: Record<string, { status: string; latency_ms?: number; error?: string }> = {};
+					for (const s of data.servers) {
+						map[s.id] = { status: s.status, latency_ms: s.latency_ms, error: s.error };
+					}
+					setHealthData(map);
+				})
+				.catch(() => { /* ignore */ });
+		};
+		fetchHealth();
+		const interval = setInterval(fetchHealth, 30000);
+		return () => clearInterval(interval);
 	}, []);
 
 	// Clear any poll intervals when the component unmounts so timers don't
@@ -448,6 +484,7 @@ export function McpStore() {
 				}))
 			}
 			installState={installStates[server.id]}
+			health={healthData[server.id]}
 		/>
 	);
 

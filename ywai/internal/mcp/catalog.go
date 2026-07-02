@@ -37,6 +37,15 @@ type CatalogEntry struct {
 	RequiredEnv []EnvSpec
 	Tools       []string
 	Docs        string
+
+	// OAuth fields for remote servers that need authentication.
+	// AuthType is "oauth" when OAuth is required; empty otherwise.
+	AuthType         string
+	ClientID         string
+	ClientSecret     string
+	Scopes           []string
+	AuthorizationURL string
+	TokenURL         string
 }
 
 // catalog is the package-private backing slice. Callers must not mutate it.

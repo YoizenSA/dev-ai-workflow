@@ -707,6 +707,8 @@ export const workflowApi = {
 		),
 	// Static catalog (used to suggest known tools for a server, best-effort).
 	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
+	// Health check for all installed MCP servers.
+	checkHealth: () => request<McpHealthResponse>("/api/mcp/health"),
 };
 
 // McpCatalogItem mirrors the control server's MCP catalog entry (subset used by
@@ -717,4 +719,17 @@ export interface McpCatalogItem {
 	tools: string[];
 	installed: boolean;
 	enabled: boolean;
+}
+
+/** Health status for a single MCP server. */
+export interface McpHealthItem {
+	serverId: string;
+	status: 'healthy' | 'unhealthy' | 'unknown';
+	latency_ms?: number;
+	error?: string;
+}
+
+/** Response from GET /api/mcp/health. */
+export interface McpHealthResponse {
+	servers: McpHealthItem[];
 }

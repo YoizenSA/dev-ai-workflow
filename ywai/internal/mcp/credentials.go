@@ -1,9 +1,139 @@
 // Package mcp provides shared helpers for the ywai MCP install flow:
 // validating required credentials, redacting secrets from log/UI messages,
-// and merging user-provided env vars on top of an os.Environ() base.
+// merging user-provided env vars on top of an os.Environ() base,
+// and managing OAuth tokens for remote MCP servers.
 package mcp
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+// OAuthToken holds the token response from an OAuth authorization server.
+type OAuthToken struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	TokenType    string    `json:"token_type,omitempty"`
+}
+
+// IsExpired returns true when the token has no expiry or is past its expiry.
+func (t *OAuthToken) IsExpired() bool {
+	return t.ExpiresAt.IsZero() || time.Now().After(t.ExpiresAt)
+}
+
+// tokenFile returns the path to the OAuth token store for the given server ID.
+// Tokens are stored under ~/.ywai/mcp-tokens/ with 0600 perms.
+func tokenDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home dir: %w", err)
+	}
+	dir := filepath.Join(home, ".ywai", "mcp-tokens")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("cannot create token dir %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+func tokenPath(serverID string) (string, error) {
+	dir, err := tokenDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, serverID+".json"), nil
+}
+
+// LoadToken reads the OAuth token for the given server from disk.
+// Returns nil when no token exists (not an error).
+func LoadToken(serverID string) (*OAuthToken, error) {
+	p, err := tokenPath(serverID)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cannot read token for %s: %w", serverID, err)
+	}
+	var tok OAuthToken
+	if err := json.Unmarshal(data, &tok); err != nil {
+		return nil, fmt.Errorf("cannot parse token for %s: %w", serverID, err)
+	}
+	return &tok, nil
+}
+
+// SaveToken persists the OAuth token for the given server to disk
+// with file permissions 0600.
+func SaveToken(serverID string, tok *OAuthToken) error {
+	p, err := tokenPath(serverID)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(tok, "", "  ")
+	if err != nil {
+		return fmt.Errorf("cannot marshal token: %w", err)
+	}
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return fmt.Errorf("cannot write token to %s: %w", p, err)
+	}
+	return nil
+}
+
+// TokenStore is a simple in-memory cache of OAuth tokens, keyed by server ID.
+// Thread-safe for concurrent access.
+var (
+	tokenMu    sync.RWMutex
+	tokenCache map[string]*OAuthToken
+)
+
+func init() {
+	tokenCache = make(map[string]*OAuthToken)
+}
+
+// CachedLoadToken reads a token from the in-memory cache (fast path) or
+// falls back to disk.
+func CachedLoadToken(serverID string) (*OAuthToken, error) {
+	tokenMu.RLock()
+	t, ok := tokenCache[serverID]
+	tokenMu.RUnlock()
+	if ok {
+		return t, nil
+	}
+	t, err := LoadToken(serverID)
+	if err != nil {
+		return nil, err
+	}
+	if t != nil {
+		tokenMu.Lock()
+		tokenCache[serverID] = t
+		tokenMu.Unlock()
+	}
+	return t, nil
+}
+
+// CachedSaveToken persists a token to disk and updates the in-memory cache.
+func CachedSaveToken(serverID string, tok *OAuthToken) error {
+	if err := SaveToken(serverID, tok); err != nil {
+		return err
+	}
+	tokenMu.Lock()
+	tokenCache[serverID] = tok
+	tokenMu.Unlock()
+	return nil
+}
+
+// HasOAuth returns true when the catalog entry requires OAuth.
+func (e CatalogEntry) HasOAuth() bool {
+	return e.AuthType == "oauth"
+}
 
 // EnvSpec describes a single environment variable expected by an MCP server
 // install. Required specs must be present with a non-empty value in the final

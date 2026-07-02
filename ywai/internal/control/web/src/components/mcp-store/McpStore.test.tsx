@@ -124,7 +124,12 @@ function mockFetchSequence(responses: MockResponse[]): void {
 	}
 	let i = 0;
 	const fallback = responses[responses.length - 1];
-	getFetchMock().mockImplementation(async () => {
+	getFetchMock().mockImplementation(async (url: string | URL | Request) => {
+		// Don't consume a response slot for auto-triggered health checks.
+		const urlStr = typeof url === 'string' ? url : 'url' in url ? url.url : '';
+		if (urlStr.endsWith('/api/mcp/health')) {
+			return { ok: true, json: async () => ({ servers: [] }) };
+		}
 		const r = i < responses.length ? responses[i] : fallback;
 		if (i < responses.length) i++;
 		return r;
