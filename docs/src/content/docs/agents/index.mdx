@@ -13,12 +13,16 @@ ywai te da acceso a **agentes especializados** que trabajan como un equipo. Cada
 
 | Agente | Rol | Para qué sirve |
 |---|---|---|
+| [**orchestrator**](/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas |
 | [**dev**](/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
 | [**qa**](/agents/qa) | QA Engineer | Tests, cobertura, validación |
 | [**architect**](/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
 | [**reviewer**](/agents/reviewer) | Revisor | Code review, bugs, seguridad |
 | [**devops**](/agents/devops) | DevOps | CI/CD, Docker, K8s, despliegues |
 | [**ask**](/agents/ask) | Investigador | Preguntas, análisis, explicaciones |
+| [**finder**](/agents/finder) | Explorador | Buscar archivos, entender estructura |
+| [**planning**](/agents/planning) | Planificador | Investigar y planificar antes de implementar |
+| [**memory**](/agents/memory) | Archivista | Memoria persistente entre sesiones |
 
 ## Cómo usarlos
 
@@ -31,6 +35,9 @@ En opencode, usa `@nombre-del-agente` seguido de tu tarea:
 @reviewer Revisa el PR del feature de pagos
 @devops Crea un Dockerfile para el servicio de Node.js
 @ask Cómo funciona el middleware de auth actual?
+@finder Dónde está la lógica de autenticación?
+@planning Planifica la implementación de RBAC
+@memory Qué decidimos sobre la estrategia de migración?
 ```
 
 ## Flujo natural del equipo
@@ -38,7 +45,7 @@ En opencode, usa `@nombre-del-agente` seguido de tu tarea:
 Los agentes están diseñados para trabajar juntos. Un flujo típico:
 
 ```
-@ask (investiga) → @architect (diseña) → @dev (implementa) → @qa (testea) → @reviewer (revisa) → @devops (despliega)
+@finder (explora) → @ask (investiga) → @planning (planifica) → @architect (diseña) → @dev (implementa) → @qa (testea) → @reviewer (revisa) → @devops (despliega)
 ```
 
 No tienes que seguir este orden exacto — úsalos según necesites.
@@ -102,7 +109,11 @@ Tú: "@ask Cuál es la diferencia entre SSR y SSG en Next.js
 **Necesitas tests** → `@qa`  
 **Decisiones de diseño** → `@architect`  
 **Revisar código** → `@reviewer`  
-**Infraestructura** → `@devops`
+**Infraestructura** → `@devops`  
+**Buscar código** → `@finder`  
+**Planificar antes de implementar** → `@planning`  
+**Recordar decisiones pasadas** → `@memory`  
+**Tarea compleja multi-agente** → `@orchestrator`
 </Card>
 
 ## Agentes personalizados

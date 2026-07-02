@@ -19,12 +19,16 @@ export default defineConfig({
           label: 'Agentes',
           items: [
             { label: 'Visión general', slug: 'agents' },
+            { label: 'Orchestrator', slug: 'agents/orchestrator' },
             { label: 'Dev', slug: 'agents/dev' },
             { label: 'QA', slug: 'agents/qa' },
             { label: 'Architect', slug: 'agents/architect' },
             { label: 'Reviewer', slug: 'agents/reviewer' },
             { label: 'DevOps', slug: 'agents/devops' },
             { label: 'Ask', slug: 'agents/ask' },
+            { label: 'Finder', slug: 'agents/finder' },
+            { label: 'Planning', slug: 'agents/planning' },
+            { label: 'Memory', slug: 'agents/memory' },
           ],
         },
         {

@@ -1,0 +1,83 @@
+---
+title: Orchestrator Agent
+description: Agente orquestador — coordina equipos de agentes para tareas complejas
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Orchestrator Agent
+
+El agente orchestrator es el **director de orquesta**. Coordina múltiples agentes para tareas complejas que un solo agente no puede resolver. Divide el trabajo, delega, y ensambla los resultados.
+
+<Badge text="Rol: Coordinador" variant="success" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Features complejas | "Implementa un sistema de pagos completo" |
+| Proyectos nuevos | "Crea la estructura base del proyecto" |
+| Refactoring grande | "Refactoriza toda la capa de acceso a datos" |
+| Múltiples pasos | "Auth + tests + docs + deploy" |
+
+## Lo que hace
+
+1. **Investiga** — Entiende qué se necesita (usa `@finder`, `@ask`)
+2. **Planifica** — Divide en subtareas con dependencias claras
+3. **Delega** — Asigna cada subtarea al agente correcto
+4. **Coordina** — Maneja dependencias entre agentes
+5. **Ensambla** — Integra los resultados de cada agente
+
+## Lo que NO hace
+
+- ❌ NO escribe código (eso es `@dev`)
+- ❌ NO escribe tests (eso es `@qa`)
+- ❌ NO toma decisiones de diseño (eso es `@architect`)
+- ❌ NO ejecuta comandos de build/deploy
+
+## Ejemplo de uso
+
+```
+Implementa un sistema de notificaciones push para la app.
+Necesita: diseño arquitectónico, implementación, tests, 
+y revisión de seguridad antes de mergear.
+```
+
+El orchestrator:
+1. Delega el diseño a `@architect`
+2. Delega la implementación a `@dev`
+3. Delega los tests a `@qa`
+4. Delega la revisión a `@reviewer`
+5. Reporta el resultado completo
+
+<Aside type="tip">
+No necesitas invocar al orchestrator directamente. opencode lo usa internamente cuando la tarea es compleja y requiere múltiples agentes. Si le pides algo complejo a opencode, el orchestrator se activa automáticamente.
+</Aside>
+
+## Flujo del orchestrator
+
+```
+Tarea compleja
+    ↓
+@orchestrator investiga
+    ↓
+Planifica subtareas
+    ↓
+┌─────────┬─────────┬─────────┐
+│@architect│  @dev   │   @qa   │
+│ diseña   │implementa│  testea │
+└─────────┴─────────┴─────────┘
+    ↓
+@reviewer revisa
+    ↓
+Resultado integrado
+```
+
+## Cuándo se activa automáticamente
+
+El orchestrator se activa cuando:
+- La tarea requiere más de un agente
+- Hay dependencias entre subtareas
+- El trabajo abarca múltiples fases (diseño → implementación → test → review)
+
+Para tareas simples, opencode delega directamente al agente correcto sin pasar por el orchestrator.

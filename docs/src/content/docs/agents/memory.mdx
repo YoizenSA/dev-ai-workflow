@@ -1,0 +1,73 @@
+---
+title: Memory Agent
+description: Agente de memoria — gestiona el conocimiento persistente entre sesiones
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Memory Agent
+
+El agente memory gestiona la **memoria persistente** de tu proyecto. Guarda decisiones, descubrimientos, y contexto importante para que las próximas sesiones empiecen con conocimiento previo.
+
+<Badge text="Rol: Archivista" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Guardar decisiones | "Record that we chose JWT over sessions" |
+| Buscar contexto | "What did we decide about the auth model?" |
+| Recuperar historial | "What bugs did we fix last week?" |
+| Documentar patrones | "Record that we use repository pattern for data access" |
+
+## Lo que hace
+
+- Guarda decisiones de arquitectura y diseño
+- Registra bugs encontrados y cómo se resolvieron
+- Documenta patrones y convenciones del proyecto
+- Recupera contexto de sesiones anteriores
+- Conecta información relacionada entre sesiones
+
+## Lo que NO hace
+
+- ❌ NO modifica archivos del proyecto
+- ❌ NO escribe código
+- ❌ NO ejecuta comandos
+
+## Ejemplo de uso
+
+```
+@memory What did we decide about the database migration strategy?
+```
+
+El memory agent busca en la memoria persistente y te da el contexto de decisiones pasadas.
+
+<Aside type="tip">
+El memory agent se activa automáticamente cuando empiezas una nueva sesión. Recupera contexto relevante para que no empieces de cero.
+</Aside>
+
+## Tipos de memoria
+
+| Tipo | Qué guarda | Ejemplo |
+|---|---|---|
+| `decision` | Decisiones técnicas | "Elegimos PostgreSQL sobre MongoDB" |
+| `bugfix` | Bugs y sus soluciones | "Fixed N+1 query en UserList" |
+| `pattern` | Patrones establecidos | "Usamos repository pattern" |
+| `config` | Configuración | "JWT expiry = 15min" |
+| `discovery` | Descubrimientos | "El API de Stripe tiene rate limit de 100 req/s" |
+
+## Cuándo se activa automáticamente
+
+El memory agent funciona en segundo plano:
+- Al **empezar** una sesión: recupera contexto relevante
+- Al **terminar** una sesión: guarda un resumen de lo que se hizo
+- Cuando se **toma una decisión**: la registra automáticamente
+- Cuando se **arregla un bug**: documenta la causa y solución
+
+## Buscar memoria
+
+```
+@memory What patterns do we use for error handling?
+@memory Show me all decisions about the auth system
+@memory What bugs did we fix in the payment module?
+```
