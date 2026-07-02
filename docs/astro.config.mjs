@@ -59,6 +59,8 @@ export default defineConfig({
             { label: 'Skills', slug: 'skills' },
             { label: 'Skills Reference', slug: 'skills/reference' },
             { label: 'Workflow Studio', slug: 'workflows' },
+            { label: 'Workflow Commands', slug: 'workflows/commands' },
+            { label: 'Workflow Groups', slug: 'workflows/groups' },
             { label: 'Settings UI', slug: 'settings' },
           ],
         },

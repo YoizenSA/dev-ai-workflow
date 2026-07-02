@@ -1,0 +1,252 @@
+---
+title: Workflows con Commands
+description: Cómo los workflows se convierten en comandos slash como /feature-delivery
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Workflows con Commands
+
+Los workflows de ywai se convierten en **comandos slash** que puedes usar en opencode. En vez de recordar qué agentes invocar, escribes un comando y el workflow coordina todo.
+
+## ¿Qué es un workflow command?
+
+Un workflow command es un comando slash (como `/feature-delivery`) que:
+1. Acepta un argumento (tu tarea)
+2. Lanza un orquestador que coordina agentes
+3. Ejecuta el flujo completo automáticamente
+
+**Ejemplo:**
+```
+/feature-delivery Implementar autenticación con JWT
+```
+
+Esto lanza todo el equipo: planificador → arquitecto → dev → qa → reviewer.
+
+## Workflows preinstalados
+
+ywai viene con 3 workflows listos para usar:
+
+### /feature-delivery
+
+**Para qué:** Implementar features completas de principio a fin.
+
+**Flujo:**
+```
+[Planificador] → [Arquitecto] → [Dev] → [QA] → [Reviewer]
+```
+
+**Agentes que usa:**
+- `planning` — Investiga y planifica
+- `architect` — Diseña la solución
+- `dev` — Implementa el código
+- `qa` — Escribe tests
+- `reviewer` — Revisa antes de mergear
+
+**Ejemplo:**
+```
+/feature-delivery Agregar sistema de notificaciones push
+```
+
+### /social-refactor
+
+**Para qué:** Migrar código entre frameworks o hacer refactoring grande.
+
+**Flujo:**
+```
+[Migration Scope] → [Migration Planner] → [Dev] → [Migration Validator]
+```
+
+**Agentes que usa:**
+- `migration-scope` — Clasifica qué hay que migrar
+- `migration-planner` — Crea el plan
+- `dev` — Implementa la migración
+- `migration-validator` — Valida paridad funcional
+
+**Ejemplo:**
+```
+/social-refactor Migrar el módulo de login de Angular a React
+```
+
+### /qa-automation
+
+**Para qué:** Testing completo con estrategia, no solo tests sueltos.
+
+**Flujo:**
+```
+[QA Analyst] → [QA Finder] → [QA Dev] → [QA Reviewer]
+```
+
+**Agentes que usa:**
+- `qa-analyst` — Diseña estrategia de testing
+- `qa-finder` — Busca código relacionado
+- `qa-dev` — Escribe tests
+- `qa-reviewer` — Revisa calidad
+
+**Ejemplo:**
+```
+/qa-automation Testear completamente el flujo de checkout
+```
+
+## Cómo funcionan internamente
+
+### 1. El workflow tiene un grafo
+
+Cada workflow es un grafo de nodos conectados:
+
+```
+[Start] → [Planning] → [Architect] → [Dev] → [QA] → [Reviewer] → [End]
+```
+
+### 2. Cada nodo es un agente
+
+Cada nodo del grafo se convierte en un agente opencode:
+- El **nodo principal** se convierte en el comando slash
+- Los **nodos de agentes** se convierten en archivos `.md` en `~/.config/opencode/agents/`
+
+### 3. Se exporta a opencode
+
+Cuando ejecutas `ywai install` o exportas un workflow:
+- Se crea `~/.config/opencode/commands/<nombre>.md` (el comando)
+- Se crean `~/.config/opencode/agents/<nombre>-<agente>.md` (los agentes)
+
+### 4. El comando lanza el orquestador
+
+Cuando escribes `/feature-delivery` en opencode:
+1. opencode lee el archivo del comando
+2. El comando lanza el orquestador
+3. El orquestador delega a cada agente en orden
+4. Cada agente hace su trabajo y reporta al siguiente
+
+## Crear tus propios workflows
+
+### Con Workflow Studio (visual)
+
+<Steps>
+
+1. **Abre** `http://localhost:5768/workflows`
+2. **Arrastra** nodos desde la paleta
+3. **Conecta** los nodos
+4. **Configura** cada nodo (agente, prompt, condiciones)
+5. **Exporta** a opencode
+
+</Steps>
+
+### Con JSON (avanzado)
+
+Crea un archivo `workflow.json`:
+
+```json
+{
+  "name": "mi-workflow",
+  "description": "Mi workflow personalizado",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "dev",
+      "type": "subAgent",
+      "agent": "dev",
+      "systemPrompt": "Implementa la feature siguiendo los patrones del proyecto.",
+      "taskPrompt": "Tarea: $ARGUMENTS",
+      "permissions": { "tools": { "read": true, "write": true, "bash": true } }
+    },
+    {
+      "id": "qa",
+      "type": "subAgent",
+      "agent": "qa",
+      "systemPrompt": "Escribe tests para la feature implementada.",
+      "taskPrompt": "Testea: $ARGUMENTS",
+      "permissions": { "tools": { "read": true, "write": true, "bash": true } }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "position": { "x": 300, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "source": "start", "target": "dev" },
+    { "source": "dev", "target": "qa" },
+    { "source": "qa", "target": "end" }
+  ],
+  "entryNodeId": "start"
+}
+```
+
+Luego exporta:
+```bash
+# Exportar a opencode
+ywai workflow export mi-workflow.json
+
+# O importar desde Workflow Studio
+# Click en "Import" → selecciona el JSON
+```
+
+## Tipos de nodos
+
+| Nodo | Qué hace | Ejemplo |
+|---|---|---|
+| **start** | Punto de entrada del workflow | Recibe `$ARGUMENTS` del usuario |
+| **end** | Punto de salida | Marca el workflow como completo |
+| **subAgent** | Delega a un agente | Dev, QA, Architect, etc. |
+| **prompt** | Instrucción fija | "Usa TypeScript estricto" |
+| **ifElse** | Decisión condicional | "Si hay errores, ir a Dev" |
+| **switch** | Múltiples condiciones | "Según el tipo de cambio..." |
+| **askUserQuestion** | Pregunta al usuario | "¿Mergeamos a main?" |
+| **skill** | Aplica un skill | react-19, tailwind-4 |
+
+## Ejemplo completo: /feature-delivery
+
+Cuando escribes:
+```
+/feature-delivery Agregar login con Google
+```
+
+Esto es lo que pasa:
+
+<Steps>
+
+1. **El orquestador recibe** "Agregar login con Google"
+
+2. **Planificador investiga** — Busca código existente de auth, entiende la estructura
+
+3. **Arquitecto diseña** — Propone usar OAuth2 con Google, define endpoints y flujo
+
+4. **Dev implementa** — Escribe el código: endpoint de callback, middleware de auth, componente de login
+
+5. **QA testea** — Escribe tests: login exitoso, error de callback, token expirado
+
+6. **Reviewer revisa** — Revisa por seguridad: CSRF, validación de redirect_uri, manejo de tokens
+
+7. **El orquestador reporta** — Resumen completo de lo que se hizo
+
+</Steps>
+
+## Cuándo usar commands vs agentes directos
+
+| Situación | Usa command | Usa agente directo |
+|---|---|---|
+| Feature completa | `/feature-delivery` | |
+| Migración de código | `/social-refactor` | |
+| Testing completo | `/qa-automation` | |
+| Bug simple | | `@dev` |
+| Pregunta rápida | | `@ask` |
+| Code review | | `@reviewer` |
+
+<Aside type="tip">
+Los commands son para flujos complejos que requieren múltiples agentes. Para tareas simples, usa un agente directamente — es más rápido.
+</Aside>
+
+## Ver workflows disponibles
+
+```bash
+# Ver workflows guardados
+ls ~/.ywai/workflows/
+
+# Ver commands generados
+ls ~/.config/opencode/commands/
+```
