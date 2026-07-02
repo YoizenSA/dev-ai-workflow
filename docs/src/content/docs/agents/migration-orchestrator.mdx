@@ -1,41 +1,39 @@
 ---
 title: Migration Orchestrator
-description: Coordina migraciones de código complejas entre frameworks
+description: Coordina migraciones de código entre frameworks
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Migration Orchestrator
 
-Coordina **migraciones de código complejas** entre frameworks. Divide la migración en páginas, delega a los agentes correctos, y ensambla los resultados.
+## Qué hace
 
-<Badge text="Grupo: social-refactor" variant="note" />
+Coordina migraciones de código entre frameworks. Divide la migración en páginas y valida cada una.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Migrar framework | "Migrate this AngularJS app to React" |
-| Refactoring grande | "Refactor the entire UI layer to use the new design system" |
-| Migración incremental | "Migrate page by page, not all at once" |
+| Migrar framework | "Migra de Angular a React" |
+| Refactoring grande | "Refactoriza toda la UI" |
+| Migración incremental | "Migra página por página" |
 
-## Lo que hace
+## Flujo
 
-1. **Clasifica** el alcance de la migración (usa `@migration-scope`)
-2. **Planifica** el orden de migración (usa `@migration-planner`)
-3. **Delega** la implementación página por página
-4. **Valida** la paridad funcional (usa `@migration-validator`)
-5. **Coordina** dependencias entre páginas
+1. `@migration-scope` clasifica qué hay que migrar
+2. `@migration-planner` crea el plan
+3. `@dev` implementa la migración
+4. `@migration-validator` valida paridad
 
-## Agentes que coordina
+## Límites
 
-| Agente | Rol |
+| ✅ Puede | ❌ No puede |
 |---|---|
-| `@migration-scope` | Clasifica qué hay que migrar |
-| `@migration-planner` | Crea el plan de migración |
-| `@migration-validator` | Valida paridad funcional |
-| `@migration-validator-focused` | Valida una página específica |
+| Coordinar migración | Implementar código (`@dev`) |
+| Delegar a agentes | Crear planes (`@migration-planner`) |
+| Validar resultados | Clasificar alcance (`@migration-scope`) |
 
 <Aside type="tip">
-Este agente es para migraciones grandes y complejas. Para cambios simples, usa `@dev` directamente.
+Para migraciones pequeñas (1-2 archivos), usá `@dev` directamente.
 </Aside>

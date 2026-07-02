@@ -3,40 +3,36 @@ title: QA Orchestrator
 description: Coordina el equipo de automatización de testing
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # QA Orchestrator
 
-Coordina el **equipo de automatización de testing**. Divide el trabajo de testing entre agentes especializados y ensambla los resultados.
+## Qué hace
 
-<Badge text="Grupo: qa-automation" variant="caution" />
+Coordina el equipo de automatización de testing. Divide el trabajo entre agentes especializados.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Testing completo | "Test the entire checkout flow" |
-| Estrategia de testing | "Design a test strategy for the new feature" |
-| Múltiples tipos de test | "Unit + integration + e2e for the auth module" |
+| Testing completo | "Testea todo el flujo de checkout" |
+| Estrategia | "Diseña estrategia para el módulo de pagos" |
 
-## Lo que hace
+## Flujo
 
-1. **Analiza** qué necesita testing (usa `@qa-analyst`)
-2. **Busca** código relevante (usa `@qa-finder`)
-3. **Delega** escritura de tests (usa `@qa-dev`)
-4. **Delega** revisión de tests (usa `@qa-reviewer`)
-5. **Responde** preguntas de testing (usa `@qa-ask`)
+1. `@qa-analyst` diseña estrategia
+2. `@qa-finder` busca código relacionado
+3. `@qa-dev` escribe tests
+4. `@qa-reviewer` revisa calidad
 
-## Agentes que coordina
+## Límites
 
-| Agente | Rol |
+| ✅ Puede | ❌ No puede |
 |---|---|
-| `@qa-analyst` | Diseña estrategia de testing |
-| `@qa-finder` | Busca código relacionado |
-| `@qa-dev` | Escribe tests automatizados |
-| `@qa-reviewer` | Revisa calidad de tests |
-| `@qa-ask` | Responde preguntas de testing |
+| Coordinar equipo | Escribir tests (`@qa-dev`) |
+| Delegar tareas | Revisar tests (`@qa-reviewer`) |
+| Ensamblar resultados | Diseñar estrategia (`@qa-analyst`) |
 
 <Aside type="tip">
-Para testing simple, usa `@qa` directamente. El qa-orchestrator es para cuando necesitas múltiples tipos de test o una estrategia completa.
+Para testing simple, usá `@qa` directamente. El qa-orchestrator es para estrategias completas.
 </Aside>

@@ -1,33 +1,28 @@
 ---
 title: QA Dev
-description: Escribe tests automatizados (unit, integration, e2e)
+description: Escribe tests automatizados
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # QA Dev
 
-Escribe **tests automatizados** — unit, integration, y e2e. Implementa la estrategia diseñada por `@qa-analyst`.
+## Qué hace
 
-<Badge text="Grupo: qa-automation" variant="caution" />
+Escribe tests automatizados — unit, integration, y e2e.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Tests unitarios | "Write unit tests for UserService" |
-| Tests de integración | "Write integration tests for the API" |
-| Tests E2E | "Write Playwright tests for the checkout flow" |
+| Tests unitarios | `@qa-dev Escribe tests para UserService` |
+| Tests integration | `@qa-dev Tests de integración para la API` |
+| Tests E2E | `@qa-dev Playwright tests para checkout` |
 
-## Lo que hace
+## Límites
 
-1. **Lee** la estrategia de `@qa-analyst`
-2. **Escribe** tests siguiendo TDD (red → green → refactor)
-3. **Cubre** casos normales, edge cases, y errores
-4. **Verifica** que los tests pasan
-
-## Lo que NO hace
-
-- ❌ NO explora codebase (eso es `@qa-finder`)
-- ❌ NO revisa su propio código (eso es `@qa-reviewer`)
-- ❌ NO diseña estrategia (eso es `@qa-analyst`)
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Escribir tests | Explorar codebase (`@qa-finder`) |
+| Cubrir edge cases | Revisar su código (`@qa-reviewer`) |
+| Verificar tests pasan | Diseñar estrategia (`@qa-analyst`) |

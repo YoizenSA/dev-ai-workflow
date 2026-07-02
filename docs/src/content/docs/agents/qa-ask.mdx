@@ -3,31 +3,26 @@ title: QA Ask
 description: Responde preguntas sobre testing
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # QA Ask
 
-Responde **preguntas sobre testing** — explica patrones, frameworks, y mejores prácticas.
+## Qué hace
 
-<Badge text="Grupo: qa-automation" variant="caution" />
+Responde preguntas sobre testing — explica frameworks, patrones, y mejores prácticas.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Preguntas de testing | "How do I mock API calls in Vitest?" |
-| Explicar frameworks | "What's the difference between unit and integration tests?" |
-| Mejores prácticas | "How should I test error handling?" |
+| Preguntas | `@qa-ask ¿Cómo mockeo API calls en Vitest?` |
+| Frameworks | `@qa-ask ¿Cuál es la diferencia entre unit e integration?` |
+| Mejores prácticas | `@qa-ask ¿Cómo testeo error handling?` |
 
-## Lo que hace
+## Límites
 
-1. **Responde** preguntas sobre testing
-2. **Explica** frameworks y herramientas
-3. **Sugiere** mejores prácticas
-4. **Da** ejemplos de código
-
-## Lo que NO hace
-
-- ❌ NO escribe tests completos (eso es `@qa-dev`)
-- ❌ NO revisa código (eso es `@qa-reviewer`)
-- ❌ NO explora codebase (eso es `@qa-finder`)
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Responder preguntas | Escribir tests completos (`@qa-dev`) |
+| Explicar frameworks | Revisar código (`@qa-reviewer`) |
+| Dar ejemplos | Explorar codebase (`@qa-finder`) |

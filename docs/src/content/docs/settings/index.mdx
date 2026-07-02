@@ -3,110 +3,47 @@ title: Settings UI
 description: Panel de configuración visual para ywai
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Settings UI
 
-El Settings UI es un **panel de configuración visual** donde puedes gestionar la configuración de ywai sin tocar archivos.
+## Qué es
 
-## Acceder a Settings
+Un panel de configuración visual donde gestionás ywai sin tocar archivos.
+
+## Quick path
 
 ```bash
+# 1. Abrir
 ywai kanban
+
+# 2. Ir a Settings
+http://localhost:5768/settings
 ```
 
-Luego navega a `http://localhost:5768/settings`.
+## Pestañas
 
-## Pestañas disponibles
+| Pestaña | Qué configurás |
+|---|---|
+| **General** | Directorio de trabajo, agente predeterminado |
+| **Agentes** | Perfiles, permisos, skills vinculados |
+| **Skills** | Ver disponibles, activar/desactivar |
+| **Memoria** | Ver observaciones, buscar, limpiar |
+| **MCP** | Servidores conectados, endpoints |
+| **SDD** | Specification-Driven Development |
+| **ADO** | Azure DevOps, PAT tokens |
+| **Git** | Estado del repo, hooks |
+| **Push** | Notificaciones |
 
-### General
+## Settings UI vs CLI
 
-Configuración general de ywai:
-- Directorio de trabajo por defecto
-- Agente predeterminado
-- Preferencias de logging
-
-### Agentes
-
-Gestiona los perfiles de agentes:
-- Ver agentes instalados
-- Editar system prompts
-- Configurar permisos de herramientas
-- Vincular skills
-
-### Skills
-
-Gestiona los skills instalados:
-- Ver skills disponibles
-- Activar/desactivar skills por agente
-- Ver triggers de cada skill
-
-### Memoria
-
-Gestiona la memoria persistente:
-- Ver observaciones guardadas
-- Buscar en la memoria
-- Limpiar entradas antiguas
-
-### MCP
-
-Configura servidores MCP:
-- Ver servidores conectados
-- Configurar endpoints
-- Verificar estado de conexión
-
-### SDD
-
-Configuración de Specification-Driven Development:
-- Habilitar/deshabilitar SDD
-- Configurar rutas de specs
-- Gestionar el registro de capabilities
-
-### ADO
-
-Configuración de Azure DevOps:
-- Conectar cuenta de ADO
-- Configurar proyectos
-- Gestionar PAT tokens
-
-### Git
-
-Configuración de Git:
-- Ver estado del repositorio
-- Configurar hooks
-- Gestionar credenciales
-
-### Push
-
-Configuración de notificaciones push:
-- Habilitar notificaciones
-- Configurar canales
-- Gestionar suscripciones
-
-<Aside type="tip">
-El Settings UI es la forma más fácil de configurar ywai. Para configuración avanzada o automatización, usa los comandos CLI.
-</Aside>
-
-## Cuándo usar Settings UI vs CLI
-
-| Situación | Usa Settings UI | Usa CLI |
+| Situación | Settings UI | CLI |
 |---|---|---|
 | Configurar por primera vez | ✅ | |
-| Cambiar configuración rápida | ✅ | |
-| Automatización/scripting | | ✅ |
-| Configurar en CI/CD | | ✅ |
-| Ver estado actual | ✅ | |
-| Configuración avanzada | | ✅ |
+| Cambio rápido | ✅ | |
+| Automatización | | ✅ |
+| CI/CD | | ✅ |
 
-## Acceso remoto
-
-El Settings UI está disponible en `http://localhost:5768`. Si necesitas acceso remoto:
-
-```bash
-# Escuchar en todas las interfaces
-ywai kanban --host 0.0.0.0
-```
-
-<Aside type="caution">
-No expongas el Settings UI en producción sin autenticación. Es una herramienta de desarrollo.
+<Aside type="tip">
+Settings UI es la forma más fácil de configurar ywai. Para automatización, usá los comandos CLI.
 </Aside>

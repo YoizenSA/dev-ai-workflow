@@ -1,33 +1,28 @@
 ---
 title: QA Analyst
-description: Diseña estrategias de testing y analiza cobertura
+description: Diseña estrategias de testing
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # QA Analyst
 
-Diseña **estrategias de testing** y analiza cobertura. Decide qué testear, cómo, y con qué prioridad.
+## Qué hace
 
-<Badge text="Grupo: qa-automation" variant="caution" />
+Diseña estrategias de testing y analiza cobertura.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Estrategia de testing | "Design a test strategy for the payment module" |
-| Análisis de cobertura | "What's our test coverage for the auth flow?" |
-| Priorización | "Which tests should we write first?" |
+| Estrategia | `@qa-analyst Diseña estrategia para pagos` |
+| Cobertura | `@qa-analyst ¿Qué cobertura tenemos en auth?` |
+| Priorización | `@qa-analyst ¿Qué tests escribir primero?` |
 
-## Lo que hace
+## Límites
 
-1. **Analiza** el código y los requisitos
-2. **Diseña** la estrategia de testing
-3. **Prioriza** qué testear primero
-4. **Identifica** gaps de cobertura
-
-## Lo que NO hace
-
-- ❌ NO escribe tests automatizados (eso es `@qa-dev`)
-- ❌ NO explora codebase (eso es `@qa-finder`)
-- ❌ NO revisa código de tests (eso es `@qa-reviewer`)
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Diseñar estrategia | Escribir tests (`@qa-dev`) |
+| Analizar cobertura | Explorar codebase (`@qa-finder`) |
+| Priorizar | Revisar tests (`@qa-reviewer`) |

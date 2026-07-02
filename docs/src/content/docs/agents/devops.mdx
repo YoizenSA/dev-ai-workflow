@@ -1,63 +1,41 @@
 ---
 title: DevOps Agent
-description: Agente de infraestructura — CI/CD, Docker, K8s, despliegues
+description: CI/CD, Docker, K8s, despliegues
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # DevOps Agent
 
-El agente devops se especializa en **infraestructura, CI/CD, contenedores y despliegues**. Configura pipelines, crea Dockerfiles y gestiona despliegues.
+## Qué hace
 
-<Badge text="Rol: DevOps Engineer" variant="note" />
+Configura pipelines, crea Dockerfiles, y gestiona despliegues.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| CI/CD pipelines | "Set up GitHub Actions for this project" |
-| Docker | "Create a Dockerfile for the Node.js service" |
-| Kubernetes | "Write K8s manifests for the API" |
-| Despliegues | "Set up staging environment on AWS" |
-| Monitoreo | "Add health checks and logging" |
+| CI/CD | `@devops Configura GitHub Actions` |
+| Docker | `@devops Crea un Dockerfile para Node.js` |
+| Kubernetes | `@devops Escribe K8s manifests para la API` |
+| Deploy | `@devops Configura deploy a staging` |
 
 ## Lo que hace
 
-1. **Configura** pipelines de CI/CD (GitHub Actions, Azure Pipelines, etc.)
-2. **Crea** Dockerfiles optimizados y seguros
-3. **Escribe** manifiestos de Kubernetes (Deployments, Services, Ingress)
-4. **Configura** Helm charts para despliegues complejos
-5. **Automatiza** procesos de build, test y deploy
+1. Configura pipelines de CI/CD
+2. Crea Dockerfiles optimizados
+3. Escribe manifiestos de Kubernetes
+4. Crea Helm charts
+5. Automatiza build, test, deploy
 
-## Lo que NO hace
+## Límites
 
-- ❌ NO implementa features de aplicación (eso es `@dev`)
-- ❌ NO diseña arquitectura de aplicación (eso es `@architect`)
-- ❌ NO escribe tests de aplicación (eso es `@qa`)
-- ❌ NO revisa código de aplicación (eso es `@reviewer`)
-
-## Ejemplo de uso
-
-```
-@devops Create a production-ready Dockerfile for our Next.js app.
-Include: multi-stage build, non-root user, health check, and 
-optimized layer caching. Also create a docker-compose.yml for 
-local development with PostgreSQL and Redis.
-```
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Configurar CI/CD | Implementar features (`@dev`) |
+| Crear Dockerfiles | Diseñar arquitectura (`@architect`) |
+| Escribir K8s manifests | Escribir tests (`@qa`) |
 
 <Aside type="tip">
-El agente devops es ideal para configurar el pipeline completo de tu proyecto, desde el push hasta producción.
+Para un Dockerfile simple, `@devops` solo es suficiente. Para pipelines completos, describí todos los requerimientos de una vez.
 </Aside>
-
-## Flujo típico
-
-```
-@architect (diseña infra) → @devops (configura) → @dev (integra) → @qa (verifica)
-```
-
-## Skills que usa
-
-| Skill | Cuándo |
-|---|---|
-| `devops` | Azure Pipelines, Helm, K8s |
-| `docker` | Dockerfiles, compose, hardening |

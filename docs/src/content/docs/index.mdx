@@ -3,10 +3,10 @@ title: ywai
 description: Un comando para configurar tu entorno de desarrollo con AI
 template: splash
 hero:
-  tagline: Un comando para configurar tu entorno de desarrollo con AI. Agentes especializados, skills preinstalados, y un flujo de trabajo que funciona.
+  tagline: Agentes especializados, skills preinstalados, y flujos de trabajo que funcionan. Un solo comando.
   actions:
     - text: Empezar
-      link: /dev-ai-workflow/getting-started
+      link: /getting-started
       icon: right-arrow
       variant: primary
     - text: Ver en GitHub
@@ -17,24 +17,39 @@ hero:
 
 import { Card, CardGrid, Badge } from '@astrojs/starlight/components';
 
-## ¿Qué es ywai?
+## Qué hace ywai
 
-ywai configura tu agente AI (opencode, Claude Code, Cursor, etc.) con **agentes especializados** y **skills** que saben cómo usar tu stack tecnológico. Un solo comando y tu agente se convierte en un equipo de desarrollo completo.
+Configura tu agente AI (opencode, Claude Code, Cursor, etc.) con **agentes especializados** y **skills** que saben cómo usar tu stack tecnológico.
 
-<CardGrid>
-  <Card title="Agentes especializados" icon="star">
-    Dev, QA, Architect, Reviewer, DevOps — cada uno con un rol claro y límites definidos.
-  </Card>
-  <Card title="Skills preinstalados" icon="puzzle">
-    React, Angular, TypeScript, Tailwind, .NET, DevOps, y más. Se cargan automáticamente.
-  </Card>
-  <Card title="Un solo comando" icon="rocket">
-    `ywai install` configura todo. Sin scripts manuales, sin copiar archivos.
-  </Card>
-  <Card title="15+ agentes soportados" icon="laptop">
-    OpenCode, Claude Code, Cursor, Gemini CLI, VS Code Copilot, y más.
-  </Card>
-</CardGrid>
+```
+ywai install → agentes + skills + config → listo para usar
+```
+
+## Quick path
+
+```bash
+# 1. Instalar
+curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+
+# 2. Configurar
+ywai install
+
+# 3. Verificar
+ywai doctor
+
+# 4. Usar
+@dev Implementa el endpoint de login
+```
+
+## Qué obtenés
+
+| Qué | Ejemplo |
+|---|---|
+| **Agentes especializados** | `@dev`, `@qa`, `@architect`, `@reviewer`, `@devops`, `@ask` |
+| **Skills preinstalados** | React, Angular, TypeScript, Tailwind, .NET, DevOps |
+| **Commands slash** | `/feature-delivery`, `/social-refactor`, `/qa-automation` |
+| **Kanban visual** | Monitorear progreso de agentes en tiempo real |
+| **Workflow Studio** | Diseñar flujos de trabajo personalizados |
 
 ## Antes vs Después
 
@@ -45,25 +60,10 @@ ywai configura tu agente AI (opencode, Claude Code, Cursor, etc.) con **agentes 
 | Buscar skills para cada framework | Decenas de skills preinstaladas |
 | Mantener configuraciones por separado | Un solo comando para actualizar todo |
 
-## Empezar ahora
+## Siguiente paso
 
-```bash
-# Instalar
-curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+<Card title="Primeros pasos" icon="star">
+Instalación, primera tarea, y conceptos clave.
 
-# Configurar
-ywai install
-
-# Verificar
-ywai doctor
-
-# Usar en opencode
-@dev Implementa el endpoint de login
-```
-
-## ¿Qué sigue?
-
-- **[Primeros pasos](/dev-ai-workflow/getting-started)** — Instalación y primera tarea
-- **[Agentes](/dev-ai-workflow/agents)** — Conoce el equipo de especialistas
-- **[Skills](/dev-ai-workflow/skills)** — Capacidades preinstaladas
-- **[Guías](/dev-ai-workflow/guides)** — Flujos de trabajo reales
+[Empezar →](/getting-started)
+</Card>

@@ -1,75 +1,50 @@
 ---
 title: Guías
-description: Flujos de trabajo prácticos — el orchestrator coordina, vos pedís
+description: Flujos de trabajo prácticos para usar ywai
 ---
 
 import { Card, Aside } from '@astrojs/starlight/components';
 
-<Aside type="tip" title="Proyecto">
-  Estos docs pertenecen a **[ywai / dev-ai-workflow](https://github.com/Yoizen/dev-ai-workflow)**. Si encontrás algo para mejorar, abrí un issue o pull request.
-</Aside>
-
 # Guías
 
-Guías prácticas para usar ywai en situaciones reales.
-
 <Aside type="tip">
-**No necesitas invocar agentes uno por uno.** Le decís al orchestrator qué necesitás y él distribuye el trabajo a los agentes correctos.
+**Patrón común:** Vos le decís al orchestrator qué necesitás → él distribuye a los agentes correctos → te reporta el resultado.
 </Aside>
 
 ## Las 7 guías
 
-<Card title="Implementar una Feature" icon="star">
-El orchestrator coordina: architect → dev → qa → reviewer
+| Guía | Qué hacés | Qué pasa |
+|---|---|---|
+| [**Implementar Feature**](/guides/feature) | "Implementa auth con JWT" | architect → dev → qa → reviewer |
+| [**Arreglar Bug**](/guides/bugfix) | "El login falla con +" | dev investiga → arregla → qa testea |
+| [**Code Review**](/guides/review) | "Revisa src/auth/" | reviewer revisa → reporta findings |
+| [**Migración**](/guides/migration) | "Migra auth de Angular a React" | migration-scope → planner → dev → validator |
+| [**Testing**](/guides/testing) | "Testea el checkout" | qa-analyst → finder → dev → reviewer |
+| [**CI/CD**](/guides/cicd) | "Configura GitHub Actions" | devops configura pipeline |
+| [**Refactoring**](/guides/refactoring) | "Usá repository pattern" | architect analiza → dev refactoriza → qa verifica |
 
-[Ver guía →](/dev-ai-workflow/guides/feature)
-</Card>
-
-<Card title="Arreglar un Bug" icon="bug">
-El orchestrator diagnostica y arregla con los agentes correctos
-
-[Ver guía →](/dev-ai-workflow/guides/bugfix)
-</Card>
-
-<Card title="Code Review" icon="search">
-El orchestrator delega al reviewer y te reporta findings
-
-[Ver guía →](/dev-ai-workflow/guides/review)
-</Card>
-
-<Card title="Migración de Código" icon="sync">
-El orchestrator coordina el equipo social-refactor
-
-[Ver guía →](/dev-ai-workflow/guides/migration)
-</Card>
-
-<Card title="Testing Completo" icon="test">
-El orchestrator coordina el equipo qa-automation
-
-[Ver guía →](/dev-ai-workflow/guides/testing)
-</Card>
-
-<Card title="CI/CD e Infraestructura" icon="server">
-El orchestrator delega a devops para pipelines y containers
-
-[Ver guía →](/dev-ai-workflow/guides/cicd)
-</Card>
-
-<Card title="Refactoring" icon="code">
-El orchestrator coordina refactorings seguros
-
-[Ver guía →](/dev-ai-workflow/guides/refactoring)
-</Card>
-
-## El patrón común
-
-Todas las guías siguen el mismo patrón:
+## Ejemplo rápido
 
 ```
-1. Vos le decís al orchestrator qué necesitás
-2. El orchestrator elige los agentes correctos
-3. Los agentes hacen su trabajo
-4. El orchestrator te reporta el resultado
+Vos: "Implementa un sistema de pagos con Stripe"
+
+Orchestrator:
+  → @architect: diseña PaymentService
+  → @dev: implementa
+  → @qa: tests
+  → @reviewer: revisa por seguridad
+  
+Resultado: "Feature completa. 2 issues corregidos."
 ```
 
-No necesitas saber qué agente hace cada cosa. El orchestrator se encarga de distribuir.
+## Cuándo usar cada guía
+
+| Situación | Guía |
+|---|---|
+| Feature nueva | [Implementar Feature](/guides/feature) |
+| Algo está roto | [Arreglar Bug](/guides/bugfix) |
+| Antes de mergear | [Code Review](/guides/review) |
+| Cambiar de framework | [Migración](/guides/migration) |
+| Necesitás cobertura | [Testing](/guides/testing) |
+| Deploy a producción | [CI/CD](/guides/cicd) |
+| Mejorar código existente | [Refactoring](/guides/refactoring) |

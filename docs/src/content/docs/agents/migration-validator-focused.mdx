@@ -3,13 +3,13 @@ title: Migration Validator Focused
 description: Valida una página específica de la migración
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Migration Validator Focused
 
-Valida **una página específica** de la migración — versión enfocada del validator general.
+## Qué hace
 
-<Badge text="Grupo: social-refactor" variant="note" />
+Valida una página específica de la migración — versión enfocada del validator general.
 
 ## Cuándo usarlo
 
@@ -18,14 +18,9 @@ Valida **una página específica** de la migración — versión enfocada del va
 | Validar una página | "Validate only the /login page migration" |
 | Revisión rápida | "Quick check on the migrated component" |
 
-## Lo que hace
+## Límites
 
-1. **Valida** solo la página objetivo (no toda la migración)
-2. **Verifica** paridad funcional de esa página
-3. **Reporta** findings específicos
-
-## Lo que NO hace
-
-- ❌ NO valida toda la migración (eso es `@migration-validator`)
-- ❌ NO modifica código
-- ❌ NO expande el alcance de validación
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Validar una página | Validar toda la migración (`@migration-validator`) |
+| Reportar findings | Modificar código |

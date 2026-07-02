@@ -3,31 +3,26 @@ title: QA Finder
 description: Busca código relacionado con testing
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # QA Finder
 
-Busca **código relacionado con testing** — encuentra archivos, patrones de test existentes, y código que necesita cobertura.
+## Qué hace
 
-<Badge text="Grupo: qa-automation" variant="caution" />
+Busca código relacionado con testing — encuentra archivos, patrones, y código sin cobertura.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Buscar tests existentes | "Find all tests related to auth" |
-| Encontrar código sin cobertura | "What code has no tests?" |
-| Explorar patrones | "How do we write tests in this project?" |
+| Buscar tests | `@qa-finder Find all tests related to auth` |
+| Código sin cobertura | `@qa-finder What code has no tests?` |
+| Patrones | `@qa-finder How do we write tests here?` |
 
-## Lo que hace
+## Límites
 
-1. **Busca** archivos de test existentes
-2. **Identifica** código sin cobertura
-3. **Encuentra** patrones de test del proyecto
-4. **Reporta** el estado de testing
-
-## Lo que NO hace
-
-- ❌ NO escribe tests (eso es `@qa-dev`)
-- ❌ NO revisa tests (eso es `@qa-reviewer`)
-- ❌ NO diseña estrategia (eso es `@qa-analyst`)
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Buscar archivos | Escribir tests (`@qa-dev`) |
+| Identificar gaps | Revisar tests (`@qa-reviewer`) |
+| Explorar patrones | Diseñar estrategia (`@qa-analyst`) |

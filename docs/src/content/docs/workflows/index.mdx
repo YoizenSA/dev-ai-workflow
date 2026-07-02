@@ -1,90 +1,58 @@
 ---
 title: Workflows
-description: Sistema de workflows — Studio, Commands y Agent Groups
+description: Studio, Commands y Agent Groups — los 3 componentes del sistema de workflows
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Card, Aside } from '@astrojs/starlight/components';
 
 # Workflows
 
-El sistema de workflows de ywai tiene **3 componentes** que trabajan juntos:
-
 ## Los 3 componentes
 
-### 1. Workflow Studio
-
-El **editor visual** donde diseñas flujos de trabajo en un canvas.
-
-- Arrastras nodos (agentes, decisiones, preguntas)
-- Los conectas para crear un flujo
-- Exportas a opencode
-
-[Ver Workflow Studio →](/dev-ai-workflow/workflows/studio)
-
-### 2. Workflow Commands
-
-Los **comandos slash** que resultan de exportar un workflow.
-
-- `/feature-delivery` — Implementar features completas
-- `/social-refactor` — Migrar código entre frameworks
-- `/qa-automation` — Testing completo con estrategia
-
-[Ver Commands →](/dev-ai-workflow/workflows/commands)
-
-### 3. Agent Groups
-
-Los **equipos predefinidos** de agentes que los commands usan.
-
-- **Core** — Equipo principal (orchestrator, dev, qa, architect, reviewer, devops, ask, finder, planning, memory)
-- **Social Refactor** — Equipo de migraciones (migration-orchestrator, migration-planner, migration-scope, migration-validator)
-- **QA Automation** — Equipo de testing (qa-orchestrator, qa-analyst, qa-dev, qa-finder, qa-reviewer, qa-ask)
-
-[Ver Agent Groups →](/dev-ai-workflow/workflows/groups)
+| Componente | Qué es | Ver más |
+|---|---|---|
+| **Workflow Studio** | Editor visual en el navegador | [Studio →](/workflows/studio) |
+| **Workflow Commands** | Slash commands generados | [Commands →](/workflows/commands) |
+| **Agent Groups** | Equipos predefinidos de agentes | [Groups →](/workflows/groups) |
 
 ## Cómo se relacionan
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Workflow Studio │────→│ Workflow JSON   │────→│ Commands        │
-│ (editor visual) │     │ (fuente)        │     │ (slash commands)│
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                                                        ▼
-                                                ┌─────────────────┐
-                                                │ Agent Groups    │
-                                                │ (equipos)       │
-                                                └─────────────────┘
+Studio (diseñas) → JSON (guardas) → Commands (exportas) → Groups (agentes)
 ```
 
-1. **Diseñas** en Workflow Studio
-2. **Guardas** como JSON
-3. **Exportas** a commands slash
-4. **Los commands** usan agent groups para coordinar
+## Quick path
 
-## Ejemplo completo
+```bash
+# 1. Abrir Studio
+ywai kanban → http://localhost:5768/workflows
 
+# 2. Diseñar flujo
+Arrastrar nodos → Conectar → Configurar
+
+# 3. Exportar
+Click "Export" → Se crea /feature-mi-flujo
+
+# 4. Usar
+/feature-mi-flujo Agregar login con Google
 ```
-1. Diseñas en Studio:
-   [Start] → [Architect] → [Dev] → [QA] → [End]
 
-2. Exportas como /feature-delivery
+## Commands preinstalados
 
-3. Usas en opencode:
-   /feature-delivery Agregar login con Google
-
-4. El command lanza el grupo Core:
-   orchestrator → architect → dev → qa → reviewer
-```
+| Command | Flujo | Para qué |
+|---|---|---|
+| `/feature-delivery` | planning → architect → dev → qa → reviewer | Features completas |
+| `/social-refactor` | scope → planner → dev → validator | Migraciones |
+| `/qa-automation` | analyst → finder → dev → reviewer | Testing completo |
 
 ## Cuándo usar cada componente
 
 | Necesidad | Componente |
 |---|---|
-| Diseñar un flujo nuevo | Workflow Studio |
-| Usar un flujo predefinido | Workflow Commands |
+| Usar un flujo predefinido | Commands |
+| Diseñar un flujo nuevo | Studio |
 | Entender qué agentes hay | Agent Groups |
-| Crear un equipo personalizado | Agent Groups + Studio |
 
 <Aside type="tip">
-No necesitas usar los 3 componentes. Para la mayoría de casos, los **commands preinstalados** (`/feature-delivery`, `/social-refactor`, `/qa-automation`) son suficientes. Usa Studio solo cuando necesites un flujo personalizado.
+Para la mayoría de casos, los commands preinstalados son suficientes. Usá Studio solo cuando necesités un flujo personalizado.
 </Aside>

@@ -1,67 +1,41 @@
 ---
 title: Ask Agent
-description: Agente de investigación — preguntas, análisis, explicaciones
+description: Preguntas, análisis, explicaciones
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Ask Agent
 
-El agente ask es tu **investigador y analista**. Responde preguntas, explica código, investiga tecnologías y analiza opciones.
+## Qué hace
 
-<Badge text="Rol: Investigador" variant="note" />
+Responde preguntas, explica código, investiga tecnologías.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Preguntas técnicas | "How does JWT refresh token rotation work?" |
-| Explicar código | "Explain the auth middleware in src/middleware/" |
-| Comparar opciones | "Zustand vs Jotai for our state management?" |
-| Investigar APIs | "How do I use the Stripe checkout session API?" |
-| Análisis | "What are the risks of switching to Prisma?" |
+| Pregunta técnica | `@ask ¿Cómo funciona JWT refresh token rotation?` |
+| Explicar código | `@ask Explica el middleware de auth` |
+| Comparar opciones | `@ask ¿Zustand o Jotai para estado?` |
+| Investigar API | `@ask ¿Cómo uso Stripe checkout sessions?` |
 
-## Lo que hace
+## Cuándo delegar vs manejar directo
 
-- Responde preguntas con precisión y contexto del proyecto
-- Explica cómo funciona el código existente
-- Investiga tecnologías y APIs
-- Compara opciones con pros/cons
-- Propone planes de acción cuando es apropiado
+| Maneja directo | Delega |
+|---|---|
+| Pregunta con una respuesta | Requiere código → `@dev` |
+| Comparación | Decisión de diseño → `@architect` |
+| Explicar código existente | Trabajo multi-agente → orchestrator |
 
-## Lo que NO hace
+## Límites
 
-- ❌ NO implementa código (eso es `@dev`)
-- ❌ NO escribe tests (eso es `@qa`)
-- ❌ NO toma decisiones de arquitectura (eso es `@architect`)
-
-## Cuándo delegar vs manejar directamente
-
-**Maneja directamente:**
-- Preguntas con una sola respuesta
-- Comparaciones o tareas de investigación
-- Explicar código o arquitectura existente
-
-**Delega a otro agente:**
-- Tareas que requieren escribir código → `@dev`
-- Decisiones de diseño → `@architect`
-- Trabajo que abarca múltiples agentes
-
-## Ejemplo de uso
-
-```
-@ask How does the current authentication flow work in our app?
-Walk me through the complete flow from login to token refresh,
-including error handling.
-```
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Responder preguntas | Implementar código (`@dev`) |
+| Explicar código | Escribir tests (`@qa`) |
+| Investigar tecnologías | Decisiones de diseño (`@architect`) |
 
 <Aside type="tip">
-El agente ask es tu punto de partida cuando no sabes por dónde empezar. Úsalo para explorar antes de delegar a agentes especializados.
+`@ask` es tu punto de partida cuando no sabés por dónde empezar.
 </Aside>
-
-## Skills que usa
-
-| Skill | Cuándo |
-|---|---|
-| `documentation-lookup` | Consultar docs de librerías |
-| `codebase-design` | Entender patrones del proyecto |

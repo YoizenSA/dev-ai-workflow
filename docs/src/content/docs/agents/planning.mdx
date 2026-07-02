@@ -1,86 +1,56 @@
 ---
 title: Planning Agent
-description: Agente de planificación — investiga y planifica antes de implementar
+description: Investigar y planificar antes de implementar
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Planning Agent
 
-El agente planning es tu **planificador**. Investiga el codebase, analiza lo que se necesita, y crea un plan estructurado antes de que nadie escriba una línea de código.
+## Qué hace
 
-<Badge text="Rol: Planificador" variant="note" />
+Investiga el codebase, analiza lo que se necesita, y crea un plan estructurado.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Planificar features | "Plan the implementation of multi-tenant support" |
-| Antes de refactoring | "Plan how to migrate from REST to GraphQL" |
-| Investigar impacto | "What would break if we change the auth model?" |
-| Crear plan de trabajo | "Break down this epic into implementable tasks" |
+| Planificar feature | `@planning Plan the implementation of RBAC` |
+| Analizar impacto | `@planning What would break if we change auth?` |
+| Crear plan de trabajo | `@planning Break down this epic into tasks` |
 
 ## Lo que hace
 
-1. **Investiga** — Usa `@finder` y `@ask` para entender el codebase
-2. **Analiza** — Identifica qué archivos se necesitan cambiar
-3. **Planifica** — Crea un plan paso a paso con dependencias
-4. **Documenta** — Escribe el plan en un formato estructurado
+1. **Investiga** — Usa `@finder` y `@ask`
+2. **Analiza** — Identifica archivos a cambiar
+3. **Planifica** — Crea plan paso a paso
+4. **Documenta** — Escribe plan estructurado
 
-## Lo que NO hace
-
-- ❌ NO implementa código (eso es `@dev`)
-- ❌ NO toma decisiones de arquitectura (eso es `@architect`)
-- ❌ NO escribe tests
-
-## Ejemplo de uso
-
-```
-@planning Plan the implementation of role-based access control (RBAC).
-We need: roles table, permissions middleware, admin UI for role management.
-Consider the impact on existing endpoints.
-```
-
-El planning agent:
-1. Investiga la estructura actual de auth
-2. Identifica archivos que necesitan cambios
-3. Crea un plan con subtareas ordenadas por dependencia
-4. Documenta riesgos y consideraciones
-
-<Aside type="tip">
-El planning agent es ideal antes de empezar features grandes. Un buen plan ahorra horas de implementación incorrecta.
-</Aside>
-
-## Formato del plan
-
-El planning agent genera un plan estructurado:
+## Ejemplo de plan
 
 ```markdown
 ## Plan: RBAC Implementation
 
 ### Subtareas
-1. Crear modelo de datos (roles, permissions, user_roles)
+1. Crear modelo de datos (roles, permissions)
 2. Implementar middleware de autorización
-3. Crear endpoints de gestión de roles
-4. Agregar UI de administración
-5. Tests de integración
+3. Crear endpoints de gestión
+4. Tests de integración
 
 ### Dependencias
 - Tarea 2 depende de 1
 - Tarea 3 depende de 1
-- Tarea 4 depende de 3
-- Tarea 5 depende de 2, 3, 4
-
-### Riesgos
-- Cambios en auth pueden romper endpoints existentes
-- Necesitamos migración de datos para usuarios existentes
+- Tarea 4 depende de 2, 3
 ```
 
-## Cuándo usarlo vs otros agentes
+## Límites
 
-| Situación | Agente |
+| ✅ Puede | ❌ No puede |
 |---|---|
-| "¿Cómo implemento X?" | `@planning` (planifica) → `@dev` (implementa) |
-| "¿Debería usar X o Y?" | `@architect` (decisión) |
-| "¿Dónde está X?" | `@finder` (busca) |
-| "¿Cómo funciona X?" | `@ask` (explica) |
+| Investigar codebase | Implementar código (`@dev`) |
+| Crear planes | Decisiones de arquitectura (`@architect`) |
+| Documentar | Escribir tests (`@qa`) |
+
+<Aside type="tip">
+Un buen plan ahorra horas de implementación incorrecta. Usá `@planning` antes de features grandes.
+</Aside>

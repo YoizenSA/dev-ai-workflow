@@ -1,107 +1,64 @@
 ---
 title: Primeros pasos
-description: Instala ywai y empieza a usar agentes especializados en minutos
+description: Instala ywai y empezá a usar agentes especializados en minutos
 ---
 
-import { Steps, Card, Badge, Aside } from '@astrojs/starlight/components';
-
-<Aside type="tip" title="Proyecto">
-  Estos docs pertenecen a **[ywai / dev-ai-workflow](https://github.com/Yoizen/dev-ai-workflow)**. Si encontrás algo para mejorar, abrí un issue o pull request.
-</Aside>
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
 
 # Primeros pasos
 
-Instala ywai y empieza a usar agentes especializados en minutos.
-
-## Instalación
+## Quick path
 
 <Steps>
 
-1. **Instala ywai**
-
+1. **Instalar ywai**
    ```bash
    curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
    ```
 
-2. **Instala la configuración en tu agente**
-
+2. **Configurar tu agente**
    ```bash
    ywai install
    ```
 
-   Esto configura:
-   - Agentes especializados (dev, qa, architect, reviewer, devops, ask)
-   - Skills para tu stack tecnológico
-   - System prompts optimizados
-
-3. **Verifica que todo esté bien**
-
+3. **Verificar**
    ```bash
    ywai doctor
    ```
 
-4. **Abre opencode y empieza a usar agentes**
-
+4. **Abrir opencode y usar**
    ```
-   @dev Hola, ¿qué puedes hacer?
+   @dev Hola, ¿qué podés hacer?
    ```
 
 </Steps>
 
 <Aside type="tip">
-La instalación detecta automáticamente qué agente AI estás usando (opencode, Claude Code, Cursor, etc.) y configura todo en el lugar correcto.
+ywai detecta automáticamente qué agente AI estás usando (opencode, Claude Code, Cursor, etc.) y configura todo en el lugar correcto.
 </Aside>
 
 ## Tu primera tarea
 
-Una vez instalado, prueba con algo simple:
-
-```
-@ask Explica la estructura de este proyecto
-```
-
-Luego algo más complejo:
-
-```
-@dev Crea un endpoint GET /api/health que retorne { status: "ok" }
-```
+| Qué pedir | Agente | Ejemplo |
+|---|---|---|
+| Pregunta simple | `@ask` | `@ask ¿Cómo funciona JWT?` |
+| Código nuevo | `@dev` | `@dev Crea un endpoint GET /api/health` |
+| Tests | `@qa` | `@qa Escribe tests para UserService` |
+| Decisión de diseño | `@architect` | `@architect ¿Monolith o microservices?` |
+| Feature completa | Orchestrator | `Implementa auth con JWT` |
 
 ## Conceptos clave
 
-### Agentes
-
-Son especialistas que trabajan como un equipo. Cada uno tiene un rol claro:
-
-| Agente | Para qué |
-|---|---|
-| `@dev` | Escribir código, arreglar bugs |
-| `@qa` | Tests y validación |
-| `@architect` | Decisiones de diseño |
-| `@reviewer` | Code review |
-| `@devops` | CI/CD e infraestructura |
-| `@ask` | Preguntas e investigación |
-
-[Ver documentación completa de agentes →](/dev-ai-workflow/agents)
-
-### Skills
-
-Son guías especializadas que le dicen a los agentes cómo usar tecnologías específicas. Se cargan automáticamente — no necesitas configurar nada.
-
-[Ver documentación completa de skills →](/dev-ai-workflow/skills)
-
-### Kanban
-
-Tablero visual para monitorear el progreso cuando delegas tareas a múltiples agentes.
-
-```bash
-ywai kanban
-```
-
-[Ver documentación completa del Kanban →](/dev-ai-workflow/kanban)
+| Concepto | Qué es | Ver más |
+|---|---|---|
+| **Agentes** | Especialistas que trabajan como equipo | [Agentes →](/agents) |
+| **Skills** | Guías de tecnologías (React, Tailwind, etc.) | [Skills →](/skills) |
+| **Commands** | Slash commands para flujos completos | [Commands →](/workflows/commands) |
+| **Kanban** | Tablero visual para monitorear agentes | [Kanban →](/kanban) |
 
 ## Comandos esenciales
 
-| Comandos | Qué hace |
+| Comando | Qué hace |
 |---|---|
 | `ywai install` | Instala todo (agentes + skills + config) |
 | `ywai update` | Actualiza a la última versión |
@@ -109,18 +66,10 @@ ywai kanban
 | `ywai skills` | Lista los skills disponibles |
 | `ywai kanban` | Abre el tablero visual |
 
-[Ver todos los comandos →](/dev-ai-workflow/commands)
-
 ## Siguiente paso
 
 <Card title="Guías prácticas" icon="star">
-Aprende flujos de trabajo reales: implementar features, arreglar bugs, hacer code review, y más.
+Flujos de trabajo reales: implementar features, arreglar bugs, hacer code review.
 
-[Ver guías →](/dev-ai-workflow/guides)
+[Ver guías →](/guides)
 </Card>
-
-## Agentes soportados
-
-ywai detecta automáticamente el agente AI que estás usando entre más de 15 opciones:
-
-OpenCode, Claude Code, Cursor, Gemini CLI, VS Code Copilot, Codex, Kilo Code, Kimi Code, Qwen Code, Antigravity, Kiro IDE, OpenClaw, Trae IDE, Windsurf, Pi, y más.

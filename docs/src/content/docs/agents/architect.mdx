@@ -1,62 +1,41 @@
 ---
 title: Architect Agent
-description: Agente de arquitectura — diseño, patrones, decisiones técnicas
+description: Decisiones de diseño, patrones, tradeoffs
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Architect Agent
 
-El agente architect se especializa en **diseño de software, patrones arquitectónicos y decisiones técnicas**. Evalúa tradeoffs, propone soluciones y documenta decisiones.
+## Qué hace
 
-<Badge text="Rol: Arquitecto" variant="success" />
+Evalúa opciones de diseño, propone soluciones, y documenta decisiones.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Decisiones de diseño | "Should we use event sourcing for this?" |
-| Evaluación de patrones | "Is CQRS appropriate here?" |
-| Análisis de tradeoffs | "Monolith vs microservices for this feature" |
-| Revisión de arquitectura | "Review the current auth architecture" |
-| Planificación de refactoring | "How should we restructure the data layer?" |
+| Decisión de diseño | `@architect ¿WebSockets o SSE para notificaciones?` |
+| Evaluar patrón | `@architect ¿CQRS es apropiado aquí?` |
+| Análisis de tradeoffs | `@architect ¿Monolith o microservices?` |
+| Revisar arquitectura | `@architect Revisa la estructura actual de auth` |
 
 ## Lo que hace
 
-1. **Evalúa** el código existente y la estructura del proyecto
-2. **Identifica** oportunidades de mejora arquitectónica
-3. **Propone** soluciones con tradeoffs claros
-4. **Documenta** decisiones (ADRs cuando aplica)
-5. **Delega** implementación a `@dev`
+1. Evalúa el código existente
+2. Identifica oportunidades de mejora
+3. Propone soluciones con tradeoffs
+4. Documenta decisiones (ADRs)
+5. Delega implementación a `@dev`
 
-## Lo que NO hace
+## Límites
 
-- ❌ NO implementa código (eso es `@dev`)
-- ❌ NO revisa PRs por estilo (eso es `@reviewer`)
-- ❌ NO configura infraestructura (eso es `@devops`)
-- ❌ NO escribe tests (eso es `@qa`)
-
-## Ejemplo de uso
-
-```
-@architect We need to add real-time notifications to the app.
-Current stack is Next.js + PostgreSQL. Should we use WebSockets,
-SSE, or a service like Pusher? Consider scalability, complexity,
-and our team size.
-```
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Evaluar opciones de diseño | Implementar código (`@dev`) |
+| Proponer soluciones | Revisar PRs por estilo (`@reviewer`) |
+| Documentar decisiones | Configurar infraestructura (`@devops`) |
 
 <Aside type="tip">
-El agente architect es ideal antes de empezar features grandes. Úsalo para tomar decisiones informadas antes de que `@dev` implemente.
+Usá `@architect` antes de features grandes. Un buen plan ahorra horas de implementación incorrecta.
 </Aside>
-
-## Flujo típico
-
-```
-@architect (diseña) → @dev (implementa) → @qa (testea) → @reviewer (revisa)
-```
-
-## Documentación que genera
-
-- **ADRs** (Architecture Decision Records) para decisiones importantes
-- **Diagramas** de arquitectura cuando es necesario
-- **Análisis de tradeoffs** con pros/cons de cada opción

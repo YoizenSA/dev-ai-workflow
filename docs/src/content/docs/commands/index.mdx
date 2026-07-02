@@ -3,33 +3,44 @@ title: Comandos CLI
 description: Todos los comandos de ywai y cuándo usarlos
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Card, Aside } from '@astrojs/starlight/components';
 
 # Comandos CLI
 
-Referencia completa de los comandos de ywai.
+## Quick reference
 
-## Comandos principales
+| Comando | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `ywai install` | Instala agentes + skills + config | Primera vez |
+| `ywai update` | Actualiza gentle-ai + skills | Después de actualizar |
+| `ywai upgrade` | Actualiza el binario de ywai | Nueva versión de ywai |
+| `ywai doctor` | Verifica la instalación | Si algo no funciona |
+| `ywai skills` | Lista skills disponibles | Ver qué hay instalado |
+| `ywai agents` | Lista agentes detectados | Verificar configuración |
+| `ywai skill-registry` | Refresca registro de skills | Después de modificar skills |
+| `ywai kanban` | Abre el tablero visual | Monitorear agentes |
+| `ywai serve` | Inicia servidor como servicio | Servidor always-on |
+
+## Detalles
 
 ### `ywai install`
 
-Instala gentle-ai, skills y la configuración completa en tu agente.
+Instala gentle-ai, skills y la configuración completa.
 
 ```bash
-# Instalación completa (recomendado)
-ywai install
-
-# Ver qué cambiaría sin aplicar
-ywai install --dry-run
-
-# Instalar solo para un agente específico
-ywai install --agent opencode
-
-# Instalar con preset específico
-ywai install --preset full-gentleman
+ywai install                    # Instalación completa
+ywai install --dry-run          # Ver qué cambiaría
+ywai install --agent opencode   # Solo para un agente
+ywai install --preset minimal   # Preset específico
 ```
 
-**Cuándo usarlo:** La primera vez que configuras ywai, o después de actualizar.
+**Presets:**
+
+| Preset | Qué instala |
+|---|---|
+| `full-gentleman` | Todo (default) |
+| `ecosystem-only` | Solo gentle-ai, sin skills extra |
+| `minimal` | Solo lo esencial |
 
 ### `ywai update`
 
@@ -39,27 +50,11 @@ Actualiza gentle-ai, re-sincroniza skills y regenera el registro.
 ywai update
 ```
 
-**Cuándo usarlo:** Después de actualizar ywai a una nueva versión.
-
-### `ywai skills`
-
-Muestra todos los skills disponibles.
-
-```bash
-ywai skills
-```
-
-**Cuándo usarlo:** Cuando quieres ver qué skills tienes instalados o buscar uno específico.
-
-### `ywai agents`
-
-Muestra los agentes detectados en tu sistema.
-
-```bash
-ywai agents
-```
-
-**Cuándo usarlo:** Para verificar qué agentes están configurados.
+**Qué hace:**
+1. Actualiza gentle-ai
+2. Re-sincroniza skills
+3. Regenera registro de skills
+4. Verifica enlaces
 
 ### `ywai doctor`
 
@@ -69,129 +64,31 @@ Verifica que la instalación esté correcta.
 ywai doctor
 ```
 
-Verifica:
-- Que gentle-ai esté instalado y actualizado
-- Que los skills estén correctamente enlazados
-- Que las rutas de configuración sean válidas
-- Que no haya conflictos entre agentes
-
-**Cuándo usarlo:** Cuando algo no funciona como esperas.
-
-### `ywai skill-registry`
-
-Refresca el registro de skills del proyecto.
-
-```bash
-ywai skill-registry
-```
-
-**Cuándo usarlo:** Después de añadir o modificar skills personalizados.
-
-### `ywai kanban`
-
-Abre el tablero Kanban en el navegador.
-
-```bash
-ywai kanban
-```
-
-Esto inicia el servidor de control y abre `http://localhost:5768`.
-
-**Cuándo usarlo:** Cuando quieres monitorear el progreso de tareas delegadas a múltiples agentes.
+**Qué verifica:**
+- gentle-ai instalado y actualizado
+- Skills correctamente enlazados
+- Rutas de configuración válidas
+- Sin conflictos entre agentes
 
 ### `ywai serve`
 
-Inicia el servidor de control como servicio de fondo (systemd en Linux).
+Inicia el servidor de control como servicio de fondo.
 
 ```bash
-# Iniciar como servicio
-ywai serve
-
-# Detener el servicio
-ywai serve --stop
-
-# Ver estado del servicio
-ywai serve --status
+ywai serve           # Iniciar
+ywai serve --stop    # Detener
+ywai serve --status  # Ver estado
 ```
-
-**Cuándo usarlo:** Cuando quieres que el servidor de control (Kanban, Settings, Workflow Studio) esté siempre corriendo sin tener que abrirlo manualmente.
-
-### `ywai update`
-
-Actualiza gentle-ai, re-sincroniza skills y regenera el registro.
-
-```bash
-ywai update
-```
-
-**Qué hace paso a paso:**
-1. Actualiza gentle-ai a la última versión
-2. Re-sincroniza los skills con gentle-ai
-3. Regenera el registro de skills del proyecto
-4. Verifica que todo esté correctamente enlazado
-
-**Cuándo usarlo:** Después de actualizar ywai a una nueva versión, o cuando gentle-ai tiene una actualización importante.
-
-### `ywai upgrade`
-
-Actualiza el propio binario de ywai.
-
-```bash
-ywai upgrade
-```
-
-**Cuándo usarlo:** Cuando quieres actualizar ywai a la última versión publicada.
 
 ## Flags comunes
 
 | Flag | Descripción | Ejemplo |
 |---|---|---|
 | `--agent, -a` | Agente específico | `ywai install --agent opencode` |
-| `--dry-run` | Vista previa sin aplicar | `ywai install --dry-run` |
-| `--cwd` | Directorio del proyecto | `ywai skill-registry --cwd /mi/proyecto` |
-| `--preset` | Preset de instalación | `ywai install --preset minimal` |
-| `--scope` | Alcance: global o workspace | `ywai install --scope workspace` |
-
-## Presets de instalación
-
-| Preset | Qué instala |
-|---|---|
-| `full-gentleman` | Todo: gentle-ai + ecosystem + skills extra (default) |
-| `ecosystem-only` | Solo gentle-ai y ecosystem, sin skills extra |
-| `minimal` | Instalación mínima, solo lo esencial |
-
-## Ejemplos comunes
-
-### Setup inicial
-
-```bash
-# Instalar todo
-ywai install
-
-# Verificar
-ywai doctor
-```
-
-### Actualizar después de un cambio
-
-```bash
-# Actualizar todo
-ywai update
-
-# Refrescar skills del proyecto
-ywai skill-registry
-```
-
-### Trabajar con múltiples proyectos
-
-```bash
-# Instalar en un proyecto específico
-ywai install --cwd /mi/proyecto
-
-# Skills de ese proyecto
-ywai skill-registry --cwd /mi/proyecto
-```
+| `--dry-run` | Vista previa | `ywai install --dry-run` |
+| `--cwd` | Directorio | `ywai skill-registry --cwd /mi/proyecto` |
+| `--preset` | Preset | `ywai install --preset minimal` |
 
 <Aside type="tip">
-Siempre corre `ywai doctor` después de instalar o actualizar. Te dice si algo está mal antes de que te encuentres con problemas.
+Siempre corre `ywai doctor` después de instalar o actualizar.
 </Aside>

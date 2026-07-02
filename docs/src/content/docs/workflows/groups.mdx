@@ -1,111 +1,72 @@
 ---
-title: Workflow Groups
-description: Grupos predefinidos de agentes que trabajan juntos
+title: Agent Groups
+description: Equipos predefinidos de agentes que trabajan juntos
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
-# Workflow Groups
+# Agent Groups
 
-Los **workflow groups** son equipos predefinidos de agentes que trabajan juntos para tareas específicas. Cada grupo tiene un orquestador que coordina a los agentes del equipo.
+## Qué son
 
-## ¿Qué es un workflow group?
+Equipos predefinidos de agentes diseñados para trabajar juntos en tareas específicas.
 
-Un workflow group es un conjunto de agentes diseñados para trabajar juntos. En vez de invocar agentes uno por uno, usas el grupo y el orquestador coordina todo automáticamente.
-
-## Grupos disponibles
+## Los 3 grupos
 
 ### Core
 
-El equipo principal de desarrollo:
-
 | Agente | Rol |
 |---|---|
-| `orchestrator` | Coordinador — delega a los demás |
+| `orchestrator` | Coordinador |
 | `dev` | Implementa código |
 | `qa` | Escribe tests |
-| `architect` | Toma decisiones de diseño |
-| `reviewer` | Revisa código |
-| `devops` | Configura infraestructura |
-| `ask` | Responde preguntas |
-| `finder` | Busca código |
-| `planning` | Planifica tareas |
-| `memory` | Gestiona memoria persistente |
+| `architect` | Decisiones de diseño |
+| `reviewer` | Revisión de código |
+| `devops` | Infraestructura |
+| `ask` | Preguntas |
+| `finder` | Búsqueda |
+| `planning` | Planificación |
+| `memory` | Memoria persistente |
 
-**Uso:** Para la mayoría de tareas de desarrollo.
+**Para qué:** Desarrollo general.
 
 ### Social Refactor
 
-Equipo especializado en migraciones de código:
-
 | Agente | Rol |
 |---|---|
-| `migration-orchestrator` | Coordina la migración |
-| `migration-planner` | Crea el plan de migración |
-| `migration-scope` | Clasifica qué hay que migrar |
-| `migration-validator` | Valida paridad funcional |
-| `migration-validator-focused` | Valida una página específica |
+| `migration-orchestrator` | Coordina migración |
+| `migration-planner` | Planifica |
+| `migration-scope` | Clasifica alcance |
+| `migration-validator` | Valida paridad |
+| `migration-validator-focused` | Valida una página |
 
-**Uso:** Cuando migras de un framework a otro (Angular → React, ASPX → WebApi, etc.)
+**Para qué:** Migraciones entre frameworks.
 
 ### QA Automation
 
-Equipo completo de automatización de testing:
-
 | Agente | Rol |
 |---|---|
-| `qa-orchestrator` | Coordina el equipo de testing |
-| `qa-analyst` | Diseña estrategia de testing |
-| `qa-dev` | Escribe tests automatizados |
-| `qa-finder` | Busca código relacionado |
-| `qa-reviewer` | Revisa calidad de tests |
-| `qa-ask` | Responde preguntas de testing |
+| `qa-orchestrator` | Coordina testing |
+| `qa-analyst` | Estrategia |
+| `qa-dev` | Escribe tests |
+| `qa-finder` | Busca código |
+| `qa-reviewer` | Revisa tests |
+| `qa-ask` | Preguntas de testing |
 
-**Uso:** Cuando necesitas una estrategia de testing completa, no solo tests individuales.
+**Para qué:** Testing completo con estrategia.
 
-## Cómo funcionan los grupos
-
-### Delegación entre agentes
-
-Cada grupo tiene reglas de quién puede delegar a quién:
+## Delegación entre agentes
 
 ```
 Core:
   orchestrator → [dev, qa, architect, reviewer, devops, ask, finder, planning, memory]
-  dev → [qa, ask]
-  qa → [dev, ask]
-  architect → [dev, qa, ask]
-  reviewer → [dev, qa, ask]
-  devops → [ask]
-  planning → [finder, ask]
-  memory → (no delega)
 
 Social Refactor:
   migration-orchestrator → [migration-planner, migration-scope, migration-validator, dev]
-  migration-planner → [finder, ask]
-  migration-scope → [finder, ask]
-  migration-validator → [migration-validator-focused]
 
 QA Automation:
   qa-orchestrator → [qa-analyst, qa-dev, qa-finder, qa-reviewer, qa-ask]
-  qa-analyst → [qa-finder, qa-ask]
-  qa-dev → [qa-finder, qa-ask]
-  qa-reviewer → [qa-finder, qa-ask]
 ```
-
-### Kanban integration
-
-Cuando un agente termina una tarea, reporta al Kanban con este formato:
-
-```
-Status: done | blocked | needs-decision
-Did: <resumen de lo que hizo>
-Artifacts: <archivos cambiados>
-Next suggested: @agente | close
-Notes/risks: <follow-ups>
-```
-
-El Kanban muestra el progreso de cada agente en tiempo real.
 
 ## Cuándo usar cada grupo
 
@@ -113,51 +74,9 @@ El Kanban muestra el progreso de cada agente en tiempo real.
 |---|---|
 | Feature nueva | Core |
 | Bug fix | Core |
-| Code review | Core |
 | Migrar framework | Social Refactor |
-| Refactoring grande | Social Refactor |
 | Testing completo | QA Automation |
-| Estrategia de testing | QA Automation |
-
-## Ejemplo: Feature con grupo Core
-
-```
-Tú: "Implementa autenticación con JWT"
-
-El orchestrator:
-1. Delega diseño a @architect
-2. Delega implementación a @dev
-3. Delega tests a @qa
-4. Delega revisión a @reviewer
-5. Reporta resultado completo
-```
-
-## Ejemplo: Migración con Social Refactor
-
-```
-Tú: "Migra el módulo de login de Angular a React"
-
-El migration-orchestrator:
-1. Delega clasificación a @migration-scope
-2. Delega planificación a @migration-planner
-3. Delega implementación a @dev
-4. Delega validación a @migration-validator
-5. Reporta resultado
-```
-
-## Ejemplo: Testing con QA Automation
-
-```
-Tú: "Testea completamente el flujo de checkout"
-
-El qa-orchestrator:
-1. Delega estrategia a @qa-analyst
-2. Delega búsqueda de código a @qa-finder
-3. Delega escritura de tests a @qa-dev
-4. Delega revisión a @qa-reviewer
-5. Reporta resultado
-```
 
 <Aside type="tip">
-No necesitas invocar los grupos directamente. Cuando le pides algo complejo a opencode, elige el grupo apropiado automáticamente. Solo necesitas saber que existen para entender qué agentes están disponibles.
+No necesitás invocar los grupos directamente. El orchestrator elige el grupo correcto según la tarea.
 </Aside>

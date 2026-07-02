@@ -1,160 +1,78 @@
 ---
 title: Agentes
-description: Conoce cada agente, qué hace y cuándo usarlo
+description: El equipo de agentes especializados de ywai
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
-
-<Aside type="tip" title="Proyecto">
-  Estos docs pertenecen a **[ywai / dev-ai-workflow](https://github.com/Yoizen/dev-ai-workflow)**. Si encontrás algo para mejorar, abrí un issue o pull request.
-</Aside>
+import { Card, Aside } from '@astrojs/starlight/components';
 
 # Agentes
 
-ywai te da acceso a **agentes especializados** que trabajan como un equipo. Cada agente tiene un rol claro y sabe exactamente qué puede y qué no puede hacer.
+## Quick reference
+
+Usá `@nombre-del-agente` en opencode:
+
+```
+@dev Implementa el endpoint de login
+@qa Escribe tests para UserService
+@architect ¿Qué patrón usamos para auth?
+@reviewer Revisa el PR de pagos
+@devops Crea un Dockerfile
+@ask ¿Cómo funciona el middleware actual?
+```
 
 ## El equipo
 
-| Agente | Rol | Para qué sirve |
+### Core (10 agentes)
+
+| Agente | Rol | Para qué |
 |---|---|---|
-| [**orchestrator**](/dev-ai-workflow/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas |
-| [**dev**](/dev-ai-workflow/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
-| [**qa**](/dev-ai-workflow/agents/qa) | QA Engineer | Tests, cobertura, validación |
-| [**architect**](/dev-ai-workflow/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
-| [**reviewer**](/dev-ai-workflow/agents/reviewer) | Revisor | Code review, bugs, seguridad |
-| [**devops**](/dev-ai-workflow/agents/devops) | DevOps | CI/CD, Docker, K8s, despliegues |
-| [**ask**](/dev-ai-workflow/agents/ask) | Investigador | Preguntas, análisis, explicaciones |
-| [**finder**](/dev-ai-workflow/agents/finder) | Explorador | Buscar archivos, entender estructura |
-| [**planning**](/dev-ai-workflow/agents/planning) | Planificador | Investigar y planificar antes de implementar |
-| [**memory**](/dev-ai-workflow/agents/memory) | Archivista | Memoria persistente entre sesiones |
+| [**orchestrator**](/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas |
+| [**dev**](/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
+| [**qa**](/agents/qa) | QA Engineer | Tests, cobertura, validación |
+| [**architect**](/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
+| [**reviewer**](/agents/reviewer) | Revisor | Code review, bugs, seguridad |
+| [**devops**](/agents/devops) | DevOps | CI/CD, Docker, K8s, despliegues |
+| [**ask**](/agents/ask) | Investigador | Preguntas, análisis, explicaciones |
+| [**finder**](/agents/finder) | Explorador | Buscar archivos, entender estructura |
+| [**planning**](/agents/planning) | Planificador | Investigar y planificar antes de implementar |
+| [**memory**](/agents/memory) | Archivista | Memoria persistente entre sesiones |
 
-### Social Refactor
+### Social Refactor (5 agentes)
 
-Agentes especializados en migraciones de código entre frameworks:
-
-| Agente | Rol | Para qué sirve |
+| Agente | Rol | Para qué |
 |---|---|---|
-| [**migration-orchestrator**](/dev-ai-workflow/agents/migration-orchestrator) | Coordinador | Coordina migraciones complejas |
-| [**migration-planner**](/dev-ai-workflow/agents/migration-planner) | Planificador | Crea planes de migración con dependencias |
-| [**migration-scope**](/dev-ai-workflow/agents/migration-scope) | Analista | Clasifica qué hay que migrar |
-| [**migration-validator**](/dev-ai-workflow/agents/migration-validator) | Validador | Valida paridad funcional |
-| [**migration-validator-focused**](/dev-ai-workflow/agents/migration-validator-focused) | Validador | Valida una página específica |
+| [**migration-orchestrator**](/agents/migration-orchestrator) | Coordinador | Coordina migraciones complejas |
+| [**migration-planner**](/agents/migration-planner) | Planificador | Crea planes de migración |
+| [**migration-scope**](/agents/migration-scope) | Analista | Clasifica qué hay que migrar |
+| [**migration-validator**](/agents/migration-validator) | Validador | Valida paridad funcional |
+| [**migration-validator-focused**](/agents/migration-validator-focused) | Validador | Valida una página específica |
 
-### QA Automation
+### QA Automation (6 agentes)
 
-Equipo completo de automatización de testing:
-
-| Agente | Rol | Para qué sirve |
+| Agente | Rol | Para qué |
 |---|---|---|
-| [**qa-orchestrator**](/dev-ai-workflow/agents/qa-orchestrator) | Coordinador | Coordina el equipo de testing |
-| [**qa-analyst**](/dev-ai-workflow/agents/qa-analyst) | Analista | Diseña estrategia de testing |
-| [**qa-dev**](/dev-ai-workflow/agents/qa-dev) | Desarrollador | Escribe tests automatizados |
-| [**qa-finder**](/dev-ai-workflow/agents/qa-finder) | Explorador | Busca código relacionado con testing |
-| [**qa-reviewer**](/dev-ai-workflow/agents/qa-reviewer) | Revisor | Revisa calidad de tests |
-| [**qa-ask**](/dev-ai-workflow/agents/qa-ask) | Investigador | Responde preguntas de testing |
-
-## Cómo usarlos
-
-En opencode, usa `@nombre-del-agente` seguido de tu tarea:
-
-```
-@dev Implementa el endpoint de login con JWT
-@qa Escribe tests para el servicio de autenticación
-@architect ¿Qué patrón usamos para el manejo de estado?
-@reviewer Revisa el PR del feature de pagos
-@devops Crea un Dockerfile para el servicio de Node.js
-@ask Cómo funciona el middleware de auth actual?
-@finder Dónde está la lógica de autenticación?
-@planning Planifica la implementación de RBAC
-@memory Qué decidimos sobre la estrategia de migración?
-```
-
-## Flujo natural del equipo
-
-Los agentes están diseñados para trabajar juntos. Un flujo típico:
-
-```
-@finder (explora) → @ask (investiga) → @planning (planifica) → @architect (diseña) → @dev (implementa) → @qa (testea) → @reviewer (revisa) → @devops (despliega)
-```
-
-No tienes que seguir este orden exacto — úsalos según necesites.
-
-## Ejemplos prácticos
-
-### Feature nueva
-
-```
-Tú: "@architect Necesitamos agregar notificaciones push. 
-     ¿Qué arquitectura recomiendas?"
-
-@architect: [analiza opciones, propone diseño]
-
-Tú: "@dev Implementa según el diseño de @architect"
-
-@dev: [escribe el código]
-
-Tú: "@qa Cubre con tests el nuevo servicio de notificaciones"
-
-@qa: [escribe tests]
-
-Tú: "@reviewer Revisa antes de mergear"
-
-@reviewer: [encuentra 2 issues, sugiere fixes]
-
-Tú: "@dev Arregla los issues encontrados por @reviewer"
-
-@dev: [corrige]
-
-Tú: "Listo para merge"
-```
-
-### Bug rápido
-
-```
-Tú: "@dev Los usuarios no pueden hacer login con Google, 
-     el callback falla con 500"
-
-@dev: [investiga, encuentra el bug, arregla]
-
-Tú: "@qa Agrega test para este caso"
-
-@qa: [escribe test que previene regresión]
-```
-
-### Pregunta técnica
-
-```
-Tú: "@ask Cuál es la diferencia entre SSR y SSG en Next.js 
-     para nuestro caso de uso?"
-
-@ask: [explica con contexto del proyecto]
-```
+| [**qa-orchestrator**](/agents/qa-orchestrator) | Coordinador | Coordina el equipo de testing |
+| [**qa-analyst**](/agents/qa-analyst) | Analista | Diseña estrategia de testing |
+| [**qa-dev**](/agents/qa-dev) | Desarrollador | Escribe tests automatizados |
+| [**qa-finder**](/agents/qa-finder) | Explorador | Busca código relacionado |
+| [**qa-reviewer**](/agents/qa-reviewer) | Revisor | Revisa calidad de tests |
+| [**qa-ask**](/agents/qa-ask) | Investigador | Responde preguntas de testing |
 
 ## Cuándo usar cada agente
 
-<Card title="Guía rápida" icon="star">
-**Sola pregunta** → `@ask`  
-**Necesitas código** → `@dev`  
-**Necesitas tests** → `@qa`  
-**Decisiones de diseño** → `@architect`  
-**Revisar código** → `@reviewer`  
-**Infraestructura** → `@devops`  
-**Buscar código** → `@finder`  
-**Planificar antes de implementar** → `@planning`  
-**Recordar decisiones pasadas** → `@memory`  
-**Tarea compleja multi-agente** → `@orchestrator`
-</Card>
-
-## Agentes personalizados
-
-Puedes crear tus propios agentes o modificar los existentes. Cada agente tiene:
-
-- **`AGENT.md`** — El system prompt (instrucciones del agente)
-- **`tools.json`** — Qué herramientas puede usar
-- **`skills.txt`** — Qué skills tiene vinculados
-
-Los perfiles están en `ywai/agents/`. Puedes copiar la estructura y ajustar según las necesidades de tu proyecto.
+| Necesidad | Agente |
+|---|---|
+| Sola pregunta | `@ask` |
+| Necesitás código | `@dev` |
+| Necesitás tests | `@qa` |
+| Decisión de diseño | `@architect` |
+| Revisar código | `@reviewer` |
+| Infraestructura | `@devops` |
+| Buscar código | `@finder` |
+| Planificar | `@planning` |
+| Recordar decisiones | `@memory` |
+| Tarea compleja | Orchestrator (automático) |
 
 <Aside type="tip">
-Los agentes funcionan mejor cuando les das contexto específico. En vez de "arregla el bug", di "el endpoint `/api/login` retorna 500 cuando el email tiene caracteres especiales".
+No necesitás invocar agentes uno por uno. Decile al orchestrator qué necesitás y él distribuye el trabajo.
 </Aside>

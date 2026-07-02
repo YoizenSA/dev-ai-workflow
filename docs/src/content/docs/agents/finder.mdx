@@ -1,56 +1,41 @@
 ---
 title: Finder Agent
-description: Agente de exploración — buscar archivos, entender estructura, encontrar código
+description: Buscar archivos, entender estructura, encontrar código
 ---
 
-import { Card, Badge, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Finder Agent
 
-El agente finder es tu **explorador del codebase**. Busca archivos, entiende la estructura del proyecto y encuentra código relevante para que otros agentes trabajen más rápido.
+## Qué hace
 
-<Badge text="Rol: Explorador" variant="note" />
+Busca archivos, entiende la estructura del proyecto, y encuentra código relevante.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Buscar archivos | "Find all test files related to auth" |
-| Entender estructura | "Show me the project structure" |
-| Encontrar código | "Where is the login logic?" |
-| Explorar dependencias | "What files import UserService?" |
-| Contexto para una tarea | "What do I need to know before changing the payment flow?" |
+| Buscar archivos | `@finder Find all test files related to auth` |
+| Entender estructura | `@finder Show me the project structure` |
+| Encontrar código | `@finder Where is the login logic?` |
+| Explorar dependencias | `@finder What files import UserService?` |
 
-## Lo que hace
+## Límites
 
-- Busca archivos por nombre, extensión o contenido
-- Explica la estructura del proyecto
-- Encuentra dónde vive una funcionalidad específica
-- Identifica archivos relacionados con una tarea
-- Da contexto rápido para que otros agentes trabajen mejor
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Buscar archivos | Modificar archivos |
+| Explicar estructura | Escribir código |
+| Encontrar código | Ejecutar comandos |
 
-## Lo que NO hace
-
-- ❌ NO modifica archivos (es read-only)
-- ❌ NO escribe código
-- ❌ NO ejecuta comandos
-
-## Ejemplo de uso
-
-```
-@finder Show me all the files related to the authentication flow.
-I need to understand the structure before making changes.
-```
-
-<Aside type="tip">
-El finder es ideal como primer paso antes de delegar a `@dev` o `@architect`. Les da contexto sobre el codebase para que trabajen más rápido.
-</Aside>
-
-## Cuándo usarlo vs otros agentes
+## Cuándo usarlo vs otros
 
 | Situación | Agente |
 |---|---|
 | "¿Dónde está X?" | `@finder` |
 | "¿Cómo funciona X?" | `@ask` |
-| "Implementa X" | `@dev` |
-| "¿Cómo debería funcionar X?" | `@architect` |
+| "Implementá X" | `@dev` |
+
+<Aside type="tip">
+`@finder` es ideal como primer paso antes de delegar a `@dev` o `@architect`.
+</Aside>

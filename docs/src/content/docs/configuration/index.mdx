@@ -1,181 +1,76 @@
 ---
 title: Configuración
-description: Cómo configurar ywai y personalizar el comportamiento de los agentes
+description: Cómo configurar ywai y personalizar agentes
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Steps, Aside } from '@astrojs/starlight/components';
 
 # Configuración
 
-Guía para configurar ywai y personalizar el comportamiento de tus agentes.
-
-## Estructura de configuración
-
-Cuando ejecutas `ywai install`, se crean estos archivos:
+## Estructura
 
 ```
 ~/.config/opencode/
-├── agents/                 # Perfiles de agentes
-│   ├── dev.md
-│   ├── qa.md
-│   ├── architect.md
-│   ├── reviewer.md
-│   ├── devops.md
-│   └── ask.md
-├── skills/                 # Skills instalados
-│   ├── typescript/
-│   ├── react-19/
-│   ├── tailwind-4/
-│   └── ...
-└── commands/               # Comandos slash
+├── agents/          # Perfiles de agentes
+├── skills/          # Skills instalados
+└── commands/        # Commands slash
 ```
 
 ## Perfiles de agentes
 
-Cada agente tiene un perfil con tres archivos:
+Cada agente tiene 3 archivos:
 
-### AGENT.md — System prompt
+| Archivo | Qué contiene |
+|---|---|
+| `AGENT.md` | System prompt (comportamiento) |
+| `tools.json` | Permisos de herramientas |
+| `skills.txt` | Skills vinculados |
 
-El archivo principal que define cómo se comporta el agente. Contiene:
-- Rol y responsabilidades
-- Principios de trabajo
-- Límites (qué puede y qué no puede hacer)
-- Formato de handoff al orquestador
-
-**Ejemplo (dev):**
-```markdown
-# Dev Agent
-
-You implement features, fix bugs, and refactor.
-Read before write, make small atomic changes, 
-follow existing patterns, and test every change.
-```
-
-### tools.json — Permisos de herramientas
-
-Define qué herramientas puede usar el agente:
-```json
-{
-  "read": true,
-  "write": true,
-  "bash": true,
-  "delegate": false
-}
-```
-
-### skills.txt — Skills vinculados
-
-Lista de skills que el agente tiene disponibles:
-```
-typescript
-react-19
-tailwind-4
-git-commit
-```
-
-## Personalizar agentes
-
-### Modificar un agente existente
+## Personalizar un agente
 
 <Steps>
 
-1. **Encuentra el perfil** en `~/.config/opencode/agents/`
-2. **Edita el AGENT.md** para cambiar el comportamiento
-3. **Edita tools.json** para cambiar permisos
-4. **Edita skills.txt** para agregar o quitar skills
-5. **Reinicia opencode** para que tome los cambios
-
-</Steps>
-
-### Crear un agente nuevo
-
-<Steps>
-
-1. **Copia un perfil existente** como base
-2. **Renombra** el archivo (ej: `mi-agente.md`)
-3. **Edita** el system prompt para el nuevo rol
-4. **Configura** permisos y skills
-5. **Reinicia opencode**
+1. Encontrar el perfil en `~/.config/opencode/agents/`
+2. Editar `AGENT.md` para cambiar comportamiento
+3. Editar `tools.json` para cambiar permisos
+4. Editar `skills.txt` para agregar/quitar skills
+5. Reiniciar opencode
 
 </Steps>
 
 ## Configuración del proyecto
 
-### AGENTS.md en el proyecto
+### AGENTS.md
 
-Puedes crear un `AGENTS.md` en la raíz de tu proyecto para dar contexto específico:
+Creá un `AGENTS.md` en la raíz de tu proyecto para dar contexto:
 
 ```markdown
 # AGENTS.md
 
-## Convenciones del proyecto
-- Usar TypeScript estricto
-- Commits en formato convencional
+## Convenciones
+- TypeScript estricto
+- Commits convencionales
 - Tests con Vitest
 
 ## Estructura
 - src/components/ — Componentes React
 - src/services/ — Lógica de negocio
-- src/utils/ — Utilidades compartidas
-
-## Stack
-- Next.js 14
-- PostgreSQL
-- Prisma ORM
-- Tailwind CSS
 ```
 
-Los agentes leen este archivo para entender tu proyecto.
-
-### Skills personalizados del proyecto
-
-Puedes crear skills específicos para tu proyecto:
+### Skills personalizados
 
 ```
-mi-proyecto/
-├── .agents/
-│   └── skills/
-│       └── mi-patron/
-│           └── SKILL.md
-└── ...
+mi-proyecto/.agents/skills/mi-skill/SKILL.md
 ```
 
-Luego registra con:
-```bash
-ywai skill-registry --cwd /mi/proyecto
-```
+Registrar: `ywai skill-registry --cwd /mi/proyecto`
 
-## Verificar la configuración
+## Verificar
 
 ```bash
 ywai doctor
 ```
 
-Esto verifica:
-- ✅ gentle-ai instalado correctamente
-- ✅ Skills enlazados
-- ✅ Rutas válidas
-- ✅ Sin conflictos
-
-## Agentes soportados
-
-ywai detecta automáticamente tu agente:
-
-| Agente | Cómo se detecta |
-|---|---|
-| OpenCode | Binario en PATH |
-| Claude Code | Binario en PATH |
-| Cursor | Binario en PATH |
-| Gemini CLI | Binario en PATH |
-| VS Code Copilot | Binario en PATH |
-| Codex | Binario en PATH |
-| Kilo Code | Binario en PATH |
-| Kimi Code | Binario en PATH |
-| Qwen Code | Binario en PATH |
-| Kiro IDE | Binario en PATH |
-| Windsurf | Directorio de config |
-| Pi | Binario en PATH |
-
 <Aside type="tip">
-Si usas opencode, la configuración se instala automáticamente en `~/.config/opencode/`. No necesitas configurar rutas manualmente.
+Si usás opencode, la configuración se instala automáticamente en `~/.config/opencode/`.
 </Aside>
