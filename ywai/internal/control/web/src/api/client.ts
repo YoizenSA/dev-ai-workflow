@@ -655,7 +655,7 @@ export const workflowApi = {
 		model?: string,
 		history?: WorkflowConversationMessage[],
 	) =>
-		request<{ workflow: Workflow; validation: WorkflowValidationResult }>(
+		request<{ workflow?: Workflow; validation?: WorkflowValidationResult; question?: string }>(
 			`/api/workflows/${name}/ai-edit`,
 			{ method: "POST", body: JSON.stringify({ instruction, model, history }) },
 		),
@@ -672,6 +672,13 @@ export const workflowApi = {
 	stop: (name: string) =>
 		request<{ status: string }>(`/api/workflows/${name}/stop`, {
 			method: "POST",
+		}),
+
+	// Input: send text to the running workflow's PTY stdin.
+	input: (name: string, text: string) =>
+		request<{ status: string }>(`/api/workflows/${name}/input`, {
+			method: "POST",
+			body: JSON.stringify({ text }),
 		}),
 
 	// MCP sync (opencode → claude-code). Preview shows what would be added;

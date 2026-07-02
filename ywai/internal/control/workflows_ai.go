@@ -28,6 +28,13 @@ type aiEditRequest struct {
 	History []workflows.ConversationMessage `json:"history,omitempty"`
 }
 
+// aiQuestionError is returned when the AI asks a clarifying question instead
+// of directly editing the workflow. The handler converts this to a {"question":...} JSON response.
+type aiQuestionError struct {
+	Question string
+}
+func (e *aiQuestionError) Error() string { return "AI question: " + e.Question }
+
 // handleAIEdit applies a natural-language edit to a workflow via the opencode
 // CLI and returns the proposed workflow plus its validation. It does NOT save —
 // the frontend applies the result into the editor (undoable) so the user can
@@ -55,6 +62,14 @@ func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 
 	edited, err := aiEditWorkflow(r.Context(), wf, req.Instruction, req.Model, req.History)
 	if err != nil {
+		// If the AI asked a question, return it as a conversational response.
+		var qErr *aiQuestionError
+		if errors.As(err, &qErr) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"question": qErr.Question,
+			})
+			return
+		}
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -103,8 +118,15 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 
 	jsonStr := extractJSONObject(string(out))
 	if jsonStr == "" {
-		return nil, errors.New("AI returned no JSON workflow")
+		return nil, errors.New("AI returned no JSON")
 	}
+
+	// Check if the AI asked a clarifying question instead of editing.
+	var maybeQ struct{ Question string `json:"question"` }
+	if err := json.Unmarshal([]byte(jsonStr), &maybeQ); err == nil && maybeQ.Question != "" {
+		return nil, &aiQuestionError{Question: maybeQ.Question}
+	}
+
 	var edited workflows.Workflow
 	if err := json.Unmarshal([]byte(jsonStr), &edited); err != nil {
 		return nil, fmt.Errorf("AI output is not a valid workflow: %w", err)

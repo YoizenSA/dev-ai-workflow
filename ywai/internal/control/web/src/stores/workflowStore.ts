@@ -190,6 +190,9 @@ interface WorkflowState {
 	// Stop the active run (kills the opencode process server-side).
 	stopWorkflow: () => Promise<void>
 
+	// Send text to the running workflow's PTY stdin.
+	sendRunInput: (text: string) => Promise<void>
+
 	// Set the workflow's slash-command options (allowed-tools, model, hooks…).
 	// Merges into `current` and marks dirty. Pass null to clear them.
 	setSlashCommandOptions: (opts: WorkflowSlashCommandOptions | null) => void
@@ -389,12 +392,42 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		try {
 			// Send the last few turns (capped server-side too) for context.
 			const recent = [...history, userMsg].slice(-6)
-			const { workflow, validation } = await workflowApi.aiEdit(
+			const result = await workflowApi.aiEdit(
 				current.name,
 				instruction,
 				model,
 				recent,
 			)
+
+			// Handle AI asking a clarifying question instead of editing.
+			if ('question' in result && result.question) {
+				const aiMsg: WorkflowConversationMessage = {
+					id: `a${Date.now()}`,
+					sender: 'ai',
+					content: result.question,
+					timestamp: new Date().toISOString(),
+				}
+				const conv: WorkflowConversationHistory = current.conversationHistory
+					? { ...current.conversationHistory }
+					: {
+							schemaVersion: '1.0.0',
+							messages: [],
+							currentIteration: 0,
+							maxIterations: 20,
+							createdAt: now,
+							updatedAt: now,
+						}
+				conv.messages = [...conv.messages, userMsg, aiMsg]
+				conv.updatedAt = now
+				const updated: Workflow = {
+					...current,
+					conversationHistory: conv,
+				}
+				set({ current: updated, aiEditing: false })
+				return
+			}
+
+			const { workflow, validation } = result as { workflow: Workflow; validation: WorkflowValidationResult }
 			// Snapshot the pre-edit state so the AI change is a single undo step.
 			snapshot()
 			// Summarize the real diff (added/removed/changed) instead of echoing the
@@ -500,6 +533,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 			closeWorkflowSocket()
 		} catch (err) {
 			set({ error: errMsg(err) })
+		}
+	},
+
+	sendRunInput: async (text) => {
+		const { current } = get()
+		if (!current || !text.trim()) return
+		try {
+			await workflowApi.input(current.name, text.trim())
+		} catch (err) {
+			set({ chatError: errMsg(err) })
 		}
 	},
 

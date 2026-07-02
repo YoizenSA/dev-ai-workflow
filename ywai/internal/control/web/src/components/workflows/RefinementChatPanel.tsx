@@ -31,19 +31,27 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 		endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
 	}, [messages.length, aiEditing])
 
+	const running = useWorkflowStore((s) => s.running)
+	const sendRunInput = useWorkflowStore((s) => s.sendRunInput)
+
 	const send = async () => {
 		const t = text.trim()
-		if (!t || aiEditing || limitReached) return
+		if (!t) return
+		// During execution: send input to the running process's PTY.
+		if (running) {
+			setText('')
+			await sendRunInput(t)
+			return
+		}
+		if (aiEditing || limitReached) return
 		setText('')
-		// The store updates `current`; the canvas observes it via selector and
-		// re-renders automatically.
 		await aiEdit(t, model || undefined)
 	}
 
 	return (
 		<div className="wf-chat-panel" data-tour="refinement-chat">
 			<div className="wf-chat-header">
-				<span className="wf-chat-title">Edit with AI</span>
+				<span className="wf-chat-title">{running ? 'Workflow Chat' : 'Edit with AI'}</span>
 				<span
 					className="wf-chat-count"
 					title="Edit rounds used / max"
@@ -118,14 +126,14 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 							send()
 						}
 					}}
-					placeholder={limitReached ? 'Edit limit reached — save and reopen.' : 'e.g. Add a reviewer sub-agent after dev.'}
+					placeholder={running ? 'Send a message to the running workflow…' : limitReached ? 'Edit limit reached — save and reopen.' : 'e.g. Add a reviewer sub-agent after dev.'}
 					rows={2}
 					disabled={aiEditing || limitReached}
 				/>
 				<button
 					className="btn btn-primary btn-icon"
 					onClick={send}
-					disabled={aiEditing || !text.trim() || limitReached}
+					disabled={running ? !text.trim() : aiEditing || !text.trim() || limitReached}
 					aria-label="Send"
 				>
 					<Send size={14} />

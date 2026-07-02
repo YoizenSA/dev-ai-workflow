@@ -57,6 +57,7 @@ func (s *Server) registerWorkflowsRoutes() {
 	s.mux.HandleFunc("POST /api/workflows/{name}/run", api.handleRun)
 	// Stop: cancel an in-progress run (kills the opencode process).
 	s.mux.HandleFunc("POST /api/workflows/{name}/stop", api.handleStop)
+	s.mux.HandleFunc("POST /api/workflows/{name}/input", api.handleInput)
 	// Live run output stream (WebSocket) for the Run panel + Commentary.
 	s.mux.HandleFunc("GET /api/workflows/ws", api.handleWorkflowWS)
 

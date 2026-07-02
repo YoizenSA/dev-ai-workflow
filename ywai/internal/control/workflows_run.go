@@ -95,6 +95,23 @@ func (a *workflowsAPI) handleStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "not-running", "workflow": name})
 }
 
+// handleInput sends user text to the running workflow's PTY stdin.
+func (a *workflowsAPI) handleInput(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := decodeJSONBody(r, &req); err != nil || strings.TrimSpace(req.Text) == "" {
+		writeWorkflowsError(w, http.StatusBadRequest, fmt.Errorf("text is required"))
+		return
+	}
+	if err := a.runs.writeInput(name, req.Text); err != nil {
+		writeWorkflowsError(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
 // runWorkflow is the background worker: spawns opencode, streams output to the
 // hub, and records the result in the run store when it exits.
 func (a *workflowsAPI) runWorkflow(ctx context.Context, wf *workflows.Workflow, req runRequest, runID string) {
@@ -158,8 +175,13 @@ func (a *workflowsAPI) spawnOpencode(ctx context.Context, wf *workflows.Workflow
 	if err != nil {
 		return 1, fmt.Errorf("start opencode (pty): %w", err)
 	}
+	// Store ptmx in the run record so the user can send input during execution.
+	a.runs.setPtmx(wf.Name, ptmx)
 	// Closing the master end after the process exits avoids a goroutine leak.
-	defer func() { _ = ptmx.Close() }()
+	defer func() {
+		a.runs.setPtmx(wf.Name, nil)
+		_ = ptmx.Close()
+	}()
 
 	// Stream the PTY output. Each line is broadcast as a run_output event and
 	// appended to the run record.

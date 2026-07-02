@@ -23,6 +23,8 @@ type runRecord struct {
 	Output    string    `json:"output"` // accumulated stdout/stderr
 	// cancel kills the running opencode process. Not serialized.
 	cancel context.CancelFunc `json:"-"`
+	// ptmx is the PTY master end; write to it to send input to the process.
+	ptmx *os.File `json:"-"`
 }
 
 // runStore tracks in-memory run records per workflow and is the source of truth
@@ -113,6 +115,27 @@ func (rs *runStore) isRunning(workflow string) bool {
 	defer rs.mu.Unlock()
 	rec, ok := rs.runs[workflow]
 	return ok && rec.Status == "running"
+}
+
+// setPtmx stores (or clears) the PTY master file for a running workflow.
+func (rs *runStore) setPtmx(workflow string, f *os.File) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rec, ok := rs.runs[workflow]; ok {
+		rec.ptmx = f
+	}
+}
+
+// writeInput sends a line of text to the running process via the PTY.
+func (rs *runStore) writeInput(workflow, text string) error {
+	rs.mu.Lock()
+	rec, ok := rs.runs[workflow]
+	rs.mu.Unlock()
+	if !ok || rec.Status != "running" || rec.ptmx == nil {
+		return fmt.Errorf("workflow %q is not running", workflow)
+	}
+	_, err := rec.ptmx.Write([]byte(text + "\n"))
+	return err
 }
 
 // persist writes a finished run's log to <logDir>/<workflow>-<runId>.log so the
