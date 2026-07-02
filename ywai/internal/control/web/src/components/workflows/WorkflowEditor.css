@@ -958,6 +958,21 @@
 	resize: none;
 }
 
+/* Chat-scoped error banner inside the panel. Sits as a direct child of the
+   flex-column panel (between body and input-row) so it stays visible. Reuses
+   .validation-issue.error for color/border; this just adds spacing + wraps text
+   so long backend errors don't overflow the narrow panel. */
+.wf-chat-error {
+	margin: 8px 12px 0;
+	padding: 6px 8px;
+	align-items: flex-start;
+}
+.wf-chat-error span {
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+}
+
 /* ─── Token estimate badge (export preview) ───────────────────────────── */
 .wf-token-hint {
 	font-size: var(--text-xs);

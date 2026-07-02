@@ -152,6 +152,9 @@ interface WorkflowState {
 
 	// edit with AI
 	aiEditing: boolean
+	// Chat-scoped error for Edit-with-AI (separate from the global `error`, which
+	// is surfaced in the sidebar). Shown inside the refinement chat panel.
+	chatError: string | null
 
 	// run (export + spawn the orchestrator). running lines stream into runOutput.
 	running: boolean
@@ -215,6 +218,8 @@ interface WorkflowState {
 	redo: () => void
 
 	clearError: () => void
+	// Clear the chat-scoped error (dismissed by the refinement chat panel).
+	clearChatError: () => void
 }
 
 // HISTORY_LIMIT caps retained snapshots so a long session never grows unbounded.
@@ -231,6 +236,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	exportPlan: null,
 	exporting: false,
 	aiEditing: false,
+	chatError: null,
 	running: false,
 	runId: null,
 	runOutput: [],
@@ -363,7 +369,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	aiEdit: async (instruction, model) => {
 		const { current } = get()
 		if (!current) return
-		set({ aiEditing: true, error: null })
+		// Snapshot the pre-edit workflow so we can summarize what actually changed
+		// (the AI bubble used to just echo the instruction back — misleading).
+		const before = current
+		set({ aiEditing: true, chatError: null, error: null })
 
 		// Build the conversation history: carry forward the workflow's existing
 		// history, append the user's new instruction, then call the AI with the
@@ -388,12 +397,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 			)
 			// Snapshot the pre-edit state so the AI change is a single undo step.
 			snapshot()
-			// Record the exchange in the workflow's conversation history so it
-			// survives reloads and feeds the next turn.
+			// Summarize the real diff (added/removed/changed) instead of echoing the
+			// instruction — the bubble now reflects what the AI actually did.
 			const aiMsg: WorkflowConversationMessage = {
 				id: `a${Date.now()}`,
 				sender: 'ai',
-				content: `Applied: "${instruction}"`,
+				content: summarizeWorkflowChanges(before, normalizeWorkflow(workflow)),
 				timestamp: new Date().toISOString(),
 			}
 			const conv: WorkflowConversationHistory = current.conversationHistory
@@ -415,7 +424,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 			}
 			set({ current: edited, validation, dirty: true, aiEditing: false })
 		} catch (err) {
-			set({ aiEditing: false, error: errMsg(err) })
+			// Surface the failure inside the chat panel (chatError) rather than only
+			// in the sidebar — previously the error was swallowed and the panel just
+			// showed "Thinking…" forever with nothing after.
+			set({ aiEditing: false, chatError: errMsg(err) })
 		}
 	},
 
@@ -646,10 +658,64 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	},
 
 	clearError: () => set({ error: null }),
+	clearChatError: () => set({ chatError: null }),
 }))
 
 export function disconnectEdgeId(c: WorkflowConnection): string {
 	return edgeId(c)
+}
+
+// summarizeWorkflowChanges produces a short, deterministic diff of what the AI
+// actually did to a workflow (added/removed/changed nodes, added/removed
+// connections). It replaces the old behavior where the AI bubble just echoed
+// the user's instruction back. Pure function — safe to unit-test in isolation.
+//
+// The message is deliberately compact and English (matching the rest of the
+// chat panel copy) so it reads cleanly in a small bubble.
+export function summarizeWorkflowChanges(before: Workflow, after: Workflow): string {
+	const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]))
+	const afterNodes = new Map(after.nodes.map((n) => [n.id, n]))
+
+	const added: string[] = []
+	const removed: string[] = []
+	let changed = 0
+	for (const n of after.nodes) {
+		if (!beforeNodes.has(n.id)) added.push(n.name || n.id)
+	}
+	for (const n of before.nodes) {
+		const prev = afterNodes.get(n.id)
+		if (!prev) {
+			removed.push(n.name || n.id)
+		} else if (prev.name !== n.name || JSON.stringify(prev.data) !== JSON.stringify(n.data)) {
+			changed++
+		}
+	}
+
+	const beforeConn = new Set(before.connections.map(connectionKey))
+	const afterConn = new Set(after.connections.map(connectionKey))
+	const connAdded = after.connections.filter((c) => !beforeConn.has(connectionKey(c))).length
+	const connRemoved = before.connections.filter((c) => !afterConn.has(connectionKey(c))).length
+
+	const lines: string[] = []
+	const hasChanges =
+		added.length > 0 || removed.length > 0 || changed > 0 || connAdded > 0 || connRemoved > 0
+	if (!hasChanges) {
+		return 'No changes — the workflow already matches.'
+	}
+	lines.push('Workflow updated.')
+	if (added.length > 0) lines.push(`+ ${added.length} node${added.length > 1 ? 's' : ''}: ${added.join(', ')}`)
+	if (removed.length > 0) lines.push(`− ${removed.length} node${removed.length > 1 ? 's' : ''}: ${removed.join(', ')}`)
+	if (changed > 0) lines.push(`~ ${changed} node${changed > 1 ? 's' : ''} updated`)
+	if (connAdded > 0) lines.push(`+ ${connAdded} connection${connAdded > 1 ? 's' : ''}`)
+	if (connRemoved > 0) lines.push(`− ${connRemoved} connection${connRemoved > 1 ? 's' : ''}`)
+	lines.push('Review the canvas, then Save.')
+	return lines.join('\n')
+}
+
+// connectionKey is a stable identity for a connection ignoring object identity,
+// used by the diff. Ports are optional; absent ports are normalized to ''.
+function connectionKey(c: WorkflowConnection): string {
+	return `${c.from}|${c.fromPort ?? ''}>${c.to}|${c.toPort ?? ''}`
 }
 
 function errMsg(err: unknown): string {

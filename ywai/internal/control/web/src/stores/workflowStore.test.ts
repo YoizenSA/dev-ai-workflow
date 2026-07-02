@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { useWorkflowStore, disconnectEdgeId } from "./workflowStore";
+import { useWorkflowStore, disconnectEdgeId, summarizeWorkflowChanges } from "./workflowStore";
 import type { Workflow } from "../api/types";
 
 // Mock the API client so tests don't hit the network.
@@ -13,6 +13,7 @@ vi.mock("../api/client", () => ({
 		import: vi.fn(),
 		validate: vi.fn(),
 		export: vi.fn(),
+		aiEdit: vi.fn(),
 	},
 }));
 
@@ -27,6 +28,7 @@ const mockApi = workflowApi as unknown as {
 	import: ReturnType<typeof vi.fn>;
 	validate: ReturnType<typeof vi.fn>;
 	export: ReturnType<typeof vi.fn>;
+	aiEdit: ReturnType<typeof vi.fn>;
 };
 
 const WORKFLOW: Workflow = {
@@ -60,6 +62,8 @@ beforeEach(() => {
 		exportPlan: null,
 		exporting: false,
 		selectedNodeId: null,
+		chatError: null,
+		aiEditing: false,
 	});
 });
 
@@ -171,5 +175,94 @@ describe("exportCurrent", () => {
 		mockApi.export.mockResolvedValue({ workflowName: "w", files: [], dryRun: false });
 		await useWorkflowStore.getState().exportCurrent(true);
 		expect(mockApi.export).toHaveBeenCalledWith("w", true);
+	});
+});
+
+describe("summarizeWorkflowChanges", () => {
+	it("reports added nodes", () => {
+		const after: Workflow = {
+			...WORKFLOW,
+			nodes: [
+				...WORKFLOW.nodes,
+				{ id: "r", type: "subAgent", name: "reviewer", position: { x: 150, y: 0 }, data: {} },
+			],
+		};
+		const summary = summarizeWorkflowChanges(WORKFLOW, after);
+		expect(summary).toContain("Workflow updated.");
+		expect(summary).toContain("+ 1 node: reviewer");
+		expect(summary).toContain("Review the canvas, then Save.");
+	});
+
+	it("reports removed nodes", () => {
+		const after: Workflow = { ...WORKFLOW, nodes: [WORKFLOW.nodes[0], WORKFLOW.nodes[2]] };
+		const summary = summarizeWorkflowChanges(WORKFLOW, after);
+		expect(summary).toContain("− 1 node: a");
+	});
+
+	it("reports changed nodes (data mutation, same id)", () => {
+		const after: Workflow = {
+			...WORKFLOW,
+			nodes: WORKFLOW.nodes.map((n) =>
+				n.id === "a" ? { ...n, data: { description: "does something else" } } : n,
+			),
+		};
+		const summary = summarizeWorkflowChanges(WORKFLOW, after);
+		expect(summary).toContain("~ 1 node updated");
+	});
+
+	it("reports added/removed connections", () => {
+		const after: Workflow = {
+			...WORKFLOW,
+			connections: [{ from: "s", to: "e", fromPort: "out", toPort: "in" }],
+		};
+		const summary = summarizeWorkflowChanges(WORKFLOW, after);
+		expect(summary).toContain("+ 1 connection");
+		expect(summary).toContain("− 2 connections");
+	});
+
+	it("returns a no-op message when nothing changed", () => {
+		const summary = summarizeWorkflowChanges(WORKFLOW, { ...WORKFLOW });
+		expect(summary).toBe("No changes — the workflow already matches.");
+	});
+});
+
+describe("aiEdit", () => {
+	it("records a change-summary bubble (not an echo of the instruction)", async () => {
+		useWorkflowStore.setState({ current: WORKFLOW });
+		// AI returns a workflow with one extra node.
+		const edited: Workflow = {
+			...WORKFLOW,
+			nodes: [
+				...WORKFLOW.nodes,
+				{ id: "r", type: "subAgent", name: "reviewer", position: { x: 300, y: 0 }, data: {} },
+			],
+		};
+		mockApi.aiEdit.mockResolvedValue({ workflow: edited, validation: { valid: true, errors: [], warnings: [] } });
+
+		await useWorkflowStore.getState().aiEdit("add a reviewer after dev");
+
+		const msgs = useWorkflowStore.getState().current!.conversationHistory!.messages;
+		const aiBubble = msgs.find((m) => m.sender === "ai")!.content;
+		// The bubble reflects the real diff, not the echoed instruction.
+		expect(aiBubble).toContain("node");
+		expect(aiBubble).toContain("reviewer");
+		expect(aiBubble).not.toContain('Applied: "add a reviewer after dev"');
+		// Iteration counter advances.
+		expect(useWorkflowStore.getState().current!.conversationHistory!.currentIteration).toBe(1);
+		expect(useWorkflowStore.getState().dirty).toBe(true);
+	});
+
+	it("surfaces failures as a chat-scoped error (not the global error)", async () => {
+		useWorkflowStore.setState({ current: WORKFLOW });
+		mockApi.aiEdit.mockRejectedValue(new Error("opencode not found"));
+
+		await useWorkflowStore.getState().aiEdit("do something");
+
+		expect(useWorkflowStore.getState().chatError).toBe("opencode not found");
+		// The global sidebar error stays clean — the failure is contextual to the chat.
+		expect(useWorkflowStore.getState().error).toBeNull();
+		expect(useWorkflowStore.getState().aiEditing).toBe(false);
+		// No conversation history was recorded for the failed turn.
+		expect(useWorkflowStore.getState().current!.conversationHistory).toBeUndefined();
 	});
 });
