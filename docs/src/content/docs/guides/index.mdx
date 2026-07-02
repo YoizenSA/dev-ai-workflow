@@ -1,0 +1,59 @@
+---
+title: Guías
+description: Guías de uso y desarrollo de ywai
+---
+
+## Inicio rápido
+
+```bash
+# Instalar ywai
+curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash
+
+# Instalar todo el ecosistema
+ywai install
+```
+
+## Desarrollo local
+
+El script `scripts/dev.sh` envuelve todos los flujos de build y test para que no tengas que recordar los comandos.
+
+### Subcomandos de dev.sh
+
+| Subcomando | Descripción |
+|---|---|
+| `test` | Ejecutar todos los tests (`go test ./... -v`) |
+| `test-kanban` | Ejecutar solo tests de kanban |
+| `build` | Build rápido SIN datos embebidos |
+| `build-full` | Build completo CON skills/agentes embebidos |
+| `install` | Build-full + instalar en `$GOPATH/bin/ywai` |
+| `check` | Pipeline completo: test → build-full → verify → install |
+| `kanban` | Build + install + iniciar UI kanban en puerto 5768 |
+
+### Flujo típico
+
+```bash
+# Antes de cada commit
+bash scripts/dev.sh check
+
+# Iteración rápida (sin embebidos)
+bash scripts/dev.sh build
+
+# Probar cambios en kanban
+bash scripts/dev.sh test-kanban
+
+# Probar visualmente el kanban
+bash scripts/dev.sh kanban
+# Abre http://localhost:5768
+```
+
+## Workflow Studio
+
+El **Workflow Studio** es un editor visual de workflows multi-agente accesible en `http://localhost:5768/workflows`. Permite diseñar workflows en un canvas React Flow y exportarlos a primitivas nativas de opencode.
+
+### Cómo funciona
+
+1. **Diseña** un workflow en el canvas: arrastra nodos (SubAgent, AskUserQuestion, Prompt, If/Else, Switch, Skill, MCP, Group) desde la paleta y conéctalos.
+2. **Edita** los campos de cada nodo en el panel lateral.
+3. **Valida** el grafo (un inicio, un final, sin ciclos).
+4. **Exporta** a opencode — el workflow se convierte en comandos slash y agentes reales.
+

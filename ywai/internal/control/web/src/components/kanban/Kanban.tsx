@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
-import { GitStatusBadge } from "./GitStatusBadge";
 import type { Delegation, DelegationColumn, WSMessage } from "../../api/types";
 import DelegationDetailModal from "./DelegationDetailModal";
 import HandoffModal from "./HandoffModal";
@@ -293,8 +292,7 @@ export default function Kanban() {
 						<h2>{activeSession?.goal || 'Select a session'}</h2>
 						{activeSession && (
 							<span className="page-title-project">{activeSession.project}</span>
-						)}
-						<GitStatusBadge />
+					)}
 					</div>
 				</div>
 

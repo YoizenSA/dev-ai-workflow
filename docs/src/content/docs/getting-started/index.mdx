@@ -1,0 +1,53 @@
+---
+title: Primeros pasos
+description: Cómo instalar y configurar ywai
+---
+
+## Requisitos
+
+- **Go 1.21+** (solo para instalación desde fuente)
+- **Linux o macOS**
+
+## Instalación rápida (recomendada)
+
+```bash
+curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash
+```
+
+Este comando descarga e instala **gentle-ai**, el ecosistema de skills, y todas las skills adicionales de ywai.
+
+## Instalación desde fuente
+
+Si prefieres compilar desde el código fuente:
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/YoizenSA/dev-ai-workflow.git
+cd dev-ai-workflow/ywai
+
+# Preparar skills embebidas y compilar
+bash scripts/prepare-embedded.sh
+go install -tags embedded ./cmd/ywai
+```
+
+## Verificar la instalación
+
+```bash
+ywai doctor
+```
+
+Este comando ejecuta un chequeo de salud para confirmar que todo está configurado correctamente.
+
+## Vista previa de cambios
+
+Si quieres ver qué va a instalar ywai sin aplicar cambios:
+
+```bash
+ywai install --dry-run
+```
+
+## Agentes soportados
+
+ywai detecta automáticamente el agente AI que estás usando entre más de 15 opciones:
+
+OpenCode, Claude Code, Cursor, Gemini CLI, VS Code Copilot, Codex, Kilo Code, Kimi Code, Qwen Code, Antigravity, Kiro IDE, OpenClaw, Trae IDE, Windsurf, Pi, y más.

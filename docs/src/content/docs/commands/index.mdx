@@ -1,0 +1,71 @@
+---
+title: Comandos
+description: Referencia completa de comandos de ywai
+---
+
+## Resumen
+
+| Comando | Descripción |
+|---|---|
+| `ywai install` | Instalar gentle-ai + ecosistema + skills adicionales |
+| `ywai update` | Actualizar gentle-ai + resincronizar skills |
+| `ywai skills` | Listar skills adicionales disponibles |
+| `ywai agents` | Listar agentes AI detectados |
+| `ywai doctor` | Ejecutar chequeo de salud de gentle-ai |
+| `ywai skill-registry` | Refrescar el registro de skills del proyecto |
+
+## `ywai install`
+
+Instala gentle-ai, el ecosistema y todas las skills adicionales.
+
+**Flags principales:**
+
+| Flag | Descripción |
+|---|---|
+| `--agent, -a` | Agente específico (se auto-detecta si se omite) |
+| `--dry-run` | Previsualizar cambios sin aplicarlos |
+| `--preset` | Preset de instalación: `full-gentleman`, `ecosystem-only`, `minimal`, `custom` |
+| `--scope` | Ámbito: `global` (por defecto) o `workspace` |
+| `--mcp` | Instalar Microsoft Learn MCP (para opencode) |
+| `--global` | Solo skills globales (omitir AGENTS.md/REVIEW.md del proyecto) |
+
+**Ejemplos:**
+
+```bash
+# Instalación completa
+ywai install
+
+# Vista previa
+ywai install --dry-run
+
+# Instalar para un agente específico
+ywai install --agent opencode --preset full-gentleman
+```
+
+## `ywai update`
+
+Actualiza gentle-ai, resiembra el ecosistema y religa las skills.
+
+## `ywai skills`
+
+Muestra las skills adicionales que ywai instala en tu agente.
+
+Skills incluidas: TypeScript, React 19, Tailwind 4, Biome, Angular (core, forms, performance, architecture), .NET/C#, DevOps (Azure Pipelines, Helm, K8s), Playwright, git-commit.
+
+## `ywai agents`
+
+Lista los agentes AI detectados en tu sistema y muestra cuál se usará por defecto.
+
+## `ywai doctor`
+
+Ejecuta el chequeo de salud de gentle-ai para verificar que la instalación es correcta.
+
+## `ywai skill-registry`
+
+Refresca el registro de skills del proyecto actual. Útil después de añadir o modificar skills.
+
+**Flags:**
+
+| Flag | Descripción |
+|---|---|
+| `--cwd` | Directorio del proyecto (por defecto: directorio actual) |

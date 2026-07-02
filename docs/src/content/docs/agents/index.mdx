@@ -1,0 +1,85 @@
+---
+title: Agentes
+description: Agentes preconfigurados de ywai — roles, permisos, composabilidad y delegación
+---
+
+## ¿Qué son los agentes?
+
+ywai viene con 6 agentes preconfigurados con roles específicos. Cada agente tiene su propio system prompt, permisos de herramientas y skills vinculados que definen su alcance y capacidades.
+
+## Los 6 agentes
+
+| Agente | Rol | Mejor para |
+|--------|-----|------------|
+| `ask` | Investigación y Q&A | Preguntas rápidas, explicaciones, investigación, análisis |
+| `dev` | Desarrollador | Implementación, coding, debugging, refactorización |
+| `qa` | Ingeniero de calidad | Estrategia de tests, escribir tests, cobertura |
+| `architect` | Arquitecto | Decisiones de diseño, patrones, arquitectura de sistemas |
+| `reviewer` | Code Reviewer | PR reviews, finding bugs, security audits |
+| `devops` | DevOps | CI/CD, deployments, Docker, K8s, monitoreo |
+
+## Composabilidad de agentes
+
+Los agentes se encadenan en secuencia formando un pipeline de desarrollo completo:
+
+```
+ask → architect → dev → qa → reviewer → devops
+```
+
+1. **ask** investiga y recopila información
+2. **architect** diseña la solución
+3. **dev** implementa el código
+4. **qa** escribe y ejecuta tests
+5. **reviewer** revisa la calidad
+6. **devops** despliega y monitorea
+
+El **Orchestrator Agent** coordina este flujo. Cada agente recibe un brief claro con objetivo, contexto, criterios de aceptación y artefactos esperados.
+
+## Delegaciones
+
+El sistema de delegación permite al orquestador asignar tareas a sub-agentes:
+
+- **Síncronas (bloqueantes):** el orquestador espera el resultado antes de continuar
+- **Asíncronas (background):** el sub-agente trabaja en segundo plano mientras el orquestador continúa con otras tareas
+
+### Formato del brief de delegación
+
+Cada delegación incluye:
+- **Goal**: objetivo de la tarea
+- **Context**: información relevante para el sub-agente
+- **Acceptance Criteria**: condiciones que debe cumplir el resultado
+- **Expected Artifacts**: archivos o documentación que debe generar
+- **Constraints**: restricciones técnicas o de diseño
+
+### Handoff
+
+Al finalizar, cada sub-agente reporta:
+- **Status**: `done`, `blocked` o `needs-decision`
+- **Did**: resumen de lo realizado
+- **Artifacts**: archivos modificados, comandos ejecutados
+- **Next suggested**: qué agente debe continuar
+- **Notes**: observaciones, riesgos, bloqueos
+
+## Permisos
+
+Cada agente tiene permisos específicos de herramientas:
+
+| Agente | Permisos |
+|--------|----------|
+| `ask` | Solo lectura |
+| `reviewer` | Solo lectura |
+| `dev` | Lectura y escritura |
+| `qa` | Lectura y escritura |
+| `architect` | Lectura y escritura |
+| `devops` | Lectura y escritura |
+| Orchestrator | Solo delega y coordina — no escribe código |
+
+## Perfiles
+
+Los perfiles de agente viven en `ywai/agents/`. Cada perfil contiene:
+
+- **`AGENT.md`**: system prompt que define el rol y comportamiento
+- **`tools.json`**: permisos de herramientas específicas
+- **`skills.txt`**: skills vinculados al agente
+
+Se pueden extender los perfiles existentes o crear perfiles personalizados copiando la estructura de `ywai/agents/` y ajustando el system prompt y permisos según las necesidades del proyecto.

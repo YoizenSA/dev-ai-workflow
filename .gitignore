@@ -63,6 +63,7 @@ GEMINI.md
 *.local
 # Local Pi runtime state
 .atl/
+.playwright-mcp/
 ywai/ywai
 ywai/docs/loop-architecture-gap-analysis.md
 .codegraph/daemon.pid

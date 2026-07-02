@@ -1,0 +1,83 @@
+---
+title: Configuración
+description: Opciones de configuración de ywai — presets, scopes, agentes soportados y comandos de diagnóstico
+---
+
+## Presets de instalación
+
+ywai ofrece varios presets para adaptar la instalación a diferentes necesidades:
+
+| Preset | Descripción |
+|--------|-------------|
+| `full-gentleman` (default) | Instalación completa con gentle-ai + ecosistema + todos los skills extra |
+| `ecosystem-only` | Solo el ecosistema gentle-ai, sin skills adicionales |
+| `minimal` | Lo mínimo necesario para funcionar |
+| `custom` | Selección manual de componentes |
+
+```bash
+# Usar un preset específico
+ywai install --preset minimal
+ywai install --preset ecosystem-only
+```
+
+## Scopes
+
+Los scopes determinan dónde se instalan los skills:
+
+| Scope | Descripción |
+|-------|-------------|
+| `global` (default) | Instala skills globalmente para todos los proyectos |
+| `workspace` | Instala skills solo en el proyecto actual |
+
+```bash
+# Instalar solo en el proyecto actual
+ywai install --scope workspace
+```
+
+## Skill Registry
+
+El registro de skills indexa todos los skills disponibles por trigger y ruta.
+
+```bash
+# Refrescar el registro de skills del proyecto
+ywai skill-registry
+
+# Especificar un directorio de proyecto
+ywai skill-registry --cwd /ruta/del/proyecto
+```
+
+Es útil después de añadir o modificar skills, para que los agentes puedan descubrir las nuevas capacidades disponibles.
+
+## Agentes soportados
+
+ywai detecta automáticamente el agente AI que estás usando:
+
+| Agente | ID | Detección |
+|--------|----|-----------|
+| OpenCode | `opencode` | Binary in PATH |
+| Claude Code | `claude-code` | Binary in PATH |
+| Cursor | `cursor` | Binary in PATH |
+| VS Code Copilot | `vscode-copilot` | Binary in PATH |
+| Gemini CLI | `gemini-cli` | Binary in PATH |
+| Codex | `codex` | Binary in PATH |
+| Kilo Code | `kilocode` | Binary in PATH |
+| Kimi Code | `kimi` | Binary in PATH |
+| Qwen Code | `qwen-code` | Binary in PATH |
+| Windsurf | `windsurf` | Config dir |
+| Trae IDE | `trae-ide` | Config dir |
+
+La detección automática evita tener que especificar manualmente qué agente estás usando.
+
+## Doctor
+
+El comando `doctor` ejecuta un chequeo de salud de gentle-ai para verificar que todo está configurado correctamente:
+
+```bash
+ywai doctor
+```
+
+Verifica:
+- Que gentle-ai esté instalado y actualizado
+- Que los skills estén correctamente enlazados
+- Que las rutas de configuración sean válidas
+- Que no haya conflictos entre agentes
