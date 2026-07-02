@@ -16,6 +16,19 @@ export default defineConfig({
         { label: 'Primeros pasos', slug: 'getting-started' },
         { label: 'Comandos', slug: 'commands' },
         {
+          label: 'Guías',
+          items: [
+            { label: 'Visión general', slug: 'guides' },
+            { label: 'Implementar Feature', slug: 'guides/feature' },
+            { label: 'Arreglar Bug', slug: 'guides/bugfix' },
+            { label: 'Code Review', slug: 'guides/review' },
+            { label: 'Migración', slug: 'guides/migration' },
+            { label: 'Testing', slug: 'guides/testing' },
+            { label: 'CI/CD', slug: 'guides/cicd' },
+            { label: 'Refactoring', slug: 'guides/refactoring' },
+          ],
+        },
+        {
           label: 'Agentes',
           items: [
             { label: 'Visión general', slug: 'agents' },
@@ -74,19 +87,6 @@ export default defineConfig({
           label: 'Configuración',
           items: [
             { label: 'Configuración', slug: 'configuration' },
-          ],
-        },
-        {
-          label: 'Guías',
-          items: [
-            { label: 'Visión general', slug: 'guides' },
-            { label: 'Implementar Feature', slug: 'guides/feature' },
-            { label: 'Arreglar Bug', slug: 'guides/bugfix' },
-            { label: 'Code Review', slug: 'guides/review' },
-            { label: 'Migración', slug: 'guides/migration' },
-            { label: 'Testing', slug: 'guides/testing' },
-            { label: 'CI/CD', slug: 'guides/cicd' },
-            { label: 'Refactoring', slug: 'guides/refactoring' },
           ],
         },
       ],
