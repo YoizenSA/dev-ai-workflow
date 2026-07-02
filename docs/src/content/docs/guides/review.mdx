@@ -1,0 +1,95 @@
+---
+title: Code Review
+description: Cómo el orchestrator coordina el code review
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Code Review
+
+El **orchestrator** coordina el code review. Le decís qué revisar y él delega al reviewer.
+
+## Review básico
+
+```
+Revisa los cambios en src/auth/ antes de mergear.
+```
+
+El orchestrator:
+1. Delega a `@reviewer` para revisar
+2. Te reporta los findings con severidad
+
+## Review con foco
+
+```
+Revisa el PR del feature de pagos por seguridad.
+Enfócate en: manejo de tokens, validación de input, OWASP top 10.
+```
+
+El orchestrator:
+1. Delega a `@reviewer` con foco en seguridad
+2. Te reporta findings de seguridad
+
+## El reporte del reviewer
+
+```
+🔴 CRITICAL: SQL injection en UserRepository.find()
+🟠 HIGH: Missing CSRF token validation
+🟡 MEDIUM: N+1 query en order list
+🟢 LOW: Inconsistente naming convention
+```
+
+### Qué hacer con cada severidad
+
+| Severidad | Acción |
+|---|---|
+| 🔴 CRITICAL | Debe arreglarse antes de merge |
+| 🟠 HIGH | Debería arreglarse |
+| 🟡 MEDIUM | Mejora recomendada |
+| 🟢 LOW | Opcional, estilo |
+
+## Flujo completo
+
+```
+Tú: "Implementa el endpoint de upload de archivos.
+     Después revisa por seguridad antes de mergear."
+
+Orchestrator:
+  → @dev: implementa el upload
+  → @qa: tests: archivo válido, muy grande, tipo no permitido
+  → @reviewer: revisa por seguridad (path traversal, file type, size limits)
+  → @dev: arregla issues encontrados
+  → Reporta: "Implementado y revisado. 2 issues de seguridad corregidos."
+```
+
+## Ejemplo real
+
+```
+Tú: "Revisa el PR del feature de pagos.
+     Archivos cambiados: src/services/PaymentService.ts, 
+     src/routes/payment.ts, src/models/Order.ts"
+
+Orchestrator:
+  → @reviewer: revisa los archivos
+  
+Reporte:
+🔴 CRITICAL: Webhook signature no se valida (payment.ts:45)
+  → Alguien puede enviar webhooks falsos
+  
+🟠 HIGH: No hay idempotency key (PaymentService.ts:78)
+  → Doble click = doble cobro
+  
+🟡 MEDIUM: N+1 query en order list (Order.ts:123)
+  → Performance degrada con muchos orders
+
+Tú: "Arregla CRITICAL y HIGH"
+
+Orchestrator:
+  → @dev: agrega validación de webhook signature + idempotency key
+  → @reviewer: re-valida
+  → Reporta: "Issues corregidos. Listo para merge."
+```
+
+<Aside type="tip">
+El reviewer es la última línea de defensa antes de merge. Pedile al orchestrator que siempre incluya un review antes de mergear features importantes.
+</Aside>

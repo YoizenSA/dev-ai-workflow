@@ -1,190 +1,71 @@
 ---
 title: Guías
-description: Flujos de trabajo prácticos para usar ywai en tu día a día
+description: Flujos de trabajo prácticos — el orchestrator coordina, vos pedís
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Card, Aside } from '@astrojs/starlight/components';
 
 # Guías
 
 Guías prácticas para usar ywai en situaciones reales.
 
-## Empezar un proyecto nuevo
-
-<Steps>
-
-1. **Instala ywai**
-   ```bash
-   curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
-   ```
-
-2. **Instala la configuración en tu agente**
-   ```bash
-   ywai install
-   ```
-
-3. **Verifica que todo esté bien**
-   ```bash
-   ywai doctor
-   ```
-
-4. **Abre opencode y empieza a trabajar**
-   ```
-   @dev Crea la estructura base del proyecto
-   ```
-
-</Steps>
-
-## Implementar una feature completa
-
-Esta guía muestra cómo usar múltiples agentes para implementar una feature de principio a fin.
-
-### Ejemplo: Sistema de autenticación
-
-<Steps>
-
-1. **Investiga** (opcional, si no conoces el dominio)
-   ```
-   @ask Cómo funciona la autenticación con JWT refresh tokens?
-   ```
-
-2. **Diseña** la arquitectura
-   ```
-   @architect Diseña el sistema de auth para nuestra app Next.js.
-   Necesitamos: login, registro, refresh tokens, y middleware de protección.
-   Usa PostgreSQL para sesiones.
-   ```
-
-3. **Implementa** el código
-   ```
-   @dev Implementa el sistema de auth según el diseño del @architect.
-   Empieza por el modelo de datos y los endpoints de login/registro.
-   ```
-
-4. **Testea** la implementación
-   ```
-   @qa Escribe tests para el flujo de autenticación.
-   Cubre: login exitoso, credenciales inválidas, token expirado,
-   refresh token rotation.
-   ```
-
-5. **Revisa** antes de mergear
-   ```
-   @reviewer Revisa el sistema de auth por seguridad.
-   Enfócate en: manejo de tokens, validación de input, y OWASP top 10.
-   ```
-
-6. **Corrige** issues encontrados
-   ```
-   @dev Arregla los issues de seguridad encontrados por @reviewer
-   ```
-
-7. **Despliega** (si aplica)
-   ```
-   @devops Configura el pipeline de CI/CD para el proyecto.
-   Incluye: tests automáticos, lint, build, y deploy a staging.
-   ```
-
-</Steps>
-
-## Arreglar un bug
-
-<Steps>
-
-1. **Reporta el bug con contexto**
-   ```
-   @dev El endpoint /api/users retorna 500 cuando el parámetro 
-   'page' es mayor a 100. El error en los logs es:
-   "ERROR: offset must not be negative"
-   ```
-
-2. **El agente investiga y arregla**
-   ```
-   @dev: [encuentra que la paginación no valida el offset máximo]
-   @dev: [agrega validación y test]
-   ```
-
-3. **Verifica** que no haya regresiones
-   ```
-   @qa Corre los tests existentes y verifica que nada se rompió
-   ```
-
-</Steps>
-
-## Hacer code review
-
-```
-@reviewer Revisa los cambios en src/auth/.
-Busca: SQL injection, XSS, manejo incorrecto de errores,
-y si los tests cubren los casos importantes.
-```
-
-El reviewer te dará un reporte con severidad:
-- 🔴 **CRITICAL** — Debe arreglarse antes de merge
-- 🟠 **HIGH** — Debería arreglarse
-- 🟡 **MEDIUM** — Mejora recomendada
-- 🟢 **LOW** — Opcional, estilo
-
-## Configurar CI/CD
-
-```
-@devops Configura GitHub Actions para este proyecto Node.js.
-Necesito:
-- Lint y tests en cada PR
-- Build de Docker image en main
-- Deploy automático a staging en main
-- Deploy manual a producción con approval
-```
-
-## Refactorizar código existente
-
-<Steps>
-
-1. **Pide análisis** al architect
-   ```
-   @architect Analiza la estructura de src/services/. 
-   ¿Hay oportunidades de mejora? ¿El código sigue los patrones del proyecto?
-   ```
-
-2. **Pide el refactoring** al dev
-   ```
-   @dev Refactoriza UserService según las sugerencias del @architect.
-   Mantén todos los tests pasando.
-   ```
-
-3. **Verifica** con tests
-   ```
-   @qa Corre todos los tests y verifica que nada se rompió
-   ```
-
-</Steps>
-
-## Trabajar con monorepo
-
-Si tu proyecto tiene múltiples paquetes:
-
-```
-@dev Los cambios en packages/core afectan a packages/api y packages/web.
-Implementa el nuevo servicio en core y actualiza los consumidores en api y web.
-```
-
-## Tips para mejores resultados
-
-<Card title="Sé específico" icon="star">
-❌ "Arregla el bug"  
-✅ "El endpoint POST /api/login retorna 500 cuando el email tiene '+' en el dominio"
-</Card>
-
-<Card title="Da contexto" icon="star">
-❌ "Crea un componente"  
-✅ "Crea un componente React para el formulario de registro. Usa react-hook-form para validación y tailwind para estilos. Sigue el patrón de src/components/LoginForm.tsx"
-</Card>
-
-<Card title="Especifica el agente" icon="star">
-❌ "Escribe tests" (¿quién?)  
-✅ "@qa Escribe tests unitarios para el UserService"
-</Card>
-
 <Aside type="tip">
-No necesitas usar todos los agentes para cada tarea. Para un bug simple, `@dev` solo es suficiente. Usa múltiples agentes cuando la tarea es compleja y se beneficia de especialización.
+**No necesitas invocar agentes uno por uno.** Le decís al orchestrator qué necesitás y él distribuye el trabajo a los agentes correctos.
 </Aside>
+
+## Las 7 guías
+
+<Card title="Implementar una Feature" icon="star">
+El orchestrator coordina: architect → dev → qa → reviewer
+
+[Ver guía →](/guides/feature)
+</Card>
+
+<Card title="Arreglar un Bug" icon="bug">
+El orchestrator diagnostica y arregla con los agentes correctos
+
+[Ver guía →](/guides/bugfix)
+</Card>
+
+<Card title="Code Review" icon="search">
+El orchestrator delega al reviewer y te reporta findings
+
+[Ver guía →](/guides/review)
+</Card>
+
+<Card title="Migración de Código" icon="sync">
+El orchestrator coordina el equipo social-refactor
+
+[Ver guía →](/guides/migration)
+</Card>
+
+<Card title="Testing Completo" icon="test">
+El orchestrator coordina el equipo qa-automation
+
+[Ver guía →](/guides/testing)
+</Card>
+
+<Card title="CI/CD e Infraestructura" icon="server">
+El orchestrator delega a devops para pipelines y containers
+
+[Ver guía →](/guides/cicd)
+</Card>
+
+<Card title="Refactoring" icon="code">
+El orchestrator coordina refactorings seguros
+
+[Ver guía →](/guides/refactoring)
+</Card>
+
+## El patrón común
+
+Todas las guías siguen el mismo patrón:
+
+```
+1. Vos le decís al orchestrator qué necesitás
+2. El orchestrator elige los agentes correctos
+3. Los agentes hacen su trabajo
+4. El orchestrator te reporta el resultado
+```
+
+No necesitas saber qué agente hace cada cosa. El orchestrator se encarga de distribuir.

@@ -1,0 +1,76 @@
+---
+title: Arreglar un Bug
+description: Cómo el orchestrator coordina el diagnóstico y fix de bugs
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Arreglar un Bug
+
+El **orchestrator** se encarga de diagnosticar y arreglar bugs. Vos le das el contexto y él coordina el trabajo.
+
+## Bug simple
+
+```
+El endpoint /api/users retorna 500 cuando el parámetro 
+'page' es mayor a 100. El error es:
+"ERROR: offset must not be negative"
+```
+
+El orchestrator:
+1. Delega a `@dev` para investigar y arreglar
+2. Delega a `@qa` para agregar test que previene regresión
+3. Te reporta el fix
+
+## Bug complejo
+
+```
+El login falla intermitentemente en producción.
+Los logs muestran "connection timeout" cada ~100 requests.
+Necesito entender por qué y arreglarlo.
+```
+
+El orchestrator:
+1. Delega a `@ask` para investigar posibles causas
+2. Delega a `@finder` para buscar código relacionado con conexiones
+3. Delega a `@dev` para arreglar la causa raíz
+4. Delega a `@qa` para testear el fix
+5. Te reporta: "Era un connection pool exhaustion. Aumenté el pool y agregué retry con backoff."
+
+## Ejemplo real: Null pointer
+
+```
+Tú: "Los usuarios ven un error blanco al hacer click en 'Ver perfil'.
+     Error en Sentry: TypeError: Cannot read properties of null (reading 'avatar')
+     en UserProfile.tsx línea 45"
+
+Orchestrator:
+  → @dev: investiga, encuentra que no maneja usuario sin avatar
+  → @dev: agrega optional chaining + fallback
+  → @qa: test: usuario sin avatar muestra placeholder
+  → Reporta: "Fix aplicado. Test agregado."
+```
+
+## Ejemplo real: Race condition
+
+```
+Tú: "Al hacer click rápido en 'Agregar al carrito' dos veces,
+     se crean dos items duplicados. Necesito que sea idempotente."
+
+Orchestrator:
+  → @dev: agrega debouncing en frontend + idempotency key en backend
+  → @qa: test que simula clicks rápidos
+  → @reviewer: revisa el fix
+  → Reporta: "Idempotency implementada. Tests pasan."
+```
+
+## Tips
+
+<Card title="Da contexto completo" icon="star">
+❌ "Arregla el bug"  
+✅ "El endpoint POST /api/login retorna 500 cuando el email tiene '+' en el dominio. Error: InvalidEmailFormat"
+</Card>
+
+<Aside type="tip">
+Mientras más contexto le des al orchestrator, mejor puede coordinar. Incluí: qué falla, dónde falla, y el error exacto.
+</Aside>

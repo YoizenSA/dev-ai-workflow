@@ -1,0 +1,81 @@
+---
+title: Refactoring
+description: Cómo el orchestrator coordina refactorings seguros
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Refactoring
+
+El **orchestrator** coordina refactorings. Le decís qué mejorar y él distribuye el trabajo.
+
+## Refactoring simple
+
+```
+Refactoriza UserService para usar el patrón repository.
+Mantén todos los tests pasando.
+```
+
+El orchestrator:
+1. Delega a `@dev` para refactorizar
+2. Delega a `@qa` para verificar que nada se rompió
+3. Te reporta el resultado
+
+## Refactoring con análisis
+
+```
+La capa de acceso a datos está desordenada.
+Cada servicio accede a la DB directamente.
+Refactoriza para usar repository pattern.
+```
+
+El orchestrator:
+1. Delega a `@architect` para analizar y proponer diseño
+2. Delega a `@dev` para implementar el refactoring
+3. Delega a `@qa` para verificar que nada se rompió
+4. Delega a `@reviewer` para revisar los cambios
+5. Te reporta: "Refactoring completo. Repository pattern implementado."
+
+## Ejemplo real: Reducir complejidad
+
+```
+Tú: "La función processOrder tiene 200 líneas y 5 niveles de nesting.
+     Es ilegible. Refactorízala en funciones más pequeñas."
+
+Orchestrator:
+  → @dev: divide en validateOrder, calculateTotal, applyDiscounts,
+          processPayment, sendConfirmation
+  → @qa: corre tests existentes + agrega tests para nuevas funciones
+  → Reporta: "Función dividida en 5 funciones. Tests pasan."
+```
+
+## Ejemplo real: Migrar patrón
+
+```
+Tú: "Los servicios usan callbacks anidados (callback hell).
+     Migra todo a async/await."
+
+Orchestrator:
+  → @dev: migra cada servicio a async/await
+  → @qa: verifica que el comportamiento se mantuvo
+  → @reviewer: revisa los cambios
+  → Reporta: "12 servicios migrados a async/await. 0 regresiones."
+```
+
+## Ejemplo real: Extraer módulo
+
+```
+Tú: "La lógica de auth está esparcida por toda la app.
+     Extraela en un módulo auth separado."
+
+Orchestrator:
+  → @architect: diseña el módulo auth
+  → @dev: extrae la lógica en src/auth/
+  → @dev: actualiza imports en toda la app
+  → @qa: corre todos los tests
+  → Reporta: "Módulo auth extraído. Tests pasan."
+```
+
+<Aside type="tip">
+Para refactorings de 1-2 archivos, decile al orchestrator que use `@dev` directamente. Para refactorings de arquitectura, pedí análisis de `@architect` primero.
+</Aside>

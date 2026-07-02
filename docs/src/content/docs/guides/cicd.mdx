@@ -1,0 +1,81 @@
+---
+title: CI/CD e Infraestructura
+description: Cómo el orchestrator coordina configuración de infraestructura
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# CI/CD e Infraestructura
+
+El **orchestrator** coordina la configuración de infraestructura. Le decís qué necesitás y él delega a `@devops`.
+
+## Docker
+
+```
+Crea un Dockerfile para nuestro servicio Node.js.
+Incluye: multi-stage build, non-root user, health check.
+```
+
+El orchestrator:
+1. Delega a `@devops` para crear el Dockerfile
+2. Te reporta el archivo creado
+
+## CI/CD Pipeline
+
+```
+Configura GitHub Actions para este proyecto.
+Necesito:
+- Lint y tests en cada PR
+- Build de Docker image en main
+- Deploy automático a staging en main
+- Deploy manual a producción con approval
+```
+
+El orchestrator:
+1. Delega a `@devops` para configurar el pipeline
+2. Te reporta el workflow creado
+
+## Kubernetes
+
+```
+Escribe manifiestos de Kubernetes para el servicio de API.
+Incluye: Deployment, Service, Ingress, ConfigMap, Secret.
+```
+
+El orchestrator:
+1. Delega a `@devops` para crear los manifests
+2. Te reporta los archivos creados
+
+## Ejemplo completo
+
+```
+Tú: "Necesito deployar nuestro servicio de API a producción.
+     Stack: Node.js + PostgreSQL + Redis.
+     Infra: Kubernetes en AWS.
+     Incluye: Dockerfile, CI pipeline, y K8s manifests."
+
+Orchestrator:
+  → @devops: crea Dockerfile multi-stage
+  → @devops: crea docker-compose.yml para local
+  → @devops: configura GitHub Actions pipeline
+  → @devops: escribe K8s manifests
+  → @devops: crea Helm chart
+  → Reporta: "Pipeline completo de CI/CD listo para usar."
+```
+
+## Ejemplo real: Deploy a producción
+
+```
+Tú: "Necesito deployar la app a producción.
+     Ya tenemos Dockerfile y docker-compose.
+     Falta: CI pipeline y K8s manifests."
+
+Orchestrator:
+  → @devops: configura GitHub Actions (lint, test, build, deploy)
+  → @devops: escribe K8s Deployment + Service + Ingress
+  → Reporta: "Pipeline y manifests creados. Listo para deploy."
+```
+
+<Aside type="tip">
+Para un Dockerfile simple, decile al orchestrator que use `@devops` directamente. Para pipelines completos con múltiples environments, describí todos los requerimientos de una vez.
+</Aside>

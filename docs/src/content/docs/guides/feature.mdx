@@ -1,0 +1,79 @@
+---
+title: Implementar una Feature
+description: Cómo el orchestrator coordina la implementación de features
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Implementar una Feature
+
+El **orchestrator** se encarga de coordinar todo. Vos le decís qué necesitás y él distribuye el trabajo a los agentes correctos.
+
+## El flujo correcto
+
+No necesitas invocar agentes uno por uno. Decile al orchestrator qué necesitás:
+
+```
+Implementa un sistema de autenticación con JWT para nuestra app Next.js.
+Necesitamos: login, registro, refresh tokens, y middleware de protección.
+Usa PostgreSQL para sesiones.
+```
+
+El orchestrator:
+1. Delega el diseño a `@architect`
+2. Delega la implementación a `@dev`
+3. Delega los tests a `@qa`
+4. Delega la revisión a `@reviewer`
+5. Te reporta el resultado completo
+
+## Ejemplo: Sistema de pagos
+
+```
+Tú: "Necesito agregar pagos con Stripe. 
+     Debe soportar: cobros únicos, suscripciones, y webhooks.
+     Valida que todo esté testado y revisado por seguridad."
+
+Orchestrator:
+  → @architect: diseña PaymentService, webhook handler, retry logic
+  → @dev: implementa según el diseño
+  → @qa: tests: pago exitoso, fallido, webhook retry, refund
+  → @reviewer: revisa por seguridad (webhook signature, idempotency)
+  → Reporta: "Feature completa. 2 issues de seguridad corregidos."
+```
+
+## Ejemplo: Endpoint simple
+
+Para tareas simples, el orchestrator usa un solo agente:
+
+```
+Tú: "Crea un endpoint GET /api/health que retorne { status: 'ok' }"
+
+Orchestrator:
+  → @dev: crea el endpoint
+  → Reporta: "Endpoint creado en src/routes/health.ts"
+```
+
+## Con command (más rápido)
+
+```
+/feature-delivery Agregar sistema de notificaciones push
+```
+
+El command lanza el orchestrator automáticamente con el flujo completo.
+
+## Cuándo el orchestrator delega a quién
+
+| Necesidad | Agente que usa |
+|---|---|
+| Diseñar arquitectura | `@architect` |
+| Escribir código | `@dev` |
+| Escribir tests | `@qa` |
+| Revisar código | `@reviewer` |
+| Configurar infra | `@devops` |
+| Investigar algo | `@ask` |
+| Buscar código | `@finder` |
+| Planificar | `@planning` |
+
+<Aside type="tip">
+No necesitas saber qué agente hace cada cosa. Decile al orchestrator qué necesitás y él elige los agentes correctos.
+</Aside>

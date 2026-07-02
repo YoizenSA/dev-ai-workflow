@@ -1,0 +1,83 @@
+---
+title: Testing Completo
+description: Cómo el orchestrator coordina testing con estrategia
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Testing Completo
+
+El **orchestrator** coordina testing completo. Le decís qué testear y él distribuye el trabajo al equipo qa-automation.
+
+## Testing simple
+
+```
+Escribe tests unitarios para el UserService.
+Cubre: crear usuario, actualizar, eliminar, buscar por email.
+```
+
+El orchestrator:
+1. Delega a `@qa` para escribir los tests
+2. Te reporta los tests creados
+
+## Testing con estrategia
+
+```
+Testea completamente el flujo de checkout.
+Necesito: estrategia de testing, tests unitarios, de integración, y e2e.
+```
+
+El orchestrator:
+1. Delega a `@qa-analyst` para diseñar la estrategia
+2. Delega a `@qa-finder` para buscar código relacionado
+3. Delega a `@qa-dev` para escribir los tests
+4. Delega a `@qa-reviewer` para revisar la calidad
+5. Te reporta: "25 tests escritos, 92% cobertura, 0 tests frágiles"
+
+## Con command
+
+```
+/qa-automation Testear completamente el flujo de checkout
+```
+
+El command lanza el orchestrator de qa-automation automáticamente.
+
+## Ejemplo real: Flujo de checkout
+
+```
+Tú: "Testea completamente el flujo de checkout.
+     Debe cubrir: agregar al carrito, aplicar descuento, 
+     seleccionar envío, pagar, y confirmar orden."
+
+Orchestrator:
+  → @qa-analyst: estrategia → unit para lógica, integration para API, e2e para UI
+  → @qa-finder: encuentra 15 archivos relacionados con checkout
+  → @qa-dev: escribe 25 tests cubriendo todos los flujos
+  → @qa-reviewer: encuentra 3 tests frágiles, sugiere fixes
+  → Reporta: "25 tests, 92% cobertura, 0 tests frágiles."
+```
+
+## Ejemplo real: API completa
+
+```
+Tú: "Testea toda la API de usuarios.
+     Endpoints: CRUD de usuarios, búsqueda, y autenticación."
+
+Orchestrator:
+  → @qa-analyst: priorizar autenticación > CRUD > búsqueda
+  → @qa-dev: tests para cada endpoint
+  → @qa-reviewer: revisa cobertura y calidad
+  → Reporta: "40 tests, 88% cobertura."
+```
+
+## Tipos de tests
+
+| Tipo | Cuándo usar | Framework |
+|---|---|---|
+| Unit | Lógica de negocio | Jest, Vitest, Go testing |
+| Integration | API endpoints | Supertest, httpexpect |
+| E2E | Flujos completos | Playwright |
+
+<Aside type="tip">
+Para tests de 1-2 funciones, decile al orchestrator que use `@qa` directamente. Usa el equipo qa-automation cuando necesites una estrategia completa.
+</Aside>

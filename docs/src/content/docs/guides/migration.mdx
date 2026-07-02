@@ -1,0 +1,78 @@
+---
+title: Migración de Código
+description: Cómo el orchestrator coordina migraciones entre frameworks
+---
+
+import { Steps, Card, Aside } from '@astrojs/starlight/components';
+
+# Migración de Código
+
+El **orchestrator** coordina migraciones de código. Le decís qué migrar y él distribuye el trabajo al equipo social-refactor.
+
+## Migración completa
+
+```
+Migra el módulo de auth de Angular a React.
+Incluye: login, registro, forgot password, y middleware.
+```
+
+El orchestrator:
+1. Delega a `@migration-scope` para clasificar qué hay que migrar
+2. Delega a `@migration-planner` para crear el plan
+3. Delega a `@dev` para implementar la migración
+4. Delega a `@migration-validator` para validar paridad
+5. Te reporta el resultado
+
+## Migración página por página
+
+```
+Migra el módulo de reportes de Angular a React.
+Son 5 páginas: list, detail, edit, create, delete.
+Migra una por una y valida cada una.
+```
+
+El orchestrator:
+1. Clasifica las 5 páginas
+2. Migra página por página
+3. Valida cada página después de migrarla
+4. Reporta: "5 páginas migradas, 0 regresiones"
+
+## Con command
+
+```
+/social-refactor Migrar el módulo de usuarios de Angular a React
+```
+
+El command lanza el orchestrator de social-refactor automáticamente.
+
+## Ejemplo real: Angular → React
+
+```
+Tú: "Migra el módulo de inventario de Angular a React.
+     Incluye: listado de productos, detalle, edición, y export a CSV."
+
+Orchestrator:
+  → @migration-scope: 12 archivos, 3 componentes, 2 servicios
+  → @migration-planner: migrar servicios primero, luego componentes
+  → @dev: migra cada archivo
+  → @migration-validator: valida paridad de UI y data
+  → Reporta: "Migración completa. 12 archivos migrados, 0 regresiones."
+```
+
+## Ejemplo real: ASPX → WebApi + Angular
+
+```
+Tú: "Migra el módulo de facturación de ASPX a WebApi + Angular.
+     El módulo actual usa WebForms con code-behind."
+
+Orchestrator:
+  → @migration-scope: clasifica componentes ASPX y lógica en code-behind
+  → @migration-planner: crear API REST + componente Angular
+  → @dev: implementa API y componente
+  → @migration-validator: valida que la funcionalidad se mantuvo
+  → Reporta: "Migración completa. API y frontend nuevos funcionando."
+```
+
+<Aside type="tip">
+Para migraciones pequeñas (1-2 archivos), decile al orchestrator que use `@dev` directamente. Usa el equipo social-refactor para migraciones grandes.
+</Aside>
