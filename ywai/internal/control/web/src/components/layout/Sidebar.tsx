@@ -4,10 +4,10 @@ import {
 	Cloud,
 	LayoutGrid,
 	LineChart,
+	MessageSquare,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Settings,
-	Sparkles,
 	Store,
 	Workflow,
 } from "lucide-react";
@@ -30,11 +30,12 @@ const NAV_ITEMS = [
 		label: "Kanban",
 		icon: <LayoutGrid size={20} />,
 	},
-	{
-		path: "/missions",
-		label: "Missions",
-		icon: <Sparkles size={20} />,
-	},
+	// ponytail: missions hidden — use kanban board instead
+	// {
+	// 	path: "/missions",
+	// 	label: "Missions",
+	// 	icon: <Sparkles size={20} />,
+	// },
 	{
 		path: "/workflows",
 		label: "Workflows",
@@ -64,6 +65,11 @@ const NAV_ITEMS = [
 		path: "/ado",
 		label: "Azure DevOps",
 		icon: <Cloud size={20} />,
+	},
+	{
+		path: "/chat",
+		label: "Chat",
+		icon: <MessageSquare size={20} />,
 	},
 ];
 

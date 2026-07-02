@@ -733,3 +733,19 @@ export interface McpHealthItem {
 export interface McpHealthResponse {
 	servers: McpHealthItem[];
 }
+
+// ─── Git API ──────────────────────────────────────────────────────────────
+
+export interface GitStatus {
+	branch: string;
+	ahead: number;
+	behind: number;
+	changed_files: number;
+	untracked_files: number;
+	dirty: boolean;
+	remote_url?: string;
+}
+
+export const gitApi = {
+	getStatus: () => request<GitStatus>("/api/git/status"),
+};

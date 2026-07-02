@@ -13,7 +13,6 @@ import {
 	Star,
 	Trash2,
 	User,
-	Users,
 	Wrench,
 } from "lucide-react";
 import { useUrlTab } from "../../hooks/useUrlTab";
@@ -51,11 +50,12 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "General",
 		icon: <SettingsIcon size={16} />,
 	},
-	{
-		id: "roles",
-		label: "Role Defaults",
-		icon: <Users size={16} />,
-	},
+	// ponytail: role defaults hidden — configure per-agent instead
+	// {
+	// 	id: "roles",
+	// 	label: "Role Defaults",
+	// 	icon: <Users size={16} />,
+	// },
 	{
 		id: "agents",
 		label: "Agents",

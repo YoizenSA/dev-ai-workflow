@@ -8,6 +8,7 @@ import Settings from './components/settings/Settings'
 import McpStore from './components/mcp-store/McpStore'
 import AdoConfig from './components/ado-config/AdoConfig'
 import WorkflowEditor from './components/workflows/WorkflowEditor'
+import Chat from './components/chat/Chat'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/mcp-store" element={<McpStore />} />
           <Route path="/ado" element={<AdoConfig />} />
+          <Route path="/chat" element={<Chat />} />
         </Routes>
       </Layout>
     </Router>

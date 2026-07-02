@@ -128,7 +128,13 @@ func (s *Server) buildRoutes() {
 	// ─── Settings maintenance API (SDD cleanup, etc.) ───────────
 	s.registerSettingsRoutes()
 
+	// ─── Git status API ─────────────────────────────────────────
+	s.registerGitRoutes()
+
 	// ─── React SPA ──────────────────────────────────────────────
+	// Chat proxy (SSE to OpenCode server)
+	s.registerChatRoutes()
+
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)
 }

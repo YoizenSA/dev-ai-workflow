@@ -915,3 +915,26 @@
 		min-height: 0;
 	}
 }
+
+/* ─── Git status badge ─────────────────────────────────────────────── */
+
+.git-status-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	font-size: 0.72rem;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.git-clean {
+	background: var(--color-success-soft, #d1fae5);
+	color: var(--color-success, #065f46);
+}
+
+.git-dirty {
+	background: var(--color-warning-soft, #fef3c7);
+	color: var(--color-warning, #92400e);
+}
