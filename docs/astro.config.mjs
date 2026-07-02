@@ -26,6 +26,14 @@ export default defineConfig({
             { label: 'Testing', slug: 'guides/testing' },
             { label: 'CI/CD', slug: 'guides/cicd' },
             { label: 'Refactoring', slug: 'guides/refactoring' },
+            {
+              label: 'Personalizar',
+              items: [
+                { label: 'System Prompts', slug: 'guides/system-prompts' },
+                { label: 'Escribir Skills', slug: 'guides/writing-skills' },
+                { label: 'Custom Agents', slug: 'guides/custom-agents' },
+              ],
+            },
           ],
         },
         {

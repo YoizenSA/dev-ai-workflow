@@ -1,0 +1,178 @@
+---
+title: Personalizar Agentes
+description: Cómo crear y personalizar agentes para tu proyecto
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+# Personalizar Agentes
+
+## Qué podés personalizar
+
+| Qué | Archivo | Qué hace |
+|---|---|---|
+| **Comportamiento** | `AGENT.md` | System prompt del agente |
+| **Permisos** | `tools.json` | Qué herramientas puede usar |
+| **Skills** | `skills.txt` | Qué skills tiene vinculados |
+
+## Estructura de un agente
+
+```
+~/.config/opencode/agents/mi-agente/
+├── AGENT.md        # System prompt
+├── tools.json      # Permisos
+└── skills.txt      # Skills vinculados
+```
+
+## Crear un agente nuevo
+
+<Steps>
+
+1. **Copiar un agente existente** como base
+   ```bash
+   cp -r ~/.config/opencode/agents/dev ~/.config/opencode/agents/mi-agente
+   ```
+
+2. **Editar `AGENT.md`** para el nuevo rol
+   ```markdown
+   # Mi Agente
+   
+   You do X, Y, and Z.
+   
+   ## When to Use
+   ...
+   ```
+
+3. **Editar `tools.json`** para permisos
+   ```json
+   {
+     "read": true,
+     "write": true,
+     "bash": false,
+     "delegate": false
+   }
+   ```
+
+4. **Editar `skills.txt`** para skills
+   ```
+   typescript
+   react-19
+   mi-skill-personalizado
+   ```
+
+5. **Reiniciar opencode**
+
+</Steps>
+
+## tools.json
+
+Define qué herramientas puede usar el agente:
+
+```json
+{
+  "read": true,      // Leer archivos
+  "write": true,     // Escribir archivos
+  "bash": true,      // Ejecutar comandos
+  "delegate": false  // Delegar a otros agentes
+}
+```
+
+### Ejemplos de permisos
+
+| Agente | read | write | bash | delegate |
+|---|---|---|---|---|
+| dev | ✅ | ✅ | ✅ | ❌ |
+| qa | ✅ | ✅ | ✅ | ❌ |
+| architect | ✅ | ❌ | ❌ | ✅ |
+| reviewer | ✅ | ❌ | ❌ | ❌ |
+| ask | ✅ | ❌ | ❌ | ❌ |
+| finder | ✅ | ❌ | ❌ | ❌ |
+
+## skills.txt
+
+Lista de skills que el agente tiene disponibles:
+
+```
+typescript
+react-19
+tailwind-4
+git-commit
+mi-skill-personalizado
+```
+
+### Cuándo agregar un skill
+
+| Situación | Acción |
+|---|---|
+| El agente usa una tecnología | Agregar skill |
+| El agente no necesita un skill | Quitar skill |
+| Tenés un skill personalizado | Agregar al agente correcto |
+
+## Ejemplo: Agente de documentación
+
+```markdown
+# Docs Agent
+
+You write and maintain project documentation.
+
+## When to Use
+
+| Trigger | Example |
+|---|---|
+| Write docs | "Write README for this module" |
+| Update docs | "Update API docs after changes" |
+| Review docs | "Check if docs are up to date" |
+
+## Principles
+
+- Docs should be concise
+- Use examples over prose
+- Keep docs close to code
+
+## What You Don't Do
+
+- ❌ Implement code → @dev
+- ❌ Write tests → @qa
+- ❌ Design architecture → @architect
+```
+
+## Ejemplo: Agente de migración
+
+```markdown
+# Migration Agent
+
+You help migrate code between frameworks.
+
+## When to Use
+
+| Trigger | Example |
+|---|---|
+| Migrate framework | "Migrate from Angular to React" |
+| Update dependencies | "Upgrade to Next.js 14" |
+| Refactor patterns | "Migrate to repository pattern" |
+
+## Workflow
+
+1. ANALYZE   → Understand current code
+2. PLAN      → Create migration plan
+3. IMPLEMENT → Migrate incrementally
+4. VALIDATE  → Verify functionality
+5. CLEANUP   → Remove old code
+
+## What You Don't Do
+
+- ❌ Migrate everything at once
+- ❌ Skip validation
+- ❌ Remove old code before validating
+```
+
+## Dónde guardar agentes
+
+| Ubicación | Para qué |
+|---|---|
+| `~/.config/opencode/agents/` | Agentes globales |
+| `mi-proyecto/.agents/` | Agentes del proyecto |
+
+<Aside type="tip">
+El mejor agente es el que tiene un rol claro, límites explícitos, y skills correctos. No necesitás crear agentes nuevos — personalizá los existentes.
+</Aside>

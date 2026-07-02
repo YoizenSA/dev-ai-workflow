@@ -1,0 +1,275 @@
+---
+title: Escribir Skills
+description: Cómo crear skills personalizados para tus agentes
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+# Escribir Skills
+
+## Qué es un skill
+
+Un skill es un archivo `SKILL.md` que le dice a un agente cómo usar una tecnología específica. Se carga automáticamente cuando el agente lo necesita.
+
+## Estructura de un SKILL.md
+
+```markdown
+---
+name: mi-skill
+description: Descripción corta del skill
+triggers:
+  - "patrón que activa el skill"
+---
+
+# Mi Skill
+
+## Instrucciones
+
+<Qué hacer cuando este skill se activa>
+
+## Ejemplos
+
+<Código de ejemplo>
+
+## Anti-patterns
+
+<Qué NO hacer>
+```
+
+## Ejemplo: API REST Skill
+
+```markdown
+---
+name: mi-api
+description: Patrones para nuestra API REST
+triggers:
+  - "api"
+  - "endpoint"
+  - "rest"
+---
+
+# Mi API
+
+## Endpoints
+
+- Siempre usar REST convencional
+- Respuestas en formato { data, error }
+- Paginación con cursor, no offset
+
+## Auth
+
+- JWT en header Authorization
+- Refresh tokens rotativos
+
+## Errores
+
+- 400 para validación
+- 401 para auth
+- 403 para permisos
+- 404 para no encontrado
+
+## Ejemplo
+
+```typescript
+// ✅ Correcto
+app.get('/api/users', async (req, res) => {
+  const { cursor } = req.query;
+  const users = await UserService.list({ cursor });
+  res.json({ data: users, error: null });
+});
+
+// ❌ Incorrecto
+app.get('/api/users', async (req, res) => {
+  const users = await UserService.getAll();
+  res.json(users); // Sin wrapper { data, error }
+});
+```
+
+## Anti-patterns
+
+- ❌ Retornar arrays directamente
+- ❌ Usar offset para paginación
+- ❌ Hardcodear códigos de error
+```
+
+## Ejemplo: Testing Skill
+
+```markdown
+---
+name: mi-testing
+description: Patrones de testing para nuestro proyecto
+triggers:
+  - "test"
+  - "testing"
+  - "vitest"
+---
+
+# Mi Testing
+
+## Convenciones
+
+- Usar Vitest
+- AAA pattern (Arrange, Act, Assert)
+- Tests independientes
+- Nombres descriptivos
+
+## Ejemplo
+
+```typescript
+// ✅ Correcto
+describe('UserService', () => {
+  describe('createUser', () => {
+    it('should create user with valid data', async () => {
+      // Arrange
+      const userData = { email: 'test@example.com', name: 'Test' };
+      
+      // Act
+      const user = await UserService.create(userData);
+      
+      // Assert
+      expect(user.email).toBe(userData.email);
+      expect(user.name).toBe(userData.name);
+    });
+
+    it('should throw ValidationError for invalid email', async () => {
+      // Arrange
+      const userData = { email: 'invalid', name: 'Test' };
+      
+      // Act & Assert
+      await expect(UserService.create(userData))
+        .rejects.toThrow(ValidationError);
+    });
+  });
+});
+```
+
+## Anti-patterns
+
+- ❌ Tests dependientes entre sí
+- ❌ Nombres genéricos como "test1"
+- ❌ Múltiples asertaciones en un test
+```
+
+## Ejemplo: Componente React Skill
+
+```markdown
+---
+name: mi-component
+description: Patrones para componentes React
+triggers:
+  - "component"
+  - "react"
+  - "tsx"
+---
+
+# Mi Componente React
+
+## Estructura
+
+```typescript
+// src/components/UserCard.tsx
+import { cn } from '@/lib/utils';
+
+interface UserCardProps {
+  user: User;
+  className?: string;
+}
+
+export function UserCard({ user, className }: UserCardProps) {
+  return (
+    <div className={cn('rounded-lg border p-4', className)}>
+      <h3>{user.name}</h3>
+      <p>{user.email}</p>
+    </div>
+  );
+}
+```
+
+## Convenciones
+
+- Props como interface, no type
+- Export nombrado, no default
+- cn() para combinar clases
+- Componentes pequeños y enfocados
+
+## Anti-patterns
+
+- ❌ Componentes con más de 100 líneas
+- ❌ Lógica de negocio en componentes
+- ❌ Props con más de 5 propiedades
+```
+
+## Cómo crear un skill
+
+<Steps>
+
+1. **Crear la carpeta** del skill
+   ```bash
+   mkdir -p mi-proyecto/.agents/skills/mi-skill
+   ```
+
+2. **Escribir el SKILL.md**
+   ```bash
+   # Seguir la estructura de arriba
+   ```
+
+3. **Registrar el skill**
+   ```bash
+   ywai skill-registry --cwd /mi/proyecto
+   ```
+
+4. **Verificar** que se cargó
+   ```bash
+   ywai skills | grep mi-skill
+   ```
+
+</Steps>
+
+## Trucos para buenos skills
+
+### Triggers específicos
+
+```
+❌ triggers:
+  - "code"
+  
+✅ triggers:
+  - "api"
+  - "endpoint"
+  - "rest"
+```
+
+### Ejemplos con código real
+
+```
+❌ "Use proper error handling"
+✅ Ejemplo:
+```typescript
+try {
+  await UserService.create(data);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    res.status(400).json({ error: error.message });
+  }
+  throw error;
+}
+```
+
+### Anti-patterns explícitos
+
+```
+❌ "Don't do bad things"
+✅ "❌ Retornar arrays directamente → Usar { data, error }"
+```
+
+## Dónde guardar skills
+
+| Ubicación | Para qué |
+|---|---|
+| `~/.config/opencode/skills/` | Skills globales (todos los proyectos) |
+| `mi-proyecto/.agents/skills/` | Skills del proyecto |
+| `ywai/skills/` | Skills que ywai instala |
+
+<Aside type="tip">
+Los mejores skills tienen: triggers específicos, ejemplos de código real, y anti-patterns explícitos.
+</Aside>
