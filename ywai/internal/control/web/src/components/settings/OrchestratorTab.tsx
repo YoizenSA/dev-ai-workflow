@@ -26,13 +26,14 @@ import {
 	Save,
 } from "lucide-react";
 import { useAgentsDiagramStore } from "../../stores/agentsDiagramStore";
-import { configApi, missionsApi } from "../../api/client";
+import { configApi, missionsApi, profilesApi } from "../../api/client";
 import type {
 	AgentGraphNode,
 	AgentGraphEdge,
 	DelegationRule,
 	DelegationTrigger,
 	ModelInfo,
+	OrchestratorProfile,
 } from "../../api/types";
 import Modal from "../shared/Modal";
 import ImportAgentsModal from "./ImportAgentsModal";
@@ -312,6 +313,93 @@ export default function OrchestratorTab() {
 	// toggle groups on from the sidebar.
 	const [hiddenGroups, setHiddenGroups] = useState<Set<string> | null>(null);
 
+	// ─── Orchestrator Profiles ──────────────────────────────────────────────────
+
+	const [profiles, setProfiles] = useState<Record<string, OrchestratorProfile>>({});
+	const [activeProfile, setActiveProfile] = useState<string>("default");
+	const [saveAsOpen, setSaveAsOpen] = useState(false);
+	const [saveAsName, setSaveAsName] = useState("");
+
+	useEffect(() => {
+		loadProfiles();
+	}, []);
+
+	const loadProfiles = useCallback(async () => {
+		try {
+			const resp = await profilesApi.list();
+			setProfiles(resp.profiles ?? {});
+			setActiveProfile(resp.active ?? "default");
+		} catch {
+			// Profiles API may not be available yet; silently degrade.
+		}
+	}, []);
+
+	const handleSelectProfile = useCallback(
+		async (name: string) => {
+			try {
+				await profilesApi.activate(name);
+				setActiveProfile(name);
+				// Reload the graph to pick up profile config changes.
+				load();
+			} catch (e) {
+				console.error("Failed to switch profile:", e);
+			}
+		},
+		[load],
+	);
+
+	const handleSaveProfile = useCallback(async () => {
+		const currentName = activeProfile;
+		if (!currentName) return;
+		try {
+			// Collect current agent models from the graph.
+			const agents: Record<string, { model: string }> = {};
+			for (const n of graph.nodes) {
+				if (n.model) {
+					agents[n.id] = { model: n.model };
+				}
+			}
+			await profilesApi.update(currentName, { agents });
+			await loadProfiles();
+		} catch (e) {
+			console.error("Failed to save profile:", e);
+		}
+	}, [activeProfile, graph.nodes, loadProfiles]);
+
+	const handleSaveProfileAs = useCallback(async () => {
+		const name = saveAsName.trim();
+		if (!name) return;
+		try {
+			const agents: Record<string, { model: string }> = {};
+			for (const n of graph.nodes) {
+				if (n.model) {
+					agents[n.id] = { model: n.model };
+				}
+			}
+			await profilesApi.save({ name, agents });
+			setSaveAsOpen(false);
+			setSaveAsName("");
+			await loadProfiles();
+			await handleSelectProfile(name);
+		} catch (e) {
+			console.error("Failed to save profile as:", e);
+		}
+	}, [saveAsName, graph.nodes, loadProfiles, handleSelectProfile]);
+
+	const handleDeleteProfile = useCallback(async () => {
+		if (activeProfile === "default") return;
+		try {
+			await profilesApi.delete(activeProfile);
+			await loadProfiles();
+			setActiveProfile("default");
+			load();
+		} catch (e) {
+			console.error("Failed to delete profile:", e);
+		}
+	}, [activeProfile, loadProfiles, load]);
+
+	// ─── End Profiles ────────────────────────────────────────────────────────────
+
 	useEffect(() => {
 		load();
 	}, [load]);
@@ -449,6 +537,50 @@ export default function OrchestratorTab() {
 	return (
 		<div className="orchestrator-tab">
 			<div className="orchestrator-toolbar">
+				{/* Profile selector */}
+				<div className="orch-profiles">
+					<label className="field-label-sm">Profile:</label>
+					<select
+						className="form-select form-select-sm"
+						value={activeProfile}
+						onChange={(e) => handleSelectProfile(e.target.value)}
+					>
+						{Object.keys(profiles).map((name) => (
+							<option key={name} value={name}>
+								{name}
+							</option>
+						))}
+						{Object.keys(profiles).length === 0 && (
+							<option value="default">default</option>
+						)}
+					</select>
+					<button
+						className="btn btn-sm btn-ghost"
+						onClick={handleSaveProfile}
+						title="Save current config to active profile"
+					>
+						Save
+					</button>
+					<button
+						className="btn btn-sm btn-ghost"
+						onClick={() => setSaveAsOpen(true)}
+						title="Save current config as a new profile"
+					>
+						Save As…
+					</button>
+					{activeProfile !== "default" && (
+						<button
+							className="btn btn-sm btn-ghost"
+							onClick={handleDeleteProfile}
+							title="Delete this profile"
+						>
+							Delete
+						</button>
+					)}
+				</div>
+
+				<span className="separator" />
+
 				<button className="btn btn-sm btn-primary" onClick={() => setNewAgentOpen(true)}>
 					<Plus size={14} /> New agent
 				</button>
@@ -609,6 +741,31 @@ export default function OrchestratorTab() {
 			</Modal>
 
 			<ImportAgentsModal open={importOpen} onClose={() => setImportOpen(false)} onDone={load} />
+			<Modal open={saveAsOpen} onClose={() => setSaveAsOpen(false)} title="Save Profile As">
+				<div className="modal-form">
+					<label className="field-label">Profile name</label>
+					<input
+						className="form-input"
+						type="text"
+						value={saveAsName}
+						onChange={(e) => setSaveAsName(e.target.value)}
+						placeholder="my-profile"
+						autoFocus
+					/>
+					<div className="modal-actions">
+						<button className="btn btn-sm btn-ghost" onClick={() => setSaveAsOpen(false)}>
+							Cancel
+						</button>
+						<button
+							className="btn btn-sm btn-primary"
+							onClick={handleSaveProfileAs}
+							disabled={!saveAsName.trim()}
+						>
+							Save
+						</button>
+					</div>
+				</div>
+			</Modal>
 		</div>
 	);
 }

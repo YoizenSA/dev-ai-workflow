@@ -457,6 +457,37 @@ export const configApi = {
 		}),
 };
 
+// ─── Orchestrator Profiles API ────────────────────────────────────────────────
+
+export const profilesApi = {
+	list: () => request<OrchestratorProfilesResponse>("/api/profiles"),
+	getActive: () => request<{ active: string }>("/api/profiles/active"),
+	save: (profile: {
+		name: string;
+		display_name?: string;
+		description?: string;
+		agents?: Record<string, { model: string }>;
+	}) =>
+		request<OrchestratorProfilesResponse["profiles"][string]>("/api/profiles", {
+			method: "POST",
+			body: JSON.stringify(profile),
+		}),
+	update: (
+		name: string,
+		profile: { display_name?: string; description?: string; agents?: Record<string, { model: string }> },
+	) =>
+		request<OrchestratorProfilesResponse["profiles"][string]>(`/api/profiles/${encodeURIComponent(name)}`, {
+			method: "PUT",
+			body: JSON.stringify(profile),
+		}),
+	delete: (name: string) =>
+		fetch(`${BASE}/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" }).then((r) => {
+			if (!r.ok) throw new Error(`${r.status}`);
+		}),
+	activate: (name: string) =>
+		request<{ active: string }>(`/api/profiles/activate/${encodeURIComponent(name)}`, { method: "POST" }),
+};
+
 // ─── Memories API ───────────────────────────────────────────────────────────
 
 export const memoriesApi = {
