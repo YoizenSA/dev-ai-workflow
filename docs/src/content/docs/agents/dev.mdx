@@ -1,0 +1,103 @@
+---
+title: Dev Agent
+description: Agente de implementación — código, bugs, refactoring
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Dev Agent
+
+El agente de desarrollo es tu herramienta principal para **escribir código, arreglar bugs y hacer refactoring**. Implementa features, corrige errores y refactoriza siguiendo los patrones existentes del códigobase.
+
+<Badge text="Rol: Implementador" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Implementar features | "Implementa el login con JWT" |
+| Arreglar bugs | "Fix the null pointer in UserService" |
+| Refactoring | "Refactor the database layer to use repositories" |
+| Agregar validación | "Add form validation to the registration" |
+| Crear endpoints | "Create a new API endpoint for user profile" |
+
+## Flujo de trabajo
+
+El agente Dev sigue un ciclo disciplinado:
+
+<Steps>
+
+1. **UNDERSTAND** — Lee archivos relacionados, entiende el contexto antes de tocar nada
+2. **PLAN** — Lista los cambios que va a hacer (breve)
+3. **IMPLEMENT** — Hace los cambios, uno atómico a la vez
+4. **VERIFY** — Corre tests, lint, type-check
+5. **CLEANUP** — Elimina código muerto, TODOs, debug statements
+
+</Steps>
+
+## Principios fundamentales
+
+### Siempre
+- Usa tipos e interfaces existentes (no reinventes)
+- Maneja errores explícitamente (sin fallos silenciosos)
+- Agrega comentarios solo para el "por qué", no el "qué"
+- Mantén funciones pequeñas y enfocadas
+- Usa nombres descriptivos de variables
+
+### Nunca
+- Deja `console.log` / `fmt.Println` de debug
+- Agrega `// TODO` sin referencia a issue
+- Rompas tests existentes
+- Introduzcas dependencias nuevas sin verificar las existentes
+
+## Handoff (reporte al orquestador)
+
+Cuando termina, el agente Dev reporta con este formato estándar:
+
+```
+Status: done | blocked | needs-decision
+Did: <resumen de lo que hizo>
+Artifacts: <archivos cambiados, comandos ejecutados, resultado>
+Next suggested: @dev | @qa | @reviewer | @devops | close
+Notes/risks>: <follow-ups, suposiciones, bloqueos>
+```
+
+## Ejemplo de uso
+
+```
+@dev Implementa la funcionalidad de cambio de contraseña.
+Debe validar la contraseña actual, verificar que la nueva sea 
+diferente, y tener mínimo 8 caracteres. Usa el patrón existente 
+de validación en src/validators/.
+```
+
+<Aside type="tip">
+El agente Dev trabaja mejor cuando le das contexto específico: qué archivos tocar, qué patrones seguir, y qué restricciones tiene.
+</Aside>
+
+## Límites
+
+- ✅ Leer, escribir y editar código
+- ✅ Correr tests y comandos de build
+- ✅ Debuggear y arreglar issues
+- ✅ Refactorizar código existente
+- ❌ NO toma decisiones de arquitectura (eso es `@architect`)
+- ❌ NO revisa su propio código (eso es `@reviewer`)
+- ❌ NO diseña estrategia de testing (eso es `@qa`)
+
+## Skills que usa
+
+| Skill | Cuándo |
+|---|---|
+| `typescript` | Al escribir código TS |
+| `tailwind-4` | Al estilizar componentes |
+| `git-commit` | Al hacer commits |
+| `diagnosing-bugs` | Al debuggear issues |
+| `codebase-design` | Al refactorizar |
+
+## Recuperación de errores
+
+Cuando se atasca:
+1. **Build falla**: Lee el error, arregla la causa raíz (no síntomas). Revisa imports, tipos, dependencias.
+2. **Tests fallan**: Entiende la asertación — ¿es un bug de lógica o un problema de setup? Arregla el código, nunca el test.
+3. **Requisitos poco claros**: Reporta `needs-decision`. No adivines.

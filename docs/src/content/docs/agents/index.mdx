@@ -1,85 +1,120 @@
 ---
 title: Agentes
-description: Agentes preconfigurados de ywai — roles, permisos, composabilidad y delegación
+description: Conoce cada agente, qué hace y cuándo usarlo
 ---
 
-## ¿Qué son los agentes?
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
 
-ywai viene con 6 agentes preconfigurados con roles específicos. Cada agente tiene su propio system prompt, permisos de herramientas y skills vinculados que definen su alcance y capacidades.
+# Agentes
 
-## Los 6 agentes
+ywai te da acceso a **agentes especializados** que trabajan como un equipo. Cada agente tiene un rol claro y sabe exactamente qué puede y qué no puede hacer.
 
-| Agente | Rol | Mejor para |
-|--------|-----|------------|
-| `ask` | Investigación y Q&A | Preguntas rápidas, explicaciones, investigación, análisis |
-| `dev` | Desarrollador | Implementación, coding, debugging, refactorización |
-| `qa` | Ingeniero de calidad | Estrategia de tests, escribir tests, cobertura |
-| `architect` | Arquitecto | Decisiones de diseño, patrones, arquitectura de sistemas |
-| `reviewer` | Code Reviewer | PR reviews, finding bugs, security audits |
-| `devops` | DevOps | CI/CD, deployments, Docker, K8s, monitoreo |
+## El equipo
 
-## Composabilidad de agentes
+| Agente | Rol | Para qué sirve |
+|---|---|---|
+| [**dev**](/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
+| [**qa**](/agents/qa) | QA Engineer | Tests, cobertura, validación |
+| [**architect**](/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
+| [**reviewer**](/agents/reviewer) | Revisor | Code review, bugs, seguridad |
+| [**devops**](/agents/devops) | DevOps | CI/CD, Docker, K8s, despliegues |
+| [**ask**](/agents/ask) | Investigador | Preguntas, análisis, explicaciones |
 
-Los agentes se encadenan en secuencia formando un pipeline de desarrollo completo:
+## Cómo usarlos
+
+En opencode, usa `@nombre-del-agente` seguido de tu tarea:
 
 ```
-ask → architect → dev → qa → reviewer → devops
+@dev Implementa el endpoint de login con JWT
+@qa Escribe tests para el servicio de autenticación
+@architect ¿Qué patrón usamos para el manejo de estado?
+@reviewer Revisa el PR del feature de pagos
+@devops Crea un Dockerfile para el servicio de Node.js
+@ask Cómo funciona el middleware de auth actual?
 ```
 
-1. **ask** investiga y recopila información
-2. **architect** diseña la solución
-3. **dev** implementa el código
-4. **qa** escribe y ejecuta tests
-5. **reviewer** revisa la calidad
-6. **devops** despliega y monitorea
+## Flujo natural del equipo
 
-El **Orchestrator Agent** coordina este flujo. Cada agente recibe un brief claro con objetivo, contexto, criterios de aceptación y artefactos esperados.
+Los agentes están diseñados para trabajar juntos. Un flujo típico:
 
-## Delegaciones
+```
+@ask (investiga) → @architect (diseña) → @dev (implementa) → @qa (testea) → @reviewer (revisa) → @devops (despliega)
+```
 
-El sistema de delegación permite al orquestador asignar tareas a sub-agentes:
+No tienes que seguir este orden exacto — úsalos según necesites.
 
-- **Síncronas (bloqueantes):** el orquestador espera el resultado antes de continuar
-- **Asíncronas (background):** el sub-agente trabaja en segundo plano mientras el orquestador continúa con otras tareas
+## Ejemplos prácticos
 
-### Formato del brief de delegación
+### Feature nueva
 
-Cada delegación incluye:
-- **Goal**: objetivo de la tarea
-- **Context**: información relevante para el sub-agente
-- **Acceptance Criteria**: condiciones que debe cumplir el resultado
-- **Expected Artifacts**: archivos o documentación que debe generar
-- **Constraints**: restricciones técnicas o de diseño
+```
+Tú: "@architect Necesitamos agregar notificaciones push. 
+     ¿Qué arquitectura recomiendas?"
 
-### Handoff
+@architect: [analiza opciones, propone diseño]
 
-Al finalizar, cada sub-agente reporta:
-- **Status**: `done`, `blocked` o `needs-decision`
-- **Did**: resumen de lo realizado
-- **Artifacts**: archivos modificados, comandos ejecutados
-- **Next suggested**: qué agente debe continuar
-- **Notes**: observaciones, riesgos, bloqueos
+Tú: "@dev Implementa según el diseño de @architect"
 
-## Permisos
+@dev: [escribe el código]
 
-Cada agente tiene permisos específicos de herramientas:
+Tú: "@qa Cubre con tests el nuevo servicio de notificaciones"
 
-| Agente | Permisos |
-|--------|----------|
-| `ask` | Solo lectura |
-| `reviewer` | Solo lectura |
-| `dev` | Lectura y escritura |
-| `qa` | Lectura y escritura |
-| `architect` | Lectura y escritura |
-| `devops` | Lectura y escritura |
-| Orchestrator | Solo delega y coordina — no escribe código |
+@qa: [escribe tests]
 
-## Perfiles
+Tú: "@reviewer Revisa antes de mergear"
 
-Los perfiles de agente viven en `ywai/agents/`. Cada perfil contiene:
+@reviewer: [encuentra 2 issues, sugiere fixes]
 
-- **`AGENT.md`**: system prompt que define el rol y comportamiento
-- **`tools.json`**: permisos de herramientas específicas
-- **`skills.txt`**: skills vinculados al agente
+Tú: "@dev Arregla los issues encontrados por @reviewer"
 
-Se pueden extender los perfiles existentes o crear perfiles personalizados copiando la estructura de `ywai/agents/` y ajustando el system prompt y permisos según las necesidades del proyecto.
+@dev: [corrige]
+
+Tú: "Listo para merge"
+```
+
+### Bug rápido
+
+```
+Tú: "@dev Los usuarios no pueden hacer login con Google, 
+     el callback falla con 500"
+
+@dev: [investiga, encuentra el bug, arregla]
+
+Tú: "@qa Agrega test para este caso"
+
+@qa: [escribe test que previene regresión]
+```
+
+### Pregunta técnica
+
+```
+Tú: "@ask Cuál es la diferencia entre SSR y SSG en Next.js 
+     para nuestro caso de uso?"
+
+@ask: [explica con contexto del proyecto]
+```
+
+## Cuándo usar cada agente
+
+<Card title="Guía rápida" icon="star">
+**Sola pregunta** → `@ask`  
+**Necesitas código** → `@dev`  
+**Necesitas tests** → `@qa`  
+**Decisiones de diseño** → `@architect`  
+**Revisar código** → `@reviewer`  
+**Infraestructura** → `@devops`
+</Card>
+
+## Agentes personalizados
+
+Puedes crear tus propios agentes o modificar los existentes. Cada agente tiene:
+
+- **`AGENT.md`** — El system prompt (instrucciones del agente)
+- **`tools.json`** — Qué herramientas puede usar
+- **`skills.txt`** — Qué skills tiene vinculados
+
+Los perfiles están en `ywai/agents/`. Puedes copiar la estructura y ajustar según las necesidades de tu proyecto.
+
+<Aside type="tip">
+Los agentes funcionan mejor cuando les das contexto específico. En vez de "arregla el bug", di "el endpoint `/api/login` retorna 500 cuando el email tiene caracteres especiales".
+</Aside>

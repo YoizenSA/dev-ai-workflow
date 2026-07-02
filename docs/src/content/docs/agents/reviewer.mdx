@@ -1,0 +1,80 @@
+---
+title: Reviewer Agent
+description: Agente de revisión — code review, bugs, seguridad
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Reviewer Agent
+
+El agente reviewer se especializa en **code review, detección de bugs y auditoría de seguridad**. Revisa PRs, encuentra issues y sugiere mejoras.
+
+<Badge text="Rol: Revisor" variant="danger" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Code review | "Review the PR for the auth feature" |
+| Detección de bugs | "Find potential bugs in the payment flow" |
+| Auditoría de seguridad | "Check for SQL injection vulnerabilities" |
+| Revisión de rendimiento | "Are there N+1 queries in this code?" |
+| Calidad de código | "Is this code following our patterns?" |
+
+## Lo que revisa
+
+### Correctitud
+- ¿El código hace lo que dice hacer?
+- ¿Hay edge cases no cubiertos?
+- ¿Los errores se manejan correctamente?
+
+### Seguridad
+- ¿Hay inyección SQL, XSS, CSRF?
+- ¿Los secretos están hardcodeados?
+- ¿La autenticación/autorización es correcta?
+
+### Rendimiento
+- ¿Hay N+1 queries?
+- ¿Hay operaciones innecesarias en loops?
+- ¿El caching es apropiado?
+
+### Mantenibilidad
+- ¿El código es legible?
+- ¿Sigue los patrones del proyecto?
+- ¿Hay código duplicado?
+
+## Lo que NO hace
+
+- ❌ NO implementa fixes (eso es `@dev`)
+- ❌ NO escribe tests (eso es `@qa`)
+- ❌ NO toma decisiones de arquitectura (eso es `@architect`)
+- ❌ NO configura CI/CD (eso es `@devops`)
+
+## Ejemplo de uso
+
+```
+@reviewer Review the changes in src/auth/ for security issues.
+Focus on: input validation, token handling, and session management.
+Check for OWASP top 10 vulnerabilities.
+```
+
+<Aside type="tip">
+El agente reviewer es más útil después de que `@dev` implementa y `@qa` testea. Úsalo como última línea de defensa antes de merge.
+</Aside>
+
+## Formato de salida
+
+El reviewer reporta findings con severidad:
+
+```
+🔴 CRITICAL: SQL injection in UserRepository.find()
+🟠 HIGH: Missing CSRF token validation
+🟡 MEDIUM: N+1 query in order list
+🟢 LOW: Inconsistent naming convention
+```
+
+## Flujo típico
+
+```
+@dev (implementa) → @qa (testea) → @reviewer (revisa) → @dev (fix issues) → merge
+```

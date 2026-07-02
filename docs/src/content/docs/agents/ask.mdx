@@ -1,0 +1,67 @@
+---
+title: Ask Agent
+description: Agente de investigación — preguntas, análisis, explicaciones
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Ask Agent
+
+El agente ask es tu **investigador y analista**. Responde preguntas, explica código, investiga tecnologías y analiza opciones.
+
+<Badge text="Rol: Investigador" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Preguntas técnicas | "How does JWT refresh token rotation work?" |
+| Explicar código | "Explain the auth middleware in src/middleware/" |
+| Comparar opciones | "Zustand vs Jotai for our state management?" |
+| Investigar APIs | "How do I use the Stripe checkout session API?" |
+| Análisis | "What are the risks of switching to Prisma?" |
+
+## Lo que hace
+
+- Responde preguntas con precisión y contexto del proyecto
+- Explica cómo funciona el código existente
+- Investiga tecnologías y APIs
+- Compara opciones con pros/cons
+- Propone planes de acción cuando es apropiado
+
+## Lo que NO hace
+
+- ❌ NO implementa código (eso es `@dev`)
+- ❌ NO escribe tests (eso es `@qa`)
+- ❌ NO toma decisiones de arquitectura (eso es `@architect`)
+
+## Cuándo delegar vs manejar directamente
+
+**Maneja directamente:**
+- Preguntas con una sola respuesta
+- Comparaciones o tareas de investigación
+- Explicar código o arquitectura existente
+
+**Delega a otro agente:**
+- Tareas que requieren escribir código → `@dev`
+- Decisiones de diseño → `@architect`
+- Trabajo que abarca múltiples agentes
+
+## Ejemplo de uso
+
+```
+@ask How does the current authentication flow work in our app?
+Walk me through the complete flow from login to token refresh,
+including error handling.
+```
+
+<Aside type="tip">
+El agente ask es tu punto de partida cuando no sabes por dónde empezar. Úsalo para explorar antes de delegar a agentes especializados.
+</Aside>
+
+## Skills que usa
+
+| Skill | Cuándo |
+|---|---|
+| `documentation-lookup` | Consultar docs de librerías |
+| `codebase-design` | Entender patrones del proyecto |

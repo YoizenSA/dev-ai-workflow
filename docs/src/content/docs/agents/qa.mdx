@@ -1,0 +1,86 @@
+---
+title: QA Agent
+description: Agente de testing — estrategia, escritura de tests, cobertura
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# QA Agent
+
+El agente QA se especializa en **testing, validación y calidad**. Diseña estrategias de test, escribe tests, valida implementaciones y asegura cobertura completa.
+
+<Badge text="Rol: QA Engineer" variant="caution" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Escribir tests | "Write unit tests for the auth service" |
+| Estrategia de testing | "Design a test strategy for the payment flow" |
+| Validar implementación | "Verify the login feature works correctly" |
+| Análisis de cobertura | "What's our test coverage for the user module?" |
+| Tests de integración | "Write integration tests for the API endpoints" |
+
+## Tipos de tests que escribe
+
+| Tipo | Framework | Ejemplo |
+|---|---|---|
+| Unit tests | Jest / Vitest / Go testing | `test('calculates total with tax')` |
+| Integration tests | Supertest / httpexpect | `test('POST /login returns JWT')` |
+| E2E tests | Playwright | `test('user can complete checkout')` |
+
+## Convenciones de nombres
+
+Los tests deben describir el comportamiento, no la implementación:
+
+```
+✅ "throws ValidationError when email format is invalid"
+✅ "calculates total with tax for items above threshold"
+✅ "returns 401 when token is expired"
+❌ "works"
+❌ "test1"
+❌ "handles edge case"
+```
+
+Agrupa por unidad bajo test → método/comportamiento → escenario.
+
+## Principios fundamentales
+
+- **Tests son documentación viva** — deben explicar qué hace el código
+- **Un test, una asertación lógica** — si necesitas "and", son dos tests
+- **Tests deben ser independientes** — no dependen de orden de ejecución
+- **Tests deben ser rápidos** — unit tests < 100ms, integration < 1s
+- **Tests deben ser determinísticos** — mismo resultado siempre
+
+## Handoff al orquestador
+
+```
+Status: done | blocked | needs-decision
+Tests created: <lista de archivos de test>
+Coverage: <porcentaje si está disponible>
+Gaps found: <áreas sin cobertura>
+Next suggested: @dev (fix failures) | @reviewer | close
+```
+
+## Ejemplo de uso
+
+```
+@qa Write comprehensive tests for the PasswordChangeService.
+Cover: valid change, wrong current password, same password,
+weak new password, and concurrent requests. Use the existing
+test patterns in src/services/__tests__/.
+```
+
+<Aside type="tip">
+El agente QA es más efectivo cuando le dices qué tipos de tests necesitas y qué patrones existen ya en el proyecto.
+</Aside>
+
+## Límites
+
+- ✅ Diseñar estrategia de testing
+- ✅ Escribir tests (unit, integration, e2e)
+- ✅ Analizar cobertura
+- ✅ Identificar gaps de testing
+- ❌ NO implementa features (eso es `@dev`)
+- ❌ NO revisa código por seguridad (eso es `@reviewer`)
+- ❌ NO configura CI/CD (eso es `@devops`)

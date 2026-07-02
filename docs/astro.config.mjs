@@ -18,12 +18,20 @@ export default defineConfig({
         {
           label: 'Agentes',
           items: [
-            { label: 'Agentes', slug: 'agents' },
+            { label: 'Visión general', slug: 'agents' },
+            { label: 'Dev', slug: 'agents/dev' },
+            { label: 'QA', slug: 'agents/qa' },
+            { label: 'Architect', slug: 'agents/architect' },
+            { label: 'Reviewer', slug: 'agents/reviewer' },
+            { label: 'DevOps', slug: 'agents/devops' },
+            { label: 'Ask', slug: 'agents/ask' },
           ],
         },
         {
-          label: 'Workflow Studio',
+          label: 'Herramientas',
           items: [
+            { label: 'Kanban Board', slug: 'kanban' },
+            { label: 'Skills', slug: 'skills' },
             { label: 'Workflow Studio', slug: 'workflows' },
           ],
         },

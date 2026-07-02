@@ -1,86 +1,95 @@
 ---
 title: Workflow Studio
-description: Editor visual de flujos de trabajo multi-agente para diseñar y exportar workflows a opencode
+description: Editor visual de flujos de trabajo multi-agente
 ---
 
-## ¿Qué es?
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
 
-Workflow Studio es un editor visual de flujos de trabajo multi-agente. Permite diseñar workflows en un canvas React Flow y exportarlos a primitivas nativas de opencode (comandos slash y agentes).
+# Workflow Studio
 
-Está diseñado para equipos que quieren definir pipelines de desarrollo repetibles con roles, gates y condiciones, sin escribir configuraciones manuales.
+Workflow Studio es un **editor visual** donde puedes diseñar flujos de trabajo multi-agente en un canvas y exportarlos a opencode.
 
-## Dónde está
+## Abrir Workflow Studio
 
-La interfaz está disponible en la ruta `/workflows` de la UI de control:
-
-```
-http://localhost:5768/workflows
+```bash
+ywai kanban
 ```
 
-## Cómo funciona
+Luego navega a `http://localhost:5768/workflows`.
 
-### 1. Diseña
+## ¿Qué es un workflow?
 
-Arrastra nodos desde la paleta al canvas y conéctalos. Los tipos de nodos disponibles son:
+Un workflow es un **flujo de trabajo** que define cómo colaboran múltiples agentes. Lo diseñas visualmente arrastrando nodos y conectándolos.
 
-| Nodo | Descripción |
-|------|-------------|
-| **SubAgent** | Delega trabajo a un sub-agente (dev, qa, reviewer, etc.) |
-| **AskUserQuestion** | Pausa el flujo para consultar al usuario |
-| **Prompt** | Muestra un mensaje o instrucción |
-| **If/Else** | Rama condicional basada en una condición |
-| **Switch** | Múltiples ramas basadas en el valor de una expresión |
-| **Skill** | Ejecuta una skill específica |
-| **MCP** | Llama a una herramienta MCP |
-| **Group** | Agrupa nodos visualmente |
+Ejemplo: "Para implementar una feature, el architect diseña, el dev implementa, el qa testea, y el reviewer revisa".
 
-### 2. Edita
+## Tipos de nodos
 
-Cada nodo tiene un panel lateral donde se configuran sus propiedades:
-
-- **System prompt**: instrucciones base para el sub-agente
-- **Task prompt**: la tarea específica a realizar
-- **Tools**: herramientas disponibles para el nodo
-- **Model**: modelo a utilizar (opcional)
-- **Options**: opciones adicionales (tiempo límite, etc.)
-- **Conditions**: condiciones para nodos If/Else y Switch
-
-### 3. Valida
-
-El grafo se valida automáticamente contra reglas estructurales:
-
-- Un solo nodo de inicio y un solo nodo de fin
-- Sin ciclos (el grafo debe ser acíclico)
-- Todos los nodos alcanzables desde el inicio
-- Límites de campos respetados
-
-### 4. Exporta
-
-El workflow se exporta a primitivas nativas de opencode:
-
-| Elemento del workflow | Primitiva opencode | Salida |
-|----------------------|--------------------|--------|
-| Workflow completo (entry point) | Slash command | `~/.config/opencode/commands/<name>.md` |
-| Orchestrator persona | Agent | `~/.config/opencode/agents/<name>-orchestrator.md` |
-| Nodos `subAgent` | Agents | `~/.config/opencode/agents/<name>-<slug>.md` |
-| `askUserQuestion` / `ifElse` / `switch` | Routing instructions | Embebido en el system prompt del orchestrator |
-
-El comando slash se invoca como `/<nombre>` en opencode.
-
-## Source of truth vs generated output
-
-| | Source (editable) | Generated (lo que lee opencode) |
+| Nodo | Qué hace | Ejemplo |
 |---|---|---|
-| Ruta | `~/.ywai/workflows/<name>.json` | `~/.config/opencode/{commands,agents}/` |
-| Formato | JSON | Markdown + archivos de agente |
-| Editable | Sí, con Workflow Studio | No — se regenera al exportar |
+| **SubAgent** | Delega a un agente especializado | Dev, QA, Architect |
+| **Prompt** | Instrucción o contexto fijo | "Usa TypeScript estricto" |
+| **If/Else** | Decisión basada en condición | "Si hay errores de tipo, ir a Dev" |
+| **AskUserQuestion** | Pregunta al usuario | "¿Mergeamos a main?" |
+| **Skill** | Aplica un skill específico | react-19, tailwind-4 |
 
-El formato JSON es estable y round-trip: puedes importar un workflow exportado, editarlo y re-exportarlo sin perder información. Si faltan nodos de inicio o fin, se añaden automáticamente al importar.
+## Cómo usarlo
 
-## Backend
+<Steps>
 
-El Workflow Studio está respaldado por:
+1. **Diseña** — Arrastra nodos desde la paleta y conéctalos
+2. **Edita** — Click en cada nodo para configurar sus campos en el panel lateral
+3. **Valida** — El sistema verifica que el grafo sea válido (un inicio, un final, sin ciclos)
+4. **Exporta** — El workflow se convierte en comandos slash y agentes reales en opencode
 
-- **Modelo**: `internal/workflows/` (modelo, store, validador, exporter, importer)
-- **API REST**: `internal/control/workflows.go` (endpoints en `/api/workflows`)
-- **Frontend**: React Flow en la UI de control
+</Steps>
+
+## Ejemplo: Workflow de feature
+
+```
+[Start] → [Architect: Diseña] → [Dev: Implementa] → [QA: Testea] → [If: Tests pasan?]
+                                                                      ├─ Sí → [Reviewer: Revisa] → [End]
+                                                                      └─ No → [Dev: Arregla] → [QA: Testea]
+```
+
+Este workflow:
+1. El architect diseña la solución
+2. El dev la implementa
+3. El qa la testea
+4. Si los tests pasan, el reviewer revisa
+5. Si no, el dev arregla y vuelve a testear
+
+## Qué se exporta a opencode
+
+| Workflow element | opencode primitive | Output |
+|---|---|---|
+| Workflow completo | Slash command | `~/.config/opencode/commands/<name>.md` |
+| Orchestrator persona | Agent | `~/.config/opencode/agents/<name>-orchestrator.md` |
+| Nodos SubAgent | Agents | `~/.config/opencode/agents/<name>-<slug>.md` |
+| If/Else / AskUser | Routing instructions | Embed in orchestrator prompt |
+
+## Importar workflows
+
+Puedes importar un workflow existente:
+
+1. Click en "Import" en la toolbar
+2. Pega o sube el `workflow.json`
+3. El workflow aparece en el canvas listo para editar
+
+## Validación
+
+El sistema valida automáticamente:
+- ✅ Nodo de inicio y final presentes
+- ✅ Sin ciclos en el grafo
+- ✅ Todos los nodos tienen los campos requeridos
+- ✅ Nombres dentro de límites de caracteres
+
+## Guardar y reutilizar
+
+- **Guardar**: Click en "Save" — se guarda en `~/.ywai/workflows/<name>.json`
+- **Reutilizar**: Importa el JSON en otro proyecto
+- **Compartir**: El JSON es portable, se puede commit al repo
+
+<Aside type="tip">
+Workflow Studio es ideal para flujos de trabajo recurrentes que tu equipo usa seguido. Diseña una vez, exporta, y todo el equipo lo usa como un comando slash.
+</Aside>

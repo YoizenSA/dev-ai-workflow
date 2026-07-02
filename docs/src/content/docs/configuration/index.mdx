@@ -1,83 +1,181 @@
 ---
 title: Configuración
-description: Opciones de configuración de ywai — presets, scopes, agentes soportados y comandos de diagnóstico
+description: Cómo configurar ywai y personalizar el comportamiento de los agentes
 ---
 
-## Presets de instalación
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
 
-ywai ofrece varios presets para adaptar la instalación a diferentes necesidades:
+# Configuración
 
-| Preset | Descripción |
-|--------|-------------|
-| `full-gentleman` (default) | Instalación completa con gentle-ai + ecosistema + todos los skills extra |
-| `ecosystem-only` | Solo el ecosistema gentle-ai, sin skills adicionales |
-| `minimal` | Lo mínimo necesario para funcionar |
-| `custom` | Selección manual de componentes |
+Guía para configurar ywai y personalizar el comportamiento de tus agentes.
 
-```bash
-# Usar un preset específico
-ywai install --preset minimal
-ywai install --preset ecosystem-only
+## Estructura de configuración
+
+Cuando ejecutas `ywai install`, se crean estos archivos:
+
+```
+~/.config/opencode/
+├── agents/                 # Perfiles de agentes
+│   ├── dev.md
+│   ├── qa.md
+│   ├── architect.md
+│   ├── reviewer.md
+│   ├── devops.md
+│   └── ask.md
+├── skills/                 # Skills instalados
+│   ├── typescript/
+│   ├── react-19/
+│   ├── tailwind-4/
+│   └── ...
+└── commands/               # Comandos slash
 ```
 
-## Scopes
+## Perfiles de agentes
 
-Los scopes determinan dónde se instalan los skills:
+Cada agente tiene un perfil con tres archivos:
 
-| Scope | Descripción |
-|-------|-------------|
-| `global` (default) | Instala skills globalmente para todos los proyectos |
-| `workspace` | Instala skills solo en el proyecto actual |
+### AGENT.md — System prompt
 
-```bash
-# Instalar solo en el proyecto actual
-ywai install --scope workspace
+El archivo principal que define cómo se comporta el agente. Contiene:
+- Rol y responsabilidades
+- Principios de trabajo
+- Límites (qué puede y qué no puede hacer)
+- Formato de handoff al orquestador
+
+**Ejemplo (dev):**
+```markdown
+# Dev Agent
+
+You implement features, fix bugs, and refactor.
+Read before write, make small atomic changes, 
+follow existing patterns, and test every change.
 ```
 
-## Skill Registry
+### tools.json — Permisos de herramientas
 
-El registro de skills indexa todos los skills disponibles por trigger y ruta.
-
-```bash
-# Refrescar el registro de skills del proyecto
-ywai skill-registry
-
-# Especificar un directorio de proyecto
-ywai skill-registry --cwd /ruta/del/proyecto
+Define qué herramientas puede usar el agente:
+```json
+{
+  "read": true,
+  "write": true,
+  "bash": true,
+  "delegate": false
+}
 ```
 
-Es útil después de añadir o modificar skills, para que los agentes puedan descubrir las nuevas capacidades disponibles.
+### skills.txt — Skills vinculados
 
-## Agentes soportados
+Lista de skills que el agente tiene disponibles:
+```
+typescript
+react-19
+tailwind-4
+git-commit
+```
 
-ywai detecta automáticamente el agente AI que estás usando:
+## Personalizar agentes
 
-| Agente | ID | Detección |
-|--------|----|-----------|
-| OpenCode | `opencode` | Binary in PATH |
-| Claude Code | `claude-code` | Binary in PATH |
-| Cursor | `cursor` | Binary in PATH |
-| VS Code Copilot | `vscode-copilot` | Binary in PATH |
-| Gemini CLI | `gemini-cli` | Binary in PATH |
-| Codex | `codex` | Binary in PATH |
-| Kilo Code | `kilocode` | Binary in PATH |
-| Kimi Code | `kimi` | Binary in PATH |
-| Qwen Code | `qwen-code` | Binary in PATH |
-| Windsurf | `windsurf` | Config dir |
-| Trae IDE | `trae-ide` | Config dir |
+### Modificar un agente existente
 
-La detección automática evita tener que especificar manualmente qué agente estás usando.
+<Steps>
 
-## Doctor
+1. **Encuentra el perfil** en `~/.config/opencode/agents/`
+2. **Edita el AGENT.md** para cambiar el comportamiento
+3. **Edita tools.json** para cambiar permisos
+4. **Edita skills.txt** para agregar o quitar skills
+5. **Reinicia opencode** para que tome los cambios
 
-El comando `doctor` ejecuta un chequeo de salud de gentle-ai para verificar que todo está configurado correctamente:
+</Steps>
+
+### Crear un agente nuevo
+
+<Steps>
+
+1. **Copia un perfil existente** como base
+2. **Renombra** el archivo (ej: `mi-agente.md`)
+3. **Edita** el system prompt para el nuevo rol
+4. **Configura** permisos y skills
+5. **Reinicia opencode**
+
+</Steps>
+
+## Configuración del proyecto
+
+### AGENTS.md en el proyecto
+
+Puedes crear un `AGENTS.md` en la raíz de tu proyecto para dar contexto específico:
+
+```markdown
+# AGENTS.md
+
+## Convenciones del proyecto
+- Usar TypeScript estricto
+- Commits en formato convencional
+- Tests con Vitest
+
+## Estructura
+- src/components/ — Componentes React
+- src/services/ — Lógica de negocio
+- src/utils/ — Utilidades compartidas
+
+## Stack
+- Next.js 14
+- PostgreSQL
+- Prisma ORM
+- Tailwind CSS
+```
+
+Los agentes leen este archivo para entender tu proyecto.
+
+### Skills personalizados del proyecto
+
+Puedes crear skills específicos para tu proyecto:
+
+```
+mi-proyecto/
+├── .agents/
+│   └── skills/
+│       └── mi-patron/
+│           └── SKILL.md
+└── ...
+```
+
+Luego registra con:
+```bash
+ywai skill-registry --cwd /mi/proyecto
+```
+
+## Verificar la configuración
 
 ```bash
 ywai doctor
 ```
 
-Verifica:
-- Que gentle-ai esté instalado y actualizado
-- Que los skills estén correctamente enlazados
-- Que las rutas de configuración sean válidas
-- Que no haya conflictos entre agentes
+Esto verifica:
+- ✅ gentle-ai instalado correctamente
+- ✅ Skills enlazados
+- ✅ Rutas válidas
+- ✅ Sin conflictos
+
+## Agentes soportados
+
+ywai detecta automáticamente tu agente:
+
+| Agente | Cómo se detecta |
+|---|---|
+| OpenCode | Binario en PATH |
+| Claude Code | Binario en PATH |
+| Cursor | Binario en PATH |
+| Gemini CLI | Binario en PATH |
+| VS Code Copilot | Binario en PATH |
+| Codex | Binario en PATH |
+| Kilo Code | Binario en PATH |
+| Kimi Code | Binario en PATH |
+| Qwen Code | Binario en PATH |
+| Kiro IDE | Binario en PATH |
+| Windsurf | Directorio de config |
+| Pi | Binario en PATH |
+
+<Aside type="tip">
+Si usas opencode, la configuración se instala automáticamente en `~/.config/opencode/`. No necesitas configurar rutas manualmente.
+</Aside>

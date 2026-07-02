@@ -1,50 +1,119 @@
 ---
 title: Primeros pasos
-description: Cómo instalar y configurar ywai
+description: Instala ywai y empieza a usar agentes especializados en minutos
 ---
 
-## Requisitos
+import { Steps, Card, Badge, Aside } from '@astrojs/starlight/components';
 
-- **Go 1.21+** (solo para instalación desde fuente)
-- **Linux o macOS**
+# Primeros pasos
 
-## Instalación rápida (recomendada)
+Instala ywai y empieza a usar agentes especializados en minutos.
 
-```bash
-curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash
+## Instalación
+
+<Steps>
+
+1. **Instala ywai**
+
+   ```bash
+   curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+   ```
+
+2. **Instala la configuración en tu agente**
+
+   ```bash
+   ywai install
+   ```
+
+   Esto configura:
+   - Agentes especializados (dev, qa, architect, reviewer, devops, ask)
+   - Skills para tu stack tecnológico
+   - System prompts optimizados
+
+3. **Verifica que todo esté bien**
+
+   ```bash
+   ywai doctor
+   ```
+
+4. **Abre opencode y empieza a usar agentes**
+
+   ```
+   @dev Hola, ¿qué puedes hacer?
+   ```
+
+</Steps>
+
+<Aside type="tip">
+La instalación detecta automáticamente qué agente AI estás usando (opencode, Claude Code, Cursor, etc.) y configura todo en el lugar correcto.
+</Aside>
+
+## Tu primera tarea
+
+Una vez instalado, prueba con algo simple:
+
+```
+@ask Explica la estructura de este proyecto
 ```
 
-Este comando descarga e instala **gentle-ai**, el ecosistema de skills, y todas las skills adicionales de ywai.
+Luego algo más complejo:
 
-## Instalación desde fuente
-
-Si prefieres compilar desde el código fuente:
-
-```bash
-# Clonar el repositorio
-git clone https://github.com/YoizenSA/dev-ai-workflow.git
-cd dev-ai-workflow/ywai
-
-# Preparar skills embebidas y compilar
-bash scripts/prepare-embedded.sh
-go install -tags embedded ./cmd/ywai
+```
+@dev Crea un endpoint GET /api/health que retorne { status: "ok" }
 ```
 
-## Verificar la instalación
+## Conceptos clave
+
+### Agentes
+
+Son especialistas que trabajan como un equipo. Cada uno tiene un rol claro:
+
+| Agente | Para qué |
+|---|---|
+| `@dev` | Escribir código, arreglar bugs |
+| `@qa` | Tests y validación |
+| `@architect` | Decisiones de diseño |
+| `@reviewer` | Code review |
+| `@devops` | CI/CD e infraestructura |
+| `@ask` | Preguntas e investigación |
+
+[Ver documentación completa de agentes →](/agents)
+
+### Skills
+
+Son guías especializadas que le dicen a los agentes cómo usar tecnologías específicas. Se cargan automáticamente — no necesitas configurar nada.
+
+[Ver documentación completa de skills →](/skills)
+
+### Kanban
+
+Tablero visual para monitorear el progreso cuando delegas tareas a múltiples agentes.
 
 ```bash
-ywai doctor
+ywai kanban
 ```
 
-Este comando ejecuta un chequeo de salud para confirmar que todo está configurado correctamente.
+[Ver documentación completa del Kanban →](/kanban)
 
-## Vista previa de cambios
+## Comandos esenciales
 
-Si quieres ver qué va a instalar ywai sin aplicar cambios:
+| Comandos | Qué hace |
+|---|---|
+| `ywai install` | Instala todo (agentes + skills + config) |
+| `ywai update` | Actualiza a la última versión |
+| `ywai doctor` | Verifica que todo funcione |
+| `ywai skills` | Lista los skills disponibles |
+| `ywai kanban` | Abre el tablero visual |
 
-```bash
-ywai install --dry-run
-```
+[Ver todos los comandos →](/commands)
+
+## Siguiente paso
+
+<Card title="Guías prácticas" icon="star">
+Aprende flujos de trabajo reales: implementar features, arreglar bugs, hacer code review, y más.
+
+[Ver guías →](/guides)
+</Card>
 
 ## Agentes soportados
 

@@ -1,0 +1,130 @@
+---
+title: Kanban Board
+description: Tablero visual para monitorear el trabajo de tus agentes en tiempo real
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Kanban Board
+
+El Kanban es un **tablero visual** donde puedes ver qué están haciendo tus agentes en tiempo real. Cada tarea delegada aparece como una card que se mueve de izquierda a derecha según avanza el trabajo.
+
+## Abrir el Kanban
+
+```bash
+ywai kanban
+```
+
+Esto abre el tablero en `http://localhost:5768`. Desde ahí puedes:
+
+- Ver todas las tareas activas
+- Monitorear el progreso de cada agente
+- Responder preguntas de los agentes
+- Redirigir o detener agentes en progreso
+
+## Las columnas
+
+El tablero tiene 5 columnas que representan el ciclo de vida de una tarea:
+
+```
+Backlog → Ready → In Progress → Review → Done
+```
+
+| Columna | Qué significa |
+|---|---|
+| **Backlog** | Tarea creada pero no empezada |
+| **Ready** | Lista para que un agente la tome |
+| **In Progress** | Un agente está trabajando en ella |
+| **Review** | El agente terminó, esperando tu aprobación |
+| **Done** | Completada y aprobada |
+
+## Qué puedes hacer
+
+### Ver el progreso
+
+Cada card muestra:
+- Qué agente está trabajando (dev, qa, architect...)
+- Qué tarea está haciendo
+- Cuánto tiempo lleva
+- El resultado parcial o final
+
+### Responder preguntas
+
+Cuando un agente necesita tu input, la card aparece en **Review** con una pregunta. Click en la card y escribe tu respuesta — el agente continúa automáticamente.
+
+### Redirigir un agente (Steer)
+
+Si un agente va por mal camino mientras trabaja:
+
+1. Click en la card del agente
+2. Escribe una instrucción adicional
+3. El agente recibe la instrucción sin reiniciar
+
+Ejemplo: "Enfócate solo en el endpoint de login, no en el registro"
+
+### Detener un agente (Stop)
+
+Si quieres cancelar una tarea:
+
+1. Click en la card
+2. Confirma la detención
+3. El agente se guarda su progreso parcial
+
+## Flujo típico de uso
+
+<Steps>
+
+1. **Abre opencode** y pide algo complejo: "Implementa autenticación completa con JWT"
+2. **El orquestador delega** — crea cards para `@dev`, `@qa`, `@reviewer`
+3. **Abre el Kanban** en el navegador para monitorear
+4. **Ve las cards moverse** de Backlog → In Progress → Review
+5. **Responde preguntas** si algún agente las tiene
+6. **Revisa resultados** cuando las cards llegan a Review
+7. **Aprueba** — las cards van a Done
+
+</Steps>
+
+## Ejemplo real
+
+```
+Tú en opencode: "Implementa un sistema de notificaciones push"
+
+El orquestador crea:
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ 🔵 architect│  │ 🟢 dev      │  │ 🟡 qa       │
+│ Diseña la   │  │ Implementa  │  │ Escribe     │
+│ arquitectura│  │ el código   │  │ los tests   │
+└─────────────┘  └─────────────┘  └─────────────┘
+
+En el Kanban ves:
+- architect se mueve a Done (diseñó)
+- dev pasa a In Progress (implementando)
+- qa espera en Ready (depende de dev)
+```
+
+## Opciones de inicio
+
+```bash
+# Kanban básico
+ywai kanban
+
+# Kanban con un proyecto específico
+ywai kanban --cwd /mi/proyecto
+
+# Ver un tablero existente
+ywai kanban --session-id abc123
+```
+
+<Aside type="tip">
+El Kanban es especialmente útil para tareas grandes que el orquestador divide en subtareas. Para tareas simples que un solo agente resuelve, no necesitas abrirlo.
+</Aside>
+
+## Cuándo usar el Kanban vs solo opencode
+
+| Situación | Usa Kanban | Solo opencode |
+|---|---|---|
+| Tarea compleja con múltiples agentes | ✅ | |
+| Quieres monitorear progreso en tiempo real | ✅ | |
+| Tarea simple de un solo agente | | ✅ |
+| Quieres ver el historial de actividades | ✅ | |
+| Pregunta rápida | | ✅ |

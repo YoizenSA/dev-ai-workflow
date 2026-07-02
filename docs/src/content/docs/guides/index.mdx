@@ -1,59 +1,190 @@
 ---
 title: Guías
-description: Guías de uso y desarrollo de ywai
+description: Flujos de trabajo prácticos para usar ywai en tu día a día
 ---
 
-## Inicio rápido
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
 
-```bash
-# Instalar ywai
-curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/latest/download/install.sh | bash
+# Guías
 
-# Instalar todo el ecosistema
-ywai install
+Guías prácticas para usar ywai en situaciones reales.
+
+## Empezar un proyecto nuevo
+
+<Steps>
+
+1. **Instala ywai**
+   ```bash
+   curl -fsSL https://github.com/Yoizen/dev-ai-workflow/releases/latest/download/install.sh | bash
+   ```
+
+2. **Instala la configuración en tu agente**
+   ```bash
+   ywai install
+   ```
+
+3. **Verifica que todo esté bien**
+   ```bash
+   ywai doctor
+   ```
+
+4. **Abre opencode y empieza a trabajar**
+   ```
+   @dev Crea la estructura base del proyecto
+   ```
+
+</Steps>
+
+## Implementar una feature completa
+
+Esta guía muestra cómo usar múltiples agentes para implementar una feature de principio a fin.
+
+### Ejemplo: Sistema de autenticación
+
+<Steps>
+
+1. **Investiga** (opcional, si no conoces el dominio)
+   ```
+   @ask Cómo funciona la autenticación con JWT refresh tokens?
+   ```
+
+2. **Diseña** la arquitectura
+   ```
+   @architect Diseña el sistema de auth para nuestra app Next.js.
+   Necesitamos: login, registro, refresh tokens, y middleware de protección.
+   Usa PostgreSQL para sesiones.
+   ```
+
+3. **Implementa** el código
+   ```
+   @dev Implementa el sistema de auth según el diseño del @architect.
+   Empieza por el modelo de datos y los endpoints de login/registro.
+   ```
+
+4. **Testea** la implementación
+   ```
+   @qa Escribe tests para el flujo de autenticación.
+   Cubre: login exitoso, credenciales inválidas, token expirado,
+   refresh token rotation.
+   ```
+
+5. **Revisa** antes de mergear
+   ```
+   @reviewer Revisa el sistema de auth por seguridad.
+   Enfócate en: manejo de tokens, validación de input, y OWASP top 10.
+   ```
+
+6. **Corrige** issues encontrados
+   ```
+   @dev Arregla los issues de seguridad encontrados por @reviewer
+   ```
+
+7. **Despliega** (si aplica)
+   ```
+   @devops Configura el pipeline de CI/CD para el proyecto.
+   Incluye: tests automáticos, lint, build, y deploy a staging.
+   ```
+
+</Steps>
+
+## Arreglar un bug
+
+<Steps>
+
+1. **Reporta el bug con contexto**
+   ```
+   @dev El endpoint /api/users retorna 500 cuando el parámetro 
+   'page' es mayor a 100. El error en los logs es:
+   "ERROR: offset must not be negative"
+   ```
+
+2. **El agente investiga y arregla**
+   ```
+   @dev: [encuentra que la paginación no valida el offset máximo]
+   @dev: [agrega validación y test]
+   ```
+
+3. **Verifica** que no haya regresiones
+   ```
+   @qa Corre los tests existentes y verifica que nada se rompió
+   ```
+
+</Steps>
+
+## Hacer code review
+
+```
+@reviewer Revisa los cambios en src/auth/.
+Busca: SQL injection, XSS, manejo incorrecto de errores,
+y si los tests cubren los casos importantes.
 ```
 
-## Desarrollo local
+El reviewer te dará un reporte con severidad:
+- 🔴 **CRITICAL** — Debe arreglarse antes de merge
+- 🟠 **HIGH** — Debería arreglarse
+- 🟡 **MEDIUM** — Mejora recomendada
+- 🟢 **LOW** — Opcional, estilo
 
-El script `scripts/dev.sh` envuelve todos los flujos de build y test para que no tengas que recordar los comandos.
+## Configurar CI/CD
 
-### Subcomandos de dev.sh
-
-| Subcomando | Descripción |
-|---|---|
-| `test` | Ejecutar todos los tests (`go test ./... -v`) |
-| `test-kanban` | Ejecutar solo tests de kanban |
-| `build` | Build rápido SIN datos embebidos |
-| `build-full` | Build completo CON skills/agentes embebidos |
-| `install` | Build-full + instalar en `$GOPATH/bin/ywai` |
-| `check` | Pipeline completo: test → build-full → verify → install |
-| `kanban` | Build + install + iniciar UI kanban en puerto 5768 |
-
-### Flujo típico
-
-```bash
-# Antes de cada commit
-bash scripts/dev.sh check
-
-# Iteración rápida (sin embebidos)
-bash scripts/dev.sh build
-
-# Probar cambios en kanban
-bash scripts/dev.sh test-kanban
-
-# Probar visualmente el kanban
-bash scripts/dev.sh kanban
-# Abre http://localhost:5768
+```
+@devops Configura GitHub Actions para este proyecto Node.js.
+Necesito:
+- Lint y tests en cada PR
+- Build de Docker image en main
+- Deploy automático a staging en main
+- Deploy manual a producción con approval
 ```
 
-## Workflow Studio
+## Refactorizar código existente
 
-El **Workflow Studio** es un editor visual de workflows multi-agente accesible en `http://localhost:5768/workflows`. Permite diseñar workflows en un canvas React Flow y exportarlos a primitivas nativas de opencode.
+<Steps>
 
-### Cómo funciona
+1. **Pide análisis** al architect
+   ```
+   @architect Analiza la estructura de src/services/. 
+   ¿Hay oportunidades de mejora? ¿El código sigue los patrones del proyecto?
+   ```
 
-1. **Diseña** un workflow en el canvas: arrastra nodos (SubAgent, AskUserQuestion, Prompt, If/Else, Switch, Skill, MCP, Group) desde la paleta y conéctalos.
-2. **Edita** los campos de cada nodo en el panel lateral.
-3. **Valida** el grafo (un inicio, un final, sin ciclos).
-4. **Exporta** a opencode — el workflow se convierte en comandos slash y agentes reales.
+2. **Pide el refactoring** al dev
+   ```
+   @dev Refactoriza UserService según las sugerencias del @architect.
+   Mantén todos los tests pasando.
+   ```
 
+3. **Verifica** con tests
+   ```
+   @qa Corre todos los tests y verifica que nada se rompió
+   ```
+
+</Steps>
+
+## Trabajar con monorepo
+
+Si tu proyecto tiene múltiples paquetes:
+
+```
+@dev Los cambios en packages/core afectan a packages/api y packages/web.
+Implementa el nuevo servicio en core y actualiza los consumidores en api y web.
+```
+
+## Tips para mejores resultados
+
+<Card title="Sé específico" icon="star">
+❌ "Arregla el bug"  
+✅ "El endpoint POST /api/login retorna 500 cuando el email tiene '+' en el dominio"
+</Card>
+
+<Card title="Da contexto" icon="star">
+❌ "Crea un componente"  
+✅ "Crea un componente React para el formulario de registro. Usa react-hook-form para validación y tailwind para estilos. Sigue el patrón de src/components/LoginForm.tsx"
+</Card>
+
+<Card title="Especifica el agente" icon="star">
+❌ "Escribe tests" (¿quién?)  
+✅ "@qa Escribe tests unitarios para el UserService"
+</Card>
+
+<Aside type="tip">
+No necesitas usar todos los agentes para cada tarea. Para un bug simple, `@dev` solo es suficiente. Usa múltiples agentes cuando la tarea es compleja y se beneficia de especialización.
+</Aside>

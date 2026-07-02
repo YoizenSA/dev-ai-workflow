@@ -1,0 +1,158 @@
+---
+title: Skills
+description: Cómo los skills le dan superpoderes a tus agentes
+---
+
+import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+
+# Skills
+
+Los skills son **guías especializadas** que le dicen a tus agentes cómo usar tecnologías específicas. Sin skills, un agente es genérico. Con skills, se convierte en un experto en tu stack.
+
+## ¿Qué es un skill?
+
+Un skill es un archivo de instrucciones que le dice a un agente:
+- Cómo usar una tecnología (React, Angular, .NET, etc.)
+- Qué patrones seguir
+- Qué evitar
+- Ejemplos de código correcto
+
+**No necesitas configurar nada** — los skills se cargan automáticamente cuando el agente los necesita.
+
+## Skills incluidos
+
+ywai instala skills que no vienen en gentle-ai:
+
+### Frontend
+
+| Skill | Qué hace |
+|---|---|
+| `react-19` | Componentes con React Compiler, hooks, patrones modernos |
+| `angular` | Components, signals, forms, lazy loading, performance |
+| `tailwind-4` | Utilidades CSS, responsive design, theming |
+| `yz-ui` | Design system de Yoizen (colores, tipografía, componentes) |
+
+### Backend
+
+| Skill | Qué hace |
+|---|---|
+| `typescript` | Tipos estrictos, generics, utility types |
+| `dotnet` | ASP.NET Core, Minimal APIs, EF Core |
+
+### DevOps
+
+| Skill | Qué hace |
+|---|---|
+| `devops` | Azure Pipelines, Helm charts, Kubernetes |
+| `docker` | Dockerfiles optimizados, compose, hardening |
+
+### Testing
+
+| Skill | Qué hace |
+|---|---|
+| `playwright` | Tests E2E cross-browser |
+| `go-testing` | Tests en Go, coverage, golden files |
+
+### Workflow
+
+| Skill | Qué hace |
+|---|---|
+| `git-commit` | Commits convencionales (feat:, fix:, refactor:) |
+
+## Cómo se cargan los skills
+
+No tienes que hacer nada. Cuando le pides algo a un agente:
+
+```
+Tú: "@dev Crea un componente React con Tailwind"
+
+El agente detecta:
+  → Archivo .tsx → Carga skill react-19
+  → Usa Tailwind  → Carga skill tailwind-4
+  
+Resultado: código que sigue los patrones correctos
+```
+
+## Ver los skills disponibles
+
+```bash
+ywai skills
+```
+
+Esto muestra todos los skills instalados y qué tecnologías cubren.
+
+## Actualizar el registro
+
+Si agregas o modificas skills:
+
+```bash
+ywai skill-registry
+```
+
+## Crear tus propios skills
+
+Puedes crear skills personalizados para tu proyecto:
+
+<Steps>
+
+1. **Crea la carpeta** del skill en tu proyecto
+2. **Escribe el SKILL.md** con instrucciones claras
+3. **Registra** con `ywai skill-registry`
+
+</Steps>
+
+### Ejemplo de un skill personalizado
+
+```markdown
+---
+name: mi-api
+description: Patrones para nuestra API REST
+---
+
+# Mi API
+
+## Endpoints
+- Siempre usar REST convencional
+- Respuestas en formato { data, error }
+- Paginación con cursor, no offset
+
+## Auth
+- JWT en header Authorization
+- Refresh tokens rotativos
+
+## Errores
+- 400 para validación
+- 401 para auth
+- 403 para permisos
+- 404 para no encontrado
+```
+
+## Skills por agente
+
+Cada agente tiene skills vinculados que se cargan automáticamente:
+
+| Agente | Skills que usa |
+|---|---|
+| `dev` | typescript, react-19, tailwind-4, angular, dotnet, git-commit |
+| `qa` | playwright, go-testing |
+| `architect` | codebase-design |
+| `reviewer` | git-commit |
+| `devops` | devops, docker |
+
+## Preguntas frecuentes
+
+### ¿Los skills modifican mi código?
+
+No. Los skills son instrucciones que el agente lee y sigue. El agente decide cómo aplicarlas según el contexto.
+
+### ¿Puedo desactivar un skill?
+
+Sí. Puedes eliminarlo del `skills.txt` del agente o mover el archivo del skill.
+
+### ¿Los skills funcionan con cualquier agente?
+
+Los skills están diseñados para opencode, pero la estructura es compatible con otros agentes que soporten el formato.
+
+<Aside type="tip">
+Los skills son la forma más fácil de personalizar el comportamiento de tus agentes. Si tu equipo usa patrones específicos, créa un skill y todos los agentes los seguirán automáticamente.
+</Aside>

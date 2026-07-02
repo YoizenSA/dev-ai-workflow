@@ -1,71 +1,154 @@
 ---
-title: Comandos
-description: Referencia completa de comandos de ywai
+title: Comandos CLI
+description: Todos los comandos de ywai y cuándo usarlos
 ---
 
-## Resumen
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
 
-| Comando | Descripción |
-|---|---|
-| `ywai install` | Instalar gentle-ai + ecosistema + skills adicionales |
-| `ywai update` | Actualizar gentle-ai + resincronizar skills |
-| `ywai skills` | Listar skills adicionales disponibles |
-| `ywai agents` | Listar agentes AI detectados |
-| `ywai doctor` | Ejecutar chequeo de salud de gentle-ai |
-| `ywai skill-registry` | Refrescar el registro de skills del proyecto |
+# Comandos CLI
 
-## `ywai install`
+Referencia completa de los comandos de ywai.
 
-Instala gentle-ai, el ecosistema y todas las skills adicionales.
+## Comandos principales
 
-**Flags principales:**
+### `ywai install`
 
-| Flag | Descripción |
-|---|---|
-| `--agent, -a` | Agente específico (se auto-detecta si se omite) |
-| `--dry-run` | Previsualizar cambios sin aplicarlos |
-| `--preset` | Preset de instalación: `full-gentleman`, `ecosystem-only`, `minimal`, `custom` |
-| `--scope` | Ámbito: `global` (por defecto) o `workspace` |
-| `--mcp` | Instalar Microsoft Learn MCP (para opencode) |
-| `--global` | Solo skills globales (omitir AGENTS.md/REVIEW.md del proyecto) |
-
-**Ejemplos:**
+Instala gentle-ai, skills y la configuración completa en tu agente.
 
 ```bash
-# Instalación completa
+# Instalación completa (recomendado)
 ywai install
 
-# Vista previa
+# Ver qué cambiaría sin aplicar
 ywai install --dry-run
 
-# Instalar para un agente específico
-ywai install --agent opencode --preset full-gentleman
+# Instalar solo para un agente específico
+ywai install --agent opencode
+
+# Instalar con preset específico
+ywai install --preset full-gentleman
 ```
 
-## `ywai update`
+**Cuándo usarlo:** La primera vez que configuras ywai, o después de actualizar.
 
-Actualiza gentle-ai, resiembra el ecosistema y religa las skills.
+### `ywai update`
 
-## `ywai skills`
+Actualiza gentle-ai, re-sincroniza skills y regenera el registro.
 
-Muestra las skills adicionales que ywai instala en tu agente.
+```bash
+ywai update
+```
 
-Skills incluidas: TypeScript, React 19, Tailwind 4, Biome, Angular (core, forms, performance, architecture), .NET/C#, DevOps (Azure Pipelines, Helm, K8s), Playwright, git-commit.
+**Cuándo usarlo:** Después de actualizar ywai a una nueva versión.
 
-## `ywai agents`
+### `ywai skills`
 
-Lista los agentes AI detectados en tu sistema y muestra cuál se usará por defecto.
+Muestra todos los skills disponibles.
 
-## `ywai doctor`
+```bash
+ywai skills
+```
 
-Ejecuta el chequeo de salud de gentle-ai para verificar que la instalación es correcta.
+**Cuándo usarlo:** Cuando quieres ver qué skills tienes instalados o buscar uno específico.
 
-## `ywai skill-registry`
+### `ywai agents`
 
-Refresca el registro de skills del proyecto actual. Útil después de añadir o modificar skills.
+Muestra los agentes detectados en tu sistema.
 
-**Flags:**
+```bash
+ywai agents
+```
 
-| Flag | Descripción |
+**Cuándo usarlo:** Para verificar qué agentes están configurados.
+
+### `ywai doctor`
+
+Verifica que la instalación esté correcta.
+
+```bash
+ywai doctor
+```
+
+Verifica:
+- Que gentle-ai esté instalado y actualizado
+- Que los skills estén correctamente enlazados
+- Que las rutas de configuración sean válidas
+- Que no haya conflictos entre agentes
+
+**Cuándo usarlo:** Cuando algo no funciona como esperas.
+
+### `ywai skill-registry`
+
+Refresca el registro de skills del proyecto.
+
+```bash
+ywai skill-registry
+```
+
+**Cuándo usarlo:** Después de añadir o modificar skills personalizados.
+
+### `ywai kanban`
+
+Abre el tablero Kanban en el navegador.
+
+```bash
+ywai kanban
+```
+
+Esto inicia el servidor de control y abre `http://localhost:5768`.
+
+**Cuándo usarlo:** Cuando quieres monitorear el progreso de tareas delegadas a múltiples agentes.
+
+## Flags comunes
+
+| Flag | Descripción | Ejemplo |
+|---|---|---|
+| `--agent, -a` | Agente específico | `ywai install --agent opencode` |
+| `--dry-run` | Vista previa sin aplicar | `ywai install --dry-run` |
+| `--cwd` | Directorio del proyecto | `ywai skill-registry --cwd /mi/proyecto` |
+| `--preset` | Preset de instalación | `ywai install --preset minimal` |
+| `--scope` | Alcance: global o workspace | `ywai install --scope workspace` |
+
+## Presets de instalación
+
+| Preset | Qué instala |
 |---|---|
-| `--cwd` | Directorio del proyecto (por defecto: directorio actual) |
+| `full-gentleman` | Todo: gentle-ai + ecosystem + skills extra (default) |
+| `ecosystem-only` | Solo gentle-ai y ecosystem, sin skills extra |
+| `minimal` | Instalación mínima, solo lo esencial |
+
+## Ejemplos comunes
+
+### Setup inicial
+
+```bash
+# Instalar todo
+ywai install
+
+# Verificar
+ywai doctor
+```
+
+### Actualizar después de un cambio
+
+```bash
+# Actualizar todo
+ywai update
+
+# Refrescar skills del proyecto
+ywai skill-registry
+```
+
+### Trabajar con múltiples proyectos
+
+```bash
+# Instalar en un proyecto específico
+ywai install --cwd /mi/proyecto
+
+# Skills de ese proyecto
+ywai skill-registry --cwd /mi/proyecto
+```
+
+<Aside type="tip">
+Siempre corre `ywai doctor` después de instalar o actualizar. Te dice si algo está mal antes de que te encuentres con problemas.
+</Aside>
