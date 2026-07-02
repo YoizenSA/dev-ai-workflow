@@ -99,6 +99,49 @@ Esto inicia el servidor de control y abre `http://localhost:5768`.
 
 **Cuándo usarlo:** Cuando quieres monitorear el progreso de tareas delegadas a múltiples agentes.
 
+### `ywai serve`
+
+Inicia el servidor de control como servicio de fondo (systemd en Linux).
+
+```bash
+# Iniciar como servicio
+ywai serve
+
+# Detener el servicio
+ywai serve --stop
+
+# Ver estado del servicio
+ywai serve --status
+```
+
+**Cuándo usarlo:** Cuando quieres que el servidor de control (Kanban, Settings, Workflow Studio) esté siempre corriendo sin tener que abrirlo manualmente.
+
+### `ywai update`
+
+Actualiza gentle-ai, re-sincroniza skills y regenera el registro.
+
+```bash
+ywai update
+```
+
+**Qué hace paso a paso:**
+1. Actualiza gentle-ai a la última versión
+2. Re-sincroniza los skills con gentle-ai
+3. Regenera el registro de skills del proyecto
+4. Verifica que todo esté correctamente enlazado
+
+**Cuándo usarlo:** Después de actualizar ywai a una nueva versión, o cuando gentle-ai tiene una actualización importante.
+
+### `ywai upgrade`
+
+Actualiza el propio binario de ywai.
+
+```bash
+ywai upgrade
+```
+
+**Cuándo usarlo:** Cuando quieres actualizar ywai a la última versión publicada.
+
 ## Flags comunes
 
 | Flag | Descripción | Ejemplo |

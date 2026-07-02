@@ -1,0 +1,33 @@
+---
+title: Migration Planner
+description: Crea planes de migración estructurados con dependencias
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Migration Planner
+
+Crea **planes de migración** detallados con dependencias, riesgos, y estrategia de rollback.
+
+<Badge text="Grupo: social-refactor" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Planificar migración | "Plan the migration from Angular to React" |
+| Analizar dependencias | "What pages depend on the old auth module?" |
+| Estrategia de rollback | "How do we roll back if something breaks?" |
+
+## Lo que hace
+
+1. **Investiga** el codebase actual (usa `@finder`)
+2. **Identifica** dependencias entre módulos
+3. **Crea** un plan con orden de migración
+4. **Documenta** riesgos y estrategia de rollback
+
+## Lo que NO hace
+
+- ❌ NO implementa código
+- ❌ NO clasifica alcance (eso es `@migration-scope`)
+- ❌ NO valida paridad (eso es `@migration-validator`)

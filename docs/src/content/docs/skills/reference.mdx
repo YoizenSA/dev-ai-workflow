@@ -1,0 +1,443 @@
+---
+title: Skills Reference
+description: Referencia completa de todos los skills disponibles en ywai
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Skills Reference
+
+Referencia completa de todos los skills que ywai instala. Cada skill le da a tus agentes conocimiento especializado sobre una tecnología.
+
+## Frontend
+
+### react-19
+
+**Trigger:** Componentes React, hooks, JSX
+
+**Qué enseña:**
+- Patrones de React 19 con React Compiler
+- Server Components y Server Actions
+- Hooks modernos (use, useOptimistic, useFormStatus)
+- Manejo de estado y efectos
+
+**Ejemplo:**
+```
+@dev Crea un componente React para el formulario de login
+→ El agente sigue los patrones de react-19 automáticamente
+```
+
+### angular-core
+
+**Trigger:** Componentes Angular, signals, inject, zoneless
+
+**Qué enseña:**
+- Componentes standalone
+- Signals y computed
+- Dependency injection con `inject()`
+- Zoneless change detection
+
+### angular-architecture
+
+**Trigger:** Estructura de proyectos Angular
+
+**Qué enseña:**
+- Organización de módulos y features
+- Lazy loading de rutas
+- Patrones de arquitectura escalable
+
+### angular-forms
+
+**Trigger:** Forms, validación en Angular
+
+**Qué enseña:**
+- Reactive Forms vs Template-driven
+- Validación custom
+- Manejo de estado del formulario
+
+### angular-performance
+
+**Trigger:** Optimización de Angular, imágenes, lazy loading
+
+**Qué enseña:**
+- OnPush change detection
+- TrackBy en ngFor
+- Lazy loading de módulos
+- Optimización de imágenes
+
+### tailwind-4
+
+**Trigger:** Estilos, CSS utilities, responsive design
+
+**Qué enseña:**
+- Utilidades de Tailwind CSS 4
+- Responsive design con breakpoints
+- Theming y dark mode
+- Custom plugins
+
+### yz-ui
+
+**Trigger:** Yoizen UI components, design system
+
+**Qué enseña:**
+- Design system de Yoizen
+- Paleta de colores y tipografía
+- Componentes predefinidos
+- Tokens de diseño
+
+## Backend
+
+### typescript
+
+**Trigger:** Código TS, tipos, interfaces, generics
+
+**Qué enseña:**
+- Tipos estrictos de TypeScript
+- Utility types (Pick, Omit, Partial, etc.)
+- Generics avanzados
+- Type guards y assertions
+
+### dotnet
+
+**Trigger:** C#, ASP.NET Core, Minimal APIs, EF Core
+
+**Qué enseña:**
+- Minimal APIs en .NET 9
+- Entity Framework Core
+- Dependency injection
+- Middleware y filtros
+
+## Testing
+
+### playwright
+
+**Trigger:** Tests E2E, browser automation
+
+**Qué enseña:**
+- Playwright test runner
+- Selectores y locators
+- Auto-wait y retry
+- Cross-browser testing
+- CI/CD integration
+
+### go-testing
+
+**Trigger:** Tests en Go, go test, coverage
+
+**Qué enseña:**
+- Testing estándar de Go
+- Table-driven tests
+- Teatest con Bubbletea
+- Golden files
+- Coverage analysis
+
+### testing-expert
+
+**Trigger:** Calidad de tests, cobertura, assertions
+
+**Qué enseña:**
+- Framework de inspección de calidad
+- Identificación de gaps de cobertura
+- Validación de assertions
+- Patrones de test efectivos
+
+### webapp-testing
+
+**Trigger:** Testing de web apps con Playwright
+
+**Qué enseña:**
+- Patrones de testing web
+- Selectores robustos
+- Estrategias de espera
+- Mejores prácticas
+
+### condition-based-waiting
+
+**Trigger:** Tests flaky, waitForTimeout, race conditions
+
+**Qué enseña:**
+- Espera basada en condiciones (no timeouts fijos)
+- Patrones anti-flaky
+- Manejo de race conditions
+
+## DevOps
+
+### devops
+
+**Trigger:** CI/CD, Azure Pipelines, Helm, Kubernetes
+
+**Qué enseña:**
+- Azure Pipelines YAML
+- Helm charts y Umbrella charts
+- Kubernetes manifests
+- Estrategias de deploy
+
+### docker
+
+**Trigger:** Dockerfiles, containers, compose
+
+**Qué enseña:**
+- Dockerfiles optimizados (multi-stage, non-root)
+- Docker Compose
+- Hardening de contenedores
+- .dockerignore
+
+## Workflow
+
+### git-commit
+
+**Trigger:** Commits, git, conventional commits
+
+**Qué enseña:**
+- Formato conventional commit (feat:, fix:, refactor:)
+- Scopes y breaking changes
+- Atomic commits
+- Mensajes descriptivos
+
+### legacy-migration-workflow
+
+**Trigger:** Migraciones ASPX → WebApi + Angular
+
+**Qué enseña:**
+- Flujo de migración con soft gates
+- Planificación, build, y validación
+- Migración incremental
+
+### tdd
+
+**Trigger:** Test-driven development, red-green-refactor
+
+**Qué enseña:**
+- Ciclo TDD (rojo → verde → refactor)
+- Vertical slices
+- Nunca refactorizar en rojo
+
+## Code Quality
+
+### biome
+
+**Trigger:** Linting, formatting, Biome
+
+**Qué enseña:**
+- Configuración de Biome
+- Reglas de linting
+- Formatting automático
+
+### codebase-design
+
+**Trigger:** Diseño de módulos, deep modules, seams
+
+**Qué enseña:**
+- Vocabulario compartido para diseño de módulos
+- Oportunidades de deepening
+- Testabilidad y navegabilidad AI
+
+### improve-codebase-architecture
+
+**Trigger:** Auditoría de arquitectura, oportunidades de mejora
+
+**Qué enseña:**
+- Escaneo de codebase por deepening
+- Reporte visual HTML
+- Priorización de mejoras
+
+## Documentación
+
+### adr-skill
+
+**Trigger:** Architecture Decision Records
+
+**Qué enseña:**
+- Crear y mantener ADRs
+- Bootstrap de carpeta adr
+- Convenciones y validación
+
+### cognitive-doc-design
+
+**Trigger:** Documentación, guías, READMEs, RFCs
+
+**Qué enseña:**
+- Documentación que reduce carga cognitiva
+- Guías de onboarding
+- RFCs y architecture docs
+
+### writing-great-skills
+
+**Trigger:** Crear o editar skills
+
+**Qué enseña:**
+- Vocabulario y principios para skills
+- Frontmatter válido
+- Patrones de triggers
+
+### skill-creator
+
+**Trigger:** Nuevos skills, instrucciones de agente
+
+**Qué enseña:**
+- Crear skills LLM-first
+- Frontmatter válido
+- Triggers y scopes
+
+### skill-improver
+
+**Trigger:** Mejorar skills existentes
+
+**Qué enseña:
+- Auditoría de calidad de skills
+- Upgrade de skills existentes
+- Patrones de mejora
+
+### skill-registry
+
+**Trigger:** Actualizar registro de skills
+
+**Qué enseña:**
+- Indexar skills por trigger y path
+- Mantener el registro actualizado
+
+## Agentes
+
+### architect-worker
+
+**Trigger:** Tareas de arquitectura
+
+**Qué enseña:**
+- Output JSON estructurado para orquestadores
+- Decisiones de diseño con evidencia
+- Handoff a otros agentes
+
+### reviewer-worker
+
+**Trigger:** Tareas de revisión
+
+**Qué enseña:**
+- Output JSON estructurado para orquestadores
+- Hallazgos con severidad
+- Handoff a otros agentes
+
+### implementation
+
+**Trigger:** Implementación genérica
+
+**Qué enseña:**
+- Rol de dev por defecto
+- TDD como flujo de trabajo
+- Procedimiento de implementación
+
+### backend-worker
+
+**Trigger:** Tareas de backend
+
+**Qué enseña:**
+- Patrones de backend
+- APIs y servicios
+- Base de datos
+
+### frontend-worker
+
+**Trigger:** Tareas de frontend
+
+**Qué enseña:**
+- Patrones de frontend
+- Componentes y UI
+- State management
+
+### qa-worker
+
+**Trigger:** Tareas de QA
+
+**Qué enseña:
+- Flujo de trabajo de QA
+- Estrategia de testing
+- Reportes de calidad
+
+## Otros
+
+### teach
+
+**Trigger:** Enseñar al usuario
+
+**Qué enseña:**
+- Cómo enseñar skills o conceptos
+- Explicaciones paso a paso
+- Ejemplos prácticos
+
+### diagnosing-bugs
+
+**Trigger:** Diagnosticar bugs, debug
+
+**Qué enseña:**
+- Ciclo de diagnóstico para bugs difíciles
+- Regresiones de performance
+- Análisis de causa raíz
+
+### branch-pr
+
+**Trigger:** Crear PRs
+
+**Qué enseña:**
+- PRs con issue-first checks
+- Preparación y apertura de PRs
+
+### chained-pr
+
+**Trigger:** PRs grandes, stacked PRs
+
+**Qué enseña:**
+- Dividir cambios grandes en PRs encadenados
+- Proteger el focus de revisión
+
+### issue-creation
+
+**Trigger:** Crear issues de GitHub
+
+**Qué enseña:**
+- Issues con issue-first checks
+- Bug reports y feature requests
+
+### comment-writer
+
+**Trigger:** Comentarios en PRs, issues
+
+**Qué enseña:**
+- Comentarios cálidos y directos
+- Feedback constructivo
+
+### legacy-migration-workflow
+
+**Trigger:** Migraciones ASPX → WebApi + Angular
+
+**Qué enseña:**
+- Flujo de migración con soft gates
+- Planificación, build, y validación
+
+### planner
+
+**Trigger:** Planificación de tareas
+
+**Qué enseña:**
+- Descomposición de tareas
+- Estimación de esfuerzo
+- Priorización
+
+### decision-mapping
+
+**Trigger:** Mapeo de decisiones
+
+**Qué enseña:**
+- Convertir ideas en tickets de investigación
+- Resolución secuencial
+
+### grill-me / grill-with-docs / grilling
+
+**Trigger:** Entrevista para afilar planes
+
+**Qué enseña:**
+- Entrevista socrática para planes
+- Documentación de decisiones
+- Stress-testing de diseños
+
+<Aside type="tip">
+No necesitas memorizar todos los skills. Los agentes los cargan automáticamente cuando los necesitan. Esta referencia es para cuando quieres entender qué puede hacer un agente específico.
+</Aside>

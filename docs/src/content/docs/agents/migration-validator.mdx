@@ -1,0 +1,33 @@
+---
+title: Migration Validator
+description: Valida que la migración mantiene paridad funcional
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Migration Validator
+
+Valida que la migración **mantiene paridad funcional** — compara el comportamiento antes y después.
+
+<Badge text="Grupo: social-refactor" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Validar migración | "Verify the migrated login page works the same" |
+| Comparar comportamiento | "Does the new API return the same responses?" |
+| Revisión de paridad | "Check all axes: UI, API, data, accessibility" |
+
+## Lo que hace
+
+1. **Compara** el comportamiento antes y después de la migración
+2. **Verifica** múltiples ejes: UI, API, datos, accesibilidad
+3. **Documenta** diferencias encontradas
+4. **Reporta** con nivel de severidad
+
+## Lo que NO hace
+
+- ❌ NO modifica código
+- ❌ NO arregla findings (eso es `@dev`)
+- ❌ NO aprueba sin evidencia a nivel de fila

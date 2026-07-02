@@ -1,0 +1,33 @@
+---
+title: QA Reviewer
+description: Revisa la calidad de los tests escritos
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# QA Reviewer
+
+Revisa la **calidad de los tests** escritos por `@qa-dev`. Verifica cobertura, assertions, y mantenibilidad.
+
+<Badge text="Grupo: qa-automation" variant="caution" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Revisar tests | "Review the tests for the payment module" |
+| Verificar cobertura | "Do the tests cover all edge cases?" |
+| Calidad de assertions | "Are the assertions meaningful?" |
+
+## Lo que hace
+
+1. **Revisa** los tests escritos por `@qa-dev`
+2. **Verifica** que las assertions sean significativas
+3. **Identifica** tests frágiles o redundantes
+4. **Sugiere** mejoras
+
+## Lo que NO hace
+
+- ❌ NO escribe tests (eso es `@qa-dev`)
+- ❌ NO explora codebase (eso es `@qa-finder`)
+- ❌ NO diseña estrategia (eso es `@qa-analyst`)

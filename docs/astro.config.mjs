@@ -20,15 +20,36 @@ export default defineConfig({
           items: [
             { label: 'Visión general', slug: 'agents' },
             { label: 'Orchestrator', slug: 'agents/orchestrator' },
+            { label: 'Architect', slug: 'agents/architect' },
             { label: 'Dev', slug: 'agents/dev' },
             { label: 'QA', slug: 'agents/qa' },
-            { label: 'Architect', slug: 'agents/architect' },
             { label: 'Reviewer', slug: 'agents/reviewer' },
             { label: 'DevOps', slug: 'agents/devops' },
             { label: 'Ask', slug: 'agents/ask' },
             { label: 'Finder', slug: 'agents/finder' },
             { label: 'Planning', slug: 'agents/planning' },
             { label: 'Memory', slug: 'agents/memory' },
+            {
+              label: 'Social Refactor',
+              items: [
+                { label: 'Migration Orchestrator', slug: 'agents/migration-orchestrator' },
+                { label: 'Migration Planner', slug: 'agents/migration-planner' },
+                { label: 'Migration Scope', slug: 'agents/migration-scope' },
+                { label: 'Migration Validator', slug: 'agents/migration-validator' },
+                { label: 'Validator Focused', slug: 'agents/migration-validator-focused' },
+              ],
+            },
+            {
+              label: 'QA Automation',
+              items: [
+                { label: 'QA Orchestrator', slug: 'agents/qa-orchestrator' },
+                { label: 'QA Analyst', slug: 'agents/qa-analyst' },
+                { label: 'QA Dev', slug: 'agents/qa-dev' },
+                { label: 'QA Finder', slug: 'agents/qa-finder' },
+                { label: 'QA Reviewer', slug: 'agents/qa-reviewer' },
+                { label: 'QA Ask', slug: 'agents/qa-ask' },
+              ],
+            },
           ],
         },
         {
@@ -36,7 +57,9 @@ export default defineConfig({
           items: [
             { label: 'Kanban Board', slug: 'kanban' },
             { label: 'Skills', slug: 'skills' },
+            { label: 'Skills Reference', slug: 'skills/reference' },
             { label: 'Workflow Studio', slug: 'workflows' },
+            { label: 'Settings UI', slug: 'settings' },
           ],
         },
         {

@@ -1,0 +1,33 @@
+---
+title: Migration Scope
+description: Clasifica el alcance de una migración
+---
+
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
+
+# Migration Scope
+
+Clasifica **qué hay que migrar** — identifica archivos, módulos, y dependencias que necesitan cambios.
+
+<Badge text="Grupo: social-refactor" variant="note" />
+
+## Cuándo usarlo
+
+| Tarea | Ejemplo |
+|---|---|
+| Clasificar alcance | "What needs to change to migrate to the new API?" |
+| Auditar dependencias | "Which files import the old auth module?" |
+| Estimar esfuerzo | "How big is this migration?" |
+
+## Lo que hace
+
+1. **Escanea** el codebase buscando código que necesita migrar
+2. **Clasifica** cada archivo por tipo de cambio necesario
+3. **Identifica** dependencias y riesgos
+4. **Reporta** el alcance completo
+
+## Lo que NO hace
+
+- ❌ NO crea planes de migración (eso es `@migration-planner`)
+- ❌ NO implementa código
+- ❌ NO valida paridad (eso es `@migration-validator`)
