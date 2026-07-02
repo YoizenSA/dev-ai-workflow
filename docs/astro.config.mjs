@@ -53,14 +53,20 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Workflows',
+          items: [
+            { label: 'Visión general', slug: 'workflows' },
+            { label: 'Workflow Studio', slug: 'workflows/studio' },
+            { label: 'Commands', slug: 'workflows/commands' },
+            { label: 'Agent Groups', slug: 'workflows/groups' },
+          ],
+        },
+        {
           label: 'Herramientas',
           items: [
             { label: 'Kanban Board', slug: 'kanban' },
             { label: 'Skills', slug: 'skills' },
             { label: 'Skills Reference', slug: 'skills/reference' },
-            { label: 'Workflow Studio', slug: 'workflows' },
-            { label: 'Workflow Commands', slug: 'workflows/commands' },
-            { label: 'Workflow Groups', slug: 'workflows/groups' },
             { label: 'Settings UI', slug: 'settings' },
           ],
         },

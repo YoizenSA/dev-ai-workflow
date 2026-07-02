@@ -1,115 +1,90 @@
 ---
-title: Workflow Studio
-description: Editor visual de flujos de trabajo multi-agente
+title: Workflows
+description: Sistema de workflows — Studio, Commands y Agent Groups
 ---
 
-import { Card, Badge, Steps, Aside } from '@astrojs/starlight/components';
+import { Card, Badge, Aside } from '@astrojs/starlight/components';
 
-# Workflow Studio
+# Workflows
 
-Workflow Studio es un **editor visual** donde puedes diseñar flujos de trabajo multi-agente en un canvas y exportarlos a opencode.
+El sistema de workflows de ywai tiene **3 componentes** que trabajan juntos:
 
-## Abrir Workflow Studio
+## Los 3 componentes
 
-```bash
-ywai kanban
-```
+### 1. Workflow Studio
 
-Luego navega a `http://localhost:5768/workflows`.
+El **editor visual** donde diseñas flujos de trabajo en un canvas.
 
-## ¿Qué es un workflow?
+- Arrastras nodos (agentes, decisiones, preguntas)
+- Los conectas para crear un flujo
+- Exportas a opencode
 
-Un workflow es un **flujo de trabajo** que define cómo colaboran múltiples agentes. Lo diseñas visualmente arrastrando nodos y conectándolos.
+[Ver Workflow Studio →](/workflows/studio)
 
-Ejemplo: "Para implementar una feature, el architect diseña, el dev implementa, el qa testea, y el reviewer revisa".
+### 2. Workflow Commands
 
-## Tipos de nodos
-
-| Nodo | Qué hace | Ejemplo |
-|---|---|---|
-| **SubAgent** | Delega a un agente especializado | Dev, QA, Architect |
-| **Prompt** | Instrucción o contexto fijo | "Usa TypeScript estricto" |
-| **If/Else** | Decisión basada en condición | "Si hay errores de tipo, ir a Dev" |
-| **AskUserQuestion** | Pregunta al usuario | "¿Mergeamos a main?" |
-| **Skill** | Aplica un skill específico | react-19, tailwind-4 |
-
-## Cómo usarlo
-
-<Steps>
-
-1. **Diseña** — Arrastra nodos desde la paleta y conéctalos
-2. **Edita** — Click en cada nodo para configurar sus campos en el panel lateral
-3. **Valida** — El sistema verifica que el grafo sea válido (un inicio, un final, sin ciclos)
-4. **Exporta** — El workflow se convierte en comandos slash y agentes reales en opencode
-
-</Steps>
-
-## Ejemplo: Workflow de feature
-
-```
-[Start] → [Architect: Diseña] → [Dev: Implementa] → [QA: Testea] → [If: Tests pasan?]
-                                                                      ├─ Sí → [Reviewer: Revisa] → [End]
-                                                                      └─ No → [Dev: Arregla] → [QA: Testea]
-```
-
-Este workflow:
-1. El architect diseña la solución
-2. El dev la implementa
-3. El qa la testea
-4. Si los tests pasan, el reviewer revisa
-5. Si no, el dev arregla y vuelve a testear
-
-## Qué se exporta a opencode
-
-| Workflow element | opencode primitive | Output |
-|---|---|---|
-| Workflow completo | Slash command | `~/.config/opencode/commands/<name>.md` |
-| Orchestrator persona | Agent | `~/.config/opencode/agents/<name>-orchestrator.md` |
-| Nodos SubAgent | Agents | `~/.config/opencode/agents/<name>-<slug>.md` |
-| If/Else / AskUser | Routing instructions | Embed in orchestrator prompt |
-
-## Importar workflows
-
-Puedes importar un workflow existente:
-
-1. Click en "Import" en la toolbar
-2. Pega o sube el `workflow.json`
-3. El workflow aparece en el canvas listo para editar
-
-## Validación
-
-El sistema valida automáticamente:
-- ✅ Nodo de inicio y final presentes
-- ✅ Sin ciclos en el grafo
-- ✅ Todos los nodos tienen los campos requeridos
-- ✅ Nombres dentro de límites de caracteres
-
-## Guardar y reutilizar
-
-- **Guardar**: Click en "Save" — se guarda en `~/.ywai/workflows/<name>.json`
-- **Reutilizar**: Importa el JSON en otro proyecto
-- **Compartir**: El JSON es portable, se puede commit al repo
-
-<Aside type="tip">
-Workflow Studio es ideal para flujos de trabajo recurrentes que tu equipo usa seguido. Diseña una vez, exporta, y todo el equipo lo usa como un comando slash.
-</Aside>
-
-## Workflow Commands
-
-Los workflows se convierten en **comandos slash** que puedes usar en opencode:
+Los **comandos slash** que resultan de exportar un workflow.
 
 - `/feature-delivery` — Implementar features completas
 - `/social-refactor` — Migrar código entre frameworks
 - `/qa-automation` — Testing completo con estrategia
 
-[Ver documentación completa de Workflow Commands →](/workflows/commands)
+[Ver Commands →](/workflows/commands)
 
-## Workflow Groups
+### 3. Agent Groups
 
-Además de crear workflows personalizados, ywai tiene **grupos predefinidos** de agentes que trabajan juntos:
+Los **equipos predefinidos** de agentes que los commands usan.
 
-- **Core** — Equipo principal de desarrollo (orchestrator, dev, qa, architect, reviewer, devops, ask, finder, planning, memory)
+- **Core** — Equipo principal (orchestrator, dev, qa, architect, reviewer, devops, ask, finder, planning, memory)
 - **Social Refactor** — Equipo de migraciones (migration-orchestrator, migration-planner, migration-scope, migration-validator)
 - **QA Automation** — Equipo de testing (qa-orchestrator, qa-analyst, qa-dev, qa-finder, qa-reviewer, qa-ask)
 
-[Ver documentación completa de Workflow Groups →](/workflows/groups)
+[Ver Agent Groups →](/workflows/groups)
+
+## Cómo se relacionan
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ Workflow Studio │────→│ Workflow JSON   │────→│ Commands        │
+│ (editor visual) │     │ (fuente)        │     │ (slash commands)│
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                                                        ▼
+                                                ┌─────────────────┐
+                                                │ Agent Groups    │
+                                                │ (equipos)       │
+                                                └─────────────────┘
+```
+
+1. **Diseñas** en Workflow Studio
+2. **Guardas** como JSON
+3. **Exportas** a commands slash
+4. **Los commands** usan agent groups para coordinar
+
+## Ejemplo completo
+
+```
+1. Diseñas en Studio:
+   [Start] → [Architect] → [Dev] → [QA] → [End]
+
+2. Exportas como /feature-delivery
+
+3. Usas en opencode:
+   /feature-delivery Agregar login con Google
+
+4. El command lanza el grupo Core:
+   orchestrator → architect → dev → qa → reviewer
+```
+
+## Cuándo usar cada componente
+
+| Necesidad | Componente |
+|---|---|
+| Diseñar un flujo nuevo | Workflow Studio |
+| Usar un flujo predefinido | Workflow Commands |
+| Entender qué agentes hay | Agent Groups |
+| Crear un equipo personalizado | Agent Groups + Studio |
+
+<Aside type="tip">
+No necesitas usar los 3 componentes. Para la mayoría de casos, los **commands preinstalados** (`/feature-delivery`, `/social-refactor`, `/qa-automation`) son suficientes. Usa Studio solo cuando necesites un flujo personalizado.
+</Aside>
