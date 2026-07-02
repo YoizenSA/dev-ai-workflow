@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
 	Activity,
+	Bell,
 	Book,
 	Check,
 	Monitor,
@@ -27,6 +28,7 @@ import RoleDefaultsTab from "./RoleDefaultsTab";
 import ReferencesTab from "./ReferencesTab";
 import OrchestratorTab from "./OrchestratorTab";
 import ProfilesTab from "./ProfilesTab";
+import { NotificationsTab } from "./NotificationsTab";
 import SearchSelect from "../shared/SearchSelect";
 import ModelCombobox from "../missions/ModelCombobox";
 import Modal from "../shared/Modal";
@@ -42,7 +44,8 @@ type Tab =
 	| "providers"
 	| "tools"
 	| "references"
-	| "profiles";
+	| "profiles"
+	| "notifications";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	{
@@ -75,6 +78,11 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		id: "skills",
 		label: "Skills",
 		icon: <Star size={16} />,
+	},
+	{
+		id: "notifications",
+		label: "Notifications",
+		icon: <Bell size={16} />,
 	},
 	{
 		id: "mcp",
@@ -135,6 +143,7 @@ export default function Settings() {
 				{activeTab === "orchestrator" && <OrchestratorTab />}
 				{activeTab === "profiles" && <ProfilesTab />}
 				{activeTab === "skills" && <SkillsTab />}
+				{activeTab === "notifications" && <NotificationsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
 				{activeTab === "tools" && <ToolsTab />}
@@ -1177,7 +1186,7 @@ function AgentsTab() {
 }
 function SkillsTab() {
 	const [skills, setSkills] = useState<
-		{ name: string; hasSkillMD: boolean; description: string }[]
+		{ name: string; hasSkillMD: boolean; description: string; scope: string }[]
 	>([]);
 	const [loading, setLoading] = useState(true);
 	const [viewingSkill, setViewingSkill] = useState<string | null>(null);

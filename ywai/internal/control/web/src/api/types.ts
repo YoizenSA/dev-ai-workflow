@@ -307,6 +307,7 @@ export interface SkillInfo {
   name: string
   hasSkillMD: boolean
   description: string
+  scope: 'bundled' | 'custom'
 }
 
 export interface MCPServer {

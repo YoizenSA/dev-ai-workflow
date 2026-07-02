@@ -369,7 +369,12 @@ export const configApi = {
 	// Skills
 	listSkills: () => request<SkillInfo[]>("/api/config/skills"),
 	getSkill: (name: string) =>
-		request<{ name: string; content: string }>(`/api/config/skills/${name}`),
+		request<{ name: string; content: string; scope: string }>(`/api/config/skills/${name}`),
+	createSkill: (name: string, description: string, content: string) =>
+		request<void>("/api/config/skills", {
+			method: "POST",
+			body: JSON.stringify({ name, description, content }),
+		}),
 	updateSkill: (name: string, content: string) =>
 		request<void>(`/api/config/skills/${name}`, {
 			method: "PUT",

@@ -51,6 +51,7 @@ type Server struct {
 	startErr  error
 	jobs      *mcp.JobManager
 	workflows *workflowsAPI
+	push      *PushAPI
 }
 
 // New creates a new control server.
@@ -88,6 +89,13 @@ func New(port int) (*Server, error) {
 	// Wire the missions→kanban event bridge
 	projector := NewKanbanProjector(kServer, missionsStore)
 	mServer.SetEventSink(projector.Project)
+
+	// Push notification setup
+	pushStore, _ := NewPushStore()
+	if pushStore != nil {
+		s.push = NewPushAPI(pushStore)
+		projector.OnComplete(s.push.sender.Send)
+	}
 
 	s.buildRoutes()
 	return s, nil
@@ -130,6 +138,12 @@ func (s *Server) buildRoutes() {
 
 	// ─── Git status API ─────────────────────────────────────────
 	s.registerGitRoutes()
+
+	// ─── Push notifications API ─────────────────────────────────
+	s.registerPushRoutes()
+
+	// ─── Skills CRUD API ────────────────────────────────────────
+	s.registerSkillsRoutes()
 
 	// ─── React SPA ──────────────────────────────────────────────
 	// Chat proxy (SSE to OpenCode server)

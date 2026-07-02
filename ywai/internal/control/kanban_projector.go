@@ -32,12 +32,18 @@ var logMarkers = []string{
 // does NOT affect the mission FSM. Completed/cancelled missions leave
 // their kanban session as history (no deletion).
 type KanbanProjector struct {
-	server   *kanban.Server
-	kanban   *kanban.Store
-	missions *missions.MissionsStore
-	mu       sync.Mutex
-	sessions map[string]string            // missionID → kanban sessionID
-	delegs   map[string]map[string]string // missionID → featureID → delegationID
+	server      *kanban.Server
+	kanban      *kanban.Store
+	missions    *missions.MissionsStore
+	mu          sync.Mutex
+	sessions    map[string]string            // missionID → kanban sessionID
+	delegs      map[string]map[string]string // missionID → featureID → delegationID
+	onComplete  func(title, body string) error
+}
+
+// OnComplete sets a callback invoked when a delegation completes or fails.
+func (p *KanbanProjector) OnComplete(fn func(title, body string) error) {
+	p.onComplete = fn
 }
 
 // NewKanbanProjector creates a projector that pushes mission events to kanban.
@@ -188,8 +194,14 @@ func (p *KanbanProjector) handleFeatureStatus(payload interface{}) {
 		p.addActivity(delegID, "progress", "▶ Agent started working")
 	case missions.FeatureCompleted:
 		p.addActivity(delegID, "progress", "✓ Completed")
+		if p.onComplete != nil {
+			_ = p.onComplete("ywai: Task Complete", "A delegation finished successfully")
+		}
 	case missions.FeatureFailed:
 		p.addActivity(delegID, "blocked", "✗ Failed")
+		if p.onComplete != nil {
+			_ = p.onComplete("ywai: Task Failed", "A delegation encountered an error")
+		}
 	}
 }
 

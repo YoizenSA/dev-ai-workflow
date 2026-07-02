@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -265,6 +267,78 @@ func (cp *ChatProxy) handleChatAbort(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
+// handleFileList lists files in the workspace matching a prefix query.
+// GET /api/files?q=<prefix>
+func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"files": []string{}})
+		return
+	}
+
+	// Walk up to find a go.mod or similar root marker.
+	// Fall back to current working directory.
+	root := "."
+	for _, marker := range []string{"go.mod", "package.json", ".git"} {
+		dir := findFileUpwards(marker)
+		if dir != "" {
+			root = dir
+			break
+		}
+	}
+
+	limit := 20
+	var results []string
+
+	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip inaccessible
+		}
+		if d.IsDir() {
+			// Skip hidden dirs and node_modules
+			if strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+
+		if strings.HasPrefix(strings.ToLower(rel), strings.ToLower(q)) {
+			results = append(results, rel)
+			if len(results) >= limit {
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+
+	sort.Strings(results)
+
+	if results == nil {
+		results = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": results})
+}
+
+// findFileUpwards walks up from cwd looking for a file, returns the dir it's in.
+func findFileUpwards(name string) string {
+	dir, _ := os.Getwd()
+	for {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // RegisterChatRoutes registers all chat proxy routes on the mux.
 func (s *Server) registerChatRoutes() {
 	// Auto-detect OpenCode server URL
@@ -278,6 +352,7 @@ func (s *Server) registerChatRoutes() {
 	log.Printf("[chat] proxying to OpenCode at %s", opencodeURL)
 
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
+	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
 	s.mux.HandleFunc("GET /api/chat/sessions", cp.handleChatSessions)
 	s.mux.HandleFunc("POST /api/chat/sessions", cp.handleChatCreateSession)
 	s.mux.HandleFunc("GET /api/chat/messages", cp.handleChatMessages)
