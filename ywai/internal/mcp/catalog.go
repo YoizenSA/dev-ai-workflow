@@ -40,12 +40,21 @@ type CatalogEntry struct {
 
 	// OAuth fields for remote servers that need authentication.
 	// AuthType is "oauth" when OAuth is required; empty otherwise.
+<<<<<<< Updated upstream
 	AuthType         string
 	ClientID         string
 	ClientSecret     string
 	Scopes           []string
 	AuthorizationURL string
 	TokenURL         string
+=======
+	AuthType        string
+	ClientID        string
+	ClientSecret    string
+	Scopes          []string
+	AuthorizationURL string
+	TokenURL        string
+>>>>>>> Stashed changes
 }
 
 // catalog is the package-private backing slice. Callers must not mutate it.

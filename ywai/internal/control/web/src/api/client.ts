@@ -759,7 +759,11 @@ export interface McpCatalogItem {
 
 /** Health status for a single MCP server. */
 export interface McpHealthItem {
+<<<<<<< Updated upstream
 	serverId: string;
+=======
+	id: string;
+>>>>>>> Stashed changes
 	status: 'healthy' | 'unhealthy' | 'unknown';
 	latency_ms?: number;
 	error?: string;
@@ -769,6 +773,7 @@ export interface McpHealthItem {
 export interface McpHealthResponse {
 	servers: McpHealthItem[];
 }
+<<<<<<< Updated upstream
 
 // ─── Git API ──────────────────────────────────────────────────────────────
 
@@ -785,3 +790,5 @@ export interface GitStatus {
 export const gitApi = {
 	getStatus: () => request<GitStatus>("/api/git/status"),
 };
+=======
+>>>>>>> Stashed changes

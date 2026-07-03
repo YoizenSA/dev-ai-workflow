@@ -3,7 +3,7 @@ title: Escribir Skills
 description: Cómo crear skills personalizados para tus agentes
 ---
 
-import { Steps, Aside } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 # Escribir Skills
 
@@ -201,8 +201,6 @@ export function UserCard({ user, className }: UserCardProps) {
 
 ## Cómo crear un skill
 
-<Steps>
-
 1. **Crear la carpeta** del skill
    ```bash
    mkdir -p mi-proyecto/.agents/skills/mi-skill
@@ -222,8 +220,6 @@ export function UserCard({ user, className }: UserCardProps) {
    ```bash
    ywai skills | grep mi-skill
    ```
-
-</Steps>
 
 ## Trucos para buenos skills
 

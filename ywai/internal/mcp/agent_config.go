@@ -256,3 +256,14 @@ func writeRootAtomic(path string, root map[string]any) error {
 	}
 	return nil
 }
+
+// ProjectMcpConfigPath returns the path to the project-local MCP config file
+// at <projectDir>/.opencode/mcp.json. The .opencode directory is created if it
+// does not exist.
+func ProjectMcpConfigPath(projectDir string) (string, error) {
+	dir := filepath.Join(projectDir, ".opencode")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create .opencode dir: %w", err)
+	}
+	return filepath.Join(dir, "mcp.json"), nil
+}

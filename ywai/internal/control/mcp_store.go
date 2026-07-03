@@ -345,8 +345,20 @@ func commandFromInterfaceSlice(values []interface{}) []string {
 	return command
 }
 
-// handleMcpInstalled returns currently installed MCPs from opencode.json.
+// handleMcpInstalled returns currently installed MCPs.
+// Supports ?project_dir=<path> for merged global+project-local config.
 func (s *Server) handleMcpInstalled(w http.ResponseWriter, r *http.Request) {
+	projectDir := r.URL.Query().Get("project_dir")
+	if projectDir != "" {
+		mcpConfig, err := readMergedMcpConfig(projectDir)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
+			return
+		}
+		writeJSON(w, http.StatusOK, mcpConfig)
+		return
+	}
+
 	mcpConfig, err := readMcpConfig()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
@@ -361,6 +373,7 @@ type mcpInstallRequest struct {
 	ID          string            `json:"id"`
 	TargetAgent string            `json:"target_agent"`
 	Credentials map[string]string `json:"credentials"`
+	ProjectDir  string            `json:"project_dir,omitempty"`
 }
 
 // mcpInstallResponse is the 202 body returned by handleMcpInstall.
@@ -702,7 +715,13 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 			item.Status = "unknown"
 			break
 		}
+<<<<<<< Updated upstream
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+=======
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		req, reqErr := http.NewRequestWithContext(checkCtx, http.MethodHead, url, nil)
+>>>>>>> Stashed changes
 		if reqErr != nil {
 			item.Status = "unhealthy"
 			item.Error = reqErr.Error()
@@ -832,4 +851,81 @@ func GetInstalledMcpIDs() ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// projectMcpConfigFilePath returns the path to the project-local MCP config file.
+func projectMcpConfigFilePath(projectDir string) string {
+	return filepath.Join(projectDir, ".opencode", "mcp.json")
+}
+
+// readProjectMcpConfig reads the mcpServers section from a project-local
+// .opencode/mcp.json file. Returns an empty map if the file doesn't exist.
+func readProjectMcpConfig(projectDir string) (map[string]interface{}, error) {
+	path := projectMcpConfigFilePath(projectDir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("reading project mcp config %s: %w", path, err)
+	}
+
+	var mcpSection map[string]interface{}
+	if err := json.Unmarshal(data, &mcpSection); err != nil {
+		return nil, fmt.Errorf("parsing project mcp config %s: %w", path, err)
+	}
+	// Handle the case where the file has a top-level "mcpServers" key.
+	if servers, ok := mcpSection["mcpServers"]; ok {
+		if s, ok := servers.(map[string]interface{}); ok {
+			return s, nil
+		}
+	}
+	return mcpSection, nil
+}
+
+// writeProjectMcpConfig writes the mcpServers section to a project-local
+// .opencode/mcp.json file. The .opencode directory is created if needed.
+func writeProjectMcpConfig(projectDir string, mcp map[string]interface{}) error {
+	dir := filepath.Join(projectDir, ".opencode")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create .opencode dir: %w", err)
+	}
+
+	path := filepath.Join(dir, "mcp.json")
+	data, err := json.MarshalIndent(mcp, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling project mcp config: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("writing project mcp config: %w", err)
+	}
+	return nil
+}
+
+// readMergedMcpConfig merges global and project-local MCP config.
+// Project-local servers override global servers with the same ID.
+// Returns the merged map and a map of scope (id -> "global" | "project").
+func readMergedMcpConfig(projectDir string) (map[string]interface{}, error) {
+	global, err := readMcpConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]interface{}, len(global))
+	for id, entry := range global {
+		result[id] = entry
+	}
+
+	if projectDir != "" {
+		project, err := readProjectMcpConfig(projectDir)
+		if err != nil {
+			return nil, err
+		}
+		for id, entry := range project {
+			result[id] = entry
+		}
+	}
+
+	return result, nil
 }

@@ -293,8 +293,32 @@
 	background: var(--success-soft, color-mix(in srgb, var(--success, #22c55e) 18%, transparent));
 	color: var(--success, #22c55e);
 	white-space: nowrap;
-	text-transform: uppercase;
-	letter-spacing: 0.03em;
+}
+
+/* ─── Health dot ────────────────────────────────────────────────── */
+
+.mcp-store-health-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-left: 6px;
+	cursor: help;
+	flex-shrink: 0;
+}
+
+.mcp-store-health-dot.healthy {
+	background: var(--success, #22c55e);
+	box-shadow: 0 0 4px var(--success, #22c55e);
+}
+
+.mcp-store-health-dot.unhealthy {
+	background: var(--danger, #ef4444);
+	box-shadow: 0 0 4px var(--danger, #ef4444);
+}
+
+.mcp-store-health-dot.unknown {
+	background: var(--text-muted, #9ca3af);
 }
 
 /* ─── Health dot ────────────────────────────────────────────────── */

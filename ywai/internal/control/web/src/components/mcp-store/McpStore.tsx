@@ -248,6 +248,10 @@ export function McpStore() {
 	}, []);
 
 	// Health check: fetch on mount and every 30s.
+<<<<<<< Updated upstream
+=======
+	const healthIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+>>>>>>> Stashed changes
 	useEffect(() => {
 		const fetchHealth = () => {
 			fetch('/api/mcp/health')
@@ -259,11 +263,21 @@ export function McpStore() {
 					}
 					setHealthData(map);
 				})
+<<<<<<< Updated upstream
 				.catch(() => { /* ignore */ });
 		};
 		fetchHealth();
 		const interval = setInterval(fetchHealth, 30000);
 		return () => clearInterval(interval);
+=======
+				.catch(() => { /* ignore — servers may not be installed yet */ });
+		};
+		fetchHealth();
+		healthIntervalRef.current = setInterval(fetchHealth, 30000);
+		return () => {
+			if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+		};
+>>>>>>> Stashed changes
 	}, []);
 
 	// Clear any poll intervals when the component unmounts so timers don't
