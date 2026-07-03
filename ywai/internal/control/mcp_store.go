@@ -715,6 +715,7 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 			item.Status = "unknown"
 			break
 		}
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 =======
@@ -722,6 +723,11 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 		defer cancel()
 		req, reqErr := http.NewRequestWithContext(checkCtx, http.MethodHead, url, nil)
 >>>>>>> Stashed changes
+=======
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		req, reqErr := http.NewRequestWithContext(checkCtx, http.MethodHead, url, nil)
+>>>>>>> 3f64425 (fix: update astro dependency to version 7.0.6 and refactor MCP health check logic)
 		if reqErr != nil {
 			item.Status = "unhealthy"
 			item.Error = reqErr.Error()
