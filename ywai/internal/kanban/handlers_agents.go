@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
 
@@ -775,33 +777,41 @@ func (h *Handlers) GetAgentGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// task delegation map -> edges + wildcard attribute.
+		// task delegation map -> edges + wildcard attribute. Prefer opencode.json;
+		// fall back to the agent markdown's permission.task. Workflow-exported
+		// agents live only as .md files and never touch opencode.json, so without
+		// this fallback their delegation edges would be missing from the graph.
+		var taskMap map[string]string
 		taskRaw := lookupAgentPermissionKey(configData, name, "task")
 		if len(taskRaw) > 0 {
-			var asMap map[string]string
-			if json.Unmarshal(taskRaw, &asMap) == nil {
-				for target, val := range asMap {
-					if target == "*" {
-						node.HasWildcard = true
-						node.WildcardValue = val
-						continue
-					}
-					if val == "allow" || val == "ask" {
-						edges = append(edges, agentGraphEdge{
-							ID:     name + "->" + target,
-							Source: name,
-							Target: target,
-							Value:  val,
-						})
-					}
-				}
-			} else {
+			if json.Unmarshal(taskRaw, &taskMap) != nil {
+				taskMap = nil
 				// Scalar form: "allow"/"ask"/"deny" applies to all targets.
 				var asStr string
 				if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
 					node.HasWildcard = true
 					node.WildcardValue = asStr
 				}
+			}
+		}
+		if taskMap == nil && !node.HasWildcard {
+			if mdPath := resolveAgentFile(agentsDirPath, name); mdPath != "" {
+				taskMap = taskMapFromMarkdown(mdPath)
+			}
+		}
+		for target, val := range taskMap {
+			if target == "*" {
+				node.HasWildcard = true
+				node.WildcardValue = val
+				continue
+			}
+			if val == "allow" || val == "ask" {
+				edges = append(edges, agentGraphEdge{
+					ID:     name + "->" + target,
+					Source: name,
+					Target: target,
+					Value:  val,
+				})
 			}
 		}
 
@@ -823,6 +833,30 @@ func (h *Handlers) GetAgentGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, agentGraphResp{Nodes: nodes, Edges: edges})
+}
+
+// taskMapFromMarkdown extracts an agent's permission.task delegation map from
+// its markdown frontmatter. Used as a fallback for agents that exist only as
+// .md files (e.g. workflow exports) and are absent from opencode.json. Returns
+// nil when the file is unreadable, has no frontmatter, or task is not a map.
+func taskMapFromMarkdown(mdPath string) map[string]string {
+	data, err := os.ReadFile(mdPath)
+	if err != nil {
+		return nil
+	}
+	fm, _ := parseFrontmatter(string(data))
+	if fm == "" {
+		return nil
+	}
+	var doc struct {
+		Permission struct {
+			Task map[string]string `yaml:"task"`
+		} `yaml:"permission"`
+	}
+	if err := yaml.Unmarshal([]byte(fm), &doc); err != nil {
+		return nil
+	}
+	return doc.Permission.Task
 }
 
 // agentGraphNode is a single agent (or a ghost target) in the delegation graph.

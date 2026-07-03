@@ -2,17 +2,18 @@ import { useState } from 'react'
 import { useProjects } from './useProjects'
 import { ProjectCard } from './ProjectCard'
 import { AddProjectModal } from './AddProjectModal'
+import './hub.css'
 
 export function HubPage() {
   const { projects, loading, error, addProject, removeProject } = useProjects()
   const [showAddModal, setShowAddModal] = useState(false)
 
   if (loading) {
-    return <div>Loading...</div>
+    return <div className="hub-page"><div className="hub-page__empty">Loading...</div></div>
   }
 
   if (error) {
-    return <div>Something went wrong</div>
+    return <div className="hub-page"><div className="hub-page__empty">Something went wrong</div></div>
   }
 
   return (
@@ -27,7 +28,7 @@ export function HubPage() {
         </div>
       )}
       <button
-        className="hub-page__add-btn"
+        className="hub-page__add-btn btn btn-primary"
         onClick={() => setShowAddModal(true)}
       >
         Add Project

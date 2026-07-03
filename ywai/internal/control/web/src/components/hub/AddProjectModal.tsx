@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import './hub.css'
 
 export interface AddProjectData {
   name: string
@@ -35,7 +36,7 @@ export function AddProjectModal({ onAdd, onCancel }: AddProjectModalProps) {
   }
 
   return (
-    <div role="dialog" className="add-project-modal">
+    <div className="add-project-modal" role="dialog">
       <form onSubmit={handleSubmit}>
         <div className="add-project-modal__field">
           <label htmlFor="project-name">Name</label>
@@ -56,8 +57,8 @@ export function AddProjectModal({ onAdd, onCancel }: AddProjectModalProps) {
           </select>
         </div>
         <div className="add-project-modal__actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="submit">Add</button>
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn btn-primary">Add</button>
         </div>
       </form>
     </div>

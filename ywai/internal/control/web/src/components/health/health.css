@@ -1,0 +1,86 @@
+/* health.css — Health dashboard styles using yz-ui design tokens */
+
+.health-dashboard {
+  padding: var(--space-6, 1.5rem);
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.health-summary {
+  margin-bottom: var(--space-6, 1.5rem);
+}
+
+.health-summary h2 {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  color: var(--text, #2d2d2d);
+  margin: 0 0 var(--space-1, 0.25rem);
+}
+
+.health-summary .health-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.health-summary.healthy h2 {
+  color: var(--success, #22c55e);
+}
+
+.health-summary.unhealthy h2 {
+  color: var(--danger, #ef4444);
+}
+
+.health-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4, 1rem);
+  margin-bottom: var(--space-6, 1.5rem);
+}
+
+.health-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.health-status-card__name {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text, #2d2d2d);
+}
+
+.health-status-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1rem;
+}
+
+.health-status-card__icon.ok {
+  background: var(--success-soft, rgba(16, 185, 129, 0.16));
+  color: var(--success, #22c55e);
+}
+
+.health-status-card__icon.error {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.16));
+  color: var(--danger, #ef4444);
+}
+
+.health-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 1rem);
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+  flex-wrap: wrap;
+}
+
+.health-meta span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 0.25rem);
+}

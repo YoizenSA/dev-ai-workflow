@@ -209,6 +209,33 @@
 	flex-shrink: 0;
 }
 
+/* Expand button — opens the detail modal. Compact icon-button using
+   yz-ui tokens. Transparent by default, lifted on hover. */
+.delegation-expand-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius, 8px);
+	background: transparent;
+	color: var(--text-faint, #9ca3af);
+	font-size: 0.85rem;
+	line-height: 1;
+	cursor: pointer;
+	transition: all 140ms ease;
+	flex-shrink: 0;
+}
+
+.delegation-expand-btn:hover {
+	background: var(--surface-hover, rgba(255,255,255,0.08));
+	border-color: var(--panel-border, #e5e7eb);
+	color: var(--text, #2d2d2d);
+	box-shadow: var(--shadow-glass, 0 1px 3px rgba(0,0,0,0.07));
+}
+
 .delegation-chevron.open {
 	transform: rotate(180deg);
 }
@@ -930,11 +957,11 @@
 }
 
 .git-clean {
-	background: var(--color-success-soft, #d1fae5);
-	color: var(--color-success, #065f46);
+	background: var(--success-soft, rgba(16, 185, 129, 0.16));
+	color: var(--success, #34d399);
 }
 
 .git-dirty {
-	background: var(--color-warning-soft, #fef3c7);
-	color: var(--color-warning, #92400e);
+	background: var(--warning-soft, rgba(253, 189, 39, 0.15));
+	color: var(--warning, #fbbf24);
 }
