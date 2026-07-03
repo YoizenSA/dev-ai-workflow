@@ -195,6 +195,7 @@
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
+  white-space: pre-wrap;
 }
 
 .chat-message.user .message-content {
@@ -223,6 +224,13 @@
 }
 
 /* Input area */
+.chat-error {
+  padding: var(--space-2) var(--space-4);
+  color: var(--yz-danger, #e53e3e);
+  font-size: 13px;
+  text-align: center;
+}
+
 .chat-input-area {
   display: flex;
   gap: var(--space-2);

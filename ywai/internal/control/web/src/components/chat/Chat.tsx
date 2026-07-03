@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Autocomplete, { type AutocompleteItem } from "./Autocomplete";
 import "./Chat.css";
+import { getEventStreamURL, getMessagesURL } from "../../api/chat";
 
 interface Session {
   id: string;
@@ -33,6 +34,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -102,7 +104,7 @@ export default function Chat() {
 
   const connectSSE = (sessionId: string) => {
     disconnectSSE();
-    const es = new EventSource(`${API_BASE}/events?sessionId=${sessionId}`);
+    const es = new EventSource(getEventStreamURL(sessionId));
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {
@@ -180,6 +182,7 @@ export default function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     const msgText = input;
     setInput("");
+    setError("");
     setIsStreaming(true);
 
     try {
@@ -192,6 +195,7 @@ export default function Chat() {
         }),
       });
     } catch {
+      setError("Send failed — network error");
       setIsStreaming(false);
     }
   };
@@ -230,7 +234,7 @@ export default function Chat() {
 
   const loadMessages = async (sessionId: string) => {
     try {
-      const resp = await fetch(`${API_BASE}/messages?sessionId=${sessionId}`);
+      const resp = await fetch(getMessagesURL(sessionId));
       if (resp.ok) {
         const data = await resp.json();
         setMessages(
@@ -491,6 +495,8 @@ export default function Chat() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {error && <div className="chat-error">{error}</div>}
 
         <div className="chat-input-area">
           <div className="input-wrapper">

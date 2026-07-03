@@ -74,6 +74,39 @@ func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 	}
 }
 
+// TestOrchestratorHasTaskPermission verifies the generated orchestrator agent
+// markdown includes a nested permission.task block with deny-all and an allow
+// entry for each subAgent node.
+func TestOrchestratorHasTaskPermission(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := NewExporterWithDirs(commandsDir, agentsDir)
+
+	_, files, err := e.Plan(exportFixture())
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	orchPath := filepath.Join(agentsDir, "daily-task-orchestrator.md")
+	orch, ok := files[orchPath]
+	if !ok {
+		t.Fatalf("orchestrator markdown not found at %s", orchPath)
+	}
+
+	if !strings.Contains(orch, "permission:") {
+		t.Errorf("orchestrator missing permission block:\n%s", orch)
+	}
+	if !strings.Contains(orch, "\n  task:") {
+		t.Errorf("orchestrator missing nested permission.task block:\n%s", orch)
+	}
+	if !strings.Contains(orch, `"*": deny`) {
+		t.Errorf("orchestrator permission.task missing deny-all:\n%s", orch)
+	}
+	if !strings.Contains(orch, "daily-task-news-briefing: allow") {
+		t.Errorf("orchestrator permission.task missing subagent allow entry:\n%s", orch)
+	}
+}
+
 func TestApplyWritesFilesToDisk(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { RefreshCw, Check, Save, Plus } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { RefreshCw, Check, Save, Plus, Search, Zap } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
 import ModelCombobox from "../missions/ModelCombobox";
@@ -28,6 +28,10 @@ export default function ProfilesTab() {
 	// Editable draft of the active profile's per-agent models.
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [dirty, setDirty] = useState(false);
+	// Filter agents by name.
+	const [agentFilter, setAgentFilter] = useState("");
+	// Bulk model selector value.
+	const [bulkModel, setBulkModel] = useState("");
 
 	const fetchProfiles = () => {
 		setLoading(true);
@@ -57,6 +61,8 @@ export default function ProfilesTab() {
 			Object.fromEntries(Object.entries(agents).map(([name, m]) => [name, m.model ?? ""])),
 		);
 		setDirty(false);
+		setAgentFilter("");
+		setBulkModel("");
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeProfile, data]);
 
@@ -142,6 +148,18 @@ export default function ProfilesTab() {
 			.finally(() => setResyncing(false));
 	};
 
+	const applyModelToAgents = (modelId: string, names: string[]) => {
+		if (!modelId || names.length === 0) return;
+		setDraft((prev) => {
+			const next = { ...prev };
+			for (const name of names) {
+				next[name] = modelId;
+			}
+			return next;
+		});
+		setDirty(true);
+	};
+
 	if (loading && !data) {
 		return (
 			<div className="card card-pad">
@@ -154,11 +172,40 @@ export default function ProfilesTab() {
 	}
 
 	const profileNames = data ? Object.keys(data.profiles) : [];
-	const agentNames = Object.keys(draft).sort((a, b) => {
-		const ga = GROUP_ORDER.indexOf(agentGroup(a));
-		const gb = GROUP_ORDER.indexOf(agentGroup(b));
-		return ga !== gb ? ga - gb : a.localeCompare(b);
-	});
+	const lowerFilter = agentFilter.toLowerCase();
+	const allAgentNames = useMemo(
+		() =>
+			Object.keys(draft).sort((a, b) => {
+				const ga = GROUP_ORDER.indexOf(agentGroup(a));
+				const gb = GROUP_ORDER.indexOf(agentGroup(b));
+				return ga !== gb ? ga - gb : a.localeCompare(b);
+			}),
+		[draft],
+	);
+	const agentNames = useMemo(
+		() => allAgentNames.filter((name) => name.toLowerCase().includes(lowerFilter)),
+		[allAgentNames, lowerFilter],
+	);
+
+	// Models currently in use somewhere in this profile, useful as quick chips.
+	const inUseModelIds = useMemo(
+		() => Array.from(new Set(Object.values(draft).filter(Boolean))),
+		[draft],
+	);
+	const inUseModels = useMemo(
+		() => inUseModelIds.map((id) => models.find((m) => m.id === id)).filter(Boolean) as ModelInfo[],
+		[inUseModelIds, models],
+	);
+
+	const allAgentGroups = useMemo(
+		() =>
+			allAgentNames.reduce<Record<string, string[]>>((acc, name) => {
+				const g = agentGroup(name);
+				(acc[g] ||= []).push(name);
+				return acc;
+			}, {}),
+		[allAgentNames],
+	);
 
 	return (
 		<div className="card card-pad">
@@ -181,7 +228,7 @@ export default function ProfilesTab() {
 
 			{/* Profile selector */}
 			<div style={{ marginBottom: "1.5rem" }}>
-				<label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>Active Profile</label>
+				<div style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>Active Profile</div>
 				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 					{profileNames.map((name) => (
 						<button
@@ -216,13 +263,91 @@ export default function ProfilesTab() {
 				</p>
 			)}
 
+			{/* Bulk actions */}
+			<div
+				style={{
+					position: "sticky",
+					top: 0,
+					zIndex: 10,
+					backgroundColor: "var(--surface, inherit)",
+					padding: "0.75rem",
+					margin: "0 -0.75rem 1rem",
+					borderRadius: "8px",
+					border: "1px solid var(--color-border, #ddd)",
+					display: "flex",
+					gap: "0.75rem",
+					flexWrap: "wrap",
+					alignItems: "center",
+				}}
+			>
+				<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 1 260px" }}>
+					<Zap size={14} />
+					<span style={{ fontWeight: 600, fontSize: "14px" }}>Quick set</span>
+					<div style={{ flex: 1, minWidth: 160 }}>
+						<ModelCombobox
+							id="bulk-model"
+							label=""
+							value={bulkModel}
+							models={models}
+							onChange={setBulkModel}
+						/>
+					</div>
+				</div>
+				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+					<button
+						type="button"
+						className="btn btn-sm"
+						disabled={!bulkModel || allAgentNames.length === 0}
+						onClick={() => applyModelToAgents(bulkModel, allAgentNames)}
+					>
+						All agents
+					</button>
+					{GROUP_ORDER.filter((g) => allAgentGroups[g]?.length).map((g) => (
+						<button
+							key={g}
+							type="button"
+							className="btn btn-sm btn-ghost"
+							disabled={!bulkModel}
+							onClick={() => applyModelToAgents(bulkModel, allAgentGroups[g])}
+						>
+							{GROUP_LABELS[g] ?? g}
+						</button>
+					))}
+				</div>
+			</div>
+
+			{/* Agent filter */}
+			<div style={{ marginBottom: "1rem" }}>
+				<div style={{ position: "relative" }}>
+					<Search
+						size={14}
+						style={{
+							position: "absolute",
+							left: "10px",
+							top: "50%",
+							transform: "translateY(-50%)",
+							color: "var(--text-muted)",
+							pointerEvents: "none",
+						}}
+					/>
+					<input
+						type="text"
+						className="input"
+						placeholder="Filter agents…"
+						value={agentFilter}
+						onChange={(e) => setAgentFilter(e.target.value)}
+						style={{ paddingLeft: "32px" }}
+					/>
+				</div>
+			</div>
+
 			{/* Editable per-agent model table */}
 			{agentNames.length > 0 ? (
 				<table style={{ width: "100%", borderCollapse: "collapse" }}>
 					<thead>
 						<tr>
 							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Agent</th>
-							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Model</th>
+							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)", width: "60%" }}>Model</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -239,20 +364,47 @@ export default function ProfilesTab() {
 									</tr>,
 								);
 							}
+							// Show quick chips for models used by other agents.
+							const quickModels = inUseModels.filter((m) => m.id !== draft[name]).slice(0, 4);
 							rows.push(
 								<tr key={name}>
-									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>{name}</td>
+									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)", verticalAlign: "middle" }}>
+										{name}
+									</td>
 									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
-										<ModelCombobox
-											id={`orch-profile-model-${name}`}
-											label=""
-											value={draft[name] ?? ""}
-											models={models}
-											onChange={(v) => {
-												setDraft((prev) => ({ ...prev, [name]: v }));
-												setDirty(true);
-											}}
-										/>
+										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+											<div style={{ flex: "1 1 220px", minWidth: 220 }}>
+												<ModelCombobox
+													id={`orch-profile-model-${name}`}
+													label=""
+													value={draft[name] ?? ""}
+													models={models}
+													onChange={(v) => {
+														setDraft((prev) => ({ ...prev, [name]: v }));
+														setDirty(true);
+													}}
+												/>
+											</div>
+											{quickModels.length > 0 && (
+												<div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+													{quickModels.map((m) => (
+														<button
+															key={m.id}
+															type="button"
+															className="pill pill-muted"
+															title={m.name || m.id}
+															onClick={() => {
+																setDraft((prev) => ({ ...prev, [name]: m.id }));
+																setDirty(true);
+															}}
+															style={{ fontSize: "11px", padding: "0.15rem 0.45rem" }}
+														>
+															{m.name || m.id}
+														</button>
+													))}
+												</div>
+											)}
+										</div>
 									</td>
 								</tr>,
 							);
@@ -261,7 +413,9 @@ export default function ProfilesTab() {
 					</tbody>
 				</table>
 			) : (
-				<p className="muted">No agent model mappings for this profile</p>
+				<p className="muted">
+					{agentFilter ? "No agents match your filter" : "No agent model mappings for this profile"}
+				</p>
 			)}
 
 			<div style={{ marginTop: "1.5rem" }}>
