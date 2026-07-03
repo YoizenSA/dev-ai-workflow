@@ -139,6 +139,15 @@ func (s *Server) buildRoutes() {
 	// ─── Settings maintenance API (SDD cleanup, etc.) ───────────
 	s.registerSettingsRoutes()
 
+	// ─── Hub (project registry) API ────────────────────────────
+	s.registerHubRoutes()
+
+	// ─── Health monitoring API ──────────────────────────────────
+	s.registerHealthRoutes()
+
+	// ─── Scheduler API ─────────────────────────────────────────
+	s.registerSchedulerRoutes()
+
 	// ─── Git status API ─────────────────────────────────────────
 	s.registerGitRoutes()
 

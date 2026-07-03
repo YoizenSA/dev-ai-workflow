@@ -68,6 +68,23 @@ export function useWorkflowList(): { name: string }[] {
 	return wfs
 }
 
+// Sections from the library (e.g. handoff, context-gathering, handoff-qa).
+let sectionsCache: { name: string; content: string }[] | null = null
+export function useSections(): { name: string; content: string }[] {
+	const [sections, setSections] = useState(sectionsCache ?? [])
+	useEffect(() => {
+		if (sectionsCache) return
+		workflowApi
+			.listSections()
+			.then((s) => {
+				sectionsCache = s ?? []
+				setSections(sectionsCache)
+			})
+			.catch(() => undefined)
+	}, [])
+	return sections
+}
+
 // Real MCP servers configured in opencode.json (not the static catalog).
 let mcpServerCache: { id: string; enabled: boolean }[] | null = null
 export function useMcpServers(): { id: string; enabled: boolean }[] {
@@ -368,6 +385,7 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 // SubAgentFields — the richest node: identity, prompts, model/mode, tools.
 function SubAgentFields({ node, models, current }: { node: WorkflowNode; models: ModelInfo[]; current: Workflow }) {
 	const descMissing = !(node.data.description ?? '').trim()
+	const availableSections = useSections()
 
 	// Build the delegate options: other subAgents in this workflow (by name) +
 	// known external agents. Exclude self.
@@ -468,6 +486,18 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 					/>
 					<span className="field-help">Agents this one may delegate to (beyond graph edges). E.g. finder for code search.</span>
 				</div>
+				<div className="field">
+					<label className="field-label">Sections</label>
+					<MultiSelect
+						options={availableSections.map((s) => ({ value: s.name, label: s.name }))}
+						selected={csvToSet(node.data.sections)}
+						onChange={(set) => update(node, { sections: setToCsv(set) })}
+						placeholder="handoff (default)"
+					/>
+					<span className="field-help">Library sections attached to handoff. Empty = handoff only.</span>
+				</div>
+			{/* ── Handoff Contract ── */}
+			<HandoffContractSection />
 		</>
 	)
 }
@@ -514,6 +544,50 @@ function AskUserFields({ node }: { node: WorkflowNode }) {
 				)}
 			</div>
 		</>
+	)
+}
+
+// HandoffContractSection — informational callout + collapsible handoff.md viewer.
+function HandoffContractSection() {
+	const [expanded, setExpanded] = useState(false)
+	const [content, setContent] = useState<string | null>(null)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!expanded || content !== null) return
+		workflowApi.handoffContract()
+			.then((r) => setContent(r.content))
+			.catch((e: Error) => setError(e.message))
+	}, [expanded, content])
+
+	return (
+		<div className="wf-handoff-section">
+			<div className="alert alert-info" style={{ marginBottom: 8 }}>
+				On export, this agent automatically receives the shared handoff contract — it must end each run
+				with <strong>Status</strong> / <strong>Did</strong> / <strong>Artifacts</strong> /{' '}
+				<strong>Next suggested</strong> / <strong>Notes/risks</strong>.
+			</div>
+			<button
+				className="btn btn-ghost"
+				onClick={() => setExpanded(!expanded)}
+				style={{ width: '100%', textAlign: 'left', fontSize: '0.82rem' }}
+			>
+				{expanded ? '▼' : '▶'} View handoff contract
+			</button>
+			{expanded && (
+				<div className="wf-handoff-contract-content">
+					{error ? (
+						<span className="field-help error">{error}</span>
+					) : content === null ? (
+						<span className="field-help">Loading…</span>
+					) : content ? (
+						<pre className="mono">{content}</pre>
+					) : (
+						<span className="field-help">No handoff contract available.</span>
+					)}
+				</div>
+			)}
+		</div>
 	)
 }
 

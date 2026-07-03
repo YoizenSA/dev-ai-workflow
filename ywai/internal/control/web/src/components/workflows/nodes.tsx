@@ -36,6 +36,7 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	taskDescription?: string
 	flowId?: string
 	aiParams?: string
+	sections?: string
 	width?: number
 	height?: number
 	options?: { id?: string; label?: string }[]
@@ -187,6 +188,11 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 				</span>
 				<span className="wf-node-type">{meta.type}</span>
 				{d.agentType && <span className="wf-badge">{d.agentType === 'claudeCode' ? 'CLAUDE CODE' : d.agentType}</span>}
+				{d.__type === 'subAgent' && (
+	<span className="wf-badge wf-badge-handoff">
+		📋 {d.sections?.trim() ? d.sections.split(',').map(s => s.trim()).filter(Boolean).join(', ') : 'handoff'}
+	</span>
+)}
 			</div>
 			<div className="wf-node-title">{title(d)}</div>
 			{sub && <div className="wf-node-sub">{sub}</div>}

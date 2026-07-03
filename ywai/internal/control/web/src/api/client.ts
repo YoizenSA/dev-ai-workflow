@@ -745,6 +745,9 @@ export const workflowApi = {
 	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
 	// Health check for all installed MCP servers.
 	checkHealth: () => request<McpHealthResponse>("/api/mcp/health"),
+	// Handoff contract — the shared Kanban handoff template injected into every sub-agent.
+	handoffContract: () => request<{ content: string }>("/api/workflows/handoff-contract"),
+	listSections: () => request<{ name: string; content: string }[]>("/api/workflows/sections"),
 };
 
 // McpCatalogItem mirrors the control server's MCP catalog entry (subset used by

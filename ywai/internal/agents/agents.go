@@ -153,7 +153,7 @@ func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 	return &AgentProfile{
 		Name:        name,
 		Description: description,
-		Prompt:      appendSections(promptWithSkills(prompt, skills), sections, sourceDir),
+		Prompt:      AppendSections(promptWithSkills(prompt, skills), sections, sourceDir),
 		Permission:  perms,
 		Skills:      skills,
 		Mode:        mode,
@@ -210,10 +210,10 @@ func extractSections(prompt string) []string {
 	return nil
 }
 
-// appendSections resolves and appends shared section files from the
+// AppendSections resolves and appends shared section files from the
 // agents/sections/ directory. Each section is a .md file named after
 // the section (e.g. "handoff" -> sections/handoff.md).
-func appendSections(prompt string, sections []string, sourceDir string) string {
+func AppendSections(prompt string, sections []string, sourceDir string) string {
 	if len(sections) == 0 {
 		return prompt
 	}

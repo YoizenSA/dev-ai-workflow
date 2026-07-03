@@ -89,15 +89,19 @@ type NodeData struct {
 	AgentDefinition  string `json:"agentDefinition,omitempty"` // system prompt / identity
 	Prompt           string `json:"prompt,omitempty"`          // task to perform
 	AgentType        string `json:"agentType,omitempty"`       // "claudeCode" | "other"
-	Tools            string `json:"tools,omitempty"`           // comma-separated tool names
-	Model            string `json:"model,omitempty"`           // sonnet|opus|haiku|inherit|provider/id
-	Memory           string `json:"memory,omitempty"`          // user|project|local
-	Color            string `json:"color,omitempty"`           // red|blue|green|...
-	Mode             string `json:"mode,omitempty"`            // all|primary
-	CommandFilePath  string `json:"commandFilePath,omitempty"` // ref to existing agent .md
-	CommandScope     string `json:"commandScope,omitempty"`    // user|project
-	PluginName       string `json:"pluginName,omitempty"`
-	BuiltInType      string `json:"builtInType,omitempty"` // general-purpose|explore|plan
+	// Sections is a comma-separated list of shared prompt sections (from
+	// agents/sections/) injected into this node's prompt on export. Empty means
+	// the export default (handoff for sub-agents).
+	Sections        string `json:"sections,omitempty"`
+	Tools           string `json:"tools,omitempty"`           // comma-separated tool names
+	Model           string `json:"model,omitempty"`           // sonnet|opus|haiku|inherit|provider/id
+	Memory          string `json:"memory,omitempty"`          // user|project|local
+	Color           string `json:"color,omitempty"`           // red|blue|green|...
+	Mode            string `json:"mode,omitempty"`            // all|primary
+	CommandFilePath string `json:"commandFilePath,omitempty"` // ref to existing agent .md
+	CommandScope    string `json:"commandScope,omitempty"`    // user|project
+	PluginName      string `json:"pluginName,omitempty"`
+	BuiltInType     string `json:"builtInType,omitempty"` // general-purpose|explore|plan
 	// DelegateTo lists agent ids (comma-separated) this sub-agent may delegate
 	// to, BEYOND what the graph's outgoing edges imply. Use this for utility
 	// agents like "finder" that several sub-agents need but aren't part of the

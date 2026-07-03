@@ -1,0 +1,3 @@
+codebase-design
+diagnosing-bugs
+adr-skill

@@ -23,7 +23,7 @@ const delegation: Delegation = {
 	session_id: 'session-abc',
 	agent: 'architect',
 	task_summary: 'Design auth module',
-	status: 'active',
+	status: 'running',
 	column: 'in_progress',
 	dependencies: [],
 	created_at: '2025-01-01T00:00:00Z',

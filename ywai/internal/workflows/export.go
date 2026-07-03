@@ -317,7 +317,9 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 	if strings.TrimSpace(prompt) == "" {
 		prompt = n.Data.Prompt
 	}
+	sections := subAgentSectionList(n.Data.Sections)
 	if e.target == TargetClaudeCode {
+		prompt = agents.AppendSections(prompt, sections, config.AgentsSourceDir())
 		claudeTools := csvFromPermissions(perm)
 		md := renderClaudeAgentMarkdown(id, desc, claudeTools, n.Data.Model, prompt)
 		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
@@ -333,6 +335,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		Mode:        mode,
 		Group:       wf.Name,
 	}
+	profile.Prompt = agents.AppendSections(profile.Prompt, sections, config.AgentsSourceDir())
 	md := agents.BuildOpenCodeMarkdown(id, profile)
 	md = injectModel(md, n.Data.Model)
 
@@ -346,6 +349,26 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 	}
 	return md
+}
+
+// subAgentSectionList parses a node's comma-separated Sections field into the
+// slice AppendSections expects. Empty (unset) falls back to the sub-agent
+// default: the shared handoff contract. An explicit non-empty list overrides it.
+func subAgentSectionList(csv string) []string {
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return []string{"handoff"}
+	}
+	var out []string
+	for _, s := range strings.Split(csv, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"handoff"}
+	}
+	return out
 }
 
 // ─── tools → permissions ───────────────────────────────────────────────────

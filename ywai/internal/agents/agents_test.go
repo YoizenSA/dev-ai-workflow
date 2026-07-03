@@ -189,12 +189,12 @@ func TestAppendSections(t *testing.T) {
 	base := "# Agent\n\nbody"
 
 	// No sections -> no-op.
-	if got := appendSections(base, nil, dir); got != base {
-		t.Errorf("appendSections(nil) should be a no-op")
+	if got := AppendSections(base, nil, dir); got != base {
+		t.Errorf("AppendSections(nil) should be a no-op")
 	}
 
 	// Existing section -> appended.
-	got := appendSections(base, []string{"handoff"}, dir)
+	got := AppendSections(base, []string{"handoff"}, dir)
 	if !strings.Contains(got, "## Handoff") {
 		t.Error("expected handoff section appended")
 	}
@@ -203,9 +203,9 @@ func TestAppendSections(t *testing.T) {
 	}
 
 	// Missing section -> silently skipped.
-	got = appendSections(base, []string{"nonexistent"}, dir)
+	got = AppendSections(base, []string{"nonexistent"}, dir)
 	if got != base {
-		t.Errorf("appendSections(missing) should be a no-op, got %q", got)
+		t.Errorf("AppendSections(missing) should be a no-op, got %q", got)
 	}
 }
 func TestLoadProfiles(t *testing.T) {

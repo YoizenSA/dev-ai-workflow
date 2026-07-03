@@ -2,6 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
 	Brain,
 	Cloud,
+	FolderKanban,
+	Heart,
 	LayoutGrid,
 	LineChart,
 	MessageSquare,
@@ -70,6 +72,16 @@ const NAV_ITEMS = [
 		path: "/chat",
 		label: "Chat",
 		icon: <MessageSquare size={20} />,
+	},
+	{
+		path: "/hub",
+		label: "Hub",
+		icon: <FolderKanban size={20} />,
+	},
+	{
+		path: "/health",
+		label: "Health",
+		icon: <Heart size={20} />,
 	},
 ];
 

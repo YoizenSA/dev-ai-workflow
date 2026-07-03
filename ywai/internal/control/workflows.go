@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -73,6 +75,8 @@ func (s *Server) registerWorkflowsRoutes() {
 	// Enumerate the tools a given MCP server exposes (live handshake). Used by
 	// the MCP node editor when configuring a tool (manual/aiParameterConfig mode).
 	s.mux.HandleFunc("GET /api/workflows-meta/mcps/{server}/tools", api.handleMcpServerTools)
+	s.mux.HandleFunc("GET /api/workflows/handoff-contract", api.handleHandoffContract)
+	s.mux.HandleFunc("GET /api/workflows/sections", api.handleListSections)
 }
 
 // ─── handlers ──────────────────────────────────────────────────────────────
@@ -343,6 +347,38 @@ func statusForWorkflowError(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func (a *workflowsAPI) handleHandoffContract(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Join(config.AgentsSourceDir(), "sections", "handoff.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"content": string(content)})
+}
+
+func (a *workflowsAPI) handleListSections(w http.ResponseWriter, r *http.Request) {
+	sectionsDir := filepath.Join(config.AgentsSourceDir(), "sections")
+	entries, err := filepath.Glob(filepath.Join(sectionsDir, "*.md"))
+	if err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	var sections []map[string]string
+	for _, entry := range entries {
+		name := strings.TrimSuffix(filepath.Base(entry), ".md")
+		content, err := os.ReadFile(entry)
+		if err != nil {
+			continue // skip unreadable files
+		}
+		sections = append(sections, map[string]string{"name": name, "content": string(content)})
+	}
+	if sections == nil {
+		sections = []map[string]string{}
+	}
+	writeJSON(w, http.StatusOK, sections)
 }
 
 func writeWorkflowsError(w http.ResponseWriter, code int, err error) {

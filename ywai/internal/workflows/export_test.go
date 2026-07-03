@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,6 +321,114 @@ func TestExportClaudeCodeTarget(t *testing.T) {
 	if strings.Contains(cmd, "subtask:") || strings.Contains(cmd, "agent:") {
 		t.Errorf("claude command must omit agent:/subtask:\n%s", cmd)
 	}
+}
+
+// TestExportSubAgentHandoffInjection verifies that the handoff contract is
+// appended to sub-agent prompts for both opencode and claude-code targets,
+// but is NOT injected into the orchestrator prompt.
+func TestExportSubAgentHandoffInjection(t *testing.T) {
+	t.Run("opencode", func(t *testing.T) {
+		wf := exportFixture()
+		cmdDir := t.TempDir()
+		agentsDir := t.TempDir()
+		e := NewExporterWithDirs(cmdDir, agentsDir)
+
+		_, files, err := e.Plan(wf)
+		if err != nil {
+			t.Fatalf("Plan: %v", err)
+		}
+
+		subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
+		sub, ok := files[subPath]
+		if !ok {
+			t.Fatalf("sub-agent markdown not found at %s", subPath)
+		}
+		if !strings.Contains(sub, "**Status**:") {
+			t.Errorf("opencode sub-agent should contain handoff section (**Status**:), got:\n%s", sub)
+		}
+
+		orchPath := filepath.Join(agentsDir, "daily-task-orchestrator.md")
+		orch, ok := files[orchPath]
+		if !ok {
+			t.Fatalf("orchestrator markdown not found at %s", orchPath)
+		}
+		if strings.Contains(orch, "**Status**:") {
+			t.Error("opencode orchestrator should NOT contain handoff section")
+		}
+	})
+
+	t.Run("claude-code", func(t *testing.T) {
+		wf := exportFixture()
+		cmdDir := t.TempDir()
+		agentsDir := t.TempDir()
+		e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+
+		_, files, err := e.Plan(wf)
+		if err != nil {
+			t.Fatalf("Plan: %v", err)
+		}
+
+		subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
+		sub, ok := files[subPath]
+		if !ok {
+			t.Fatalf("sub-agent markdown not found at %s", subPath)
+		}
+		if !strings.Contains(sub, "**Status**:") {
+			t.Errorf("claude-code sub-agent should contain handoff section (**Status**:), got:\n%s", sub)
+		}
+
+		orchPath := filepath.Join(agentsDir, "daily-task-orchestrator.md")
+		orch, ok := files[orchPath]
+		if !ok {
+			t.Fatalf("orchestrator markdown not found at %s", orchPath)
+		}
+		if strings.Contains(orch, "**Status**:") {
+			t.Error("claude-code orchestrator should NOT contain handoff section")
+		}
+	})
+
+	t.Run("custom-sections", func(t *testing.T) {
+		wf := exportFixture()
+		for i := range wf.Nodes {
+			if wf.Nodes[i].ID == "news" {
+				wf.Nodes[i].Data.Sections = "handoff-qa"
+			}
+		}
+		cmdDir := t.TempDir()
+		agentsDir := t.TempDir()
+		e := NewExporterWithDirs(cmdDir, agentsDir)
+
+		_, files, err := e.Plan(wf)
+		if err != nil {
+			t.Fatalf("Plan: %v", err)
+		}
+
+		subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
+		sub, ok := files[subPath]
+		if !ok {
+			t.Fatalf("sub-agent markdown not found at %s", subPath)
+		}
+		if !strings.Contains(sub, "@qa-orchestrator") {
+			t.Errorf("custom-sections sub-agent should contain handoff-qa section (@qa-orchestrator), got:\n%s", sub)
+		}
+	})
+
+	// Regression: the frontend persists Sections as a comma-separated string, so
+	// the workflow JSON must decode into NodeData.Sections and export correctly.
+	// A prior version typed Sections as []string, which failed to unmarshal the
+	// CSV the UI sends, breaking save/load for any node with sections set.
+	t.Run("csv-from-frontend-json", func(t *testing.T) {
+		var nd NodeData
+		if err := json.Unmarshal([]byte(`{"sections":"handoff-qa, context-gathering"}`), &nd); err != nil {
+			t.Fatalf("NodeData must decode CSV sections from the frontend: %v", err)
+		}
+		if got := subAgentSectionList(nd.Sections); len(got) != 2 || got[0] != "handoff-qa" || got[1] != "context-gathering" {
+			t.Errorf("subAgentSectionList(%q) = %v, want [handoff-qa context-gathering]", nd.Sections, got)
+		}
+		if got := subAgentSectionList(""); len(got) != 1 || got[0] != "handoff" {
+			t.Errorf("empty sections must default to [handoff], got %v", got)
+		}
+	})
 }
 
 func keys(m map[string]string) []string {

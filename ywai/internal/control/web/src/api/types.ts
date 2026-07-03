@@ -661,6 +661,8 @@ export interface WorkflowNodeData {
 	builtInType?: string;
 	/** Agents this sub-agent may delegate to without a visible edge (CSV: finder, memory). */
 	delegateTo?: string;
+	/** Library sections attached to this sub-agent's handoff (CSV: qa, context-gathering). */
+	sections?: string;
 
 	// askUserQuestion
 	questionText?: string;
