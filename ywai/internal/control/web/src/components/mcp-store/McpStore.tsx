@@ -248,14 +248,7 @@ export function McpStore() {
 	}, []);
 
 	// Health check: fetch on mount and every 30s.
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
 	const healthIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
->>>>>>> Stashed changes
-=======
-	const healthIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
->>>>>>> 3f64425 (fix: update astro dependency to version 7.0.6 and refactor MCP health check logic)
 	useEffect(() => {
 		const fetchHealth = () => {
 			fetch('/api/mcp/health')
@@ -267,30 +260,13 @@ export function McpStore() {
 					}
 					setHealthData(map);
 				})
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-				.catch(() => { /* ignore */ });
-		};
-		fetchHealth();
-		const interval = setInterval(fetchHealth, 30000);
-		return () => clearInterval(interval);
-=======
 				.catch(() => { /* ignore — servers may not be installed yet */ });
 		};
 		fetchHealth();
-=======
-				.catch(() => { /* ignore — servers may not be installed yet */ });
-		};
-		fetchHealth();
->>>>>>> 3f64425 (fix: update astro dependency to version 7.0.6 and refactor MCP health check logic)
 		healthIntervalRef.current = setInterval(fetchHealth, 30000);
 		return () => {
 			if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
 		};
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> 3f64425 (fix: update astro dependency to version 7.0.6 and refactor MCP health check logic)
 	}, []);
 
 	// Clear any poll intervals when the component unmounts so timers don't

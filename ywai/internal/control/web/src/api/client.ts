@@ -759,15 +759,7 @@ export interface McpCatalogItem {
 
 /** Health status for a single MCP server. */
 export interface McpHealthItem {
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-	serverId: string;
-=======
 	id: string;
->>>>>>> Stashed changes
-=======
-	id: string;
->>>>>>> 3f64425 (fix: update astro dependency to version 7.0.6 and refactor MCP health check logic)
 	status: 'healthy' | 'unhealthy' | 'unknown';
 	latency_ms?: number;
 	error?: string;
@@ -777,7 +769,6 @@ export interface McpHealthItem {
 export interface McpHealthResponse {
 	servers: McpHealthItem[];
 }
-<<<<<<< Updated upstream
 
 
 // ─── Git API ──────────────────────────────────────────────────────────────
@@ -795,5 +786,3 @@ export interface GitStatus {
 export const gitApi = {
 	getStatus: () => request<GitStatus>("/api/git/status"),
 };
-=======
->>>>>>> Stashed changes
