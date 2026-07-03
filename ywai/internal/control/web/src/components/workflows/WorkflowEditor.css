@@ -1121,3 +1121,60 @@
 	opacity: 0.7;
 	font-size: 0.65rem;
 }
+
+/* Agent behavior toggles (plain-language replacement for raw sections) */
+.wf-behavior {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.wf-behavior-fixed {
+	padding: 0.55rem 0.7rem;
+	border-radius: var(--radius-sm);
+	background: var(--info-soft);
+	border: 1px solid var(--info-border);
+	color: var(--tint-info);
+	font-size: 0.78rem;
+	line-height: 1.4;
+}
+.wf-behavior-toggle {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	cursor: pointer;
+	font-size: 0.82rem;
+}
+.wf-behavior-toggle input {
+	margin-top: 3px;
+	flex-shrink: 0;
+}
+.wf-behavior-toggle span {
+	display: flex;
+	flex-direction: column;
+}
+.wf-behavior-toggle small {
+	color: var(--text-dim, var(--text-muted));
+	font-size: 0.72rem;
+	line-height: 1.35;
+	margin-top: 1px;
+}
+
+/* Focus: read-only assembled prompt view (no editor, can't perturb canvas) */
+.wf-focus-assembled {
+	height: 60vh;
+	overflow: auto;
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 12px;
+}
+.wf-focus-assembled pre {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-size: 0.8rem;
+	line-height: 1.5;
+}

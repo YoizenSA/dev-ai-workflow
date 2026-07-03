@@ -1,6 +1,7 @@
 .chat-container {
   display: flex;
-  height: calc(100vh - 60px);
+  flex: 1;
+  min-height: 0;
   background: var(--surface);
   color: var(--text);
   font-family: var(--font-sans);

@@ -2,7 +2,27 @@ import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import Modal from '../shared/Modal'
 import { useWorkflowStore } from '../../stores/workflowStore'
+import { workflowApi } from '../../api/client'
 import type { WorkflowNode } from '../../api/types'
+
+// assembledPrompt rebuilds the exact system prompt the exporter produces for a
+// sub-agent: identity/task base, then each injected section's real text, then
+// the task block when both exist. Mirrors the export default (empty → handoff).
+function assembledPrompt(node: WorkflowNode, sections: { name: string; content: string }[]): string {
+	const identity = (node.data.agentDefinition ?? '').trim()
+	const task = (node.data.prompt ?? '').trim()
+	const base = identity || task
+	const names = (node.data.sections ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+	const injected = names.length ? names : ['handoff']
+	const byName = new Map(sections.map((s) => [s.name, s.content]))
+	const parts = [base]
+	for (const n of injected) {
+		const c = byName.get(n)?.trim()
+		if (c) parts.push(c)
+	}
+	if (identity && task) parts.push(`---\n\n## Task\n\n${task}`)
+	return parts.filter(Boolean).join('\n\n')
+}
 
 // Long-text fields editable in focus mode, per node type. Each maps to a
 // node.data key (or the synthetic "name" for the node's top-level name).
@@ -27,6 +47,7 @@ function fieldsFor(node: WorkflowNode): FocusField[] {
 			return [
 				{ key: 'agentDefinition', label: 'System prompt / identity', language: md },
 				{ key: 'prompt', label: 'Task prompt', language: md },
+				{ key: '__assembled', label: 'Full prompt (with sections)', language: md },
 				{ key: 'description', label: 'Description', language: txt },
 				{ key: 'tools', label: 'Tools', language: txt },
 			]
@@ -61,16 +82,23 @@ export default function NodeFocusModal({ nodeId, onClose }: { nodeId: string | n
 	// doesn't get clobbered; applied to the store only when it parses.
 	const [jsonText, setJsonText] = useState('')
 	const [jsonError, setJsonError] = useState<string | null>(null)
+	// Library sections (for the assembled-prompt view). Local to this modal and
+	// fetched once — never written back — so it can't perturb the canvas state.
+	const [libSections, setLibSections] = useState<{ name: string; content: string }[]>([])
 	useEffect(() => {
 		if (node) setJsonText(JSON.stringify(node.data, null, 2))
 		setJsonError(null)
 		// Re-seed when the focused node changes, not on every data tick.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [nodeId])
+	useEffect(() => {
+		workflowApi.listSections().then((s) => setLibSections(s ?? [])).catch(() => undefined)
+	}, [])
 
 	if (!node) return null
 	const field = fields[Math.min(active, fields.length - 1)]
 	const isJson = field.key === '__json'
+	const isAssembled = field.key === '__assembled'
 	const value = (node.data as Record<string, unknown>)[field.key]
 
 	return (
@@ -108,6 +136,10 @@ export default function NodeFocusModal({ nodeId, onClose }: { nodeId: string | n
 							}}
 							options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
 						/>
+					) : isAssembled ? (
+						<div className="wf-focus-assembled">
+							<pre className="mono">{assembledPrompt(node, libSections)}</pre>
+						</div>
 					) : (
 						<Editor
 							height="60vh"

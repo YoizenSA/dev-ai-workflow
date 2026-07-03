@@ -86,9 +86,7 @@ export default function Evals() {
           <span className="page-eyebrow">Benchmarks</span>
           <h1 className="page-title">Evals</h1>
           <p className="page-subtitle">
-            {kind === "tasks"
-              ? "Agent performance benchmarks"
-              : "Memory retrieval quality"}
+            Measure agent accuracy and memory retrieval quality across benchmark runs
           </p>
         </div>
       </header>
@@ -98,13 +96,13 @@ export default function Evals() {
           className={`tab${kind === "tasks" ? " active" : ""}`}
           onClick={() => setKind("tasks")}
         >
-          Task runs
+          Agent Benchmarks
         </button>
         <button
           className={`tab${kind === "recall" ? " active" : ""}`}
           onClick={() => setKind("recall")}
         >
-          Memory recall
+          Memory Recall
         </button>
       </div>
 
@@ -123,8 +121,8 @@ export default function Evals() {
           <div className="empty-icon">
             <FileText size={24} />
           </div>
-          <p className="empty-title">No eval runs yet</p>
-          <p className="empty-desc">Run <code>ywai eval run</code> to get started</p>
+          <p className="empty-title">No benchmark runs yet</p>
+          <p className="empty-desc">Run <code>ywai eval run</code> to measure agent performance on standard tasks</p>
         </div>
       ) : (
         <div className="eval-runs-list">
@@ -138,6 +136,7 @@ export default function Evals() {
               </div>
               <div className="kpi-value tnum">{runs.length}</div>
               <div className="kpi-label">Total Runs</div>
+              <div className="kpi-subtitle">All evaluation runs</div>
             </div>
             <div className="kpi">
               <div className="kpi-top">
@@ -149,6 +148,7 @@ export default function Evals() {
                 {((latest?.summary.passRate ?? 0) * 100).toFixed(0)}%
               </div>
               <div className="kpi-label">Latest Pass Rate</div>
+              <div className="kpi-subtitle">Tasks passed / total</div>
             </div>
             <div className="kpi">
               <div className="kpi-top">
@@ -168,13 +168,13 @@ export default function Evals() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Run ID</th>
-                  <th>Mode</th>
-                  <th>Model</th>
-                  <th>Pass Rate</th>
-                  <th>Tasks</th>
-                  <th>Duration</th>
-                  <th>Date</th>
+                  <th title="Unique run identifier">Run ID</th>
+                  <th title="Eval mode (coder/architect/qa)">Mode</th>
+                  <th title="Agent model used">Model</th>
+                  <th title="Percentage of tasks passed">Pass Rate</th>
+                  <th title="Tasks completed / total">Tasks</th>
+                  <th title="Duration per task">Duration</th>
+                  <th title="Run date">Date</th>
                 </tr>
               </thead>
               <tbody>

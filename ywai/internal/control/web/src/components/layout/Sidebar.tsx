@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
 	Brain,
+	ChevronDown,
+	ChevronRight,
 	Cloud,
 	FolderKanban,
 	Heart,
@@ -68,15 +71,18 @@ const NAV_ITEMS = [
 		label: "Azure DevOps",
 		icon: <Cloud size={20} />,
 	},
-	{
-		path: "/chat",
-		label: "Chat",
-		icon: <MessageSquare size={20} />,
-	},
+];
+
+const BETA_ITEMS = [
 	{
 		path: "/hub",
 		label: "Hub",
 		icon: <FolderKanban size={20} />,
+	},
+	{
+		path: "/chat",
+		label: "Chat",
+		icon: <MessageSquare size={20} />,
 	},
 	{
 		path: "/health",
@@ -86,6 +92,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
+	const [betaOpen, setBetaOpen] = useState(false);
 	const location = useLocation();
 	const sessionCount = useKanbanStore(
 		(s) => (s.sessions ?? []).filter((sess) => sess.status === "active").length,
@@ -144,22 +151,51 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 					);
 				})}
 
-				<span className="nav-section-label">PLUGINS</span>
-				{NAV_ITEMS.slice(6).map((item) => {
-					const isActive = location.pathname === item.path;
+				{/* Beta group (collapsible) */}
+			<div className="nav-group">
+				<button
+					className="nav-group-header"
+					onClick={() => setBetaOpen((v) => !v)}
+					aria-expanded={betaOpen}
+				>
+					{betaOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+					<span className="nav-group-label">Beta</span>
+				</button>
+				{betaOpen && (
+					<div className="nav-group-items">
+						{BETA_ITEMS.map((item) => {
+							const isActive = location.pathname === item.path;
+							return (
+								<Link
+									key={item.path}
+									to={item.path}
+									className={`nav-link${isActive ? " is-active" : ""}`}
+									onClick={onClose}
+								>
+									{item.icon}
+									<span className="nav-label">{item.label}</span>
+								</Link>
+							);
+						})}
+					</div>
+				)}
+			</div>
 
-					return (
-						<Link
-							key={item.path}
-							to={item.path}
-							className={`nav-link${isActive ? " is-active" : ""}`}
-							onClick={onClose}
-						>
-							{item.icon}
-							<span className="nav-label">{item.label}</span>
-						</Link>
-					);
-				})}
+			{/* ADO standalone */}
+			{NAV_ITEMS.slice(6).map((item) => {
+				const isActive = location.pathname === item.path;
+				return (
+					<Link
+						key={item.path}
+						to={item.path}
+						className={`nav-link${isActive ? " is-active" : ""}`}
+						onClick={onClose}
+					>
+						{item.icon}
+						<span className="nav-label">{item.label}</span>
+					</Link>
+				);
+			})}
 			</nav>
 
 			{/* Kanban: sessions live inside the main sidebar so the board

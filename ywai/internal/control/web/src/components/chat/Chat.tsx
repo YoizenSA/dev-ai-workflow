@@ -186,13 +186,10 @@ export default function Chat() {
     setIsStreaming(true);
 
     try {
-      await fetch(`${API_BASE}/send`, {
+      await fetch(`${API_BASE}/sessions/${activeSession}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionID: activeSession,
-          content: msgText,
-        }),
+        body: JSON.stringify({ content: msgText }),
       });
     } catch {
       setError("Send failed — network error");
@@ -207,7 +204,7 @@ export default function Chat() {
       });
       if (resp.ok) {
         const data = await resp.json();
-        setActiveSession(data.sessionID);
+        setActiveSession(data.id);
         setMessages([]);
         loadSessions();
       }
@@ -219,10 +216,10 @@ export default function Chat() {
   const handleCompact = async () => {
     if (!activeSession) return;
     try {
-      await fetch(`${API_BASE}/send`, {
+      await fetch(`${API_BASE}/sessions/${activeSession}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionID: activeSession, content: "/compact" }),
+        body: JSON.stringify({ content: "/compact" }),
       });
       setIsStreaming(false);
     } catch {
@@ -242,7 +239,7 @@ export default function Chat() {
             id: m.id,
             role: m.role,
             content: extractTextContent(m),
-            timestamp: m.time?.created || Date.now(),
+            timestamp: m.created_at || Date.now(),
           })),
         );
       }

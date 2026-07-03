@@ -339,8 +339,9 @@ func findFileUpwards(name string) string {
 	}
 }
 
-// RegisterChatRoutes registers all chat proxy routes on the mux.
-func (s *Server) registerChatRoutes() {
+// registerChatProxyRoutes registers chat proxy routes on the mux.
+// Session CRUD routes are handled by registerChatRoutes (chat_routes.go).
+func (s *Server) registerChatProxyRoutes() {
 	// Auto-detect OpenCode server URL
 	opencodeURL := detectOpenCodeURL()
 	if opencodeURL == "" {
@@ -351,10 +352,9 @@ func (s *Server) registerChatRoutes() {
 	cp := NewChatProxy(opencodeURL)
 	log.Printf("[chat] proxying to OpenCode at %s", opencodeURL)
 
+	// Session CRUD (GET/POST /api/chat/sessions) is handled by registerChatRoutes.
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
 	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
-	s.mux.HandleFunc("GET /api/chat/sessions", cp.handleChatSessions)
-	s.mux.HandleFunc("POST /api/chat/sessions", cp.handleChatCreateSession)
 	s.mux.HandleFunc("GET /api/chat/messages", cp.handleChatMessages)
 	s.mux.HandleFunc("POST /api/chat/send", cp.handleChatSend)
 	s.mux.HandleFunc("POST /api/chat/abort", cp.handleChatAbort)

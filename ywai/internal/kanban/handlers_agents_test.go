@@ -323,3 +323,38 @@ func TestPutDelegationRules_WritesSidecarAndRendersMarkdown(t *testing.T) {
 		t.Errorf("markdown missing the rule row")
 	}
 }
+
+// TestTaskMapFromMarkdown covers the delegation-graph fallback for agents that
+// exist only as .md files (workflow exports), whose permission.task lives in the
+// markdown frontmatter rather than opencode.json.
+func TestTaskMapFromMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	md := `---
+description: Orchestrator
+mode: all
+permission:
+  read: allow
+  task:
+    "*": deny
+    wf-architect: allow
+    wf-backend: allow
+  skill: allow
+---
+
+Body.`
+	path := filepath.Join(dir, "wf-orchestrator.md")
+	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := taskMapFromMarkdown(path)
+	if got["wf-architect"] != "allow" || got["wf-backend"] != "allow" {
+		t.Errorf("expected allow edges for wf-architect/wf-backend, got %v", got)
+	}
+	if got["*"] != "deny" {
+		t.Errorf("expected wildcard deny, got %v", got)
+	}
+	// Missing file -> nil, no panic.
+	if taskMapFromMarkdown(filepath.Join(dir, "nope.md")) != nil {
+		t.Error("expected nil for missing file")
+	}
+}

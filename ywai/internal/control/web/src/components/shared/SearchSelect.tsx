@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./SearchSelect.css";
 
 interface Props {
 	id?: string;
@@ -10,11 +11,14 @@ interface Props {
 }
 
 /**
- * SearchSelect — input + dropdown of options.
- *
- * Unlike a native <datalist>, the dropdown always shows the full list on focus
- * and filters as the user types. Set allowCustom=true to accept arbitrary
- * strings outside the option list (the user's text becomes the value on blur).
+ * Combobox-style text input that filters options as you type.
+ * - Matches are case-insensitive substring.
+ * - `allowCustom` (default true) lets the user type a value not in the list.
+ * - Click an option or press Enter to commit.
+ * - Press Escape to close the dropdown without committing.
+ * - Click outside or blur the input to commit whatever is in the draft.
+ * - When `allowCustom` is false, selecting an option or clicking away hides
+ *   the option list (the user's text becomes the value on blur).
  */
 export default function SearchSelect({
 	id,
@@ -42,7 +46,7 @@ export default function SearchSelect({
 				inputRef.current &&
 				!inputRef.current.contains(e.target as Node)
 			) {
-				setIsOpen(false);
+				commit(draft);
 			}
 		};
 		document.addEventListener("mousedown", onClick);
@@ -56,12 +60,12 @@ export default function SearchSelect({
 	};
 
 	return (
-		<div style={{ position: "relative" }}>
+		<div className="search-select">
 			<input
 				ref={inputRef}
 				id={id}
 				type="text"
-				className="input mono"
+				className="input mono search-select-input"
 				placeholder={placeholder}
 				value={isOpen ? draft : value}
 				onChange={(e) => {
@@ -75,49 +79,18 @@ export default function SearchSelect({
 				onKeyDown={(e) => {
 					if (e.key === "Escape") setIsOpen(false);
 				}}
-				style={{ paddingRight: 32, cursor: "pointer" }}
 			/>
-			<div
-				style={{
-					position: "absolute",
-					right: 8,
-					top: "50%",
-					transform: "translateY(-50%)",
-					pointerEvents: "none",
-					fontSize: 12,
-					color: "var(--text-muted)",
-				}}
-			>
+			<div className="search-select-clear">
 				{isOpen ? "▲" : "▼"}
 			</div>
 
 			{isOpen && (
 				<div
 					ref={dropdownRef}
-					style={{
-						position: "absolute",
-						top: "100%",
-						left: 0,
-						right: 0,
-						marginTop: 4,
-						backgroundColor: "var(--yz-dark-soft)",
-						border: "1px solid var(--panel-border)",
-						borderRadius: 6,
-						maxHeight: 280,
-						overflowY: "auto",
-						zIndex: 1000,
-						boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-					}}
+					className="search-select-dropdown"
 				>
 					{filtered.length === 0 ? (
-						<div
-							style={{
-								padding: "10px 12px",
-								color: "var(--text-muted)",
-								fontSize: 13,
-								textAlign: "center",
-							}}
-						>
+						<div className="search-select-empty">
 							{allowCustom ? "Press Enter to keep your value" : "No matches"}
 						</div>
 					) : (
@@ -125,27 +98,7 @@ export default function SearchSelect({
 							<div
 								key={opt}
 								onClick={() => commit(opt)}
-								style={{
-									padding: "8px 12px",
-									cursor: "pointer",
-									backgroundColor:
-										value === opt ? "var(--info-soft)" : "transparent",
-									color: value === opt ? "var(--info)" : "var(--text)",
-									fontSize: 13,
-									fontFamily: "var(--font-mono)",
-								}}
-								onMouseEnter={(e) => {
-									if (value !== opt) {
-										(e.target as HTMLElement).style.backgroundColor =
-											"var(--surface-hover)";
-									}
-								}}
-								onMouseLeave={(e) => {
-									if (value !== opt) {
-										(e.target as HTMLElement).style.backgroundColor =
-											"transparent";
-									}
-								}}
+								className={"search-select-option" + (value === opt ? " selected" : "")}
 							>
 								{opt}
 							</div>

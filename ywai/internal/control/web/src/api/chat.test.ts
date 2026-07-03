@@ -8,9 +8,9 @@ describe("chat API URL construction", () => {
     expect(url).toContain("sessionID=session-abc");
   });
 
-  it("should use sessionID (capital D) in messages URL", () => {
+  it("should use session route for messages", () => {
     const url = getMessagesURL("session-abc");
-    // The backend expects sessionID (capital D) — see chat_proxy.go handleChatMessages
-    expect(url).toContain("sessionID=session-abc");
+    // Session routes are always registered (chat_routes.go)
+    expect(url).toBe("/api/chat/sessions/session-abc");
   });
 });

@@ -77,7 +77,8 @@
         "prompt": "Explore the codebase using codegraph and context7. Report a concise map: affected files, patterns, constraints, risks.",
         "tools": "read, grep, glob, codegraph_*, context7_*, engram_*",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -96,7 +97,8 @@
         "prompt": "Design the implementation approach from the finder's map: chosen design, trade-offs, acceptance criteria. Then use the `codebase-design` skill to turn it into an implementation plan split into frontend / backend / infrastructure slices the dev agents can pick up independently.\n\nSkills available (use the `skill` tool): adr-skill, codebase-design, improve-codebase-architecture.",
         "tools": "read, grep, glob, codegraph_*, context7_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -139,7 +141,8 @@
         "prompt": "Implement the frontend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): typescript, tailwind-4, git-commit, diagnosing-bugs, tdd.",
         "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -158,7 +161,8 @@
         "prompt": "Implement the backend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): go-testing, git-commit, diagnosing-bugs, codebase-design, tdd.",
         "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -177,7 +181,8 @@
         "prompt": "Implement the infrastructure portion of the approved plan (CI, Docker, deploy).\n\nSkills available (use the `skill` tool): devops, docker, git-commit.",
         "tools": "read, bash, codegraph_*, context7_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -196,7 +201,8 @@
         "prompt": "Review the implementation and any fixes. Findings by severity with file:line and a fix. State merge-readiness.\n\nSkills available (use the `skill` tool): git-commit.",
         "tools": "read, grep, glob, bash, codegraph_*, context7_*, engram_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {

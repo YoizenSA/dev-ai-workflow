@@ -31,7 +31,8 @@
         "prompt": "The feature is implemented. Produce the QA-ready summary of functionality and use cases.",
         "model": "inherit",
         "mode": "all",
-        "tools": "read, grep, glob, codegraph_*"
+        "tools": "read, grep, glob, codegraph_*",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {
@@ -49,7 +50,8 @@
         "prompt": "Using the feature summary, create the Azure DevOps Exploratory Test work item linked to the user story and write the scenarios in Gherkin.\n\nSkills available (use the `skill` tool): azure-devops, playwright-e2e-testing.",
         "model": "inherit",
         "mode": "all",
-        "tools": "read, write, ado_*, skill"
+        "tools": "read, write, ado_*, skill",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {

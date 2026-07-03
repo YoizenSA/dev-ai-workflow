@@ -8,5 +8,5 @@ export function getEventStreamURL(sessionId: string): string {
 }
 
 export function getMessagesURL(sessionId: string): string {
-  return `${API_BASE}/messages?sessionID=${sessionId}`;
+  return `${API_BASE}/sessions/${sessionId}`;
 }

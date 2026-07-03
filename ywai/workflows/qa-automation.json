@@ -101,7 +101,8 @@
         "prompt": "Understand the testing requirements and design the test strategy: scope, scenarios, prioritization, and test types. Deliver the strategy so @qa-dev can implement it.\n\nSkills available (use the `skill` tool): playwright-e2e-testing, webapp-testing.",
         "tools": "read, glob, grep, lsp, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {
@@ -120,7 +121,8 @@
         "prompt": "Explore the codebase and report what needs testing: affected files, existing tests, coverage gaps, and patterns for @qa-dev to follow. Read-only.\n\nSkills available (use the `skill` tool): playwright-e2e-testing, webapp-testing.",
         "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {
@@ -139,7 +141,8 @@
         "prompt": "Write automated tests following the strategy. Use stable selectors, comment each step for a learner, and run the suite green before handing off.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing, webapp-testing, condition-based-waiting, diagnosing-bugs, tdd.",
         "tools": "read, edit, write, bash, glob, grep, lsp, ast_grep, websearch, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {
@@ -158,7 +161,8 @@
         "prompt": "Review the test code: readability, reliability, coverage, and flaky-test patterns. Classify findings by severity and show how to fix them.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing, webapp-testing, condition-based-waiting.",
         "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {
@@ -189,7 +193,8 @@
         "prompt": "Answer the testing question clearly for a manual tester learning automation. Use analogies and short code examples. Escalate multi-step requests to @qa-orchestrator.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing, webapp-testing.",
         "tools": "read, glob, grep, lsp, websearch, webfetch, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
       }
     },
     {

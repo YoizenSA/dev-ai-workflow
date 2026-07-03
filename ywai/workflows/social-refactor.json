@@ -63,7 +63,8 @@
         "prompt": "Classify the requested legacy migration surface: size, split indicators, dependency evidence audit. Return SCOPE_SINGLE_PLAN or SCOPE_SPLIT_RECOMMENDED with evidence.",
         "tools": "read, glob, grep, webfetch, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -82,7 +83,8 @@
         "prompt": "From the scope classification, create an executable migration plan (or parent + child work graph) with evidence-backed dependencies and parity rows. Mark the plan status: ready when done.",
         "tools": "read, glob, grep, webfetch, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "context-gathering"
       }
     },
     {
@@ -100,7 +102,8 @@
         "prompt": "Implement the migration plan (or remediate the validator's findings). Build to spec, update the tracker, and set plan status: implemented when all files exist.",
         "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -119,7 +122,8 @@
         "prompt": "Validate the implemented migration against ALL axes using legacy source as truth. Return APPROVED, REJECTED (with mandatory fixes), or BLOCKED.",
         "tools": "read, glob, grep, webfetch, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -138,7 +142,8 @@
         "prompt": "Validate ONLY the remediation just performed — the open findings it targeted. Return FOCUSED_APPROVED, FOCUSED_REJECTED, or ESCALATE_FULL_VALIDATION.",
         "tools": "read, glob, grep, webfetch, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {

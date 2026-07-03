@@ -1,5 +1,12 @@
 /* Evals Dashboard — yz-ui aligned */
 
+/* KPI subtitle — brief context below each metric label */
+.kpi-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+  margin-top: 1px;
+}
+
 .eval-runs-list {
   display: flex;
   flex-direction: column;

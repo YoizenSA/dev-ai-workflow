@@ -486,19 +486,8 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 					/>
 					<span className="field-help">Agents this one may delegate to (beyond graph edges). E.g. finder for code search.</span>
 				</div>
-				<div className="field">
-					<label className="field-label">Sections</label>
-					<MultiSelect
-						options={availableSections.map((s) => ({ value: s.name, label: s.name }))}
-						selected={csvToSet(node.data.sections)}
-						onChange={(set) => update(node, { sections: setToCsv(set) })}
-						placeholder="handoff (default)"
-					/>
-					<span className="field-help">Library sections attached to handoff. Empty = handoff only.</span>
-				</div>
-			{/* ── Handoff Contract ── */}
-			<HandoffContractSection />
-		</>
+				<AgentBehavior node={node} sections={availableSections} />
+			</>
 	)
 }
 
@@ -548,42 +537,109 @@ function AskUserFields({ node }: { node: WorkflowNode }) {
 }
 
 // HandoffContractSection — informational callout + collapsible handoff.md viewer.
-function HandoffContractSection() {
-	const [expanded, setExpanded] = useState(false)
-	const [content, setContent] = useState<string | null>(null)
-	const [error, setError] = useState<string | null>(null)
+// Section names are an internal mechanism; the canvas speaks in behaviors.
+// Reporting mirrors the core agent roles: implementers report with `handoff`,
+// QA agents with `handoff-qa`, and coordinators (planners) don't report at all.
+type Reporting = 'standard' | 'qa' | 'none'
+const SECTION_HANDOFF = 'handoff'
+const SECTION_HANDOFF_QA = 'handoff-qa'
+const SECTION_CONTEXT = 'context-gathering'
 
-	useEffect(() => {
-		if (!expanded || content !== null) return
-		workflowApi.handoffContract()
-			.then((r) => setContent(r.content))
-			.catch((e: Error) => setError(e.message))
-	}, [expanded, content])
+function csvHas(csv: string | undefined, name: string): boolean {
+	return (csv ?? '').split(',').map((s) => s.trim()).includes(name)
+}
+function csvNames(csv: string | undefined): string[] {
+	return (csv ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+function reportingFromCsv(csv: string | undefined): Reporting {
+	if (csvHas(csv, SECTION_HANDOFF_QA)) return 'qa'
+	if (csvHas(csv, SECTION_HANDOFF)) return 'standard'
+	// Empty CSV = export default = standard handoff. A non-empty CSV with no
+	// handoff variant is a coordinator (reports nothing).
+	return csvNames(csv).length === 0 ? 'standard' : 'none'
+}
+
+function effectiveSections(reporting: Reporting, context: boolean): string[] {
+	const list: string[] = []
+	if (reporting === 'standard') list.push(SECTION_HANDOFF)
+	else if (reporting === 'qa') list.push(SECTION_HANDOFF_QA)
+	if (context) list.push(SECTION_CONTEXT)
+	return list
+}
+
+// behaviorToCsv stores the node's sections. Plain standard handoff is stored as
+// empty so existing workflows and the export default stay byte-identical.
+function behaviorToCsv(reporting: Reporting, context: boolean): string {
+	const list = effectiveSections(reporting, context)
+	if (list.length === 1 && list[0] === SECTION_HANDOFF) return ''
+	return list.join(',')
+}
+
+// AgentBehavior replaces the raw "sections" mechanism with plain-language
+// controls plus a preview of the exact system prompt the agent gets on export —
+// so nothing is injected invisibly.
+function AgentBehavior({ node, sections }: { node: WorkflowNode; sections: { name: string; content: string }[] }) {
+	const [showPreview, setShowPreview] = useState(false)
+	const reporting = reportingFromCsv(node.data.sections)
+	const context = csvHas(node.data.sections, SECTION_CONTEXT)
+
+	const setBehavior = (next: { reporting?: Reporting; context?: boolean }) => {
+		update(node, { sections: behaviorToCsv(next.reporting ?? reporting, next.context ?? context) })
+	}
+
+	// Assemble the same body the exporter builds: identity/task base, then each
+	// injected section's real text, then the task block when both exist. Mirror
+	// the export default (empty sections → handoff) so the preview never lies.
+	const identity = (node.data.agentDefinition ?? '').trim()
+	const task = (node.data.prompt ?? '').trim()
+	const base = identity || task
+	const csv = behaviorToCsv(reporting, context)
+	const injected = csvNames(csv).length ? csvNames(csv) : [SECTION_HANDOFF]
+	const contentByName = new Map(sections.map((s) => [s.name, s.content]))
+	const parts = [base]
+	for (const name of injected) {
+		const c = contentByName.get(name)?.trim()
+		if (c) parts.push(c)
+	}
+	if (identity && task) parts.push(`---\n\n## Task\n\n${task}`)
+	const preview = parts.filter(Boolean).join('\n\n')
 
 	return (
-		<div className="wf-handoff-section">
-			<div className="alert alert-info" style={{ marginBottom: 8 }}>
-				On export, this agent automatically receives the shared handoff contract — it must end each run
-				with <strong>Status</strong> / <strong>Did</strong> / <strong>Artifacts</strong> /{' '}
-				<strong>Next suggested</strong> / <strong>Notes/risks</strong>.
+		<div className="wf-behavior">
+			<label className="field-label">Agent behavior</label>
+
+			<div className="field">
+				<label className="field-label" htmlFor="wf-reporting">Reporting</label>
+				<YdSelect
+					options={[
+						{ value: 'standard', label: 'Standard handoff — reports back to orchestrator' },
+						{ value: 'qa', label: 'QA-style handoff — reports tests & findings' },
+						{ value: 'none', label: 'None — coordinator (no handoff)' },
+					]}
+					value={reporting}
+					onChange={(v) => setBehavior({ reporting: v as Reporting })}
+				/>
+				<span className="field-help">How this agent reports back. Standard/QA add the handoff (incl. Kanban update); coordinators report nothing.</span>
 			</div>
-			<button
-				className="btn btn-ghost"
-				onClick={() => setExpanded(!expanded)}
-				style={{ width: '100%', textAlign: 'left', fontSize: '0.82rem' }}
-			>
-				{expanded ? '▼' : '▶'} View handoff contract
+
+			<label className="wf-behavior-toggle">
+				<input type="checkbox" checked={context} onChange={(e) => setBehavior({ context: e.target.checked })} />
+				<span>
+					Gather context before acting
+					<small>Investigate memory &amp; related files before making changes.</small>
+				</span>
+			</label>
+
+			<button className="btn btn-ghost wf-handoff-toggle" onClick={() => setShowPreview(!showPreview)}>
+				{showPreview ? '▼' : '▶'} Preview system prompt
 			</button>
-			{expanded && (
+			{showPreview && (
 				<div className="wf-handoff-contract-content">
-					{error ? (
-						<span className="field-help error">{error}</span>
-					) : content === null ? (
-						<span className="field-help">Loading…</span>
-					) : content ? (
-						<pre className="mono">{content}</pre>
+					{preview.trim() ? (
+						<pre className="mono">{preview}</pre>
 					) : (
-						<span className="field-help">No handoff contract available.</span>
+						<span className="field-help">Add an identity or task to see the assembled prompt.</span>
 					)}
 				</div>
 			)}

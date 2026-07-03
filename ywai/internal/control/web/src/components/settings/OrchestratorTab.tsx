@@ -539,9 +539,10 @@ export default function OrchestratorTab() {
 			<div className="orchestrator-toolbar">
 				{/* Profile selector */}
 				<div className="orch-profiles">
-					<label className="field-label-sm">Profile:</label>
+					<label className="field-label">Profile:</label>
 					<select
-						className="form-select form-select-sm"
+						className="select"
+						style={{ fontSize: '0.82rem', paddingBlock: '0.2rem', paddingLeft: '0.5rem' }}
 						value={activeProfile}
 						onChange={(e) => handleSelectProfile(e.target.value)}
 					>

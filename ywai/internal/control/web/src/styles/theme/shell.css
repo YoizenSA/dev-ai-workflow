@@ -50,6 +50,24 @@
   background: var(--panel-border-strong);
 }
 
+/* Collapsible nav group (e.g. Beta) */
+.nav-group { display: flex; flex-direction: column; }
+.nav-group-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: var(--space-2) var(--space-3);
+  background: none; border: none; cursor: pointer;
+  color: var(--text-faint); font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: color 0.15s; width: 100%; text-align: left;
+}
+.nav-group-header:hover { color: var(--text); }
+.collapsed .nav-group-header { justify-content: center; padding: 0.5rem; }
+.collapsed .nav-group-header .nav-group-label { display: none; }
+.nav-group-items {
+  display: flex; flex-direction: column; gap: 2px;
+  padding-left: var(--space-2);
+}
+
 .nav { display: flex; flex-direction: column; gap: 3px; }
 .nav-link {
   display: flex; align-items: center; gap: 0.7rem;

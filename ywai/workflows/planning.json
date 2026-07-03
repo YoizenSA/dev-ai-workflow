@@ -8,21 +8,38 @@
       "id": "g-research",
       "type": "group",
       "name": "RESEARCH",
-      "position": { "x": 640, "y": 206 },
-      "data": { "label": "RESEARCH", "width": 360, "height": 360 }
+      "position": {
+        "x": 640,
+        "y": 206
+      },
+      "data": {
+        "label": "RESEARCH",
+        "width": 360,
+        "height": 360
+      }
     },
     {
       "id": "g-plan",
       "type": "group",
       "name": "PLAN",
-      "position": { "x": 1240, "y": 206 },
-      "data": { "label": "PLAN", "width": 360, "height": 360 }
+      "position": {
+        "x": 1240,
+        "y": 206
+      },
+      "data": {
+        "label": "PLAN",
+        "width": 360,
+        "height": 360
+      }
     },
     {
       "id": "start",
       "type": "start",
       "name": "start",
-      "position": { "x": 60, "y": 360 },
+      "position": {
+        "x": 60,
+        "y": 360
+      },
       "data": {
         "label": "Planning request",
         "description": "Plan-mode orchestrator: research, clarify, draft a plan, wait for approval.",
@@ -35,7 +52,10 @@
       "type": "subAgent",
       "name": "planner-scout",
       "parentId": "g-research",
-      "position": { "x": 26, "y": 54 },
+      "position": {
+        "x": 26,
+        "y": 54
+      },
       "data": {
         "name": "planner-scout",
         "description": "Read-only codebase scout for planning. Maps affected files, patterns, risks, and complexity before any plan is drafted.",
@@ -43,19 +63,31 @@
         "prompt": "Explore the codebase for the planning request: affected files, existing patterns, risks, dependencies, and complexity estimate. Return a structured Scout Report. Read-only.",
         "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
       }
     },
     {
       "id": "clarify",
       "type": "askUserQuestion",
       "name": "scope-gate",
-      "position": { "x": 330, "y": 360 },
+      "position": {
+        "x": 330,
+        "y": 360
+      },
       "data": {
         "questionText": "I've researched the codebase. Should I draft the plan now with the scope as understood, or refine the scope first?",
         "options": [
-          { "id": "proceed", "label": "Draft the plan", "description": "Synthesize the actionable plan with the current understanding and stated assumptions." },
-          { "id": "refine", "label": "Refine scope first", "description": "Re-scout with a narrower or adjusted focus before drafting." }
+          {
+            "id": "proceed",
+            "label": "Draft the plan",
+            "description": "Synthesize the actionable plan with the current understanding and stated assumptions."
+          },
+          {
+            "id": "refine",
+            "label": "Refine scope first",
+            "description": "Re-scout with a narrower or adjusted focus before drafting."
+          }
         ]
       }
     },
@@ -64,7 +96,10 @@
       "type": "subAgent",
       "name": "planner-draft",
       "parentId": "g-plan",
-      "position": { "x": 26, "y": 54 },
+      "position": {
+        "x": 26,
+        "y": 54
+      },
       "data": {
         "name": "planner-draft",
         "description": "Plan synthesis agent. Turns scout findings into a concise, actionable markdown plan with file paths, steps, and risks.",
@@ -72,23 +107,46 @@
         "prompt": "Synthesize the Scout Report into a concise, actionable plan: goal, approach, changes (with full file paths), ordered steps, and risks. Mermaid diagram only if it clarifies. No emojis. Proportional to complexity. Then PERSIST the plan to `.plans/<slug>.md` in the repo root (create the directory if needed) and report the path back to the orchestrator. You may ONLY write under `.plans/` — nowhere else.",
         "tools": "read, write, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, mcp",
         "model": "inherit",
-        "mode": "subagent"
+        "mode": "subagent",
+        "sections": "context-gathering"
       }
     },
     {
       "id": "end",
       "type": "end",
       "name": "end",
-      "position": { "x": 1640, "y": 360 },
-      "data": { "label": "Plan ready for approval" }
+      "position": {
+        "x": 1640,
+        "y": 360
+      },
+      "data": {
+        "label": "Plan ready for approval"
+      }
     }
   ],
   "connections": [
-    { "from": "start", "to": "scout" },
-    { "from": "scout", "to": "clarify" },
-    { "from": "clarify", "to": "planner", "fromPort": "proceed" },
-    { "from": "clarify", "to": "scout", "fromPort": "refine" },
-    { "from": "planner", "to": "end" }
+    {
+      "from": "start",
+      "to": "scout"
+    },
+    {
+      "from": "scout",
+      "to": "clarify"
+    },
+    {
+      "from": "clarify",
+      "to": "planner",
+      "fromPort": "proceed"
+    },
+    {
+      "from": "clarify",
+      "to": "scout",
+      "fromPort": "refine"
+    },
+    {
+      "from": "planner",
+      "to": "end"
+    }
   ],
   "createdAt": "2026-07-01T00:00:00Z",
   "updatedAt": "2026-07-01T00:00:00Z"
