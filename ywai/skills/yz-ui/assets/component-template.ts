@@ -48,10 +48,10 @@ type Size = 'sm' | 'md' | 'lg';
     /* Consumir siempre tokens de palette.css — nunca hex directos. */
     .card {
       background: var(--surface);
-      border: 1px solid var(--border);
+      border: 1px solid var(--panel-border);
       border-radius: var(--radius-md);
       padding: var(--space-4);
-      box-shadow: var(--shadow-soft);
+      box-shadow: var(--shadow-glass);
     }
 
     .card-title {
