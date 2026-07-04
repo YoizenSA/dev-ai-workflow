@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, signal, computed, input, output, HostListener, ElementRef, inject, effect } from '@angular/core';
-import { LucideAngularModule } from 'lucide-angular';
+import { LucideAngularModule, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-angular';
 import { PopoverService } from './popover.service';
 import { YdAnchoredDirective } from './yd-anchored.directive';
 
@@ -36,12 +36,12 @@ interface Cell { iso: string; day: number; muted: boolean; today: boolean; disab
       <button type="button" class="yd-date-trigger" (click)="toggle($event)">
         @if (label()) { <span class="yd-ctl-prefix">{{ label() }}:</span> }
         <span class="yd-date-label" [class.muted]="!value()">{{ display() }}</span>
-        <lucide-icon name="calendar-clock" [size]="15" />
+        <lucide-icon [img]="CalendarClockIcon" [size]="15" />
       </button>
       @if (open()) {
         <div class="yd-pop yd-cal yd-menu-docked" ydAnchored [ydFixed]="true" (click)="picker.set(null)">
           <div class="yd-cal-head">
-            <button type="button" class="yd-cal-arrow" aria-label="Mes anterior" (click)="nav(-1, $event)"><lucide-icon name="chevron-left" [size]="16" /></button>
+            <button type="button" class="yd-cal-arrow" aria-label="Mes anterior" (click)="nav(-1, $event)"><lucide-icon [img]="ChevronLeftIcon" [size]="16" /></button>
 
             <div class="yd-cal-jump">
               <!-- Selector de MES (dropdown themed propio) -->
@@ -75,7 +75,7 @@ interface Cell { iso: string; day: number; muted: boolean; today: boolean; disab
               </div>
             </div>
 
-            <button type="button" class="yd-cal-arrow" aria-label="Mes siguiente" (click)="nav(1, $event)"><lucide-icon name="chevron-right" [size]="16" /></button>
+            <button type="button" class="yd-cal-arrow" aria-label="Mes siguiente" (click)="nav(1, $event)"><lucide-icon [img]="ChevronRightIcon" [size]="16" /></button>
           </div>
 
           <div class="yd-cal-grid">
@@ -98,6 +98,9 @@ interface Cell { iso: string; day: number; muted: boolean; today: boolean; disab
 export class YdDateComponent {
   private readonly host = inject(ElementRef);
   private readonly popovers = inject(PopoverService);
+  protected readonly CalendarClockIcon = CalendarClock;
+  protected readonly ChevronLeftIcon = ChevronLeft;
+  protected readonly ChevronRightIcon = ChevronRight;
   readonly value = input<string>('');
   /** Prefijo dentro del control (filtros): "Label: valor". */
   readonly label = input<string>('');
