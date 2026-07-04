@@ -35,6 +35,23 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+
+  // Model selection (per active session, in-memory).
+  const [providers, setProviders] = useState<
+    { id: string; name: string; models: string[] }[]
+  >([]);
+  const [selectedModel, setSelectedModel] = useState<{
+    providerID: string;
+    modelID: string;
+  } | null>(null);
+
+  // Session pins and prompt templates (persisted server-side in ~/.ywai).
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<
+    { id: string; name: string; content: string }[]
+  >([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,8 +153,100 @@ export default function Chat() {
     }
   };
 
+  const loadProviders = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/providers`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const list = (data.providers || []).map((p: any) => ({
+        id: p.id,
+        name: p.name || p.id,
+        models: Object.keys(p.models || {}).sort(),
+      }));
+      setProviders(list);
+      // Seed the default selection from OpenCode's configured defaults.
+      const def = data.default || {};
+      const firstProviderID = Object.keys(def)[0];
+      if (firstProviderID && def[firstProviderID]) {
+        setSelectedModel({
+          providerID: firstProviderID,
+          modelID: def[firstProviderID],
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadPins = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/pins`);
+      if (resp.ok) setPinned((await resp.json()).pins || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const togglePin = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isPinned = pinned.includes(id);
+    try {
+      const resp = await fetch(`${API_BASE}/pins/${id}`, {
+        method: isPinned ? "DELETE" : "POST",
+      });
+      if (resp.ok) setPinned((await resp.json()).pins || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/templates`);
+      if (resp.ok) setTemplates((await resp.json()).templates || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const saveTemplate = async () => {
+    const content = input.trim();
+    if (!content) return;
+    const name = window.prompt("Template name?");
+    if (!name) return;
+    try {
+      const resp = await fetch(`${API_BASE}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, content }),
+      });
+      if (resp.ok) loadTemplates();
+    } catch {
+      // ignore
+    }
+  };
+
+  const deleteTemplate = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await fetch(`${API_BASE}/templates/${id}`, { method: "DELETE" });
+      loadTemplates();
+    } catch {
+      // ignore
+    }
+  };
+
+  const insertTemplate = (content: string) => {
+    setInput((prev) => (prev ? `${prev}\n${content}` : content));
+    setShowTemplates(false);
+    textareaRef.current?.focus();
+  };
+
   useEffect(() => {
     loadSessions();
+    loadProviders();
+    loadPins();
+    loadTemplates();
   }, []);
 
   const connectSSE = (sessionId: string) => {
@@ -223,7 +332,10 @@ export default function Chat() {
       await fetch(`${API_BASE}/sessions/${activeSession}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: msgText }),
+        body: JSON.stringify({
+          content: msgText,
+          model: selectedModel || undefined,
+        }),
       });
     } catch {
       setError("Send failed — network error");
@@ -463,6 +575,13 @@ export default function Chat() {
     );
   };
 
+  const sortedSessions = [...sessions].sort((a, b) => {
+    const pa = pinned.includes(a.id) ? 1 : 0;
+    const pb = pinned.includes(b.id) ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    return (b.time?.created || 0) - (a.time?.created || 0);
+  });
+
   return (
     <div className="chat-container">
       {/* Session sidebar */}
@@ -474,8 +593,8 @@ export default function Chat() {
           </button>
         </div>
         <div className="chat-sessions-list">
-          {sessions.map((s) => (
-            <button
+          {sortedSessions.map((s) => (
+            <div
               key={s.id}
               className={`session-item ${s.id === activeSession ? "active" : ""}`}
               onClick={() => {
@@ -487,7 +606,14 @@ export default function Chat() {
               <span className="session-title">
                 {s.title || `Session ${s.id.slice(0, 8)}`}
               </span>
-            </button>
+              <button
+                className="btn-pin"
+                title={pinned.includes(s.id) ? "Unpin" : "Pin"}
+                onClick={(e) => togglePin(s.id, e)}
+              >
+                {pinned.includes(s.id) ? "★" : "☆"}
+              </button>
+            </div>
           ))}
           {sessions.length === 0 && (
             <div className="chat-empty">No sessions yet</div>
@@ -501,6 +627,29 @@ export default function Chat() {
           <span className="chat-connection-status">
             {connected ? "● Connected" : "○ Disconnected"}
           </span>
+          {providers.length > 0 && (
+            <select
+              className="chat-model-select"
+              title="Model"
+              value={
+                selectedModel
+                  ? `${selectedModel.providerID}::${selectedModel.modelID}`
+                  : ""
+              }
+              onChange={(e) => {
+                const [providerID, modelID] = e.target.value.split("::");
+                setSelectedModel(providerID && modelID ? { providerID, modelID } : null);
+              }}
+            >
+              {providers.map((p) =>
+                p.models.map((m) => (
+                  <option key={`${p.id}::${m}`} value={`${p.id}::${m}`}>
+                    {p.name} / {m}
+                  </option>
+                )),
+              )}
+            </select>
+          )}
         </div>
 
         <div className="chat-messages">
@@ -527,6 +676,46 @@ export default function Chat() {
         </div>
 
         {error && <div className="chat-error">{error}</div>}
+
+        <div className="chat-input-toolbar">
+          <button
+            className="btn-templates"
+            onClick={() => setShowTemplates((v) => !v)}
+          >
+            Templates ▾
+          </button>
+          <button
+            className="btn-templates"
+            title="Save current input as a template"
+            onClick={saveTemplate}
+            disabled={!input.trim()}
+          >
+            + Save
+          </button>
+          {showTemplates && (
+            <div className="templates-menu">
+              {templates.length === 0 && (
+                <div className="templates-empty">No templates yet</div>
+              )}
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  className="template-item"
+                  onClick={() => insertTemplate(t.content)}
+                >
+                  <span className="template-name">{t.name}</span>
+                  <button
+                    className="btn-template-delete"
+                    title="Delete"
+                    onClick={(e) => deleteTemplate(t.id, e)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="chat-input-area">
           <div className="input-wrapper">

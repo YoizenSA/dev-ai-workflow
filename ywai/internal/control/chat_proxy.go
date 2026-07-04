@@ -205,6 +205,10 @@ func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Content string `json:"content"`
+		Model   *struct {
+			ProviderID string `json:"providerID"`
+			ModelID    string `json:"modelID"`
+		} `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -218,9 +222,13 @@ func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		payload = []byte("{}")
 	} else {
 		path = "/session/" + id + "/message"
-		payload, _ = json.Marshal(map[string]any{
+		msg := map[string]any{
 			"parts": []map[string]string{{"type": "text", "text": req.Content}},
-		})
+		}
+		if req.Model != nil && req.Model.ProviderID != "" && req.Model.ModelID != "" {
+			msg["model"] = req.Model
+		}
+		payload, _ = json.Marshal(msg)
 	}
 
 	// The prompt call blocks until the assistant finishes; results stream
@@ -284,6 +292,19 @@ func (cp *ChatProxy) upstreamTimeout(r *http.Request, method, path string, body 
 		return nil, 0, fmt.Errorf("failed to read upstream response: %w", err)
 	}
 	return respBody, resp.StatusCode, nil
+}
+
+// handleProviders returns OpenCode's configured providers and models.
+// GET /api/chat/providers -> {providers:[{id,name,models:{...}}], default:{...}}
+func (cp *ChatProxy) handleProviders(w http.ResponseWriter, r *http.Request) {
+	body, status, err := cp.upstream(r, "GET", "/config/providers", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
 }
 
 // handleFileList lists files in the workspace matching a prefix query.
@@ -363,6 +384,7 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
 	s.mux.HandleFunc("POST /api/chat/abort", cp.handleAbort)
+	s.mux.HandleFunc("GET /api/chat/providers", cp.handleProviders)
 	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
 }
 

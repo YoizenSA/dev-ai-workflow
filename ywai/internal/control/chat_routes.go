@@ -9,6 +9,9 @@ import (
 // detected, all routes proxy to it (see chat_proxy.go). Otherwise the chat is
 // unavailable and every endpoint returns a clear 503 so the UI can surface it.
 func (s *Server) registerChatRoutes() {
+	// ywai-local endpoints (pins, prompt templates) work with or without OpenCode.
+	s.registerChatLocalStores()
+
 	if url := detectOpenCodeURL(); url != "" {
 		s.registerOpenCodeProxy(url)
 		return

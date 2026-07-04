@@ -123,3 +123,81 @@ func TestChatProxyEndToEnd(t *testing.T) {
 		t.Error("assistant reply not found in history")
 	}
 }
+
+func TestChatProxyProviders(t *testing.T) {
+	url := liveOpenCodeURL(t)
+	cp := NewChatProxy(url)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/chat/providers", cp.handleProviders)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/chat/providers")
+	if err != nil {
+		t.Fatalf("get providers: %v", err)
+	}
+	var data struct {
+		Providers []struct {
+			ID     string         `json:"id"`
+			Models map[string]any `json:"models"`
+		} `json:"providers"`
+		Default map[string]string `json:"default"`
+	}
+	json.NewDecoder(resp.Body).Decode(&data)
+	resp.Body.Close()
+	if len(data.Providers) == 0 {
+		t.Fatal("expected at least one provider")
+	}
+	if data.Providers[0].ID == "" || len(data.Providers[0].Models) == 0 {
+		t.Errorf("provider missing id or models: %+v", data.Providers[0])
+	}
+}
+
+func TestChatPinsStore(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	s := newChatPinsStore()
+	if len(s.list()) != 0 {
+		t.Fatal("new store should be empty")
+	}
+	s.pin("ses_a")
+	s.pin("ses_a") // dedup
+	s.pin("ses_b")
+	if got := s.list(); len(got) != 2 {
+		t.Fatalf("expected 2 pins, got %v", got)
+	}
+	s.unpin("ses_a")
+	got := s.list()
+	if len(got) != 1 || got[0] != "ses_b" {
+		t.Fatalf("expected [ses_b], got %v", got)
+	}
+
+	// Persistence: a fresh store reads the same file.
+	if got := newChatPinsStore().list(); len(got) != 1 || got[0] != "ses_b" {
+		t.Fatalf("pins not persisted, got %v", got)
+	}
+}
+
+func TestChatTemplatesStore(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	s := newChatTemplatesStore()
+	created, ok := s.upsert(promptTemplate{Name: "greet", Content: "hello"})
+	if !ok || created.ID == "" {
+		t.Fatal("create should assign an id")
+	}
+	if _, ok := s.upsert(promptTemplate{ID: created.ID, Name: "greet2", Content: "hi"}); !ok {
+		t.Fatal("update of existing id should succeed")
+	}
+	if _, ok := s.upsert(promptTemplate{ID: "missing", Name: "x", Content: "y"}); ok {
+		t.Fatal("update of missing id should fail")
+	}
+	list := s.list()
+	if len(list) != 1 || list[0].Name != "greet2" || list[0].Content != "hi" {
+		t.Fatalf("unexpected list: %+v", list)
+	}
+	s.delete(created.ID)
+	if len(s.list()) != 0 {
+		t.Fatal("delete should empty the store")
+	}
+}
