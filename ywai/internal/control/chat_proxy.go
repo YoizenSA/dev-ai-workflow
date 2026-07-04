@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -119,14 +120,19 @@ func (cp *ChatProxy) handleListSessions(w http.ResponseWriter, r *http.Request) 
 	fmt.Fprintf(w, `{"sessions":%s}`, body)
 }
 
-// handleCreateSession creates a new OpenCode session.
-// POST /api/chat/sessions -> session object (with id)
+// handleCreateSession creates a new OpenCode session. An optional ?directory=
+// query scopes the session to a specific workspace (project worktree path).
+// POST /api/chat/sessions[?directory=...] -> session object (with id)
 func (cp *ChatProxy) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	reqBody, _ := io.ReadAll(r.Body)
 	if len(bytes.TrimSpace(reqBody)) == 0 {
 		reqBody = []byte("{}")
 	}
-	body, status, err := cp.upstream(r, "POST", "/session", reqBody)
+	path := "/session"
+	if dir := r.URL.Query().Get("directory"); dir != "" {
+		path += "?directory=" + url.QueryEscape(dir)
+	}
+	body, status, err := cp.upstream(r, "POST", path, reqBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -134,6 +140,100 @@ func (cp *ChatProxy) handleCreateSession(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	w.Write(body)
+}
+
+// handleAgents returns the agents that can be run as the primary agent
+// (OpenCode "primary"/"all" modes; "subagent"-only agents are excluded).
+// GET /api/chat/agents -> {"agents":[{name,description,mode}]}
+func (cp *ChatProxy) handleAgents(w http.ResponseWriter, r *http.Request) {
+	body, status, err := cp.upstream(r, "GET", "/agent", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+		return
+	}
+	var raw []struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Mode        string `json:"mode"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		http.Error(w, "failed to parse agents", http.StatusBadGateway)
+		return
+	}
+	agents := make([]map[string]string, 0, len(raw))
+	for _, a := range raw {
+		if a.Mode == "subagent" {
+			continue
+		}
+		agents = append(agents, map[string]string{
+			"name": a.Name, "description": a.Description, "mode": a.Mode,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+}
+
+// handleProjects returns the workspaces (OpenCode projects) the user can start
+// chats in, deduplicated by worktree path and excluding the global "/" root.
+// GET /api/chat/projects -> {"projects":[{id,path,name}]}
+func (cp *ChatProxy) handleProjects(w http.ResponseWriter, r *http.Request) {
+	body, status, err := cp.upstream(r, "GET", "/project", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+		return
+	}
+	var raw []struct {
+		ID       string `json:"id"`
+		Worktree string `json:"worktree"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		http.Error(w, "failed to parse projects", http.StatusBadGateway)
+		return
+	}
+	seen := map[string]bool{}
+	projects := make([]map[string]string, 0, len(raw))
+	for _, p := range raw {
+		if p.Worktree == "" || p.Worktree == "/" || seen[p.Worktree] {
+			continue
+		}
+		seen[p.Worktree] = true
+		name := filepath.Base(strings.TrimRight(p.Worktree, "/"))
+		projects = append(projects, map[string]string{
+			"id": p.ID, "path": p.Worktree, "name": name,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"projects": projects})
+}
+
+// handleChildren lists child (subagent) sessions of a session, used to
+// visualize async/background subagents.
+// GET /api/chat/sessions/{id}/children -> {"children":[{id,title,...}]}
+func (cp *ChatProxy) handleChildren(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/session/"+id+"/children", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"children":%s}`, body)
 }
 
 // opencodeMessage is the subset of an OpenCode message we surface to the UI.
@@ -146,9 +246,35 @@ type opencodeMessage struct {
 		} `json:"time"`
 	} `json:"info"`
 	Parts []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		ID          string `json:"id"`
+		Type        string `json:"type"`
+		Text        string `json:"text"`
+		Tool        string `json:"tool"`
+		Agent       string `json:"agent"`
+		Description string `json:"description"`
+		Prompt      string `json:"prompt"`
+		State       struct {
+			Status string          `json:"status"`
+			Title  string          `json:"title"`
+			Output string          `json:"output"`
+			Error  string          `json:"error"`
+			Input  json.RawMessage `json:"input"`
+		} `json:"state"`
 	} `json:"parts"`
+}
+
+// outPart is a typed message fragment surfaced to the UI: assistant replies mix
+// plain text, reasoning ("thinking"), and tool calls.
+type outPart struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"` // text | reasoning | tool | subtask
+	Text        string `json:"text,omitempty"`
+	Tool        string `json:"tool,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Output      string `json:"output,omitempty"`
+	Agent       string `json:"agent,omitempty"`       // subtask: which subagent
+	Description string `json:"description,omitempty"` // subtask: task description
 }
 
 // handleGetMessages returns the flattened message history for a session.
@@ -174,23 +300,54 @@ func (cp *ChatProxy) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type outMsg struct {
-		ID        string `json:"id"`
-		Role      string `json:"role"`
-		Content   string `json:"content"`
-		CreatedAt int64  `json:"created_at"`
+		ID        string    `json:"id"`
+		Role      string    `json:"role"`
+		Parts     []outPart `json:"parts"`
+		CreatedAt int64     `json:"created_at"`
 	}
 	msgs := make([]outMsg, 0, len(raw))
 	for _, m := range raw {
-		var sb strings.Builder
+		parts := make([]outPart, 0, len(m.Parts))
 		for _, p := range m.Parts {
-			if p.Type == "text" {
-				sb.WriteString(p.Text)
+			switch p.Type {
+			case "text":
+				if p.Text != "" {
+					parts = append(parts, outPart{ID: p.ID, Kind: "text", Text: p.Text})
+				}
+			case "reasoning":
+				if p.Text != "" {
+					parts = append(parts, outPart{ID: p.ID, Kind: "reasoning", Text: p.Text})
+				}
+			case "tool":
+				out := p.State.Output
+				if p.State.Error != "" {
+					out = p.State.Error
+				}
+				parts = append(parts, outPart{
+					ID:     p.ID,
+					Kind:   "tool",
+					Tool:   p.Tool,
+					Status: p.State.Status,
+					Title:  p.State.Title,
+					Output: out,
+				})
+			case "subtask":
+				desc := p.Description
+				if desc == "" {
+					desc = p.Prompt
+				}
+				parts = append(parts, outPart{
+					ID:          p.ID,
+					Kind:        "subtask",
+					Agent:       p.Agent,
+					Description: desc,
+				})
 			}
 		}
 		msgs = append(msgs, outMsg{
 			ID:        m.Info.ID,
 			Role:      m.Info.Role,
-			Content:   sb.String(),
+			Parts:     parts,
 			CreatedAt: m.Info.Time.Created,
 		})
 	}
@@ -205,6 +362,7 @@ func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Content string `json:"content"`
+		Agent   string `json:"agent"`
 		Model   *struct {
 			ProviderID string `json:"providerID"`
 			ModelID    string `json:"modelID"`
@@ -227,6 +385,9 @@ func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Model != nil && req.Model.ProviderID != "" && req.Model.ModelID != "" {
 			msg["model"] = req.Model
+		}
+		if req.Agent != "" {
+			msg["agent"] = req.Agent
 		}
 		payload, _ = json.Marshal(msg)
 	}
@@ -295,16 +456,49 @@ func (cp *ChatProxy) upstreamTimeout(r *http.Request, method, path string, body 
 }
 
 // handleProviders returns OpenCode's configured providers and models.
-// GET /api/chat/providers -> {providers:[{id,name,models:{...}}], default:{...}}
+// The upstream payload embeds provider API keys, so we strip everything down to
+// id/name/model ids before returning it to the browser — never forward secrets.
+// GET /api/chat/providers -> {providers:[{id,name,models:{modelID:{}}}], default:{...}}
 func (cp *ChatProxy) handleProviders(w http.ResponseWriter, r *http.Request) {
 	body, status, err := cp.upstream(r, "GET", "/config/providers", nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write(body)
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+		return
+	}
+
+	var raw struct {
+		Providers []struct {
+			ID     string                     `json:"id"`
+			Name   string                     `json:"name"`
+			Models map[string]json.RawMessage `json:"models"`
+		} `json:"providers"`
+		Default map[string]string `json:"default"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		http.Error(w, "failed to parse providers", http.StatusBadGateway)
+		return
+	}
+
+	type provOut struct {
+		ID     string              `json:"id"`
+		Name   string              `json:"name"`
+		Models map[string]struct{} `json:"models"`
+	}
+	out := make([]provOut, 0, len(raw.Providers))
+	for _, p := range raw.Providers {
+		models := make(map[string]struct{}, len(p.Models))
+		for id := range p.Models {
+			models[id] = struct{}{}
+		}
+		out = append(out, provOut{ID: p.ID, Name: p.Name, Models: models})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": out, "default": raw.Default})
 }
 
 // handleFileList lists files in the workspace matching a prefix query.
@@ -381,10 +575,13 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("GET /api/chat/sessions", cp.handleListSessions)
 	s.mux.HandleFunc("POST /api/chat/sessions", cp.handleCreateSession)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}", cp.handleGetMessages)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}/children", cp.handleChildren)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
 	s.mux.HandleFunc("POST /api/chat/abort", cp.handleAbort)
 	s.mux.HandleFunc("GET /api/chat/providers", cp.handleProviders)
+	s.mux.HandleFunc("GET /api/chat/agents", cp.handleAgents)
+	s.mux.HandleFunc("GET /api/chat/projects", cp.handleProjects)
 	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
 }
 

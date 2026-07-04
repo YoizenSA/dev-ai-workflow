@@ -1,19 +1,72 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Plus,
+  Star,
+  Send,
+  User,
+  Bot,
+  FileText,
+  Sparkles,
+  MessageSquarePlus,
+  Trash2,
+  Users,
+} from "lucide-react";
 import Autocomplete, { type AutocompleteItem } from "./Autocomplete";
+import Markdown from "./Markdown";
+import { ThinkingBlock, ToolBlock, SubagentBlock } from "./PartBlock";
 import "./Chat.css";
 import { getEventStreamURL, getMessagesURL } from "../../api/chat";
+
+const SUGGESTIONS = [
+  "Explain what this project does",
+  "Help me write a message",
+  "Summarize a text I paste",
+  "Give me ideas to get started",
+];
+
+function formatTime(ms?: number): string {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString([], { day: "2-digit", month: "short" });
+}
 
 interface Session {
   id: string;
   title?: string;
-  time?: { created?: number };
+  time?: { created?: number; completed?: number };
+  directory?: string;
+}
+
+type PartKind = "text" | "reasoning" | "tool" | "subtask";
+
+interface MsgPart {
+  id: string;
+  kind: PartKind;
+  text: string;
+  tool?: string;
+  status?: string;
+  title?: string;
+  output?: string;
+  agent?: string;
+  description?: string;
 }
 
 interface Message {
   id: string;
   role: string;
-  content: string;
+  parts: MsgPart[];
   timestamp: number;
+}
+
+// Human-friendly workspace label from an absolute directory path.
+function workspaceLabel(dir?: string): string {
+  if (!dir) return "No workspace";
+  const parts = dir.replace(/\/+$/, "").split("/");
+  return parts[parts.length - 1] || dir;
 }
 
 const API_BASE = "/api/chat";
@@ -45,6 +98,21 @@ export default function Chat() {
     modelID: string;
   } | null>(null);
 
+  // Agent selection (per active session, in-memory).
+  const [agents, setAgents] = useState<
+    { name: string; description: string; mode: string }[]
+  >([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
+
+  // Workspaces (OpenCode projects). Empty filter = all workspaces.
+  const [projects, setProjects] = useState<
+    { id: string; path: string; name: string }[]
+  >([]);
+  const [workspaceFilter, setWorkspaceFilter] = useState<string>("");
+
+  // Child (subagent) sessions of the active session, for async subagent viz.
+  const [children, setChildren] = useState<Session[]>([]);
+
   // Session pins and prompt templates (persisted server-side in ~/.ywai).
   const [pinned, setPinned] = useState<string[]>([]);
   const [templates, setTemplates] = useState<
@@ -56,14 +124,15 @@ export default function Chat() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Accumulates messages by id and their text parts (by partID) so streaming
-  // deltas and full-part updates from OpenCode reconstruct in order.
+  // Accumulates messages by id and their typed parts (by partID) so streaming
+  // deltas and full-part snapshots from OpenCode reconstruct in order. Parts can
+  // be plain text, reasoning ("thinking"), or tool calls.
   type StoredMessage = {
     id: string;
     role: string;
     created: number;
     order: string[];
-    parts: Map<string, string>;
+    parts: Map<string, MsgPart>;
   };
   const msgStore = useRef<Map<string, StoredMessage>>(new Map());
 
@@ -78,19 +147,30 @@ export default function Chat() {
     return m;
   };
 
-  const setPart = (msgID: string, partID: string, text: string) => {
-    const m = ensureMsg(msgID);
-    if (!m.parts.has(partID)) m.order.push(partID);
-    m.parts.set(partID, text);
+  const ensurePart = (m: StoredMessage, partID: string, kind: PartKind): MsgPart => {
+    let p = m.parts.get(partID);
+    if (!p) {
+      p = { id: partID, kind, text: "" };
+      m.parts.set(partID, p);
+      m.order.push(partID);
+    }
+    return p;
   };
 
+  // Full-snapshot upsert of a part (from message.part.updated).
+  const setPart = (
+    msgID: string,
+    partID: string,
+    fields: Partial<MsgPart> & { kind: PartKind },
+  ) => {
+    const p = ensurePart(ensureMsg(msgID), partID, fields.kind);
+    Object.assign(p, fields);
+  };
+
+  // Incremental text append (from message.part.delta).
   const appendPart = (msgID: string, partID: string, delta: string) => {
-    const m = ensureMsg(msgID);
-    if (!m.parts.has(partID)) {
-      m.order.push(partID);
-      m.parts.set(partID, "");
-    }
-    m.parts.set(partID, (m.parts.get(partID) || "") + delta);
+    const p = ensurePart(ensureMsg(msgID), partID, "text");
+    p.text = (p.text || "") + delta;
   };
 
   const rebuildMessages = () => {
@@ -99,7 +179,7 @@ export default function Chat() {
       .map((m) => ({
         id: m.id,
         role: m.role,
-        content: m.order.map((p) => m.parts.get(p) || "").join(""),
+        parts: m.order.map((id) => m.parts.get(id)!).filter(Boolean),
         timestamp: m.created,
       }));
     setMessages(arr);
@@ -130,6 +210,14 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Auto-grow the composer textarea to fit its content (capped by CSS max-height).
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [input]);
 
   useEffect(() => {
     if (activeSession) {
@@ -173,6 +261,39 @@ export default function Chat() {
           modelID: def[firstProviderID],
         });
       }
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadAgents = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/agents`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const list = data.agents || [];
+      setAgents(list);
+      // Default to "build" (OpenCode's default) when present.
+      const build = list.find((a: any) => a.name === "build");
+      setSelectedAgent(build ? "build" : list[0]?.name || "");
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadProjects = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/projects`);
+      if (resp.ok) setProjects((await resp.json()).projects || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadChildren = async (sessionId: string) => {
+    try {
+      const resp = await fetch(`${API_BASE}/sessions/${sessionId}/children`);
+      if (resp.ok) setChildren((await resp.json()).children || []);
     } catch {
       // ignore
     }
@@ -245,9 +366,17 @@ export default function Chat() {
   useEffect(() => {
     loadSessions();
     loadProviders();
+    loadAgents();
+    loadProjects();
     loadPins();
     loadTemplates();
   }, []);
+
+  // Refresh subagent (child) sessions when the session changes or streaming ends.
+  useEffect(() => {
+    if (activeSession) loadChildren(activeSession);
+    else setChildren([]);
+  }, [activeSession, isStreaming]);
 
   const connectSSE = (sessionId: string) => {
     disconnectSSE();
@@ -297,12 +426,44 @@ export default function Chat() {
           rebuildMessages();
         }
         break;
-      case "message.part.updated":
-        if (p.part?.type === "text") {
-          setPart(p.part.messageID, p.part.id, p.part.text || "");
-          rebuildMessages();
+      case "message.part.updated": {
+        const part = p.part;
+        if (!part) break;
+        if (part.type === "text") {
+          setPart(part.messageID, part.id, { kind: "text", text: part.text || "" });
+        } else if (part.type === "reasoning") {
+          setPart(part.messageID, part.id, {
+            kind: "reasoning",
+            text: part.text || "",
+          });
+        } else if (part.type === "tool") {
+          const st = part.state || {};
+          const out =
+            st.error ||
+            (typeof st.output === "string"
+              ? st.output
+              : st.output
+                ? JSON.stringify(st.output, null, 2)
+                : "");
+          setPart(part.messageID, part.id, {
+            kind: "tool",
+            tool: part.tool,
+            status: st.status,
+            title: st.title,
+            output: out,
+          });
+        } else if (part.type === "subtask") {
+          setPart(part.messageID, part.id, {
+            kind: "subtask",
+            agent: part.agent,
+            description: part.description || part.prompt || "",
+          });
+        } else {
+          break;
         }
+        rebuildMessages();
         break;
+      }
       case "message.part.delta":
         if (p.field === "text") {
           appendPart(p.messageID, p.partID, p.delta || "");
@@ -335,6 +496,7 @@ export default function Chat() {
         body: JSON.stringify({
           content: msgText,
           model: selectedModel || undefined,
+          agent: selectedAgent || undefined,
         }),
       });
     } catch {
@@ -345,7 +507,11 @@ export default function Chat() {
 
   const createSession = async () => {
     try {
-      const resp = await fetch(`${API_BASE}/sessions`, {
+      // When a workspace is selected, scope the new session to that directory.
+      const qs = workspaceFilter
+        ? `?directory=${encodeURIComponent(workspaceFilter)}`
+        : "";
+      const resp = await fetch(`${API_BASE}/sessions${qs}`, {
         method: "POST",
       });
       if (resp.ok) {
@@ -383,8 +549,23 @@ export default function Chat() {
         msgStore.current = new Map();
         (data.messages || []).forEach((m: any, i: number) => {
           const e = ensureMsg(m.id, m.role, m.created_at || i + 1);
-          e.order = ["_full"];
-          e.parts = new Map([["_full", m.content || ""]]);
+          e.order = [];
+          e.parts = new Map();
+          (m.parts || []).forEach((p: any, idx: number) => {
+            const pid = p.id || `${m.id}-${idx}`;
+            e.order.push(pid);
+            e.parts.set(pid, {
+              id: pid,
+              kind: p.kind,
+              text: p.text || "",
+              tool: p.tool,
+              status: p.status,
+              title: p.title,
+              output: p.output,
+              agent: p.agent,
+              description: p.description,
+            });
+          });
         });
         rebuildMessages();
       }
@@ -480,7 +661,7 @@ export default function Chat() {
         const helpMsg: Message = {
           id: `help-${Date.now()}`,
           role: "assistant",
-          content: HELP_TEXT,
+          parts: [{ id: "help", kind: "text", text: HELP_TEXT }],
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, helpMsg]);
@@ -575,100 +756,245 @@ export default function Chat() {
     );
   };
 
-  const sortedSessions = [...sessions].sort((a, b) => {
-    const pa = pinned.includes(a.id) ? 1 : 0;
-    const pb = pinned.includes(b.id) ? 1 : 0;
-    if (pa !== pb) return pb - pa;
-    return (b.time?.created || 0) - (a.time?.created || 0);
-  });
+  const sortedSessions = [...sessions]
+    .filter((s) => !workspaceFilter || s.directory === workspaceFilter)
+    .sort((a, b) => {
+      const pa = pinned.includes(a.id) ? 1 : 0;
+      const pb = pinned.includes(b.id) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return (b.time?.created || 0) - (a.time?.created || 0);
+    });
+
+  // Group sessions by workspace (directory), preserving the sorted order so each
+  // group's first entry is its most-recent/pinned session.
+  const groupedSessions: [string, Session[]][] = [];
+  const groupIndex = new Map<string, Session[]>();
+  for (const s of sortedSessions) {
+    const key = s.directory || "";
+    let bucket = groupIndex.get(key);
+    if (!bucket) {
+      bucket = [];
+      groupIndex.set(key, bucket);
+      groupedSessions.push([key, bucket]);
+    }
+    bucket.push(s);
+  }
+
+  const activeTitle =
+    sessions.find((s) => s.id === activeSession)?.title || "New conversation";
+  const showWelcome = !!activeSession && messages.length === 0 && !isStreaming;
 
   return (
     <div className="chat-container">
       {/* Session sidebar */}
-      <div className="chat-sessions">
+      <aside className="chat-sessions">
         <div className="chat-sessions-header">
-          <span>Sessions</span>
-          <button className="btn-new-session" onClick={createSession}>
-            + New
+          <span className="chat-brand">
+            <Sparkles size={16} /> Chat
+          </span>
+          <button
+            className="btn-new-session"
+            onClick={createSession}
+            title="New conversation"
+          >
+            <Plus size={16} /> New
           </button>
         </div>
-        <div className="chat-sessions-list">
-          {sortedSessions.map((s) => (
-            <div
-              key={s.id}
-              className={`session-item ${s.id === activeSession ? "active" : ""}`}
-              onClick={() => {
-                setActiveSession(s.id);
-                setMessages([]);
-                loadMessages(s.id);
-              }}
+        {projects.length > 0 && (
+          <div className="workspace-switcher">
+            <select
+              className="workspace-select"
+              value={workspaceFilter}
+              onChange={(e) => setWorkspaceFilter(e.target.value)}
+              title="Filter by workspace (also targets new chats)"
             >
-              <span className="session-title">
-                {s.title || `Session ${s.id.slice(0, 8)}`}
-              </span>
-              <button
-                className="btn-pin"
-                title={pinned.includes(s.id) ? "Unpin" : "Pin"}
-                onClick={(e) => togglePin(s.id, e)}
-              >
-                {pinned.includes(s.id) ? "★" : "☆"}
-              </button>
+              <option value="">All workspaces</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.path}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="chat-sessions-list">
+          {groupedSessions.map(([dir, items]) => (
+            <div className="session-group" key={dir || "none"}>
+              <div className="session-group-header" title={dir}>
+                {workspaceLabel(dir)}
+              </div>
+              {items.map((s) => (
+                <div
+                  key={s.id}
+                  className={`session-item ${s.id === activeSession ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveSession(s.id);
+                    setMessages([]);
+                    loadMessages(s.id);
+                  }}
+                >
+                  <MessageSquarePlus size={15} className="session-icon" />
+                  <span className="session-title">
+                    {s.title || `Session ${s.id.slice(0, 8)}`}
+                  </span>
+                  <span className="session-time">
+                    {formatTime(s.time?.created)}
+                  </span>
+                  <button
+                    className={`btn-pin ${pinned.includes(s.id) ? "pinned" : ""}`}
+                    title={pinned.includes(s.id) ? "Unpin" : "Pin"}
+                    onClick={(e) => togglePin(s.id, e)}
+                  >
+                    <Star
+                      size={14}
+                      fill={pinned.includes(s.id) ? "currentColor" : "none"}
+                    />
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
           {sessions.length === 0 && (
-            <div className="chat-empty">No sessions yet</div>
+            <div className="chat-empty">
+              No conversations yet.
+              <br />
+              Tap <strong>New</strong> to start.
+            </div>
           )}
         </div>
-      </div>
+      </aside>
 
       {/* Main chat area */}
-      <div className="chat-main">
-        <div className="chat-header">
-          <span className="chat-connection-status">
-            {connected ? "● Connected" : "○ Disconnected"}
-          </span>
-          {providers.length > 0 && (
-            <select
-              className="chat-model-select"
-              title="Model"
-              value={
-                selectedModel
-                  ? `${selectedModel.providerID}::${selectedModel.modelID}`
-                  : ""
-              }
-              onChange={(e) => {
-                const [providerID, modelID] = e.target.value.split("::");
-                setSelectedModel(providerID && modelID ? { providerID, modelID } : null);
-              }}
-            >
-              {providers.map((p) =>
-                p.models.map((m) => (
-                  <option key={`${p.id}::${m}`} value={`${p.id}::${m}`}>
-                    {p.name} / {m}
-                  </option>
-                )),
-              )}
-            </select>
-          )}
-        </div>
+      <main className="chat-main">
+        <header className="chat-header">
+          <div className="chat-header-title">{activeTitle}</div>
+          <div className="chat-header-right">
+            <span
+              className={`chat-status-dot ${connected ? "on" : "off"}`}
+              title={connected ? "Connected" : "Disconnected"}
+            />
+          </div>
+        </header>
+
+        {activeSession && children.length > 0 && (
+          <div className="subagents-strip">
+            <span className="subagents-label">
+              <Users size={13} /> Subagents
+            </span>
+            {children.map((c) => {
+              const running = c.time?.completed == null;
+              return (
+                <button
+                  key={c.id}
+                  className={`subagent-chip ${running ? "running" : "done"}`}
+                  title={c.title}
+                  onClick={() => {
+                    setActiveSession(c.id);
+                    setMessages([]);
+                    loadMessages(c.id);
+                  }}
+                >
+                  <span className="subagent-dot" />
+                  {c.title || c.id.slice(0, 8)}
+                  <span className="subagent-mode">
+                    {running ? "async · running" : "done"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="chat-messages">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`chat-message ${msg.role} ${isStreaming && messages[messages.length - 1]?.id === msg.id && msg.role === "assistant" ? "streaming" : ""}`}
-            >
-              <div className="message-role">
-                {msg.role === "user" ? "You" : "AI"}
+          {!activeSession && (
+            <div className="chat-placeholder">
+              <Bot size={40} />
+              <h2>How can I help you today?</h2>
+              <p>Pick a conversation or create a new one to get started.</p>
+              <button className="btn-new-session big" onClick={createSession}>
+                <Plus size={16} /> New conversation
+              </button>
+            </div>
+          )}
+
+          {showWelcome && (
+            <div className="chat-placeholder">
+              <Sparkles size={36} />
+              <h2>How can I help?</h2>
+              <div className="chat-suggestions">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    className="suggestion-card"
+                    onClick={() => {
+                      setInput(s);
+                      textareaRef.current?.focus();
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
-              <div className="message-content">{msg.content}</div>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div key={msg.id} className={`chat-message ${msg.role}`}>
+              <div className="message-avatar">
+                {msg.role === "user" ? <User size={18} /> : <Bot size={18} />}
+              </div>
+              <div className="message-body">
+                <div className="message-role">
+                  {msg.role === "user" ? "You" : "Assistant"}
+                </div>
+                <div className="message-content">
+                  {msg.parts.map((part) => {
+                    if (part.kind === "reasoning")
+                      return <ThinkingBlock key={part.id} text={part.text} />;
+                    if (part.kind === "subtask")
+                      return (
+                        <SubagentBlock
+                          key={part.id}
+                          agent={part.agent}
+                          description={part.description}
+                        />
+                      );
+                    if (part.kind === "tool")
+                      return (
+                        <ToolBlock
+                          key={part.id}
+                          tool={part.tool}
+                          status={part.status}
+                          title={part.title}
+                          output={part.output}
+                        />
+                      );
+                    return msg.role === "user" ? (
+                      <div key={part.id} className="text-part">
+                        {part.text}
+                      </div>
+                    ) : (
+                      <Markdown key={part.id} content={part.text} />
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           ))}
-          {isStreaming && (
-            <div className="chat-message assistant streaming">
-              <div className="message-role">AI</div>
-              <div className="message-content">
-                <span className="streaming-cursor">▊</span>
+          {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+            <div className="chat-message assistant">
+              <div className="message-avatar">
+                <Bot size={18} />
+              </div>
+              <div className="message-body">
+                <div className="message-role">Assistant</div>
+                <div className="message-content">
+                  <span className="typing">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -677,57 +1003,82 @@ export default function Chat() {
 
         {error && <div className="chat-error">{error}</div>}
 
-        <div className="chat-input-toolbar">
-          <button
-            className="btn-templates"
-            onClick={() => setShowTemplates((v) => !v)}
-          >
-            Templates ▾
-          </button>
-          <button
-            className="btn-templates"
-            title="Save current input as a template"
-            onClick={saveTemplate}
-            disabled={!input.trim()}
-          >
-            + Save
-          </button>
-          {showTemplates && (
-            <div className="templates-menu">
-              {templates.length === 0 && (
-                <div className="templates-empty">No templates yet</div>
-              )}
-              {templates.map((t) => (
-                <div
-                  key={t.id}
-                  className="template-item"
-                  onClick={() => insertTemplate(t.content)}
-                >
-                  <span className="template-name">{t.name}</span>
-                  <button
-                    className="btn-template-delete"
-                    title="Delete"
-                    onClick={(e) => deleteTemplate(t.id, e)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="chat-input-area">
-          <div className="input-wrapper">
+        {/* Composer */}
+        <div className="chat-composer">
+          <div className="composer-card">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
-              rows={2}
+              placeholder={
+                activeSession
+                  ? "Type your message…  (Enter to send, Shift+Enter for a new line)"
+                  : "Create or pick a conversation to start typing"
+              }
+              rows={1}
               disabled={!activeSession}
             />
+            <div className="composer-toolbar">
+              {agents.length > 0 && (
+                <select
+                  className="composer-select"
+                  title="Agent"
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                >
+                  {agents.map((a) => (
+                    <option key={a.name} value={a.name} title={a.description}>
+                      @{a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {providers.length > 0 && (
+                <select
+                  className="composer-select"
+                  title="Model"
+                  value={
+                    selectedModel
+                      ? `${selectedModel.providerID}::${selectedModel.modelID}`
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const [providerID, modelID] = e.target.value.split("::");
+                    setSelectedModel(
+                      providerID && modelID ? { providerID, modelID } : null,
+                    );
+                  }}
+                >
+                  {providers.map((p) =>
+                    p.models.map((m) => (
+                      <option key={`${p.id}::${m}`} value={`${p.id}::${m}`}>
+                        {p.name} · {m}
+                      </option>
+                    )),
+                  )}
+                </select>
+              )}
+              <div className="composer-actions">
+                <button
+                  className="composer-icon"
+                  title="Templates"
+                  onClick={() => setShowTemplates((v) => !v)}
+                  disabled={!activeSession}
+                >
+                  <FileText size={18} />
+                </button>
+                <button
+                  className="btn-send"
+                  onClick={sendMessage}
+                  disabled={!input.trim() || !activeSession || isStreaming}
+                  title="Send"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+            </div>
+
             <Autocomplete
               items={getFilteredSlashCommands()}
               selectedIndex={slashIndex}
@@ -744,16 +1095,45 @@ export default function Chat() {
               visible={showFileMenu}
               anchorEl={textareaRef.current}
             />
+
+            {showTemplates && (
+              <div className="templates-menu">
+                <div className="templates-menu-header">
+                  <span>Templates</span>
+                  <button
+                    className="btn-save-template"
+                    onClick={saveTemplate}
+                    disabled={!input.trim()}
+                  >
+                    <Plus size={13} /> Save current
+                  </button>
+                </div>
+                {templates.length === 0 && (
+                  <div className="templates-empty">
+                    No templates yet. Type something and save it here.
+                  </div>
+                )}
+                {templates.map((t) => (
+                  <div
+                    key={t.id}
+                    className="template-item"
+                    onClick={() => insertTemplate(t.content)}
+                  >
+                    <span className="template-name">{t.name}</span>
+                    <button
+                      className="btn-template-delete"
+                      title="Delete"
+                      onClick={(e) => deleteTemplate(t.id, e)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || !activeSession || isStreaming}
-            className="btn-send"
-          >
-            Send
-          </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

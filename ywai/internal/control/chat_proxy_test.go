@@ -97,9 +97,12 @@ func TestChatProxyEndToEnd(t *testing.T) {
 	}
 	var msgs struct {
 		Messages []struct {
-			ID      string `json:"id"`
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			ID    string `json:"id"`
+			Role  string `json:"role"`
+			Parts []struct {
+				Kind string `json:"kind"`
+				Text string `json:"text"`
+			} `json:"parts"`
 		} `json:"messages"`
 	}
 	json.NewDecoder(resp.Body).Decode(&msgs)
@@ -107,12 +110,24 @@ func TestChatProxyEndToEnd(t *testing.T) {
 	if len(msgs.Messages) < 2 {
 		t.Fatalf("expected >=2 messages (user+assistant), got %d", len(msgs.Messages))
 	}
+	textOf := func(parts []struct {
+		Kind string `json:"kind"`
+		Text string `json:"text"`
+	}) string {
+		var s string
+		for _, p := range parts {
+			if p.Kind == "text" {
+				s += p.Text
+			}
+		}
+		return s
+	}
 	var haveUser, haveAssistant bool
 	for _, m := range msgs.Messages {
-		if m.Role == "user" && strings.Contains(m.Content, "pong") {
+		if m.Role == "user" && strings.Contains(textOf(m.Parts), "pong") {
 			haveUser = true
 		}
-		if m.Role == "assistant" && m.Content != "" {
+		if m.Role == "assistant" && textOf(m.Parts) != "" {
 			haveAssistant = true
 		}
 	}
