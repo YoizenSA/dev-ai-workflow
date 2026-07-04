@@ -15,16 +15,18 @@ import (
 	"time"
 )
 
-// ChatProxy proxies SSE connections to a local OpenCode server.
+// ChatProxy proxies chat requests to a local OpenCode server, translating
+// between the frontend's simple contract and OpenCode's REST API.
 type ChatProxy struct {
-	opencodeBaseURL string // e.g. "http://localhost:3000"
+	opencodeBaseURL string // e.g. "http://localhost:4096"
 }
 
 func NewChatProxy(opencodeBaseURL string) *ChatProxy {
 	return &ChatProxy{opencodeBaseURL: opencodeBaseURL}
 }
 
-// handleChatSSE proxies the SSE stream from OpenCode to the client.
+// handleChatSSE proxies OpenCode's global /event stream to the client,
+// forwarding only events for the requested session (plus global events).
 // GET /api/chat/events?sessionID=xxx
 func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("sessionID")
@@ -33,15 +35,13 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	upstreamURL := fmt.Sprintf("%s/event", cp.opencodeBaseURL)
+	upstreamURL := cp.opencodeBaseURL + "/event"
 	req, err := http.NewRequestWithContext(r.Context(), "GET", upstreamURL, nil)
 	if err != nil {
 		http.Error(w, "failed to create request", http.StatusInternalServerError)
 		return
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
 
 	client := &http.Client{Timeout: 0} // no timeout for SSE
 	resp, err := client.Do(req)
@@ -56,7 +56,6 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -74,197 +73,217 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		// Filter events for the requested session
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
 			if cp.shouldForwardEvent(data, sessionID) {
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
 			}
-		} else if strings.HasPrefix(line, "event: ") || line == "" {
-			fmt.Fprintf(w, "%s\n", line)
-			flusher.Flush()
 		}
 	}
 }
 
-// shouldForwardEvent checks if an SSE event belongs to the requested session.
+// shouldForwardEvent checks whether an OpenCode event belongs to the requested
+// session. OpenCode nests the session id under `properties.sessionID`.
 func (cp *ChatProxy) shouldForwardEvent(data, sessionID string) bool {
-	// Try to parse as JSON and check sessionID
 	var event struct {
-		SessionID string `json:"sessionID"`
-		Type      string `json:"type"`
+		Properties struct {
+			SessionID string `json:"sessionID"`
+		} `json:"properties"`
 	}
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
-		// If we can't parse, forward it (might be a global event)
-		return true
+		return true // unparseable → forward (likely a global event)
 	}
-
-	// Forward global events (no sessionID)
-	if event.SessionID == "" {
-		return true
+	if event.Properties.SessionID == "" {
+		return true // global event (server.connected, catalog.updated, ...)
 	}
-
-	return event.SessionID == sessionID
+	return event.Properties.SessionID == sessionID
 }
 
-// handleChatSend proxies a message send to OpenCode.
-// POST /api/chat/send
-func (cp *ChatProxy) handleChatSend(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
+// handleListSessions lists OpenCode sessions.
+// GET /api/chat/sessions -> {"sessions": [...]}
+func (cp *ChatProxy) handleListSessions(w http.ResponseWriter, r *http.Request) {
+	body, status, err := cp.upstream(r, "GET", "/session", nil)
 	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-
-	upstreamURL := fmt.Sprintf("%s/session.message", cp.opencodeBaseURL)
-	req, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
-	if err != nil {
-		http.Error(w, "failed to create request", http.StatusInternalServerError)
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Forward response
+	// OpenCode returns a bare array; the frontend expects {"sessions": [...]}.
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	fmt.Fprintf(w, `{"sessions":%s}`, body)
 }
 
-// handleChatSessions proxies session listing to OpenCode.
-// GET /api/chat/sessions
-func (cp *ChatProxy) handleChatSessions(w http.ResponseWriter, r *http.Request) {
-	upstreamURL := fmt.Sprintf("%s/session.list", cp.opencodeBaseURL)
-	req, err := http.NewRequestWithContext(r.Context(), "GET", upstreamURL, nil)
+// handleCreateSession creates a new OpenCode session.
+// POST /api/chat/sessions -> session object (with id)
+func (cp *ChatProxy) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+	reqBody, _ := io.ReadAll(r.Body)
+	if len(bytes.TrimSpace(reqBody)) == 0 {
+		reqBody = []byte("{}")
+	}
+	body, status, err := cp.upstream(r, "POST", "/session", reqBody)
 	if err != nil {
-		http.Error(w, "failed to create request", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.WriteHeader(status)
+	w.Write(body)
 }
 
-// handleChatCreateSession creates a new session on OpenCode.
-// POST /api/chat/sessions
-func (cp *ChatProxy) handleChatCreateSession(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// opencodeMessage is the subset of an OpenCode message we surface to the UI.
+type opencodeMessage struct {
+	Info struct {
+		ID   string `json:"id"`
+		Role string `json:"role"`
+		Time struct {
+			Created int64 `json:"created"`
+		} `json:"time"`
+	} `json:"info"`
+	Parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"parts"`
+}
 
-	body, err := io.ReadAll(r.Body)
+// handleGetMessages returns the flattened message history for a session.
+// GET /api/chat/sessions/{id} -> {"messages": [{id, role, content, created_at}]}
+func (cp *ChatProxy) handleGetMessages(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/session/"+id+"/message", nil)
 	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
 		return
 	}
 
-	upstreamURL := fmt.Sprintf("%s/session.create", cp.opencodeBaseURL)
-	req, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
+	var raw []opencodeMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		http.Error(w, "failed to parse upstream messages", http.StatusBadGateway)
+		return
+	}
+
+	type outMsg struct {
+		ID        string `json:"id"`
+		Role      string `json:"role"`
+		Content   string `json:"content"`
+		CreatedAt int64  `json:"created_at"`
+	}
+	msgs := make([]outMsg, 0, len(raw))
+	for _, m := range raw {
+		var sb strings.Builder
+		for _, p := range m.Parts {
+			if p.Type == "text" {
+				sb.WriteString(p.Text)
+			}
+		}
+		msgs = append(msgs, outMsg{
+			ID:        m.Info.ID,
+			Role:      m.Info.Role,
+			Content:   sb.String(),
+			CreatedAt: m.Info.Time.Created,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// handleSendMessage sends a user prompt to OpenCode. A "/compact" content is
+// translated to a session summarize call.
+// POST /api/chat/sessions/{id}/messages  body: {"content": "..."}
+func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var path string
+	var payload []byte
+	if strings.TrimSpace(req.Content) == "/compact" {
+		path = "/session/" + id + "/summarize"
+		payload = []byte("{}")
+	} else {
+		path = "/session/" + id + "/message"
+		payload, _ = json.Marshal(map[string]any{
+			"parts": []map[string]string{{"type": "text", "text": req.Content}},
+		})
+	}
+
+	// The prompt call blocks until the assistant finishes; results stream
+	// concurrently via /event, so no client timeout here.
+	body, status, err := cp.upstreamTimeout(r, "POST", path, payload, 0)
 	if err != nil {
-		http.Error(w, "failed to create request", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.WriteHeader(status)
+	w.Write(body)
 }
 
-// handleChatMessages proxies message listing to OpenCode.
-// GET /api/chat/messages?sessionID=xxx
-func (cp *ChatProxy) handleChatMessages(w http.ResponseWriter, r *http.Request) {
-	sessionID := r.URL.Query().Get("sessionID")
-	if sessionID == "" {
+// handleAbort aborts a running session.
+// POST /api/chat/abort  body: {"sessionID": "..."}
+func (cp *ChatProxy) handleAbort(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SessionID string `json:"sessionID"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SessionID == "" {
 		http.Error(w, "sessionID required", http.StatusBadRequest)
 		return
 	}
-
-	upstreamURL := fmt.Sprintf("%s/session.messages?id=%s", cp.opencodeBaseURL, sessionID)
-	req, err := http.NewRequestWithContext(r.Context(), "GET", upstreamURL, nil)
+	body, status, err := cp.upstream(r, "POST", "/session/"+req.SessionID+"/abort", []byte("{}"))
 	if err != nil {
-		http.Error(w, "failed to create request", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.WriteHeader(status)
+	w.Write(body)
 }
 
-// handleChatAbort aborts a running session.
-// POST /api/chat/abort
-func (cp *ChatProxy) handleChatAbort(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// upstream performs a request against the OpenCode server with a default
+// timeout and returns the response body and status.
+func (cp *ChatProxy) upstream(r *http.Request, method, path string, body []byte) ([]byte, int, error) {
+	return cp.upstreamTimeout(r, method, path, body, 30*time.Second)
+}
 
-	body, err := io.ReadAll(r.Body)
+func (cp *ChatProxy) upstreamTimeout(r *http.Request, method, path string, body []byte, timeout time.Duration) ([]byte, int, error) {
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(r.Context(), method, cp.opencodeBaseURL+path, rdr)
 	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-
-	upstreamURL := fmt.Sprintf("%s/session.abort", cp.opencodeBaseURL)
-	req, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
-	if err != nil {
-		http.Error(w, "failed to create request", http.StatusInternalServerError)
-		return
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		return
+		return nil, 0, fmt.Errorf("upstream error: %v", err)
 	}
 	defer resp.Body.Close()
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read upstream response: %w", err)
+	}
+	return respBody, resp.StatusCode, nil
 }
 
 // handleFileList lists files in the workspace matching a prefix query.
@@ -276,8 +295,6 @@ func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Walk up to find a go.mod or similar root marker.
-	// Fall back to current working directory.
 	root := "."
 	for _, marker := range []string{"go.mod", "package.json", ".git"} {
 		dir := findFileUpwards(marker)
@@ -292,21 +309,18 @@ func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip inaccessible
+			return nil
 		}
 		if d.IsDir() {
-			// Skip hidden dirs and node_modules
 			if strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return nil
 		}
-
 		if strings.HasPrefix(strings.ToLower(rel), strings.ToLower(q)) {
 			results = append(results, rel)
 			if len(results) >= limit {
@@ -317,7 +331,6 @@ func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 	})
 
 	sort.Strings(results)
-
 	if results == nil {
 		results = []string{}
 	}
@@ -339,36 +352,31 @@ func findFileUpwards(name string) string {
 	}
 }
 
-// registerChatProxyRoutes registers chat proxy routes on the mux.
-// Session CRUD routes are handled by registerChatRoutes (chat_routes.go).
-func (s *Server) registerChatProxyRoutes() {
-	// Auto-detect OpenCode server URL
-	opencodeURL := detectOpenCodeURL()
-	if opencodeURL == "" {
-		log.Printf("[chat] no OpenCode server detected, using echo mode")
-		s.mux.HandleFunc("GET /api/chat/events", s.handleChatSSEFallback)
-		return
-	}
-
+// registerOpenCodeProxy wires every /api/chat route to the OpenCode server.
+func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	cp := NewChatProxy(opencodeURL)
 	log.Printf("[chat] proxying to OpenCode at %s", opencodeURL)
 
-	// Session CRUD (GET/POST /api/chat/sessions) is handled by registerChatRoutes.
+	s.mux.HandleFunc("GET /api/chat/sessions", cp.handleListSessions)
+	s.mux.HandleFunc("POST /api/chat/sessions", cp.handleCreateSession)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}", cp.handleGetMessages)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
+	s.mux.HandleFunc("POST /api/chat/abort", cp.handleAbort)
 	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
-	s.mux.HandleFunc("GET /api/chat/messages", cp.handleChatMessages)
-	s.mux.HandleFunc("POST /api/chat/send", cp.handleChatSend)
-	s.mux.HandleFunc("POST /api/chat/abort", cp.handleChatAbort)
 }
 
 // detectOpenCodeURL tries to find a running OpenCode server.
 func detectOpenCodeURL() string {
-	// Try common ports
-	ports := []string{"3000", "3001", "4096"}
+	if url := strings.TrimSpace(os.Getenv("OPENCODE_URL")); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	// Try common ports. OpenCode's default is 4096.
+	ports := []string{"4096", "3000", "3001"}
 	for _, port := range ports {
 		url := fmt.Sprintf("http://localhost:%s", port)
 		client := &http.Client{Timeout: 1 * time.Second}
-		resp, err := client.Get(url + "/health")
+		resp, err := client.Get(url + "/app")
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -376,15 +384,5 @@ func detectOpenCodeURL() string {
 			}
 		}
 	}
-
-	// Check environment variable
-	if url := strings.TrimSpace(getenvFallback("OPENCODE_URL")); url != "" {
-		return url
-	}
-
 	return ""
-}
-
-func getenvFallback(key string) string {
-	return os.Getenv(key)
 }

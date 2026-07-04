@@ -158,10 +158,8 @@ func (s *Server) buildRoutes() {
 	s.registerSkillsRoutes()
 
 	// ─── Chat API ───────────────────────────────────────────────
-	// In-memory session CRUD (always available)
+	// Proxies to a local OpenCode server when one is running.
 	s.registerChatRoutes()
-	// Chat proxy (SSE streaming, send, abort — only if OpenCode is running)
-	s.registerChatProxyRoutes()
 
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)

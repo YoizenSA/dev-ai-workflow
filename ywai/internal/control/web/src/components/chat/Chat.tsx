@@ -39,6 +39,55 @@ export default function Chat() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Accumulates messages by id and their text parts (by partID) so streaming
+  // deltas and full-part updates from OpenCode reconstruct in order.
+  type StoredMessage = {
+    id: string;
+    role: string;
+    created: number;
+    order: string[];
+    parts: Map<string, string>;
+  };
+  const msgStore = useRef<Map<string, StoredMessage>>(new Map());
+
+  const ensureMsg = (id: string, role?: string, created?: number) => {
+    let m = msgStore.current.get(id);
+    if (!m) {
+      m = { id, role: role || "assistant", created: created || Date.now(), order: [], parts: new Map() };
+      msgStore.current.set(id, m);
+    }
+    if (role) m.role = role;
+    if (created) m.created = created;
+    return m;
+  };
+
+  const setPart = (msgID: string, partID: string, text: string) => {
+    const m = ensureMsg(msgID);
+    if (!m.parts.has(partID)) m.order.push(partID);
+    m.parts.set(partID, text);
+  };
+
+  const appendPart = (msgID: string, partID: string, delta: string) => {
+    const m = ensureMsg(msgID);
+    if (!m.parts.has(partID)) {
+      m.order.push(partID);
+      m.parts.set(partID, "");
+    }
+    m.parts.set(partID, (m.parts.get(partID) || "") + delta);
+  };
+
+  const rebuildMessages = () => {
+    const arr = Array.from(msgStore.current.values())
+      .sort((a, b) => a.created - b.created)
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.order.map((p) => m.parts.get(p) || "").join(""),
+        timestamp: m.created,
+      }));
+    setMessages(arr);
+  };
+
   // Autocomplete state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [showFileMenu, setShowFileMenu] = useState(false);
@@ -91,17 +140,6 @@ export default function Chat() {
     loadSessions();
   }, []);
 
-  const extractTextContent = (message: any): string => {
-    if (typeof message.content === "string") return message.content;
-    if (Array.isArray(message.content)) {
-      return message.content
-        .filter((p: any) => p.type === "text")
-        .map((p: any) => p.text)
-        .join("");
-    }
-    return "";
-  };
-
   const connectSSE = (sessionId: string) => {
     disconnectSSE();
     const es = new EventSource(getEventStreamURL(sessionId));
@@ -134,53 +172,48 @@ export default function Chat() {
     }
   };
 
+  // Parses OpenCode's /event stream. Relevant events:
+  //   message.updated       -> establishes a message's role/created time
+  //   message.part.updated  -> full text for a part
+  //   message.part.delta    -> incremental text chunk for a part
+  //   session.status/idle   -> streaming indicator
   const handleSSEEvent = (data: any) => {
-    const part = data.params?.part;
+    const p = data.properties;
+    if (!p) return;
 
-    if (data.params?.status) {
-      setIsStreaming(
-        data.params.status === "running" ||
-          data.params.status === "streaming",
-      );
-    }
-
-    if (!part) return;
-
-    if (part.kind === "text" || part.kind === "code") {
-      const text = part.text || "";
-      setMessages((prev) => {
-        const existing = prev.find((m) => m.id === part.messageID);
-        if (existing) {
-          return prev.map((m) =>
-            m.id === part.messageID
-              ? { ...m, content: m.content + text }
-              : m,
-          );
+    switch (data.type) {
+      case "message.updated":
+        if (p.info) {
+          ensureMsg(p.info.id, p.info.role, p.info.time?.created);
+          rebuildMessages();
         }
-        return [
-          ...prev,
-          {
-            id: part.messageID,
-            role: "assistant",
-            content: text,
-            timestamp: Date.now(),
-          },
-        ];
-      });
+        break;
+      case "message.part.updated":
+        if (p.part?.type === "text") {
+          setPart(p.part.messageID, p.part.id, p.part.text || "");
+          rebuildMessages();
+        }
+        break;
+      case "message.part.delta":
+        if (p.field === "text") {
+          appendPart(p.messageID, p.partID, p.delta || "");
+          rebuildMessages();
+        }
+        break;
+      case "session.status":
+        setIsStreaming(p.status?.type === "busy");
+        break;
+      case "session.idle":
+        setIsStreaming(false);
+        break;
     }
   };
 
   const sendMessage = async () => {
     if (!input.trim() || !activeSession || isStreaming) return;
 
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      role: "user",
-      content: input,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    // The user message and its echo stream back via /event, so we don't add an
+    // optimistic bubble here (it would duplicate the event-sourced one).
     const msgText = input;
     setInput("");
     setError("");
@@ -235,14 +268,13 @@ export default function Chat() {
       const resp = await fetch(getMessagesURL(sessionId));
       if (resp.ok) {
         const data = await resp.json();
-        setMessages(
-          (data.messages || []).map((m: any) => ({
-            id: m.id,
-            role: m.role,
-            content: extractTextContent(m),
-            timestamp: m.created_at || Date.now(),
-          })),
-        );
+        msgStore.current = new Map();
+        (data.messages || []).forEach((m: any, i: number) => {
+          const e = ensureMsg(m.id, m.role, m.created_at || i + 1);
+          e.order = ["_full"];
+          e.parts = new Map([["_full", m.content || ""]]);
+        });
+        rebuildMessages();
       }
     } catch {
       // ignore
