@@ -345,7 +345,8 @@ func (s *Server) registerChatProxyRoutes() {
 	// Auto-detect OpenCode server URL
 	opencodeURL := detectOpenCodeURL()
 	if opencodeURL == "" {
-		log.Printf("[chat] no OpenCode server detected, chat disabled")
+		log.Printf("[chat] no OpenCode server detected, using echo mode")
+		s.mux.HandleFunc("GET /api/chat/events", s.handleChatSSEFallback)
 		return
 	}
 

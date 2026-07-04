@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -35,10 +36,12 @@ type message struct {
 type chatStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*chatSession
+	subs     map[string][]chan message
 }
 
 var globalChatStore = &chatStore{
 	sessions: make(map[string]*chatSession),
+	subs:     make(map[string][]chan message),
 }
 
 func (cs *chatStore) create(title string) *chatSession {
@@ -72,9 +75,9 @@ func (cs *chatStore) get(id string) *chatSession {
 
 func (cs *chatStore) addMessage(sessionID, role, content string) *message {
 	cs.mu.Lock()
-	defer cs.mu.Unlock()
 	s, ok := cs.sessions[sessionID]
 	if !ok {
+		cs.mu.Unlock()
 		return nil
 	}
 	m := message{
@@ -84,7 +87,50 @@ func (cs *chatStore) addMessage(sessionID, role, content string) *message {
 		CreatedAt: time.Now(),
 	}
 	s.Messages = append(s.Messages, m)
+	cs.mu.Unlock()
+
+	// Only broadcast assistant messages via SSE; user messages are
+	// already added optimistically by the frontend and emitting them
+	// would cause duplicates.
+	if role != "user" {
+		cs.broadcast(sessionID, m)
+	}
 	return &m
+}
+
+func (cs *chatStore) subscribe(sessionID string) chan message {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	ch := make(chan message, 16)
+	cs.subs[sessionID] = append(cs.subs[sessionID], ch)
+	return ch
+}
+
+func (cs *chatStore) unsubscribe(sessionID string, ch chan message) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	subs := cs.subs[sessionID]
+	for i, s := range subs {
+		if s == ch {
+			cs.subs[sessionID] = append(subs[:i], subs[i+1:]...)
+			break
+		}
+	}
+	if len(cs.subs[sessionID]) == 0 {
+		delete(cs.subs, sessionID)
+	}
+}
+
+func (cs *chatStore) broadcast(sessionID string, msg message) {
+	cs.mu.RLock()
+	subs := cs.subs[sessionID]
+	cs.mu.RUnlock()
+	for _, ch := range subs {
+		select {
+		case ch <- msg:
+		default: // drop if subscriber buffer full
+		}
+	}
 }
 
 // registerChatRoutes registers chat session API endpoints.
@@ -157,4 +203,57 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	globalChatStore.addMessage(id, "assistant", "Echo: "+req.Content)
 
 	writeJSON(w, http.StatusCreated, session)
+}
+
+// handleChatSSEFallback streams in-memory echo events when no OpenCode server is available.
+// GET /api/chat/events?sessionID=<id>
+func (s *Server) handleChatSSEFallback(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.URL.Query().Get("sessionID")
+	if sessionID == "" {
+		http.Error(w, "missing sessionID", http.StatusBadRequest)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher.Flush()
+
+	ch := globalChatStore.subscribe(sessionID)
+	defer globalChatStore.unsubscribe(sessionID, ch)
+
+	ctx := r.Context()
+	for {
+		select {
+		case msg := <-ch:
+			data, _ := json.Marshal(map[string]any{
+				"params": map[string]any{
+					"part": map[string]any{
+						"kind":      "text",
+						"text":      msg.Content,
+						"messageID": msg.ID,
+					},
+				},
+			})
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+
+			// Signal done so the frontend re-enables the send button.
+			done, _ := json.Marshal(map[string]any{
+				"params": map[string]any{
+					"status": "done",
+				},
+			})
+			fmt.Fprintf(w, "data: %s\n\n", done)
+			flusher.Flush()
+		case <-ctx.Done():
+			return
+		}
+	}
 }

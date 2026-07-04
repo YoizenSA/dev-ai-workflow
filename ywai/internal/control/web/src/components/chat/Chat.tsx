@@ -136,6 +136,14 @@ export default function Chat() {
 
   const handleSSEEvent = (data: any) => {
     const part = data.params?.part;
+
+    if (data.params?.status) {
+      setIsStreaming(
+        data.params.status === "running" ||
+          data.params.status === "streaming",
+      );
+    }
+
     if (!part) return;
 
     if (part.kind === "text" || part.kind === "code") {
@@ -159,13 +167,6 @@ export default function Chat() {
           },
         ];
       });
-    }
-
-    if (data.params?.status) {
-      setIsStreaming(
-        data.params.status === "running" ||
-          data.params.status === "streaming",
-      );
     }
   };
 
