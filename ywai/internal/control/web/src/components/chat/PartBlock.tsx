@@ -37,7 +37,7 @@ export function ThinkingBlock({ text }: { text: string }) {
       <button className="part-block-header" onClick={() => setOpen((o) => !o)}>
         <ChevronRight size={16} className="part-chevron" />
         <Brain size={16} />
-        <span>Pensando</span>
+        <span>Thinking</span>
       </button>
       {open && <div className="part-block-body">{text}</div>}
     </div>
@@ -45,9 +45,9 @@ export function ThinkingBlock({ text }: { text: string }) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "en cola",
-  running: "ejecutando…",
-  completed: "listo",
+  pending: "queued",
+  running: "running…",
+  completed: "done",
   error: "error",
 };
 
@@ -69,7 +69,7 @@ export function ToolBlock({
       <button className="part-block-header" onClick={() => setOpen((o) => !o)}>
         <ChevronRight size={16} className="part-chevron" />
         <Wrench size={16} />
-        <span className="part-tool-name">{tool || "Herramienta"}</span>
+        <span className="part-tool-name">{tool || "Tool"}</span>
         {title && <span className="part-tool-title">{title}</span>}
         <span className="part-tool-status">{STATUS_LABEL[status || ""] || status}</span>
       </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Plus,
   Star,
@@ -8,17 +9,19 @@ import {
   Bot,
   FileText,
   Sparkles,
-  MessageSquarePlus,
   Trash2,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRight,
   Menu,
   X,
+  Folder,
+  ChevronRight,
 } from "lucide-react";
 import Autocomplete, { type AutocompleteItem } from "./Autocomplete";
 import Markdown from "./Markdown";
 import { ThinkingBlock, ToolBlock, SubagentBlock } from "./PartBlock";
-import SubagentsPanel from "./SubagentsPanel";
+import RightPanel, { type RightTab } from "./RightPanel";
 import ModelSearchSelect from "./ModelSearchSelect";
 import AgentSearchSelect from "./AgentSearchSelect";
 import WorkspaceSearchSelect from "./WorkspaceSearchSelect";
@@ -93,13 +96,20 @@ Type \`@\` followed by a filename to search and insert file references.`;
 
 export default function Chat() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeSession, setActiveSession] = useState<string | null>(
+    () => searchParams.get("session")
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
   const [ctxUsage, setCtxUsage] = useState<{ used: number; total: number; pct: number } | null>(null);
+  // Session IDs currently busy, tracked from live status events. OpenCode never
+  // sets time.completed on subagent sessions, so this is the only reliable
+  // "running" signal for the subagents panel.
+  const [busySessions, setBusySessions] = useState<Set<string>>(new Set());
   // opencodeDown is set when the chat backend returns 503 (no opencode server
   // reachable). The banner offers a button to spawn `opencode serve` via ywai.
   const [opencodeDown, setOpencodeDown] = useState(false);
@@ -149,7 +159,12 @@ export default function Chat() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   // Collapsible right-side panel for subagent (child session) details.
-  const [subagentsPanelOpen, setSubagentsPanelOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Agent (root session) IDs whose subagent children are expanded. Empty by
+  // default → subagents stay collapsed under their parent until clicked open.
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [rightTab, setRightTab] = useState<RightTab>("subagents");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -234,13 +249,25 @@ export default function Chat() {
     { label: "/help", description: "Show commands", value: "/help" },
   ];
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
+  // New messages (streaming tokens, replies) scroll smoothly to the bottom.
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom("smooth");
   }, [messages, scrollToBottom]);
+
+  // Switching sessions should land at the bottom right away, without the
+  // animated scroll-from-top that smooth scrolling produces on a fresh load.
+  const prevSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevSessionRef.current !== activeSession) {
+      prevSessionRef.current = activeSession;
+      // Defer one frame so the freshly loaded messages are in the DOM.
+      requestAnimationFrame(() => scrollToBottom("instant"));
+    }
+  }, [activeSession, scrollToBottom]);
 
   // Auto-grow the composer textarea to fit its content (capped by CSS max-height).
   useEffect(() => {
@@ -258,6 +285,16 @@ export default function Chat() {
     return () => {
       disconnectSSE();
     };
+  }, [activeSession]);
+
+  // Keep ?session=<id> in the URL in sync with the active session so a page
+  // reload (F5) or shared link reopens the same session. Mirrors Kanban/Missions.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (activeSession) next.set("session", activeSession);
+    else next.delete("session");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession]);
 
   const loadSessions = async () => {
@@ -601,11 +638,28 @@ export default function Chat() {
           });
         }
         break;
-      case "session.status":
-        setIsStreaming(p.status?.type === "busy");
+      case "session.status": {
+        const busy = p.status?.type === "busy";
+        setIsStreaming(busy);
+        if (p.sessionID) {
+          setBusySessions((prev) => {
+            const next = new Set(prev);
+            if (busy) next.add(p.sessionID);
+            else next.delete(p.sessionID);
+            return next;
+          });
+        }
         break;
+      }
       case "session.idle":
         setIsStreaming(false);
+        if (p.sessionID) {
+          setBusySessions((prev) => {
+            const next = new Set(prev);
+            next.delete(p.sessionID);
+            return next;
+          });
+        }
         break;
       case "todo.updated":
         setTodoRefreshKey((k) => k + 1);
@@ -979,6 +1033,81 @@ export default function Chat() {
     bucket.push(s);
   }
 
+  // Nest subagents under their parent within a workspace group. Roots keep the
+  // group's sort order; orphan subagents (parent absent from the list) surface
+  // as roots so they're never lost.
+  const buildAgentTree = (items: Session[]) => {
+    const byId = new Set(items.map((s) => s.id));
+    const kidsOf = new Map<string, Session[]>();
+    const roots: Session[] = [];
+    for (const s of items) {
+      if (s.parentID && byId.has(s.parentID)) {
+        const arr = kidsOf.get(s.parentID) || [];
+        arr.push(s);
+        kidsOf.set(s.parentID, arr);
+      } else {
+        roots.push(s);
+      }
+    }
+    return roots.map((root) => ({ root, kids: kidsOf.get(root.id) || [] }));
+  };
+
+  const renderSessionItem = (
+    s: Session,
+    isChild: boolean,
+    childCount: number,
+    open: boolean,
+  ) => (
+    <div
+      key={s.id}
+      className={`session-item ${s.id === activeSession ? "active" : ""} ${isChild ? "is-subagent" : ""}`}
+      onClick={() => {
+        setActiveSession(s.id);
+        setMessages([]);
+        loadMessages(s.id);
+        setMobileDrawerOpen(false);
+      }}
+    >
+      {childCount > 0 ? (
+        <button
+          className={`session-agent-toggle ${open ? "open" : ""}`}
+          data-tip={open ? "Collapse subagents" : "Expand subagents"}
+          aria-label={open ? "Collapse subagents" : "Expand subagents"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpandedAgents((prev) => {
+              const next = new Set(prev);
+              if (next.has(s.id)) next.delete(s.id);
+              else next.add(s.id);
+              return next;
+            });
+          }}
+        >
+          <ChevronRight size={13} />
+        </button>
+      ) : isChild ? (
+        <Bot size={13} className="session-subagent-icon" data-tip="Subagent session" />
+      ) : null}
+      <span className={`session-title ${s.title ? "" : "is-placeholder"}`}>
+        {s.title || `Session ${s.id.slice(0, 8)}`}
+      </span>
+      {childCount > 0 && (
+        <span className="session-subagent-count" data-tip="Subagents">
+          {childCount}
+        </span>
+      )}
+      <span className="session-time">{formatTime(s.time?.created)}</span>
+      <button
+        className={`btn-pin ${pinned.includes(s.id) ? "pinned" : ""}`}
+        data-tip={pinned.includes(s.id) ? "Unpin" : "Pin"}
+        aria-label={pinned.includes(s.id) ? "Unpin session" : "Pin session"}
+        onClick={(e) => togglePin(s.id, e)}
+      >
+        <Star size={16} fill={pinned.includes(s.id) ? "currentColor" : "none"} />
+      </button>
+    </div>
+  );
+
   const activeTitle =
     sessions.find((s) => s.id === activeSession)?.title || "New conversation";
   const showWelcome = !!activeSession && messages.length === 0 && !isStreaming;
@@ -1029,44 +1158,41 @@ export default function Chat() {
           </div>
         )}
         <div className="chat-sessions-list">
-          {groupedSessions.map(([dir, items]) => (
-            <div className="session-group" key={dir || "none"}>
-              <div className="session-group-header" data-tip={dir}>
-                {workspaceLabel(dir)}
-              </div>
-              {items.map((s) => (
-                <div
-                  key={s.id}
-                  className={`session-item ${s.id === activeSession ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveSession(s.id);
-                    setMessages([]);
-                    loadMessages(s.id);
-                    setMobileDrawerOpen(false);
-                  }}
-                >
-                  <MessageSquarePlus size={16} className="session-icon" />
-                  <span className="session-title">
-                    {s.title || `Session ${s.id.slice(0, 8)}`}
-                  </span>
-                  <span className="session-time">
-                    {formatTime(s.time?.created)}
-                  </span>
-                  <button
-                    className={`btn-pin ${pinned.includes(s.id) ? "pinned" : ""}`}
-                    data-tip={pinned.includes(s.id) ? "Unpin" : "Pin"}
-                    aria-label={pinned.includes(s.id) ? "Unpin session" : "Pin session"}
-                    onClick={(e) => togglePin(s.id, e)}
-                  >
-                    <Star
-                      size={16}
-                      fill={pinned.includes(s.id) ? "currentColor" : "none"}
-                    />
-                  </button>
-                </div>
-              ))}
+          {groupedSessions.map(([dir, items]) => {
+            const groupKey = dir || "none";
+            const collapsed = collapsedGroups.has(groupKey);
+            return (
+            <div className="session-group" key={groupKey}>
+              <button
+                className={`session-group-header ${collapsed ? "collapsed" : ""}`}
+                data-tip={dir}
+                onClick={() =>
+                  setCollapsedGroups((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(groupKey)) next.delete(groupKey);
+                    else next.add(groupKey);
+                    return next;
+                  })
+                }
+              >
+                <ChevronRight size={14} className="session-group-chevron" />
+                <Folder size={16} className="session-group-folder" />
+                <span className="session-group-name">{workspaceLabel(dir)}</span>
+                <span className="session-group-count">{items.length}</span>
+              </button>
+              {!collapsed && buildAgentTree(items).map(({ root, kids }) => {
+                const agentOpen = expandedAgents.has(root.id);
+                return (
+                  <div className="agent-node" key={root.id}>
+                    {renderSessionItem(root, false, kids.length, agentOpen)}
+                    {agentOpen &&
+                      kids.map((k) => renderSessionItem(k, true, 0, false))}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+            );
+          })}
           {sessions.length === 0 && (
             <div className="chat-empty">
               No conversations yet.
@@ -1101,18 +1227,19 @@ export default function Chat() {
           </button>
           <div className="chat-header-title">{activeTitle}</div>
           <div className="chat-header-right">
-            {activeSession &&
-              (!!parentSession || siblings.length > 0 || children.length > 0) && (
+            {activeSession && (
               <button
-                className={`chat-subagents-toggle ${subagentsPanelOpen ? "active" : ""}`}
-                onClick={() => setSubagentsPanelOpen((v) => !v)}
-                data-tip="Sessions"
-                aria-label={`Related sessions (${siblings.length + children.length})`}
+                className={`chat-subagents-toggle ${rightPanelOpen ? "active" : ""}`}
+                onClick={() => setRightPanelOpen((v) => !v)}
+                data-tip="Session tools (subagents, diff, files)"
+                aria-label="Toggle session tools panel"
               >
-                <Bot size={16} />
-                <span className="chat-subagents-badge">
-                  {siblings.length + children.length}
-                </span>
+                <PanelRight size={16} />
+                {siblings.length + children.length > 0 && (
+                  <span className="chat-subagents-badge">
+                    {siblings.length + children.length}
+                  </span>
+                )}
               </button>
             )}
             {ctxUsage && ctxUsage.total > 0 && (
@@ -1428,21 +1555,28 @@ export default function Chat() {
         </div>
         </div>
 
-        <SubagentsPanel
-          open={
-            subagentsPanelOpen &&
-            !!activeSession &&
-            (!!parentSession || siblings.length > 0 || children.length > 0)
-          }
+        <RightPanel
+          open={rightPanelOpen && !!activeSession}
+          onClose={() => setRightPanelOpen(false)}
+          tab={rightTab}
+          onTabChange={setRightTab}
           activeSessionId={activeSession}
+          workspaceDir={
+            sessions.find((s) => s.id === activeSession)?.directory ||
+            workspaceFilter
+          }
           parent={parentSession}
           siblings={siblings}
           children={children}
-          onClose={() => setSubagentsPanelOpen(false)}
+          busySessions={busySessions}
           onSelectSession={(id) => {
             setActiveSession(id);
             setMessages([]);
             loadMessages(id);
+          }}
+          onInsertFile={(f) => {
+            setInput((prev) => `${prev}\`${f}\` `);
+            textareaRef.current?.focus();
           }}
         />
         </div>

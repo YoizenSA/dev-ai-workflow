@@ -518,14 +518,19 @@ func (cp *ChatProxy) handleProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"providers": out, "default": raw.Default})
 }
 
-// handleFileList lists files in the workspace matching a prefix query.
-// GET /api/files?q=<prefix>
+// handleFileList lists files and/or folders in the workspace matching a query.
+// GET /api/files?q=<query>[&type=file|dir|all]
+// Directories are returned with a trailing "/". type defaults to "all" so a
+// single "@" menu can surface both; "dir" powers a folder-only "#" trigger.
 func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"files": []string{}})
 		return
 	}
+	kind := r.URL.Query().Get("type")
+	wantFiles := kind == "" || kind == "all" || kind == "file"
+	wantDirs := kind == "" || kind == "all" || kind == "dir"
 
 	root := "."
 	for _, marker := range []string{"go.mod", "package.json", ".git"} {
@@ -537,7 +542,8 @@ func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := 20
-	var results []string
+	lq := strings.ToLower(q)
+	var matches []string
 
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -547,26 +553,53 @@ func (cp *ChatProxy) handleFileList(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
+			if !wantDirs || path == root {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return nil
+			}
+			if strings.Contains(strings.ToLower(rel), lq) {
+				matches = append(matches, rel+"/")
+			}
+			return nil
+		}
+		if !wantFiles {
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return nil
 		}
-		if strings.HasPrefix(strings.ToLower(rel), strings.ToLower(q)) {
-			results = append(results, rel)
-			if len(results) >= limit {
-				return filepath.SkipAll
-			}
+		// Substring match anywhere in the path so "@core" finds
+		// "internal/control/...", not just paths starting with the query.
+		if strings.Contains(strings.ToLower(rel), lq) {
+			matches = append(matches, rel)
 		}
 		return nil
 	})
 
-	sort.Strings(results)
-	if results == nil {
-		results = []string{}
+	// Rank: basename matches before path-only matches, then shorter paths,
+	// then alphabetical — so the most relevant files surface first.
+	sort.Slice(matches, func(i, j int) bool {
+		bi := strings.Contains(strings.ToLower(filepath.Base(matches[i])), lq)
+		bj := strings.Contains(strings.ToLower(filepath.Base(matches[j])), lq)
+		if bi != bj {
+			return bi
+		}
+		if len(matches[i]) != len(matches[j]) {
+			return len(matches[i]) < len(matches[j])
+		}
+		return matches[i] < matches[j]
+	})
+	if len(matches) > limit {
+		matches = matches[:limit]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"files": results})
+	if matches == nil {
+		matches = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": matches})
 }
 
 // findFileUpwards walks up from cwd looking for a file, returns the dir it's in.
@@ -797,6 +830,7 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/context", cp.handleSessionContext)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/todo", cp.handleTodo)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/diff", cp.handleDiff)
+	s.mux.HandleFunc("GET /api/chat/gitdiff", cp.handleGitDiff)
 	s.mux.HandleFunc("DELETE /api/chat/sessions/{id}/message/{messageID}", cp.handleDeleteMessage)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/revert", cp.handleRevert)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/command", cp.handleCommand)

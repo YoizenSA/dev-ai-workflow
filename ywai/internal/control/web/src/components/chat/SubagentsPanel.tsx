@@ -1,4 +1,4 @@
-import { X, ArrowUp, Bot, Loader, CheckCircle, Clock, GitBranch } from "lucide-react";
+import { ArrowUp, Bot, Loader, CheckCircle, Clock, GitBranch } from "lucide-react";
 import type { Session } from "./types";
 
 interface SubagentsPanelProps {
@@ -13,6 +13,8 @@ interface SubagentsPanelProps {
 	siblings: Session[];
 	// Children of the active session (its subagents).
 	children: Session[];
+	// Session IDs currently busy (from live status events).
+	busySessions: Set<string>;
 	onSelectSession: (id: string) => void;
 }
 
@@ -29,13 +31,16 @@ function formatRel(ms?: number): string {
 function SessionCard({
 	s,
 	active,
+	running = false,
 	onClick,
 }: {
 	s: Session;
 	active?: boolean;
+	// Live busy state — OpenCode never sets time.completed on subagents, so the
+	// caller resolves this from status events instead of the session object.
+	running?: boolean;
 	onClick: () => void;
 }) {
-	const running = s.time?.completed == null && !!s.time?.created;
 	return (
 		<button
 			className={`subagent-card ${running ? "running" : "done"} ${active ? "current" : ""}`}
@@ -77,37 +82,22 @@ function GithubBranchLike() {
 	return <GitBranch size={16} />;
 }
 
-export default function SubagentsPanel({
-	open,
-	onClose,
+// SubagentsList renders the family tree (parent / siblings / children) without
+// any panel chrome, so it can be embedded as a tab inside RightPanel.
+export function SubagentsList({
 	activeSessionId,
 	parent,
 	siblings,
 	children,
+	busySessions,
 	onSelectSession,
-}: SubagentsPanelProps) {
-	if (!open) return null;
-
+}: Omit<SubagentsPanelProps, "open" | "onClose">) {
 	const hasFamily = !!parent || siblings.length > 0;
+	const isRunning = (id: string) => busySessions.has(id);
 
 	return (
-		<aside className="subagents-panel" aria-label="Related sessions">
-			<header className="subagents-panel-header">
-				<span className="subagents-panel-title">
-					<Bot size={16} /> Sessions
-				</span>
-				<button
-					className="subagents-panel-close"
-					onClick={onClose}
-					aria-label="Close sessions panel"
-					data-tip="Close"
-				>
-					<X size={18} />
-				</button>
-			</header>
-
-			<div className="subagents-panel-list">
-				{/* Parent — go up */}
+		<div className="subagents-panel-list">
+			{/* Parent — go up */}
 				{parent && (
 					<div className="subagents-section">
 						<div className="subagents-section-label">
@@ -115,6 +105,7 @@ export default function SubagentsPanel({
 						</div>
 						<SessionCard
 							s={parent}
+							running={isRunning(parent.id)}
 							onClick={() => onSelectSession(parent.id)}
 						/>
 					</div>
@@ -131,6 +122,7 @@ export default function SubagentsPanel({
 								key={sib.id}
 								s={sib}
 								active={sib.id === activeSessionId}
+								running={isRunning(sib.id)}
 								onClick={() => onSelectSession(sib.id)}
 							/>
 						))}
@@ -153,12 +145,12 @@ export default function SubagentsPanel({
 								key={c.id}
 								s={c}
 								active={c.id === activeSessionId}
+								running={isRunning(c.id)}
 								onClick={() => onSelectSession(c.id)}
 							/>
 						))
 					)}
 				</div>
-			</div>
-		</aside>
+		</div>
 	);
 }

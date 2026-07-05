@@ -122,16 +122,79 @@
   background: var(--surface-hover);
   color: var(--text);
   font-weight: 500;
+  /* Accent rail so the active conversation is easy to spot at a glance. */
+  box-shadow: inset 2px 0 0 var(--yz-accent);
 }
 .session-icon {
   flex-shrink: 0;
   opacity: 0.6;
+}
+/* Subagent sessions carry a parentID — mark them with a bot glyph and a subtle
+   accent rail so they read as forks, not top-level conversations. */
+.session-subagent-icon {
+  flex-shrink: 0;
+  color: var(--yz-accent);
+  opacity: 0.8;
+}
+.session-item.is-subagent {
+  margin-left: var(--space-4);
+  border-left: 2px solid var(--yz-accent-soft);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.session-item.is-subagent .session-title {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+/* Expand/collapse caret for an agent (root) that owns subagents. */
+.session-agent-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: transform 0.12s, color 0.12s;
+}
+.session-agent-toggle:hover {
+  color: var(--text);
+}
+.session-agent-toggle.open {
+  transform: rotate(90deg);
+}
+.session-subagent-count {
+  flex-shrink: 0;
+  min-width: 16px;
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  background: var(--yz-accent-soft);
+  color: var(--yz-accent);
 }
 .session-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+/* Placeholder title for untitled sessions — dim it so real titles stand out. */
+.session-title.is-placeholder {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-style: italic;
+}
+/* The active session keeps a heavier title even when its siblings dim. */
+.session-item.active .session-title {
+  color: var(--text);
 }
 .session-time {
   font-size: 11px;
@@ -708,18 +771,57 @@
 
 /* ── Workspace groups in sidebar ────────────────────────────────── */
 .session-group {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .session-group-header {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-  padding: var(--space-2) var(--space-2) 4px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-soft);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.session-group-header:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.session-group-chevron {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: transform 0.15s;
+  transform: rotate(90deg);
+}
+.session-group-header.collapsed .session-group-chevron {
+  transform: rotate(0deg);
+}
+.session-group-folder {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.session-group-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.session-group-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  min-width: 18px;
+  text-align: center;
+}
+/* Session items sit indented under their workspace folder */
+.session-group .session-item {
+  margin-left: var(--space-3);
 }
 
 /* ── Collapsible thinking / tool blocks ─────────────────────────── */
@@ -1658,7 +1760,6 @@
   top: auto;
   bottom: calc(100% + var(--space-1));
 }
-}
 .combo-group-label {
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-2xs);
@@ -1760,6 +1861,155 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
+}
+
+/* ── Right panel (tabbed: subagents / diff / files) ─────────────── */
+.right-panel {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--panel-border);
+  background: linear-gradient(160deg, rgba(var(--surf-1-rgb), 0.55), rgba(var(--surf-3-rgb), 0.60));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  min-height: 0;
+}
+.right-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--panel-border);
+}
+.right-panel-tabs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+}
+.right-panel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm, 13px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.right-panel-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.right-panel-tab.active {
+  color: var(--yz-accent);
+  background: var(--yz-accent-soft, rgba(120, 120, 255, 0.12));
+}
+.right-panel-close {
+  display: inline-flex;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.right-panel-close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.right-panel-tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+.right-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.right-panel-scope {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-2, rgba(128, 128, 128, 0.1));
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  /* Make the native popup follow the app theme instead of the OS default. */
+  color-scheme: dark;
+}
+:root[data-theme="light"] .right-panel-scope {
+  color-scheme: light;
+}
+.right-panel-scope option {
+  background: var(--surface);
+  color: var(--text);
+}
+.right-panel-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.right-panel-refresh:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.right-panel-empty {
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.right-panel-search {
+  width: 100%;
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  background: var(--surface-2, rgba(128, 128, 128, 0.1));
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+}
+.right-panel-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.right-panel-file {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.right-panel-file:hover {
+  background: var(--yz-accent-soft, rgba(120, 120, 255, 0.12));
 }
 
 /* ── Subagents panel (right side) ───────────────────────────────── */
