@@ -531,6 +531,97 @@
   cursor: not-allowed;
 }
 
+/* Autocomplete dropdown (slash commands + @file mentions) */
+.autocomplete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.autocomplete-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: var(--space-1, 4px);
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface, #1c1c22);
+  border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-glass, 0 8px 24px rgba(0, 0, 0, 0.35));
+}
+.autocomplete-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: var(--yz-accent-soft, rgba(120, 120, 255, 0.15));
+}
+.autocomplete-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text, #eee);
+}
+.autocomplete-desc {
+  font-size: 11px;
+  color: var(--text-muted, #999);
+}
+
+/* Stop (abort) button — replaces Send while a turn is streaming */
+.btn-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--error-soft, rgba(220, 60, 60, 0.15));
+  color: var(--error, #dc3c3c);
+  border: 1px solid var(--error-border, rgba(220, 60, 60, 0.4));
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-stop:hover {
+  opacity: 0.85;
+}
+
+/* Context usage meter in the header */
+.chat-context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+  font-size: 11px;
+  color: var(--text-muted, #888);
+}
+.chat-context-bar {
+  display: inline-block;
+  width: 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.2));
+  overflow: hidden;
+}
+.chat-context-fill {
+  display: block;
+  height: 100%;
+  background: var(--yz-accent);
+  transition: width 0.3s ease;
+}
+.chat-context-meter.warn .chat-context-fill {
+  background: var(--error, #dc3c3c);
+}
+.chat-context-meter.warn .chat-context-pct {
+  color: var(--error, #dc3c3c);
+}
+
 /* Templates popover */
 .templates-menu {
   position: absolute;

@@ -3,6 +3,7 @@ import {
   Plus,
   Star,
   Send,
+  Square,
   User,
   Bot,
   FileText,
@@ -22,7 +23,7 @@ import ModelSearchSelect from "./ModelSearchSelect";
 import AgentSearchSelect from "./AgentSearchSelect";
 import WorkspaceSearchSelect from "./WorkspaceSearchSelect";
 import "./Chat.css";
-import { API_BASE, getEventStreamURL, getMessagesURL, deleteMessage, revertToMessage, sendQuestionReply, startOpencode, getSessionInfo } from "../../api/chat";
+import { API_BASE, getEventStreamURL, getMessagesURL, deleteMessage, revertToMessage, sendQuestionReply, startOpencode, getSessionInfo, abortSession, fetchContextUsage } from "../../api/chat";
 import TodoDisplay from "./TodoDisplay";
 import MessageActions from "./MessageActions";
 import PermissionDialog, { type PermissionRequest } from "./PermissionDialog";
@@ -98,6 +99,7 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  const [ctxUsage, setCtxUsage] = useState<{ used: number; total: number; pct: number } | null>(null);
   // opencodeDown is set when the chat backend returns 503 (no opencode server
   // reachable). The banner offers a button to spawn `opencode serve` via ywai.
   const [opencodeDown, setOpencodeDown] = useState(false);
@@ -699,6 +701,21 @@ export default function Chat() {
     }
   };
 
+  // Refresh context usage when the session changes or a turn finishes.
+  useEffect(() => {
+    if (!activeSession) {
+      setCtxUsage(null);
+      return;
+    }
+    if (isStreaming) return;
+    fetchContextUsage(activeSession).then(setCtxUsage);
+  }, [activeSession, isStreaming]);
+
+  const handleAbort = async () => {
+    await abortSession();
+    setIsStreaming(false);
+  };
+
   const handleClear = () => setMessages([]);
 
   const loadMessages = async (sessionId: string) => {
@@ -1098,6 +1115,21 @@ export default function Chat() {
                 </span>
               </button>
             )}
+            {ctxUsage && ctxUsage.total > 0 && (
+              <div
+                className={`chat-context-meter ${ctxUsage.pct >= 80 ? "warn" : ""}`}
+                data-tip={`${ctxUsage.used.toLocaleString()} / ${ctxUsage.total.toLocaleString()} tokens`}
+                aria-label={`Context usage ${ctxUsage.pct}%`}
+              >
+                <span className="chat-context-bar">
+                  <span
+                    className="chat-context-fill"
+                    style={{ width: `${Math.min(ctxUsage.pct, 100)}%` }}
+                  />
+                </span>
+                <span className="chat-context-pct">{ctxUsage.pct}%</span>
+              </div>
+            )}
             <span
               className={`chat-status-dot ${connected ? "on" : "off"}`}
               data-tip={connected ? "Connected" : "Disconnected"}
@@ -1314,15 +1346,26 @@ export default function Chat() {
                 >
                   <FileText size={20} />
                 </button>
-                <button
-                  className="btn-send"
-                  onClick={sendMessage}
-                  disabled={!input.trim() || !activeSession || isStreaming}
-                  data-tip="Send"
-                  aria-label="Send message"
-                >
-                  <Send size={20} />
-                </button>
+                {isStreaming ? (
+                  <button
+                    className="btn-stop"
+                    onClick={handleAbort}
+                    data-tip="Stop"
+                    aria-label="Stop generation"
+                  >
+                    <Square size={20} />
+                  </button>
+                ) : (
+                  <button
+                    className="btn-send"
+                    onClick={sendMessage}
+                    disabled={!input.trim() || !activeSession}
+                    data-tip="Send"
+                    aria-label="Send message"
+                  >
+                    <Send size={20} />
+                  </button>
+                )}
               </div>
             </div>
 

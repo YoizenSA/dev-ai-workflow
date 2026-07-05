@@ -21,7 +21,6 @@ export default function Autocomplete({
   onSelect,
   onClose,
   visible,
-  anchorEl,
 }: AutocompleteProps) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -33,16 +32,6 @@ export default function Autocomplete({
   }, [selectedIndex, visible]);
 
   if (!visible || items.length === 0) return null;
-
-  const style: React.CSSProperties = {};
-  if (anchorEl) {
-    const rect = anchorEl.getBoundingClientRect();
-    style.position = "fixed";
-    style.left = rect.left + "px";
-    style.top = rect.top - 8 + "px";
-    style.width = Math.max(rect.width, 240) + "px";
-    style.transform = "translateY(-100%)";
-  }
 
   return (
     <>
@@ -56,7 +45,6 @@ export default function Autocomplete({
       <ul
         ref={listRef}
         className="autocomplete-dropdown"
-        style={style}
         role="listbox"
       >
         {items.map((item, i) => (
