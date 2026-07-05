@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
@@ -171,13 +172,14 @@ func (wm *WorkerManager) resolveSkillsForFeature(mission *Mission, feature *Feat
 
 // ─── opencode Detection ────────────────────────────────────────────────────
 
-// DetectOpencode checks if opencode is available in PATH and returns its path.
+// DetectOpencode resolves the opencode binary path. It uses agent.FindBinary so
+// binaries installed via nvm/asdf/etc. (not in the raw process PATH) are found
+// via the login-shell `which` fallback and well-known dirs.
 func DetectOpencode() (string, error) {
-	path, err := exec.LookPath("opencode")
-	if err != nil {
-		return "", ErrOpencodeNotFound
+	if path := agent.FindBinary("opencode"); path != "" {
+		return path, nil
 	}
-	return path, nil
+	return "", ErrOpencodeNotFound
 }
 
 // ─── Context Preparation ───────────────────────────────────────────────────

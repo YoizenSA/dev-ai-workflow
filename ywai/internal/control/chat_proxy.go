@@ -236,6 +236,23 @@ func (cp *ChatProxy) handleChildren(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"children":%s}`, body)
 }
 
+// handleSessionInfo returns a single session's metadata (id, title, parentID,
+// time, …) by passing opencode's GET /session/{id} through unchanged. The UI
+// uses it to navigate up to a parent session that may not be in the loaded
+// session list. (GET /api/chat/sessions/{id} is wired to handleGetMessages,
+// hence the dedicated /info route.)
+func (cp *ChatProxy) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/session/"+id, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
 // opencodeMessage is the subset of an OpenCode message we surface to the UI.
 type opencodeMessage struct {
 	Info struct {
@@ -567,6 +584,194 @@ func findFileUpwards(name string) string {
 	}
 }
 
+// handleRenameSession renames a session.
+// PATCH /api/chat/sessions/{id}  body: {"title": "..."}
+func (cp *ChatProxy) handleRenameSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "PATCH", "/session/"+id, body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
+// handleDeleteSession deletes a session.
+// DELETE /api/chat/sessions/{id}
+func (cp *ChatProxy) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "DELETE", "/session/"+id, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
+// handlePermissionReply replies to a permission request.
+// POST /api/chat/sessions/{id}/permissions/{permissionID}
+func (cp *ChatProxy) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	permissionID := r.PathValue("permissionID")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "POST", "/session/"+id+"/permissions/"+permissionID, body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
+// handleQuestionReply replies to a question.
+// POST /api/chat/sessions/{id}/question/{requestID}/reply
+func (cp *ChatProxy) handleQuestionReply(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	requestID := r.PathValue("requestID")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "POST", "/api/session/"+id+"/question/"+requestID+"/reply", body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
+// handleQuestionReject rejects a question.
+// POST /api/chat/sessions/{id}/question/{requestID}/reject
+func (cp *ChatProxy) handleQuestionReject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	requestID := r.PathValue("requestID")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "POST", "/api/session/"+id+"/question/"+requestID+"/reject", body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
+// handleSessionContext returns token usage for a session.
+// GET /api/chat/sessions/{id}/context
+func (cp *ChatProxy) handleSessionContext(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/api/session/"+id+"/context", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
+// handleTodo returns the todo list for a session.
+// GET /api/chat/sessions/{id}/todo
+func (cp *ChatProxy) handleTodo(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/session/"+id+"/todo", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
+// handleDiff returns file diffs for a session.
+// GET /api/chat/sessions/{id}/diff
+func (cp *ChatProxy) handleDiff(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, status, err := cp.upstream(r, "GET", "/session/"+id+"/diff", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
+// handleDeleteMessage deletes a message in a session.
+// DELETE /api/chat/sessions/{id}/message/{messageID}
+func (cp *ChatProxy) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	messageID := r.PathValue("messageID")
+	body, status, err := cp.upstream(r, "DELETE", "/session/"+id+"/message/"+messageID, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(body)
+}
+
+// handleRevert reverts changes in a session.
+// POST /api/chat/sessions/{id}/revert
+func (cp *ChatProxy) handleRevert(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "POST", "/session/"+id+"/revert", body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
+// handleCommand executes a command in a session.
+// POST /api/chat/sessions/{id}/command
+func (cp *ChatProxy) handleCommand(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	respBody, status, err := cp.upstream(r, "POST", "/session/"+id+"/command", body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(respBody)
+}
+
 // registerOpenCodeProxy wires every /api/chat route to the OpenCode server.
 func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	cp := NewChatProxy(opencodeURL)
@@ -575,6 +780,7 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("GET /api/chat/sessions", cp.handleListSessions)
 	s.mux.HandleFunc("POST /api/chat/sessions", cp.handleCreateSession)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}", cp.handleGetMessages)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}/info", cp.handleSessionInfo)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/children", cp.handleChildren)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
@@ -583,6 +789,17 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("GET /api/chat/agents", cp.handleAgents)
 	s.mux.HandleFunc("GET /api/chat/projects", cp.handleProjects)
 	s.mux.HandleFunc("GET /api/files", cp.handleFileList)
+	s.mux.HandleFunc("PATCH /api/chat/sessions/{id}", cp.handleRenameSession)
+	s.mux.HandleFunc("DELETE /api/chat/sessions/{id}", cp.handleDeleteSession)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/permissions/{permissionID}", cp.handlePermissionReply)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/question/{requestID}/reply", cp.handleQuestionReply)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/question/{requestID}/reject", cp.handleQuestionReject)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}/context", cp.handleSessionContext)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}/todo", cp.handleTodo)
+	s.mux.HandleFunc("GET /api/chat/sessions/{id}/diff", cp.handleDiff)
+	s.mux.HandleFunc("DELETE /api/chat/sessions/{id}/message/{messageID}", cp.handleDeleteMessage)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/revert", cp.handleRevert)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/command", cp.handleCommand)
 }
 
 // detectOpenCodeURL tries to find a running OpenCode server.

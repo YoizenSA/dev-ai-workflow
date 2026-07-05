@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +20,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
@@ -247,25 +248,83 @@ var stopCmd = &cobra.Command{
 	},
 }
 
-// startOpencodeServe starts the opencode HTTP server in background if not already running.
+// startOpencodeServe starts the opencode HTTP server in background if an
+// opencode server is not already reachable at the configured URL.
+//
+// It resolves the opencode binary via agent.FindBinary (so binaries installed
+// via nvm/asdf/etc. — not in the raw process PATH — are still found), and
+// probes with opencode.ProbeServer (GET /status requiring 200) instead of a
+// bare /health ping, so another server (e.g. Kilo Code) on the same port does
+// not produce a false "already running" positive.
+//
+// If the default port (4096, or the one in OPENCODE_URL) is already taken by a
+// non-opencode process, it walks up to find a free port and starts opencode
+// there, exporting the chosen URL via OPENCODE_URL so the rest of ywai
+// (chat proxy, missions) all point at the same instance.
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
 	if url == "" {
 		url = "http://127.0.0.1:4096"
 	}
-	// Quick check: is it already running?
-	resp, err := http.Get(url + "/health")
-	if err == nil {
-		resp.Body.Close()
-		return // already running
+
+	// Probe: is an opencode server already running at the URL?
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if ok, _ := opencode.ProbeServer(ctx, url); ok {
+		return // a real opencode server is already reachable
 	}
-	cmd := exec.Command("opencode", "serve", "--port", "4096")
-	cmd.SysProcAttr = sysProcAttr()
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve: %v\n", err)
+
+	// Resolve the opencode binary (PATH, well-known dirs, login-shell which).
+	binPath := agent.FindBinary("opencode")
+	if binPath == "" {
+		fmt.Fprintln(os.Stderr, "Warning: opencode binary not found (looked in PATH, "+
+			"~/.opencode/bin, ~/.local/bin, and login-shell which). "+
+			"Install opencode or set OPENCODE_URL to point at a running server.")
 		return
 	}
-	fmt.Printf("opencode server starting on %s (PID %d)\n", url, cmd.Process.Pid)
+
+	// Determine the starting port from the URL (default 4096).
+	startPort := 4096
+	if _, p, err := net.SplitHostPort(strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")); err == nil && p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			startPort = n
+		}
+	}
+
+	// Find a free port. If the default (startPort) is open, use it; otherwise
+	// walk up to 50 ports looking for one that binds. This handles the case
+	// where another server (Kilo Code, etc.) occupies the default opencode port.
+	port := serverutil.FindFreePort(startPort)
+	if port != startPort {
+		fmt.Fprintf(os.Stderr, "Warning: port %d is busy; using %d instead.\n", startPort, port)
+	}
+
+	chosenURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	cmd := exec.Command(binPath, "serve", "--port", strconv.Itoa(port))
+	cmd.SysProcAttr = sysProcAttr()
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve (%s): %v\n", binPath, err)
+		return
+	}
+	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
+	// OPENCODE_URL in this process) proxies to the instance we just started.
+	os.Setenv("OPENCODE_URL", chosenURL)
+	fmt.Printf("opencode server starting on %s (PID %d)\n", chosenURL, cmd.Process.Pid)
+
+	// Wait briefly for opencode to bind its port, so the control server's chat
+	// route registration (which runs right after) sees it. Poll /status up to
+	// ~5s; opencode usually binds in under a second.
+	for i := 0; i < 25; i++ {
+		pctx, pcancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ok, _ := opencode.ProbeServer(pctx, chosenURL)
+		pcancel()
+		if ok {
+			fmt.Printf("opencode server ready on %s\n", chosenURL)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s — chat may need a moment.\n", chosenURL)
 }
 
 var installCmd = &cobra.Command{
@@ -913,15 +972,17 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
+		// Auto-start opencode serve BEFORE the control server, so that when the
+		// control server registers its chat routes (which probe for opencode),
+		// opencode is already binding its port.
+		startOpencodeServe()
+
 		// Start control server
 		control.AppVersion = version
 		s, err := control.GetOrStart(port)
 		if err != nil {
 			return fmt.Errorf("failed to start control server: %w", err)
 		}
-
-		// Auto-start opencode serve if not already running
-		startOpencodeServe()
 
 		// Start MCP adapter in background if not disabled
 		if !noMCP {

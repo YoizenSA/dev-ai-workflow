@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { tokenize } from "./syntaxHighlight";
 
 // Lightweight, dependency-free markdown renderer for chat messages. Covers the
 // formatting AI replies actually use: fenced code, inline code, bold, italic,
@@ -56,6 +57,9 @@ export default function Markdown({ content }: { content: string }) {
 
     // Fenced code block.
     if (line.trimStart().startsWith("```")) {
+      // Extract language from the opening fence (e.g. ```tsx, ```python)
+      const fenceMatch = line.trimStart().match(/^```(\w+)?/);
+      const lang = fenceMatch?.[1] || "";
       const code: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
@@ -63,11 +67,30 @@ export default function Markdown({ content }: { content: string }) {
         i++;
       }
       i++; // skip closing fence
-      blocks.push(
-        <pre key={key++}>
-          <code>{code.join("\n")}</code>
-        </pre>,
-      );
+      const codeText = code.join("\n");
+
+      if (lang) {
+        const tokens = tokenize(lang, codeText);
+        blocks.push(
+          <pre key={key++} className={`lang-${lang}`}>
+            <code>
+              {tokens.map((t, ti) =>
+                t.className ? (
+                  <span key={ti} className={t.className}>{t.text}</span>
+                ) : (
+                  <span key={ti}>{t.text}</span>
+                )
+              )}
+            </code>
+          </pre>,
+        );
+      } else {
+        blocks.push(
+          <pre key={key++}>
+            <code>{codeText}</code>
+          </pre>,
+        );
+      }
       continue;
     }
 

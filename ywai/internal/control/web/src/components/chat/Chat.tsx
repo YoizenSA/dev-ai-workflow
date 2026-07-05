@@ -9,13 +9,24 @@ import {
   Sparkles,
   MessageSquarePlus,
   Trash2,
-  Users,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X,
 } from "lucide-react";
 import Autocomplete, { type AutocompleteItem } from "./Autocomplete";
 import Markdown from "./Markdown";
 import { ThinkingBlock, ToolBlock, SubagentBlock } from "./PartBlock";
+import SubagentsPanel from "./SubagentsPanel";
+import ModelSearchSelect from "./ModelSearchSelect";
+import AgentSearchSelect from "./AgentSearchSelect";
+import WorkspaceSearchSelect from "./WorkspaceSearchSelect";
 import "./Chat.css";
-import { getEventStreamURL, getMessagesURL } from "../../api/chat";
+import { API_BASE, getEventStreamURL, getMessagesURL, deleteMessage, revertToMessage, sendQuestionReply, startOpencode, getSessionInfo } from "../../api/chat";
+import TodoDisplay from "./TodoDisplay";
+import MessageActions from "./MessageActions";
+import PermissionDialog, { type PermissionRequest } from "./PermissionDialog";
+import QuestionPrompt, { type QuestionRequest } from "./QuestionPrompt";
 
 const SUGGESTIONS = [
   "Explain what this project does",
@@ -39,6 +50,7 @@ interface Session {
   title?: string;
   time?: { created?: number; completed?: number };
   directory?: string;
+  parentID?: string;
 }
 
 type PartKind = "text" | "reasoning" | "tool" | "subtask";
@@ -69,8 +81,6 @@ function workspaceLabel(dir?: string): string {
   return parts[parts.length - 1] || dir;
 }
 
-const API_BASE = "/api/chat";
-
 const HELP_TEXT = `**Available commands:**
 - \`/new\` — Start a new chat session
 - \`/compact\` — Compact the current session (sends to OpenCode)
@@ -88,6 +98,15 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  // opencodeDown is set when the chat backend returns 503 (no opencode server
+  // reachable). The banner offers a button to spawn `opencode serve` via ywai.
+  const [opencodeDown, setOpencodeDown] = useState(false);
+  const [startingOpencode, setStartingOpencode] = useState(false);
+  const [todoRefreshKey, setTodoRefreshKey] = useState(0);
+
+  // Pending permission / question dialogs from OpenCode events.
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<QuestionRequest | null>(null);
 
   // Model selection (per active session, in-memory).
   const [providers, setProviders] = useState<
@@ -112,6 +131,10 @@ export default function Chat() {
 
   // Child (subagent) sessions of the active session, for async subagent viz.
   const [children, setChildren] = useState<Session[]>([]);
+  // Family navigation: parent of the active session (null for roots) and its
+  // siblings (other subagents of the same parent).
+  const [parentSession, setParentSession] = useState<Session | null>(null);
+  const [siblings, setSiblings] = useState<Session[]>([]);
 
   // Session pins and prompt templates (persisted server-side in ~/.ywai).
   const [pinned, setPinned] = useState<string[]>([]);
@@ -119,6 +142,12 @@ export default function Chat() {
     { id: string; name: string; content: string }[]
   >([]);
   const [showTemplates, setShowTemplates] = useState(false);
+
+  // Collapsible sidebar (desktop rail) + mobile off-canvas drawer.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // Collapsible right-side panel for subagent (child session) details.
+  const [subagentsPanelOpen, setSubagentsPanelOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -232,12 +261,36 @@ export default function Chat() {
   const loadSessions = async () => {
     try {
       const resp = await fetch(`${API_BASE}/sessions`);
+      if (resp.status === 503) {
+        // Backend has no opencode server to proxy to — surface the start button.
+        setOpencodeDown(true);
+        return;
+      }
       if (resp.ok) {
+        setOpencodeDown(false);
         const data = await resp.json();
         setSessions(data.sessions || []);
       }
     } catch {
-      // ignore
+      // ignore network errors
+    }
+  };
+
+  const handleStartOpencode = async () => {
+    setStartingOpencode(true);
+    setError("");
+    try {
+      const res = await startOpencode();
+      // Give the server a moment to bind, then re-check sessions.
+      await new Promise((r) => setTimeout(r, 2500));
+      await loadSessions();
+      if (res.status === "already_running" || res.status === "started") {
+        // Best-effort: if sessions now load, opencodeDown is cleared by loadSessions.
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start opencode");
+    } finally {
+      setStartingOpencode(false);
     }
   };
 
@@ -374,9 +427,67 @@ export default function Chat() {
 
   // Refresh subagent (child) sessions when the session changes or streaming ends.
   useEffect(() => {
-    if (activeSession) loadChildren(activeSession);
-    else setChildren([]);
-  }, [activeSession, isStreaming]);
+    if (!activeSession) {
+      setChildren([]);
+      setParentSession(null);
+      setSiblings([]);
+      return;
+    }
+    loadChildren(activeSession);
+    // Resolve the active session's family for the subagents panel: parent
+    // (for "go up") and siblings (other subagents of the same parent).
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await getSessionInfo(activeSession);
+        if (cancelled) return;
+        const pid = info.parentID;
+        if (!pid) {
+          setParentSession(null);
+          setSiblings([]);
+          return;
+        }
+        // Parent: prefer the already-loaded list, fall back to a metadata fetch.
+        const fromList = sessions.find((s) => s.id === pid);
+        if (fromList) {
+          setParentSession(fromList);
+        } else {
+          try {
+            const pInfo = await getSessionInfo(pid);
+            if (!cancelled) {
+              setParentSession({
+                id: pInfo.id,
+                title: pInfo.title,
+                time: { created: pInfo.time?.created },
+                directory: pInfo.directory,
+              });
+            }
+          } catch {
+            setParentSession(null);
+          }
+        }
+        // Siblings: the parent's other children.
+        try {
+          const resp = await fetch(`${API_BASE}/sessions/${pid}/children`);
+          if (cancelled) return;
+          if (resp.ok) {
+            const data = await resp.json();
+            setSiblings((data.children || []) as Session[]);
+          }
+        } catch {
+          setSiblings([]);
+        }
+      } catch {
+        if (!cancelled) {
+          setParentSession(null);
+          setSiblings([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession, isStreaming, sessions]);
 
   const connectSSE = (sessionId: string) => {
     disconnectSSE();
@@ -470,14 +581,63 @@ export default function Chat() {
           rebuildMessages();
         }
         break;
+      case "session.created":
+      case "session.updated":
+        // A child session of the active one — surface it in the subagents panel.
+        if (p.info?.id && p.info?.parentID === activeSession) {
+          setChildren((prev) => {
+            const next = prev.filter((c) => c.id !== p.info.id);
+            return [
+              ...next,
+              {
+                id: p.info.id,
+                title: p.info.title,
+                time: p.info.time,
+                directory: p.info.directory,
+              },
+            ];
+          });
+        }
+        break;
       case "session.status":
         setIsStreaming(p.status?.type === "busy");
         break;
       case "session.idle":
         setIsStreaming(false);
         break;
+      case "todo.updated":
+        setTodoRefreshKey((k) => k + 1);
+        break;
+      case "permission.updated":
+        setPendingPermission({
+          id: p.id,
+          sessionID: p.sessionID || p.session_id || activeSession || "",
+          tool: p.tool || "",
+          description: p.description || "",
+        });
+        break;
+      case "question":
+        setPendingQuestion({
+          id: p.id || p.requestID,
+          sessionID: p.sessionID || activeSession || "",
+          questions: p.questions || [],
+        });
+        break;
     }
   };
+
+  // Called when the user dismisses a permission dialog (allow/deny).
+  const handlePermissionDone = () => setPendingPermission(null);
+
+  // Called when the user submits an answer to a question.
+  const handleQuestionReply = async (answers: string[][]) => {
+    if (!pendingQuestion) return;
+    await sendQuestionReply(pendingQuestion.sessionID, pendingQuestion.id, answers);
+    setPendingQuestion(null);
+  };
+
+  // Called when the user skips a question.
+  const handleQuestionReject = () => setPendingQuestion(null);
 
   const sendMessage = async () => {
     if (!input.trim() || !activeSession || isStreaming) return;
@@ -571,6 +731,28 @@ export default function Chat() {
       }
     } catch {
       // ignore
+    }
+  };
+
+  const handleEditMessage = (text: string) => {
+    setInput(text);
+    textareaRef.current?.focus();
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!activeSession) return;
+    const ok = await deleteMessage(activeSession, messageId);
+    if (ok) {
+      msgStore.current.delete(messageId);
+      rebuildMessages();
+    }
+  };
+
+  const handleRevertToMessage = async (messageId: string) => {
+    if (!activeSession) return;
+    const ok = await revertToMessage(activeSession, messageId);
+    if (ok) {
+      loadMessages(activeSession);
     }
   };
 
@@ -785,42 +967,54 @@ export default function Chat() {
   const showWelcome = !!activeSession && messages.length === 0 && !isStreaming;
 
   return (
-    <div className="chat-container">
+    <div
+      className={`chat-container ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileDrawerOpen ? "drawer-open" : ""}`}
+    >
+      {/* Mobile drawer scrim (blurs + dims the conversation behind the drawer) */}
+      {mobileDrawerOpen && (
+        <div
+          className="chat-drawer-scrim"
+          onClick={() => setMobileDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Session sidebar */}
-      <aside className="chat-sessions">
+      <aside className={`chat-sessions ${mobileDrawerOpen ? "drawer-open" : ""}`}>
         <div className="chat-sessions-header">
           <span className="chat-brand">
-            <Sparkles size={16} /> Chat
+            <Sparkles size={20} /> Chat
           </span>
           <button
             className="btn-new-session"
             onClick={createSession}
-            title="New conversation"
+            data-tip="New conversation"
+            aria-label="New conversation"
           >
-            <Plus size={16} /> New
+            <Plus size={16} /> <span className="btn-new-session-text">New</span>
+          </button>
+          {/* Mobile close (only visible inside the drawer) */}
+          <button
+            className="chat-drawer-close"
+            onClick={() => setMobileDrawerOpen(false)}
+            aria-label="Close menu"
+          >
+            <X size={20} />
           </button>
         </div>
         {projects.length > 0 && (
           <div className="workspace-switcher">
-            <select
-              className="workspace-select"
+            <WorkspaceSearchSelect
+              workspaces={projects}
               value={workspaceFilter}
-              onChange={(e) => setWorkspaceFilter(e.target.value)}
-              title="Filter by workspace (also targets new chats)"
-            >
-              <option value="">All workspaces</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.path}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              onChange={setWorkspaceFilter}
+            />
           </div>
         )}
         <div className="chat-sessions-list">
           {groupedSessions.map(([dir, items]) => (
             <div className="session-group" key={dir || "none"}>
-              <div className="session-group-header" title={dir}>
+              <div className="session-group-header" data-tip={dir}>
                 {workspaceLabel(dir)}
               </div>
               {items.map((s) => (
@@ -831,9 +1025,10 @@ export default function Chat() {
                     setActiveSession(s.id);
                     setMessages([]);
                     loadMessages(s.id);
+                    setMobileDrawerOpen(false);
                   }}
                 >
-                  <MessageSquarePlus size={15} className="session-icon" />
+                  <MessageSquarePlus size={16} className="session-icon" />
                   <span className="session-title">
                     {s.title || `Session ${s.id.slice(0, 8)}`}
                   </span>
@@ -842,11 +1037,12 @@ export default function Chat() {
                   </span>
                   <button
                     className={`btn-pin ${pinned.includes(s.id) ? "pinned" : ""}`}
-                    title={pinned.includes(s.id) ? "Unpin" : "Pin"}
+                    data-tip={pinned.includes(s.id) ? "Unpin" : "Pin"}
+                    aria-label={pinned.includes(s.id) ? "Unpin session" : "Pin session"}
                     onClick={(e) => togglePin(s.id, e)}
                   >
                     <Star
-                      size={14}
+                      size={16}
                       fill={pinned.includes(s.id) ? "currentColor" : "none"}
                     />
                   </button>
@@ -862,53 +1058,60 @@ export default function Chat() {
             </div>
           )}
         </div>
+        {/* Desktop collapse toggle (rail pattern) */}
+        <button
+          className="chat-collapse-toggle"
+          onClick={() => setSidebarCollapsed((v) => !v)}
+          data-tip={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!sidebarCollapsed}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+        </button>
       </aside>
 
       {/* Main chat area */}
       <main className="chat-main">
         <header className="chat-header">
+          {/* Mobile hamburger (only visible below 760px) */}
+          <button
+            className="chat-drawer-toggle"
+            onClick={() => setMobileDrawerOpen((v) => !v)}
+            aria-label={mobileDrawerOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileDrawerOpen}
+          >
+            {mobileDrawerOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
           <div className="chat-header-title">{activeTitle}</div>
           <div className="chat-header-right">
+            {activeSession &&
+              (!!parentSession || siblings.length > 0 || children.length > 0) && (
+              <button
+                className={`chat-subagents-toggle ${subagentsPanelOpen ? "active" : ""}`}
+                onClick={() => setSubagentsPanelOpen((v) => !v)}
+                data-tip="Sessions"
+                aria-label={`Related sessions (${siblings.length + children.length})`}
+              >
+                <Bot size={16} />
+                <span className="chat-subagents-badge">
+                  {siblings.length + children.length}
+                </span>
+              </button>
+            )}
             <span
               className={`chat-status-dot ${connected ? "on" : "off"}`}
-              title={connected ? "Connected" : "Disconnected"}
+              data-tip={connected ? "Connected" : "Disconnected"}
+              aria-label={connected ? "Connected" : "Disconnected"}
             />
           </div>
         </header>
 
-        {activeSession && children.length > 0 && (
-          <div className="subagents-strip">
-            <span className="subagents-label">
-              <Users size={13} /> Subagents
-            </span>
-            {children.map((c) => {
-              const running = c.time?.completed == null;
-              return (
-                <button
-                  key={c.id}
-                  className={`subagent-chip ${running ? "running" : "done"}`}
-                  title={c.title}
-                  onClick={() => {
-                    setActiveSession(c.id);
-                    setMessages([]);
-                    loadMessages(c.id);
-                  }}
-                >
-                  <span className="subagent-dot" />
-                  {c.title || c.id.slice(0, 8)}
-                  <span className="subagent-mode">
-                    {running ? "async · running" : "done"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
+        <div className="chat-content-row">
+        <div className="chat-body">
         <div className="chat-messages">
           {!activeSession && (
             <div className="chat-placeholder">
-              <Bot size={40} />
+              <Sparkles size={24} className="chat-placeholder-icon" />
               <h2>How can I help you today?</h2>
               <p>Pick a conversation or create a new one to get started.</p>
               <button className="btn-new-session big" onClick={createSession}>
@@ -919,7 +1122,7 @@ export default function Chat() {
 
           {showWelcome && (
             <div className="chat-placeholder">
-              <Sparkles size={36} />
+              <Sparkles size={24} className="chat-placeholder-icon" />
               <h2>How can I help?</h2>
               <div className="chat-suggestions">
                 {SUGGESTIONS.map((s) => (
@@ -938,53 +1141,78 @@ export default function Chat() {
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div key={msg.id} className={`chat-message ${msg.role}`}>
-              <div className="message-avatar">
-                {msg.role === "user" ? <User size={18} /> : <Bot size={18} />}
-              </div>
-              <div className="message-body">
-                <div className="message-role">
-                  {msg.role === "user" ? "You" : "Assistant"}
+          {activeSession && (
+            <TodoDisplay sessionId={activeSession} refreshKey={todoRefreshKey} />
+          )}
+
+          {messages.map((msg, i) => {
+            const prev = messages[i - 1];
+            const startsNewTurn = !prev || prev.role !== msg.role;
+            const msgText = msg.parts
+              .filter((p) => p.kind === "text" || !p.kind)
+              .map((p) => p.text || "")
+              .join("\n");
+            return (
+              <div
+                key={msg.id}
+                className={`chat-message ${msg.role} ${startsNewTurn ? "turn-start" : ""}`}
+              >
+                {msg.role === "user" && (
+                  <MessageActions
+                    text={msgText}
+                    messageId={msg.id}
+                    isFirstUser={i === 0}
+                    onEdit={handleEditMessage}
+                    onDelete={handleDeleteMessage}
+                    onRevert={handleRevertToMessage}
+                  />
+                )}
+                <div className="message-avatar">
+                  {msg.role === "user" ? <User size={20} /> : <Bot size={20} />}
                 </div>
-                <div className="message-content">
-                  {msg.parts.map((part) => {
-                    if (part.kind === "reasoning")
-                      return <ThinkingBlock key={part.id} text={part.text} />;
-                    if (part.kind === "subtask")
-                      return (
-                        <SubagentBlock
-                          key={part.id}
-                          agent={part.agent}
-                          description={part.description}
-                        />
+                <div className="message-body">
+                  <div className="message-role">
+                    {msg.role === "user" ? "You" : "Assistant"}
+                  </div>
+                  <div className="message-content">
+                    {msg.parts.map((part) => {
+                      if (part.kind === "reasoning")
+                        return <ThinkingBlock key={part.id} text={part.text} />;
+                      if (part.kind === "subtask")
+                        return (
+                          <SubagentBlock
+                            key={part.id}
+                            agent={part.agent}
+                            description={part.description}
+                          />
+                        );
+                      if (part.kind === "tool")
+                        return (
+                          <ToolBlock
+                            key={part.id}
+                            tool={part.tool}
+                            status={part.status}
+                            title={part.title}
+                            output={part.output}
+                          />
+                        );
+                      return msg.role === "user" ? (
+                        <div key={part.id} className="text-part">
+                          {part.text}
+                        </div>
+                      ) : (
+                        <Markdown key={part.id} content={part.text} />
                       );
-                    if (part.kind === "tool")
-                      return (
-                        <ToolBlock
-                          key={part.id}
-                          tool={part.tool}
-                          status={part.status}
-                          title={part.title}
-                          output={part.output}
-                        />
-                      );
-                    return msg.role === "user" ? (
-                      <div key={part.id} className="text-part">
-                        {part.text}
-                      </div>
-                    ) : (
-                      <Markdown key={part.id} content={part.text} />
-                    );
-                  })}
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-            <div className="chat-message assistant">
+            <div className="chat-message assistant turn-start">
               <div className="message-avatar">
-                <Bot size={18} />
+                <Bot size={20} />
               </div>
               <div className="message-body">
                 <div className="message-role">Assistant</div>
@@ -1001,7 +1229,41 @@ export default function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
+        {opencodeDown && (
+          <div className="chat-banner chat-banner-warn" role="status">
+            <div className="chat-banner-text">
+              <strong>OpenCode server is not running.</strong>
+              <span>The chat needs an opencode server. Start one now or run <code>opencode serve</code> in a terminal.</span>
+            </div>
+            <button
+              className="btn-new-session"
+              onClick={handleStartOpencode}
+              disabled={startingOpencode}
+              data-tip={startingOpencode ? "Starting…" : "Run `opencode serve` via ywai"}
+              aria-label="Start opencode server"
+            >
+              {startingOpencode ? "Starting…" : "Start opencode"}
+            </button>
+          </div>
+        )}
+
         {error && <div className="chat-error">{error}</div>}
+
+        {/* Permission and question dialogs from OpenCode */}
+        {pendingPermission && (
+          <div className="dialog-overlay">
+            <PermissionDialog request={pendingPermission} onDone={handlePermissionDone} />
+          </div>
+        )}
+        {pendingQuestion && (
+          <div className="dialog-overlay">
+            <QuestionPrompt
+              request={pendingQuestion}
+              onReply={handleQuestionReply}
+              onReject={handleQuestionReject}
+            />
+          </div>
+        )}
 
         {/* Composer */}
         <div className="chat-composer">
@@ -1021,60 +1283,45 @@ export default function Chat() {
             />
             <div className="composer-toolbar">
               {agents.length > 0 && (
-                <select
-                  className="composer-select"
-                  title="Agent"
+                <AgentSearchSelect
+                  agents={agents}
                   value={selectedAgent}
-                  onChange={(e) => setSelectedAgent(e.target.value)}
-                >
-                  {agents.map((a) => (
-                    <option key={a.name} value={a.name} title={a.description}>
-                      @{a.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedAgent}
+                  disabled={!activeSession}
+                />
               )}
               {providers.length > 0 && (
-                <select
-                  className="composer-select"
-                  title="Model"
+                <ModelSearchSelect
+                  providers={providers}
                   value={
                     selectedModel
                       ? `${selectedModel.providerID}::${selectedModel.modelID}`
                       : ""
                   }
-                  onChange={(e) => {
-                    const [providerID, modelID] = e.target.value.split("::");
-                    setSelectedModel(
-                      providerID && modelID ? { providerID, modelID } : null,
-                    );
-                  }}
-                >
-                  {providers.map((p) =>
-                    p.models.map((m) => (
-                      <option key={`${p.id}::${m}`} value={`${p.id}::${m}`}>
-                        {p.name} · {m}
-                      </option>
-                    )),
-                  )}
-                </select>
+                  onChange={(providerID, modelID) =>
+                    setSelectedModel({ providerID, modelID })
+                  }
+                  disabled={!activeSession}
+                />
               )}
               <div className="composer-actions">
                 <button
                   className="composer-icon"
-                  title="Templates"
+                  data-tip="Templates"
+                  aria-label="Templates"
                   onClick={() => setShowTemplates((v) => !v)}
                   disabled={!activeSession}
                 >
-                  <FileText size={18} />
+                  <FileText size={20} />
                 </button>
                 <button
                   className="btn-send"
                   onClick={sendMessage}
                   disabled={!input.trim() || !activeSession || isStreaming}
-                  title="Send"
+                  data-tip="Send"
+                  aria-label="Send message"
                 >
-                  <Send size={18} />
+                  <Send size={20} />
                 </button>
               </div>
             </div>
@@ -1104,8 +1351,10 @@ export default function Chat() {
                     className="btn-save-template"
                     onClick={saveTemplate}
                     disabled={!input.trim()}
+                    data-tip="Save current message as template"
+                    aria-label="Save template"
                   >
-                    <Plus size={13} /> Save current
+                    <Plus size={16} /> Save current
                   </button>
                 </div>
                 {templates.length === 0 && (
@@ -1122,16 +1371,37 @@ export default function Chat() {
                     <span className="template-name">{t.name}</span>
                     <button
                       className="btn-template-delete"
-                      title="Delete"
+                      data-tip="Delete template"
+                      aria-label={`Delete template ${t.name}`}
                       onClick={(e) => deleteTemplate(t.id, e)}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </div>
+        </div>
+
+        <SubagentsPanel
+          open={
+            subagentsPanelOpen &&
+            !!activeSession &&
+            (!!parentSession || siblings.length > 0 || children.length > 0)
+          }
+          activeSessionId={activeSession}
+          parent={parentSession}
+          siblings={siblings}
+          children={children}
+          onClose={() => setSubagentsPanelOpen(false)}
+          onSelectSession={(id) => {
+            setActiveSession(id);
+            setMessages([]);
+            loadMessages(id);
+          }}
+        />
         </div>
       </main>
     </div>

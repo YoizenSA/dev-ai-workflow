@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Brain, Wrench, Users } from "lucide-react";
+import DiffViewer, { isDiffContent } from "./DiffViewer";
 
 // Inline subagent delegation block (a "subtask" part). Shows which agent was
 // spawned and its task; collapsible to reveal the full task description.
@@ -14,8 +15,8 @@ export function SubagentBlock({
   return (
     <div className={`part-block subagent ${open ? "open" : ""}`}>
       <button className="part-block-header" onClick={() => setOpen((o) => !o)}>
-        <ChevronRight size={14} className="part-chevron" />
-        <Users size={14} />
+        <ChevronRight size={16} className="part-chevron" />
+        <Users size={16} />
         <span className="part-tool-name">Subagent</span>
         <span className="part-tool-title">{agent || "agent"}</span>
         <span className="part-tool-status">sync</span>
@@ -34,8 +35,8 @@ export function ThinkingBlock({ text }: { text: string }) {
   return (
     <div className={`part-block thinking ${open ? "open" : ""}`}>
       <button className="part-block-header" onClick={() => setOpen((o) => !o)}>
-        <ChevronRight size={14} className="part-chevron" />
-        <Brain size={14} />
+        <ChevronRight size={16} className="part-chevron" />
+        <Brain size={16} />
         <span>Pensando</span>
       </button>
       {open && <div className="part-block-body">{text}</div>}
@@ -66,15 +67,19 @@ export function ToolBlock({
   return (
     <div className={`part-block tool status-${status || "pending"} ${open ? "open" : ""}`}>
       <button className="part-block-header" onClick={() => setOpen((o) => !o)}>
-        <ChevronRight size={14} className="part-chevron" />
-        <Wrench size={14} />
+        <ChevronRight size={16} className="part-chevron" />
+        <Wrench size={16} />
         <span className="part-tool-name">{tool || "Herramienta"}</span>
         {title && <span className="part-tool-title">{title}</span>}
         <span className="part-tool-status">{STATUS_LABEL[status || ""] || status}</span>
       </button>
       {open && output && (
         <div className="part-block-body">
-          <pre>{output}</pre>
+          {isDiffContent(output) ? (
+            <DiffViewer content={output} />
+          ) : (
+            <pre>{output}</pre>
+          )}
         </div>
       )}
     </div>

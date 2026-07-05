@@ -154,7 +154,12 @@ func createSkillsDir(path string) error {
 	return os.MkdirAll(path, perm)
 }
 
-func findBinary(name string) string {
+// FindBinary resolves the absolute path to an agent binary by trying, in order:
+// exec.LookPath (system PATH), Windows extensions, well-known install dirs
+// (~/.<name>/bin, ~/.local/bin), and finally a login-shell `which`/`where`
+// fallback so binaries installed via nvm/asdf/etc. (not in the raw process
+// PATH) are still found. Returns "" if not found.
+func FindBinary(name string) string {
 	if path, err := exec.LookPath(name); err == nil {
 		return path
 	}
@@ -226,7 +231,7 @@ func Detect() []Agent {
 			continue
 		}
 
-		path := findBinary(ka.Binary)
+		path := FindBinary(ka.Binary)
 		if path == "" {
 			// Fallback: detect by config dir even if binary not in PATH
 			if detectByConfigDir(ka.Name, ka.SkillsPath()) {

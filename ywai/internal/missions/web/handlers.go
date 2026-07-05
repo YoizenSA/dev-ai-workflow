@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/engram"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/gorilla/websocket"
 )
 
@@ -293,25 +296,66 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start opencode serve in background on the port DefaultClient probes.
-	cmd := exec.Command("opencode", "serve", "--port", "4096")
-	cmd.Env = append(os.Environ(), "OPENCODE_SERVER_PASSWORD=")
-	if err := cmd.Start(); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to start opencode: %v", err))
+	// Resolve the opencode binary (PATH, well-known dirs, login-shell which)
+	// so binaries installed via nvm/asdf/etc. are found even though the ywai
+	// process does not load the user's shell profile.
+	binPath, err := missions.DetectOpencode()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError,
+			"opencode binary not found. Install opencode or start it manually, then retry.")
 		return
 	}
 
-	// Wait a moment for server to start
-	time.Sleep(2 * time.Second)
+	// Determine the starting port from OPENCODE_URL (default 4096) and find a
+	// free one if it's busy. Another server (e.g. Kilo Code) on 4096 would make
+	// opencode fail to bind silently, leaving the UI stuck on "Starting…".
+	startPort := 4096
+	if u := os.Getenv("OPENCODE_URL"); u != "" {
+		host := strings.TrimPrefix(strings.TrimPrefix(u, "http://"), "https://")
+		if _, p, e := net.SplitHostPort(host); e == nil && p != "" {
+			if n, e := strconv.Atoi(p); e == nil {
+				startPort = n
+			}
+		}
+	}
+	port := serverutil.FindFreePort(startPort)
+	if port != startPort {
+		log.Printf("opencode start: port %d busy, using %d", startPort, port)
+	}
+	chosenURL := "http://127.0.0.1:" + strconv.Itoa(port)
 
-	// Probe the server directly; if it's up, switch to a ServerClient so that
-	// subsequent session operations work (the original client may be a LocalClient
-	// captured at startup that does not support sessions).
-	if h.trySwitchToServerClient(ctx) {
+	cmd := exec.Command(binPath, "serve", "--port", strconv.Itoa(port))
+	cmd.Env = append(os.Environ(), "OPENCODE_SERVER_PASSWORD=")
+	if err := cmd.Start(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to start opencode (%s): %v", binPath, err))
+		return
+	}
+
+	// Export the chosen URL so trySwitchToServerClient (and the chat proxy)
+	// both point at the instance we just started.
+	os.Setenv("OPENCODE_URL", chosenURL)
+
+	// Wait for opencode to bind (poll /status up to ~6s). This is what unblocks
+	// the UI — instead of returning "starting" and leaving the button spinning,
+	// we confirm readiness before responding.
+	ready := false
+	for i := 0; i < 30; i++ {
+		pctx, pcancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		ok, _ := opencode.ProbeServer(pctx, chosenURL)
+		pcancel()
+		if ok {
+			ready = true
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	if ready && h.trySwitchToServerClient(ctx) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"status":  "started",
 			"message": "opencode server started successfully",
 			"pid":     cmd.Process.Pid,
+			"url":     chosenURL,
 		})
 		return
 	}
@@ -320,6 +364,7 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 		"status":  "starting",
 		"message": "opencode server is starting, please wait a moment and try again",
 		"pid":     cmd.Process.Pid,
+		"url":     chosenURL,
 	})
 }
 

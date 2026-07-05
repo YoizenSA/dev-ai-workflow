@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import "./Layout.css";
@@ -21,13 +22,22 @@ export default function Layout({ children }: LayoutProps) {
 		});
 	};
 
+	// On /chat the dashboard nav is forced to its thin icon rail so it doesn't
+	// sit next to the chat's own session sidebar (avoids a double-sidebar). The
+	// user's saved collapse preference still applies on every other route.
+	const location = useLocation();
+	const onChat = location.pathname.startsWith("/chat");
+	const effectiveCollapsed = collapsed || onChat;
+
 	return (
-		<div className={`app-shell${collapsed ? " collapsed" : ""}`}>
+		<div className={`app-shell${effectiveCollapsed ? " collapsed" : ""}`}>
 			<Sidebar
 				open={sidebarOpen}
 				onClose={() => setSidebarOpen(false)}
-				collapsed={collapsed}
-				onToggleCollapse={toggleCollapse}
+				collapsed={effectiveCollapsed}
+				// On /chat the dashboard rail has no expand toggle — it would only
+				// fight the chat sidebar. Keep the toggle on every other route.
+				onToggleCollapse={onChat ? undefined : toggleCollapse}
 			/>
 
 			{/* Scrim overlay for mobile */}

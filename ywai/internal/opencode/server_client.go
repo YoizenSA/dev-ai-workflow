@@ -261,7 +261,9 @@ func (c *ServerClient) Status(ctx context.Context) (ClientStatus, error) {
 		}
 	}
 
-	// Fallback: try /health
+	// Fallback: try /health. Require StatusCode 200 — another server (e.g. Kilo
+	// Code) occupying the same port returns 401/404 and must NOT be mistaken
+	// for a running opencode instance.
 	url = c.baseURL + "/health"
 	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -273,6 +275,9 @@ func (c *ServerClient) Status(ctx context.Context) (ClientStatus, error) {
 		return ClientStatus{Connected: false}, nil
 	}
 	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ClientStatus{Connected: false}, nil
+	}
 
 	// Try to get connected providers from /provider
 	connectedProviders := c.getConnectedProviders(ctx)
