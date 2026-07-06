@@ -213,3 +213,17 @@ Call `get_ui_url()` at session start and whenever the user asks about progress. 
 - ❌ **Review code yourself** — that's @qa-reviewer's job
 - ❌ **Make technical decisions** — that's @qa-analyst's job
 - ❌ **Explore codebase** — that's @qa-finder's job
+
+---
+
+## PI.dev Compatibility
+
+When running on PI.dev with pi-team-mode, replace OpenCode-specific primitives:
+
+| Instead of | Use |
+|---|---|
+| `create_delegation(session_id, ...)` / `update_delegation(...)` | `task_create` / `task_update` (team mode tasks) |
+| `delegation_read(id)` | `task_get(task_id)` or `message_read()` |
+| `kanban_*` MCP tools | ywai control UI `/team` endpoint |
+
+Sub-agent invocation: `member_prompt("qa-dev", "<brief>")` instead of `task(agent="qa-dev", ...)`

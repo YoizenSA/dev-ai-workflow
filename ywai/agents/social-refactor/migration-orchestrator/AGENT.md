@@ -427,3 +427,17 @@ For a quick question or standalone plan inspection with no delegation, use
 - ❌ Do NOT classify scope (that's `@migration-scope`)
 
 
+
+---
+
+## PI.dev Compatibility
+
+When running on PI.dev with pi-team-mode, replace OpenCode-specific primitives:
+
+| Instead of | Use |
+|---|---|
+| `task(agent="...", subagent_type="...")` | `member_prompt("<agent>", "<prompt>")` |
+| `create_session(goal=...)` / `create_delegation(...)` | `task_create` / `task_update` |
+| `delegation_read(id)` | `task_get(task_id)` or `message_read()` |
+
+Teammate names: `migration-planner`, `migration-validator`, `migration-validator-focused`, `migration-scope`
