@@ -397,6 +397,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
 			}
+			teamProfilesDir := filepath.Join(home, ".pi", "agent")
+			if err := agentprofiles.InstallPiTeamProfiles(teamProfilesDir, profiles, overwriteAgents); err != nil {
+				fmt.Printf("  [%s] Warning: teammate profiles: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Teammate profiles generated\n", a.Name)
+			}
 		}
 	}
 }

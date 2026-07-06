@@ -52,6 +52,7 @@ type Server struct {
 	jobs      *mcp.JobManager
 	workflows *workflowsAPI
 	push      *PushAPI
+	teamAPI   *TeamAPI
 }
 
 // New creates a new control server.
@@ -97,6 +98,7 @@ func New(port int) (*Server, error) {
 		projector.OnComplete(s.push.sender.Send)
 	}
 
+	s.teamAPI = NewTeamAPI()
 	s.buildRoutes()
 	return s, nil
 }
@@ -160,6 +162,9 @@ func (s *Server) buildRoutes() {
 	// ─── Chat API ───────────────────────────────────────────────
 	// Proxies to a local OpenCode server when one is running.
 	s.registerChatRoutes()
+
+	// ─── Team API ─────────────────────────────────────────────
+	s.RegisterTeamRoutes(s.teamAPI)
 
 	// Everything else (/, /missions, /settings, /app.js, etc.)
 	s.mux.HandleFunc("/", s.serveSPA)

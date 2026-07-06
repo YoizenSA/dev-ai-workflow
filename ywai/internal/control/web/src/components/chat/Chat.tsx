@@ -128,6 +128,14 @@ export default function Chat() {
   const [busySessions, setBusySessions] = useState<Set<string>>(new Set());
   const [opencodeDown, setOpencodeDown] = useState(false);
   const [startingOpencode, setStartingOpencode] = useState(false);
+  const [agentTarget, setAgentTarget] = useState<string>(() => {
+    try {
+      return localStorage.getItem("chat-target") || "opencode";
+    } catch {
+      return "opencode";
+    }
+  });
+  const [connectionStatus, setConnectionStatus] = useState<{pi: boolean; opencode: boolean}>({pi: false, opencode: false});
 
   // ── Ref for pane actions (template insertion, focus) ───────────────────
   const paneActionsRef = useRef<PaneActions | null>(null);
@@ -508,6 +516,29 @@ export default function Chat() {
 
   // opencode reachability is derived from loadSessions' status code (see above);
   // there is no dedicated /api/chat/health route.
+
+  // ── Agent target switch ────────────────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/chat/target", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: agentTarget }),
+    }).catch(() => {});
+  }, [agentTarget]);
+
+  // ── Connection status polling ──────────────────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch("/api/chat/status");
+        const data = await res.json();
+        setConnectionStatus({ pi: data.pi, opencode: data.opencode });
+      } catch { /* ignore */ }
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Sidebar: rename / delete ──────────────────────────────────────────
   const handleDeleteSession = async (id: string) => {
@@ -919,6 +950,64 @@ export default function Chat() {
 
       {/* Main area */}
       <main className="chat-main">
+        {/* Agent selector bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "6px 12px",
+            borderBottom: "1px solid var(--border-color, #333)",
+            gap: "6px",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              background:
+                agentTarget === "pi"
+                  ? connectionStatus.pi
+                    ? "#4caf50"
+                    : "#f44336"
+                  : connectionStatus.opencode
+                    ? "#4caf50"
+                    : "#f44336",
+            }}
+            title={
+              agentTarget === "pi"
+                ? connectionStatus.pi
+                  ? "PI.dev connected"
+                  : "PI.dev disconnected"
+                : connectionStatus.opencode
+                  ? "OpenCode connected"
+                  : "OpenCode disconnected"
+            }
+          />
+          <select
+            value={agentTarget}
+            onChange={(e) => {
+              const target = e.target.value;
+              setAgentTarget(target);
+              try { localStorage.setItem("chat-target", target); } catch {}
+            }}
+            title="Select AI agent"
+            style={{
+              padding: "4px 8px",
+              borderRadius: "4px",
+              border: "1px solid var(--border-color, #333)",
+              background: "var(--bg-secondary, #1a1a1a)",
+              color: "var(--text-primary, #fff)",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            <option value="opencode">🔷 OpenCode</option>
+            <option value="pi">🟣 PI.dev</option>
+          </select>
+        </div>
+
         {/* VS Code-style split grid. renderNode recurses the layout tree. */}
         {hasOpenTabs(layout) ? (
           <div className="layout-root">{renderNode(layout)}</div>

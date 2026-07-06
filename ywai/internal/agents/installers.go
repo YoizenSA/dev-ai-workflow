@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -606,4 +607,137 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString(prompt)
 
 	return b.String()
+}
+
+// TeammateProfile represents a PI.dev teammate profile JSON structure.
+type TeammateProfile struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Model        string   `json:"model"`
+	Thinking     bool     `json:"thinking"`
+	SystemPrompt string   `json:"system_prompt"`
+	Prompt       string   `json:"prompt"`
+	Tools        []string `json:"tools"`
+	Skills       []string `json:"skills"`
+}
+
+// opencodeToPiTool maps opencode tool names to PI.dev tool names.
+var opencodeToPiTool = map[string]string{
+	"read":      "Read",
+	"edit":      "Edit",
+	"write":     "Write",
+	"bash":      "Bash",
+	"glob":      "Glob",
+	"grep":      "Grep",
+	"websearch": "WebSearch",
+}
+
+// agentDefaults returns the static defaults (description, tools, model) for a given agent name.
+// An empty model string means "inherit from lead agent".
+func agentDefaults(name string) (description string, tools []string, model string) {
+	switch name {
+	case "orchestrator":
+		return "Technical lead that decomposes work and delegates to subagents",
+			[]string{"member_prompt", "member_steer", "member_wait", "task_*", "message_*"}, ""
+	case "dev":
+		return "Implements features, fixes bugs, and refactors code",
+			[]string{"Read", "Write", "Edit", "Bash", "Grep", "Glob"}, ""
+	case "qa":
+		return "Writes and runs tests, ensures quality",
+			[]string{"Read", "Write", "Edit", "Bash", "Grep"}, ""
+	case "architect":
+		return "Designs architecture and makes technical decisions",
+			[]string{"Read", "Write", "Edit", "Grep", "Glob", "Bash"}, ""
+	case "reviewer":
+		return "Reviews code for correctness and quality",
+			[]string{"Read", "Grep", "Glob", "Bash"}, ""
+	case "devops":
+		return "Manages CI/CD, deployments, and infrastructure",
+			[]string{"Read", "Write", "Edit", "Bash"}, ""
+	case "finder":
+		return "Explores codebase and searches for information",
+			[]string{"Read", "Grep", "Glob", "Bash"}, "anthropic/claude-haiku-4-5"
+	case "ask":
+		return "Answers questions and does research",
+			[]string{"Read", "WebSearch"}, "anthropic/claude-haiku-4-5"
+	default:
+		return "", nil, ""
+	}
+}
+
+// convertPermissionsToPiTools converts an opencode Permission map to a sorted list of PI.dev tool names.
+func convertPermissionsToPiTools(perm map[string]string) []string {
+	var tools []string
+	for ocTool, val := range perm {
+		if val == "allow" {
+			if piTool, ok := opencodeToPiTool[ocTool]; ok {
+				tools = append(tools, piTool)
+			}
+		}
+	}
+	sort.Strings(tools)
+	return tools
+}
+
+// InstallPiTeamProfiles generates PI.dev teammate profile JSON files for all agent profiles.
+func InstallPiTeamProfiles(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
+	teamDir := filepath.Join(agentsDir, "team-profiles")
+	if err := os.MkdirAll(teamDir, 0o755); err != nil {
+		return fmt.Errorf("create team-profiles dir: %w", err)
+	}
+
+	for _, profile := range profiles {
+		targetPath := filepath.Join(teamDir, profile.Name+".json")
+		if _, err := os.Stat(targetPath); err == nil && !overwrite {
+			continue // skip existing
+		}
+
+		desc, tools, model := agentDefaults(profile.Name)
+		if desc == "" {
+			continue // unknown agent, skip
+		}
+
+		permTools := convertPermissionsToPiTools(profile.Permission)
+		tools = append(tools, permTools...)
+		sort.Strings(tools)
+		tools = uniqueSortedStrings(tools)
+
+		tp := TeammateProfile{
+			Name:         profile.Name,
+			Description:  desc,
+			Model:        model,
+			Thinking:     false,
+			SystemPrompt: profile.Prompt,
+			Prompt:       profile.Prompt,
+			Tools:        tools,
+			Skills:       profile.Skills,
+		}
+
+		data, err := json.MarshalIndent(tp, "", "  ")
+		if err != nil {
+			fmt.Printf("  Warning: failed to marshal %s: %v\n", profile.Name, err)
+			continue
+		}
+
+		if err := os.WriteFile(targetPath, data, 0o644); err != nil {
+			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
+			continue
+		}
+	}
+
+	return nil
+}
+
+// uniqueSortedStrings deduplicates a sorted string slice in place.
+func uniqueSortedStrings(s []string) []string {
+	if len(s) < 2 {
+		return s
+	}
+	result := make([]string, 0, len(s))
+	for i, v := range s {
+		if i == 0 || v != s[i-1] {
+			result = append(result, v)
+		}
+	}
+	return result
 }
