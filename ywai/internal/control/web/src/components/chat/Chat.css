@@ -7,6 +7,11 @@
 .content:has(.chat-container) {
   padding: 0;
   gap: 0;
+  /* The chat owns its internal scroll (.chat-messages). Without this, the
+     shell's own overflow-y:auto also scrolls: messagesEndRef.scrollIntoView()
+     (autoscroll to the last message) scrolls .content too, pushing the pane
+     header off the top of the viewport when a long session is opened. */
+  overflow: hidden;
 }
 .chat-container {
   display: flex;
@@ -20,59 +25,98 @@
 }
 
 /* ── Sidebar ────────────────────────────────────────────────────── */
-.chat-sessions {
-  width: var(--sidebar-w, 260px);
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--panel-border);
-  /* Glass over the ambient glow instead of an opaque fill. */
-  background: linear-gradient(160deg, rgba(var(--surf-1-rgb), 0.55), rgba(var(--surf-3-rgb), 0.60));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  min-height: 0;
-  transition: width var(--t-slow) var(--ease-out);
-}
-/* Collapsible rail (desktop) — hides text labels, centers icons. */
-.chat-container.sidebar-collapsed .chat-sessions {
-  width: var(--sidebar-w-collapsed, 78px);
-}
-.chat-container.sidebar-collapsed .btn-new-session-text,
-.chat-container.sidebar-collapsed .session-title,
-.chat-container.sidebar-collapsed .session-time,
-.chat-container.sidebar-collapsed .session-group-header,
-.chat-container.sidebar-collapsed .btn-pin,
-.chat-container.sidebar-collapsed .workspace-switcher {
-  display: none;
-}
-.chat-container.sidebar-collapsed .btn-new-session {
-  margin: 0 auto;
-}
-.chat-container.sidebar-collapsed .chat-sessions-header {
-  justify-content: center;
-}
-.chat-container.sidebar-collapsed .session-item {
-  justify-content: center;
-  padding: var(--space-2);
-}
+/* The sidebar lives in .chat-sidebar (styled via the class alias near the
+   bottom of this file). The rules here cover the header, filter, list and
+   group chrome that the current Chat.tsx renders — previously these had no
+   matching styles, so the sidebar rendered as unstyled stacked text. */
 
-.chat-sessions-header {
+/* Sidebar header — title row + action icons. */
+.sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
 }
-
-.chat-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
+.sidebar-title {
+  margin: 0;
+  font-size: var(--text-sm);
   font-weight: 600;
-  font-size: 14px;
+  letter-spacing: -0.005em;
   color: var(--text);
 }
+.sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* Collapsed rail: hide text labels, center the icons. */
+.chat-sidebar.collapsed .sidebar-title {
+  display: none;
+}
+.chat-sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: var(--space-3) var(--space-2);
+}
 
+/* Workspace filter combobox wrapper. */
+.sidebar-filter {
+  padding: var(--space-2) var(--space-3) 0;
+  flex-shrink: 0;
+}
+
+/* Session list — the scrollable region. */
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Items container under a workspace group. */
+.session-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+/* A root session and its subagent children form a node. */
+.agent-node {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Busy indicator — a small pulsing dot on the session row. */
+.session-busy-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--yz-accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--yz-accent);
+  animation: session-busy-pulse 1.2s infinite ease-in-out;
+}
+@keyframes session-busy-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Mobile scrim behind the off-canvas drawer. */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: calc(var(--z-drawer) - 1);
+  cursor: pointer;
+}
+
+/* New-session accent pill (used in empty states / banners). */
 .btn-new-session {
   display: inline-flex;
   align-items: center;
@@ -82,7 +126,7 @@
   border: none;
   border-radius: var(--radius-sm);
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -92,14 +136,8 @@
 }
 .btn-new-session.big {
   padding: 10px 16px;
-  font-size: 14px;
+  font-size: var(--text-base);
   margin-top: var(--space-3);
-}
-
-.chat-sessions-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-2);
 }
 
 .session-item {
@@ -222,6 +260,61 @@
 .btn-pin:hover {
   color: var(--yz-accent);
 }
+/* Delete: same reveal-on-hover ghost treatment as the pin, red on hover. */
+.btn-delete-session {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.session-item:hover .btn-delete-session {
+  opacity: 1;
+}
+.btn-delete-session:hover {
+  color: var(--tint-danger);
+  background: var(--danger-soft);
+}
+
+/* Session search — yz-ui input (was unstyled → legacy browser default). */
+.sidebar-search {
+  appearance: none;
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 140ms ease, background 140ms ease,
+    box-shadow 140ms ease;
+}
+.sidebar-search::placeholder {
+  color: var(--text-faint);
+}
+.sidebar-search:hover {
+  border-color: var(--panel-border-strong);
+}
+.sidebar-search:focus {
+  outline: none;
+  border-color: rgba(var(--info-rgb), 0.6);
+  box-shadow: var(--focus-ring);
+}
+
+/* Drawer toggle is mobile-only — hidden on desktop so the pane header does not
+   show two identical collapse icons. Shown under the mobile breakpoint below.
+   .btn-icon.mobile-only (0,2,0) to beat .btn-icon's display:inline-flex. */
+.btn-icon.mobile-only {
+  display: none;
+}
 
 .chat-empty {
   color: var(--text-faint);
@@ -248,6 +341,7 @@
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--panel-border);
   background: var(--surface-soft);
+  flex-shrink: 0;
 }
 .chat-header-left {
   display: flex;
@@ -268,30 +362,6 @@
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;
-}
-.chat-model-select {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  max-width: 240px;
-  cursor: pointer;
-}
-.chat-status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.chat-status-dot.on {
-  background: var(--success);
-  box-shadow: 0 0 6px var(--success);
-}
-.chat-status-dot.off {
-  background: var(--text-faint);
 }
 
 /* ── Messages ───────────────────────────────────────────────────── */
@@ -350,6 +420,18 @@
 }
 .chat-message.assistant .message-content {
   white-space: normal;
+}
+/* User turn reads as a contained glass panel (VS Code-like) instead of raw
+   text floating over the ambient gradient. Pasted dumps stay legible and no
+   longer dominate the pane. */
+.chat-message.user .message-content {
+  background: var(--surface-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-glass);
+  max-height: 22em;
+  overflow: auto;
 }
 
 /* Markdown */
@@ -490,6 +572,7 @@
 .chat-composer {
   padding: var(--space-3) var(--space-5) var(--space-5);
   background: transparent;
+  flex-shrink: 0;
 }
 .composer-card {
   position: relative;
@@ -756,6 +839,72 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Templates panel — a centered modal. The composer now lives inside each
+   SessionPane, so this panel (owned by Chat) can't anchor to it; float it as a
+   self-contained overlay instead. */
+.templates-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 99;
+}
+.templates-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - var(--space-6)));
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, rgba(var(--surf-1-rgb), 0.96), rgba(var(--surf-3-rgb), 0.98));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass);
+  z-index: 100;
+}
+.templates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--panel-border);
+}
+.templates-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.templates-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+.templates-create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--panel-border);
+}
+.template-input,
+.template-textarea {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  resize: vertical;
+}
 .btn-template-delete {
   display: inline-flex;
   background: none;
@@ -922,23 +1071,9 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Workspace switcher ─────────────────────────────────────────── */
-.workspace-switcher {
-  padding: var(--space-2) var(--space-3) 0;
-}
-.workspace-select {
-  width: 100%;
-  background: var(--surface);
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: 12.5px;
-  font-family: var(--font-sans);
-  cursor: pointer;
-}
-/* Searchable workspace combobox (replaces the native select above). Keeps the
-   same full-width, compact look but adds search + grouping. */
+/* ── Workspace combobox (WorkspaceSearchSelect) ──────────────────── */
+/* Searchable workspace combobox. The dropdown opens downward (default),
+   unlike the composer combos which open upward. */
 .workspace-combo {
   width: 100%;
 }
@@ -1034,13 +1169,10 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────
-   Class aliases — the modular component tree (Sidebar/Composer/…)
-   renamed several hooks. These rules map the new class names onto the
-   same token-driven styling already defined above, so the design system
-   applies uniformly regardless of which component renders the node.
+   Sidebar root (.chat-sidebar) — the panel rendered by Chat.tsx. The
+   header/filter/list chrome it contains is styled at the top of this file.
    ─────────────────────────────────────────────────────────────────── */
 
-/* Sidebar root ↔ .chat-sessions */
 .chat-sidebar {
   width: var(--sidebar-w, 260px);
   flex-shrink: 0;
@@ -1054,90 +1186,31 @@
   transition: width var(--t-slow) var(--ease-out);
 }
 .chat-sidebar.collapsed {
-  width: var(--sidebar-w-collapsed, 78px);
+  /* Narrower than the dashboard rail (78px): the chat collapsed state only
+     shows icons, so 48px is enough. Override the shared token locally. */
+  width: 48px;
 }
-.chat-sidebar.collapsed .chat-brand-text,
-.chat-sidebar.collapsed .btn-new-session-text,
-.chat-sidebar.collapsed .session-title,
-.chat-sidebar.collapsed .session-time,
-.chat-sidebar.collapsed .session-group-label,
-.chat-sidebar.collapsed .btn-pin,
-.chat-sidebar.collapsed .chat-filter {
-  display: none;
-}
-.chat-sidebar.collapsed .btn-new-session {
-  margin: 0 auto;
-}
-.chat-sidebar.collapsed .chat-sessions-header {
-  justify-content: center;
-}
-.chat-sidebar.collapsed .chat-brand {
-  gap: 0;
-}
-.chat-sidebar.collapsed .session-item {
-  justify-content: center;
-  padding: var(--space-2);
-}
-.chat-sidebar.collapsed .chat-collapse-toggle {
-  align-self: center;
-}
-
-.chat-sidebar-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-2);
+/* Sidebar resize sash wrapper — reuses .layout-sash look. The wrapper is a
+   thin flex item so the sash's `previousElementSibling` is the sidebar. */
+.sidebar-sash-wrapper {
+  flex: 0 0 1px;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
-
-.chat-filter {
-  background: var(--input-bg, var(--surface));
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  margin: var(--space-2) var(--space-2) var(--space-1);
-  width: calc(100% - 2 * var(--space-2));
-  font-size: var(--text-sm);
-  font-family: var(--font-sans);
-  cursor: pointer;
+.sidebar-sash-wrapper .layout-sash {
+  flex: 1;
 }
-
-.chat-collapse-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--panel-border);
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-2);
-  flex-shrink: 0;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.chat-collapse-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.chat-drawer-toggle {
+/* Collapsed rail: hide everything but the icons. */
+.chat-sidebar.collapsed .sidebar-title,
+.chat-sidebar.collapsed .sidebar-filter,
+.chat-sidebar.collapsed .session-search,
+.chat-sidebar.collapsed .session-list,
+.chat-sidebar.collapsed .sidebar-overlay {
   display: none;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  transition: background var(--t-fast), color var(--t-fast);
 }
-.chat-drawer-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+/* Center the expand button in the narrow rail. */
+.chat-sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: var(--space-2);
 }
 
 .session-group-label {
@@ -1252,34 +1325,12 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .spin {
-    animation: none;
-  }
-}
 
+/* Mobile: reveal the mobile-only sidebar toggle (hidden on desktop so the
+   pane header doesn't show two collapse icons). */
 @media (max-width: 760px) {
-  .chat-drawer-toggle {
+  .btn-icon.mobile-only {
     display: inline-flex;
-  }
-  .chat-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 86vw;
-    max-width: 320px;
-    transform: translateX(-100%);
-    transition: transform var(--t-slow) var(--ease-out);
-    z-index: var(--z-drawer);
-    box-shadow: var(--shadow-glass);
-  }
-  .chat-sidebar.drawer-open {
-    transform: translateX(0);
-  }
-  .chat-drawer-close {
-    display: inline-flex;
-    margin-left: auto;
   }
 }
 
@@ -1391,10 +1442,7 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────
-   Monolito Chat.tsx enhancements (token-first, behavior-preserving)
-   These rules cover the classes emitted by Chat.tsx directly (not the
-   modular aliases above): glass sidebar header, turn grouping, the
-   collapse/drawer toggles, mobile scrim, and motion guards.
+   Turn grouping + motion guards for the message stream.
    ─────────────────────────────────────────────────────────────────── */
 
 /* Turn grouping — extra space before a new speaker's turn so the eye
@@ -1407,86 +1455,9 @@
   margin-top: 0;
 }
 
-/* Sidebar header gets the glass treatment too (matches the panel). */
-.chat-sessions-header {
-  background: transparent;
-}
-
-/* Collapse toggle (desktop rail) — same styling as the modular alias. */
-.chat-collapse-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--panel-border);
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-2);
-  flex-shrink: 0;
-  margin-top: auto;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.chat-collapse-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-/* Mobile hamburger (hidden on desktop, shown below 760px). */
-.chat-drawer-toggle {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.chat-drawer-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-/* Close button inside the drawer (hidden on desktop). */
-.chat-drawer-close {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.chat-drawer-close:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-/* Scrim behind the mobile drawer (sits below the drawer, above content). */
-.chat-drawer-scrim {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  z-index: 29; /* one below --z-drawer (30) so the drawer floats above it */
-  cursor: pointer;
-}
-
 /* ── Responsive: off-canvas drawer below 760px ──────────────────── */
 @media (max-width: 760px) {
-  .chat-drawer-toggle {
-    display: inline-flex;
-  }
-  .chat-sessions {
+  .chat-sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -1498,14 +1469,11 @@
     z-index: var(--z-drawer);
     box-shadow: var(--shadow-glass);
   }
-  .chat-sessions.drawer-open {
+  .chat-sidebar.open {
     transform: translateX(0);
   }
-  .chat-drawer-close {
-    display: inline-flex;
-  }
-  /* Hide the desktop collapse toggle on mobile — the drawer replaces it. */
-  .chat-collapse-toggle {
+  /* Hide the sidebar resize sash on mobile (sidebar is a drawer here). */
+  .sidebar-sash-wrapper {
     display: none;
   }
   /* Suggestions stack to a single column. */
@@ -1526,6 +1494,9 @@
   .subagent-chip.running .subagent-dot {
     animation: none;
   }
+  .session-busy-indicator {
+    animation: none;
+  }
   .part-chevron {
     transition: none;
   }
@@ -1535,7 +1506,6 @@
   .chat-suggestion {
     transition: none;
   }
-  .chat-sessions,
   .chat-sidebar {
     transition: none;
   }
@@ -1806,7 +1776,15 @@
 
 /* ── Chat body: messages + composer, with room for the subagents panel ── */
 .chat-main {
-  /* column: header on top, content-row (chat-body + panel) below */
+  /* column: pane-header on top, pane-group (chat-body + panel) below.
+     Must be a flex column with flex:1 + min-height:0 so the pane-group
+     gets a bounded height to fill; otherwise children with flex:1 grow
+     unbounded and the composer pushes the messages off-screen. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 .chat-content-row {
   flex: 1;
@@ -2214,3 +2192,315 @@
 .subagent-card.current .subagent-card-icon {
   color: var(--yz-accent);
 }
+
+/* ── VS Code-style split layout ─────────────────────────────────── */
+/* The layout is a recursive tree: .layout-root > (.layout-split | .layout-leaf).
+   A split lays its children out in a row (side by side) or column (stacked),
+   with a .layout-sash between siblings for resizing. A leaf is one editor
+   pane: a tab strip + the session view. */
+
+.layout-root {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* A split group: row = horizontal flex, column = vertical flex. */
+.layout-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+.layout-row {
+  flex-direction: row;
+}
+.layout-column {
+  flex-direction: column;
+}
+/* Each child of a split is wrapped in .layout-child so the sash and the
+   pane share a flex item and resize predictably. */
+.layout-child {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.layout-row > .layout-child {
+  flex-direction: row;
+}
+.layout-column > .layout-child {
+  flex-direction: column;
+}
+
+/* The sash: a thin divider that thickens on hover. axis x = col-resize
+   (between row siblings), axis y = row-resize (between column siblings). */
+.layout-sash {
+  flex: 0 0 1px;
+  background: var(--panel-border);
+  position: relative;
+  z-index: 5;
+  transition: background var(--t-fast), flex-basis var(--t-fast);
+}
+.layout-sash:hover,
+.layout-sash:active {
+  flex-basis: 4px;
+  background: var(--yz-accent);
+}
+.layout-sath-x, /* legacy typo guard */
+.layout-sash-x {
+  cursor: col-resize;
+}
+.layout-sash-y {
+  cursor: row-resize;
+}
+
+/* A leaf = one pane (tabs + session view). */
+.layout-leaf {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Focused leaf gets a subtle accent border so the active pane is obvious. */
+.layout-leaf-focused {
+  outline: 1px solid var(--yz-accent-soft);
+  outline-offset: -1px;
+}
+/* Drop target: the whole pane lights up when a tab is dragged over it, so
+   the user sees where the tab will land — not just the thin tab strip. */
+.layout-leaf-drop-target {
+  background: var(--yz-accent-soft);
+  outline: 1px solid var(--yz-accent);
+  outline-offset: -1px;
+}
+
+/* ── Tab strip (VS Code flush tabs) ─────────────────────────────── */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  /* Flush: no top padding, tabs sit edge-to-edge. Bottom border is the
+     separator that the active tab "connects" to (VS Code look). */
+  padding: 0;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--panel-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+  min-height: 34px;
+}
+/* Trailing actions pinned to the right end of the strip (subagents toggle,
+   context meter). They don't scroll with the tabs. */
+.tab-strip-trailing {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border-left: 1px solid var(--panel-border);
+  background: var(--surface-soft);
+  position: sticky;
+  right: 0;
+}
+.tab-strip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* Compact context meter inside the tab strip trailing. */
+.tab-context-meter {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.tab-context-meter.warn {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+/* Inline subagent count pill (sibling of the toggle button, not absolute,
+   so it isn't clipped by the tab strip's overflow). */
+.tab-subagents-count {
+  font-size: var(--text-2xs);
+  color: var(--yz-accent);
+  background: var(--yz-accent-soft);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 1;
+}
+.tab-strip::-webkit-scrollbar {
+  display: none;
+}
+.tab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  /* No rounded top corners — VS Code tabs are flush, separated by a hairline. */
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  /* Active tab "connects" to the content below by overlapping the bottom
+     border with a 1px transparent border that turns solid when active. */
+  border-right: 1px solid var(--panel-border);
+  user-select: none;
+  max-width: 200px;
+  position: relative;
+}
+.tab-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.tab-item.tab-active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+}
+/* Active indicator: a top accent bar (VS Code's signature tab cue). */
+.tab-item.tab-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: var(--yz-accent);
+}
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab-subagent-icon {
+  color: var(--yz-accent);
+  flex-shrink: 0;
+}
+.tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  opacity: 0;
+  transition: opacity var(--t-fast) ease, background var(--t-fast) ease;
+}
+.tab-item:hover .tab-close,
+.tab-item.tab-active .tab-close {
+  opacity: 1;
+}
+.tab-close:hover {
+  background: var(--surface-2, rgba(128, 128, 128, 0.2));
+  color: var(--text);
+}
+
+/* ── Empty pane placeholder ─────────────────────────────────────── */
+.pane-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex: 1;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.session-pane-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Tab DnD ────────────────────────────────────────────────────── */
+.tab-item[draggable="true"] {
+  cursor: grab;
+}
+.tab-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+.tab-item[data-dragging="true"] {
+  opacity: 0.4;
+}
+.tab-strip-drop-active {
+  background: color-mix(in srgb, var(--yz-accent) 8%, transparent);
+}
+.tab-drop-before {
+  position: relative;
+}
+/* Use ::after (not ::before) so the drop bar doesn't override the active
+   tab's top accent indicator, which also uses ::before. */
+.tab-drop-before::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--yz-accent);
+  border-radius: 1px;
+  z-index: 5;
+}
+.tab-drop-indicator-end {
+  width: 2px;
+  align-self: stretch;
+  background: var(--yz-accent);
+  border-radius: 1px;
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+
+/* ── Tab context menu (right-click) ─────────────────────────────── */
+.tab-context-menu {
+  position: fixed;
+  z-index: var(--z-popover, 70);
+  min-width: 160px;
+  padding: var(--space-1) 0;
+  background: linear-gradient(160deg, rgba(var(--surf-1-rgb), 0.96), rgba(var(--surf-3-rgb), 0.98));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-glass);
+}
+.tab-context-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.tab-context-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.tab-context-sep {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--panel-border);
+}
+

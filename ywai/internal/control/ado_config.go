@@ -13,8 +13,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 )
 
-// adoConfigMu guards concurrent reads/writes of the ADO config section in
-// opencode.json.
+// adoConfigMu guards concurrent reads/writes of ado.json.
 var adoConfigMu sync.Mutex
 
 // adoProfile mirrors the profile shape the `ado` CLI reads from opencode.json.
@@ -28,9 +27,9 @@ type adoProfile struct {
 	Default   bool     `json:"default,omitempty"`
 }
 
-// adoConfig is the value of the top-level "ado" key in opencode.json. The
-// `ado` CLI discovers profiles here WITHOUT registering the in-process plugin,
-// so its 22 tools are never loaded into the agent's context.
+// adoConfig is stored in ~/.config/opencode/ado.json. The `ado` CLI discovers
+// profiles here WITHOUT registering the in-process plugin, so its 22 tools are
+// never loaded into the agent's context.
 type adoConfig struct {
 	DefaultProfile string                `json:"defaultProfile"`
 	Profiles       map[string]adoProfile `json:"profiles"`
@@ -44,13 +43,22 @@ type adoProfileRequest struct {
 
 // ─── Config helpers ───────────────────────────────────────────────────────
 
-// readAdoConfig reads the top-level "ado" key from opencode.json. Returns an
+// adoConfigPath returns ~/.config/opencode/ado.json.
+func adoConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("home dir: %w", err)
+	}
+	return filepath.Join(home, ".config", "opencode", "ado.json"), nil
+}
+
+// readAdoConfig reads profiles from ado.json. Returns an empty config (not an
 // empty config (not an error) when the file or key is absent.
 func readAdoConfig() (*adoConfig, error) {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
 
-	path, err := configFilePath()
+	path, err := adoConfigPath()
 	if err != nil {
 		return nil, err
 	}
@@ -60,21 +68,11 @@ func readAdoConfig() (*adoConfig, error) {
 		if os.IsNotExist(err) {
 			return &adoConfig{Profiles: map[string]adoProfile{}}, nil
 		}
-		return nil, fmt.Errorf("reading config: %w", err)
-	}
-
-	var full map[string]json.RawMessage
-	if err := json.Unmarshal(data, &full); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
-	}
-
-	raw, ok := full["ado"]
-	if !ok {
-		return &adoConfig{Profiles: map[string]adoProfile{}}, nil
+		return nil, fmt.Errorf("reading ado config: %w", err)
 	}
 
 	var cfg adoConfig
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing ado config: %w", err)
 	}
 	if cfg.Profiles == nil {
@@ -89,8 +87,7 @@ func readAdoConfig() (*adoConfig, error) {
 	return &cfg, nil
 }
 
-// writeAdoConfig writes the top-level "ado" key back to opencode.json,
-// preserving every other top-level key.
+// writeAdoConfig writes the ADO profile config to ~/.config/opencode/ado.json.
 func writeAdoConfig(cfg *adoConfig) error {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
@@ -102,31 +99,14 @@ func writeAdoConfig(cfg *adoConfig) error {
 		cfg.Profiles = map[string]adoProfile{}
 	}
 
-	path, err := configFilePath()
+	path, err := adoConfigPath()
 	if err != nil {
 		return err
 	}
-
-	// Read-modify-write: parse the whole file, replace only the "ado" key.
-	data, err := os.ReadFile(path)
-	full := map[string]any{}
-	if err == nil {
-		_ = json.Unmarshal(data, &full)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("reading config: %w", err)
-	}
-
-	if len(cfg.Profiles) == 0 {
-		delete(full, "ado")
-	} else {
-		full["ado"] = cfg
-	}
-
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-
-	out, err := json.MarshalIndent(full, "", "  ")
+	out, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
@@ -150,7 +130,7 @@ func adoPATPath() (string, error) {
 // ─── Route registration ───────────────────────────────────────────────────
 
 // registerAdoConfigRoutes registers the Azure DevOps config API. The config
-// lives under the top-level "ado" key of opencode.json (profiles) plus a PAT
+// lives in ~/.config/opencode/ado.json (profiles) plus a PAT
 // file at ~/.azure-devops-cli/pat.
 func (s *Server) registerAdoConfigRoutes() {
 	s.mux.HandleFunc("GET /api/ado/config", s.handleAdoGetConfig)

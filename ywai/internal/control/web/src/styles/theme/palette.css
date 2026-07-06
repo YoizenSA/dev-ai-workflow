@@ -82,6 +82,9 @@
   --info-soft:      rgba(var(--yz-primary-1-rgb), 0.16);
   --info-border:    rgba(var(--info-rgb), 0.42);
 
+  /* Accent soft fill — used by badges, chips, rails, hover states. */
+  --yz-accent-soft: rgba(var(--yz-accent-rgb), 0.15);
+
   /* ---- Semantic text tints (bright pastels for text on glass) ---- */
   --tint-primary:   #79a9ff;
   --tint-primary-2: #cbe0ff;
@@ -204,6 +207,9 @@
   --warning-soft: rgba(var(--yz-yellow-rgb), 0.22);
   --warning-border: rgba(217, 119, 6, 0.45);
   --info-soft:    rgba(var(--yz-primary-1-rgb), 0.11);
+
+  /* Accent soft fill — higher alpha on light to register against white. */
+  --yz-accent-soft: rgba(var(--yz-accent-rgb), 0.14);
 
   /* Surfaces: light translucent */
   --surface:        rgba(255, 255, 255, 0.86);

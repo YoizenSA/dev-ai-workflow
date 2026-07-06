@@ -316,14 +316,29 @@ export default function AdoConfig() {
 	if (loading) {
 		return (
 			<div className="ado-config" aria-busy="true">
-				<div className="skeleton skel-card">
-					<span className="skel-line title" />
-					<span className="skel-line desc" />
-					<span className="skel-line tag" />
+				{/* Header skeleton */}
+				<div className="ado-skel-header">
+					<span className="skeleton ado-skel-title" />
+					<span className="skeleton ado-skel-badge" />
 				</div>
-				<div className="skeleton skel-card">
-					<span className="skel-line title" />
-					<span className="skel-line desc" />
+				{/* PAT bar skeleton */}
+				<div className="skeleton ado-skel-pat">
+					<span className="skeleton ado-skel-pat-line" />
+				</div>
+				{/* Profiles section header skeleton */}
+				<div className="ado-skel-section-header">
+					<span className="skeleton ado-skel-section-title" />
+					<span className="skeleton ado-skel-add-btn" />
+				</div>
+				{/* Profile cards skeleton (3 cards in a grid) */}
+				<div className="ado-config-profiles">
+					{[0, 1, 2].map((i) => (
+						<div key={i} className="skeleton ado-skel-card">
+							<span className="skeleton ado-skel-line w60" />
+							<span className="skeleton ado-skel-line w85" />
+							<span className="skeleton ado-skel-line w40" />
+						</div>
+					))}
 				</div>
 			</div>
 		);

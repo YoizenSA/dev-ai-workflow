@@ -22,6 +22,8 @@ interface RightPanelProps {
   onSelectSession: (id: string) => void;
   // Inserts a file reference into the composer input.
   onInsertFile: (path: string) => void;
+  // Panel width in px (controlled by the resize sash). Falls back to CSS default.
+  width?: number;
 }
 
 const API_BASE = "/api/chat";
@@ -189,11 +191,16 @@ export default function RightPanel({
   busySessions,
   onSelectSession,
   onInsertFile,
+  width,
 }: RightPanelProps) {
   if (!open) return null;
 
   return (
-    <aside className="right-panel" aria-label="Session tools">
+    <aside
+      className="right-panel"
+      aria-label="Session tools"
+      style={width ? { flex: `0 0 ${width}px`, width } : undefined}
+    >
       <header className="right-panel-header">
         <div className="right-panel-tabs" role="tablist">
           <button

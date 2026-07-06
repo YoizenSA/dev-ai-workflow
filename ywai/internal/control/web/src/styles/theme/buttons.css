@@ -59,11 +59,18 @@
 .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.82rem; }
 .btn-xs { padding: 0.3rem 0.6rem; font-size: 0.76rem; gap: 0.3rem; }
 
-/* Icon-only — circular */
+/* Icon-only — circular. Self-sufficient so it also works WITHOUT the base .btn
+   class (chat header/composer icons use `btn-icon` alone) — otherwise they
+   render as bare floating icons with no border/centering/hover. */
 .btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
   width: 38px; height: 38px; padding: 0; border-radius: 50%;
-  background: var(--surface-soft); border-color: var(--panel-border); color: var(--text-soft);
+  border: 1px solid var(--panel-border); cursor: pointer;
+  background: var(--surface-soft); color: var(--text-soft);
+  transition: transform 150ms ease, background 150ms ease,
+              border-color 150ms ease, color 150ms ease;
 }
+.btn-icon:disabled { cursor: not-allowed; opacity: 0.55; }
 .btn-icon.sm { width: 30px; height: 30px; }
 .btn-icon:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); transform: translateY(-1px); }
 .btn-icon.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--tint-danger); }

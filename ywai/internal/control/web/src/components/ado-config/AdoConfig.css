@@ -567,3 +567,72 @@
 		justify-content: flex-end;
 	}
 }
+
+/* ─── Loading skeleton ──────────────────────────────────────────────────
+   Mirrors the real layout (header + PAT bar + section header + profile card
+   grid) so the shimmer reads as "this page is loading," not "two grey boxes."
+   Uses the global .skeleton shimmer (from components.css) + local sizing. */
+
+.ado-skel-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-bottom: var(--space-5);
+}
+.ado-skel-title {
+	height: 1.75rem;
+	width: 180px;
+	border-radius: var(--radius-sm);
+}
+.ado-skel-badge {
+	height: 1.5rem;
+	width: 110px;
+	border-radius: 999px;
+}
+.ado-skel-pat {
+	height: 3rem;
+	border-radius: var(--radius-md);
+	margin-bottom: var(--space-5);
+	display: flex;
+	align-items: center;
+	padding: 0 var(--space-4);
+}
+.ado-skel-pat-line {
+	height: 0.9rem;
+	width: 40%;
+	border-radius: var(--radius-sm);
+}
+.ado-skel-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--space-3);
+}
+.ado-skel-section-title {
+	height: 1.3rem;
+	width: 120px;
+	border-radius: var(--radius-sm);
+}
+.ado-skel-add-btn {
+	height: 2rem;
+	width: 120px;
+	border-radius: var(--radius-sm);
+}
+/* Skeleton profile cards — same border-radius + border as the real cards
+   (.ado-config-card) so the silhouette matches. */
+.ado-skel-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-4);
+	border-radius: var(--radius-lg);
+	border: 1px solid var(--panel-border);
+	min-height: 120px;
+}
+.ado-skel-line {
+	height: 0.82rem;
+	border-radius: var(--radius-sm);
+}
+.ado-skel-line.w60 { width: 60%; }
+.ado-skel-line.w85 { width: 85%; }
+.ado-skel-line.w40 { width: 40%; }

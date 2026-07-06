@@ -19,11 +19,23 @@ import (
 // ChatProxy proxies chat requests to a local OpenCode server, translating
 // between the frontend's simple contract and OpenCode's REST API.
 type ChatProxy struct {
-	opencodeBaseURL string // e.g. "http://localhost:4096"
+	opencodeBaseURL string // fallback when OPENCODE_URL is unset, e.g. "http://localhost:4096"
 }
 
 func NewChatProxy(opencodeBaseURL string) *ChatProxy {
 	return &ChatProxy{opencodeBaseURL: opencodeBaseURL}
+}
+
+// baseURL returns the OpenCode server URL to proxy to. It prefers the live
+// OPENCODE_URL env var (which the "Start OpenCode" handler updates when it
+// spawns opencode on a dynamic port) and falls back to the URL the proxy was
+// constructed with. This is what lets the chat recover after opencode is
+// (re)started without restarting ywai.
+func (cp *ChatProxy) baseURL() string {
+	if u := strings.TrimSpace(os.Getenv("OPENCODE_URL")); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	return cp.opencodeBaseURL
 }
 
 // handleChatSSE proxies OpenCode's global /event stream to the client,
@@ -36,7 +48,7 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	upstreamURL := cp.opencodeBaseURL + "/event"
+	upstreamURL := cp.baseURL() + "/event"
 	req, err := http.NewRequestWithContext(r.Context(), "GET", upstreamURL, nil)
 	if err != nil {
 		http.Error(w, "failed to create request", http.StatusInternalServerError)
@@ -452,7 +464,7 @@ func (cp *ChatProxy) upstreamTimeout(r *http.Request, method, path string, body 
 	if body != nil {
 		rdr = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(r.Context(), method, cp.opencodeBaseURL+path, rdr)
+	req, err := http.NewRequestWithContext(r.Context(), method, cp.baseURL()+path, rdr)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
