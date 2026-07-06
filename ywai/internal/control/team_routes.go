@@ -1,9 +1,13 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,6 +64,48 @@ func (api *TeamAPI) handleSpawn(w http.ResponseWriter, r *http.Request) {
 
 	memberID := generateID("member")
 	taskID := generateID("task")
+
+	// Default values
+	if req.Profile == "" {
+		req.Profile = "dev"
+	}
+	if req.Task == "" {
+		req.Task = req.Prompt
+	}
+
+	// Check if pi binary is available
+	piBin, _ := exec.LookPath("pi")
+
+	// Spawn PI.dev teammate via member_prompt in background
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		if piBin != "" {
+			// Try pi team member_prompt mode first
+			cmd := exec.CommandContext(ctx, piBin,
+				"team", "member_prompt",
+				"--profile", req.Profile,
+				"--prompt", req.Prompt,
+			)
+			output, err := cmd.CombinedOutput()
+
+			if err != nil {
+				// Fallback: direct pi prompt with profile env
+				fallbackCmd := exec.CommandContext(ctx, piBin, "--prompt", req.Prompt)
+				fallbackCmd.Env = append(os.Environ(), "PI_PROFILE="+req.Profile)
+				output, _ = fallbackCmd.CombinedOutput()
+			}
+
+			result := strings.TrimSpace(string(output))
+			api.store.UpdateTask(taskID, "done", result)
+			api.store.UpdateMember(memberID, "done")
+		} else {
+			// No PI.dev installed — simulate
+			api.store.UpdateTask(taskID, "done", "[simulated] PI.dev not installed. Install with: npm install -g @pi-apps/pi")
+			api.store.UpdateMember(memberID, "done")
+		}
+	}()
 
 	api.store.AddMember(TeamMember{
 		ID:        memberID,

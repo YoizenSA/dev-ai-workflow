@@ -403,6 +403,41 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Teammate profiles generated\n", a.Name)
 			}
+
+			// Auto-install PI.dev plugins required for orchestrator
+			if piBin, err := exec.LookPath("pi"); err == nil {
+				piPlugins := []string{
+					"@spences10/pi-team-mode",
+					"@spences10/pi-mcp",
+					"@spences10/pi-skills",
+					"@spences10/pi-skill-importer",
+					"@spences10/pi-child-env",
+					"@spences10/pi-lsp",
+					"@spences10/pi-redact",
+					"@spences10/pi-nopeek",
+				}
+
+				for _, plugin := range piPlugins {
+					fmt.Printf("  [%s] Installing %s...\n", a.Name, plugin)
+
+					if dryRun {
+						fmt.Printf("  [%s] Would install %s\n", a.Name, plugin)
+						continue
+					}
+
+					cmd := exec.Command(piBin, "install", "npm:"+plugin)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+
+					if err := cmd.Run(); err != nil {
+						fmt.Printf("  [%s] Warning: %s install failed: %v\n", a.Name, plugin, err)
+					} else {
+						fmt.Printf("  [%s] %s installed\n", a.Name, plugin)
+					}
+				}
+			} else {
+				fmt.Printf("  [%s] Note: pi binary not found — install PI.dev first: npm install -g @pi-apps/pi\n", a.Name)
+			}
 		}
 	}
 }

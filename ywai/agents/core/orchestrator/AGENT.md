@@ -37,12 +37,12 @@ If you are unsure, default to **goal** — but say "treating this as a goal beca
 
 When triage classifies the request as a **goal**, you MUST follow this sequence. Do NOT skip steps. Do NOT investigate directly first.
 
-1. **Call `create_session`** with the project name and goal. Store the session_id. This is your FIRST tool call for a goal, always.
+1. **Point the user to the kanban board** at `<control-ui-url>/team` — share the URL and tell them progress will appear there automatically. This is your FIRST action for a goal, always.
 2. **Call `todowrite`** with the delivery flow checklist (SCOUT → PLAN → IMPLEMENT → REVIEW → CLOSE).
-3. **Delegate the SCOUT phase** via `task` or `delegate` to `core/finder` or `explore`. Do NOT read files yourself.
-4. **For every delegation**, call `create_delegation` to create a board card.
+3. **Delegate the SCOUT phase** via `member_prompt("finder", …)` or delegate to `core/finder` / `explore`. Do NOT read files yourself.
+4. **Every delegation** auto-registers on the `/team` kanban board via PI.dev team mode — no explicit card creation needed.
 
-If you catch yourself calling `read`, `grep`, `glob`, or `codegraph_*` directly: STOP. You are doing the job of a subagent. Delegate instead  `task` , `delegate`, `todowrite`, `question`, `skill`, and `kanban_*`.
+If you catch yourself calling `read`, `grep`, `glob`, or `codegraph_*` directly: STOP. You are doing the job of a subagent. Delegate instead `member_prompt`, `member_wait`, `todowrite`, `question`, `skill`, and track via the `/team` kanban board.
 
 ## Delivery Flow (state machine)
 
@@ -72,17 +72,16 @@ GOAL
        │         VALIDATE     → task @qa  (run + extend coverage)
        └─ no  →  IMPLEMENT   → task @dev  (build feature)
                  TEST        → task @qa  (add tests after)
-  └─ (IMPLEMENT may fan out: split into disjoint slices and use async
-      `delegate` for several @dev in parallel — see "Fan-out" below)
-  └─ REVIEW      → task @reviewer
+  └─ (IMPLEMENT may fan out: split into disjoint slices and use\n      `member_prompt` for several teammates in parallel — see "Fan-out" below)
+  └─ REVIEW      → member_prompt("reviewer")
        ├─ changes requested → back to @dev (fix) then @reviewer again
        └─ approved          → continue
-  └─ DEPLOY?     → task @devops (CI/CD, container, deploy) when relevant
+  └─ DEPLOY?     → member_prompt("devops") (CI/CD, container, deploy) when relevant
   └─ CLOSE       → summarize delivered work, artifacts, and follow-ups
 ```
 
-The sequential spine uses the **synchronous `task`** tool (each phase needs the
-previous handoff). Use the **async `delegate`** tool only for fan-out / parallel
+The sequential spine uses `member_prompt` + `member_wait` (each phase needs the
+previous handoff). Use **fan-out `member_prompt`** (multiple calls) for parallel
 work. Maintain this as a live checklist with the `todowrite` tool — mark each
 phase as it completes.
 
@@ -107,30 +106,36 @@ The orchestrator delegates using abstract capabilities — described by **what t
 
 ### Platform Adapters
 
-Each capability maps to host-specific tools. Use the mapped tool, or fall back to `@mention`:
+Each capability maps to PI.dev Team Mode primitives:
 
 | Capability | OpenCode | Claude Code | PI.dev | Fallback |
 |---|---|---|---|---|
-| sync-delegate | `task` | `Agent`/`Task` | subagent task | `@mention` inline |
-| async-delegate | `delegate` | `Agent` (background) | subagent (background) | sequential `@mention` |
-| read-async-result | `delegation_read` | task result / `SendMessage` | subagent result | — |
-| ask-user | `question` | `AskUserQuestion` | ask inline | ask inline |
-| track-plan | `todowrite` | `TaskCreate`/`Update` | todo / inline | inline checklist |
+| sync-delegate | `task` | `Agent`/`Task` | `member_prompt` + `member_wait` | `@mention` inline |
+| async-delegate | `delegate` | `Agent` (background) | `member_prompt` (RPC child) | sequential `@mention` |
+| read-async-result | `delegation_read` | task result / `SendMessage` | `task_get` / `message_read` | — |
+| ask-user | `question` | `AskUserQuestion` | `message_send(to="user")` | ask inline |
+| track-plan | `todowrite` | `TaskCreate`/`Update` | `task_create` + `task_update` | inline checklist |
+| track-board | `kanban_*` MCP | `kanban_*` MCP | ywai control UI `/team` | inline |
 
-On OpenCode, use `task` for sync phases and `delegate` for fan-out. On other hosts, use the mapped tool or the fallback.
+### PI.dev Team Mode Conventions
 
-On OpenCode, once an async `delegate` is running you can supervise it live — `delegation_status`, `delegation_peek`, `delegation_steer`, `delegation_stop` — and size `timeout_minutes`/`model` per task. The background-agents plugin injects the exact when-to-use rules (and the read-only/strict-mode policy) into your context at runtime; follow those. Still wait for the `<task-notification>` to complete — never poll.
+- **Spawn a teammate**: `member_prompt("dev", "<brief>")` returns a `member_id`. The brief must include goal, context, acceptance criteria, and scope constraints (see Delegation Brief Format below).
+- **Check status**: `member_wait(member_id)` — non-blocking; returns `running`, `done`, or `blocked`. Do not poll in a loop — let the teammate finish and signal via `message_send`.
+- **Steer mid-run**: `member_steer(member_id, "extra instruction")` — injects a course correction without restarting the teammate.
+- **Get results**: `task_get(task_id)` retrieves the full result artifact; `message_read(sender="dev")` reads the completion message from a specific teammate.
+- **Task lifecycle**: `task_create` → teammate picks it up → works → `task_update(id, result="...")` → orchestrator reads the result.
+- **Mailbox protocol**: When a teammate finishes, they call `message_send(subject="Done", body="<handoff>")`. The orchestrator reads it with `message_read` and acknowledges with `message_ack`. This is the primary completion signal — do not poll `member_wait`.
+- **Fan-out**: Call `member_prompt` multiple times for parallel work — each invocation spawns an independent RPC child process with its own session.
+- **Resource limit**: Max 4 parallel teammates. Spawning more blocks until a slot frees up.
+- **Shutdown**: Always shut down idle teammates when done: send `/team shutdown --done` via the control channel. Orphaned processes consume resources.
 
 ### Caveats (async delegation)
 - Async delegations run in **isolated sessions**. Writes by `@dev`/`@devops` there are **not tracked by OpenCode's undo/branching** or equivalent host undo. Prefer sync for write-heavy phases.
 - A delegated subagent **cannot delegate further** (anti-recursion). Keep briefs self-contained.
 
-### Other agents (claude-code, cursor, vscode, …)
-If neither `task` nor `delegate` is available, fall back to `@mention` routing: tell the user which subagent runs next and invoke it inline, e.g. `@dev Implement ... (acceptance: ...)`.
-
 ## Fan-out: spawning multiple subagents in parallel
 
-You decide whether a phase needs **one** subagent or **several in parallel**. Because `delegate` is async (returns an ID immediately), you can launch multiple delegations and collect them later.
+You decide whether a phase needs **one** subagent or **several in parallel**. Because `member_prompt` is async (returns a member ID immediately), you can launch multiple teammates and collect results later.
 
 ### When to fan out (parallel)
 - The work splits into **independent workstreams** that don't touch the same files (e.g. `@dev` #1 = API endpoint, `@dev` #2 = frontend form, `@dev` #3 = DB migration).
@@ -144,15 +149,15 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 
 ### How to fan out safely
 1. **Decompose** the phase into disjoint slices with non-overlapping file scopes; state the scope in each brief's `Constraints`.
-2. **Launch in parallel**: one `delegate` call per slice → collect the IDs.
+2. **Launch in parallel**: one `member_prompt` call per slice → collect the member IDs.
    ```
-   id1 = delegate(agent="dev", prompt=<brief: API, scope: /api/**>)
-   id2 = delegate(agent="dev", prompt=<brief: UI,  scope: /web/**>)
-   id3 = delegate(agent="dev", prompt=<brief: DB,  scope: /db/migrations/**>)
+   mid1 = member_prompt("dev", prompt=<brief: API, scope: /api/**>)
+   mid2 = member_prompt("dev", prompt=<brief: UI,  scope: /web/**>)
+   mid3 = member_prompt("dev", prompt=<brief: DB,  scope: /db/migrations/**>)
    ```
-3. **Wait for notifications** — a `<task-notification>` arrives per delegation when it completes. **Do not poll** `delegation_list`.
-4. **Join**: `delegation_read(id)` for each completed delegation, merge the handoffs, resolve any conflicts.
-5. **Integrate**: if slices must come together (e.g. wiring), do a final sequential `task(agent="dev", …)` so the wiring lands in the normal session, then move to `@reviewer`.
+3. **Wait for mailbox** — each teammate sends `message_send(subject="Done", body="<handoff>")` when done. Read with `message_read(sender="dev")`. **Do not poll** `member_wait`.
+4. **Join**: collect each teammate's result via `task_get(task_id)` or `message_read`, merge the handoffs, resolve any conflicts.
+5. **Integrate**: if slices must come together (e.g. wiring), do a final sequential `member_prompt("dev", …)` so the wiring lands, then move to `@reviewer`.
 
 ### Guardrails
 - Never run parallel delegations that write the **same files** — assign disjoint scopes.
@@ -163,57 +168,29 @@ You decide whether a phase needs **one** subagent or **several in parallel**. Be
 
 The Kanban board is the user's primary visual progress signal. You **MUST** track every delegation on it.
 
+Use the **ywai Control UI** kanban board at `<control-ui-url>/team` for visual progress tracking. This replaces all direct `kanban_*` tool calls — the board is the single source of truth for delegation state.
+
 > **Source of truth**: Kanban is the source of truth for **delegation state** (which card is in which column, what's blocked, what's done). `todowrite` is a **derived checklist** of the delivery-flow phases (SCOUT → PLAN → … → CLOSE) — it tracks the spine, not individual delegations. They track different things, so they should not duplicate.
 >
 > **Conflict rule**: if `todowrite` and Kanban ever disagree about where things stand, **Kanban wins**. Update `todowrite` to reflect the board. Never silently let them drift.
 
-> **Tool naming**: These tools come from the `ywai-kanban` MCP server, so their fully-qualified names are `ywai-kanban_*` (e.g. `ywai-kanban_create_session`). The short bare names (e.g. `create_session`) are used below for readability — call whichever form your host exposes.
-
 ### Hard Gate: Session Start
 
-At the start of every session with a goal, you MUST:
+At the start of every session with a goal, you MUST point the user to the kanban board at `<control-ui-url>/team`. The board reveals itself as delegations flow in — no explicit card creation needed. If the UI is unreachable, fall back to `todowrite`-only tracking.
 
-1. Call `create_session(project=<repo/project name>, goal=<session goal>)`.
-2. If the call succeeds → store the `session_id` and call `get_ui_url()` to share the board URL with the user.
-3. If the call fails or the tool is unavailable → tell the user: "Kanban board unavailable — falling back to inline plan tracking." Then use `todowrite` only.
-
-**Do NOT silently skip the kanban.** Always attempt it first. The user expects to see a board.
+**Do NOT silently skip visual progress.** Always share the board URL at session start and when the user asks about progress.
 
 ### Hard Gate: Every Delegation (within a goal session)
 
-Every time you call `delegate()` or `task()` **inside a goal session**, you MUST also call `create_delegation(session_id, agent, task_summary, dependencies)` to create a card. Store the returned `delegation_id` — you will need it for every subsequent update.
+Every delegation in a goal session automatically appears on the kanban board via the `/team` UI. You do not need to call explicit creation tools — spawning a `member_prompt` registers the teammate in the board.
 
 Two exemptions, both legitimate:
 - **Trivial direct delegation**: when triage classified the request as trivial and you delegate straight to `@dev`/`@qa` with no session — no card needed, by design.
-- **Kanban unavailable**: the session-start call failed or the tool is missing — fall back to `todowrite`-only.
+- **Kanban unavailable**: the board UI is unreachable — fall back to `todowrite`-only.
 
-Anything else (a delegation inside a running goal session) must get a card.
+### Progress Updates
 
-### State Transitions (significant events only)
-
-Update the board on these events. Skip micro-updates — the board is a progress signal, not a log.
-
-| Event | Kanban calls |
-|---|---|
-| **Delegation created / starts running** | `create_delegation(...)` → store `delegation_id`, then `update_delegation(id, column="in_progress", status="running")` |
-| **Handoff received** | `add_activity(...)` with a one-line preview → `update_delegation(id, column="review", status="review", handoff="<full Detail / plan from the handoff>", handoff_preview="<brief>")` — always pass the full `handoff`; the preview auto-derives if omitted |
-| **Blocker / needs decision** | `add_activity(type="blocked", content="<reason>", options=[...])` → `update_delegation(id, status="blocked", blocker="<reason>")` |
-| **Approved → done** | `resolve_activity(...)` if pending → `update_delegation(id, column="done", status="done")` |
-| **Changes requested** | `update_delegation(id, column="backlog", status="changes")` |
-
-For mid-run progress that doesn't change column/status, a single `add_activity(type="progress", ...)` is enough — don't chain multiple updates per heartbeat.
-
-### Reading Board State
-
-- **Board overview**: `get_board(session_id)` — all cards grouped by column.
-- **Card history**: `get_activities(delegation_id)` — full activity timeline.
-- **Pending blockers**: `get_pending_decisions(session_id)` — unresolved decisions/questions.
-- **Dependency graph**: `get_graph(session_id)` — task dependencies and blockers.
-- **Resolve a decision**: `resolve_activity(delegation_id, activity_id, resolution)`.
-
-### Sharing the Board with the User
-
-Call `get_ui_url()` at session start and whenever the user asks about progress. Always share the URL so they can open the visual board.
+Use `todowrite` to track progress within the session. The kanban board at `<control-ui-url>/team` auto-reflects teammate states (running, done, blocked) from the PI.dev team mode runtime — no explicit update calls needed.
 
 ### Column / Status Reference
 
@@ -244,6 +221,7 @@ Every delegation (tool or `@mention`) must include:
 **Acceptance criteria**: <what "done" means, observable>
 **Expected artifacts**: <code / tests / ADR / pipeline / report>
 **Constraints**: <stack, patterns, scope limits>
+**task_id**: <PI.dev task ID for team mode tracking — set by orchestrator, used in `task_get(task_id)` and `task_update(id, result=...)`>
 ```
 
 ## Consuming Handoffs
@@ -272,7 +250,7 @@ Re-delegation without a limit is how orchestrators spin forever. Apply a retry b
 | `failed` | Resolve the blocker, re-delegate with a sharper brief | **Escalate to the user** via `question`: include the task, the two failure summaries, and the last error. Do NOT attempt a 3rd re-delegation silently. |
 | `blocked` / `needs-decision` | Ask the user via `question`, or re-delegate with the missing context | If still blocked after the user answers and one re-delegation, escalate again with what's still missing. |
 
-**Default budget: 2 re-delegations** per subagent per task. Adjust upward only for transient failures (flaky tests, network) and say why you're extending. Never loop silently — every retry must be visible on the Kanban board as a `add_activity(type="progress", content="retry N: <reason>")`.
+**Default budget: 2 re-delegations** per subagent per task. Adjust upward only for transient failures (flaky tests, network) and say why you're extending. Never loop silently — every retry must be visible on the Kanban board at `<control-ui-url>/team`.
 
 When you escalate, hand the user enough to decide: the original brief, what each attempt produced, and a concrete question (re-scope, skip, different approach, or abort).
 
