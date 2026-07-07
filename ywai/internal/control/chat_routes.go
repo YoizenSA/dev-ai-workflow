@@ -140,7 +140,7 @@ func dispatchSessionRoute(cp *ChatProxy, w http.ResponseWriter, r *http.Request,
 		cp.handleSessionInfo(w, r)
 	case tail == "children" && m == "GET":
 		cp.handleChildren(w, r)
-	case tail == "messages" && m == "POST":
+	case tail == "message" && m == "POST":
 		cp.handleSendMessage(w, r)
 	case tail == "context" && m == "GET":
 		cp.handleSessionContext(w, r)

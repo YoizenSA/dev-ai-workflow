@@ -33,7 +33,7 @@ func newProxyMux(url string) *http.ServeMux {
 	mux.HandleFunc("GET /api/chat/sessions", cp.handleListSessions)
 	mux.HandleFunc("POST /api/chat/sessions", cp.handleCreateSession)
 	mux.HandleFunc("GET /api/chat/sessions/{id}", cp.handleGetMessages)
-	mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
+	mux.HandleFunc("POST /api/chat/sessions/{id}/message", cp.handleSendMessage)
 	return mux
 }
 
@@ -79,8 +79,8 @@ func TestChatProxyEndToEnd(t *testing.T) {
 	}
 
 	// Send a message; the prompt call blocks until the assistant finishes.
-	body := strings.NewReader(`{"content":"reply with the single word: pong"}`)
-	resp, err = http.Post(srv.URL+"/api/chat/sessions/"+session.ID+"/messages", "application/json", body)
+	body := strings.NewReader(`{"message":"reply with the single word: pong"}`)
+	resp, err = http.Post(srv.URL+"/api/chat/sessions/"+session.ID+"/message", "application/json", body)
 	if err != nil {
 		t.Fatalf("send message: %v", err)
 	}

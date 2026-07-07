@@ -442,19 +442,17 @@ func (cp *ChatProxy) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
 }
 
-// handleSendMessage sends a user prompt to OpenCode. A "/compact" content is
+// handleSendMessage sends a user prompt to OpenCode. A "/compact" message is
 // translated to a session summarize call.
-// POST /api/chat/sessions/{id}/messages  body: {"content": "..."}
+// POST /api/chat/sessions/{id}/message  body: {"message":"...","model":"providerID/modelID"}
 func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	var req struct {
-		Content string `json:"content"`
+		Message string `json:"message"`
 		Agent   string `json:"agent"`
-		Model   *struct {
-			ProviderID string `json:"providerID"`
-			ModelID    string `json:"modelID"`
-		} `json:"model"`
+		// Model is "providerID/modelID" as sent by the UI; split for upstream.
+		Model string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -463,16 +461,16 @@ func (cp *ChatProxy) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 	var path string
 	var payload []byte
-	if strings.TrimSpace(req.Content) == "/compact" {
+	if strings.TrimSpace(req.Message) == "/compact" {
 		path = "/session/" + id + "/summarize"
 		payload = []byte("{}")
 	} else {
 		path = "/session/" + id + "/message"
 		msg := map[string]any{
-			"parts": []map[string]string{{"type": "text", "text": req.Content}},
+			"parts": []map[string]string{{"type": "text", "text": req.Message}},
 		}
-		if req.Model != nil && req.Model.ProviderID != "" && req.Model.ModelID != "" {
-			msg["model"] = req.Model
+		if pid, mid, ok := strings.Cut(req.Model, "/"); ok && pid != "" && mid != "" {
+			msg["model"] = map[string]string{"providerID": pid, "modelID": mid}
 		}
 		if req.Agent != "" {
 			msg["agent"] = req.Agent
@@ -886,7 +884,7 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}", cp.handleGetMessages)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/info", cp.handleSessionInfo)
 	s.mux.HandleFunc("GET /api/chat/sessions/{id}/children", cp.handleChildren)
-	s.mux.HandleFunc("POST /api/chat/sessions/{id}/messages", cp.handleSendMessage)
+	s.mux.HandleFunc("POST /api/chat/sessions/{id}/message", cp.handleSendMessage)
 	s.mux.HandleFunc("GET /api/chat/events", cp.handleChatSSE)
 	s.mux.HandleFunc("POST /api/chat/abort", cp.handleAbort)
 	s.mux.HandleFunc("GET /api/chat/providers", cp.handleProviders)
@@ -907,6 +905,7 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/command", cp.handleCommand)
 	s.mux.HandleFunc("POST /api/chat/target", cp.handleSetTarget)
 	s.mux.HandleFunc("GET /api/chat/target", cp.handleGetTarget)
+	s.mux.HandleFunc("GET /api/chat/status", cp.handleStatus)
 }
 
 // detectOpenCodeURL tries to find a running OpenCode server.

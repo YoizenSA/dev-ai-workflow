@@ -109,6 +109,7 @@ export default function SessionPane({
 
   // --- Composer ---
   const [input, setInput] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // --- Model selection ---
@@ -370,6 +371,9 @@ export default function SessionPane({
             ensurePart(m, partID, "text");
             setPart(msgID, partID, { text: part.text || "" });
           }
+          // Providers that don't send an explicit part `order` (e.g. pi) still
+          // need the part registered so rebuildMessages renders it.
+          if (!m.order.includes(partID)) m.order.push(partID);
         } else if (part.type === "reasoning") {
           const existing = m.parts.get(partID);
           if (data.type === "message.part.delta" && existing) {
@@ -378,6 +382,7 @@ export default function SessionPane({
             ensurePart(m, partID, "reasoning");
             setPart(msgID, partID, { text: part.text || "" });
           }
+          if (!m.order.includes(partID)) m.order.push(partID);
         } else if (part.type === "tool") {
           const st = part.state || {};
           const out =
@@ -596,10 +601,15 @@ export default function SessionPane({
         }),
       });
       if (!resp.ok) {
+        const detail = (await resp.text().catch(() => "")).trim();
+        setSendError(detail || `Failed to send message (HTTP ${resp.status})`);
         console.error("Failed to send message:", resp.status);
+        return;
       }
+      setSendError(null);
       setIsStreaming(true);
     } catch (err) {
+      setSendError("Failed to send message — the chat backend is unreachable.");
       console.error("Failed to send message:", err);
     }
   };
@@ -1012,6 +1022,20 @@ export default function SessionPane({
 
           {/* Composer */}
           <div className="chat-composer">
+            {sendError && (
+              <div className="chat-banner chat-banner-warn" role="alert">
+                <div className="chat-banner-text">
+                  <strong>Message not sent.</strong>
+                  <span>{sendError}</span>
+                </div>
+                <button
+                  className="btn-new-session"
+                  onClick={() => setSendError(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
             <div className="composer-card">
               <textarea
                 ref={textareaRef}
