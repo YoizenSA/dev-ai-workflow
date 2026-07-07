@@ -777,25 +777,6 @@ export interface McpHealthResponse {
 // ─── Team / Chat API ──────────────────────────────────────────────────────
 
 export const teamApi = {
-	setChatTarget: (target: "opencode" | "pi") =>
-		request<{ target: string }>("/api/chat/target", {
-			method: "POST",
-			body: JSON.stringify({ target }),
-		}),
-	getChatTarget: () =>
-		request<{ target: string; opencode: boolean; pi: boolean; connected: boolean }>(
-			"/api/chat/status",
-		),
-	getTeamStatus: () =>
-		request<{
-			members: Array<{ id: string; name: string; status: string; started_at: string }>;
-			tasks: Array<{ id: string; title: string; status: string; assignee: string; result?: string }>;
-		}>("/api/team/status"),
-	spawnTeammate: (profile: string, prompt: string) =>
-		request<{ member_id: string; task_id: string }>("/api/team/spawn", {
-			method: "POST",
-			body: JSON.stringify({ profile, prompt }),
-		}),
 	steerTeammate: (memberId: string, message: string) =>
 		request<{ ok: boolean }>("/api/team/steer", {
 			method: "POST",

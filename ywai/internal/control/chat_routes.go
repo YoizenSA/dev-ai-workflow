@@ -2,13 +2,10 @@ package control
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 // registerChatRoutes wires the chat API. When a local OpenCode server is
@@ -42,20 +39,14 @@ func (s *Server) registerChatRoutes() {
 		mu.Lock()
 		if proxy == nil {
 			opencodeURL := detectOpenCodeURL()
-			piURL := detectPiURL()
 
-			if opencodeURL == "" && piURL == "" {
+			if opencodeURL == "" {
 				mu.Unlock()
-				log.Println("[chat] no OpenCode or PI.dev server detected — chat disabled")
 				http.Error(w, "no chat server available", http.StatusServiceUnavailable)
 				return
 			}
 
 			proxy = NewChatProxy(opencodeURL)
-			if piURL != "" {
-				proxy.piBaseURL = piURL
-				log.Printf("[chat] PI.dev server detected at %s", piURL)
-			}
 			if opencodeURL != "" {
 				log.Printf("[chat] OpenCode server detected at %s", opencodeURL)
 			}
@@ -106,10 +97,6 @@ func dispatchChat(cp *ChatProxy, w http.ResponseWriter, r *http.Request) {
 		cp.handleProjects(w, r)
 	case p == "/gitdiff" && m == "GET":
 		cp.handleGitDiff(w, r)
-	case p == "/target" && m == "GET":
-		cp.handleGetTarget(w, r)
-	case p == "/target" && m == "POST":
-		cp.handleSetTarget(w, r)
 	case p == "/status" && m == "GET":
 		cp.handleStatus(w, r)
 	case strings.HasPrefix(p, "/sessions/"):
@@ -179,44 +166,11 @@ func dispatchSessionRoute(cp *ChatProxy, w http.ResponseWriter, r *http.Request,
 	}
 }
 
-// detectPiURL tries to find a running PI.dev server.
-func detectPiURL() string {
-	// Check env var first
-	if u := strings.TrimSpace(os.Getenv("PI_URL")); u != "" {
-		return strings.TrimRight(u, "/")
-	}
-
-	// Try common PI.dev ports
-	ports := []int{5173, 3000, 4000, 8080}
-	client := &http.Client{Timeout: 1 * time.Second}
-	for _, port := range ports {
-		url := fmt.Sprintf("http://localhost:%d", port)
-		resp, err := client.Get(url + "/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return url
-			}
-		}
-		// Also try /api/health
-		resp, err = client.Get(url + "/api/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return url
-			}
-		}
-	}
-	return ""
-}
-
 // handleStatus returns connection status for the frontend.
 func (cp *ChatProxy) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"target":    cp.Target(),
 		"opencode":  cp.opencodeBaseURL != "",
-		"pi":        cp.piBaseURL != "",
-		"connected": cp.opencodeBaseURL != "" || cp.piBaseURL != "",
+		"connected": cp.opencodeBaseURL != "",
 	})
 }

@@ -21,15 +21,12 @@ import (
 // between the frontend's simple contract and OpenCode's REST API.
 type ChatProxy struct {
 	opencodeBaseURL string // fallback when OPENCODE_URL is unset, e.g. "http://localhost:4096"
-	target          string // "opencode" or "pi"
-	piBaseURL       string
 	mu              sync.RWMutex
 }
 
 func NewChatProxy(opencodeBaseURL string) *ChatProxy {
 	return &ChatProxy{
 		opencodeBaseURL: opencodeBaseURL,
-		target:         "opencode",
 	}
 }
 
@@ -39,63 +36,15 @@ func NewChatProxy(opencodeBaseURL string) *ChatProxy {
 // constructed with. This is what lets the chat recover after opencode is
 // (re)started without restarting ywai.
 func (cp *ChatProxy) baseURL() string {
-	cp.mu.RLock()
-	target := cp.target
-	cp.mu.RUnlock()
-
-	if target == "pi" {
-		if u := strings.TrimSpace(os.Getenv("PI_URL")); u != "" {
-			return strings.TrimRight(u, "/")
-		}
-		if cp.piBaseURL != "" {
-			return cp.piBaseURL
-		}
-		// Fall back to OpenCode URL if PI not configured
-	}
-
 	if u := strings.TrimSpace(os.Getenv("OPENCODE_URL")); u != "" {
 		return strings.TrimRight(u, "/")
 	}
 	return cp.opencodeBaseURL
 }
 
-// SetTarget switches the proxy target between "opencode" and "pi".
-func (cp *ChatProxy) SetTarget(target string) {
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-	cp.target = target
-}
 
-// Target returns the current proxy target.
-func (cp *ChatProxy) Target() string {
-	cp.mu.RLock()
-	defer cp.mu.RUnlock()
-	return cp.target
-}
 
-// handleSetTarget handles POST /api/chat/target to switch the proxy target.
-func (cp *ChatProxy) handleSetTarget(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Target string `json:"target"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	if req.Target != "opencode" && req.Target != "pi" {
-		http.Error(w, "target must be 'opencode' or 'pi'", http.StatusBadRequest)
-		return
-	}
-	cp.SetTarget(req.Target)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"target": cp.Target()})
-}
 
-// handleGetTarget handles GET /api/chat/target to return the current target.
-func (cp *ChatProxy) handleGetTarget(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"target": cp.Target()})
-}
 
 // handleChatSSE proxies OpenCode's global /event stream to the client,
 // forwarding only events for the requested session (plus global events).
@@ -903,9 +852,6 @@ func (s *Server) registerOpenCodeProxy(opencodeURL string) {
 	s.mux.HandleFunc("DELETE /api/chat/sessions/{id}/message/{messageID}", cp.handleDeleteMessage)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/revert", cp.handleRevert)
 	s.mux.HandleFunc("POST /api/chat/sessions/{id}/command", cp.handleCommand)
-	s.mux.HandleFunc("POST /api/chat/target", cp.handleSetTarget)
-	s.mux.HandleFunc("GET /api/chat/target", cp.handleGetTarget)
-	s.mux.HandleFunc("GET /api/chat/status", cp.handleStatus)
 }
 
 // detectOpenCodeURL tries to find a running OpenCode server.

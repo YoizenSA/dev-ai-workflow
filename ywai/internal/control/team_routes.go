@@ -76,7 +76,6 @@ func (api *TeamAPI) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// Check if pi binary is available
 	piBin, _ := exec.LookPath("pi")
 
-	// Spawn PI.dev teammate via member_prompt in background
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -101,8 +100,6 @@ func (api *TeamAPI) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			api.store.UpdateTask(taskID, "done", result)
 			api.store.UpdateMember(memberID, "done")
 		} else {
-			// No PI.dev installed — simulate
-			api.store.UpdateTask(taskID, "done", "[simulated] PI.dev not installed. Install with: npm install -g @pi-apps/pi")
 			api.store.UpdateMember(memberID, "done")
 		}
 	}()

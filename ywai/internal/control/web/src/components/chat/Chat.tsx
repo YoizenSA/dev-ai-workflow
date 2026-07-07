@@ -16,7 +16,6 @@ import WorkspaceSearchSelect from "./WorkspaceSearchSelect";
 import TabStrip from "./TabStrip";
 import SessionPane, { type PaneActions } from "./SessionPane";
 import LayoutSash from "./LayoutSash";
-import AgentTargetSelect from "./AgentTargetSelect";
 import {
   type LayoutNode,
   type SplitDirection,
@@ -129,15 +128,6 @@ export default function Chat() {
   const [busySessions, setBusySessions] = useState<Set<string>>(new Set());
   const [opencodeDown, setOpencodeDown] = useState(false);
   const [startingOpencode, setStartingOpencode] = useState(false);
-  const [agentTarget, setAgentTarget] = useState<string>(() => {
-    try {
-      return localStorage.getItem("chat-target") || "opencode";
-    } catch {
-      return "opencode";
-    }
-  });
-  const [connectionStatus, setConnectionStatus] = useState<{pi: boolean; opencode: boolean}>({pi: false, opencode: false});
-
   // ── Ref for pane actions (template insertion, focus) ───────────────────
   const paneActionsRef = useRef<PaneActions | null>(null);
 
@@ -518,28 +508,6 @@ export default function Chat() {
   // opencode reachability is derived from loadSessions' status code (see above);
   // there is no dedicated /api/chat/health route.
 
-  // ── Agent target switch ────────────────────────────────────────────────
-  useEffect(() => {
-    fetch("/api/chat/target", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target: agentTarget }),
-    }).catch(() => {});
-  }, [agentTarget]);
-
-  // ── Connection status polling ──────────────────────────────────────────
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const res = await fetch("/api/chat/status");
-        const data = await res.json();
-        setConnectionStatus({ pi: data.pi, opencode: data.opencode });
-      } catch { /* ignore */ }
-    };
-    check();
-    const interval = setInterval(check, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // ── Sidebar: rename / delete ──────────────────────────────────────────
   const handleDeleteSession = async (id: string) => {
@@ -952,17 +920,6 @@ export default function Chat() {
       {/* Main area */}
       <main className="chat-main">
         {/* Agent selector bar */}
-        <div className="chat-agent-bar">
-          <AgentTargetSelect
-            value={agentTarget}
-            onChange={(target) => {
-              setAgentTarget(target);
-              try { localStorage.setItem("chat-target", target); } catch {}
-            }}
-            connectionStatus={connectionStatus}
-          />
-        </div>
-
         {/* VS Code-style split grid. renderNode recurses the layout tree. */}
         {hasOpenTabs(layout) ? (
           <div className="layout-root">{renderNode(layout)}</div>

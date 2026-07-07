@@ -2505,8 +2505,6 @@
 }
 
 /* ── Agent target selector bar (top of chat-main) ───────────────── */
-/* Thin toolbar that hosts the OpenCode/PI.dev backend picker. Uses
-   design-system spacing + border vars so it follows the theme. */
 .chat-agent-bar {
   display: flex;
   align-items: center;
