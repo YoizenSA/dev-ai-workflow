@@ -1,14 +1,17 @@
 import { Injectable, signal } from '@angular/core';
+import { CheckCircle2, CircleAlert, TriangleAlert, Info, ClipboardCheck } from 'lucide-angular';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
-export interface ToastOpts { icon?: string; duration?: number; }
-export interface ToastItem { id: number; msg: string; type: ToastType; icon: string; duration: number; }
+/** Un ícono Lucide (objeto), para el patrón [img] — no un string. */
+export type LucideIcon = typeof CheckCircle2;
+export interface ToastOpts { icon?: LucideIcon; duration?: number; }
+export interface ToastItem { id: number; msg: string; type: ToastType; icon: LucideIcon; duration: number; }
 
-const TOAST_ICON: Record<ToastType, string> = {
-  success: 'check-circle-2',
-  error: 'circle-alert',
-  warning: 'triangle-alert',
-  info: 'info',
+const TOAST_ICON: Record<ToastType, LucideIcon> = {
+  success: CheckCircle2,
+  error: CircleAlert,
+  warning: TriangleAlert,
+  info: Info,
 };
 
 /* Duración por severidad (ms): base + tiempo de lectura (~45ms/char), acotada.
@@ -40,7 +43,7 @@ export class ToastService {
 
   /** Confirmación de copia al portapapeles: estilo éxito, ícono de portapapeles. */
   copied(msg: string): void {
-    this.show(msg, 'success', { icon: 'clipboard-check' });
+    this.show(msg, 'success', { icon: ClipboardCheck });
   }
 
   /** Pausa el contador mientras el cursor/foco está sobre el toast. */

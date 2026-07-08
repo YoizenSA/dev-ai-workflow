@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, signal, computed, input, output, HostListener, ElementRef, inject, viewChild } from '@angular/core';
-import { LucideAngularModule } from 'lucide-angular';
+import { LucideAngularModule, ChevronDown, Search } from 'lucide-angular';
 import { PopoverService } from './popover.service';
 import { YdAnchoredDirective } from './yd-anchored.directive';
 
@@ -29,13 +29,13 @@ const SEARCH_THRESHOLD = 7;
         } @else {
           <span class="yd-select-label" [class.is-ph]="!hasSelection()">{{ selectedLabel() }}</span>
         }
-        <lucide-icon name="chevron-down" [size]="15" />
+        <lucide-icon [img]="ChevronDownIcon" [size]="15" />
       </button>
       @if (open()) {
         <div class="yd-pop yd-select-menu yd-menu-docked" ydAnchored [ydConfineToModal]="true">
           @if (showSearch()) {
             <div class="yd-select-search" (click)="$event.stopPropagation()">
-              <lucide-icon name="search" [size]="15" />
+              <lucide-icon [img]="SearchIcon" [size]="15" />
               <input #searchBox class="yd-select-search-input" [value]="query()" placeholder="Buscar…"
                      (input)="query.set($any($event.target).value)"
                      (keydown.enter)="pickFirst($event)" (keydown.escape)="close()" />
@@ -58,6 +58,8 @@ const SEARCH_THRESHOLD = 7;
 export class YdSelectComponent {
   private readonly host = inject(ElementRef);
   private readonly popovers = inject(PopoverService);
+  protected readonly ChevronDownIcon = ChevronDown;
+  protected readonly SearchIcon = Search;
   readonly options = input<SelectOption[]>([]);
   readonly value = input<string>('');
   /** Prefijo dentro del control (filtros): "Label: valor". */

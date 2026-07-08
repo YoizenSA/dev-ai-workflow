@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
-import { LucideAngularModule } from 'lucide-angular';
+import { LucideAngularModule, X } from 'lucide-angular';
 import { ToastService } from './toast.service';
 
 /** Fixed bottom-right toast stack (uses global .toast classes). */
@@ -17,10 +17,10 @@ import { ToastService } from './toast.service';
              [style.--toast-dur]="t.duration + 'ms'"
              (mouseenter)="toast.pause(t.id)" (mouseleave)="toast.resume(t.id)"
              (focusin)="toast.pause(t.id)" (focusout)="toast.resume(t.id)">
-          <span class="toast-ico"><lucide-icon [name]="t.icon" [size]="17" /></span>
+          <span class="toast-ico"><lucide-icon [img]="t.icon" [size]="17" /></span>
           <span class="toast-msg">{{ t.msg }}</span>
           <button class="toast-close" type="button" aria-label="Cerrar notificación"
-                  (click)="$event.stopPropagation(); toast.dismiss(t.id)"><lucide-icon name="x" [size]="14" /></button>
+                  (click)="$event.stopPropagation(); toast.dismiss(t.id)"><lucide-icon [img]="XIcon" [size]="14" /></button>
           <span class="toast-bar"></span>
         </div>
       }
@@ -29,4 +29,5 @@ import { ToastService } from './toast.service';
 })
 export class ToastStackComponent {
   readonly toast = inject(ToastService);
+  protected readonly XIcon = X;
 }
