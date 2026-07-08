@@ -19,6 +19,7 @@ import AgentSearchSelect from "./AgentSearchSelect";
 import PermissionDialog, { type PermissionRequest } from "./PermissionDialog";
 import QuestionPrompt, { type QuestionRequest } from "./QuestionPrompt";
 import type { Session, StoredMessage, MsgPart, PartKind } from "./types";
+import { configApi } from "../../api/client";
 import {
   API_BASE,
   getEventStreamURL,
@@ -856,17 +857,48 @@ export default function SessionPane({
     }
   };
 
-  // ── Provider/model seed ────────────────────────────────────────────────
+  // ── Provider/model + agent seed from /settings defaults ────────────────
+  // Track whether we've applied the saved defaults so a user change isn't
+  // clobbered if providers re-loads. Only seeds once per pane.
+  const seededDefaults = useRef(false);
   useEffect(() => {
-    if (providers.length > 0 && !selectedModel) {
+    if (seededDefaults.current || providers.length === 0 || selectedModel) return;
+    seededDefaults.current = true;
+
+    const applyFallback = () => {
       const first = providers[0];
       if (first.models.length > 0) {
-        setSelectedModel({
-          providerID: first.id,
-          modelID: first.models[0],
-        });
+        setSelectedModel({ providerID: first.id, modelID: first.models[0] });
       }
-    }
+    };
+
+    configApi
+      .getConfig()
+      .then((cfg) => {
+        // opencode.json stores default_agent as a flat string or {id: ...}.
+        const agent =
+          typeof cfg.defaultAgent === "string"
+            ? cfg.defaultAgent
+            : cfg.defaultAgent && typeof cfg.defaultAgent === "object"
+              ? Object.keys(cfg.defaultAgent)[0] ?? ""
+              : "";
+        if (agent) setSelectedAgent(agent);
+
+        // config.model is "providerID/modelID"; only apply if it exists in
+        // the loaded providers, otherwise fall back to the first provider.
+        const slash = cfg.model?.indexOf("/") ?? -1;
+        if (cfg.model && slash > 0) {
+          const providerID = cfg.model.slice(0, slash);
+          const modelID = cfg.model.slice(slash + 1);
+          const prov = providers.find((p) => p.id === providerID);
+          if (prov?.models.includes(modelID)) {
+            setSelectedModel({ providerID, modelID });
+            return;
+          }
+        }
+        applyFallback();
+      })
+      .catch(applyFallback);
   }, [providers, selectedModel]);
 
   // ── Context usage polling ──────────────────────────────────────────────
