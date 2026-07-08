@@ -74,3 +74,42 @@ func TestGetRoleDefault_NilReceiver(t *testing.T) {
 		t.Fatalf("expected seed model when receiver is nil, got empty")
 	}
 }
+
+func TestGetVisionModel(t *testing.T) {
+	t.Run("default_value", func(t *testing.T) {
+		cfg := &UserConfig{}
+		got := cfg.GetVisionModel()
+		if got != DefaultVisionModel {
+			t.Errorf("GetVisionModel() = %q, want %q", got, DefaultVisionModel)
+		}
+	})
+
+	t.Run("override_wins", func(t *testing.T) {
+		cfg := &UserConfig{
+			VisionModel:         "gpt-4o",
+			VisionModelOverride: "claude-3-opus",
+		}
+		got := cfg.GetVisionModel()
+		if got != "claude-3-opus" {
+			t.Errorf("GetVisionModel() = %q, want %q", got, "claude-3-opus")
+		}
+	})
+
+	t.Run("vision_model_when_no_override", func(t *testing.T) {
+		cfg := &UserConfig{
+			VisionModel: "gpt-4o",
+		}
+		got := cfg.GetVisionModel()
+		if got != "gpt-4o" {
+			t.Errorf("GetVisionModel() = %q, want %q", got, "gpt-4o")
+		}
+	})
+
+	t.Run("nil_receiver_returns_default", func(t *testing.T) {
+		var cfg *UserConfig
+		got := cfg.GetVisionModel()
+		if got != DefaultVisionModel {
+			t.Errorf("GetVisionModel() = %q, want %q", got, DefaultVisionModel)
+		}
+	})
+}

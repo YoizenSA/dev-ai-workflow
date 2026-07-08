@@ -399,6 +399,8 @@ export interface UserConfig {
     autostart?: boolean
   }
   role_defaults?: RoleDefaults
+  vision_model?: string
+  vision_model_override?: string
 }
 
 // ─── Memories Types ──────────────────────────────────────────────────────────

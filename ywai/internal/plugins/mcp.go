@@ -114,7 +114,7 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	key := mcpConfigKey(agentName)
 
 	if key == "mcpServers" {
-		// Claude Code format
+		// Claude Code / pi format
 		mcp, _ := root[key].(map[string]any)
 		if mcp == nil {
 			mcp = map[string]any{}
@@ -138,6 +138,53 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 			mcp["microsoft-learn"] = map[string]any{
 				"type":    "remote",
 				"url":     "https://learn.microsoft.com/api/mcp",
+				"enabled": true,
+			}
+			root[key] = mcp
+		}
+	}
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
+	}
+
+	return nil
+}
+
+// InstallVisionMCP adds the mcp-vision MCP server to the agent's config file.
+// This enables vision model queries via the TokenBank bridge.
+func InstallVisionMCP(configPath, agentName string) error {
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+
+	key := mcpConfigKey(agentName)
+
+	if key == "mcpServers" {
+		// Claude Code / pi format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		if _, exists := mcp["mcp-vision"]; !exists {
+			mcp["mcp-vision"] = map[string]any{
+				"command": "mcp-vision",
+			}
+			root[key] = mcp
+		}
+	} else {
+		// opencode format
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		if _, exists := mcp["mcp-vision"]; !exists {
+			mcp["mcp-vision"] = map[string]any{
+				"type":    "local",
+				"command": []any{"mcp-vision"},
 				"enabled": true,
 			}
 			root[key] = mcp

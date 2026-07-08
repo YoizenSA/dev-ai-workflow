@@ -558,6 +558,118 @@ func TestInstallKanbanMCP(t *testing.T) {
 	})
 }
 
+func TestInstallVisionMCP(t *testing.T) {
+	t.Run("opencode", func(t *testing.T) {
+		t.Run("creates_entry_when_missing", func(t *testing.T) {
+			path := writeAgentConfig(t, "opencode.json", map[string]any{})
+
+			if err := InstallVisionMCP(path, "opencode"); err != nil {
+				t.Fatalf("InstallVisionMCP() error = %v", err)
+			}
+
+			entry := readMCPServer(t, path, "opencode", "mcp-vision")
+			if entry == nil {
+				t.Fatal("mcp-vision entry is nil")
+			}
+			got := entry["command"].([]any)
+			want := []any{"mcp-vision"}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("entry.command = %v, want %v", got, want)
+			}
+			if typ, _ := entry["type"].(string); typ != "local" {
+				t.Errorf("entry.type = %q, want \"local\"", typ)
+			}
+			if enabled, _ := entry["enabled"].(bool); !enabled {
+				t.Errorf("entry.enabled = %v, want true", enabled)
+			}
+		})
+
+		t.Run("preserves_existing_entry", func(t *testing.T) {
+			path := writeAgentConfig(t, "opencode.json", map[string]any{
+				"mcp": map[string]any{
+					"mcp-vision": map[string]any{
+						"type":    "local",
+						"command": []any{"mcp-vision"},
+						"enabled": true,
+					},
+				},
+			})
+
+			if err := InstallVisionMCP(path, "opencode"); err != nil {
+				t.Fatalf("InstallVisionMCP() error = %v", err)
+			}
+
+			entry := readMCPServer(t, path, "opencode", "mcp-vision")
+			if entry == nil {
+				t.Fatal("mcp-vision entry is nil after preserve")
+			}
+			got := entry["command"].([]any)
+			want := []any{"mcp-vision"}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("entry.command = %v, want %v", got, want)
+			}
+		})
+	})
+
+	t.Run("claude_code", func(t *testing.T) {
+		t.Run("creates_entry_when_missing", func(t *testing.T) {
+			path := writeAgentConfig(t, "claude_desktop_config.json", map[string]any{})
+
+			if err := InstallVisionMCP(path, "claude-code"); err != nil {
+				t.Fatalf("InstallVisionMCP() error = %v", err)
+			}
+
+			entry := readMCPServer(t, path, "claude-code", "mcp-vision")
+			if entry == nil {
+				t.Fatal("mcp-vision entry is nil")
+			}
+			if cmd, _ := entry["command"].(string); cmd != "mcp-vision" {
+				t.Errorf("entry.command = %q, want \"mcp-vision\"", cmd)
+			}
+		})
+
+		t.Run("preserves_existing_entry", func(t *testing.T) {
+			path := writeAgentConfig(t, "claude_desktop_config.json", map[string]any{
+				"mcpServers": map[string]any{
+					"mcp-vision": map[string]any{
+						"command": "mcp-vision",
+					},
+				},
+			})
+
+			if err := InstallVisionMCP(path, "claude-code"); err != nil {
+				t.Fatalf("InstallVisionMCP() error = %v", err)
+			}
+
+			entry := readMCPServer(t, path, "claude-code", "mcp-vision")
+			if entry == nil {
+				t.Fatal("mcp-vision entry is nil after preserve")
+			}
+			if cmd, _ := entry["command"].(string); cmd != "mcp-vision" {
+				t.Errorf("entry.command = %q, want \"mcp-vision\"", cmd)
+			}
+		})
+	})
+
+	t.Run("pi", func(t *testing.T) {
+		t.Run("creates_entry_when_missing", func(t *testing.T) {
+			path := writeAgentConfig(t, "pi.json", map[string]any{})
+
+			if err := InstallVisionMCP(path, "pi"); err != nil {
+				t.Fatalf("InstallVisionMCP() error = %v", err)
+			}
+
+			entry := readMCPServer(t, path, "pi", "mcp-vision")
+			if entry == nil {
+				t.Fatal("mcp-vision entry is nil")
+			}
+			if cmd, _ := entry["command"].(string); cmd != "mcp-vision" {
+				t.Errorf("entry.command = %q, want \"mcp-vision\"", cmd)
+			}
+		})
+	})
+}
+
 // ─── helpers ───────────────────────────────────────────────────────────────
 
 // writeAgentConfig writes a JSON config file inside a fresh temp dir and

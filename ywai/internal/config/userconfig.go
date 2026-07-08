@@ -12,13 +12,17 @@ import (
 const (
 	RolePlanning  = "planning"
 	RoleArchitect = "architect"
-	RoleQA        = "qa"
-	RoleReviewer  = "reviewer"
 	RoleDev       = "dev"
 	RoleFrontend  = "frontend"
 	RoleBackend   = "backend"
+	RoleQA        = "qa"
+	RoleReviewer  = "reviewer"
 	RoleDevops    = "devops"
 )
+
+// DefaultVisionModel is the default vision model used by mcp-vision when no
+// user config override is set.
+const DefaultVisionModel = "mimo-v2.5"
 
 // CanonicalRoles is the ordered set of supported role identifiers.
 // Ordered roughly by delivery phase: plan → design → implement → verify → ship.
@@ -88,6 +92,12 @@ type UserConfig struct {
 
 	// OrchestratorProfiles contains user-overridable model profiles for orchestrator roles.
 	OrchestratorProfiles map[string]OrchestratorModelProfile `yaml:"orchestrator_profiles,omitempty" json:"orchestrator_profiles,omitempty"`
+
+	// VisionModel is the default vision model used by mcp-vision.
+	VisionModel string `yaml:"vision_model,omitempty" json:"vision_model,omitempty"`
+
+	// VisionModelOverride, when set, overrides VisionModel for mcp-vision calls.
+	VisionModelOverride string `yaml:"vision_model_override,omitempty" json:"vision_model_override,omitempty"`
 }
 
 // ServerConfig contains configuration for the control server
@@ -169,6 +179,7 @@ func DefaultConfig() *UserConfig {
 		RoleDefaults:              DefaultRoleDefaults(),
 		ActiveOrchestratorProfile: DefaultOrchestratorModelProfileName,
 		OrchestratorProfiles:      DefaultOrchestratorModelProfiles(),
+		VisionModel:               DefaultVisionModel,
 	}
 }
 
@@ -188,6 +199,20 @@ func (c *UserConfig) ensureDefaults() {
 	if _, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; !ok {
 		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 	}
+	if c.VisionModel == "" {
+		c.VisionModel = DefaultVisionModel
+	}
+}
+
+// GetVisionModel returns the effective vision model: override if set, otherwise default.
+func (c *UserConfig) GetVisionModel() string {
+	if c != nil && c.VisionModelOverride != "" {
+		return c.VisionModelOverride
+	}
+	if c != nil && c.VisionModel != "" {
+		return c.VisionModel
+	}
+	return DefaultVisionModel
 }
 
 // GetRoleDefault returns the configured RoleDefault for a role, lazily falling

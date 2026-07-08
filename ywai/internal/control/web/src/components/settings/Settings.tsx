@@ -157,6 +157,8 @@ export default function Settings() {
 
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
+	const [visionModel, setVisionModel] = useState("mimo-v2.5");
+	const [visionModelOverride, setVisionModelOverride] = useState("");
 	const [agentList, setAgentList] = useState<string[]>([]);
 
 	const [models, setModels] = useState<ModelInfo[]>([]);
@@ -184,7 +186,8 @@ function GeneralTab() {
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => [] as { name: string }[]),
 			missionsApi.listModels().catch(() => null),
-		]).then(([cfg, agents, modelsRes]) => {
+			configApi.getUserConfig().catch(() => null),
+		]).then(([cfg, agents, modelsRes, userCfg]) => {
 			if (cfg) {
 				// opencode.json stores these keys in snake_case; the UI reads
 				// camelCase. Bridge them on load so saved values reappear.
@@ -195,6 +198,8 @@ function GeneralTab() {
 					defaultAgent:
 						cfg.defaultAgent ?? (raw.default_agent as string | undefined),
 				});
+				setVisionModel(userCfg?.vision_model ?? "mimo-v2.5");
+				setVisionModelOverride(userCfg?.vision_model_override ?? "");
 			}
 			setAgentList((agents ?? []).map((a) => a.name));
 			setModels(
@@ -254,6 +259,13 @@ function GeneralTab() {
 			if (config.temperature !== undefined)
 				toSave.temperature = config.temperature;
 			await configApi.updateConfig(toSave as OpenCodeConfigType);
+
+			// Save vision model fields to user config (separate API)
+			await configApi.updateUserConfig({
+				vision_model: visionModel || "mimo-v2.5",
+				vision_model_override: visionModelOverride || undefined,
+			});
+
 			setMessage("Saved successfully");
 		} catch (err) {
 			setMessage(`Error: ${err}`);
@@ -392,6 +404,38 @@ function GeneralTab() {
 						}
 					/>
 				</div>
+			</div>
+
+			{/* ─── Vision Model ───────────────────────────────────────── */}
+			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
+				<span className="field-label" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+					Vision Model
+				</span>
+			</div>
+
+			<ModelCombobox
+				id="cfg-vision-model"
+				label="Default Vision Model"
+				value={visionModel}
+				models={models}
+				onChange={(v) => setVisionModel(v)}
+			/>
+
+			<div className="field span-2">
+				<label className="field-label" htmlFor="cfg-vision-override">
+					Override
+				</label>
+				<span className="field-hint">
+					Custom model identifier (overrides the default when set)
+				</span>
+				<input
+					id="cfg-vision-override"
+					className="input"
+					type="text"
+					placeholder="e.g., custom-vision-model"
+					value={visionModelOverride}
+					onChange={(e) => setVisionModelOverride(e.target.value)}
+				/>
 			</div>
 
 			{message && (

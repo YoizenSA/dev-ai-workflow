@@ -556,6 +556,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 
 		if dryRun {
 			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
+			fmt.Printf("  [%s] Would install mcp-vision MCP\n", a.Name)
 			if supportsOpenCodePlugins {
 				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
 				fmt.Printf("  [%s] Would install ywai TUI logo\n", a.Name)
@@ -572,6 +573,13 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
 		} else {
 			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
+		}
+
+		// Install mcp-vision (always, core functionality)
+		if err := plugins.InstallVisionMCP(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install mcp-vision MCP: %v\n", a.Name, err)
+		} else {
+			fmt.Printf("  [%s] Installed mcp-vision MCP\n", a.Name)
 		}
 
 		// Install background-agents plugin (async delegation) for opencode-format configs.
