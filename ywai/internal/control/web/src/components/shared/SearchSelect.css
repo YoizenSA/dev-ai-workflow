@@ -5,17 +5,17 @@
 .search-select-input {
   width: 100%;
   padding: var(--yz-space-2, 0.5rem) var(--yz-space-3, 0.75rem);
-  border: 1px solid var(--yz-border, #e5e7eb);
+  border: 1px solid var(--panel-border);
   border-radius: var(--yz-radius, 6px);
   font-size: var(--yz-text-sm, 0.875rem);
-  color: var(--yz-text, #2d2d2d);
-  background: var(--yz-surface, #fff);
+  color: var(--text);
+  background: var(--surface-soft);
 }
 
 .search-select-input:focus {
   outline: none;
-  border-color: var(--yz-accent, #2d2d2d);
-  box-shadow: 0 0 0 2px var(--yz-accent-soft, rgba(45, 45, 45, 0.15));
+  border-color: var(--yz-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--yz-accent) 25%, transparent);
 }
 
 .search-select-clear {
@@ -25,7 +25,7 @@
   transform: translateY(-50%);
   pointer-events: none;
   font-size: 12px;
-  color: var(--yz-text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 .search-select-dropdown {
@@ -35,10 +35,11 @@
   right: 0;
   z-index: 50;
   margin-top: 4px;
-  border: 1px solid var(--yz-border, #e5e7eb);
+  border: 1px solid var(--panel-border);
   border-radius: var(--yz-radius, 6px);
-  background: var(--yz-surface, #fff);
-  box-shadow: var(--yz-shadow, 0 1px 3px rgba(0, 0, 0, 0.1));
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--yz-shadow, 0 8px 24px rgba(0, 0, 0, 0.35));
   max-height: 200px;
   overflow-y: auto;
 }
@@ -47,20 +48,20 @@
   padding: var(--yz-space-2, 0.5rem);
   cursor: pointer;
   font-size: var(--yz-text-sm, 0.875rem);
-  color: var(--yz-text, #2d2d2d);
+  color: var(--text);
 }
 
 .search-select-option:hover {
-  background: var(--yz-bg, #f5f5f5);
+  background: var(--surface-hover);
 }
 
 .search-select-option.selected {
-  background: var(--yz-accent-soft, rgba(45, 45, 45, 0.08));
+  background: color-mix(in srgb, var(--yz-accent) 14%, transparent);
   font-weight: 500;
 }
 
 .search-select-empty {
   padding: var(--yz-space-2, 0.5rem);
-  color: var(--yz-text-muted, #6b7280);
+  color: var(--text-muted);
   font-size: var(--yz-text-sm, 0.875rem);
 }

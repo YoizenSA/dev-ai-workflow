@@ -185,7 +185,17 @@ function GeneralTab() {
 			configApi.listAgents().catch(() => [] as { name: string }[]),
 			missionsApi.listModels().catch(() => null),
 		]).then(([cfg, agents, modelsRes]) => {
-			if (cfg) setConfig(cfg);
+			if (cfg) {
+				// opencode.json stores these keys in snake_case; the UI reads
+				// camelCase. Bridge them on load so saved values reappear.
+				const raw = cfg as Record<string, unknown>;
+				setConfig({
+					...cfg,
+					smallModel: cfg.smallModel ?? (raw.small_model as string | undefined),
+					defaultAgent:
+						cfg.defaultAgent ?? (raw.default_agent as string | undefined),
+				});
+			}
 			setAgentList((agents ?? []).map((a) => a.name));
 			setModels(
 				modelsRes

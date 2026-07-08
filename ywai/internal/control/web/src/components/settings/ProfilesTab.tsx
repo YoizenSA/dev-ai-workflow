@@ -160,17 +160,6 @@ export default function ProfilesTab() {
 		setDirty(true);
 	};
 
-	if (loading && !data) {
-		return (
-			<div className="card card-pad">
-				<div className="loading-inline">
-					<div className="spinner" />
-					<span>Loading profiles…</span>
-				</div>
-			</div>
-		);
-	}
-
 	const profileNames = data ? Object.keys(data.profiles) : [];
 	const lowerFilter = agentFilter.toLowerCase();
 	const allAgentNames = useMemo(
@@ -206,6 +195,17 @@ export default function ProfilesTab() {
 			}, {}),
 		[allAgentNames],
 	);
+
+	if (loading && !data) {
+		return (
+			<div className="card card-pad">
+				<div className="loading-inline">
+					<div className="spinner" />
+					<span>Loading profiles…</span>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="card card-pad">
