@@ -37,7 +37,7 @@
   --slate-rgb:        148, 163, 184;  /* borders / dividers */
   --purple-bright-rgb: 164, 153, 228;  /* púrpura H290, croma bajo */
   --white-rgb:        255, 255, 255;   /* flips in light theme */
-  --black-rgb:        0, 0, 0;         /* flips in light theme */
+  --black-rgb:        0, 0, 0;         /* scrims/shadows — stays true black; NOT flipped (only --white-rgb flips) */
 
   /* ---- Surfaces ---- */
   --surface:             rgba(30, 35, 48, 0.72);

@@ -230,6 +230,7 @@ Copy the canonical files from `assets/` and import them once from `styles.css`, 
 |------|------|
 | `yz-modal.directive.ts` | Accessible dialog: `role`/`aria-modal`, focus-trap, scroll-lock, Escape |
 | `yd-anchored.directive.ts` | Popover positioning: flip/clamp vs viewport or modal (`ydConfineToModal`) |
+| `popover.service.ts` | Single-open coordinator: opening one docked popover (`yd-select`/`yd-date`) closes the other |
 | `yd-select.component.ts` | Themed select with search / tags |
 | `yd-date.component.ts` | Themed calendar — dropdown-caption header (month/year as themed dropdowns, never native), keyboard nav |
 | `yd-diff.component.ts` + `diff.ts` | Side-by-side diff (antes \| después) GitHub-style; `diff.ts` = `unifiedToRows` / `diffTexts` (LCS) |
