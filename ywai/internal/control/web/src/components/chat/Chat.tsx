@@ -762,6 +762,7 @@ export default function Chat() {
                   className="btn-icon"
                   onClick={createSession}
                   data-tip="New session"
+                  data-tip-pos="bottom"
                 >
                   <Plus size={16} />
                 </button>
@@ -769,6 +770,7 @@ export default function Chat() {
                   className="btn-icon"
                   onClick={() => setSidebarCollapsed(true)}
                   data-tip="Collapse sidebar"
+                  data-tip-pos="bottom"
                 >
                   <PanelLeftClose size={16} />
                 </button>
@@ -780,6 +782,7 @@ export default function Chat() {
               className="btn-icon"
               onClick={() => setSidebarCollapsed(false)}
               data-tip="Expand sidebar"
+              data-tip-pos="right"
             >
               <PanelLeftOpen size={16} />
             </button>

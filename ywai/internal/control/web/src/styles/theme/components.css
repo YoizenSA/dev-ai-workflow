@@ -321,6 +321,17 @@
   transform: translateY(-50%) rotate(135deg);
 }
 
+/* Variante inferior: data-tip-pos="bottom" (elementos pegados al borde
+   superior, p.ej. la cabecera del sidebar, donde el tooltip por defecto
+   queda recortado fuera de vista). */
+[data-tip][data-tip-pos="bottom"]:hover::after {
+  bottom: auto; top: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+}
+[data-tip][data-tip-pos="bottom"]:hover::before {
+  bottom: auto; top: calc(100% + 5px); left: 50%;
+  transform: translateX(-50%) rotate(225deg);
+}
+
 /* Trigger deshabilitado del select temático */
 .yd-select-trigger:disabled { opacity: 0.55; cursor: not-allowed; }
 
