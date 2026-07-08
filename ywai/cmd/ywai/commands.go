@@ -22,6 +22,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -436,10 +437,10 @@ var updateCmd = &cobra.Command{
 
 		fmt.Println("=== ywai update ===")
 
-		fmt.Println("\n[1/7] Self-updating ywai...")
+		fmt.Println("\n[1/8] Self-updating ywai...")
 		selfUpdate()
 
-		fmt.Println("\n[2/7] Upgrading gentle-ai...")
+		fmt.Println("\n[2/8] Upgrading gentle-ai...")
 		if !gentlai.IsInstalled() {
 			fmt.Println("  gentle-ai not found, installing...")
 			if err := gentlai.Install(); err != nil {
@@ -451,12 +452,25 @@ var updateCmd = &cobra.Command{
 			}
 		}
 
+		fmt.Println("\n[3/8] Upgrading Azure DevOps CLI (`ado`)...")
+		if _, installed := plugins.AdoCLIInfo(); !installed {
+			fmt.Println("  ado CLI not installed; skipping (run `ywai setup` to install).")
+		} else if err := plugins.InstallAdoCLI(); err != nil {
+			warn("ado CLI upgrade failed: %v", err)
+		} else if v, ok := plugins.AdoCLIInfo(); ok {
+			if v == "" {
+				fmt.Println("  ✓ ado CLI upgraded (version unknown)")
+			} else {
+				fmt.Printf("  ✓ ado CLI upgraded (v%s)\n", v)
+			}
+		}
+
 		agents := agent.Resolve()
 
-		fmt.Println("\n[3/7] Re-seeding skills cache...")
+		fmt.Println("\n[4/8] Re-seeding skills cache...")
 		reseedData()
 
-		fmt.Println("\n[4/7] Cleaning stale legacy links + pre-copying extra skills...")
+		fmt.Println("\n[5/8] Cleaning stale legacy links + pre-copying extra skills...")
 		if len(agents) > 0 {
 			for _, a := range agents {
 				if configDir := filepath.Dir(a.SkillsDir); skills.IsLinkOrJunction(configDir) {
@@ -476,7 +490,7 @@ var updateCmd = &cobra.Command{
 			fmt.Println("  No supported agents detected; skipping pre-sync skill copy.")
 		}
 
-		fmt.Println("\n[5/7] Copying extra skills...")
+		fmt.Println("\n[6/8] Copying extra skills...")
 		if len(agents) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
 			os.Exit(1)
@@ -490,7 +504,7 @@ var updateCmd = &cobra.Command{
 			fmt.Printf("  [%s] Copied skills\n", a.Name)
 		}
 
-		fmt.Println("\n[6/7] Re-applying ywai overrides...")
+		fmt.Println("\n[7/8] Re-applying ywai overrides...")
 		agentDirs := make(map[string]string, len(agents))
 		for _, a := range agents {
 			agentDirs[a.Name] = a.SkillsDir
@@ -499,7 +513,7 @@ var updateCmd = &cobra.Command{
 			warn("failed to apply overrides: %v", err)
 		}
 
-		fmt.Println("\n[7/7] Restarting control server...")
+		fmt.Println("\n[8/8] Restarting control server...")
 		if port := serverutil.GetRunningPort(); port > 0 {
 			fmt.Printf("  Stopping server on port %d...\n", port)
 			if err := killPort(port); err != nil {
