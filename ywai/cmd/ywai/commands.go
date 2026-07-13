@@ -426,7 +426,17 @@ var installCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Upgrade ywai + gentle-ai + re-seed + copy skills",
+	Short: "One-command upgrade: binary, skills, plugins, control server",
+	Long: `Upgrade ywai and re-apply everything it manages so you usually do not
+need a separate install after updating:
+
+  - self-update ywai
+  - upgrade gentle-ai / ado (when present)
+  - re-seed skills + copy them into detected agents
+  - re-wire OpenCode plugins (vision-bridge, background-agents, kanban MCP)
+  - restart the control server
+
+After update, restart OpenCode once so it reloads plugins.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var warnings []string
 		warn := func(format string, args ...any) {
@@ -436,11 +446,12 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Println("=== ywai update ===")
+		fmt.Println("  (binary + skills + plugins — one command is enough)")
 
-		fmt.Println("\n[1/8] Self-updating ywai...")
+		fmt.Println("\n[1/9] Self-updating ywai...")
 		selfUpdate()
 
-		fmt.Println("\n[2/8] Upgrading gentle-ai...")
+		fmt.Println("\n[2/9] Upgrading gentle-ai...")
 		if !gentlai.IsInstalled() {
 			fmt.Println("  gentle-ai not found, installing...")
 			if err := gentlai.Install(); err != nil {
@@ -452,9 +463,9 @@ var updateCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("\n[3/8] Upgrading Azure DevOps CLI (`ado`)...")
+		fmt.Println("\n[3/9] Upgrading Azure DevOps CLI (`ado`)...")
 		if _, installed := plugins.AdoCLIInfo(); !installed {
-			fmt.Println("  ado CLI not installed; skipping (run `ywai setup` to install).")
+			fmt.Println("  ado CLI not installed; skipping (optional).")
 		} else if err := plugins.InstallAdoCLI(); err != nil {
 			warn("ado CLI upgrade failed: %v", err)
 		} else if v, ok := plugins.AdoCLIInfo(); ok {
@@ -467,10 +478,10 @@ var updateCmd = &cobra.Command{
 
 		agents := agent.Resolve()
 
-		fmt.Println("\n[4/8] Re-seeding skills cache...")
+		fmt.Println("\n[4/9] Re-seeding skills cache...")
 		reseedData()
 
-		fmt.Println("\n[5/8] Cleaning stale legacy links + pre-copying extra skills...")
+		fmt.Println("\n[5/9] Cleaning stale legacy links + pre-copying extra skills...")
 		if len(agents) > 0 {
 			for _, a := range agents {
 				if configDir := filepath.Dir(a.SkillsDir); skills.IsLinkOrJunction(configDir) {
@@ -487,33 +498,48 @@ var updateCmd = &cobra.Command{
 				}
 			}
 		} else {
-			fmt.Println("  No supported agents detected; skipping pre-sync skill copy.")
+			fmt.Println("  No supported agents detected; skipping skill copy.")
 		}
 
-		fmt.Println("\n[6/8] Copying extra skills...")
+		fmt.Println("\n[6/9] Copying extra skills...")
 		if len(agents) == 0 {
-			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
-			os.Exit(1)
-		}
-
-		for _, a := range agents {
-			if err := skills.CopyTo(a.SkillsDir); err != nil {
-				warn("[%s] re-copy skills failed: %v", a.Name, err)
-				continue
+			warn("no supported agents detected; skills/plugins not re-applied")
+		} else {
+			for _, a := range agents {
+				if err := skills.CopyTo(a.SkillsDir); err != nil {
+					warn("[%s] re-copy skills failed: %v", a.Name, err)
+					continue
+				}
+				fmt.Printf("  [%s] Copied skills\n", a.Name)
 			}
-			fmt.Printf("  [%s] Copied skills\n", a.Name)
 		}
 
-		fmt.Println("\n[7/8] Re-applying ywai overrides...")
-		agentDirs := make(map[string]string, len(agents))
-		for _, a := range agents {
-			agentDirs[a.Name] = a.SkillsDir
-		}
-		if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
-			warn("failed to apply overrides: %v", err)
+		fmt.Println("\n[7/9] Re-applying ywai overrides...")
+		if len(agents) > 0 {
+			agentDirs := make(map[string]string, len(agents))
+			for _, a := range agents {
+				agentDirs[a.Name] = a.SkillsDir
+			}
+			if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
+				warn("failed to apply overrides: %v", err)
+			} else {
+				fmt.Println("  ✓ overrides applied")
+			}
+		} else {
+			fmt.Println("  skipped (no agents)")
 		}
 
-		fmt.Println("\n[8/8] Restarting control server...")
+		// Family-friendly: update also re-wires plugins so users do not need
+		// a separate `ywai install` after every release (vision-bridge, etc.).
+		fmt.Println("\n[8/9] Re-wiring agent plugins + MCP...")
+		if len(agents) == 0 {
+			fmt.Println("  skipped (no agents)")
+		} else {
+			installPluginsForAgents(agents, false, false)
+			fmt.Println("  ✓ plugins re-wired (vision-bridge, background-agents, kanban MCP)")
+		}
+
+		fmt.Println("\n[9/9] Restarting control server...")
 		if port := serverutil.GetRunningPort(); port > 0 {
 			fmt.Printf("  Stopping server on port %d...\n", port)
 			if err := killPort(port); err != nil {
@@ -543,10 +569,13 @@ var updateCmd = &cobra.Command{
 			for _, msg := range warnings {
 				fmt.Printf("  - %s\n", msg)
 			}
-			return
+		} else {
+			fmt.Println("\n=== Done! ===")
 		}
-
-		fmt.Println("\n=== Done! ===")
+		fmt.Println()
+		fmt.Println("Next step (once):")
+		fmt.Println("  Restart OpenCode so it reloads plugins (vision-bridge, etc.).")
+		fmt.Println("  Optional: open ywai Settings → Vision bridge to pick the vision model.")
 	},
 }
 

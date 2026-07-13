@@ -171,6 +171,8 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	return tui.Run(tuiAgents)
 }
 
+// executeInstall is the first-time / full setup path.
+// Day-to-day upgrades should use `ywai update`, which now also re-wires plugins.
 func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool) {
 	var agents []agent.Agent
 	if opts.AgentName != "" {
