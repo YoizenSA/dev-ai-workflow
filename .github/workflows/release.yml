@@ -1,5 +1,7 @@
 name: Release
 
+# ONLY tags. Single pipeline for publish: test gate + GoReleaser.
+# Does not run CI workflow (CI is PR-only).
 on:
   push:
     tags:
@@ -24,6 +26,19 @@ jobs:
         with:
           go-version: '1.26'
           cache-dependency-path: ywai/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: ywai
+          args: --timeout=5m
+
+      - name: Test unit
+        run: go test ./internal/... -count=1 -timeout 60s
 
       - uses: actions/setup-node@v5
         with:

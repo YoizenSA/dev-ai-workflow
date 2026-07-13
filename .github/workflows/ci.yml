@@ -1,12 +1,8 @@
 name: CI
 
-# Run on branch/PR work only. Tag pushes are handled by Release — do NOT
-# re-run the full matrix on every v* tag (avoids double CI when tagging the
-# same commit already tested on main).
+# ONLY pull requests. Push to main and tags do NOT run CI.
+# Tags → Release workflow only (one pipeline for publish).
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
@@ -70,8 +66,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ywai/internal/control/web/package-lock.json
 
-      # bun is required by prepare-embedded.sh to bundle the background-agents
-      # plugin. See .github/workflows/release.yml and scripts/prepare-embedded.sh.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
