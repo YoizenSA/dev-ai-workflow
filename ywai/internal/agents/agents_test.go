@@ -208,6 +208,50 @@ func TestAppendSections(t *testing.T) {
 		t.Errorf("AppendSections(missing) should be a no-op, got %q", got)
 	}
 }
+
+func TestEnsureSection(t *testing.T) {
+	got := ensureSection(nil, "orchestrator-contracts")
+	if len(got) != 1 || got[0] != "orchestrator-contracts" {
+		t.Fatalf("ensureSection(nil) = %v", got)
+	}
+	got = ensureSection([]string{"handoff"}, "orchestrator-contracts")
+	if len(got) != 2 || got[1] != "orchestrator-contracts" {
+		t.Fatalf("ensureSection append = %v", got)
+	}
+	got = ensureSection([]string{"orchestrator-contracts", "handoff"}, "orchestrator-contracts")
+	if len(got) != 2 {
+		t.Fatalf("ensureSection dedupe = %v", got)
+	}
+}
+
+func TestOrchestratorRoleGetsContractsSection(t *testing.T) {
+	src := t.TempDir()
+	sectionsDir := filepath.Join(src, "sections")
+	if err := os.MkdirAll(sectionsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sectionsDir, "orchestrator-contracts.md"), []byte("## Typed Contracts (orchestrator)\n\nShip gate."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orchDir := filepath.Join(src, "orch")
+	if err := os.MkdirAll(orchDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agentMD := "---\nname: orch\ndescription: >\n  Lead.\nrole: orchestrator\n---\n\n# Orch\n\nBody."
+	if err := os.WriteFile(filepath.Join(orchDir, "AGENT.md"), []byte(agentMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(orchDir, "permissions.json"), []byte(`{"read":"allow"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := loadProfile(orchDir, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Prompt, "Typed Contracts (orchestrator)") {
+		t.Fatalf("orchestrator prompt missing contracts section:\n%s", p.Prompt)
+	}
+}
 func TestLoadProfiles(t *testing.T) {
 	src := t.TempDir()
 	devDir := filepath.Join(src, "dev")

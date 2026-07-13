@@ -6,7 +6,7 @@ description: >
   Trigger: Architecture decisions, design, "how should we structure", system design.
 role: architect
 mode: all
-sections: [handoff, context-gathering]
+sections: [handoff, context-gathering, fast-tools]
 ---
 
 # Architect Agent

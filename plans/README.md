@@ -10,6 +10,8 @@ This directory contains Architecture Decision Records (ADRs) and implementation 
 | 2 | Session CLI (`ocm-cli`) | [ADR-002](./adr-002-session-cli.md) | [Plan](./plan-session-cli.md) | High | Medium |
 | 3 | Session scheduling & calendar view | [ADR-003](./adr-003-session-scheduling.md) | [Plan](./plan-session-scheduling.md) | Medium | Large |
 | 4 | Health monitoring for repos & agents | [ADR-005](./adr-005-health-monitoring.md) | [Plan](./plan-health-monitoring.md) | Low | Small |
+| 5 | omp harness ideas → ywai contracts | — (Fase 0) | [Plan](./plan-omp-harness-ideas.md) | High | Medium |
+| 6 | ywai-fastfs MCP (in-process search/read) | — | [Plan](./plan-fastfs-mcp.md) | High | Medium |
 
 ## Effort Estimates
 

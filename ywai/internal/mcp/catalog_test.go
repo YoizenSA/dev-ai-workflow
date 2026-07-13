@@ -84,8 +84,8 @@ var _ = CatalogEntry{}
 // exactly 12 entries. If a future addition sneaks in, this test fails.
 func TestCatalog_Len(t *testing.T) {
 	got := len(Catalog())
-	if got != 12 {
-		t.Errorf("len(Catalog()) = %d, want 12", got)
+	if got != 13 {
+		t.Errorf("len(Catalog()) = %d, want 13", got)
 	}
 }
 
@@ -107,6 +107,7 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"engram",
 		"codegraph",
 		"ywai-kanban",
+		"ywai-fastfs",
 	}
 	for _, id := range want {
 		entry, ok := CatalogByID(id)
@@ -449,11 +450,11 @@ func TestCatalog_AllLocalNonKanbanHaveInstallCmd(t *testing.T) {
 		if e.Type != "local" {
 			continue
 		}
-		if e.ID == "ywai-kanban" {
+		if e.ID == "ywai-kanban" || e.ID == "ywai-fastfs" {
 			continue // documented exception: binary is ywai itself
 		}
 		if e.InstallCmd == "" {
-			t.Errorf("entry %q: Type=local and not ywai-kanban, "+
+			t.Errorf("entry %q: Type=local and not ywai-kanban/fastfs, "+
 				"but InstallCmd is empty (install UI cannot render "+
 				"an install step)", e.ID)
 		}

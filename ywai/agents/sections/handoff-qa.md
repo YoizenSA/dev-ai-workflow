@@ -1,24 +1,52 @@
 ## Handoff (report back to @qa-orchestrator)
 
-When you finish, end your response with this standard handoff so the orchestrator can decide the next step:
+When you finish, end your response with a **fenced** `handoff` block so the QA orchestrator can parse it. Prose above the fence is fine for humans; the fence is mandatory for routing.
 
+````markdown
+```handoff
+status: done | blocked | needs-decision
+did: <summary of what you did>
+artifacts:
+  - path: <file path, command, or test id>
+    kind: file | command | test
+next: qa-analyst | qa-dev | qa-finder | qa-reviewer | close | null
+risks:
+  - <follow-up, assumption, or blocker>
+findings: []   # optional; severity P0|P1|P2|P3
+kanban:
+  column: review | backlog | done
+  summary: <one-line summary>
+  detail: <FULL handoff: findings, steps, paths, commands, test results — do not truncate>
 ```
-**Status**: done | blocked | needs-decision
-**Did**: <summary of what you did>
-**Artifacts**: <files changed, commands run, test/build result>
-**Next suggested**: @qa-analyst | @qa-dev | @qa-finder | @qa-reviewer | close
-**Notes/risks**: <follow-ups, assumptions, blockers>
-```
+````
 
-When the orchestrator is tracking a Kanban board (session was created at session start), include a **Kanban status update** in your handoff so the orchestrator can update the board:
+### Field rules
+
+- **status**: `done` only when the QA acceptance criteria are met.
+- **next**: next QA agent, or `close`.
+- **kanban.detail**: full content for the next agent or learner — never truncate.
+- Explain blockers in plain language (manual testers may be learning automation).
+
+### Severity (when using findings)
+
+| Level | Meaning |
+|---|---|
+| P0 | Ship-blocker / test completely wrong or unsafe |
+| P1 | Must fix before trusting the suite |
+| P2 | Should improve soon |
+| P3 | Nit / teaching note |
+
+### Legacy Kanban prose (optional extra)
+
+If present and it conflicts with the fence, **the fence wins**.
 
 ```
 ## Kanban Update
 - **Status**: done | blocked | needs-decision
-- **Column**: review (ready for reviewer) | backlog (changes requested) | done
-- **Summary**: <brief one-line summary of what was completed or what's blocking>
-- **Detail**: <the FULL handoff: findings, steps, file paths, commands, test/build results — the complete content the next agent or the user needs.>
-- **Blocker**: <reason, if status is blocked> (omit if not blocked)
+- **Column**: review | backlog | done
+- **Summary**: <one line>
+- **Detail**: <same as kanban.detail>
+- **Blocker**: <reason if blocked>
 ```
 
-This is **mandatory** when the orchestrator created a kanban session. The orchestrator uses your Kanban Update to call `update_delegation` (passing **Detail** as the full `handoff` and **Summary** as `handoff_preview`) and `add_activity`. The card shows the full **Detail** in its expanded view / Details modal, so do NOT truncate it. If you omit it, the board will be stale and the user loses visibility.
+This is **mandatory** when the orchestrator tracks a Kanban board.

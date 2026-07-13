@@ -16,13 +16,14 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/fastfs"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // CodegraphInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -436,8 +437,13 @@ need a separate install after updating:
   - re-wire OpenCode plugins (vision-bridge, background-agents, kanban MCP)
   - restart the control server
 
+Channels:
+  default          stable only (GitHub /releases/latest — ignores prereleases)
+  --beta           newest prerelease (e.g. vX.Y.Z-beta.N)
+
 After update, restart OpenCode once so it reloads plugins.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		beta, _ := cmd.Flags().GetBool("beta")
 		var warnings []string
 		warn := func(format string, args ...any) {
 			msg := fmt.Sprintf(format, args...)
@@ -445,11 +451,15 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Printf("  Warning: %s\n", msg)
 		}
 
-		fmt.Println("=== ywai update ===")
+		if beta {
+			fmt.Println("=== ywai update (beta channel) ===")
+		} else {
+			fmt.Println("=== ywai update ===")
+		}
 		fmt.Println("  (binary + skills + plugins — one command is enough)")
 
 		fmt.Println("\n[1/9] Self-updating ywai...")
-		selfUpdate()
+		selfUpdate(beta)
 
 		fmt.Println("\n[2/9] Upgrading gentle-ai...")
 		if !gentlai.IsInstalled() {
@@ -625,10 +635,40 @@ var skillsCmd = &cobra.Command{
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Run gentle-ai health check",
-	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space.",
+	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, CodeGraph, ywai-fastfs.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return gentlai.Doctor()
+		if err := gentlai.Doctor(); err != nil {
+			return err
+		}
+		printFastPathDoctor()
+		return nil
 	},
+}
+
+// printFastPathDoctor reports CodeGraph + ywai-fastfs readiness (Layer A/B).
+func printFastPathDoctor() {
+	fmt.Println("\n── ywai fast path ──")
+	if v, ok := plugins.CodegraphInfo(); ok {
+		if v != "" {
+			fmt.Printf("  codegraph: installed (%s)\n", v)
+		} else {
+			fmt.Println("  codegraph: installed (version unknown)")
+		}
+	} else {
+		fmt.Println("  codegraph: NOT on PATH (run ywai install / install codegraph)")
+	}
+	if _, err := exec.LookPath("ywai"); err != nil {
+		// Still ok when running from a built binary not named on PATH.
+		fmt.Println("  ywai-fastfs: use `ywai mcp fastfs` from this binary")
+	} else {
+		fmt.Println("  ywai-fastfs: `ywai mcp fastfs` available (register via ywai install)")
+	}
+	// Smoke: can construct a service for cwd.
+	if svc, err := fastfs.NewService(""); err != nil {
+		fmt.Printf("  fastfs service: ERROR %v\n", err)
+	} else {
+		fmt.Printf("  fastfs workspace: %s\n", svc.RootAbs())
+	}
 }
 
 var skillRegistryCmd = &cobra.Command{
@@ -1119,7 +1159,31 @@ var tokenbankSetupCmd = &cobra.Command{
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Manage MCP server authentication",
+	Short: "MCP servers and authentication",
+}
+
+var mcpFastfsCmd = &cobra.Command{
+	Use:   "fastfs",
+	Short: "Run ywai-fastfs MCP server on stdio (search/read with mtime cache)",
+	Long: `Starts the ywai-fastfs MCP server on stdin/stdout.
+
+Long-lived process: the mtime file cache is shared across tool calls in the
+same session (no per-call rg/cat fork). Register with:
+
+  ywai install   # wires ywai-fastfs into opencode/claude/pi configs
+
+Tools: fastfs_find, fastfs_search, fastfs_read_outline, fastfs_read_slice, fastfs_stat.
+Prefer codegraph_explore for structural questions; use fastfs for text search.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, _ := cmd.Flags().GetString("cwd")
+		adapter, err := fastfs.NewMCPAdapter(cwd)
+		if err != nil {
+			return err
+		}
+		adapter.Run()
+		return nil
+	},
 }
 
 var mcpAuthCmd = &cobra.Command{
@@ -1247,6 +1311,8 @@ func init() {
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 
 	rootCmd.AddCommand(installCmd)
+
+	updateCmd.Flags().Bool("beta", false, "Upgrade to the newest prerelease (beta) instead of stable latest")
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)
@@ -1275,6 +1341,8 @@ func init() {
 	rootCmd.AddCommand(tokenbankCmd)
 
 	// MCP commands
+	mcpFastfsCmd.Flags().String("cwd", "", "Workspace root (default: process cwd)")
+	mcpCmd.AddCommand(mcpFastfsCmd)
 	mcpCmd.AddCommand(mcpAuthCmd)
 	rootCmd.AddCommand(mcpCmd)
 }

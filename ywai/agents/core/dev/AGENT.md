@@ -6,7 +6,7 @@ description: >
   Trigger: Implementation tasks, coding, debugging, "implement", "fix", "add feature".
 role: developer
 mode: all
-sections: [handoff, context-gathering]
+sections: [handoff, context-gathering, fast-tools]
 ---
 
 # Dev Agent

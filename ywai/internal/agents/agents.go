@@ -126,8 +126,13 @@ func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 	if mode == "" {
 		mode = "primary"
 	}
-	_ = extractRole(prompt) // extracted for future use
+	role := extractRole(prompt)
 	sections := extractSections(prompt)
+	// Every orchestrator/planning lead shares typed handoff + review ship rules.
+	// Keep the contract in agents/sections/orchestrator-contracts.md (single source).
+	if role == "orchestrator" || role == "planning" {
+		sections = ensureSection(sections, "orchestrator-contracts")
+	}
 	prompt = stripFrontmatter(prompt)
 
 	// Read permissions.json
@@ -208,6 +213,16 @@ func extractSections(prompt string) []string {
 		}
 	}
 	return nil
+}
+
+// ensureSection appends name if it is not already present (order-preserving).
+func ensureSection(sections []string, name string) []string {
+	for _, s := range sections {
+		if s == name {
+			return sections
+		}
+	}
+	return append(sections, name)
 }
 
 // AppendSections resolves and appends shared section files from the

@@ -73,9 +73,10 @@ GOAL
        └─ no  →  IMPLEMENT   → task @dev  (build feature)
                  TEST        → task @qa  (add tests after)
   └─ (IMPLEMENT may fan out: split into disjoint slices and use\n      `member_prompt` for several teammates in parallel — see "Fan-out" below)
-  └─ REVIEW      → member_prompt("reviewer")
-       ├─ changes requested → back to @dev (fix) then @reviewer again
-       └─ approved          → continue
+  └─ REVIEW      → member_prompt("reviewer")  (require ```review fence)
+       ├─ verdict block OR any P0 → back to @dev (fix) then @reviewer again
+       ├─ ship-with-nits (P2/P3 only) → continue; track nits
+       └─ ship (no P0/P1) → continue
   └─ DEPLOY?     → member_prompt("devops") (CI/CD, container, deploy) when relevant
   └─ CLOSE       → summarize delivered work, artifacts, and follow-ups
 ```
@@ -221,25 +222,32 @@ Every delegation (tool or `@mention`) must include:
 **Acceptance criteria**: <what "done" means, observable>
 **Expected artifacts**: <code / tests / ADR / pipeline / report>
 **Constraints**: <stack, patterns, scope limits>
+**Return format**: End with a fenced ```handoff block (YAML). Reviewers also end with ```review.
 **task_id**: <PI.dev task ID for team mode tracking — set by orchestrator, used in `task_get(task_id)` and `task_update(id, result=...)`>
 ```
 
 ## Consuming Handoffs
 
-Each subagent reports back in the standard handoff format:
+Require fenced **` ```handoff `** from every subagent (YAML). Prefer the fence over prose.
 
 ```
-**Status**: done | blocked | needs-decision
-**Did**: <summary>
-**Artifacts**: <files / tests / ADR / etc>
-**Next suggested**: @dev | @qa | @reviewer | @devops | close
-**Notes/risks**: <...>
+status: done | blocked | needs-decision
+did: ...
+artifacts: [{path, kind}]
+next: dev | qa | reviewer | devops | close | null
+risks: []
+findings: [{path, severity: P0|P1|P2|P3, confidence, message}]
+kanban: {column, summary, detail}
 ```
 
 On each handoff:
 - `done` → advance to the next phase in the flow.
 - `blocked` / `needs-decision` → resolve (ask the user via `question`, or re-delegate with clarification).
+- Any **P0** finding → do not close; fix or escalate.
+- After `@reviewer`, require **` ```review `** and apply ship rules: `block` or any P0 → re-open `@dev` (or ask user); never CLOSE on an unresolved block.
 - Update the `todowrite` checklist and continue until the goal is met.
+
+Full contract text is also appended as **Typed Contracts (orchestrator)** — keep that section as the source of truth.
 
 ## Retry & Escalation Budget
 

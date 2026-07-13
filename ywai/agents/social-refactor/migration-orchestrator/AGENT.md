@@ -355,14 +355,25 @@ Additionally:
 
 ## Consuming Handoffs
 
+Require fenced **` ```handoff `** from every subagent (YAML). Prefer the fence over prose.
+
 On each handoff:
 - `done` → advance to next phase in the flow
 - `blocked` / `needs-decision` → resolve (ask user via `question`, or
   re-delegate with clarification)
 - `CHANGES_REQUESTED` → delegate remediation to `@dev` or anchor a new
   sub-plan
+- Any **P0** finding or review **`verdict: block`** → do not mark `validated`;
+  remediate or escalate
+- After validators / reviewers, honor **` ```review `** ship rules when present
+  (`block` or P0 → stop ship path)
 - Update `Yoizen.Legacy/migration-progress-tracker.md` and update the Kanban
   card before continuing
+
+Every delegation brief must include:
+`**Return format**: End with a fenced ```handoff block (YAML).`
+
+Full contract text is also appended as **Typed Contracts (orchestrator)**.
 
 ## Delegation Targets
 

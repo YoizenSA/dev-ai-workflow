@@ -720,3 +720,22 @@ func assertRawValue(t *testing.T, got, want any) {
 		t.Errorf("value = %v (type %T), want %v (type %T)", got, got, want, want)
 	}
 }
+
+func TestInstallFastfsMCP(t *testing.T) {
+	t.Run("opencode_creates_entry", func(t *testing.T) {
+		path := writeAgentConfig(t, "opencode.json", map[string]any{})
+		if err := InstallFastfsMCP(path, "opencode"); err != nil {
+			t.Fatal(err)
+		}
+		entry := readMCPServer(t, path, "opencode", "ywai-fastfs")
+		assertOpencodeCommand(t, entry, []any{"ywai", "mcp", "fastfs"})
+	})
+	t.Run("claude_creates_entry", func(t *testing.T) {
+		path := writeAgentConfig(t, "settings.json", map[string]any{})
+		if err := InstallFastfsMCP(path, "claude-code"); err != nil {
+			t.Fatal(err)
+		}
+		entry := readMCPServer(t, path, "claude-code", "ywai-fastfs")
+		assertClaudeCodeArgs(t, entry, []any{"mcp", "fastfs"})
+	})
+}

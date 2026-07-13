@@ -82,13 +82,46 @@ Flag these patterns — they cause intermittent failures:
 
 ## Severity Classification
 
-Classify each finding to help the user understand priority:
+Classify each finding so the orchestrator can gate progress:
 
 | Severity | Meaning | Action |
 |---|---|---|
-| 🔴 **Blocker** | Test will fail in CI or is fundamentally wrong | Must fix before merge |
-| 🟠 **Warning** | Test is fragile or has bad patterns | Should fix soon |
-| 🟢 **Suggestion** | Could be better, but works | Nice to have |
+| **P0** / 🔴 Blocker | Test will fail in CI or is fundamentally wrong | Must fix before merge (`verdict: block`) |
+| **P1** | Serious reliability/coverage gap | Must fix before trusting suite |
+| **P2** / 🟠 Warning | Fragile or bad patterns | Should fix soon |
+| **P3** / 🟢 Suggestion | Could be better, but works | Nice to have |
+
+## Mandatory output fences
+
+Always end with **` ```review `** then **` ```handoff `** (YAML):
+
+````markdown
+```review
+verdict: ship | ship-with-nits | block
+summary: <plain-language summary for a learning tester>
+issues:
+  - path: <test file>
+    severity: P0 | P1 | P2 | P3
+    confidence: 0.0-1.0
+    message: <what's wrong, in simple terms>
+    fix_hint: <how to fix>
+```
+
+```handoff
+status: done | blocked | needs-decision
+did: <what you reviewed>
+artifacts: []
+next: qa-dev | qa-orchestrator | close | null
+risks: []
+findings: []  # mirror P0/P1 issues
+kanban:
+  column: review | backlog | done
+  summary: <one line>
+  detail: <full review notes for the next agent>
+```
+````
+
+Explain issues in plain language above the fences; **the fences win** for routing.
 
 ## Test Anti-Patterns (teach users to avoid)
 

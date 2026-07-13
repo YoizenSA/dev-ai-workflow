@@ -24,20 +24,20 @@ const (
 )
 
 type releaseInfo struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
+	TagName    string `json:"tag_name"`
+	Prerelease bool   `json:"prerelease"`
+	Assets     []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
 	} `json:"assets"`
 }
 
-func LatestVersion() (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
-
+// githubGET performs an authenticated (when possible) GET against the GitHub API.
+func githubGET(url string) (*http.Response, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "ywai")
@@ -48,7 +48,13 @@ func LatestVersion() (string, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := client.Do(req)
+	return client.Do(req)
+}
+
+func LatestVersion() (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
+
+	resp, err := githubGET(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch latest release: %w", err)
 	}
@@ -64,6 +70,64 @@ func LatestVersion() (string, error) {
 	}
 
 	return release.TagName, nil
+}
+
+// LatestPrereleaseVersion returns the newest GitHub release marked as
+// prerelease (or with a beta/rc/pre tag). Releases are newest-first from the API.
+// Does not fall back to stable — callers that want stable use LatestVersion.
+func LatestPrereleaseVersion() (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=30", owner, repo)
+
+	resp, err := githubGET(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+
+	var releases []releaseInfo
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return "", fmt.Errorf("failed to parse releases: %w", err)
+	}
+
+	tag, ok := pickLatestPrerelease(releases)
+	if !ok {
+		return "", fmt.Errorf("no prerelease (beta) found for %s/%s", owner, repo)
+	}
+	return tag, nil
+}
+
+// pickLatestPrerelease returns the first release in list that is a beta channel
+// candidate. list is assumed newest-first (GitHub default).
+func pickLatestPrerelease(releases []releaseInfo) (tag string, ok bool) {
+	for _, r := range releases {
+		if r.TagName == "" {
+			continue
+		}
+		if r.Prerelease || isPrereleaseTag(r.TagName) {
+			return r.TagName, true
+		}
+	}
+	return "", false
+}
+
+// isPrereleaseTag reports whether a tag looks like a beta/rc/pre channel even
+// if the GitHub "prerelease" flag was not set.
+func isPrereleaseTag(tag string) bool {
+	t := strings.ToLower(strings.TrimPrefix(tag, "v"))
+	// semver pre-release segment starts after the first '-'
+	i := strings.IndexByte(t, '-')
+	if i < 0 {
+		return false
+	}
+	pre := t[i+1:]
+	return strings.HasPrefix(pre, "beta") ||
+		strings.HasPrefix(pre, "rc") ||
+		strings.HasPrefix(pre, "pre") ||
+		strings.HasPrefix(pre, "alpha")
 }
 
 // githubToken returns a GitHub token from the environment if present.
@@ -121,22 +185,44 @@ func assetName(version string) string {
 	return fmt.Sprintf("ywai_%s_%s_%s.%s", clean, osName, arch, ext)
 }
 
+// Run upgrades to the latest stable release (GitHub /releases/latest).
+// Returns ("", nil) when already on that version.
 func Run(currentVersion string) (string, error) {
-	latest, err := LatestVersion()
-	if err != nil {
-		return "", fmt.Errorf("checking latest version: %w", err)
+	return run(currentVersion, false)
+}
+
+// RunBeta upgrades to the newest prerelease (beta) on GitHub.
+// Stable latest is intentionally not used. Returns ("", nil) when already
+// on that prerelease tag.
+func RunBeta(currentVersion string) (string, error) {
+	return run(currentVersion, true)
+}
+
+func run(currentVersion string, beta bool) (string, error) {
+	var (
+		target string
+		err    error
+	)
+	if beta {
+		target, err = LatestPrereleaseVersion()
+		if err != nil {
+			return "", fmt.Errorf("checking latest beta: %w", err)
+		}
+	} else {
+		target, err = LatestVersion()
+		if err != nil {
+			return "", fmt.Errorf("checking latest version: %w", err)
+		}
 	}
 
-	normalized := latest
-	if strings.HasPrefix(normalized, "v") {
-		normalized = normalized[1:]
-	}
+	normalized := strings.TrimPrefix(target, "v")
+	current := strings.TrimPrefix(currentVersion, "v")
 
-	if normalized == currentVersion {
+	if normalized == current {
 		return "", nil
 	}
 
-	return downloadAndReplace(latest)
+	return downloadAndReplace(target)
 }
 
 func downloadAndReplace(version string) (string, error) {

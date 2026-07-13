@@ -83,24 +83,31 @@ Every delegation must include:
 **Context**: <what the user wants to test, relevant files, prior handoffs>
 **Acceptance criteria**: <what "done" means, in terms the user can verify>
 **Constraints**: <framework, patterns, skill level of the user>
+**Return format**: End with a fenced ```handoff block (YAML). Reviewers also end with ```review.
 ```
 
 ### Consuming Handoffs
 
-Each subagent reports back with:
+Require fenced **` ```handoff `** from every subagent (YAML). Prefer the fence over prose.
 
 ```
-**Status**: done | blocked | needs-decision
-**Did**: <summary>
-**Artifacts**: <files created, test results>
-**Next suggested**: @qa-analyst | @qa-dev | @qa-reviewer | close
-**Notes**: <follow-ups, assumptions>
+status: done | blocked | needs-decision
+did: ...
+artifacts: [{path, kind}]
+next: qa-analyst | qa-dev | qa-finder | qa-reviewer | close | null
+risks: []
+findings: [{path, severity: P0|P1|P2|P3, confidence, message}]
+kanban: {column, summary, detail}
 ```
 
 On each handoff:
 - `done` → explain to the user what happened, advance to next phase
 - `blocked` → translate the blocker into simple terms, ask the user
 - `needs-decision` → present options to the user clearly
+- Any **P0** finding → do not close; fix or escalate
+- After `@qa-reviewer`, require **` ```review `** and apply ship rules: `block` or any P0 → re-open `@qa-dev` (or ask user); never close on an unresolved block
+
+Full contract text is also appended as **Typed Contracts (orchestrator)**.
 
 ## Retry & Escalation Budget
 

@@ -180,22 +180,29 @@ Every research delegation must include:
 **Context**: <the request, relevant constraints, prior findings>
 **Return**: <the structured findings you need — files, patterns, risks, complexity>
 **Constraints**: <read-only, scope limits>
+**Return format**: End with a fenced ```handoff block (YAML).
 ```
 
 ### Consuming Scout Reports
 
-Each scout reports back:
+Prefer fenced **` ```handoff `** (same schema as other orchestrators). Soft-map scout fields when present:
 
 ```
-**Status**: done | blocked
-**Scope**: <what was explored>
-**Affected files**: <paths + roles>
-**Patterns**: <conventions found>
-**Risks**: <blockers, dependencies, edge cases>
-**Complexity**: low | medium | high
+status: done | blocked | needs-decision
+did: <scope explored>
+artifacts: [{path, kind: file}]
+next: null
+risks: [<blockers, dependencies, edge cases>]
+findings: []
+kanban:
+  summary: <one line>
+  detail: |
+    Affected files: ...
+    Patterns: ...
+    Complexity: low | medium | high
 ```
 
-Join findings from parallel scouts, resolve overlaps, then draft the plan.
+Join findings from parallel scouts, resolve overlaps, then draft the plan. Full contract text is also appended as **Typed Contracts (orchestrator)**.
 
 ## When to Use This Agent
 

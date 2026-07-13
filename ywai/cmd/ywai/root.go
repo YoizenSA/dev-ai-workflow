@@ -444,17 +444,37 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 	}
 }
 
-func selfUpdate() {
-	newVersion, err := selfupdate.Run(version)
+// selfUpdate upgrades the binary. When beta is true, uses the newest GitHub
+// prerelease; otherwise uses /releases/latest (stable only).
+func selfUpdate(beta bool) {
+	var (
+		newVersion string
+		err        error
+	)
+	if beta {
+		fmt.Println("  Channel: beta (prerelease)")
+		newVersion, err = selfupdate.RunBeta(version)
+	} else {
+		newVersion, err = selfupdate.Run(version)
+	}
 	if err != nil {
 		fmt.Printf("  Warning: self-update failed: %v\n", err)
+		if beta {
+			fmt.Println("  Tip: pin a tag with install.sh, e.g.")
+			fmt.Println("    curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/download/vX.Y.Z-beta.N/install.sh | bash -s -- vX.Y.Z-beta.N")
+			return
+		}
 		fmt.Println("  Falling back to go install...")
 		selfUpdateViaGo()
 		return
 	}
 
 	if newVersion == "" {
-		fmt.Println("  Already up to date.")
+		if beta {
+			fmt.Println("  Already on latest beta.")
+		} else {
+			fmt.Println("  Already up to date.")
+		}
 		return
 	}
 
@@ -558,6 +578,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 
 		if dryRun {
 			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
+			fmt.Printf("  [%s] Would install ywai-fastfs MCP\n", a.Name)
 			fmt.Printf("  [%s] Would remove legacy mcp-vision MCP (if present)\n", a.Name)
 			if supportsOpenCodePlugins {
 				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
@@ -576,6 +597,13 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
 		} else {
 			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
+		}
+
+		// Install fastfs MCP (in-process search/read with mtime cache)
+		if err := plugins.InstallFastfsMCP(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install ywai-fastfs MCP: %v\n", a.Name, err)
+		} else {
+			fmt.Printf("  [%s] Installed ywai-fastfs MCP\n", a.Name)
 		}
 
 		// Remove legacy mcp-vision MCP (replaced by vision-bridge plugin).

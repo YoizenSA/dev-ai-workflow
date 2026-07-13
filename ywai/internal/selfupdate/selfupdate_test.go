@@ -25,3 +25,49 @@ func TestAssetNameStripsVersionPrefix(t *testing.T) {
 		t.Fatalf("asset name %q does not include normalized version/os/arch", name)
 	}
 }
+
+func TestPickLatestPrerelease(t *testing.T) {
+	// Newest first (GitHub order)
+	releases := []releaseInfo{
+		{TagName: "v8.10.0", Prerelease: false},
+		{TagName: "v8.10.0-beta.2", Prerelease: true},
+		{TagName: "v8.10.0-beta.1", Prerelease: true},
+	}
+	tag, ok := pickLatestPrerelease(releases)
+	if !ok || tag != "v8.10.0-beta.2" {
+		t.Fatalf("got %q ok=%v, want v8.10.0-beta.2", tag, ok)
+	}
+
+	// Tag-name fallback when prerelease flag missing
+	releases = []releaseInfo{
+		{TagName: "v9.0.0", Prerelease: false},
+		{TagName: "v9.0.0-rc.1", Prerelease: false},
+	}
+	tag, ok = pickLatestPrerelease(releases)
+	if !ok || tag != "v9.0.0-rc.1" {
+		t.Fatalf("tag fallback: got %q ok=%v, want v9.0.0-rc.1", tag, ok)
+	}
+
+	// No prerelease
+	releases = []releaseInfo{
+		{TagName: "v1.0.0", Prerelease: false},
+	}
+	if _, ok := pickLatestPrerelease(releases); ok {
+		t.Fatal("expected no prerelease")
+	}
+}
+
+func TestIsPrereleaseTag(t *testing.T) {
+	cases := map[string]bool{
+		"v8.10.0-beta.1": true,
+		"v8.10.0-rc.1":   true,
+		"v8.10.0-alpha":  true,
+		"v8.10.0":        false,
+		"8.10.0":         false,
+	}
+	for tag, want := range cases {
+		if got := isPrereleaseTag(tag); got != want {
+			t.Errorf("isPrereleaseTag(%q)=%v want %v", tag, got, want)
+		}
+	}
+}

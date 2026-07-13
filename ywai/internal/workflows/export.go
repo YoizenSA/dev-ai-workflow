@@ -133,6 +133,9 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	// 1. Orchestrator agent.
 	orchPath := filepath.Join(e.agentsDir, orchestratorID+".md")
 	orchBody := orchestratorBody(wf, subAgentIDs)
+	// Same typed contracts as core orchestrators (handoff fence + review ship gate).
+	// Single source: agents/sections/orchestrator-contracts.md — do not fork per workflow.
+	orchBody = agents.AppendSections(orchBody, []string{"orchestrator-contracts"}, config.AgentsSourceDir())
 	files[orchPath] = e.renderOrchestratorMarkdown(wf, orchestratorID, orchTaskTargets, orchBody)
 	artifacts = append(artifacts, ExportArtifact{Path: orchPath, Kind: "agent", Name: orchestratorID})
 
