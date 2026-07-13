@@ -127,7 +127,7 @@ func (s *server) serve() error {
 func (s *server) handle(msg jsonrpcMessage) jsonrpcResponse {
 	switch msg.Method {
 	case "initialize":
-		return s.handleInitialize()
+		return s.handleInitialize(msg.Params)
 	case "tools/list":
 		return s.handleToolsList()
 	case "tools/call":
@@ -138,6 +138,17 @@ func (s *server) handle(msg jsonrpcMessage) jsonrpcResponse {
 }
 
 // ─── Initialize ─────────────────────────────────────────────────────────────
+
+// protocol versions accepted by the official MCP client SDK (opencode, etc.).
+// "0.1.0" is rejected by the client with: Server's protocol version is not supported.
+var supportedProtocolVersions = map[string]bool{
+	"2025-06-18": true,
+	"2025-03-26": true,
+	"2024-11-05": true,
+	"2024-10-07": true,
+}
+
+const defaultProtocolVersion = "2024-11-05"
 
 type initializeResult struct {
 	ProtocolVersion string         `json:"protocolVersion"`
@@ -150,10 +161,23 @@ type serverInfo struct {
 	Version string `json:"version"`
 }
 
-func (s *server) handleInitialize() jsonrpcResponse {
+type initializeParams struct {
+	ProtocolVersion string `json:"protocolVersion"`
+}
+
+func negotiateProtocolVersion(requested string) string {
+	if supportedProtocolVersions[requested] {
+		return requested
+	}
+	return defaultProtocolVersion
+}
+
+func (s *server) handleInitialize(raw json.RawMessage) jsonrpcResponse {
+	var params initializeParams
+	_ = json.Unmarshal(raw, &params)
 	return jsonrpcResponse{
 		Result: initializeResult{
-			ProtocolVersion: "0.1.0",
+			ProtocolVersion: negotiateProtocolVersion(params.ProtocolVersion),
 			Capabilities:    map[string]any{"tools": map[string]any{}},
 			ServerInfo: serverInfo{
 				Name:    "tokenbank-vision",

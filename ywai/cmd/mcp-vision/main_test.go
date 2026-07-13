@@ -17,6 +17,7 @@ func TestInitialize(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"opencode","version":"1"}}`),
 	}
 	resp := s.handle(msg)
 	if resp.Error != nil {
@@ -25,12 +26,41 @@ func TestInitialize(t *testing.T) {
 	var result map[string]any
 	b, _ := json.Marshal(resp.Result)
 	json.Unmarshal(b, &result)
-	if result["protocolVersion"] != "0.1.0" {
-		t.Fatalf("expected protocolVersion 0.1.0, got %v", result["protocolVersion"])
+	if result["protocolVersion"] != "2024-11-05" {
+		t.Fatalf("expected protocolVersion 2024-11-05, got %v", result["protocolVersion"])
 	}
 	si, _ := result["serverInfo"].(map[string]any)
 	if si["name"] != "tokenbank-vision" {
 		t.Fatalf("expected server name tokenbank-vision, got %v", si["name"])
+	}
+}
+
+func TestInitialize_UnsupportedClientVersionFallsBack(t *testing.T) {
+	s := &server{}
+	msg := jsonrpcMessage{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"0.1.0"}`),
+	}
+	resp := s.handle(msg)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %+v", resp.Error)
+	}
+	var result map[string]any
+	b, _ := json.Marshal(resp.Result)
+	json.Unmarshal(b, &result)
+	if result["protocolVersion"] != defaultProtocolVersion {
+		t.Fatalf("expected fallback %s, got %v", defaultProtocolVersion, result["protocolVersion"])
+	}
+}
+
+func TestNegotiateProtocolVersion(t *testing.T) {
+	if got := negotiateProtocolVersion("2025-03-26"); got != "2025-03-26" {
+		t.Fatalf("got %q, want client version echoed", got)
+	}
+	if got := negotiateProtocolVersion("nope"); got != defaultProtocolVersion {
+		t.Fatalf("got %q, want %q", got, defaultProtocolVersion)
 	}
 }
 
