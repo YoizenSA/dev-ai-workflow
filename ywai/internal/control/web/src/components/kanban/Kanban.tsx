@@ -4,6 +4,7 @@ import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { DelegationColumn, WSMessage } from "../../api/types";
 import { DelegationCard, COLUMNS } from "./DelegationCard";
+import { SessionSidebar } from "./SessionSidebar";
 import "./Kanban.css";
 
 export default function Kanban() {
@@ -74,6 +75,7 @@ export default function Kanban() {
 
 	return (
 		<div className="kanban-page">
+			<SessionSidebar />
 			<div className="kanban-main">
 				<div className="page-header">
 					<div className="page-title">

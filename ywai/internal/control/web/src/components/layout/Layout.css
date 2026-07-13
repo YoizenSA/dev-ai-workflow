@@ -11,29 +11,3 @@
    longer redefines them (it was overriding the glassmorphism with
    non-existent --accent / --hover-bg vars and a stray border-left). */
 
-/* ── Sessions block embedded inside the main sidebar (Kanban only) ── */
-.sidebar-sessions {
-	display: flex;
-	flex-direction: column;
-	flex: 1;
-	min-height: 0;
-	margin-top: var(--space-3);
-	border-top: 1px solid var(--panel-border);
-}
-
-/* Override the standalone Kanban sidebar styles so the embedded version
-   stretches to fill the parent sidebar instead of forcing 260px. */
-.sidebar-sessions .sessions-sidebar {
-	width: 100%;
-	flex: 1;
-	min-height: 0;
-	border-right: none;
-	background: transparent;
-}
-
-/* Collapsed sidebar: the sessions list needs text + width to be usable, so
-   hide it on the 78px icon rail — same treatment as nav labels, brand-sub,
-   and version-update (shell.css). Without this it overflows and breaks. */
-.collapsed .sidebar-sessions {
-	display: none;
-}

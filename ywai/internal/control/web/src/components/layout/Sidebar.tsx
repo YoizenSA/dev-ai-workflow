@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useMissionsStore } from "../../stores/missionsStore";
-import { SessionSidebar } from "../kanban/SessionSidebar";
 import { ThemeToggle } from "../shared/ThemeToggle";
 import { VersionUpdate } from "./VersionUpdate";
 
@@ -197,14 +196,6 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 				);
 			})}
 			</nav>
-
-			{/* Kanban: sessions live inside the main sidebar so the board
-			    gets full width for its 5 columns. */}
-			{location.pathname === "/" && (
-				<div className="sidebar-sessions">
-					<SessionSidebar />
-				</div>
-			)}
 
 			{/* Sidebar foot: footer tools (theme toggle).
 			    Pushed to the bottom by .sidebar-foot { margin-top: auto } in shell.css. */}
