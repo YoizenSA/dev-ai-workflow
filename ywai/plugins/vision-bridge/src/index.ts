@@ -227,13 +227,40 @@ async function analyzeImage(
     throw new Error(`TokenBank vision error (${res.status}): ${text.slice(0, 300)}`)
   }
   const body = JSON.parse(text) as {
-    choices?: Array<{ message?: { content?: string | null } }>
+    choices?: Array<{
+      message?: {
+        content?: string | null | Array<{ type?: string; text?: string }>
+        reasoning_content?: string | null
+      }
+    }>
   }
-  const content = body.choices?.[0]?.message?.content
+  const message = body.choices?.[0]?.message
+  const content = normalizeAssistantText(message?.content, message?.reasoning_content)
   if (!content) {
     throw new Error("TokenBank vision returned empty content")
   }
   return content
+}
+
+/** Flatten OpenAI-style content + reasoning_content into a single string. */
+function normalizeAssistantText(
+  content: string | null | undefined | Array<{ type?: string; text?: string }>,
+  reasoning?: string | null,
+): string {
+  let text = ""
+  if (typeof content === "string") {
+    text = content.trim()
+  } else if (Array.isArray(content)) {
+    text = content
+      .map((part) => (typeof part?.text === "string" ? part.text : ""))
+      .join("")
+      .trim()
+  }
+  if (text) return text
+  if (typeof reasoning === "string" && reasoning.trim()) {
+    return reasoning.trim()
+  }
+  return ""
 }
 
 const VisionBridgePlugin: Plugin = async () => {
@@ -289,9 +316,11 @@ const VisionBridgePlugin: Plugin = async () => {
             messageID: part.messageID,
             sessionID: part.sessionID,
             synthetic: true,
+            // Keep wording positive: "cannot see images" made chat models claim the bridge failed.
             text:
-              `[Vision bridge → ${visionModel}] The active model (${model.modelID}) cannot see images. ` +
-              `Analysis from the vision model:\n\n${analysis}`,
+              `[Image analysis via ${visionModel}]\n` +
+              `The user attached an image. Below is a description produced by the vision model ` +
+              `(the chat model should treat this as ground truth about the image):\n\n${analysis}`,
           })
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
@@ -301,7 +330,9 @@ const VisionBridgePlugin: Plugin = async () => {
             messageID: part.messageID,
             sessionID: part.sessionID,
             synthetic: true,
-            text: `[Vision bridge failed] ${msg}`,
+            text:
+              `[Vision bridge error] Could not analyze the attached image with the configured vision model. ` +
+              `Details: ${msg}`,
           })
         }
       }
