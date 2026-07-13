@@ -285,9 +285,17 @@ const VisionBridgePlugin: Plugin = async () => {
         .map((p) => p.text!.trim())
         .filter(Boolean)
         .join("\n")
-      const prompt =
-        userText ||
-        "Describe this image in detail. Note any text, UI, errors, or relevant visual information."
+      // Always ask the vision model (in English) for a concrete visual description.
+      // If the user also wrote a question, answer it after describing what is visible.
+      const prompt = [
+        "You are a vision assistant. Look at the attached image carefully.",
+        "Respond in clear English.",
+        "First describe exactly what you see: layout, UI elements, text (transcribe it), colors, icons, logos, errors, and any important visual details.",
+        "Be specific and factual. Do not invent content that is not visible.",
+        userText
+          ? `Then answer the user's request about the image:\n${userText}`
+          : "If there is no further question, end with a short one-paragraph summary of the image.",
+      ].join("\n")
 
       const next: AnyPart[] = []
       for (const part of parts) {
