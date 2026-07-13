@@ -174,7 +174,7 @@ describe("exportCurrent", () => {
 		useWorkflowStore.setState({ current: WORKFLOW });
 		mockApi.export.mockResolvedValue({ workflowName: "w", files: [], dryRun: false });
 		await useWorkflowStore.getState().exportCurrent(true);
-		expect(mockApi.export).toHaveBeenCalledWith("w", true);
+		expect(mockApi.export).toHaveBeenCalledWith("w", true, "opencode");
 	});
 });
 

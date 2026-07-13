@@ -330,9 +330,14 @@ export default function SessionPane({
       // Session status. The event may target this pane's session OR one of its
       // subagents, so key the busy report by the event's own session id and only
       // flip this pane's streaming flag when it's about this session.
-      if (data.type === "session.status") {
+      if (data.type === "session.status" || data.type === "session.idle") {
         const evId = p.sessionID || sessionId;
-        const running = p.status === "running";
+        // status can be a string ("running") or OpenCode's object ({type:"busy"}).
+        const st = p.status;
+        const running =
+          data.type !== "session.idle" &&
+          (st === "running" || st === "busy" ||
+            st?.type === "busy" || st?.type === "running");
         onBusyChange(evId, running);
         if (evId === sessionId) setIsStreaming(running);
         return;
@@ -344,45 +349,48 @@ export default function SessionPane({
         return;
       }
 
-      const msgID = p.messageID || p.id;
+      // OpenCode nests event payloads: message.updated → p.info,
+      // message.part.updated → p.part, message.part.delta →
+      // {messageID, partID, field, delta}. Older/flat emitters put the fields
+      // directly on properties — support both shapes.
+      const info = p.info || p;
+      const part = p.part || p;
+      const msgID = part.messageID || info.id || p.messageID || p.id;
       if (!msgID) return;
 
       if (data.type === "message.updated") {
-        const m = ensureMsg(msgID, p.role, p.created_at);
-        if (p.role) m.role = p.role;
-        if (p.created_at) m.created = p.created_at;
+        const created = info.time?.created ?? info.created_at;
+        const m = ensureMsg(msgID, info.role, created);
+        if (info.role) m.role = info.role;
+        if (created) m.created = created;
         rebuildMessages();
         return;
       }
 
-      if (
-        data.type === "message.part.updated" ||
-        data.type === "message.part.delta"
-      ) {
-        const part = p;
-        if (!part) return;
+      if (data.type === "message.part.delta") {
+        const partID = part.partID || part.id || `${msgID}-0`;
+        const m = ensureMsg(msgID);
+        const kind = part.field === "reasoning" ? "reasoning" : "text";
+        const existing = ensurePart(m, partID, kind);
+        existing.text = (existing.text || "") + (part.delta ?? part.text ?? "");
+        if (!m.order.includes(partID)) m.order.push(partID);
+        rebuildMessages();
+        return;
+      }
+
+      if (data.type === "message.part.updated") {
         const m = ensureMsg(msgID);
         const partID = part.id || `${msgID}-0`;
 
         if (part.type === "text" || !part.type) {
-          const existing = m.parts.get(partID);
-          if (data.type === "message.part.delta" && existing) {
-            existing.text = (existing.text || "") + (part.text || "");
-          } else {
-            ensurePart(m, partID, "text");
-            setPart(msgID, partID, { text: part.text || "" });
-          }
+          ensurePart(m, partID, "text");
+          setPart(msgID, partID, { text: part.text || "" });
           // Providers that don't send an explicit part `order` (e.g. pi) still
           // need the part registered so rebuildMessages renders it.
           if (!m.order.includes(partID)) m.order.push(partID);
         } else if (part.type === "reasoning") {
-          const existing = m.parts.get(partID);
-          if (data.type === "message.part.delta" && existing) {
-            existing.text = (existing.text || "") + (part.text || "");
-          } else {
-            ensurePart(m, partID, "reasoning");
-            setPart(msgID, partID, { text: part.text || "" });
-          }
+          ensurePart(m, partID, "reasoning");
+          setPart(msgID, partID, { text: part.text || "" });
           if (!m.order.includes(partID)) m.order.push(partID);
         } else if (part.type === "tool") {
           const st = part.state || {};
@@ -393,6 +401,7 @@ export default function SessionPane({
               : st.output
                 ? JSON.stringify(st.output, null, 2)
                 : "");
+          ensurePart(m, partID, "tool");
           setPart(msgID, partID, {
             kind: "tool",
             tool: part.tool,
@@ -402,11 +411,11 @@ export default function SessionPane({
             agent: st.agent,
             description: st.description,
           });
-          // Ensure order
           if (!m.order.includes(partID)) {
             m.order.push(partID);
           }
         } else if (part.type === "subtask") {
+          ensurePart(m, partID, "subtask");
           setPart(msgID, partID, {
             kind: "subtask",
             agent: part.agent,

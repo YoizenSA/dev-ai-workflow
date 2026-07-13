@@ -99,20 +99,35 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 // shouldForwardEvent checks whether an OpenCode event belongs to the requested
-// session. OpenCode nests the session id under `properties.sessionID`.
+// session. OpenCode puts the session id at `properties.sessionID`, but nested
+// payloads carry their own: `properties.info.sessionID` (message.updated) and
+// `properties.part.sessionID` (message.part.updated).
 func (cp *ChatProxy) shouldForwardEvent(data, sessionID string) bool {
 	var event struct {
 		Properties struct {
 			SessionID string `json:"sessionID"`
+			Info      struct {
+				SessionID string `json:"sessionID"`
+			} `json:"info"`
+			Part struct {
+				SessionID string `json:"sessionID"`
+			} `json:"part"`
 		} `json:"properties"`
 	}
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
 		return true // unparseable → forward (likely a global event)
 	}
-	if event.Properties.SessionID == "" {
+	sid := event.Properties.SessionID
+	if sid == "" {
+		sid = event.Properties.Info.SessionID
+	}
+	if sid == "" {
+		sid = event.Properties.Part.SessionID
+	}
+	if sid == "" {
 		return true // global event (server.connected, catalog.updated, ...)
 	}
-	return event.Properties.SessionID == sessionID
+	return sid == sessionID
 }
 
 // handleListSessions lists OpenCode sessions.
