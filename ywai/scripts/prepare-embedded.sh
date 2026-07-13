@@ -6,6 +6,8 @@ WEB_DIR="$REPO_ROOT/internal/control/web"
 EMBED_DIR="$REPO_ROOT/cmd/ywai/embedded_data"
 BA_DIR="$REPO_ROOT/plugins/background-agents"
 BA_BUNDLE="$BA_DIR/dist/background-agents.js"
+VB_DIR="$REPO_ROOT/plugins/vision-bridge"
+VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
 
 # Rebuild the React UI so the embedded binary always carries the current
 # frontend. Without this, `ywai install` / `dev.sh install` would ship a stale
@@ -37,8 +39,16 @@ if command -v bun >/dev/null 2>&1; then
     bun install --cwd "$BA_DIR"
     bun build "$BA_DIR/src/plugin/background-agents.ts" \
         --outfile "$BA_BUNDLE" --target node
+    echo "Building vision-bridge plugin (bun bundle)…"
+    bun build "$VB_DIR/src/index.ts" \
+        --outfile "$VB_BUNDLE" --target node
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
+    if [ -f "$VB_BUNDLE" ]; then
+        echo "using existing vision-bridge bundle as-is"
+    else
+        echo "WARNING: vision-bridge bundle missing (optional when bun unavailable)"
+    fi
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
     echo "       The background-agents plugin is required; refusing to ship a release without it." >&2
@@ -59,6 +69,9 @@ cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"
 if [ -f "$BA_BUNDLE" ]; then
     cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"
+fi
+if [ -f "$VB_BUNDLE" ]; then
+    cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"
 fi
 
 # ywai TUI logo (home_logo slot). Plain .tsx source — no build step.

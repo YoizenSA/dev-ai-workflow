@@ -23,6 +23,10 @@ var (
 // background-agents plugin, both in the embedded FS and once seeded to disk.
 const BackgroundAgentsBundleName = "background-agents.js"
 
+// VisionBridgeBundleName is the filename of the vision-bridge opencode plugin
+// that auto-routes images through TokenBank vision for text-only models.
+const VisionBridgeBundleName = "vision-bridge.js"
+
 // TuiLogoBundleName is the filename of the ywai TUI logo plugin, both in the
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
@@ -316,6 +320,28 @@ func BackgroundAgentsBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("background-agents plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// VisionBridgeBundlePath resolves the path to the bundled vision-bridge plugin JS.
+// Same resolution order as BackgroundAgentsBundlePath.
+func VisionBridgeBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "vision-bridge", "dist", VisionBridgeBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), VisionBridgeBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 // TuiLogoBundlePath resolves the path to the ywai TUI logo plugin source. It

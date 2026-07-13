@@ -559,6 +559,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 			fmt.Printf("  [%s] Would install mcp-vision MCP\n", a.Name)
 			if supportsOpenCodePlugins {
 				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
+				fmt.Printf("  [%s] Would install vision-bridge plugin\n", a.Name)
 				fmt.Printf("  [%s] Would install ywai TUI logo\n", a.Name)
 			}
 			if installMCP {
@@ -588,6 +589,14 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Installed background-agents plugin\n", a.Name)
+			}
+
+			// vision-bridge: auto-route attached images through TokenBank vision
+			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
+			if err := plugins.InstallVisionBridge(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install vision-bridge plugin: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Installed vision-bridge plugin\n", a.Name)
 			}
 
 			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
