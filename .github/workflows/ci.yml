@@ -1,10 +1,15 @@
 name: CI
 
+# Run on branch/PR work only. Tag pushes are handled by Release — do NOT
+# re-run the full matrix on every v* tag (avoids double CI when tagging the
+# same commit already tested on main).
 on:
   push:
-    branches: []
+    branches:
+      - main
   pull_request:
-    branches: []
+    branches:
+      - main
 
 defaults:
   run:

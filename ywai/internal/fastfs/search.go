@@ -12,10 +12,10 @@ import (
 
 // SearchOptions controls content search.
 type SearchOptions struct {
-	Pattern     string // Go regexp
-	Glob        string // optional file filter (same as Find pattern)
-	MaxMatches  int    // default 50
-	MaxFiles    int    // default 2000 scanned files with content
+	Pattern         string // Go regexp
+	Glob            string // optional file filter (same as Find pattern)
+	MaxMatches      int    // default 50
+	MaxFiles        int    // default 2000 scanned files with content
 	CaseInsensitive bool
 }
 
@@ -29,11 +29,11 @@ type SearchMatch struct {
 
 // SearchResult is the structured search response.
 type SearchResult struct {
-	Matches    []SearchMatch `json:"matches"`
-	FilesScanned int         `json:"filesScanned"`
-	Truncated  bool          `json:"truncated"`
-	CacheHits  int64         `json:"cacheHits"`
-	CacheMisses int64        `json:"cacheMisses"`
+	Matches      []SearchMatch `json:"matches"`
+	FilesScanned int           `json:"filesScanned"`
+	Truncated    bool          `json:"truncated"`
+	CacheHits    int64         `json:"cacheHits"`
+	CacheMisses  int64         `json:"cacheMisses"`
 }
 
 // Search runs a parallel regex content search through the mtime cache.
@@ -59,11 +59,11 @@ func (s *Service) Search(opts SearchOptions) (*SearchResult, error) {
 	}
 	jobs := make(chan job, 64)
 	var (
-		mu       sync.Mutex
-		matches  []SearchMatch
-		scanned  int32
-		trunc    int32
-		wg       sync.WaitGroup
+		mu      sync.Mutex
+		matches []SearchMatch
+		scanned int32
+		trunc   int32
+		wg      sync.WaitGroup
 	)
 
 	workers := runtime.NumCPU()

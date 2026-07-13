@@ -52,10 +52,10 @@ type rpcRequest struct {
 }
 
 type rpcResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
+	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *rpcError   `json:"error,omitempty"`
+	Result  interface{}     `json:"result,omitempty"`
+	Error   *rpcError       `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -114,10 +114,10 @@ func toolDefs() []map[string]interface{} {
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"pattern":           map[string]interface{}{"type": "string", "description": "Go regexp"},
-					"glob":              map[string]interface{}{"type": "string", "description": "Optional file glob filter"},
-					"max_matches":       map[string]interface{}{"type": "integer"},
-					"case_insensitive":  map[string]interface{}{"type": "boolean"},
+					"pattern":          map[string]interface{}{"type": "string", "description": "Go regexp"},
+					"glob":             map[string]interface{}{"type": "string", "description": "Optional file glob filter"},
+					"max_matches":      map[string]interface{}{"type": "integer"},
+					"case_insensitive": map[string]interface{}{"type": "boolean"},
 				},
 				"required": []string{"pattern"},
 			},
