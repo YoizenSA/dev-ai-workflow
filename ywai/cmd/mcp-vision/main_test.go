@@ -116,14 +116,13 @@ func TestToolsList(t *testing.T) {
 }
 
 func TestListVisionModels(t *testing.T) {
+	// Cached catalog is returned when TokenBank is unreachable (baseURL is fake).
 	s := &server{
 		baseURL: "https://tokenbank.example.com",
 		apiKey:  "test-key",
 		visionModels: []visionModel{
-			{ID: "mimo-v2.5", Name: "MiMo V2.5", Pricing: "$0.15"},
-			{ID: "kimi-k2.6", Name: "Kimi K2.6", Pricing: "$0.40"},
-			{ID: "qwen3.6-plus", Name: "Qwen 3.6 Plus", Pricing: "$0.50"},
-			{ID: "mimo-v2.5-pro", Name: "MiMo V2.5 Pro", Pricing: "$0.50"},
+			{ID: "vision-a", Name: "Vision A", Modalities: []string{"text", "image"}},
+			{ID: "vision-b", Name: "Vision B", Modalities: []string{"text", "image"}},
 		},
 	}
 	msg := jsonrpcMessage{
@@ -143,8 +142,8 @@ func TestListVisionModels(t *testing.T) {
 	if len(result.Content) != 1 {
 		t.Fatalf("expected 1 content item, got %d", len(result.Content))
 	}
-	if !strings.Contains(result.Content[0].Text, "mimo-v2.5") {
-		t.Fatalf("response should contain mimo-v2.5, got: %s", result.Content[0].Text)
+	if !strings.Contains(result.Content[0].Text, "vision-a") {
+		t.Fatalf("response should contain vision-a, got: %s", result.Content[0].Text)
 	}
 }
 
@@ -235,9 +234,9 @@ func TestAnalyzeImage_InvalidDataURI(t *testing.T) {
 }
 
 func TestBuildVisionPayload(t *testing.T) {
-	p := buildVisionPayload("mimo-v2.5", "describe this", "data:image/png;base64,abc123")
-	if p.Model != "mimo-v2.5" {
-		t.Fatalf("expected model mimo-v2.5, got %s", p.Model)
+	p := buildVisionPayload("vision-a", "describe this", "data:image/png;base64,abc123")
+	if p.Model != "vision-a" {
+		t.Fatalf("expected model vision-a, got %s", p.Model)
 	}
 	if len(p.Messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(p.Messages))
@@ -263,17 +262,33 @@ func TestBuildVisionPayload(t *testing.T) {
 }
 
 func TestDefaultModel(t *testing.T) {
-	// Default model is applied when model is empty.
-	var args analyzeImageArgs
-	if err := json.Unmarshal([]byte(`{"image":"data:image/png;base64,abc","prompt":"what"}`), &args); err != nil {
-		t.Fatal(err)
+	// Server-side default is used when args.model is empty.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		if reqBody["model"] != "catalog-default" {
+			t.Errorf("expected model catalog-default, got %v", reqBody["model"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer ts.Close()
+
+	s := &server{
+		baseURL:     ts.URL,
+		apiKey:      "test-key",
+		httpCli:     ts.Client(),
+		visionModel: "catalog-default",
 	}
-	model := args.Model
-	if model == "" {
-		model = "mimo-v2.5"
+	msg := jsonrpcMessage{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`20`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"analyze_image","arguments":{"image":"data:image/png;base64,abc","prompt":"what"}}`),
 	}
-	if model != "mimo-v2.5" {
-		t.Fatalf("expected default model mimo-v2.5, got %s", model)
+	resp := s.handle(msg)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %+v", resp.Error)
 	}
 }
 
@@ -340,8 +355,8 @@ func TestAnalyzeImage_HTTPSuccess(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 			t.Fatal(err)
 		}
-		if reqBody["model"] != "mimo-v2.5" {
-			t.Errorf("expected model mimo-v2.5, got %v", reqBody["model"])
+		if reqBody["model"] != "vision-a" {
+			t.Errorf("expected model vision-a, got %v", reqBody["model"])
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"choices":[{"message":{"content":"test response"}}]}`))
@@ -352,7 +367,7 @@ func TestAnalyzeImage_HTTPSuccess(t *testing.T) {
 		baseURL:     ts.URL,
 		apiKey:      "test-key",
 		httpCli:     ts.Client(),
-		visionModel: "mimo-v2.5",
+		visionModel: "vision-a",
 	}
 	msg := jsonrpcMessage{
 		JSONRPC: "2.0",
@@ -384,9 +399,10 @@ func TestAnalyzeImage_HTTPError(t *testing.T) {
 	defer ts.Close()
 
 	s := &server{
-		baseURL: ts.URL,
-		apiKey:  "test-key",
-		httpCli: ts.Client(),
+		baseURL:     ts.URL,
+		apiKey:      "test-key",
+		httpCli:     ts.Client(),
+		visionModel: "vision-a",
 	}
 	msg := jsonrpcMessage{
 		JSONRPC: "2.0",

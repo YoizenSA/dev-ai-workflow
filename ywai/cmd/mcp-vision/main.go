@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 )
 
 func main() {
@@ -40,17 +41,26 @@ func run() error {
 		return fmt.Errorf("tokenbank_api_key not set in config")
 	}
 
+	baseURL := strings.TrimRight(cfg.TokenBankURL, "/")
+	apiKey := cfg.TokenBankAPIKey
+	httpCli := &http.Client{Timeout: 60 * time.Second}
+
+	// Live catalog from TokenBank — never hardcode product model ids.
+	visionModels, err := loadVisionModels(baseURL, apiKey)
+	if err != nil {
+		log.Printf("mcp-vision: warning: could not load vision models: %v", err)
+	}
+	defaultModel := tokenbank.ResolveVisionModelID(cfg.GetVisionModel(), visionModels)
+	if defaultModel == "" && len(visionModels) == 0 {
+		log.Printf("mcp-vision: warning: no vision models available yet; analyze_image will fail until TokenBank is reachable")
+	}
+
 	s := &server{
-		baseURL:     strings.TrimRight(cfg.TokenBankURL, "/"),
-		apiKey:      cfg.TokenBankAPIKey,
-		httpCli:     &http.Client{Timeout: 60 * time.Second},
-		visionModel: cfg.GetVisionModel(),
-		visionModels: []visionModel{
-			{ID: "mimo-v2.5", Name: "MiMo V2.5", Pricing: "$0.15 per 1M input tokens"},
-			{ID: "kimi-k2.6", Name: "Kimi K2.6", Pricing: "$0.40 per 1M input tokens"},
-			{ID: "qwen3.6-plus", Name: "Qwen 3.6 Plus", Pricing: "$0.50 per 1M input tokens"},
-			{ID: "mimo-v2.5-pro", Name: "MiMo V2.5 Pro", Pricing: "$0.50 per 1M input tokens"},
-		},
+		baseURL:      baseURL,
+		apiKey:       apiKey,
+		httpCli:      httpCli,
+		visionModel:  defaultModel,
+		visionModels: toVisionModelList(visionModels),
 	}
 	return s.serve()
 }
@@ -62,13 +72,33 @@ type server struct {
 	apiKey       string
 	httpCli      *http.Client
 	visionModels []visionModel
-	visionModel  string // effective default vision model from user config
+	visionModel  string // effective default vision model (config or first from catalog)
 }
 
 type visionModel struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Pricing string `json:"pricing"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Modalities []string `json:"modalities,omitempty"`
+}
+
+func loadVisionModels(baseURL, apiKey string) ([]tokenbank.ModelInfo, error) {
+	resp, err := tokenbank.FetchModels(baseURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return tokenbank.FilterVisionModels(resp.Models), nil
+}
+
+func toVisionModelList(models []tokenbank.ModelInfo) []visionModel {
+	out := make([]visionModel, 0, len(models))
+	for _, m := range models {
+		vm := visionModel{ID: m.ID, Name: m.Name}
+		if m.Modalities != nil {
+			vm.Modalities = append([]string(nil), m.Modalities.Input...)
+		}
+		out = append(out, vm)
+	}
+	return out
 }
 
 // jsonrpcMessage is a generic JSON-RPC 2.0 envelope.
@@ -190,12 +220,20 @@ func (s *server) handleInitialize(raw json.RawMessage) jsonrpcResponse {
 // ─── Tools / List ───────────────────────────────────────────────────────────
 
 func (s *server) handleToolsList() jsonrpcResponse {
+	modelProp := map[string]any{
+		"type":        "string",
+		"description": "Vision model to use. Omit to use the configured default (or the first vision model from TokenBank).",
+	}
+	if s.visionModel != "" {
+		modelProp["description"] = fmt.Sprintf("Vision model to use (default: %s).", s.visionModel)
+		modelProp["default"] = s.visionModel
+	}
 	return jsonrpcResponse{
 		Result: map[string]any{
 			"tools": []any{
 				map[string]any{
 					"name":        "analyze_image",
-					"description": "Analyze an image using a Tokenbank vision model. Provide the image as a base64 data URI and a text prompt describing what to analyze.",
+					"description": "Analyze an image using a Tokenbank vision model. Provide the image as a base64 data URI and a text prompt describing what to analyze. Call list_vision_models to see available models.",
 					"inputSchema": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
@@ -207,18 +245,14 @@ func (s *server) handleToolsList() jsonrpcResponse {
 								"type":        "string",
 								"description": "The question or instruction about the image.",
 							},
-							"model": map[string]any{
-								"type":        "string",
-								"description": "Vision model to use (default: mimo-v2.5).",
-								"default":     "mimo-v2.5",
-							},
+							"model": modelProp,
 						},
 						"required": []any{"image", "prompt"},
 					},
 				},
 				map[string]any{
 					"name":        "list_vision_models",
-					"description": "List available vision-capable models and their pricing.",
+					"description": "List vision-capable models from TokenBank (live catalog).",
 					"inputSchema": map[string]any{
 						"type":       "object",
 						"properties": map[string]any{},
@@ -298,6 +332,17 @@ func (s *server) callAnalyzeImage(raw json.RawMessage) jsonrpcResponse {
 	model := args.Model
 	if model == "" {
 		model = s.visionModel
+	}
+	if model == "" {
+		// Refresh catalog once more in case TokenBank was down at startup.
+		if models, err := loadVisionModels(s.baseURL, s.apiKey); err == nil && len(models) > 0 {
+			s.visionModels = toVisionModelList(models)
+			model = tokenbank.ResolveVisionModelID("", models)
+			s.visionModel = model
+		}
+	}
+	if model == "" {
+		return jsonrpcResponse{Error: &rpcError{Code: -32603, Message: "no vision model configured and none available from TokenBank"}}
 	}
 
 	// Build the OpenAI-compatible chat request.
@@ -409,6 +454,15 @@ func buildVisionPayload(model, prompt, imageDataURI string) visionPayload {
 // ─── list_vision_models ─────────────────────────────────────────────────────
 
 func (s *server) callListVisionModels() jsonrpcResponse {
+	// Always refresh from TokenBank so the tool reflects live catalog changes.
+	if models, err := loadVisionModels(s.baseURL, s.apiKey); err == nil {
+		s.visionModels = toVisionModelList(models)
+		if s.visionModel == "" {
+			s.visionModel = tokenbank.ResolveVisionModelID("", models)
+		}
+	} else if len(s.visionModels) == 0 {
+		return jsonrpcResponse{Error: &rpcError{Code: -32603, Message: "failed to list vision models: " + err.Error()}}
+	}
 	out, _ := json.Marshal(s.visionModels)
 	return jsonrpcResponse{
 		Result: toolCallResult{

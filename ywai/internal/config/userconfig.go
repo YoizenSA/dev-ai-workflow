@@ -21,9 +21,9 @@ const (
 	RoleDevops    = "devops"
 )
 
-// DefaultVisionModel is the default vision model used by mcp-vision when no
-// user config override is set.
-const DefaultVisionModel = "mimo-v2.5"
+// DefaultVisionModel is intentionally empty: mcp-vision resolves the default
+// from TokenBank's live vision-capable model catalog at runtime.
+const DefaultVisionModel = ""
 
 // CanonicalRoles is the ordered set of supported role identifiers.
 // Ordered roughly by delivery phase: plan → design → implement → verify → ship.
@@ -200,21 +200,22 @@ func (c *UserConfig) ensureDefaults() {
 	if _, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; !ok {
 		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 	}
-	if c.VisionModel == "" {
-		c.VisionModel = DefaultVisionModel
-	}
+	// VisionModel stays empty when unset so mcp-vision can pick from
+	// TokenBank's live catalog instead of a hardcoded product default.
 }
 
-// GetVisionModel returns the effective vision model: override if set, otherwise default.
-// Strips a provider prefix (e.g. "opencode-admin/mimo-v2.5" → "mimo-v2.5") so the
-// value is a bare TokenBank model id suitable for /v1/chat/completions.
+// GetVisionModel returns the configured vision model preference (override wins),
+// or empty when unset. Strips a provider prefix (e.g. "opencode-admin/mimo-v2.5"
+// → "mimo-v2.5") so the value is a bare TokenBank model id. An empty return means
+// the caller should resolve the default from TokenBank's vision catalog.
 func (c *UserConfig) GetVisionModel() string {
-	raw := DefaultVisionModel
+	raw := ""
 	if c != nil && c.VisionModelOverride != "" {
 		raw = c.VisionModelOverride
 	} else if c != nil && c.VisionModel != "" {
 		raw = c.VisionModel
 	}
+	raw = strings.TrimSpace(raw)
 	if i := strings.LastIndex(raw, "/"); i >= 0 && i+1 < len(raw) {
 		return raw[i+1:]
 	}

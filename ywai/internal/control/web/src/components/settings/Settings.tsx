@@ -157,7 +157,7 @@ export default function Settings() {
 
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
-	const [visionModel, setVisionModel] = useState("mimo-v2.5");
+	const [visionModel, setVisionModel] = useState("");
 	const [visionModelOverride, setVisionModelOverride] = useState("");
 	const [agentList, setAgentList] = useState<string[]>([]);
 
@@ -198,7 +198,7 @@ function GeneralTab() {
 					defaultAgent:
 						cfg.defaultAgent ?? (raw.default_agent as string | undefined),
 				});
-				setVisionModel(userCfg?.vision_model ?? "mimo-v2.5");
+				setVisionModel(userCfg?.vision_model ?? "");
 				setVisionModelOverride(userCfg?.vision_model_override ?? "");
 			}
 			setAgentList((agents ?? []).map((a) => a.name));
@@ -262,7 +262,8 @@ function GeneralTab() {
 
 			// Save vision model fields to user config (separate API)
 			await configApi.updateUserConfig({
-				vision_model: visionModel || "mimo-v2.5",
+				// Empty = mcp-vision resolves from TokenBank live catalog
+				vision_model: visionModel || undefined,
 				vision_model_override: visionModelOverride || undefined,
 			});
 

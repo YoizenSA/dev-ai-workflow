@@ -76,11 +76,11 @@ func TestGetRoleDefault_NilReceiver(t *testing.T) {
 }
 
 func TestGetVisionModel(t *testing.T) {
-	t.Run("default_value", func(t *testing.T) {
+	t.Run("empty_when_unset", func(t *testing.T) {
 		cfg := &UserConfig{}
 		got := cfg.GetVisionModel()
-		if got != DefaultVisionModel {
-			t.Errorf("GetVisionModel() = %q, want %q", got, DefaultVisionModel)
+		if got != "" {
+			t.Errorf("GetVisionModel() = %q, want empty (resolve from TokenBank)", got)
 		}
 	})
 
@@ -105,11 +105,11 @@ func TestGetVisionModel(t *testing.T) {
 		}
 	})
 
-	t.Run("nil_receiver_returns_default", func(t *testing.T) {
+	t.Run("nil_receiver_returns_empty", func(t *testing.T) {
 		var cfg *UserConfig
 		got := cfg.GetVisionModel()
-		if got != DefaultVisionModel {
-			t.Errorf("GetVisionModel() = %q, want %q", got, DefaultVisionModel)
+		if got != "" {
+			t.Errorf("GetVisionModel() = %q, want empty", got)
 		}
 	})
 
