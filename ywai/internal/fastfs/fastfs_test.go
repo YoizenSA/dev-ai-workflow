@@ -17,18 +17,14 @@ func TestRootRejectsEscape(t *testing.T) {
 	if _, err := r.Resolve("../outside"); err == nil {
 		t.Fatal("expected escape rejection")
 	}
-	if _, err := r.Resolve(filepath.Join(dir, "ok.txt")); err != nil {
-		// file need not exist
-		if !strings.Contains(err.Error(), "escape") {
-			// resolve of non-existing under root should still work
-		}
-	}
+	// Compare against r.Abs (symlink-resolved), not t.TempDir(): on macOS
+	// /var/folders is a symlink to /private/var/folders.
 	p, err := r.Resolve("ok.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(p, dir) {
-		t.Fatalf("resolved %q not under %q", p, dir)
+	if !isUnder(r.Abs, p) {
+		t.Fatalf("resolved %q not under root %q", p, r.Abs)
 	}
 }
 
