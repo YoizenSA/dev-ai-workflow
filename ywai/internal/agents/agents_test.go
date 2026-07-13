@@ -526,6 +526,30 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	}
 }
 
+func TestBuildOpenCodeMarkdown_LeavesUnlistedMCPsEnabled(t *testing.T) {
+	profile := AgentProfile{
+		Description: "Restricted agent",
+		Prompt:      "# Restricted",
+		Mode:        "subagent",
+		Permission: map[string]string{
+			"read": "allow",
+			"edit": "deny",
+		},
+	}
+
+	md := BuildOpenCodeMarkdown("restricted", profile)
+
+	if strings.Contains(md, `"*": deny`) {
+		t.Fatalf("unlisted MCP tools must remain enabled by default, got:\n%s", md)
+	}
+	if !strings.Contains(md, "edit: deny") {
+		t.Fatalf("explicit native-tool restrictions must be preserved, got:\n%s", md)
+	}
+	if !strings.Contains(md, "todowrite: deny") {
+		t.Fatalf("unlisted native tools must stay denied, got:\n%s", md)
+	}
+}
+
 // TestBuildOpenCodeMarkdown_EmptyDescriptionFallsBackToName guards the
 // regression where a bare "description:" (empty value) parses as YAML null and
 // opencode rejects the whole config with "Expected string | undefined, got null
@@ -566,16 +590,12 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
-	// With the "*: deny" + whitelist pattern, denied tools are NOT emitted
-	// individually — instead "*: deny" blocks everything and only "allow"
-	// rules whitelist specific tools.
-	if !strings.Contains(md, `"*": deny`) {
-		t.Error(`should emit "*: deny" when any tool is denied`)
+	if strings.Contains(md, `"*": deny`) {
+		t.Error(`must not emit "*: deny" because it hides externally configured MCPs`)
 	}
-	// Explicit deny rules like "edit: deny" are redundant with "*: deny"
-	// and should NOT be emitted (they waste tokens in the system prompt).
-	if strings.Contains(md, "edit: deny") {
-		t.Error("explicit deny rules should not be emitted with '*: deny' pattern")
+	// Explicit native-tool restrictions remain effective without the catch-all.
+	if !strings.Contains(md, "edit: deny") {
+		t.Error("explicit native deny should be rendered")
 	}
 	// Bare ywai buckets must NOT leak into opencode output (they are no-ops there).
 	for _, bare := range []string{"\n  memory: ", "\n  mcp: "} {
@@ -595,9 +615,9 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 			t.Errorf("bucket %q should expand to %q, missing in:\n%s", bucket, pattern, md)
 		}
 	}
-	// Deny bucket expansions should NOT be emitted (redundant with "*: deny").
-	if strings.Contains(md, `"ado_*": deny`) {
-		t.Error("deny bucket expansions should not be emitted with '*: deny' pattern")
+	// Deny bucket expansions must remain explicit when there is no catch-all.
+	if !strings.Contains(md, `"ado_*": deny`) {
+		t.Error("denied bucket should expand explicitly")
 	}
 }
 
@@ -618,15 +638,16 @@ func TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("dev", profile)
 
-	if !strings.Contains(md, `"*": deny`) {
-		t.Fatalf(`expected "*": deny whitelist pattern, got:\n%s`, md)
+	if strings.Contains(md, `"*": deny`) {
+		t.Fatalf(`must not block externally configured MCPs, got:\n%s`, md)
 	}
 	if !strings.Contains(md, "ywai-kanban_update_delegation: allow") {
 		t.Errorf("update_delegation must be whitelisted even when mcp is denied, got:\n%s", md)
 	}
-	// The mcp bucket was denied, so the broad kanban glob must NOT be allowed.
-	if strings.Contains(md, `"ywai-kanban_*": allow`) {
-		t.Error(`mcp:deny must not whitelist the broad "ywai-kanban_*" glob`)
+	// The mcp bucket was denied, so its broad kanban glob must be denied while
+	// the reporting tool keeps its narrow explicit allow.
+	if !strings.Contains(md, `"ywai-kanban_*": deny`) {
+		t.Error(`mcp:deny must render the broad "ywai-kanban_*" deny glob`)
 	}
 }
 
@@ -646,19 +667,17 @@ func TestExpandPermissionBuckets_Delegate(t *testing.T) {
 }
 
 // TestBuildOpenCodeMarkdown_DelegateBucket checks the rendered frontmatter: an
-// agent allowed "delegate" gets both keys whitelisted; an agent denied
-// "delegate" gets neither (blocked by "*: deny").
+// agent allowed "delegate" gets both keys; an agent denied "delegate" gets an
+// explicit deny while unrelated MCP tools remain enabled by OpenCode's default.
 func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
-	// Real orchestrators carry denies (edit/write/bash), so rendering goes
-	// through the "*: deny" + whitelist branch — exercise that path here.
 	allow := BuildOpenCodeMarkdown("orchestrator", AgentProfile{
 		Description: "Orchestrator",
 		Prompt:      "# Orchestrator",
 		Mode:        "all",
 		Permission:  map[string]string{"read": "allow", "write": "deny", "delegate": "allow"},
 	})
-	if !strings.Contains(allow, `"*": deny`) {
-		t.Fatalf("expected whitelist branch ('*: deny'), got:\n%s", allow)
+	if strings.Contains(allow, `"*": deny`) {
+		t.Fatalf("must not use a catch-all deny, got:\n%s", allow)
 	}
 	if !strings.Contains(allow, `"delegate": allow`) {
 		t.Errorf("allowed delegate should emit '\"delegate\": allow', got:\n%s", allow)
@@ -673,8 +692,8 @@ func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
 		Mode:        "subagent",
 		Permission:  map[string]string{"read": "allow", "delegate": "deny"},
 	})
-	if strings.Contains(deny, "delegate") {
-		t.Errorf("denied delegate should not be whitelisted, got:\n%s", deny)
+	if !strings.Contains(deny, `"delegate": deny`) {
+		t.Errorf("denied delegate should be rendered explicitly, got:\n%s", deny)
 	}
 }
 

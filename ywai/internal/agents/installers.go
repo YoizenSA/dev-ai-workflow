@@ -464,6 +464,16 @@ var ywaiBucketPatterns = map[string][]string{
 	"delegate": {"delegate", "delegation_*"},
 }
 
+// openCodeNativePermissionKeys are tools that remain deny-by-default when an
+// agent omits them from permissions.json. MCP server tools intentionally do not
+// appear here: OpenCode leaves unlisted tools enabled, so newly configured MCPs
+// are available immediately and can be disabled by name when needed.
+var openCodeNativePermissionKeys = []string{
+	"read", "edit", "write", "bash", "glob", "grep", "list", "lsp",
+	"ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite",
+	"delegate", "question", "skill", "external_directory", "doom_loop",
+}
+
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
 // buckets (ado, memory, intercom, mcp) expanded to the opencode-native wildcard
 // patterns that actually gate the underlying tools. Keys without a bucket mapping
@@ -535,69 +545,36 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		}
 	}
 
-	// Check if any tool is denied — if so, use "*: deny" + whitelist pattern.
-	hasDeny := false
-	for _, v := range profile.Permission {
-		if v == "deny" {
-			hasDeny = true
-			break
+	// Emit explicit restrictions, but do not add a catch-all "*: deny" rule.
+	// OpenCode enables unlisted tools by default, which keeps MCP servers added
+	// outside ywai available without requiring a release for each new server.
+	// Native tool restrictions remain explicit in each profile's permissions.json.
+	written := map[string]bool{}
+	for _, key := range openCodeNativePermissionKeys {
+		val := profile.Permission[key]
+		if val == "" {
+			val = "deny"
+		}
+		emitPermission(key, val)
+		written[key] = true
+	}
+	// Append custom tool permissions deterministically. They include explicit
+	// MCP overrides, which still take precedence over the permissive default.
+	var remaining []string
+	for k := range profile.Permission {
+		if !written[k] {
+			remaining = append(remaining, k)
 		}
 	}
-
-	if hasDeny {
-		// Emit "*: deny" first (blocks everything by default).
-		emitPermission("*", "deny")
-		// Then emit only the "allow" rules (whitelist).
-		allowOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
-		written := map[string]bool{}
-		for _, key := range allowOrder {
-			if val, ok := profile.Permission[key]; ok && val == "allow" {
-				emitPermission(key, val)
-				written[key] = true
-			}
-		}
-		// Append any remaining allow keys not in allowOrder (e.g. custom/MCP tools).
-		var remaining []string
-		for k, v := range profile.Permission {
-			if v == "allow" && !written[k] {
-				remaining = append(remaining, k)
-			}
-		}
-		sort.Strings(remaining)
-		for _, key := range remaining {
-			emitPermission(key, profile.Permission[key])
-		}
-		// Baseline MCP tools every agent may call. Under the "*: deny"
-		// whitelist these would otherwise be blocked for agents without the
-		// "mcp" bucket allowed. Skip any the agent set explicitly per-tool
-		// (an explicit allow was already emitted above; an explicit deny is
-		// an intentional override we must honor).
-		for _, tool := range AlwaysAllowedMCPTools {
-			if _, ok := profile.Permission[tool]; ok {
-				continue
-			}
+	sort.Strings(remaining)
+	for _, key := range remaining {
+		emitPermission(key, profile.Permission[key])
+	}
+	// Agents may always update their own kanban handoff unless that exact tool is
+	// explicitly denied. This is more specific than a broad MCP-server pattern.
+	for _, tool := range AlwaysAllowedMCPTools {
+		if _, ok := profile.Permission[tool]; !ok {
 			emitPermission(tool, "allow")
-		}
-	} else {
-		// No deny rules — emit all permissions as-is (full access agent).
-		permOrder := []string{"read", "edit", "write", "bash", "glob", "grep", "lsp", "ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite", "delegate", "question", "skill", "memory", "intercom", "ado", "mcp"}
-		written := map[string]bool{}
-		for _, key := range permOrder {
-			if val, ok := profile.Permission[key]; ok {
-				emitPermission(key, val)
-				written[key] = true
-			}
-		}
-		// Append any remaining permission keys not in permOrder (e.g. custom/MCP tools)
-		var remaining []string
-		for k := range profile.Permission {
-			if !written[k] {
-				remaining = append(remaining, k)
-			}
-		}
-		sort.Strings(remaining)
-		for _, key := range remaining {
-			emitPermission(key, profile.Permission[key])
 		}
 	}
 	b.WriteString("---\n\n")
