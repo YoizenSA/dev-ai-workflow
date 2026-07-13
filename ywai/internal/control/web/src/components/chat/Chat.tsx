@@ -8,6 +8,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelRight,
+  RefreshCw,
   X,
   Folder,
   ChevronRight,
@@ -679,6 +680,15 @@ export default function Chat() {
                       {focusedHeader.ctxPct}%
                     </span>
                   )}
+                  <button
+                    className="btn-icon sm"
+                    onClick={() => paneActionsRef.current?.refresh()}
+                    aria-label="Refresh messages"
+                    disabled={!paneActionsRef.current}
+                    data-tip="Refresh"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
                   <button
                     className={`btn-icon sm ${focusedHeader?.rightPanelOpen ? "active" : ""}`}
                     onClick={() => paneActionsRef.current?.toggleRightPanel()}

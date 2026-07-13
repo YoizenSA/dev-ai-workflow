@@ -45,6 +45,7 @@ export interface PaneActions {
   insertText(text: string): void;
   focus(): void;
   toggleRightPanel(): void;
+  refresh(): void;
 }
 
 /** Header state for the focused pane — rendered by Chat in the tab strip. */
@@ -178,11 +179,19 @@ export default function SessionPane({
       },
       focus: () => textareaRef.current?.focus(),
       toggleRightPanel: () => setRightPanelOpen((o) => !o),
+      refresh: () => {
+        msgStore.current.clear();
+        setMessages([]);
+        loadMessages(sessionId);
+        loadChildren(sessionId);
+        loadContextUsage(sessionId);
+      },
     };
     return () => {
       paneActionsRef.current = null;
     };
-  }, [paneActionsRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paneActionsRef, sessionId]);
 
   // ── Report header state to Chat (for the tab strip trailing actions) ───
   // Only the focused leaf reports; Chat ignores the rest.
