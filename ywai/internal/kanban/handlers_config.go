@@ -12,6 +12,7 @@ import (
 	"time"
 
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/tokenbank"
 )
 
 // toolCacheTTL is how long an assembled tools payload is considered fresh.
@@ -1166,4 +1167,48 @@ func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
+}
+
+// ListVisionModels returns vision-capable models from TokenBank for the
+// Settings vision-bridge picker. Requires tokenbank_url + tokenbank_api_key
+// in ~/.ywai/config.yaml.
+// GET /api/config/vision-models
+func (h *Handlers) ListVisionModels(w http.ResponseWriter, r *http.Request) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if cfg.TokenBankURL == "" || cfg.TokenBankAPIKey == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"models":  []any{},
+			"current": cfg.GetVisionModel(),
+			"error":   "TokenBank not configured. Run: ywai tokenbank setup --url <url> --key <key>",
+		})
+		return
+	}
+
+	resp, err := tokenbank.FetchModels(cfg.TokenBankURL, cfg.TokenBankAPIKey)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	vision := tokenbank.FilterVisionModels(resp.Models)
+	out := make([]map[string]any, 0, len(vision))
+	for _, m := range vision {
+		entry := map[string]any{
+			"id":   m.ID,
+			"name": m.Name,
+		}
+		if m.Modalities != nil && len(m.Modalities.Input) > 0 {
+			entry["modalities"] = m.Modalities.Input
+		}
+		out = append(out, entry)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models":  out,
+		"current": cfg.GetVisionModel(),
+	})
 }

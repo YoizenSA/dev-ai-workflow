@@ -158,10 +158,11 @@ export default function Settings() {
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [visionModel, setVisionModel] = useState("");
-	const [visionModelOverride, setVisionModelOverride] = useState("");
 	const [agentList, setAgentList] = useState<string[]>([]);
 
 	const [models, setModels] = useState<ModelInfo[]>([]);
+	const [visionModels, setVisionModels] = useState<ModelInfo[]>([]);
+	const [visionModelsError, setVisionModelsError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
@@ -187,7 +188,12 @@ function GeneralTab() {
 			configApi.listAgents().catch(() => [] as { name: string }[]),
 			missionsApi.listModels().catch(() => null),
 			configApi.getUserConfig().catch(() => null),
-		]).then(([cfg, agents, modelsRes, userCfg]) => {
+			configApi.listVisionModels().catch((e: Error) => ({
+				models: [] as Array<{ id: string; name: string }>,
+				current: undefined as string | undefined,
+				error: e?.message ?? "failed to load vision models",
+			})),
+		]).then(([cfg, agents, modelsRes, userCfg, visionRes]) => {
 			if (cfg) {
 				// opencode.json stores these keys in snake_case; the UI reads
 				// camelCase. Bridge them on load so saved values reappear.
@@ -198,15 +204,27 @@ function GeneralTab() {
 					defaultAgent:
 						cfg.defaultAgent ?? (raw.default_agent as string | undefined),
 				});
-				setVisionModel(userCfg?.vision_model ?? "");
-				setVisionModelOverride(userCfg?.vision_model_override ?? "");
 			}
+			// vision_model lives in ~/.ywai/config.yaml (user config), not opencode.json
+			const preferred =
+				userCfg?.vision_model_override ||
+				userCfg?.vision_model ||
+				("current" in (visionRes ?? {}) ? visionRes?.current : undefined) ||
+				"";
+			setVisionModel(preferred ?? "");
 			setAgentList((agents ?? []).map((a) => a.name));
 			setModels(
 				modelsRes
 					? Object.values(modelsRes.modelsByProvider ?? {}).flat()
 					: [],
 			);
+			const vModels = (visionRes?.models ?? []).map((m) => ({
+				id: m.id,
+				name: m.name || m.id,
+				provider: "tokenbank",
+			}));
+			setVisionModels(vModels);
+			setVisionModelsError(visionRes?.error ?? null);
 			setLoading(false);
 		});
 
@@ -260,11 +278,11 @@ function GeneralTab() {
 				toSave.temperature = config.temperature;
 			await configApi.updateConfig(toSave as OpenCodeConfigType);
 
-			// Save vision model fields to user config (separate API)
+			// Vision model for vision-bridge plugin (TokenBank model id)
 			await configApi.updateUserConfig({
-				// Empty = vision-bridge resolves from TokenBank live catalog
-				vision_model: visionModel || undefined,
-				vision_model_override: visionModelOverride || undefined,
+				vision_model: visionModel || "",
+				// Clear override so Settings is the single source of truth
+				vision_model_override: "",
 			});
 
 			setMessage("Saved successfully");
@@ -407,36 +425,45 @@ function GeneralTab() {
 				</div>
 			</div>
 
-			{/* ─── Vision Model ───────────────────────────────────────── */}
+			{/* ─── Vision bridge ──────────────────────────────────────── */}
 			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
 				<span className="field-label" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-					Vision Model
+					Vision bridge
+				</span>
+				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
+					When the chat model cannot see images (e.g. DeepSeek), the vision-bridge
+					plugin analyzes attached images with this TokenBank model and injects the
+					text for the chat model.
 				</span>
 			</div>
 
-			<ModelCombobox
-				id="cfg-vision-model"
-				label="Default Vision Model"
-				value={visionModel}
-				models={models}
-				onChange={(v) => setVisionModel(v)}
-			/>
-
 			<div className="field span-2">
-				<label className="field-label" htmlFor="cfg-vision-override">
-					Override
-				</label>
-				<span className="field-hint">
-					Custom model identifier (overrides the default when set)
-				</span>
-				<input
-					id="cfg-vision-override"
-					className="input"
-					type="text"
-					placeholder="e.g., custom-vision-model"
-					value={visionModelOverride}
-					onChange={(e) => setVisionModelOverride(e.target.value)}
+				<ModelCombobox
+					id="cfg-vision-model"
+					label="Vision model"
+					value={visionModel}
+					models={visionModels.length > 0 ? visionModels : models}
+					onChange={(v) => setVisionModel(v)}
 				/>
+				{visionModelsError && (
+					<span className="field-hint" style={{ color: "var(--danger, #c44)", display: "block", marginTop: "0.35rem" }}>
+						{visionModelsError}
+					</span>
+				)}
+				{!visionModelsError && visionModels.length === 0 && (
+					<span className="field-hint" style={{ display: "block", marginTop: "0.35rem" }}>
+						No vision models loaded. Configure TokenBank or type a model id.
+					</span>
+				)}
+				<button
+					type="button"
+					className="btn btn-ghost"
+					style={{ marginTop: "0.5rem" }}
+					onClick={() => setVisionModel("")}
+					disabled={!visionModel}
+				>
+					Use catalog default
+				</button>
 			</div>
 
 			{message && (

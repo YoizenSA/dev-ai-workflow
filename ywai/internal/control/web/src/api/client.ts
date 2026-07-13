@@ -426,6 +426,13 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
+	// Vision models for vision-bridge plugin (TokenBank catalog)
+	listVisionModels: () =>
+		request<{
+			models: Array<{ id: string; name: string; modalities?: string[] }>;
+			current?: string;
+			error?: string;
+		}>("/api/config/vision-models"),
 	getRoleDefaults: () =>
 		request<RoleDefaults>("/api/config/user/role-defaults"),
 	getOrchestratorProfiles: () =>

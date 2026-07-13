@@ -126,18 +126,23 @@ async function modelSupportsImage(
 }
 
 async function resolveVisionModel(cfg: YwaiConfig): Promise<string> {
+  // Settings is the source of truth: vision_model_override > vision_model.
   const preferred = stripProviderPrefix(
     (cfg.vision_model_override || cfg.vision_model || "").trim(),
   )
-  if (!cfg.tokenbank_url || !cfg.tokenbank_api_key) {
+  if (preferred) {
     return preferred
+  }
+  // Empty setting → first vision model from TokenBank catalog.
+  if (!cfg.tokenbank_url || !cfg.tokenbank_api_key) {
+    return ""
   }
   try {
     const res = await fetch(
       `${cfg.tokenbank_url.replace(/\/$/, "")}/api/setup/models`,
       { headers: { Authorization: `Bearer ${cfg.tokenbank_api_key}` } },
     )
-    if (!res.ok) return preferred
+    if (!res.ok) return ""
     const body = (await res.json()) as {
       models?: Array<{
         id: string
@@ -148,13 +153,10 @@ async function resolveVisionModel(cfg: YwaiConfig): Promise<string> {
     const vision = (body.models ?? []).filter(
       (m) => m.vision || m.modalities?.input?.includes("image"),
     )
-    if (preferred && vision.some((m) => m.id === preferred)) return preferred
-    if (preferred && vision.length === 0) return preferred
-    if (vision.length > 0) return vision[0].id
+    return vision[0]?.id ?? ""
   } catch {
-    // ignore
+    return ""
   }
-  return preferred
 }
 
 async function toDataURI(part: AnyPart): Promise<string | null> {

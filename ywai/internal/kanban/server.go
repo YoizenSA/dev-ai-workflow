@@ -105,6 +105,7 @@ func New(port int, dataDir string) *Server {
 	mux.HandleFunc("DELETE /api/config/providers/{name}", handlers.DeleteProvider)
 	mux.HandleFunc("GET /api/config/user", handlers.GetUserConfig)
 	mux.HandleFunc("PUT /api/config/user", handlers.PutUserConfig)
+	mux.HandleFunc("GET /api/config/vision-models", handlers.ListVisionModels)
 	mux.HandleFunc("GET /api/config/user/role-defaults", handlers.GetRoleDefaults)
 	mux.HandleFunc("GET /api/config/user/orchestrator-profiles", handlers.GetOrchestratorProfiles)
 	mux.HandleFunc("PUT /api/config/user/orchestrator-profiles/active", handlers.SetActiveOrchestratorProfile)
