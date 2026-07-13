@@ -99,61 +99,61 @@ func toolDefs() []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"name":        "fastfs_find",
-			"description": "Glob file paths under the workspace (gitignore-aware, no process spawn). Prefer over bash find/fd.",
+			"description": "Find files in the workspace by glob pattern. Respects .gitignore and returns paths only; use fastfs_search to inspect file contents.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"pattern": map[string]interface{}{"type": "string", "description": "Glob e.g. *.go or **/*.ts"},
-					"max":     map[string]interface{}{"type": "integer", "description": "Max paths (default 500)"},
+					"pattern": map[string]interface{}{"type": "string", "description": "Glob pattern, for example *.go or **/*.ts. Omit to match all files."},
+					"max":     map[string]interface{}{"type": "integer", "description": "Maximum number of paths to return (default: 500)."},
 				},
 			},
 		},
 		{
 			"name":        "fastfs_search",
-			"description": "Regex content search with mtime file cache and parallel workers. Prefer over bash rg/grep for exploration. For structural questions use codegraph_explore first.",
+			"description": "Search file contents with a Go regular expression. Use for text discovery; use codegraph_explore first for symbols, call flows, or other structural questions.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"pattern":          map[string]interface{}{"type": "string", "description": "Go regexp"},
-					"glob":             map[string]interface{}{"type": "string", "description": "Optional file glob filter"},
-					"max_matches":      map[string]interface{}{"type": "integer"},
-					"case_insensitive": map[string]interface{}{"type": "boolean"},
+					"pattern":          map[string]interface{}{"type": "string", "description": "Go regular expression to match."},
+					"glob":             map[string]interface{}{"type": "string", "description": "Optional glob that limits which files are searched."},
+					"max_matches":      map[string]interface{}{"type": "integer", "description": "Maximum matches to return."},
+					"case_insensitive": map[string]interface{}{"type": "boolean", "description": "Whether to ignore letter case while matching."},
 				},
 				"required": []string{"pattern"},
 			},
 		},
 		{
 			"name":        "fastfs_read_outline",
-			"description": "Summarized file view: signatures + elided sample. Prefer over dumping entire files.",
+			"description": "Summarize one text file with its signatures and an abbreviated sample. The path must identify a file, not a directory; use fastfs_find to discover files and fastfs_read_slice for exact lines.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"path": map[string]interface{}{"type": "string", "description": "Workspace-relative path"},
+					"path": map[string]interface{}{"type": "string", "description": "Path to one text file, relative to the workspace or absolute. Directories are not supported."},
 				},
 				"required": []string{"path"},
 			},
 		},
 		{
 			"name":        "fastfs_read_slice",
-			"description": "Read a bounded line range (default max 200 lines). Use after outline when you need exact lines.",
+			"description": "Read a bounded, inclusive line range from one text file. Use fastfs_read_outline first to locate the relevant lines; reads are capped at 200 lines by default.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"path":      map[string]interface{}{"type": "string"},
-					"start":     map[string]interface{}{"type": "integer", "description": "1-based start line"},
-					"end":       map[string]interface{}{"type": "integer", "description": "1-based end line"},
-					"max_lines": map[string]interface{}{"type": "integer"},
+					"path":      map[string]interface{}{"type": "string", "description": "Path to one text file, relative to the workspace or absolute."},
+					"start":     map[string]interface{}{"type": "integer", "description": "First line to return, using 1-based numbering (default: 1)."},
+					"end":       map[string]interface{}{"type": "integer", "description": "Last line to return, inclusive (default: end of file)."},
+					"max_lines": map[string]interface{}{"type": "integer", "description": "Maximum number of lines to return (default: 200)."},
 				},
 				"required": []string{"path"},
 			},
 		},
 		{
 			"name":        "fastfs_stat",
-			"description": "File metadata + process cache stats (hits/misses).",
+			"description": "Return metadata for a workspace path and FastFS process-cache statistics. Use it to check whether a path is a file or directory before reading it.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"path": map[string]interface{}{"type": "string"},
+					"path": map[string]interface{}{"type": "string", "description": "Path to inspect, relative to the workspace or absolute."},
 				},
 				"required": []string{"path"},
 			},
