@@ -12,7 +12,7 @@
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 
 type AnyPart = {
   id?: string
@@ -263,7 +263,29 @@ function normalizeAssistantText(
   return ""
 }
 
-const VisionBridgePlugin: Plugin = async () => {
+type ToastVariant = "info" | "success" | "warning" | "error"
+
+/** Best-effort TUI toast; no-ops when no TUI is attached (headless). */
+async function showToast(
+  client: PluginInput["client"],
+  message: string,
+  variant: ToastVariant,
+): Promise<void> {
+  try {
+    // tui is present when OpenCode runs with a UI; typed loosely for SDK drift.
+    const tui = (client as { tui?: { showToast?: (opts: unknown) => Promise<unknown> } }).tui
+    if (!tui?.showToast) return
+    await tui.showToast({
+      body: { title: "Vision bridge", message, variant },
+    })
+  } catch {
+    // No TUI attached; nothing to do.
+  }
+}
+
+const VisionBridgePlugin: Plugin = async (ctx) => {
+  const { client } = ctx
+
   return {
     "chat.message": async (input, output) => {
       const model = input.model
@@ -297,7 +319,19 @@ const VisionBridgePlugin: Plugin = async () => {
           : "If there is no further question, end with a short one-paragraph summary of the image.",
       ].join("\n")
 
+      const n = imageParts.length
+      const modelLabel = visionModel || "vision model"
+      await showToast(
+        client,
+        n === 1
+          ? `Analyzing image with ${modelLabel}…`
+          : `Analyzing ${n} images with ${modelLabel}…`,
+        "info",
+      )
+
       const next: AnyPart[] = []
+      let ok = 0
+      let failed = 0
       for (const part of parts) {
         if (!(part.type === "file" && part.mime?.startsWith("image/"))) {
           next.push(part)
@@ -307,6 +341,7 @@ const VisionBridgePlugin: Plugin = async () => {
         try {
           const dataURI = await toDataURI(part)
           if (!dataURI) {
+            failed++
             next.push({
               id: part.id,
               type: "text",
@@ -318,6 +353,7 @@ const VisionBridgePlugin: Plugin = async () => {
             continue
           }
           const analysis = await analyzeImage(cfg, visionModel, dataURI, prompt)
+          ok++
           next.push({
             id: part.id,
             type: "text",
@@ -331,6 +367,7 @@ const VisionBridgePlugin: Plugin = async () => {
               `(the chat model should treat this as ground truth about the image):\n\n${analysis}`,
           })
         } catch (err) {
+          failed++
           const msg = err instanceof Error ? err.message : String(err)
           next.push({
             id: part.id,
@@ -343,6 +380,24 @@ const VisionBridgePlugin: Plugin = async () => {
               `Details: ${msg}`,
           })
         }
+      }
+
+      if (failed > 0 && ok === 0) {
+        await showToast(client, `Vision analysis failed (${failed})`, "error")
+      } else if (failed > 0) {
+        await showToast(
+          client,
+          `Analyzed ${ok}, failed ${failed} with ${modelLabel}`,
+          "warning",
+        )
+      } else {
+        await showToast(
+          client,
+          ok === 1
+            ? `Image analyzed with ${modelLabel}`
+            : `${ok} images analyzed with ${modelLabel}`,
+          "success",
+        )
       }
 
       // Mutate in place — OpenCode reads output.parts after the hook.
