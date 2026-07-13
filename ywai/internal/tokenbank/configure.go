@@ -103,11 +103,44 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 		entry["reasoning"] = true
 		entry["temperature"] = !isKimiModel(m.ID)
 		entry["tool_call"] = true
-		entry["attachment"] = true
-		entry["modalities"] = map[string]interface{}{
-			"input":  []string{"text", "audio", "image", "video", "pdf"},
-			"output": []string{"text"},
+
+		// Respect TokenBank vision/modalities metadata. Forcing every model to
+		// accept images makes OpenCode send media natively to text-only models
+		// (e.g. deepseek-v4-flash) and TokenBank returns 502 Upstream error.
+		// Text-only models keep attachment=false so agents can use mcp-vision
+		// tools instead of a broken native image path.
+		applyVisionCapabilities(entry, m)
+	}
+}
+
+// applyVisionCapabilities sets attachment + modalities from TokenBank metadata.
+// Prefer explicit modalities from the API; fall back to the vision flag.
+func applyVisionCapabilities(entry map[string]interface{}, m ModelInfo) {
+	input := []string{"text"}
+	output := []string{"text"}
+	if m.Modalities != nil {
+		if len(m.Modalities.Input) > 0 {
+			input = m.Modalities.Input
 		}
+		if len(m.Modalities.Output) > 0 {
+			output = m.Modalities.Output
+		}
+	} else if m.Vision {
+		input = []string{"text", "audio", "image", "video", "pdf"}
+	}
+
+	supportsMedia := m.Vision
+	for _, mod := range input {
+		switch mod {
+		case "image", "audio", "video", "pdf":
+			supportsMedia = true
+		}
+	}
+
+	entry["attachment"] = supportsMedia
+	entry["modalities"] = map[string]interface{}{
+		"input":  input,
+		"output": output,
 	}
 }
 

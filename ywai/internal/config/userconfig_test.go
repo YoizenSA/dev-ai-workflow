@@ -112,4 +112,12 @@ func TestGetVisionModel(t *testing.T) {
 			t.Errorf("GetVisionModel() = %q, want %q", got, DefaultVisionModel)
 		}
 	})
+
+	t.Run("strips_provider_prefix", func(t *testing.T) {
+		cfg := &UserConfig{VisionModel: "opencode-admin/mimo-v2.5"}
+		got := cfg.GetVisionModel()
+		if got != "mimo-v2.5" {
+			t.Errorf("GetVisionModel() = %q, want %q", got, "mimo-v2.5")
+		}
+	})
 }

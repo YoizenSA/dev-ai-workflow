@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -205,14 +206,19 @@ func (c *UserConfig) ensureDefaults() {
 }
 
 // GetVisionModel returns the effective vision model: override if set, otherwise default.
+// Strips a provider prefix (e.g. "opencode-admin/mimo-v2.5" → "mimo-v2.5") so the
+// value is a bare TokenBank model id suitable for /v1/chat/completions.
 func (c *UserConfig) GetVisionModel() string {
+	raw := DefaultVisionModel
 	if c != nil && c.VisionModelOverride != "" {
-		return c.VisionModelOverride
+		raw = c.VisionModelOverride
+	} else if c != nil && c.VisionModel != "" {
+		raw = c.VisionModel
 	}
-	if c != nil && c.VisionModel != "" {
-		return c.VisionModel
+	if i := strings.LastIndex(raw, "/"); i >= 0 && i+1 < len(raw) {
+		return raw[i+1:]
 	}
-	return DefaultVisionModel
+	return raw
 }
 
 // GetRoleDefault returns the configured RoleDefault for a role, lazily falling

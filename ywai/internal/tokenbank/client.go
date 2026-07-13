@@ -16,14 +16,21 @@ import (
 // API client
 // ---------------------------------------------------------------------------
 
+// ModelModalities is the input/output modality set returned by TokenBank.
+type ModelModalities struct {
+	Input  []string `json:"input,omitempty"`
+	Output []string `json:"output,omitempty"`
+}
+
 // ModelInfo represents a model returned by the TokenBank API.
 type ModelInfo struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	ToolCalling    bool   `json:"toolCalling,omitempty"`
-	Vision         bool   `json:"vision,omitempty"`
-	MaxInputTokens int    `json:"maxInputTokens,omitempty"`
-	MaxOutputToken int    `json:"maxOutputTokens,omitempty"`
+	ID             string           `json:"id"`
+	Name           string           `json:"name"`
+	ToolCalling    bool             `json:"toolCalling,omitempty"`
+	Vision         bool             `json:"vision,omitempty"`
+	MaxInputTokens int              `json:"maxInputTokens,omitempty"`
+	MaxOutputToken int              `json:"maxOutputTokens,omitempty"`
+	Modalities     *ModelModalities `json:"modalities,omitempty"`
 }
 
 // ModelsResponse is the response from GET /api/setup/models.
