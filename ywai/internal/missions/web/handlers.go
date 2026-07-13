@@ -318,6 +318,39 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Reuse an already-running opencode server before spawning a new one, so
+	// restarts of ywai don't accumulate orphan instances (one per restart).
+	// Probe /status AND /app so a non-opencode server squatting a port (e.g.
+	// Kilo on 4096) isn't mistaken for one.
+	for p := startPort; p < startPort+20; p++ {
+		candidate := "http://127.0.0.1:" + strconv.Itoa(p)
+		pctx, pcancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		ok, _ := opencode.ProbeServer(pctx, candidate)
+		if ok {
+			req, _ := http.NewRequestWithContext(pctx, http.MethodGet, candidate+"/app", nil)
+			resp, err := (&http.Client{Timeout: 500 * time.Millisecond}).Do(req)
+			if err != nil || resp.StatusCode != http.StatusOK {
+				ok = false
+			}
+			if resp != nil {
+				resp.Body.Close()
+			}
+		}
+		pcancel()
+		if ok {
+			os.Setenv("OPENCODE_URL", candidate)
+			if h.trySwitchToServerClient(ctx) {
+				log.Printf("opencode start: reusing running server at %s", candidate)
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"status":  "already_running",
+					"message": "reusing running opencode server",
+					"url":     candidate,
+				})
+				return
+			}
+		}
+	}
+
 	port := serverutil.FindFreePort(startPort)
 	if port != startPort {
 		log.Printf("opencode start: port %d busy, using %d", startPort, port)

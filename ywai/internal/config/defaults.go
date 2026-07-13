@@ -88,7 +88,7 @@ func BuiltInDefaults() *TUIDefaults {
 		Scope:      "global",
 		GlobalOnly: true,
 		MCP:        false,
-		Autostart:  false,
+		Autostart:  true,
 		Groups:     []string{},
 	}
 }
