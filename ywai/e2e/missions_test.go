@@ -288,7 +288,11 @@ func TestE2E_OpenCode_StartIsIdempotent(t *testing.T) {
 				errMsg, _ = body["message"].(string)
 			}
 			// CI runners don't have opencode installed — accept the 500.
-			if strings.Contains(errMsg, "executable file not found") {
+			// DetectOpencode surfaces a wrapped "not found" message; the HTTP
+			// handler rewrites it to "opencode binary not found...".
+			if strings.Contains(errMsg, "executable file not found") ||
+				strings.Contains(errMsg, "opencode binary not found") ||
+				strings.Contains(errMsg, "not found in PATH") {
 				continue
 			}
 			t.Errorf("call %d: status = %d, want < 500 (body: %v)", i, status, body)
