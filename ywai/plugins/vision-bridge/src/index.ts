@@ -5,9 +5,8 @@
  * images attached by the user are analyzed via TokenBank's vision models and
  * replaced with text so the text-only model can reason about them.
  *
- * This is the automatic half of the mcp-vision product: agents can still call
- * analyze_image manually; this hook covers "I pasted an image" without requiring
- * the model to invent a tool call + base64 payload.
+ * Covers "I pasted an image" for text-only models without requiring native
+ * vision support or a separate MCP server.
  */
 
 import * as fs from "node:fs/promises"

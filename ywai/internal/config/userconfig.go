@@ -21,7 +21,7 @@ const (
 	RoleDevops    = "devops"
 )
 
-// DefaultVisionModel is intentionally empty: mcp-vision resolves the default
+// DefaultVisionModel is intentionally empty: vision-bridge resolves the default
 // from TokenBank's live vision-capable model catalog at runtime.
 const DefaultVisionModel = ""
 
@@ -94,10 +94,10 @@ type UserConfig struct {
 	// OrchestratorProfiles contains user-overridable model profiles for orchestrator roles.
 	OrchestratorProfiles map[string]OrchestratorModelProfile `yaml:"orchestrator_profiles,omitempty" json:"orchestrator_profiles,omitempty"`
 
-	// VisionModel is the default vision model used by mcp-vision.
+	// VisionModel is the default vision model used by vision-bridge.
 	VisionModel string `yaml:"vision_model,omitempty" json:"vision_model,omitempty"`
 
-	// VisionModelOverride, when set, overrides VisionModel for mcp-vision calls.
+	// VisionModelOverride, when set, overrides VisionModel for vision-bridge calls.
 	VisionModelOverride string `yaml:"vision_model_override,omitempty" json:"vision_model_override,omitempty"`
 }
 
@@ -200,14 +200,14 @@ func (c *UserConfig) ensureDefaults() {
 	if _, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; !ok {
 		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 	}
-	// VisionModel stays empty when unset so mcp-vision can pick from
+	// VisionModel stays empty when unset so vision-bridge can pick from
 	// TokenBank's live catalog instead of a hardcoded product default.
 }
 
 // GetVisionModel returns the configured vision model preference (override wins),
 // or empty when unset. Strips a provider prefix (e.g. "opencode-admin/mimo-v2.5"
 // → "mimo-v2.5") so the value is a bare TokenBank model id. An empty return means
-// the caller should resolve the default from TokenBank's vision catalog.
+// vision-bridge should resolve the default from TokenBank's vision catalog.
 func (c *UserConfig) GetVisionModel() string {
 	raw := ""
 	if c != nil && c.VisionModelOverride != "" {

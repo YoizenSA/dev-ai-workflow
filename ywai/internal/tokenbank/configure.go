@@ -107,8 +107,8 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 		// Respect TokenBank vision/modalities metadata. Forcing every model to
 		// accept images makes OpenCode send media natively to text-only models
 		// (e.g. deepseek-v4-flash) and TokenBank returns 502 Upstream error.
-		// Text-only models keep attachment=false so agents can use mcp-vision
-		// tools instead of a broken native image path.
+		// Text-only models keep attachment=false so vision-bridge can analyze
+		// attached images via a vision model instead of a broken native path.
 		applyVisionCapabilities(entry, m)
 	}
 }

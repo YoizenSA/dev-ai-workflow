@@ -1,6 +1,6 @@
 # ADR-005: Tokenbank Vision MCP Server
 
-**Status:** Proposed
+**Status:** Superseded (vision-bridge plugin replaces mcp-vision MCP)
 **Date:** 2026-07-08
 
 ---

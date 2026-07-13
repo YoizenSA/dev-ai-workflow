@@ -151,49 +151,28 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	return nil
 }
 
-// InstallVisionMCP adds the mcp-vision MCP server to the agent's config file.
-// This enables vision model queries via the TokenBank bridge.
-func InstallVisionMCP(configPath, agentName string) error {
+// RemoveVisionMCP removes the legacy mcp-vision MCP server entry from the
+// agent's config. Vision for text-only models is handled by the vision-bridge
+// OpenCode plugin, not an MCP server.
+func RemoveVisionMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
 	key := mcpConfigKey(agentName)
-
-	if key == "mcpServers" {
-		// Claude Code / pi format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
-		}
-		if _, exists := mcp["mcp-vision"]; !exists {
-			mcp["mcp-vision"] = map[string]any{
-				"command": "mcp-vision",
-			}
-			root[key] = mcp
-		}
-	} else {
-		// opencode format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
-		}
-		if _, exists := mcp["mcp-vision"]; !exists {
-			mcp["mcp-vision"] = map[string]any{
-				"type":    "local",
-				"command": []any{"mcp-vision"},
-				"enabled": true,
-			}
-			root[key] = mcp
-		}
+	mcp, _ := root[key].(map[string]any)
+	if mcp == nil {
+		return nil
 	}
+	if _, exists := mcp["mcp-vision"]; !exists {
+		return nil
+	}
+	delete(mcp, "mcp-vision")
+	root[key] = mcp
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
-
 	return nil
 }

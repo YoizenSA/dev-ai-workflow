@@ -262,7 +262,7 @@ function GeneralTab() {
 
 			// Save vision model fields to user config (separate API)
 			await configApi.updateUserConfig({
-				// Empty = mcp-vision resolves from TokenBank live catalog
+				// Empty = vision-bridge resolves from TokenBank live catalog
 				vision_model: visionModel || undefined,
 				vision_model_override: visionModelOverride || undefined,
 			});
