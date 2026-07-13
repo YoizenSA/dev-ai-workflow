@@ -58,7 +58,7 @@ GOAL
   │       - Default to @finder for codebase navigation/scouting.
   │       - Send ONE scout delegation with a complete brief. Do NOT
   │         spawn multiple explores to "understand" the repo — @finder
-  │         already fans out Glob/Grep/Read and codegraph internally.
+  │         already fans out codegraph and ywai-fastfs internally.
   │       - Only re-scout if the first handoff is explicitly incomplete
   │         or blocked, and say what's missing in the new brief.
   │       - Use @explore ONLY for conceptual/external research (compare

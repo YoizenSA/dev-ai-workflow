@@ -5,7 +5,7 @@ description: >
   Trigger: Validate remediation, "check fix", focused validation.
 role: reviewer
 mode: all
-sections: [handoff]
+sections: [handoff, fast-tools]
 ---
 
 # Migration Validator Focused (Remediation Validation)

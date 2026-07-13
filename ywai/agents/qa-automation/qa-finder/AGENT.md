@@ -5,7 +5,7 @@ description: >
   Trigger: Explore codebase, find test areas, "what needs testing", coverage gaps.
 role: explorer
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa, context-gathering, fast-tools]
 ---
 
 # QA Finder Agent
@@ -60,10 +60,11 @@ Want me to explain what tests are needed for each?"
 
 ## Exploration Techniques
 
-- **File search** — find relevant files
-- **Code search** — find specific functions
-- **Dependency tracking** — understand relationships
-- **Pattern recognition** — identify common structures
+- **Structure & relationships** — `codegraph_explore` / `codegraph_search` / `codegraph_trace` for symbols, call flow, dependencies
+- **File search** — `ywai-fastfs_fastfs_find` with globs (`**/*.spec.ts`, `**/auth*`)
+- **Code search** — `ywai-fastfs_fastfs_search` with regex for functions, selectors, strings
+- **Reading** — `ywai-fastfs_fastfs_read_outline` first, then `read_slice` for exact lines
+- Host `glob`/`grep`/`read` only if the above are unavailable; never bash `rg`/`cat` for exploration
 
 ## Coverage Gap Analysis
 

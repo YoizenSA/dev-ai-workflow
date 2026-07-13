@@ -5,7 +5,7 @@ description: >
   Trigger: Migration planning, "create plan", dependency analysis.
 role: developer
 mode: all
-sections: [handoff]
+sections: [handoff, fast-tools]
 ---
 
 # Migration Planner (Legacy Migration Planning)

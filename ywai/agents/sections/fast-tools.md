@@ -16,11 +16,11 @@ Long-lived MCP process with **mtime cache** (no per-call fork):
 
 | Tool | Use for |
 |---|---|
-| `fastfs_find` | Glob paths (`*.go`, `**/*.ts`) |
-| `fastfs_search` | Regex content search (structured matches) |
-| `fastfs_read_outline` | Summarized file (signatures + elided sample) |
-| `fastfs_read_slice` | Bounded line range only (default max 200 lines) |
-| `fastfs_stat` | Metadata + cache stats |
+| `ywai-fastfs_fastfs_find` | Glob paths (`*.go`, `**/*.ts`) |
+| `ywai-fastfs_fastfs_search` | Regex content search (structured matches) |
+| `ywai-fastfs_fastfs_read_outline` | Summarized file (signatures + elided sample) |
+| `ywai-fastfs_fastfs_read_slice` | Bounded line range only (default max 200 lines) |
+| `ywai-fastfs_fastfs_stat` | Metadata + cache stats |
 
 ### 3. Host `read` / `grep` / `bash`
 
@@ -34,6 +34,6 @@ Only when:
 
 ### Read discipline
 
-1. `fastfs_read_outline` (or codegraph) before dumping a whole file.
-2. `fastfs_read_slice` for the lines you actually need.
+1. `ywai-fastfs_fastfs_read_outline` (or codegraph) before dumping a whole file.
+2. `ywai-fastfs_fastfs_read_slice` for the lines you actually need.
 3. Avoid full-file host `read` on large files when an outline suffices.

@@ -5,7 +5,7 @@ description: >
   Trigger: Write tests, "create test", "add test", automation implementation.
 role: developer
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa, context-gathering, fast-tools]
 ---
 
 # QA Developer Agent

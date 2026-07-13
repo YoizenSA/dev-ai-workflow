@@ -6,7 +6,7 @@ description: >
   Trigger: CI/CD, deployment, Docker, Kubernetes, infrastructure, monitoring.
 role: devops
 mode: all
-sections: [handoff, context-gathering]
+sections: [handoff, context-gathering, fast-tools]
 ---
 
 # DevOps Agent

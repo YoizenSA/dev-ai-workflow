@@ -5,7 +5,7 @@ description: >
   Trigger: Testing questions, "what is", "how to", framework explanations.
 role: ask
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa, context-gathering, fast-tools]
 ---
 
 # QA Ask Agent

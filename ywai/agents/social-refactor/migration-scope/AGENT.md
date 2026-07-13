@@ -5,7 +5,7 @@ description: >
   Trigger: Scope classification, "classify scope", migration surface analysis.
 role: architect
 mode: all
-sections: [handoff]
+sections: [handoff, fast-tools]
 ---
 
 # Migration Scope (Legacy Scope Classification)

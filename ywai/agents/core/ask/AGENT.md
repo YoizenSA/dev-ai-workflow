@@ -6,7 +6,7 @@ description: >
   Trigger: Questions, research, explanations, "what is", "how does", "why".
 role: ask
 mode: all
-sections: [context-gathering]
+sections: [context-gathering, fast-tools]
 ---
 
 # Ask Agent

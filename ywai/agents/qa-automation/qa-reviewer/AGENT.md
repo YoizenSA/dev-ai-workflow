@@ -5,7 +5,7 @@ description: >
   Trigger: Review tests, "check test quality", test code feedback.
 role: reviewer
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa, context-gathering, fast-tools]
 ---
 
 # QA Reviewer Agent

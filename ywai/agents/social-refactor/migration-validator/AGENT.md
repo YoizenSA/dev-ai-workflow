@@ -5,7 +5,7 @@ description: >
   Trigger: Validate migration, "check parity", migration validation.
 role: reviewer
 mode: all
-sections: [handoff]
+sections: [handoff, fast-tools]
 ---
 
 # Migration Validator (Legacy Parity & Governance)

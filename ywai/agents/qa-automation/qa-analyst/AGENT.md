@@ -5,7 +5,7 @@ description: >
   Trigger: Test strategy, requirements analysis, "understand tests", "plan automation".
 role: analyst
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa, context-gathering, fast-tools]
 ---
 
 # QA Analyst Agent
