@@ -59,7 +59,7 @@ var sessionStartCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-			goal := cmd.Annotations["_saved_goal"]
+		goal := cmd.Annotations["_saved_goal"]
 		if goal == "" {
 			return fmt.Errorf("required flag(s) \"goal\" not set")
 		}

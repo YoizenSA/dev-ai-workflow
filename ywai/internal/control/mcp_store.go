@@ -879,26 +879,6 @@ func readProjectMcpConfig(projectDir string) (map[string]interface{}, error) {
 	return mcpSection, nil
 }
 
-// writeProjectMcpConfig writes the mcpServers section to a project-local
-// .opencode/mcp.json file. The .opencode directory is created if needed.
-func writeProjectMcpConfig(projectDir string, mcp map[string]interface{}) error {
-	dir := filepath.Join(projectDir, ".opencode")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create .opencode dir: %w", err)
-	}
-
-	path := filepath.Join(dir, "mcp.json")
-	data, err := json.MarshalIndent(mcp, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling project mcp config: %w", err)
-	}
-	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("writing project mcp config: %w", err)
-	}
-	return nil
-}
-
 // readMergedMcpConfig merges global and project-local MCP config.
 // Project-local servers override global servers with the same ID.
 // Returns the merged map and a map of scope (id -> "global" | "project").

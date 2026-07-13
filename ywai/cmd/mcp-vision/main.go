@@ -81,10 +81,10 @@ type jsonrpcMessage struct {
 
 // jsonrpcResponse is a JSON-RPC 2.0 response (success).
 type jsonrpcResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      any         `json:"id"`
-	Result  any         `json:"result,omitempty"`
-	Error   *rpcError   `json:"error,omitempty"`
+	JSONRPC string    `json:"jsonrpc"`
+	ID      any       `json:"id"`
+	Result  any       `json:"result,omitempty"`
+	Error   *rpcError `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -140,9 +140,9 @@ func (s *server) handle(msg jsonrpcMessage) jsonrpcResponse {
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
 type initializeResult struct {
-	ProtocolVersion string          `json:"protocolVersion"`
-	Capabilities    map[string]any  `json:"capabilities"`
-	ServerInfo      serverInfo      `json:"serverInfo"`
+	ProtocolVersion string         `json:"protocolVersion"`
+	Capabilities    map[string]any `json:"capabilities"`
+	ServerInfo      serverInfo     `json:"serverInfo"`
 }
 
 type serverInfo struct {
@@ -345,8 +345,8 @@ type visionMessage struct {
 }
 
 type visionContent struct {
-	Type     string         `json:"type"`
-	Text     string         `json:"text,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
 	ImageURL *visionImageURL `json:"image_url,omitempty"`
 }
 

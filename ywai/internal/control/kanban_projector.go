@@ -32,13 +32,13 @@ var logMarkers = []string{
 // does NOT affect the mission FSM. Completed/cancelled missions leave
 // their kanban session as history (no deletion).
 type KanbanProjector struct {
-	server      *kanban.Server
-	kanban      *kanban.Store
-	missions    *missions.MissionsStore
-	mu          sync.Mutex
-	sessions    map[string]string            // missionID → kanban sessionID
-	delegs      map[string]map[string]string // missionID → featureID → delegationID
-	onComplete  func(title, body string) error
+	server     *kanban.Server
+	kanban     *kanban.Store
+	missions   *missions.MissionsStore
+	mu         sync.Mutex
+	sessions   map[string]string            // missionID → kanban sessionID
+	delegs     map[string]map[string]string // missionID → featureID → delegationID
+	onComplete func(title, body string) error
 }
 
 // OnComplete sets a callback invoked when a delegation completes or fails.

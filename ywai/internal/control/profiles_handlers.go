@@ -80,11 +80,11 @@ func (s *Server) handleGetActiveProfile(w http.ResponseWriter, r *http.Request) 
 
 // saveProfileRequest is the body for creating or updating a profile.
 type saveProfileRequest struct {
-	Name        string                  `json:"name"`
-	DisplayName string                  `json:"display_name,omitempty"`
-	Description string                  `json:"description,omitempty"`
-	Agents      map[string]AgentConfig  `json:"agents,omitempty"`
-	Config      *ProfileConfig          `json:"config,omitempty"`
+	Name        string                 `json:"name"`
+	DisplayName string                 `json:"display_name,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Agents      map[string]AgentConfig `json:"agents,omitempty"`
+	Config      *ProfileConfig         `json:"config,omitempty"`
 }
 
 // AgentConfig mirrors the frontend's OrchestratorModelMapping.

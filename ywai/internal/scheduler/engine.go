@@ -15,7 +15,6 @@ var timeNow = time.Now
 // Scheduler manages scheduled tasks.
 type Scheduler struct {
 	store Store
-	mu    uintptr // atomic counter for unique IDs
 }
 
 // NewScheduler creates a new Scheduler with the given store.

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -21,7 +20,6 @@ import (
 // between the frontend's simple contract and OpenCode's REST API.
 type ChatProxy struct {
 	opencodeBaseURL string // fallback when OPENCODE_URL is unset, e.g. "http://localhost:4096"
-	mu              sync.RWMutex
 }
 
 func NewChatProxy(opencodeBaseURL string) *ChatProxy {
@@ -41,10 +39,6 @@ func (cp *ChatProxy) baseURL() string {
 	}
 	return cp.opencodeBaseURL
 }
-
-
-
-
 
 // handleChatSSE proxies OpenCode's global /event stream to the client,
 // forwarding only events for the requested session (plus global events).

@@ -193,10 +193,10 @@ func StartOAuthFlow(ctx context.Context, entry CatalogEntry) error {
 // returns the parsed OAuthToken.
 func exchangeCode(ctx context.Context, entry CatalogEntry, code, verifier, redirectURI string) (*OAuthToken, error) {
 	data := url.Values{
-		"grant_type":   {"authorization_code"},
-		"code":         {code},
-		"redirect_uri": {redirectURI},
-		"client_id":    {entry.ClientID},
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"client_id":     {entry.ClientID},
 		"code_verifier": {verifier},
 	}
 	if entry.ClientSecret != "" {

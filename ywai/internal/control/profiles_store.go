@@ -13,8 +13,8 @@ import (
 // ProfileStore manages named orchestrator configuration profiles.
 // Profiles are stored as individual JSON files in ~/.ywai/orchestrator-profiles/.
 type ProfileStore struct {
-	dir  string
-	mu   sync.RWMutex
+	dir string
+	mu  sync.RWMutex
 }
 
 // ProfileAgentConfig defines model settings for a single agent role within a profile.

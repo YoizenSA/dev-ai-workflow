@@ -33,6 +33,7 @@ type aiEditRequest struct {
 type aiQuestionError struct {
 	Question string
 }
+
 func (e *aiQuestionError) Error() string { return "AI question: " + e.Question }
 
 // handleAIEdit applies a natural-language edit to a workflow via the opencode
@@ -122,7 +123,9 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 	}
 
 	// Check if the AI asked a clarifying question instead of editing.
-	var maybeQ struct{ Question string `json:"question"` }
+	var maybeQ struct {
+		Question string `json:"question"`
+	}
 	if err := json.Unmarshal([]byte(jsonStr), &maybeQ); err == nil && maybeQ.Question != "" {
 		return nil, &aiQuestionError{Question: maybeQ.Question}
 	}

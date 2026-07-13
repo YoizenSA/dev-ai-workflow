@@ -333,5 +333,3 @@ func TestStore_UpdateProject_NotFound(t *testing.T) {
 		t.Fatal("UpdateProject expected error for nonexistent project, got nil")
 	}
 }
-
-

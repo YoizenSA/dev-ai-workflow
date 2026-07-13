@@ -132,11 +132,11 @@ func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) e
 
 	// Build aes128gcm binary body
 	var body bytes.Buffer
-	body.Write(salt)                                     // 16 bytes salt
+	body.Write(salt)                                        // 16 bytes salt
 	_ = binary.Write(&body, binary.BigEndian, uint32(4096)) // record size
-	body.WriteByte(byte(len(ephemPub)))                   // key length = 65
-	body.Write(ephemPub)                                 // uncompressed public key
-	body.Write(ciphertext)                               // encrypted payload + auth tag
+	body.WriteByte(byte(len(ephemPub)))                     // key length = 65
+	body.Write(ephemPub)                                    // uncompressed public key
+	body.Write(ciphertext)                                  // encrypted payload + auth tag
 
 	// Build VAPID JWT with endpoint origin as audience
 	vapidJWT, err := ps.buildVAPIDJWT(sub.Endpoint)
