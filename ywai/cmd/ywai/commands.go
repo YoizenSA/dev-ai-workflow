@@ -1303,10 +1303,10 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
-	installCmd.Flags().Bool("global", false, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
+	installCmd.Flags().Bool("global", true, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
 	installCmd.Flags().String("preset", "full-gentleman", "Install preset: full-gentleman, ecosystem-only, minimal, custom")
 	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
-	installCmd.Flags().Bool("autostart", false, "Configure control server to start automatically on system boot")
+	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 
