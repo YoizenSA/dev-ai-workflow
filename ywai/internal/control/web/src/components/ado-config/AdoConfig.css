@@ -18,6 +18,7 @@
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: var(--space-3);
+	flex-wrap: wrap;
 }
 
 .ado-config-title-section {
@@ -99,127 +100,69 @@
 	border: 1px solid var(--danger-border);
 }
 
-/* ─── PAT status ─────────────────────────────────────────────────────── */
+/* ─── Status row (compact checks) ────────────────────────────────────── */
 
-.ado-config-pat {
+.ado-config-status {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--space-3);
-	padding: var(--space-4);
-	background: var(--surface);
-	border: 1px solid var(--panel-border);
-	border-radius: var(--radius-lg, 12px);
 	flex-wrap: wrap;
-}
-
-.ado-config-pat-info {
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-}
-
-.ado-config-pat-dot {
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	flex-shrink: 0;
-}
-.ado-config-pat-dot.ok {
-	background: var(--success);
-	box-shadow: 0 0 8px rgba(var(--success-rgb), 0.5);
-}
-.ado-config-pat-dot.missing {
-	background: var(--danger);
-}
-
-.ado-config-pat-source {
-	color: var(--text-muted);
-	font-size: 0.88rem;
-}
-.ado-config-pat-source.missing {
-	color: var(--danger);
-}
-
-.ado-config-pat-actions {
-	display: flex;
 	gap: var(--space-2);
 }
-
-/* ─── Buttons ────────────────────────────────────────────────────────── */
-
-.ado-config-btn {
-	padding: 0.4rem 0.9rem;
-	border-radius: var(--radius-md, 8px);
-	border: 1px solid var(--panel-border);
-	background: var(--surface-soft);
-	color: var(--text-soft);
-	font-size: 0.85rem;
+.ado-config-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.7rem;
+	border-radius: var(--radius-full, 999px);
+	font-size: 0.82rem;
 	font-weight: 500;
+	border: 1px solid var(--panel-border);
+	background: var(--surface);
+	color: var(--text-soft);
+	font-family: inherit;
+}
+/* When the PAT check is a <button>, let it look clickable. */
+button.ado-config-check {
 	cursor: pointer;
 	transition: background 0.15s, border-color 0.15s;
 }
-.ado-config-btn:hover {
+button.ado-config-check:hover {
 	background: var(--surface-hover);
 	border-color: var(--panel-border-strong);
 }
-.ado-config-btn.primary {
-	background: var(--yz-accent);
-	color: #fff;
-	border-color: var(--yz-accent);
+.ado-config-check-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
 }
-.ado-config-btn.primary:hover {
-	filter: brightness(1.1);
+.ado-config-check.ok .ado-config-check-dot {
+	background: var(--success);
+	box-shadow: 0 0 6px rgba(var(--success-rgb), 0.5);
 }
-
-.ado-config-add-btn {
-	padding: 0.4rem 0.8rem;
-	border-radius: var(--radius-md, 8px);
-	border: 1px dashed var(--panel-border-strong);
-	background: transparent;
-	color: var(--yz-accent);
-	font-size: 0.85rem;
-	font-weight: 600;
-	cursor: pointer;
+.ado-config-check.missing .ado-config-check-dot {
+	background: var(--danger);
 }
-.ado-config-add-btn:hover {
-	background: var(--surface-soft);
+.ado-config-check.ok {
+	color: var(--success);
+}
+.ado-config-check.missing {
+	color: var(--danger);
 }
 
-/* ─── Tutorial ───────────────────────────────────────────────────────── */
+/* ─── Org (shown once, globally) ─────────────────────────────────────── */
 
-.ado-config-tutorial {
-	padding: var(--space-4);
-	background: var(--surface);
-	border: 1px solid var(--panel-border);
-	border-radius: var(--radius-lg, 12px);
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-3);
-}
-.ado-config-tutorial h3 {
-	margin: 0;
-	font-size: 1rem;
-	color: var(--text);
-}
-.ado-config-tutorial p {
-	margin: 0;
-	color: var(--text-soft);
+.ado-config-org {
 	font-size: 0.9rem;
-	line-height: 1.5;
+	color: var(--text-soft);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
 }
-.ado-config-tutorial code {
-	background: var(--surface-soft);
-	padding: 0.1rem 0.35rem;
-	border-radius: 4px;
-	font-size: 0.85em;
-}
-.ado-config-tutorial-hint {
-	color: var(--text-muted) !important;
-	font-size: 0.82rem !important;
+.ado-config-org-warn {
+	font-size: 0.72rem;
 }
 
-/* ─── Code blocks ────────────────────────────────────────────────────── */
+/* ─── Code blocks (shared by wizard + builder) ───────────────────────── */
 
 .ado-config-code-block {
 	background: var(--surface-strong);
@@ -252,18 +195,6 @@
 	color: var(--text-soft);
 	white-space: pre;
 }
-.ado-config-copy-btn {
-	padding: 0.2rem 0.6rem;
-	border-radius: var(--radius-sm, 6px);
-	border: 1px solid var(--panel-border);
-	background: var(--surface);
-	color: var(--yz-accent);
-	font-size: 0.75rem;
-	cursor: pointer;
-}
-.ado-config-copy-btn:hover {
-	background: var(--surface-hover);
-}
 
 /* ─── Default selector ───────────────────────────────────────────────── */
 
@@ -278,12 +209,7 @@
 	font-weight: 500;
 }
 .ado-config-default-select {
-	padding: 0.35rem 0.6rem;
-	border-radius: var(--radius-md, 8px);
-	border: 1px solid var(--panel-border);
-	background: var(--input-bg);
-	color: var(--text);
-	font-size: 0.88rem;
+	max-width: 280px;
 }
 
 /* ─── Section headers ────────────────────────────────────────────────── */
@@ -319,15 +245,20 @@
 	background: var(--surface);
 	border: 1px dashed var(--panel-border-strong);
 	border-radius: var(--radius-lg, 12px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-3);
 }
 .ado-config-empty h3 {
-	margin: 0 0 var(--space-2) 0;
+	margin: 0;
 	color: var(--text);
 }
 .ado-config-empty p {
 	margin: 0;
 	color: var(--text-muted);
 	font-size: 0.9rem;
+	max-width: 420px;
 }
 
 /* ─── Profile cards ──────────────────────────────────────────────────── */
@@ -393,12 +324,6 @@
 	font-weight: 500;
 	margin-right: var(--space-1);
 }
-.ado-config-card-info code {
-	background: var(--surface-soft);
-	padding: 0.1rem 0.3rem;
-	border-radius: 4px;
-	font-size: 0.85em;
-}
 
 .ado-config-card-repos {
 	display: flex;
@@ -415,6 +340,7 @@
 	color: var(--text-soft);
 	font-size: 0.78rem;
 	cursor: pointer;
+	font-family: inherit;
 }
 .ado-config-card-btn:hover {
 	background: var(--surface-hover);
@@ -427,7 +353,7 @@
 	background: var(--danger-soft);
 }
 
-/* ─── Repo pills ─────────────────────────────────────────────────────── */
+/* ─── Repo pills (shared by cards + wizard + modal) ──────────────────── */
 
 .ado-config-repo-pill {
 	display: inline-flex;
@@ -453,59 +379,7 @@
 	color: var(--danger);
 }
 
-/* ─── Form (modal) ───────────────────────────────────────────────────── */
-
-.ado-config-form-group {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-1);
-	margin-bottom: var(--space-3);
-}
-.ado-config-form-label {
-	font-size: 0.85rem;
-	font-weight: 500;
-	color: var(--text-soft);
-}
-.ado-config-form-input {
-	padding: 0.45rem 0.6rem;
-	border-radius: var(--radius-md, 8px);
-	border: 1px solid var(--panel-border);
-	background: var(--input-bg);
-	color: var(--text);
-	font-size: 0.9rem;
-}
-.ado-config-form-input:focus {
-	outline: none;
-	border-color: var(--yz-accent);
-}
-.ado-config-form-input:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-.ado-config-form-hint {
-	font-size: 0.78rem;
-	color: var(--text-muted);
-}
-.ado-config-form-hint code {
-	background: var(--surface-soft);
-	padding: 0.1rem 0.3rem;
-	border-radius: 4px;
-}
-.ado-config-form-row {
-	flex-direction: row;
-	gap: var(--space-4);
-	flex-wrap: wrap;
-}
-.ado-config-form-row label {
-	display: flex;
-	align-items: center;
-	gap: 0.4rem;
-	font-size: 0.85rem;
-	color: var(--text-soft);
-	cursor: pointer;
-}
-
-/* ─── Tag input ──────────────────────────────────────────────────────── */
+/* ─── Tag input (shared by wizard + modal) ───────────────────────────── */
 
 .ado-config-tag-input-wrapper {
 	display: flex;
@@ -529,6 +403,7 @@
 	color: var(--text);
 	font-size: 0.88rem;
 	outline: none;
+	font-family: inherit;
 }
 
 /* ─── TOML builder ───────────────────────────────────────────────────── */
@@ -543,14 +418,186 @@
 	background: var(--surface);
 	border: 1px solid var(--panel-border);
 	border-radius: var(--radius-lg, 12px);
-	display: grid;
-	grid-template-columns: 1fr 1fr;
+	display: flex;
+	flex-direction: column;
 	gap: var(--space-3);
 }
-@media (max-width: 560px) {
-	.ado-config-toml-form {
-		grid-template-columns: 1fr;
-	}
+
+/* ─── Wizard step indicator ────────────────────────────────────────────
+   Promoted from Missions.css so the wizard renders correctly on /ado,
+   where Missions.css is not loaded. Token-driven (themes for free). */
+
+.wizard-steps {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	margin-bottom: var(--space-4);
+	padding: var(--space-3) 0;
+	flex-wrap: wrap;
+	row-gap: var(--space-2);
+}
+
+.wizard-step {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.wizard-step:last-child {
+	flex: 0 0 auto;
+}
+
+.wizard-step-circle {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.85rem;
+	font-weight: 700;
+	background: var(--surface-soft);
+	color: var(--text-muted);
+	border: 2px solid var(--panel-border);
+	transition: all 200ms ease;
+	flex-shrink: 0;
+}
+.wizard-step.active .wizard-step-circle {
+	background: var(--yz-accent);
+	color: #fff;
+	border-color: var(--yz-accent);
+}
+.wizard-step.done .wizard-step-circle {
+	background: var(--success-soft, rgba(34, 197, 94, 0.15));
+	color: var(--success, #22c55e);
+	border-color: var(--success, #22c55e);
+}
+
+.wizard-step-label {
+	font-size: 0.8rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+.wizard-step.active .wizard-step-label {
+	color: var(--text);
+	font-weight: 600;
+}
+
+.wizard-step-line {
+	flex: 1 1 auto;
+	min-width: 16px;
+	height: 2px;
+	background: var(--panel-border);
+	margin: 0 var(--space-1);
+	transition: background 200ms ease;
+}
+.wizard-step-line.done {
+	background: var(--success, #22c55e);
+}
+
+.wizard-step-content {
+	padding: var(--space-1) 0;
+}
+.wizard-step-title {
+	font-size: 1.15rem;
+	font-weight: 700;
+	margin: 0 0 var(--space-1);
+	color: var(--text);
+}
+.wizard-step-desc {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	margin: 0 0 var(--space-3);
+	line-height: 1.5;
+}
+.wizard-step-desc code {
+	background: var(--surface-soft);
+	padding: 0.1rem 0.3rem;
+	border-radius: 4px;
+}
+
+/* ─── Wizard: profile draft cards ────────────────────────────────────── */
+
+.ado-wiz-profile-card {
+	padding: var(--space-4);
+	background: var(--surface);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg, 12px);
+	margin-bottom: var(--space-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+.ado-wiz-profile-card.default {
+	border-color: var(--yz-accent);
+	box-shadow: 0 0 0 1px rgba(var(--yz-accent-rgb), 0.3);
+}
+.ado-wiz-profile-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.ado-wiz-default-label {
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: var(--text-soft);
+}
+.ado-wiz-remove {
+	color: var(--danger);
+}
+
+/* ─── Wizard: PAT existing banner + env tutorial ─────────────────────── */
+
+.ado-wiz-pat-existing {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+.ado-wiz-env-tutorial {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin-top: var(--space-2);
+}
+
+/* ─── Wizard: review ─────────────────────────────────────────────────── */
+
+.ado-wiz-review {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+.ado-wiz-review > div {
+	display: grid;
+	grid-template-columns: 140px 1fr;
+	gap: var(--space-2);
+	align-items: start;
+}
+.ado-wiz-review dt {
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+.ado-wiz-review dd {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--text);
+}
+.ado-wiz-review-profile {
+	line-height: 1.5;
+}
+.ado-wiz-optional {
+	font-size: 0.72rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-left: var(--space-2);
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────────── */
@@ -559,19 +606,12 @@
 	.ado-config-profiles {
 		grid-template-columns: 1fr;
 	}
-	.ado-config-pat {
-		flex-direction: column;
-		align-items: stretch;
-	}
-	.ado-config-pat-actions {
-		justify-content: flex-end;
+	.ado-wiz-review > div {
+		grid-template-columns: 1fr;
 	}
 }
 
-/* ─── Loading skeleton ──────────────────────────────────────────────────
-   Mirrors the real layout (header + PAT bar + section header + profile card
-   grid) so the shimmer reads as "this page is loading," not "two grey boxes."
-   Uses the global .skeleton shimmer (from components.css) + local sizing. */
+/* ─── Loading skeleton ───────────────────────────────────────────────── */
 
 .ado-skel-header {
 	display: flex;
@@ -602,37 +642,3 @@
 	width: 40%;
 	border-radius: var(--radius-sm);
 }
-.ado-skel-section-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: var(--space-3);
-}
-.ado-skel-section-title {
-	height: 1.3rem;
-	width: 120px;
-	border-radius: var(--radius-sm);
-}
-.ado-skel-add-btn {
-	height: 2rem;
-	width: 120px;
-	border-radius: var(--radius-sm);
-}
-/* Skeleton profile cards — same border-radius + border as the real cards
-   (.ado-config-card) so the silhouette matches. */
-.ado-skel-card {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
-	padding: var(--space-4);
-	border-radius: var(--radius-lg);
-	border: 1px solid var(--panel-border);
-	min-height: 120px;
-}
-.ado-skel-line {
-	height: 0.82rem;
-	border-radius: var(--radius-sm);
-}
-.ado-skel-line.w60 { width: 60%; }
-.ado-skel-line.w85 { width: 85%; }
-.ado-skel-line.w40 { width: 40%; }

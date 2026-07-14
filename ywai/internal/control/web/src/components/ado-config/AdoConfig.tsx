@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../shared/Modal";
+import AdoSetupWizard from "./AdoSetupWizard";
+import { buildToml, buildTomlCommand, defaultToml, type TomlConfig } from "./tomlBuilder";
 import "./AdoConfig.css";
 
 // ─── Types (mirror the Go structs in internal/control/ado_config.go) ───────
@@ -30,74 +32,6 @@ interface CliStatus {
 	error?: string;
 }
 
-const emptyProfile = (): AdoProfile => ({
-	org: "",
-	project: "",
-	patEnvVar: "AZURE_DEVOPS_PAT",
-	repos: [],
-});
-
-// ─── .adoconfig.toml builder state ─────────────────────────────────────────
-
-interface TomlConfig {
-	strategy: "feature-chain" | "stacked";
-	baseBranch: string;
-	maxLength: number;
-	prefix: string;
-	requireWorkItem: boolean;
-	defaultDraft: boolean;
-	allowedTypes: string;
-}
-
-const defaultToml = (): TomlConfig => ({
-	strategy: "feature-chain",
-	baseBranch: "main",
-	maxLength: 10,
-	prefix: "feature",
-	requireWorkItem: true,
-	defaultDraft: true,
-	allowedTypes: "feature, fix, hotfix, chore, refactor",
-});
-
-function buildToml(t: TomlConfig): string {
-	const types = t.allowedTypes
-		.split(",")
-		.map((s) => s.trim())
-		.filter(Boolean)
-		.map((x) => `"${x}"`)
-		.join(", ");
-	return `# .adoconfig.toml — Project-level ADO conventions
-
-[chain]
-strategy = "${t.strategy}"        # "feature-chain" | "stacked"
-base_branch = "${t.baseBranch}"
-max_length = ${t.maxLength}
-prefix = "${t.prefix}"
-
-[branch]
-allowed_types = [${types}]
-slug_max_length = 40
-require_wi_id = true
-
-[pr]
-require_work_item = ${t.requireWorkItem}
-include_chain_context = true
-review_budget = 400
-default_draft = ${t.defaultDraft}
-
-[work_item]
-auto_transition = false
-target_state = "In Dev"
-`;
-}
-
-// Build a copy-paste shell command that writes .adoconfig.toml into the current
-// repo. Heredoc keeps quoting/escaping simple across bash/zsh.
-function buildTomlCommand(toml: string): string {
-	return `cat > .adoconfig.toml <<'EOF'
-${toml.trimEnd()}\nEOF`;
-}
-
 export default function AdoConfig() {
 	const [config, setConfig] = useState<AdoConfig | null>(null);
 	const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
@@ -106,22 +40,25 @@ export default function AdoConfig() {
 	const [error, setError] = useState<string | null>(null);
 	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-	// Profile modal state
+	// Wizard
+	const [showWizard, setShowWizard] = useState(false);
+
+	// Profile add/edit modal (management view)
 	const [showModal, setShowModal] = useState(false);
 	const [editingName, setEditingName] = useState<string | null>(null);
 	const [formName, setFormName] = useState("");
-	const [formProfile, setFormProfile] = useState<AdoProfile>(emptyProfile());
+	const [formProject, setFormProject] = useState("");
+	const [formRepos, setFormRepos] = useState<string[]>([]);
 	const [repoInput, setRepoInput] = useState("");
 
-	// PAT modal state
+	// PAT modal (management view)
 	const [showPatModal, setShowPatModal] = useState(false);
 	const [patValue, setPatValue] = useState("");
-	const [showTutorial, setShowTutorial] = useState(false);
 
-	// CLI update state ("idle" | "updating" | "error")
+	// CLI update
 	const [cliUpdateStatus, setCliUpdateStatus] = useState<"idle" | "updating" | "error">("idle");
 
-	// TOML builder state
+	// TOML builder (collapsible)
 	const [toml, setToml] = useState<TomlConfig>(defaultToml());
 	const [tomlCopied, setTomlCopied] = useState(false);
 	const [showTomlBuilder, setShowTomlBuilder] = useState(false);
@@ -141,19 +78,32 @@ export default function AdoConfig() {
 			.catch(() => { setError("Failed to load ADO config"); setLoading(false); });
 	}, []);
 
-	// Auto-dismiss messages after 3s
 	useEffect(() => {
 		if (!message) return;
 		const id = setTimeout(() => setMessage(null), 3000);
 		return () => clearTimeout(id);
 	}, [message]);
 
-	// ─── Profile handlers ───────────────────────────────────────────────
+	// ─── Derived: the org is global (taken from the default profile) ──────
+	const profileNames = config ? Object.keys(config.profiles) : [];
+	const defaultProfileName = config?.defaultProfile ?? "";
+	const globalOrg = config && defaultProfileName
+		? (config.profiles[defaultProfileName]?.org ?? "")
+		: (profileNames.length > 0 ? config!.profiles[profileNames[0]].org : "");
+	// Detect legacy heterogeneous orgs (so we can warn).
+	const orgMismatch = useMemo(() => {
+		if (!config) return false;
+		const orgs = new Set(Object.values(config.profiles).map((p) => p.org));
+		return orgs.size > 1;
+	}, [config]);
+
+	// ─── Profile handlers (management modal: project + repos only) ────────
 
 	const openAddModal = () => {
 		setEditingName(null);
 		setFormName("");
-		setFormProfile(emptyProfile());
+		setFormProject("");
+		setFormRepos([]);
 		setRepoInput("");
 		setShowModal(true);
 	};
@@ -163,7 +113,8 @@ export default function AdoConfig() {
 		if (!p) return;
 		setEditingName(name);
 		setFormName(name);
-		setFormProfile({ ...p, repos: [...(p.repos ?? [])] });
+		setFormProject(p.project);
+		setFormRepos([...(p.repos ?? [])]);
 		setRepoInput("");
 		setShowModal(true);
 	};
@@ -171,40 +122,47 @@ export default function AdoConfig() {
 	const closeModal = () => setShowModal(false);
 
 	const addRepo = () => {
-		const r = repoInput.trim();
-		if (!r) return;
-		if (!formProfile.repos.includes(r)) {
-			setFormProfile({ ...formProfile, repos: [...formProfile.repos, r] });
+		const raw = repoInput.trim();
+		if (!raw) return;
+		const names = raw.split(",").map((x) => x.trim()).filter(Boolean);
+		const valid = names.filter((n) => /^[a-zA-Z0-9._-]+$/.test(n));
+		if (valid.length !== names.length) {
+			setMessage({ text: "Repo names may only contain letters, numbers, dots, hyphens, underscores", type: "error" });
 		}
+		setFormRepos([...new Set([...formRepos, ...valid])]);
 		setRepoInput("");
 	};
 
-	const removeRepo = (r: string) => {
-		setFormProfile({ ...formProfile, repos: formProfile.repos.filter((x) => x !== r) });
-	};
+	const removeRepo = (r: string) => setFormRepos(formRepos.filter((x) => x !== r));
 
 	const handleRepoKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			addRepo();
-		}
+		if (e.key === "Enter") { e.preventDefault(); addRepo(); }
 	};
 
 	const handleSaveProfile = async () => {
-		if (!formName.trim() || !formProfile.org.trim() || !formProfile.project.trim()) {
-			setMessage({ text: "Name, org and project are required", type: "error" });
+		if (!formProject.trim()) {
+			setMessage({ text: "Project is required", type: "error" });
+			return;
+		}
+		const fallback = formName.trim() || formProject.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+		const name = (editingName ?? fallback).slice(0, 50);
+		if (!name) {
+			setMessage({ text: "Could not derive a profile name", type: "error" });
 			return;
 		}
 		try {
 			const res = await fetch("/api/ado/profile", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: formName.trim(), profile: formProfile }),
+				body: JSON.stringify({
+					name,
+					profile: { org: globalOrg, project: formProject.trim(), patEnvVar: "AZURE_DEVOPS_PAT", repos: formRepos },
+				}),
 			});
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.error || "Failed to save profile");
 			setConfig(data.config);
-			setMessage({ text: `Profile "${formName.trim()}" saved`, type: "success" });
+			setMessage({ text: `Profile "${name}" saved`, type: "success" });
 			closeModal();
 		} catch (e) {
 			setMessage({ text: (e as Error).message, type: "error" });
@@ -245,7 +203,7 @@ export default function AdoConfig() {
 		}
 	};
 
-	// ─── PAT handlers ───────────────────────────────────────────────────
+	// ─── PAT handler ──────────────────────────────────────────────────────
 
 	const handleSavePat = async () => {
 		if (!patValue.trim()) {
@@ -269,11 +227,10 @@ export default function AdoConfig() {
 		}
 	};
 
-	// ─── TOML builder ───────────────────────────────────────────────────
+	// ─── TOML builder ─────────────────────────────────────────────────────
 
 	const tomlString = useMemo(() => buildToml(toml), [toml]);
 	const tomlCommand = useMemo(() => buildTomlCommand(tomlString), [tomlString]);
-
 	const copyTomlCommand = async () => {
 		try {
 			await navigator.clipboard.writeText(tomlCommand);
@@ -284,13 +241,8 @@ export default function AdoConfig() {
 		}
 	};
 
-	const profileNames = config ? Object.keys(config.profiles) : [];
+	// ─── CLI update ───────────────────────────────────────────────────────
 
-	// ─── CLI update ─────────────────────────────────────────────────────
-
-	// Runs `npm i -g @cioffinahuel/opencode-ado` server-side. The server stays
-	// up (unlike ywai self-update), so we just refresh cliStatus from the
-	// response — no /health polling or page reload needed.
 	const handleUpdateCli = async () => {
 		setCliUpdateStatus("updating");
 		setMessage(null);
@@ -300,46 +252,25 @@ export default function AdoConfig() {
 			if (!res.ok) throw new Error(data.error || "Failed to update ado CLI");
 			setCliStatus(data);
 			setCliUpdateStatus("idle");
-			if (data.updateAvailable) {
-				setMessage({ text: "ado CLI updated, but a newer version is still available", type: "error" });
-			} else {
-				setMessage({ text: `ado CLI updated to v${data.version}`, type: "success" });
-			}
+			setMessage(data.updateAvailable
+				? { text: "ado CLI updated, but a newer version is still available", type: "error" }
+				: { text: `ado CLI updated to v${data.version}`, type: "success" });
 		} catch (e) {
 			setCliUpdateStatus("error");
 			setMessage({ text: (e as Error).message, type: "error" });
 		}
 	};
 
-	// ─── Render ─────────────────────────────────────────────────────────
+	// ─── Render ───────────────────────────────────────────────────────────
 
 	if (loading) {
 		return (
 			<div className="ado-config" aria-busy="true">
-				{/* Header skeleton */}
 				<div className="ado-skel-header">
 					<span className="skeleton ado-skel-title" />
 					<span className="skeleton ado-skel-badge" />
 				</div>
-				{/* PAT bar skeleton */}
-				<div className="skeleton ado-skel-pat">
-					<span className="skeleton ado-skel-pat-line" />
-				</div>
-				{/* Profiles section header skeleton */}
-				<div className="ado-skel-section-header">
-					<span className="skeleton ado-skel-section-title" />
-					<span className="skeleton ado-skel-add-btn" />
-				</div>
-				{/* Profile cards skeleton (3 cards in a grid) */}
-				<div className="ado-config-profiles">
-					{[0, 1, 2].map((i) => (
-						<div key={i} className="skeleton ado-skel-card">
-							<span className="skeleton ado-skel-line w60" />
-							<span className="skeleton ado-skel-line w85" />
-							<span className="skeleton ado-skel-line w40" />
-						</div>
-					))}
-				</div>
+				<div className="skeleton ado-skel-pat"><span className="skeleton ado-skel-pat-line" /></div>
 			</div>
 		);
 	}
@@ -347,6 +278,8 @@ export default function AdoConfig() {
 	if (error) {
 		return <div className="ado-config"><p className="ado-error">{error}</p></div>;
 	}
+
+	const hasProfiles = profileNames.length > 0;
 
 	return (
 		<div className="ado-config">
@@ -359,12 +292,7 @@ export default function AdoConfig() {
 							{cliStatus.updateAvailable && cliStatus.latest ? (
 								<>
 									{`ado v${cliStatus.version} → ${cliStatus.latest}`}
-									<button
-										type="button"
-										className="ado-config-cli-update-btn"
-										onClick={handleUpdateCli}
-										disabled={cliUpdateStatus === "updating"}
-									>
+									<button type="button" className="ado-config-cli-update-btn" onClick={handleUpdateCli} disabled={cliUpdateStatus === "updating"}>
 										{cliUpdateStatus === "updating" ? "Updating…" : "Update"}
 									</button>
 								</>
@@ -373,128 +301,102 @@ export default function AdoConfig() {
 							)}
 						</span>
 					) : (
-						<span className="ado-config-cli-badge missing">
-							CLI not installed — run ywai install
-						</span>
+						<span className="ado-config-cli-badge missing">CLI not installed — run ywai install</span>
 					)}
 				</div>
+				<button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+					🪄 {hasProfiles ? "Guided setup" : "Get started"}
+				</button>
 			</div>
 
-			{message && (
-				<div className={`ado-config-message ${message.type}`}>{message.text}</div>
-			)}
+			{message && <div className={`ado-config-message ${message.type}`}>{message.text}</div>}
 
-			{/* PAT status */}
-			<div className="ado-config-pat">
-				<div className="ado-config-pat-info">
-					<span className={`ado-config-pat-dot ${patStatus?.hasPat ? "ok" : "missing"}`} />
-					<div>
-						<strong>PAT</strong>
-						{patStatus?.hasPat ? (
-							<span className="ado-config-pat-source">
-								{" "}✓ available ({patStatus.source === "env" ? "AZURE_DEVOPS_PAT env var" : "~/.azure-devops-cli/pat"})
-							</span>
-						) : (
-							<span className="ado-config-pat-source missing">{" "}✗ not configured</span>
-						)}
-					</div>
+			{/* Status row — compact checks */}
+			<div className="ado-config-status">
+				<div className={`ado-config-check ${cliStatus?.installed ? "ok" : "missing"}`}>
+					<span className="ado-config-check-dot" />
+					CLI {cliStatus?.installed ? `v${cliStatus.version}` : "missing"}
 				</div>
-				<div className="ado-config-pat-actions">
-					<button className="ado-config-btn" onClick={() => setShowPatModal(true)}>Set PAT</button>
-					<button className="ado-config-btn" onClick={() => setShowTutorial(!showTutorial)}>
-						{showTutorial ? "Hide" : "Env var"} tutorial
-					</button>
+				<button className={`ado-config-check ${patStatus?.hasPat ? "ok" : "missing"}`} onClick={() => setShowPatModal(true)} title="Set PAT">
+					<span className="ado-config-check-dot" />
+					PAT {patStatus?.hasPat ? `(${patStatus.source === "env" ? "env" : "file"})` : "missing"}
+				</button>
+				<div className={`ado-config-check ${hasProfiles ? "ok" : "missing"}`}>
+					<span className="ado-config-check-dot" />
+					{hasProfiles ? `${profileNames.length} profile${profileNames.length === 1 ? "" : "s"}` : "no profiles"}
 				</div>
 			</div>
 
-			{/* Env var tutorial */}
-			{showTutorial && (
-				<div className="ado-config-tutorial">
-					<h3>Set <code>AZURE_DEVOPS_PAT</code> as an environment variable</h3>
-					<p>The <code>ado</code> CLI reads the PAT in this order: direct profile value → <code>AZURE_DEVOPS_PAT</code> env var → <code>~/.azure-devops-cli/pat</code> file.</p>
-					<p className="ado-config-tutorial-hint">Required PAT scopes: <strong>Code</strong> (R/W), <strong>Pull Request Contribute</strong> (R/W), <strong>Work Items</strong> (Read).</p>
-
-					<div className="ado-config-code-block">
-						<div className="ado-config-code-label">macOS / Linux (zsh, bash) — add to <code>~/.zshrc</code> or <code>~/.bashrc</code></div>
-						<pre><code>{`echo 'export AZURE_DEVOPS_PAT="YOUR_PAT_HERE"' >> ~/.zshrc
-source ~/.zshrc`}</code></pre>
-					</div>
-
-					<div className="ado-config-code-block">
-						<div className="ado-config-code-label">Windows (PowerShell) — current user, persistent</div>
-						<pre><code>{`[Environment]::SetEnvironmentVariable("AZURE_DEVOPS_PAT", "YOUR_PAT_HERE", "User")
-# Restart your terminal`}</code></pre>
-					</div>
-
-					<div className="ado-config-code-block">
-						<div className="ado-config-code-label">Verify it works</div>
-						<pre><code>{`echo $AZURE_DEVOPS_PAT   # should print your PAT
-ado profile            # uses it to reach Azure DevOps`}</code></pre>
-					</div>
-				</div>
-			)}
-
-			{/* Default profile selector */}
-			{profileNames.length > 0 && (
-				<div className="ado-config-default">
-					<label className="ado-config-default-label" htmlFor="ado-default">Default profile</label>
-					<select
-						id="ado-default"
-						className="ado-config-default-select"
-						value={config?.defaultProfile ?? ""}
-						onChange={(e) => handleDefaultChange(e.target.value)}
-					>
-						{profileNames.map((n) => <option key={n} value={n}>{n}</option>)}
-					</select>
+			{/* Org shown once, globally */}
+			{globalOrg && (
+				<div className="ado-config-org">
+					<span className="muted">Organization:</span> <strong>{globalOrg}</strong>
+					{orgMismatch && (
+						<span className="pill pill-warning ado-config-org-warn" title="Some profiles use a different org">
+							mixed orgs
+						</span>
+					)}
 				</div>
 			)}
 
 			{/* Profiles */}
 			<div className="ado-config-section-header">
 				<h2 className="ado-config-section-title">Profiles</h2>
-				<button className="ado-config-add-btn" onClick={openAddModal}>+ Add Profile</button>
+				{hasProfiles && <button className="btn btn-outline btn-sm" onClick={openAddModal}>+ Add profile</button>}
 			</div>
 
-			{profileNames.length === 0 ? (
+			{!hasProfiles ? (
 				<div className="ado-config-empty">
 					<h3>No profiles yet</h3>
-					<p>An ADO profile maps to one project. Add your org, project and the repos you want to monitor.</p>
+					<p>Run the guided setup to configure your org, PAT and first project — it only takes a minute.</p>
+					<button className="btn btn-primary" onClick={() => setShowWizard(true)}>🪄 Start guided setup</button>
 				</div>
 			) : (
-				<div className="ado-config-profiles">
-					{profileNames.map((name) => {
-						const p = config!.profiles[name];
-						return (
-							<div key={name} className={`ado-config-card ${p.default ? "default" : ""}`}>
-								<div className="ado-config-card-header">
-									<span className="ado-config-card-name">{name}</span>
-									{p.default && <span className="ado-config-card-default-badge">Default</span>}
-									<div className="ado-config-card-actions">
-										<button className="ado-config-card-btn" onClick={() => openEditModal(name)}>Edit</button>
-										<button className="ado-config-card-btn danger" onClick={() => handleDeleteProfile(name)}>Delete</button>
+				<>
+					<div className="ado-config-default">
+						<label className="ado-config-default-label" htmlFor="ado-default">Default profile</label>
+						<select
+							id="ado-default"
+							className="input ado-config-default-select"
+							value={config?.defaultProfile ?? ""}
+							onChange={(e) => handleDefaultChange(e.target.value)}
+						>
+							{profileNames.map((n) => <option key={n} value={n}>{n}</option>)}
+						</select>
+					</div>
+					<div className="ado-config-profiles">
+						{profileNames.map((name) => {
+							const p = config!.profiles[name];
+							return (
+								<div key={name} className={`ado-config-card ${p.default ? "default" : ""}`}>
+									<div className="ado-config-card-header">
+										<span className="ado-config-card-name">{name}</span>
+										{p.default && <span className="ado-config-card-default-badge">Default</span>}
+										<div className="ado-config-card-actions">
+											<button className="ado-config-card-btn" onClick={() => openEditModal(name)}>Edit</button>
+											<button className="ado-config-card-btn danger" onClick={() => handleDeleteProfile(name)}>Delete</button>
+										</div>
+									</div>
+									<div className="ado-config-card-info">
+										<p><strong>Project:</strong> {p.project}</p>
+										{p.repos && p.repos.length > 0 && (
+											<div className="ado-config-card-repos">
+												<strong>Repos:</strong>
+												{p.repos.map((r) => <span key={r} className="ado-config-repo-pill">{r}</span>)}
+											</div>
+										)}
 									</div>
 								</div>
-								<div className="ado-config-card-info">
-									<p><strong>Org:</strong> {p.org}</p>
-									<p><strong>Project:</strong> {p.project}</p>
-									{p.patEnvVar && <p><strong>PAT var:</strong> <code>{p.patEnvVar}</code></p>}
-									{p.repos && p.repos.length > 0 && (
-										<div className="ado-config-card-repos">
-											<strong>Repos:</strong>
-											{p.repos.map((r) => <span key={r} className="ado-config-repo-pill">{r}</span>)}
-										</div>
-									)}
-								</div>
-							</div>
-						);
-					})}
-				</div>
+							);
+						})}
+					</div>
+				</>
 			)}
 
-			{/* ─── .adoconfig.toml builder ─────────────────────────────── */}
+			{/* .adoconfig.toml builder (collapsible) */}
 			<div className="ado-config-section-header">
 				<h2 className="ado-config-section-title">Project rules (.adoconfig.toml)</h2>
-				<button className="ado-config-add-btn" onClick={() => setShowTomlBuilder(!showTomlBuilder)}>
+				<button className="btn btn-outline btn-sm" onClick={() => setShowTomlBuilder(!showTomlBuilder)}>
 					{showTomlBuilder ? "Hide" : "Build"}
 				</button>
 			</div>
@@ -505,49 +407,47 @@ ado profile            # uses it to reach Azure DevOps`}</code></pre>
 			{showTomlBuilder && (
 				<div className="ado-config-toml-builder">
 					<div className="ado-config-toml-form">
-						<div className="ado-config-form-group">
-							<label className="ado-config-form-label">Chain strategy</label>
-							<select
-								className="ado-config-form-input"
-								value={toml.strategy}
-								onChange={(e) => setToml({ ...toml, strategy: e.target.value as TomlConfig["strategy"] })}
-							>
+						<div className="field">
+							<label className="field-label">Chain strategy</label>
+							<select className="input" value={toml.strategy} onChange={(e) => setToml({ ...toml, strategy: e.target.value as TomlConfig["strategy"] })}>
 								<option value="feature-chain">feature-chain</option>
 								<option value="stacked">stacked</option>
 							</select>
 						</div>
-						<div className="ado-config-form-group">
-							<label className="ado-config-form-label">Base branch</label>
-							<input className="ado-config-form-input" value={toml.baseBranch} onChange={(e) => setToml({ ...toml, baseBranch: e.target.value })} />
+						<div className="form-grid">
+							<div className="field">
+								<label className="field-label">Base branch</label>
+								<input className="input" value={toml.baseBranch} onChange={(e) => setToml({ ...toml, baseBranch: e.target.value })} />
+							</div>
+							<div className="field">
+								<label className="field-label">Max chain length</label>
+								<input className="input" type="number" value={toml.maxLength} onChange={(e) => setToml({ ...toml, maxLength: Number(e.target.value) })} />
+							</div>
+							<div className="field">
+								<label className="field-label">Branch prefix</label>
+								<input className="input" value={toml.prefix} onChange={(e) => setToml({ ...toml, prefix: e.target.value })} />
+							</div>
+							<div className="field">
+								<label className="field-label">Allowed branch types</label>
+								<input className="input" value={toml.allowedTypes} onChange={(e) => setToml({ ...toml, allowedTypes: e.target.value })} />
+							</div>
 						</div>
-						<div className="ado-config-form-group">
-							<label className="ado-config-form-label">Max chain length</label>
-							<input className="ado-config-form-input" type="number" value={toml.maxLength} onChange={(e) => setToml({ ...toml, maxLength: Number(e.target.value) })} />
-						</div>
-						<div className="ado-config-form-group">
-							<label className="ado-config-form-label">Branch prefix</label>
-							<input className="ado-config-form-input" value={toml.prefix} onChange={(e) => setToml({ ...toml, prefix: e.target.value })} />
-						</div>
-						<div className="ado-config-form-group">
-							<label className="ado-config-form-label">Allowed branch types (comma-separated)</label>
-							<input className="ado-config-form-input" value={toml.allowedTypes} onChange={(e) => setToml({ ...toml, allowedTypes: e.target.value })} />
-						</div>
-						<div className="ado-config-form-group ado-config-form-row">
-							<label>
+						<div className="row" style={{ gap: "var(--space-4)", flexWrap: "wrap" }}>
+							<label className="checkbox-row">
 								<input type="checkbox" checked={toml.requireWorkItem} onChange={(e) => setToml({ ...toml, requireWorkItem: e.target.checked })} />
 								Require work item for PRs
 							</label>
-							<label>
+							<label className="checkbox-row">
 								<input type="checkbox" checked={toml.defaultDraft} onChange={(e) => setToml({ ...toml, defaultDraft: e.target.checked })} />
-								Create PRs as draft by default
+								PRs as draft by default
 							</label>
 						</div>
 					</div>
 
 					<div className="ado-config-code-block">
 						<div className="ado-config-code-label">
-							Run this in your repo (writes <code>.adoconfig.toml</code>)
-							<button className="ado-config-copy-btn" onClick={copyTomlCommand}>
+							Run this in your repo
+							<button className="btn btn-ghost btn-xs" onClick={copyTomlCommand}>
 								{tomlCopied ? "✓ Copied" : "Copy"}
 							</button>
 						</div>
@@ -556,62 +456,51 @@ ado profile            # uses it to reach Azure DevOps`}</code></pre>
 				</div>
 			)}
 
-			{/* Profile modal */}
+			{/* Wizard */}
+			<AdoSetupWizard
+				open={showWizard}
+				onClose={() => setShowWizard(false)}
+				onApplied={(cfg) => { setConfig(cfg); setPatStatus({ hasPat: true, source: "file" }); }}
+				initialOrg={globalOrg}
+				initialProfiles={config?.profiles ?? {}}
+				initialDefault={config?.defaultProfile ?? ""}
+				patStatus={patStatus}
+				onMessage={setMessage}
+			/>
+
+			{/* Profile add/edit modal (project + repos only) */}
 			<Modal
 				open={showModal}
 				onClose={closeModal}
 				title={editingName ? `Edit profile "${editingName}"` : "Add profile"}
-				subtitle="An ADO profile maps to one Azure DevOps project."
+				subtitle={`Org inherited: ${globalOrg || "(configure org in guided setup)"}`}
 				width="540px"
 				footer={
 					<>
-						<button className="ado-config-btn" onClick={closeModal}>Cancel</button>
-						<button className="ado-config-btn primary" onClick={handleSaveProfile}>Save</button>
+						<button className="btn btn-ghost" onClick={closeModal}>Cancel</button>
+						<button className="btn btn-primary" onClick={handleSaveProfile}>Save</button>
 					</>
 				}
 			>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">Profile name</label>
+				<div className="field">
+					<label className="field-label">Profile name</label>
 					<input
-						className="ado-config-form-input"
+						className="input"
 						value={formName}
 						disabled={!!editingName}
 						onChange={(e) => setFormName(e.target.value)}
-						placeholder="e.g. myorg-web"
+						placeholder="auto-derived from project if blank"
 					/>
-					{editingName && <span className="ado-config-form-hint">Profile name cannot be changed.</span>}
+					<span className="field-hint">Left blank, it's derived from the project name (slug).</span>
 				</div>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">Organization</label>
-					<input
-						className="ado-config-form-input"
-						value={formProfile.org}
-						onChange={(e) => setFormProfile({ ...formProfile, org: e.target.value })}
-						placeholder="myorg, or https://dev.azure.com/myorg"
-					/>
+				<div className="field">
+					<label className="field-label">Project</label>
+					<input className="input" value={formProject} onChange={(e) => setFormProject(e.target.value)} placeholder="MyProject" />
 				</div>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">Project</label>
-					<input
-						className="ado-config-form-input"
-						value={formProfile.project}
-						onChange={(e) => setFormProfile({ ...formProfile, project: e.target.value })}
-						placeholder="MyProject"
-					/>
-				</div>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">PAT env var</label>
-					<input
-						className="ado-config-form-input"
-						value={formProfile.patEnvVar}
-						onChange={(e) => setFormProfile({ ...formProfile, patEnvVar: e.target.value })}
-					/>
-					<span className="ado-config-form-hint">Name of the env var holding your PAT. Defaults to AZURE_DEVOPS_PAT.</span>
-				</div>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">Repos to monitor</label>
+				<div className="field">
+					<label className="field-label">Repos to monitor</label>
 					<div className="ado-config-tag-input-wrapper">
-						{formProfile.repos.map((r) => (
+						{formRepos.map((r) => (
 							<span key={r} className="ado-config-repo-pill">
 								{r}
 								<button className="ado-config-repo-pill-remove" onClick={() => removeRepo(r)}>×</button>
@@ -622,7 +511,7 @@ ado profile            # uses it to reach Azure DevOps`}</code></pre>
 							value={repoInput}
 							onChange={(e) => setRepoInput(e.target.value)}
 							onKeyDown={handleRepoKeyDown}
-							placeholder="Type a repo name and press Enter"
+							placeholder="repo name + Enter (or comma-separated)"
 						/>
 					</div>
 				</div>
@@ -637,23 +526,15 @@ ado profile            # uses it to reach Azure DevOps`}</code></pre>
 				width="480px"
 				footer={
 					<>
-						<button className="ado-config-btn" onClick={() => setShowPatModal(false)}>Cancel</button>
-						<button className="ado-config-btn primary" onClick={handleSavePat}>Save</button>
+						<button className="btn btn-ghost" onClick={() => setShowPatModal(false)}>Cancel</button>
+						<button className="btn btn-primary" onClick={handleSavePat}>Save</button>
 					</>
 				}
 			>
-				<div className="ado-config-form-group">
-					<label className="ado-config-form-label">Personal Access Token</label>
-					<input
-						className="ado-config-form-input"
-						type="password"
-						value={patValue}
-						onChange={(e) => setPatValue(e.target.value)}
-						placeholder="Paste your PAT here"
-					/>
-					<span className="ado-config-form-hint">
-						Alternatively set the <code>AZURE_DEVOPS_PAT</code> env var (see tutorial).
-					</span>
+				<div className="field">
+					<label className="field-label">Personal Access Token</label>
+					<input className="input" type="password" value={patValue} onChange={(e) => setPatValue(e.target.value)} placeholder="Paste your PAT here" />
+					<span className="field-hint">Alternatively set the <code>AZURE_DEVOPS_PAT</code> env var.</span>
 				</div>
 			</Modal>
 		</div>
