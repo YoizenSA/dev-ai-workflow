@@ -47,7 +47,6 @@ changelog:
       - "^chore:"
 
 release:
-  overwrite: true
   github:
     owner: YoizenSA
     name: dev-ai-workflow
