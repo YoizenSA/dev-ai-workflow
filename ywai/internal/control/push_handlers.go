@@ -100,10 +100,15 @@ func (api *PushAPI) handleTestNotification(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "push not available", http.StatusServiceUnavailable)
 		return
 	}
+	count := len(api.store.List())
+	if count == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "no-subscribers", "sent": 0})
+		return
+	}
 	if err := api.sender.Send("ywai Test", "Push notifications are working!"); err != nil {
 		log.Printf("push: test notification error: %v", err)
 		http.Error(w, "send failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "sent", "sent": count})
 }

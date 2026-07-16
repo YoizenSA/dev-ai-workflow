@@ -57,15 +57,21 @@ func (ps *PushSender) Send(title, body string) error {
 	}
 	payload := fmt.Sprintf(`{"title":%q,"body":%q}`, title, body)
 	payloadBytes := []byte(payload)
+	// Surface the first real delivery failure so the test endpoint can report it.
+	// Dead subscriptions (410/404) are pruned and never counted as an error.
+	var firstErr error
 	for _, sub := range subs {
 		if err := ps.sendToSubscription(sub, payloadBytes); err != nil {
-			// Gone or not found → subscription is dead
 			if strings.Contains(err.Error(), "410") || strings.Contains(err.Error(), "404") {
 				_ = ps.store.Unsubscribe(sub.Endpoint)
+				continue
+			}
+			if firstErr == nil {
+				firstErr = err
 			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) error {

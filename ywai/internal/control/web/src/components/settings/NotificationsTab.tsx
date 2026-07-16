@@ -7,6 +7,7 @@ export function NotificationsTab() {
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -78,9 +79,19 @@ export function NotificationsTab() {
 
   async function sendTest() {
     setError("");
+    setInfo("");
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        sent?: number;
+      };
       if (!res.ok) throw new Error("Test notification failed");
+      if (data.status === "no-subscribers") {
+        setInfo("No active subscription on this server. Re-enable notifications.");
+      } else {
+        setInfo(`Test sent to ${data.sent ?? 0} subscription(s).`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Test failed");
     }
@@ -105,6 +116,7 @@ export function NotificationsTab() {
       </p>
 
       {error && <p className="error">{error}</p>}
+      {info && <p className="text-muted">{info}</p>}
 
       <div className="button-group">
         {!subscribed ? (
