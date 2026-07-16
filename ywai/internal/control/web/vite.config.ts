@@ -1,8 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { boneyardPlugin } from 'boneyard-js/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Captures <Skeleton name="..."> layouts in dev and writes src/bones/*.bones.json
+    boneyardPlugin({ out: './src/bones' }),
+  ],
   base: '/',
   build: {
     outDir: 'dist',

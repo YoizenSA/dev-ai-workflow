@@ -1,0 +1,115 @@
+/* Boneyard CSS fallbacks — used until .bones.json is captured */
+
+.by-fallback {
+	width: 100%;
+	min-height: 200px;
+}
+
+.by-bone {
+	background: rgba(255, 255, 255, 0.08);
+	border-radius: 6px;
+	animation: by-pulse 1.4s ease-in-out infinite;
+}
+
+:root:not(.dark) .by-bone,
+html:not(.dark) .by-bone {
+	background: rgba(0, 0, 0, 0.08);
+}
+
+.by-bone-line {
+	margin-bottom: 8px;
+}
+
+.by-bone-round {
+	border-radius: 999px;
+	flex-shrink: 0;
+}
+
+.by-bone-btn {
+	border-radius: 8px;
+	margin-top: 16px;
+}
+
+.by-fallback-sidebar {
+	width: 220px;
+	flex-shrink: 0;
+	padding: 16px;
+	border-right: 1px solid var(--panel-border, rgba(255, 255, 255, 0.08));
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.by-fallback-main {
+	flex: 1;
+	min-width: 0;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.by-fallback-board {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--space-4, 16px);
+	min-height: 360px;
+}
+
+.by-fallback-col {
+	min-height: 280px;
+}
+
+.by-fallback-card {
+	background: var(--surface-soft, rgba(255, 255, 255, 0.03));
+	border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.08));
+	border-radius: var(--radius-lg, 12px);
+	padding: 12px;
+	margin-bottom: 10px;
+}
+
+.by-fallback-card-pad {
+	padding: 16px;
+}
+
+.by-fallback-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 16px;
+	padding: 16px;
+}
+
+.by-fallback-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 8px;
+}
+
+.by-fallback-flex {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex: 1;
+}
+
+.by-fallback-health-cards {
+	padding: 0 16px 16px;
+}
+
+@keyframes by-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.45;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.by-bone {
+		animation: none;
+	}
+}

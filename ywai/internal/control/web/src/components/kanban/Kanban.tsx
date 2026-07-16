@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useKanbanStore } from "../../stores/kanbanStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { DelegationColumn, WSMessage } from "../../api/types";
+import { SkeletonScreen } from "../../bones/SkeletonScreen";
+import { KanbanBonesFallback, KanbanCaptureFixture } from "../../bones/fallbacks";
 import { DelegationCard, COLUMNS } from "./DelegationCard";
 import { SessionSidebar } from "./SessionSidebar";
 import "./Kanban.css";
@@ -64,65 +66,63 @@ export default function Kanban() {
 		}
 	};
 
-	if (loading && !board) {
-		return (
-			<div className="loading-inline">
-				<div className="spinner"></div>
-				<span>Loading kanban board…</span>
-		</div>
-	);
-}
+	const showSkeleton = loading && !board;
 
 	return (
-		<div className="kanban-page">
-			<SessionSidebar />
-			<div className="kanban-main">
-				<div className="page-header">
-					<div className="page-title">
-						<h2>{activeSession?.goal || 'Select a session'}</h2>
-						{activeSession && (
-							<span className="page-title-project">{activeSession.project}</span>
-					)}
+		<SkeletonScreen
+			name="kanban-board"
+			loading={showSkeleton}
+			fallback={<KanbanBonesFallback />}
+			fixture={<KanbanCaptureFixture />}
+		>
+			<div className="kanban-page">
+				<SessionSidebar />
+				<div className="kanban-main">
+					<div className="page-header">
+						<div className="page-title">
+							<h2>{activeSession?.goal || "Select a session"}</h2>
+							{activeSession && (
+								<span className="page-title-project">{activeSession.project}</span>
+							)}
+						</div>
 					</div>
-				</div>
 
-			{/* Kanban board */}
-			<div className="board">
-				{COLUMNS.map((col) => {
-					const delegations = board?.[col.id] ?? [];
-					return (
-						<div
-							key={col.id}
-							className={`kanban-column${dragOverColumn === col.id ? " drag-over" : ""}`}
-							data-column={col.id}
-							onDrop={(e) => handleDrop(e, col.id)}
-							onDragOver={(e) => handleDragOver(e, col.id)}
-							onDragLeave={(e) => handleDragLeave(e, col.id)}
-						>
-							<div className="kanban-column-header">
-								<h2 className="kanban-column-title">{col.label}</h2>
-								<span className="kanban-column-count">
-									{delegations.length}
-								</span>
-							</div>
-							<div className="kanban-column-cards">
-								{delegations.map((d) => (
-									<DelegationCard key={d.id} delegation={d} />
-								))}
-								{delegations.length === 0 && (
-									<div className="kanban-empty-col">
-										<span className="muted" style={{ fontSize: "0.82rem" }}>
-											No delegations
+					<div className="board">
+						{COLUMNS.map((col) => {
+							const delegations = board?.[col.id] ?? [];
+							return (
+								<div
+									key={col.id}
+									className={`kanban-column${dragOverColumn === col.id ? " drag-over" : ""}`}
+									data-column={col.id}
+									onDrop={(e) => handleDrop(e, col.id)}
+									onDragOver={(e) => handleDragOver(e, col.id)}
+									onDragLeave={(e) => handleDragLeave(e, col.id)}
+								>
+									<div className="kanban-column-header">
+										<h2 className="kanban-column-title">{col.label}</h2>
+										<span className="kanban-column-count">
+											{delegations.length}
 										</span>
 									</div>
-								)}
-							</div>
-						</div>
-					);
-				})}
+									<div className="kanban-column-cards">
+										{delegations.map((d) => (
+											<DelegationCard key={d.id} delegation={d} />
+										))}
+										{delegations.length === 0 && (
+											<div className="kanban-empty-col">
+												<span className="muted" style={{ fontSize: "0.82rem" }}>
+													No delegations
+												</span>
+											</div>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</div>
 			</div>
-
-			</div>
-		</div>
+		</SkeletonScreen>
 	);
 }

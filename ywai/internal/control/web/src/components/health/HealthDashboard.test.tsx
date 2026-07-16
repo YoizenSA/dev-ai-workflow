@@ -141,7 +141,7 @@ describe('HealthDashboard', () => {
 
 		render(<HealthDashboard />);
 
-		expect(screen.getByText(/loading/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/loading health status/i)).toBeInTheDocument();
 	});
 
 	it('shows error message on fetch failure', async () => {

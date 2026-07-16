@@ -1,5 +1,33 @@
 import '@testing-library/jest-dom';
 
+// boneyard-js Skeleton uses matchMedia + ResizeObserver.
+if (typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
 // Workaround for Vitest 2.1.9 + jsdom 25.0.1 + Node 25 leaving
 // `window.localStorage` as an empty object (no `getItem`/`setItem`/etc.).
 // Verified that the `environmentOptions: { jsdom: { url: 'http://localhost/' } }`

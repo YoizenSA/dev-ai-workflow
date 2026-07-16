@@ -1,4 +1,6 @@
 import { useHealth } from './useHealth';
+import { SkeletonScreen } from '../../bones/SkeletonScreen';
+import { HealthBonesFallback, HealthCaptureFixture } from '../../bones/fallbacks';
 import './health.css';
 
 function formatDate(iso: string): string {
@@ -29,33 +31,37 @@ export function HealthStatusCard({ name, ok }: HealthStatusCardProps) {
 export function HealthDashboard() {
 	const { data, loading, error } = useHealth();
 
-	if (loading) {
-		return <div className="health-dashboard"><div className="hub-page__empty">Loading health status...</div></div>;
-	}
-
 	if (error) {
 		return <div className="health-dashboard"><div className="hub-page__empty">Error: {error.message}</div></div>;
 	}
 
-	if (!data) {
-		return null;
-	}
-
-	const ok = data.daemon_ok && data.db_ok;
+	const ok = data ? data.daemon_ok && data.db_ok : false;
 
 	return (
-		<div className="health-dashboard">
-			<div className={`health-summary ${ok ? 'healthy' : 'unhealthy'}`}>
-				<h2>{ok ? 'Healthy' : 'Unhealthy'}</h2>
-				<p className="health-subtitle">Last check: {formatDate(data.last_check)}</p>
-			</div>
-			<div className="health-cards">
-				<HealthStatusCard name="Daemon" ok={data.daemon_ok} />
-				<HealthStatusCard name="Database" ok={data.db_ok} />
-			</div>
-			<div className="health-meta">
-				<span>{data.repo_count} repos</span>
-			</div>
-		</div>
+		<SkeletonScreen
+			name="health-dashboard"
+			loading={loading || !data}
+			fallback={<HealthBonesFallback />}
+			fixture={<HealthCaptureFixture />}
+		>
+			{data ? (
+				<div className="health-dashboard">
+					<div className={`health-summary ${ok ? 'healthy' : 'unhealthy'}`}>
+						<h2>{ok ? 'Healthy' : 'Unhealthy'}</h2>
+						<p className="health-subtitle">Last check: {formatDate(data.last_check)}</p>
+					</div>
+					<div className="health-cards">
+						<HealthStatusCard name="Daemon" ok={data.daemon_ok} />
+						<HealthStatusCard name="Database" ok={data.db_ok} />
+					</div>
+					<div className="health-meta">
+						<span>{data.repo_count} repos</span>
+					</div>
+				</div>
+			) : (
+				// Placeholder children for boneyard capture when still loading
+				<div className="health-dashboard" />
+			)}
+		</SkeletonScreen>
 	);
 }

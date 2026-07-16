@@ -11,6 +11,11 @@ import {
 import { useMissionsStore } from "../../stores/missionsStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { Mission, WSMessage } from "../../api/types";
+import { SkeletonScreen } from "../../bones/SkeletonScreen";
+import {
+	MissionsBonesFallback,
+	MissionsCaptureFixture,
+} from "../../bones/fallbacks";
 import CreateMissionModal from "./CreateMissionModal";
 import "./Missions.css";
 
@@ -499,25 +504,15 @@ export default function Missions() {
 	const runningCount = missions.filter((m) => m.status === "active").length;
 	const pausedCount = missions.filter((m) => m.status === "paused").length;
 
-	if (loading && missions.length === 0) {
-		return (
-			<div className="missions" aria-busy="true">
-				<header className="page-header">
-					<div className="page-heading">
-						<span className="page-eyebrow">Missions</span>
-						<h1 className="page-title">Mission Control</h1>
-					</div>
-				</header>
-				<div className="skeleton skel-card" style={{ margin: 'var(--space-4)', padding: 'var(--space-6)' }}>
-					<div className="skel-line title" style={{ width: '40%' }} />
-					<div className="skel-line desc" style={{ width: '70%' }} />
-					<div className="skel-line desc sm" style={{ width: '50%' }} />
-				</div>
-			</div>
-		);
-	}
+	const showSkeleton = loading && missions.length === 0;
 
 	return (
+		<SkeletonScreen
+			name="missions-list"
+			loading={showSkeleton}
+			fallback={<MissionsBonesFallback />}
+			fixture={<MissionsCaptureFixture />}
+		>
 		<div className="missions">
 			{/* Page header */}
 			<header className="page-header">
@@ -699,5 +694,6 @@ export default function Missions() {
 				</div>
 			)}
 		</div>
+		</SkeletonScreen>
 	);
 }

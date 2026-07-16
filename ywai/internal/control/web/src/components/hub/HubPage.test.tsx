@@ -23,7 +23,7 @@ describe('HubPage', () => {
     })
 
     render(<HubPage />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/loading projects/i)).toBeInTheDocument()
   })
 
   it('should render error state', () => {
