@@ -3,7 +3,9 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -41,15 +43,34 @@ func TestInstallDryRunNoTypeShowsAllSkills(t *testing.T) {
 	}
 }
 
-func TestInstallHas3Steps(t *testing.T) {
+// The install step count is dynamic (see countApplySteps), so assert the
+// numbered-progress format is well-formed instead of a magic count: every
+// marker shares the same total, they run 1..total with no gaps, and the last
+// equals the total.
+func TestInstallShowsNumberedSteps(t *testing.T) {
 	withFakeAgent(t)
 	bin := buildBinary(t)
 	out := runYwai(t, bin, "install", "--dry-run")
 
-	for _, step := range []string{"[1/3]", "[2/3]", "[3/3]"} {
-		if !strings.Contains(out, step) {
-			t.Errorf("expected %s in install output", step)
+	re := regexp.MustCompile(`\[(\d+)/(\d+)\]`)
+	matches := re.FindAllStringSubmatch(out, -1)
+	if len(matches) == 0 {
+		t.Fatalf("expected numbered [cur/total] steps in install output, got: %s", out)
+	}
+
+	total := matches[0][2]
+	for i, m := range matches {
+		if m[2] != total {
+			t.Errorf("step %d has total %s, expected consistent %s", i+1, m[2], total)
 		}
+		cur, _ := strconv.Atoi(m[1])
+		if cur != i+1 {
+			t.Errorf("expected step [%d/%s], got [%s/%s]", i+1, total, m[1], m[2])
+		}
+	}
+
+	if last := matches[len(matches)-1][1]; last != total {
+		t.Errorf("last step %s does not match total %s", last, total)
 	}
 }
 

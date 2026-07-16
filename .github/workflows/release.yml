@@ -39,7 +39,9 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.6
+          # Must be built with Go >= go.mod's toolchain (1.26); older
+          # golangci-lint fails with "language version ... lower than targeted".
+          version: v2.12.2
           working-directory: ywai
           args: --timeout=3m
           install-mode: binary
