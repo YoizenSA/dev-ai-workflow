@@ -16,7 +16,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/fastfs"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
@@ -560,18 +559,18 @@ var skillsCmd = &cobra.Command{
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Run gentle-ai health check",
-	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, CodeGraph, ywai-fastfs.",
+	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, CodeGraph.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := gentlai.Doctor(); err != nil {
 			return err
 		}
-		printFastPathDoctor()
+		printCodegraphDoctor()
 		return nil
 	},
 }
 
-// printFastPathDoctor reports CodeGraph + ywai-fastfs readiness (Layer A/B).
-func printFastPathDoctor() {
+// printCodegraphDoctor reports CodeGraph readiness.
+func printCodegraphDoctor() {
 	fmt.Println("\n── ywai fast path ──")
 	if v, ok := plugins.CodegraphInfo(); ok {
 		if v != "" {
@@ -581,18 +580,6 @@ func printFastPathDoctor() {
 		}
 	} else {
 		fmt.Println("  codegraph: NOT on PATH (run ywai install / install codegraph)")
-	}
-	if _, err := exec.LookPath("ywai"); err != nil {
-		// Still ok when running from a built binary not named on PATH.
-		fmt.Println("  ywai-fastfs: use `ywai mcp fastfs` from this binary")
-	} else {
-		fmt.Println("  ywai-fastfs: `ywai mcp fastfs` available (register via ywai install)")
-	}
-	// Smoke: can construct a service for cwd.
-	if svc, err := fastfs.NewService(""); err != nil {
-		fmt.Printf("  fastfs service: ERROR %v\n", err)
-	} else {
-		fmt.Printf("  fastfs workspace: %s\n", svc.RootAbs())
 	}
 }
 
@@ -1083,30 +1070,6 @@ var mcpCmd = &cobra.Command{
 	Short: "MCP servers and authentication",
 }
 
-var mcpFastfsCmd = &cobra.Command{
-	Use:   "fastfs",
-	Short: "Run ywai-fastfs MCP server on stdio (search/read with mtime cache)",
-	Long: `Starts the ywai-fastfs MCP server on stdin/stdout.
-
-Long-lived process: the mtime file cache is shared across tool calls in the
-same session (no per-call rg/cat fork). Register with:
-
-  ywai install   # wires ywai-fastfs into opencode/claude/pi configs
-
-Tools: fastfs_find, fastfs_search, fastfs_read_outline, fastfs_read_slice, fastfs_stat.
-Prefer codegraph_explore for structural questions; use fastfs for text search.
-`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cwd, _ := cmd.Flags().GetString("cwd")
-		adapter, err := fastfs.NewMCPAdapter(cwd)
-		if err != nil {
-			return err
-		}
-		adapter.Run()
-		return nil
-	},
-}
-
 var mcpAuthCmd = &cobra.Command{
 	Use:   "auth <server-id>",
 	Short: "Authenticate an MCP server via OAuth",
@@ -1266,8 +1229,6 @@ func init() {
 	rootCmd.AddCommand(tokenbankCmd)
 
 	// MCP commands
-	mcpFastfsCmd.Flags().String("cwd", "", "Workspace root (default: process cwd)")
-	mcpCmd.AddCommand(mcpFastfsCmd)
 	mcpCmd.AddCommand(mcpAuthCmd)
 	rootCmd.AddCommand(mcpCmd)
 }

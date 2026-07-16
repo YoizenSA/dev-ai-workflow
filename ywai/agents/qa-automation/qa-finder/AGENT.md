@@ -61,10 +61,10 @@ Want me to explain what tests are needed for each?"
 ## Exploration Techniques
 
 - **Structure & relationships** — `codegraph_explore` / `codegraph_search` / `codegraph_trace` for symbols, call flow, dependencies
-- **File search** — `ywai-fastfs_fastfs_find` with globs (`**/*.spec.ts`, `**/auth*`)
-- **Code search** — `ywai-fastfs_fastfs_search` with regex for functions, selectors, strings
-- **Reading** — `ywai-fastfs_fastfs_read_outline` first, then `read_slice` for exact lines
-- Host `glob`/`grep`/`read` only if the above are unavailable; never bash `rg`/`cat` for exploration
+- **File search** — `glob` with patterns (`**/*.spec.ts`, `**/auth*`)
+- **Code search** — `grep` / `code_search` with regex for functions, selectors, strings
+- **Reading** — `codegraph_explore` for context first, then `read` for exact lines
+- Never bash `rg`/`cat` for exploration — use the dedicated `grep`/`glob`/`read` tools
 
 ## Coverage Gap Analysis
 

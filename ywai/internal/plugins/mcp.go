@@ -104,44 +104,6 @@ func InstallKanbanMCP(configPath, agentName string) error {
 	return nil
 }
 
-// InstallFastfsMCP adds the ywai-fastfs MCP server (in-process file search/read
-// with mtime cache). Prefer this over shelling out to rg/cat for exploration.
-// Idempotent: does not overwrite an existing entry.
-func InstallFastfsMCP(configPath, agentName string) error {
-	root, err := config.ReadJSONC(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configPath, err)
-	}
-
-	key := mcpConfigKey(agentName)
-	mcp, _ := root[key].(map[string]any)
-	if mcp == nil {
-		mcp = map[string]any{}
-	}
-	if _, exists := mcp["ywai-fastfs"]; exists {
-		root[key] = mcp
-		return config.WriteJSONC(configPath, root)
-	}
-
-	if key == "mcpServers" {
-		mcp["ywai-fastfs"] = map[string]any{
-			"command": "ywai",
-			"args":    []any{"mcp", "fastfs"},
-		}
-	} else {
-		mcp["ywai-fastfs"] = map[string]any{
-			"type":    "local",
-			"command": []any{"ywai", "mcp", "fastfs"},
-			"enabled": true,
-		}
-	}
-	root[key] = mcp
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("failed to write %s: %w", configPath, err)
-	}
-	return nil
-}
-
 // InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's config file.
 func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)

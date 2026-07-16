@@ -44,8 +44,6 @@ var toolRegistry = []toolPattern{
 	// context7 — read-only documentation queries
 	{prefix: "context7_", category: ToolRead},
 
-	// ywai-fastfs — read-only file search/read (host id: ywai-fastfs_fastfs_*)
-	{prefix: "ywai-fastfs_", category: ToolRead},
 
 	// Azure DevOps — read tools
 	{prefix: "ado_pr_diff", category: ToolRead},

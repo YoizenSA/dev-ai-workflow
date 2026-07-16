@@ -82,7 +82,7 @@ Every delegation brief must include:
 
 ```
 **Return format**: End with a fenced ```handoff block (YAML). Reviewers also end with ```review.
-**Exploration**: Use codegraph + ywai-fastfs (fastfs_*), not bash rg/cat for search/read.
+**Exploration**: Use codegraph and the host grep/glob/read tools, not bash rg/cat for search/read.
 ```
 
 ### 5. Standing rule (maintainers / future edits)

@@ -455,7 +455,7 @@ var ywaiBucketPatterns = map[string][]string{
 	"ado":      {"ado_*"},
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
-	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*", "ywai-fastfs_*"},
+	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*"},
 	// "delegate" launches an async sub-agent (background-agents plugin); the
 	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
 	// status, peek, steer, stop). Without the glob, an agent whitelisted for

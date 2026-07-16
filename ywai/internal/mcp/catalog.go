@@ -166,14 +166,6 @@ var catalog = []CatalogEntry{
 		Tools: []string{"create_task", "list_boards", "move_card", "add_comment"},
 		Docs:  "https://github.com/Yoizen/dev-ai-workflow",
 	},
-	{
-		ID: "ywai-fastfs", Name: "ywai FastFS",
-		Description: "In-process file find/search/outline with mtime cache (prefer over bash rg/cat)",
-		Category:    "productivity", Icon: "⚡", Popular: true,
-		Type: "local", Command: []string{"ywai", "mcp", "fastfs"},
-		Tools: []string{"fastfs_find", "fastfs_search", "fastfs_read_outline", "fastfs_read_slice", "fastfs_stat"},
-		Docs:  "https://github.com/Yoizen/dev-ai-workflow",
-	},
 }
 
 // Catalog returns the canonical list of MCP servers ywai can install.

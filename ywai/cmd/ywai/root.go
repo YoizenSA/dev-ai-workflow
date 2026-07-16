@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -383,15 +385,24 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 						continue
 					}
 
-					cmd := exec.Command(piBin, "install", "npm:"+plugin)
+					// ponytail: 2m timeout + closed stdin so a hung/interactive
+					// pi install can't block the whole update forever.
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					cmd := exec.CommandContext(ctx, piBin, "install", "npm:"+plugin, "--no-approve")
+					cmd.Stdin = nil
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 
 					if err := cmd.Run(); err != nil {
-						fmt.Printf("  [%s] Warning: %s install failed: %v\n", a.Name, plugin, err)
+						if ctx.Err() == context.DeadlineExceeded {
+							fmt.Printf("  [%s] Warning: %s install timed out after 2m — skipping\n", a.Name, plugin)
+						} else {
+							fmt.Printf("  [%s] Warning: %s install failed: %v\n", a.Name, plugin, err)
+						}
 					} else {
 						fmt.Printf("  [%s] %s installed\n", a.Name, plugin)
 					}
+					cancel()
 				}
 			} else {
 				fmt.Printf("  [%s] Note: pi binary not found — install PI.dev first: npm install -g @pi-apps/pi\n", a.Name)
@@ -541,11 +552,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		// Install kanban MCP (always, required for orchestrator)
 		if err := plugins.InstallKanbanMCP(configPath, a.Name); err != nil {
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
-		}
-
-		// Install fastfs MCP (in-process search/read with mtime cache)
-		if err := plugins.InstallFastfsMCP(configPath, a.Name); err != nil {
-			fmt.Printf("  [%s] Warning: failed to install ywai-fastfs MCP: %v\n", a.Name, err)
 		}
 
 		// Remove legacy mcp-vision MCP (replaced by vision-bridge plugin).
