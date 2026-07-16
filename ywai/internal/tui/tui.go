@@ -199,7 +199,7 @@ type Model struct {
 	scopeIdx      int
 	globalOnly    bool
 	autostart     bool
-	sddIdx int // 0=off, 1=single, 2=multi
+	sddIdx        int // 0=off, 1=single, 2=multi
 
 	// MCP selection
 	installMicrosoftLearnMCP bool
