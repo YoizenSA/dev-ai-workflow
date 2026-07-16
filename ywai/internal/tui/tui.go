@@ -158,6 +158,7 @@ type agentOption struct {
 type TUIResult struct {
 	Agent           string
 	MCP             bool
+	Ponytail        bool
 	GlobalOnly      bool
 	OverwriteAgents bool
 	Preset          string
@@ -201,8 +202,10 @@ type Model struct {
 	autostart     bool
 	sddIdx        int // 0=off, 1=single, 2=multi
 
-	// MCP selection
+	// Optional plugins step (Microsoft Learn MCP + ponytail)
+	optionalPluginCursor     int
 	installMicrosoftLearnMCP bool
+	installPonytail          bool
 
 	// Overwrite existing profiles
 	overwriteAgents bool
@@ -264,6 +267,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		autostart:                defaults.Autostart,
 		sddIdx:                   0, // SDD off by default
 		installMicrosoftLearnMCP: defaults.MCP,
+		installPonytail:          defaults.Ponytail,
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
@@ -497,7 +501,10 @@ func (m *Model) handleUp() (tea.Model, tea.Cmd) {
 			}
 		}
 	case stepMCP:
-		// Single MCP toggle; nothing to navigate up/down.
+		n := m.optionalPluginCount()
+		if n > 0 {
+			m.optionalPluginCursor = (m.optionalPluginCursor - 1 + n) % n
+		}
 	}
 	return m, nil
 }
@@ -525,7 +532,10 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 			}
 		}
 	case stepMCP:
-		// Single MCP toggle; nothing to navigate up/down.
+		n := m.optionalPluginCount()
+		if n > 0 {
+			m.optionalPluginCursor = (m.optionalPluginCursor + 1) % n
+		}
 	}
 	return m, nil
 }
@@ -555,9 +565,24 @@ func (m *Model) handleRight() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) toggleCurrentMCP() {
-	if m.shouldShowMCPStep() {
-		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
+	if !m.shouldShowMCPStep() {
+		return
 	}
+	// Row 0 = Microsoft Learn MCP, row 1 = Ponytail.
+	switch m.optionalPluginCursor {
+	case 0:
+		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
+	case 1:
+		m.installPonytail = !m.installPonytail
+	}
+}
+
+// optionalPluginCount is the number of toggles on the Optional plugins step.
+func (m *Model) optionalPluginCount() int {
+	if m.shouldShowMCPStep() {
+		return 2 // Microsoft Learn MCP + Ponytail
+	}
+	return 0
 }
 
 func (m *Model) cycleOption(dir int) {
@@ -585,17 +610,29 @@ func (m *Model) shouldShowMCPStep() bool {
 	if m.selectedAgent == "" {
 		return false
 	}
-	if m.selectedAgent == "opencode" || m.selectedAgent == "kilocode" {
+	// Optional plugins step: Microsoft Learn MCP + Ponytail for hosts we wire.
+	// opencode/kilocode get both; claude-code gets both (MCP via settings.json,
+	// ponytail via Claude marketplace CLI).
+	if optionalPluginsAgent(m.selectedAgent) {
 		return true
 	}
 	if m.selectedAgent == "all" {
 		for _, a := range m.agents {
-			if a.Name == "opencode" || a.Name == "kilocode" {
+			if optionalPluginsAgent(a.Name) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func optionalPluginsAgent(name string) bool {
+	switch name {
+	case "opencode", "kilocode", "claude-code":
+		return true
+	default:
+		return false
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1060,15 +1097,46 @@ func (m *Model) viewMCP() string {
 
 	b.WriteString("  Select plugins to install:\n\n")
 
-	if m.shouldShowMCPStep() {
-		cursor := activeStyle.Render(">")
+	if !m.shouldShowMCPStep() {
+		return b.String()
+	}
+
+	type pluginRow struct {
+		name    string
+		desc    string
+		checked bool
+	}
+	rows := []pluginRow{
+		{
+			name:    "Microsoft Learn MCP",
+			desc:    "Access to official Microsoft documentation",
+			checked: m.installMicrosoftLearnMCP,
+		},
+		{
+			name:    "Ponytail",
+			desc:    "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)",
+			checked: m.installPonytail,
+		},
+	}
+
+	for i, row := range rows {
+		isSelected := i == m.optionalPluginCursor
+
+		cursor := "  "
+		if isSelected {
+			cursor = activeStyle.Render(">")
+		}
 
 		checkbox := dimStyle.Render("[ ]")
-		if m.installMicrosoftLearnMCP {
+		if row.checked {
 			checkbox = checkStyle.Render("[✓]")
 		}
-		name := activeStyle.Render("Microsoft Learn MCP")
-		desc := descStyle.Render("  Access to official Microsoft documentation")
+
+		name := itemStyle.Render(row.name)
+		if isSelected {
+			name = activeStyle.Render(row.name)
+		}
+		desc := descStyle.Render("  " + row.desc)
 		b.WriteString(fmt.Sprintf("  %s %s %s%s\n", cursor, checkbox, name, desc))
 	}
 
@@ -1149,6 +1217,11 @@ func (m *Model) viewConfirm() string {
 			mcpLabel = "yes"
 		}
 		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
+		ponytailLabel := "no"
+		if m.installPonytail {
+			ponytailLabel = "yes"
+		}
+		rows = append(rows, [2]string{"Ponytail", ponytailLabel})
 	}
 
 	// Find max label width for alignment
@@ -1287,6 +1360,7 @@ func (m *Model) Result() TUIResult {
 	r := TUIResult{
 		Agent:           m.selectedAgent,
 		MCP:             m.installMicrosoftLearnMCP,
+		Ponytail:        m.installPonytail,
 		GlobalOnly:      m.globalOnly,
 		OverwriteAgents: m.overwriteAgents,
 		Preset:          presetChoices[m.presetIdx],

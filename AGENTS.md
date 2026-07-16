@@ -107,6 +107,7 @@ cd ywai && bash scripts/dev.sh kanban
 | `--preset` | Install preset: `full-gentleman` (default), `ecosystem-only`, `minimal`, `custom` |
 | `--scope` | Install scope: `global` (default) or `workspace` |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode/kilocode plugin array + Claude Code marketplace; default off |
 | `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
 
 ### Skill registry flags

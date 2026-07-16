@@ -68,6 +68,7 @@ type applyOpts struct {
 
 	Opts            gentlai.InstallOptions
 	InstallMCP      bool
+	InstallPonytail bool
 	GlobalOnly      bool
 	GroupFilter     agentprofiles.GroupFilter
 	OverwriteAgents bool
@@ -207,11 +208,13 @@ func applyManaged(o applyOpts) applyResult {
 		}
 	}
 
-	title := "=== ywai install ==="
+	// Update already printed its own banner + [pre] steps; just open the
+	// managed phase. Install has no prior banner, so print the full one.
 	if o.Mode == applyUpdate {
-		title = "=== ywai update (apply) ==="
+		fmt.Println("\n[apply] Re-applying managed state...")
+	} else {
+		fmt.Println("=== ywai install ===")
 	}
-	fmt.Println(title)
 	if o.Opts.DryRun {
 		fmt.Println("\n[DRY RUN] No changes will be made.")
 	}
@@ -307,7 +310,7 @@ func applyManaged(o applyOpts) applyResult {
 	// ── plugins + CLIs ────────────────────────────────────────────────────
 	if plan.InstallPlugins {
 		steps.next("Installing plugins + MCP + companion CLIs")
-		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP)
+		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallPonytail)
 	}
 
 	// ── cleanup ───────────────────────────────────────────────────────────

@@ -62,6 +62,8 @@ ywai skills                   # List extra skills
 | `--type, -t` | Project type (react, nest, dotnet, etc.) |
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
+| `--mcp` | Install Microsoft Learn MCP (for opencode) |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace; default off |
 | `--autostart` | Configure control server to start automatically on system boot |
 
 ### Configuration
@@ -82,6 +84,7 @@ Available configuration options:
 - `default_scope`: Install scope (global, workspace)
 - `default_tui`: Use TUI by default (true/false)
 - `default_mcp`: Install MCP by default for opencode (true/false)
+- `default_ponytail`: Install ponytail plugin by default for opencode/kilocode (true/false)
 - `colored_output`: Use colored output (true/false)
 - `log_level`: Logging level (debug, info, warn, error)
 - `server.port`: Default port for the control server (number, default `5768`)

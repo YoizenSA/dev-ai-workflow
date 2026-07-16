@@ -123,6 +123,7 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 }
 
 func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOptions) {
+	var done []string
 	for _, a := range agents {
 		configDir := filepath.Dir(a.SkillsDir)
 		if skills.IsLinkOrJunction(configDir) {
@@ -131,8 +132,7 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 			continue
 		}
 		if dryRun {
-			fmt.Printf("  [%s] Would remove stale legacy skill links that block gentle-ai...\n", a.Name)
-			fmt.Printf("  [%s] Running gentle-ai install...\n", a.Name)
+			done = append(done, a.Name)
 			continue
 		}
 		if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
@@ -147,8 +147,23 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		agentOpts.InstallSDD = false
 		if err := gentlai.InstallEcosystem(agentOpts); err != nil {
 			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
+		} else {
+			done = append(done, a.Name)
 		}
 	}
+	summarizeAgents(dryRun, "gentle-ai ecosystem", done)
+}
+
+// summarizeAgents prints one line per phase instead of chattering per agent.
+func summarizeAgents(dryRun bool, what string, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	verb := "installed"
+	if dryRun {
+		verb = "would install"
+	}
+	fmt.Printf("  %s %s for %d agents: %s\n", verb, what, len(names), strings.Join(names, ", "))
 }
 
 // installOptionalGentle installs optional SDD per agent after AGENTS.md.
@@ -186,20 +201,19 @@ func installOptionalGentle(agents []agent.Agent, opts gentlai.InstallOptions, r 
 }
 
 func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
-	fmt.Println("  Copying all ywai extra skills.")
-
+	var done []string
 	for _, a := range agents {
 		if dryRun {
-			fmt.Printf("  [%s] Would copy extra skills to %s\n", a.Name, a.SkillsDir)
+			done = append(done, a.Name)
 			continue
 		}
-
 		if err := skills.CopyTo(a.SkillsDir); err != nil {
 			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
 			continue
 		}
-		fmt.Printf("  [%s] Copied extra skills to %s\n", a.Name, a.SkillsDir)
+		done = append(done, a.Name)
 	}
+	summarizeAgents(dryRun, "ywai extra skills", done)
 }
 
 func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
@@ -210,11 +224,12 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
+func executeInstall(opts gentlai.InstallOptions, installMCP, installPonytail bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
 	return applyManaged(applyOpts{
 		Mode:            applyInstall,
 		Opts:            opts,
 		InstallMCP:      installMCP,
+		InstallPonytail: installPonytail,
 		GlobalOnly:      globalOnly,
 		GroupFilter:     groupFilter,
 		OverwriteAgents: overwriteAgents,
@@ -489,8 +504,9 @@ func reseedData() {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installPonytail bool) {
 	agentSettingsPaths := agent.SettingsPaths()
+	var done []string
 
 	// Install sub-agent-statusline TUI plugin (global config, not per-agent)
 	if !dryRun {
@@ -518,33 +534,18 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 		supportsOpenCodePlugins := a.Name == "opencode" || a.Name == "kilocode"
 
 		if dryRun {
-			fmt.Printf("  [%s] Would install ywai-kanban MCP\n", a.Name)
-			fmt.Printf("  [%s] Would install ywai-fastfs MCP\n", a.Name)
-			fmt.Printf("  [%s] Would remove legacy mcp-vision MCP (if present)\n", a.Name)
-			if supportsOpenCodePlugins {
-				fmt.Printf("  [%s] Would install background-agents plugin\n", a.Name)
-				fmt.Printf("  [%s] Would install vision-bridge plugin\n", a.Name)
-				fmt.Printf("  [%s] Would install ywai TUI logo\n", a.Name)
-			}
-			if installMCP {
-				fmt.Printf("  [%s] Would install Microsoft Learn MCP\n", a.Name)
-			}
-			fmt.Printf("  [%s] Would remove Azure DevOps plugin entries (legacy)\n", a.Name)
+			done = append(done, a.Name)
 			continue
 		}
 
 		// Install kanban MCP (always, required for orchestrator)
 		if err := plugins.InstallKanbanMCP(configPath, a.Name); err != nil {
 			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
-		} else {
-			fmt.Printf("  [%s] Installed ywai-kanban MCP\n", a.Name)
 		}
 
 		// Install fastfs MCP (in-process search/read with mtime cache)
 		if err := plugins.InstallFastfsMCP(configPath, a.Name); err != nil {
 			fmt.Printf("  [%s] Warning: failed to install ywai-fastfs MCP: %v\n", a.Name, err)
-		} else {
-			fmt.Printf("  [%s] Installed ywai-fastfs MCP\n", a.Name)
 		}
 
 		// Remove legacy mcp-vision MCP (replaced by vision-bridge plugin).
@@ -556,24 +557,18 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 		if supportsOpenCodePlugins {
 			if err := plugins.InstallBackgroundAgents(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
-			} else {
-				fmt.Printf("  [%s] Installed background-agents plugin\n", a.Name)
 			}
 
 			// vision-bridge: auto-route attached images through TokenBank vision
 			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
 			if err := plugins.InstallVisionBridge(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install vision-bridge plugin: %v\n", a.Name, err)
-			} else {
-				fmt.Printf("  [%s] Installed vision-bridge plugin\n", a.Name)
 			}
 
 			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
 			// from tui-plugins/, so no config patching is needed.
 			if err := plugins.InstallTuiLogo(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
-			} else {
-				fmt.Printf("  [%s] Installed ywai TUI logo\n", a.Name)
 			}
 		}
 
@@ -581,8 +576,18 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 		if installMCP {
 			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
+			}
+		}
+
+		// Install ponytail (YAGNI / minimal-code plugin) if requested.
+		// opencode/kilocode: npm plugin array; claude-code: marketplace CLI.
+		if installPonytail && plugins.SupportsPonytail(a.Name) {
+			if err := plugins.InstallPonytail(a.Name, configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install ponytail: %v\n", a.Name, err)
+			} else if a.Name == "claude-code" {
+				fmt.Printf("  [%s] Installed ponytail via Claude marketplace (%s)\n", a.Name, plugins.PonytailClaudePluginID)
 			} else {
-				fmt.Printf("  [%s] Installed Microsoft Learn MCP\n", a.Name)
+				fmt.Printf("  [%s] Installed ponytail plugin (%s)\n", a.Name, plugins.PonytailNPMPackage)
 			}
 		}
 
@@ -592,7 +597,9 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP bool)
 		if err := plugins.RemoveAdoPluginFromConfig(configPath, a.Name); err != nil {
 			fmt.Printf("  [%s] Warning: failed to remove Azure DevOps plugin entries: %v\n", a.Name, err)
 		}
+		done = append(done, a.Name)
 	}
+	summarizeAgents(dryRun, "plugins + MCP", done)
 
 	// Delete the standalone ADO plugin config older ywai installs wrote next to
 	// opencode.json (~/.config/opencode/ado-plugin.json). Runs once, not per-agent.
@@ -710,8 +717,11 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 		return fmt.Errorf("parsing opencode.json: %w", err)
 	}
 
-	if _, ok := cfg["default_agent"]; ok {
-		fmt.Printf("  default_agent already set to %q\n", cfg["default_agent"])
+	// Respect a user's explicit choice, but never leave gentle-ai's auto-set
+	// "gentle-orchestrator" as the default — ywai owns orchestration and always
+	// points the default at its own orchestrator profile.
+	if cur, ok := cfg["default_agent"]; ok && cur != "gentle-orchestrator" {
+		fmt.Printf("  default_agent already set to %q\n", cur)
 		return nil
 	}
 

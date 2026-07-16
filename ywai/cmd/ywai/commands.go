@@ -337,6 +337,7 @@ var installCmd = &cobra.Command{
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		tuiFlag, _ := cmd.Flags().GetBool("tui")
 		mcpFlag, _ := cmd.Flags().GetBool("mcp")
+		ponytailFlag, _ := cmd.Flags().GetBool("ponytail")
 		globalFlag, _ := cmd.Flags().GetBool("global")
 		autostartFlag, _ := cmd.Flags().GetBool("autostart")
 
@@ -346,6 +347,7 @@ var installCmd = &cobra.Command{
 		}
 
 		var installMCP bool
+		var installPonytail bool
 		var globalOnly bool
 		var preset, scope string
 		var groupFilter agentprofiles.GroupFilter
@@ -377,6 +379,7 @@ var installCmd = &cobra.Command{
 				agentFlag = result.Agent
 			}
 			installMCP = result.MCP
+			installPonytail = result.Ponytail
 			globalOnly = result.GlobalOnly
 			overwriteAgents = result.OverwriteAgents
 			preset = result.Preset
@@ -388,6 +391,7 @@ var installCmd = &cobra.Command{
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag
+			installPonytail = ponytailFlag
 			globalOnly = globalFlag
 			preset = getStringFlag(cmd, "preset")
 			scope = getStringFlag(cmd, "scope")
@@ -424,7 +428,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, globalOnly, groupFilter, overwriteAgents, autostartFlag)
+		result := executeInstall(installOpts, installMCP, installPonytail, globalOnly, groupFilter, overwriteAgents, autostartFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -996,11 +1000,7 @@ var serveCmd = &cobra.Command{
 			}()
 		}
 
-		fmt.Printf("Server running on port %d\n", s.Port())
-		fmt.Printf("Control UI: http://localhost:%d/\n", s.Port())
-		fmt.Printf("Health check: http://localhost:%d/health\n", s.Port())
-		fmt.Printf("Kanban UI: http://localhost:%d/\n", s.Port())
-		fmt.Printf("Missions UI: http://localhost:%d/missions/\n", s.Port())
+		fmt.Printf("Server running at http://localhost:%d/\n", s.Port())
 
 		// Block forever
 		select {}
@@ -1224,6 +1224,7 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
+	installCmd.Flags().Bool("ponytail", false, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace")
 	installCmd.Flags().Bool("global", true, "Run gentle-ai from a neutral dir so it does not write into the current project (default true; pass --global explicitly to skip the install TUI)")
 	installCmd.Flags().String("preset", "full-gentleman", "gentle-ai component preset only (ywai skills always install): full-gentleman, ecosystem-only, minimal")
 	installCmd.Flags().String("scope", "", "gentle-ai --scope: global (default) or workspace")

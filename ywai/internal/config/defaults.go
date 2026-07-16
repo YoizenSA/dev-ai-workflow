@@ -14,6 +14,7 @@ type TUIDefaults struct {
 	Scope      string   `json:"scope"`
 	GlobalOnly bool     `json:"global_only"`
 	MCP        bool     `json:"mcp"`
+	Ponytail   bool     `json:"ponytail"`
 	Autostart  bool     `json:"autostart"`
 	Groups     []string `json:"groups"`
 }
@@ -88,6 +89,7 @@ func BuiltInDefaults() *TUIDefaults {
 		Scope:      "global",
 		GlobalOnly: true,
 		MCP:        false,
+		Ponytail:   false,
 		Autostart:  true,
 		Groups:     []string{},
 	}
@@ -110,6 +112,7 @@ func SaveDefaults(defaults *TUIDefaults) error {
 	b.WriteString(fmt.Sprintf("  \"scope\": %q,\n", defaults.Scope))
 	b.WriteString(fmt.Sprintf("  \"global_only\": %v,\n", defaults.GlobalOnly))
 	b.WriteString(fmt.Sprintf("  \"mcp\": %v,\n", defaults.MCP))
+	b.WriteString(fmt.Sprintf("  \"ponytail\": %v,\n", defaults.Ponytail))
 
 	// Groups array
 	b.WriteString("  \"groups\": [")

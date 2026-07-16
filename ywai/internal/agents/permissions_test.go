@@ -28,6 +28,23 @@ func TestClassifyMCPTool_CodeGraph(t *testing.T) {
 	}
 }
 
+func TestClassifyMCPTool_Fastfs(t *testing.T) {
+	tools := []string{
+		"ywai-fastfs_fastfs_find",
+		"ywai-fastfs_fastfs_search",
+		"ywai-fastfs_fastfs_read_outline",
+		"ywai-fastfs_fastfs_read_slice",
+		"ywai-fastfs_fastfs_stat",
+	}
+	for _, tool := range tools {
+		t.Run(tool, func(t *testing.T) {
+			if got := ClassifyMCPTool(tool); got != ToolRead {
+				t.Errorf("ClassifyMCPTool(%q) = %v (%s), want ToolRead", tool, got, got)
+			}
+		})
+	}
+}
+
 func TestClassifyMCPTool_Context7(t *testing.T) {
 	tools := []string{
 		"context7_query-docs",

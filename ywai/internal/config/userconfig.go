@@ -66,6 +66,9 @@ type UserConfig struct {
 	// Whether to install MCP by default for opencode
 	DefaultMCP bool `yaml:"default_mcp,omitempty" json:"default_mcp,omitempty"`
 
+	// Whether to install ponytail plugin by default for opencode/kilocode
+	DefaultPonytail bool `yaml:"default_ponytail,omitempty" json:"default_ponytail,omitempty"`
+
 	// Whether to use colored output
 	ColoredOutput *bool `yaml:"colored_output,omitempty" json:"colored_output,omitempty"`
 

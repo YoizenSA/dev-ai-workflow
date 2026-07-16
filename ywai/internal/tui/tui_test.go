@@ -134,6 +134,19 @@ func TestStepFlow_OptionsToMCP_WhenOpencode(t *testing.T) {
 	}
 }
 
+func TestStepFlow_OptionsToMCP_WhenClaudeCode(t *testing.T) {
+	m := NewModel(singleAgent("claude-code"))
+	goToCustomInstall(&m)
+	sendKey(&m, "enter") // select claude-code -> options
+	sendKey(&m, "enter") // options -> optional plugins
+	if m.step != stepMCP {
+		t.Fatalf("expected stepMCP for claude-code, got %d", m.step)
+	}
+	if !m.shouldShowMCPStep() {
+		t.Fatal("shouldShowMCPStep should be true for claude-code")
+	}
+}
+
 func TestStepFlow_OptionsToConfirm_WhenWindsurf(t *testing.T) {
 	m := NewModel(singleAgent("windsurf"))
 	goToCustomInstall(&m)
@@ -318,6 +331,7 @@ func TestResult_AllFields(t *testing.T) {
 	m.scopeIdx = 1
 	m.globalOnly = true
 	m.installMicrosoftLearnMCP = true
+	m.installPonytail = true
 	m.sddIdx = 2 // multi
 	m.confirmed = true
 
@@ -337,6 +351,9 @@ func TestResult_AllFields(t *testing.T) {
 	if !r.MCP {
 		t.Fatal("MCP should be true")
 	}
+	if !r.Ponytail {
+		t.Fatal("Ponytail should be true")
+	}
 	if !r.InstallSDD || r.SDDMode != "multi" {
 		t.Fatalf("SDD = %v/%q, want true/multi", r.InstallSDD, r.SDDMode)
 	}
@@ -349,6 +366,9 @@ func TestResult_OptionalOffByDefault(t *testing.T) {
 	r := m.Result()
 	if r.InstallSDD {
 		t.Fatalf("SDD must be off by default: %+v", r)
+	}
+	if r.Ponytail {
+		t.Fatalf("Ponytail must be off by default: %+v", r)
 	}
 }
 
@@ -382,10 +402,11 @@ func TestViewConfirm_ShowsAllOptions(t *testing.T) {
 	m.scopeIdx = 0
 	m.globalOnly = true
 	m.installMicrosoftLearnMCP = true
+	m.installPonytail = true
 
 	view := m.viewConfirm()
 
-	checks := []string{"opencode", "full-gentleman", "global", "yes", "all extra skills", "Microsoft Learn MCP"}
+	checks := []string{"opencode", "full-gentleman", "global", "yes", "all extra skills", "Microsoft Learn MCP", "Ponytail"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewConfirm missing %q", c)
@@ -457,6 +478,49 @@ func TestMCPToggle(t *testing.T) {
 	sendKey(&m, " ") // space to toggle back
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should be false after second toggle")
+	}
+}
+
+func TestPonytailToggle(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	goToCustomInstall(&m)
+	sendKey(&m, "enter") // agent -> options
+	sendKey(&m, "enter") // options -> optional plugins
+	if m.step != stepMCP {
+		t.Fatalf("expected stepMCP, got %d", m.step)
+	}
+	if m.installPonytail {
+		t.Fatal("Ponytail should start as false")
+	}
+	if m.optionalPluginCursor != 0 {
+		t.Fatalf("optionalPluginCursor=%d, want 0", m.optionalPluginCursor)
+	}
+	sendKey(&m, "down") // focus Ponytail
+	if m.optionalPluginCursor != 1 {
+		t.Fatalf("optionalPluginCursor=%d, want 1", m.optionalPluginCursor)
+	}
+	sendKey(&m, " ") // toggle ponytail
+	if !m.installPonytail {
+		t.Fatal("Ponytail should be true after space toggle")
+	}
+	if m.installMicrosoftLearnMCP {
+		t.Fatal("MCP should remain false when toggling Ponytail")
+	}
+	sendKey(&m, " ") // toggle off
+	if m.installPonytail {
+		t.Fatal("Ponytail should be false after second toggle")
+	}
+}
+
+func TestViewMCP_ShowsBothOptionalPlugins(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	m.selectedAgent = "opencode"
+	m.step = stepMCP
+	view := m.viewMCP()
+	for _, want := range []string{"Microsoft Learn MCP", "Ponytail", "Lazy-senior"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("viewMCP missing %q", want)
+		}
 	}
 }
 
