@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
 	Activity,
-	Bell,
 	Book,
 	Check,
 	Monitor,
@@ -14,7 +13,6 @@ import {
 	Star,
 	Trash2,
 	User,
-	Wrench,
 } from "lucide-react";
 import { useUrlTab } from "../../hooks/useUrlTab";
 import { configApi, missionsApi } from "../../api/client";
@@ -79,11 +77,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "Skills",
 		icon: <Star size={16} />,
 	},
-	{
-		id: "notifications",
-		label: "Notifications",
-		icon: <Bell size={16} />,
-	},
+	// ponytail: Notifications hidden — Push Notifications now lives in General.
 	{
 		id: "mcp",
 		label: "MCP",
@@ -94,11 +88,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "Providers",
 		icon: <Activity size={16} />,
 	},
-	{
-		id: "tools",
-		label: "Tools",
-		icon: <Wrench size={16} />,
-	},
+	// ponytail: Tools tab hidden — read-only tool listing, redundant with the
+	// per-agent Permissions view.
 	{
 		id: "references",
 		label: "References",
@@ -158,6 +149,9 @@ export default function Settings() {
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [visionModel, setVisionModel] = useState("");
+	// Optional OpenAI-compatible vision provider override. Empty = use TokenBank.
+	const [visionProviderUrl, setVisionProviderUrl] = useState("");
+	const [visionProviderKey, setVisionProviderKey] = useState("");
 	const [agentList, setAgentList] = useState<string[]>([]);
 
 	const [models, setModels] = useState<ModelInfo[]>([]);
@@ -212,6 +206,8 @@ function GeneralTab() {
 				("current" in (visionRes ?? {}) ? visionRes?.current : undefined) ||
 				"";
 			setVisionModel(preferred ?? "");
+			setVisionProviderUrl(userCfg?.vision_provider_url ?? "");
+			setVisionProviderKey(userCfg?.vision_provider_api_key ?? "");
 			setAgentList((agents ?? []).map((a) => a.name));
 			setModels(
 				modelsRes
@@ -283,6 +279,9 @@ function GeneralTab() {
 				vision_model: visionModel || "",
 				// Clear override so Settings is the single source of truth
 				vision_model_override: "",
+				// Optional OpenAI-compatible provider override (empty = TokenBank)
+				vision_provider_url: visionProviderUrl.trim(),
+				vision_provider_api_key: visionProviderKey.trim(),
 			});
 
 			setMessage("Saved successfully");
@@ -432,8 +431,9 @@ function GeneralTab() {
 				</span>
 				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
 					When the chat model cannot see images (e.g. DeepSeek), the vision-bridge
-					plugin analyzes attached images with this TokenBank model and injects the
-					text for the chat model.
+					plugin analyzes attached images with a vision model and injects the text
+					for the chat model. Defaults to TokenBank; set a provider below to use any
+					OpenAI-compatible endpoint instead.
 				</span>
 			</div>
 
@@ -464,6 +464,38 @@ function GeneralTab() {
 				>
 					Use catalog default
 				</button>
+			</div>
+
+			{/* Optional provider override — any OpenAI-compatible endpoint */}
+			<div className="field span-2">
+				<label className="field-label" htmlFor="cfg-vision-provider-url">
+					Vision provider URL (optional)
+				</label>
+				<span className="field-hint">
+					OpenAI-compatible base URL. Leave empty to use TokenBank. With a custom
+					provider you must type the vision model id above (no auto-listing).
+				</span>
+				<input
+					id="cfg-vision-provider-url"
+					className="input mono"
+					type="text"
+					placeholder="https://api.openai.com/v1"
+					value={visionProviderUrl}
+					onChange={(e) => setVisionProviderUrl(e.target.value)}
+				/>
+			</div>
+			<div className="field span-2">
+				<label className="field-label" htmlFor="cfg-vision-provider-key">
+					Vision provider API key (optional)
+				</label>
+				<input
+					id="cfg-vision-provider-key"
+					className="input mono"
+					type="password"
+					placeholder="sk-…"
+					value={visionProviderKey}
+					onChange={(e) => setVisionProviderKey(e.target.value)}
+				/>
 			</div>
 
 			{message && (
@@ -588,6 +620,11 @@ function GeneralTab() {
 						</>
 					)}
 				</button>
+			</div>
+
+			{/* ─── Push Notifications ────────────────────────────────────── */}
+			<div className="card card-pad" style={{ marginTop: "2rem" }}>
+				<NotificationsTab />
 			</div>
 		</div>
 		);

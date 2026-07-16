@@ -16,6 +16,13 @@ configureBoneyard({
 	select: "viewport",
 });
 
+// Register the service worker so push notifications can activate.
+// Without this, navigator.serviceWorker.ready never resolves and the
+// "Enable Push Notifications" button hangs on "Enabling…".
+if ("serviceWorker" in navigator) {
+	navigator.serviceWorker.register("/sw.js").catch(() => {})
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
 	<React.StrictMode>
 		<App />

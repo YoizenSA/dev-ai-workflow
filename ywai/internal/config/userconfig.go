@@ -102,6 +102,12 @@ type UserConfig struct {
 
 	// VisionModelOverride, when set, overrides VisionModel for vision-bridge calls.
 	VisionModelOverride string `yaml:"vision_model_override,omitempty" json:"vision_model_override,omitempty"`
+
+	// VisionProviderURL / VisionProviderAPIKey optionally point vision-bridge at
+	// any OpenAI-compatible endpoint instead of TokenBank. When empty, vision-bridge
+	// falls back to TokenBankURL / TokenBankAPIKey (the default provider).
+	VisionProviderURL    string `yaml:"vision_provider_url,omitempty" json:"vision_provider_url,omitempty"`
+	VisionProviderAPIKey string `yaml:"vision_provider_api_key,omitempty" json:"vision_provider_api_key,omitempty"`
 }
 
 // ServerConfig contains configuration for the control server

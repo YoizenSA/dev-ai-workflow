@@ -32,6 +32,17 @@ type YwaiConfig = {
   tokenbank_api_key?: string
   vision_model?: string
   vision_model_override?: string
+  vision_provider_url?: string
+  vision_provider_api_key?: string
+}
+
+// The vision endpoint is the override provider when set, else TokenBank.
+// Any OpenAI-compatible endpoint (OpenAI, OpenRouter, a local vLLM…) works.
+function visionEndpoint(cfg: YwaiConfig): { url: string; key: string } {
+  return {
+    url: (cfg.vision_provider_url || cfg.tokenbank_url || "").trim(),
+    key: (cfg.vision_provider_api_key || cfg.tokenbank_api_key || "").trim(),
+  }
 }
 
 function stripProviderPrefix(id: string): string {
@@ -59,9 +70,11 @@ async function readYwaiConfig(): Promise<YwaiConfig> {
         key === "tokenbank_url" ||
         key === "tokenbank_api_key" ||
         key === "vision_model" ||
-        key === "vision_model_override"
+        key === "vision_model_override" ||
+        key === "vision_provider_url" ||
+        key === "vision_provider_api_key"
       ) {
-        out[key] = val
+        out[key as keyof YwaiConfig] = val
       }
     }
     return out
@@ -163,6 +176,11 @@ async function resolveVisionModel(cfg: YwaiConfig): Promise<string> {
   if (preferred) {
     return preferred
   }
+  // A custom provider has no vision-flagged catalog (only TokenBank exposes
+  // /api/setup/models), so the model id must be set explicitly.
+  if (cfg.vision_provider_url) {
+    return ""
+  }
   // Empty setting → first vision model from TokenBank catalog.
   if (!cfg.tokenbank_url || !cfg.tokenbank_api_key) {
     return ""
@@ -221,19 +239,20 @@ async function analyzeImage(
   dataURI: string,
   prompt: string,
 ): Promise<string> {
-  if (!cfg.tokenbank_url || !cfg.tokenbank_api_key) {
-    throw new Error("TokenBank not configured in ~/.ywai/config.yaml")
+  const { url, key } = visionEndpoint(cfg)
+  if (!url || !key) {
+    throw new Error("No vision provider configured in ~/.ywai/config.yaml")
   }
   if (!visionModel) {
-    throw new Error("No vision model available from TokenBank")
+    throw new Error("No vision model configured")
   }
 
   const res = await fetch(
-    `${cfg.tokenbank_url.replace(/\/$/, "")}/v1/chat/completions`,
+    `${url.replace(/\/$/, "")}/v1/chat/completions`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${cfg.tokenbank_api_key}`,
+        Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
