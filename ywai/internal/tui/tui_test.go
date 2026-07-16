@@ -318,6 +318,7 @@ func TestResult_AllFields(t *testing.T) {
 	m.scopeIdx = 1
 	m.globalOnly = true
 	m.installMicrosoftLearnMCP = true
+	m.sddIdx = 2 // multi
 	m.confirmed = true
 
 	r := m.Result()
@@ -335,6 +336,42 @@ func TestResult_AllFields(t *testing.T) {
 	}
 	if !r.MCP {
 		t.Fatal("MCP should be true")
+	}
+	if !r.InstallSDD || r.SDDMode != "multi" {
+		t.Fatalf("SDD = %v/%q, want true/multi", r.InstallSDD, r.SDDMode)
+	}
+}
+
+func TestResult_OptionalOffByDefault(t *testing.T) {
+	m := NewModel(singleAgent("windsurf"))
+	m.selectedAgent = "windsurf"
+	m.confirmed = true
+	r := m.Result()
+	if r.InstallSDD {
+		t.Fatalf("SDD must be off by default: %+v", r)
+	}
+}
+
+func TestOptionsStep_CycleSDD(t *testing.T) {
+	m := NewModel(singleAgent("windsurf"))
+	goToCustomInstall(&m)
+	sendKey(&m, "enter") // agent -> options
+	for i := 0; i < 5; i++ {
+		sendKey(&m, "down")
+	}
+	if m.optionsCursor != 5 {
+		t.Fatalf("expected optionsCursor=5 (SDD), got %d", m.optionsCursor)
+	}
+	if m.sddIdx != 0 {
+		t.Fatal("SDD should start off")
+	}
+	sendKey(&m, "right")
+	if m.sddIdx != 1 {
+		t.Fatalf("SDD idx=%d, want 1 (single)", m.sddIdx)
+	}
+	sendKey(&m, "right")
+	if m.sddIdx != 2 {
+		t.Fatalf("SDD idx=%d, want 2 (multi)", m.sddIdx)
 	}
 }
 
@@ -372,11 +409,14 @@ func TestViewOptions_Renders(t *testing.T) {
 	m.step = stepOptions
 	view := m.viewOptions()
 
-	checks := []string{"Preset", "Scope", "Global only", "full-gentleman", "global", "yes"}
+	checks := []string{"Preset", "Scope", "Global only", "SDD", "full-gentleman", "global", "yes", "off"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewOptions missing %q", c)
 		}
+	}
+	if strings.Contains(view, "Persona") {
+		t.Error("viewOptions must not offer gentle-ai Persona")
 	}
 }
 

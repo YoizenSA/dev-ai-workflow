@@ -113,10 +113,10 @@ const (
 )
 
 // optionsRowCount is the number of navigable rows on the Options step
-// (Preset, Scope, Global only, Overwrite agents, Autostart).
-// SDD Mode and Persona were removed: ywai no longer installs the sdd/persona
-// components and writes its own curated AGENTS.md instead.
-const optionsRowCount = 5
+// (Preset, Scope, Global only, Overwrite agents, Autostart, SDD).
+// SDD is optional (off by default). gentle-ai persona is never offered —
+// ywai always owns agent tone via its curated AGENTS.md.
+const optionsRowCount = 6
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Choices
@@ -124,15 +124,23 @@ const optionsRowCount = 5
 
 var (
 	presetChoices = []string{"full-gentleman", "ecosystem-only", "minimal"}
-	presetDescs   = map[string]string{
-		"full-gentleman": "Complete gentle-ai + all skills + preconfigured agents",
-		"ecosystem-only": "gentle-ai core only (no extra skills)",
-		"minimal":        "Just the essentials (basic gentle-ai)",
+	// Presets only select gentle-ai components. ywai extra skills always install.
+	presetDescs = map[string]string{
+		"full-gentleman": "gentle-ai: engram + skills + context7 + permissions",
+		"ecosystem-only": "gentle-ai: same core components as full (engram + skills + context7 + permissions)",
+		"minimal":        "gentle-ai: skills component only (no engram via this preset)",
 	}
 	scopeChoices = []string{"global", "workspace"}
 	scopeDescs   = map[string]string{
 		"global":    "Skills shared across all your projects (~/.local)",
 		"workspace": "Skills only in this project (current directory)",
+	}
+	// Optional gentle-ai SDD (index 0 = off). Persona is never installed.
+	sddChoices = []string{"off", "single", "multi"}
+	sddDescs   = map[string]string{
+		"off":    "Do not install gentle-ai SDD (ywai skills still install)",
+		"single": "gentle-ai SDD orchestrator in single-agent mode",
+		"multi":  "gentle-ai SDD orchestrator in multi-agent mode",
 	}
 )
 
@@ -155,7 +163,10 @@ type TUIResult struct {
 	Preset          string
 	Scope           string
 	Autostart       bool
-	GroupFilter     agents.GroupFilter
+	// Optional gentle-ai SDD (false = skip). Persona is never installed.
+	InstallSDD  bool
+	SDDMode     string // single|multi when InstallSDD
+	GroupFilter agents.GroupFilter
 }
 
 // InstallStep tracks a single installation phase.
@@ -188,6 +199,7 @@ type Model struct {
 	scopeIdx      int
 	globalOnly    bool
 	autostart     bool
+	sddIdx int // 0=off, 1=single, 2=multi
 
 	// MCP selection
 	installMicrosoftLearnMCP bool
@@ -250,6 +262,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		scopeIdx:                 scopeIdx,
 		globalOnly:               defaults.GlobalOnly,
 		autostart:                defaults.Autostart,
+		sddIdx:                   0, // SDD off by default
 		installMicrosoftLearnMCP: defaults.MCP,
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
@@ -559,6 +572,8 @@ func (m *Model) cycleOption(dir int) {
 		m.overwriteAgents = !m.overwriteAgents
 	case 4:
 		m.autostart = !m.autostart
+	case 5:
+		m.sddIdx = (m.sddIdx + dir + len(sddChoices)) % len(sddChoices)
 	}
 }
 
@@ -917,6 +932,7 @@ func (m *Model) viewOptions() string {
 		{"Global only", globalLabel},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
+		{"SDD", sddChoices[m.sddIdx]},
 	}
 
 	maxLabel := 0
@@ -984,6 +1000,8 @@ func (m *Model) viewOptions() string {
 			} else {
 				b.WriteString(helpStyle.Render("    Don't configure the control server to start on boot"))
 			}
+		case 5:
+			b.WriteString(helpStyle.Render("    " + sddDescs[sddChoices[m.sddIdx]]))
 		}
 	}
 
@@ -1107,7 +1125,8 @@ func (m *Model) viewConfirm() string {
 		{"Global only", globalLabel},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
-		{"Skills", "all extra skills"},
+		{"SDD", sddChoices[m.sddIdx]},
+		{"Skills", "all extra skills (always)"},
 	}
 
 	// Add selected groups
@@ -1264,7 +1283,8 @@ func (m *Model) Result() TUIResult {
 	if !m.confirmed {
 		return TUIResult{}
 	}
-	return TUIResult{
+	sddChoice := sddChoices[m.sddIdx]
+	r := TUIResult{
 		Agent:           m.selectedAgent,
 		MCP:             m.installMicrosoftLearnMCP,
 		GlobalOnly:      m.globalOnly,
@@ -1274,6 +1294,11 @@ func (m *Model) Result() TUIResult {
 		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),
 	}
+	if sddChoice != "off" {
+		r.InstallSDD = true
+		r.SDDMode = sddChoice
+	}
+	return r
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

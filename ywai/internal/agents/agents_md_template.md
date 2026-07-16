@@ -1,5 +1,7 @@
 # AGENTS.md
 
+ywai-managed instructions. Scope is limited to three concerns: **Engram**, **sub-agent strategy**, and **CodeGraph**. Persona, SDD, skill catalogs, and review hooks are not owned by this file.
+
 ## Engram Persistent Memory — Protocol
 
 You have access to Engram, a persistent memory system that survives across sessions and compactions.
@@ -21,7 +23,7 @@ Call `mem_save` IMMEDIATELY and WITHOUT BEING ASKED after any of these:
 - Pattern established (naming, structure, convention)
 - User preference or constraint learned
 
-Self-check after EVERY task: "Did I make a decision, fix a bug, learn something non-obvious, or establish a convention? If yes, call mem_save NOW."
+Self-check after EVERY task: "Did I make a decision, fix a bug, learn something non-obvious, or establish a convention? If yes, call `mem_save` NOW."
 
 Format for `mem_save`:
 - **title**: Verb + what — short, searchable (e.g. "Fixed N+1 query in UserList")
@@ -102,27 +104,7 @@ If you see a compaction message or "FIRST ACTION REQUIRED":
 
 Do not skip step 1. Without it, everything done before compaction is lost from memory.
 
-## Skills
-
-### Contextual Skill Loading (MANDATORY)
-
-The `<available_skills>` block in your system prompt is authoritative — it lists every skill installed for this session.
-
-**Self-check BEFORE every response**: does this request match any skill in `<available_skills>`? If yes, read the matching SKILL.md (using your agent's read mechanism) BEFORE generating your reply. This is a blocking requirement, not optional context. Skipping it is a discipline failure.
-
-Multiple skills can apply at once. Match by file context (extensions, paths) and task context (what the user is asking for).
-
-### Skill Registry (for orchestrators that delegate)
-
-The skill registry is an index of skill names, triggers, scopes, and exact `SKILL.md` paths — not a summary. Resolve it once per session:
-
-1. `mem_search(query: "skill-registry", project: "{project}")` → `mem_get_observation(id)` for full content
-2. Fallback: read `.atl/skill-registry.md` from the project root
-3. Cache the index and pass matching `SKILL.md` paths (not summaries) into sub-agent prompts
-
-If no registry exists, proceed without project-specific standards.
-
-## Sub-Agents
+## Sub-Agents — Strategy
 
 ### Sub-Agent Launch Deduplication (MANDATORY)
 
@@ -137,7 +119,7 @@ This prevents duplicate sub-agent launches that cause "File X has been modified 
 
 ### Sub-Agent Launch Pattern
 
-ALL sub-agent launch prompts that involve reading, writing, or reviewing code MUST include pre-resolved **skill paths** from the skill registry. Follow the **Skill Resolver Protocol** (see `_shared/skill-resolver.md` in the skills directory).
+ALL sub-agent launch prompts that involve reading, writing, or reviewing code MUST include pre-resolved **skill paths** from the skill registry when one is available. Follow the **Skill Resolver Protocol** (see `_shared/skill-resolver.md` in the skills directory).
 
 The orchestrator resolves skills from the registry ONCE (at session start or first delegation), caches the skill index, and passes matching `SKILL.md` paths into each sub-agent's prompt.
 
@@ -168,17 +150,37 @@ Sub-agents get a fresh context with NO memory. The orchestrator controls context
 
 #### General Delegation
 
-- Read context: orchestrator searches engram (`mem_search`) for relevant prior context and passes it in the sub-agent prompt. Sub-agent does NOT search engram itself.
+- Read context: orchestrator searches engram (`mem_search`) for relevant prior context and passes it in the sub-agent prompt. Sub-agent does NOT search engram itself for handoff context.
 - Write context: sub-agent MUST save significant discoveries, decisions, or bug fixes to engram via `mem_save` before returning. Sub-agent has full detail — save before returning, not after.
 - Always add to sub-agent prompt: `"If you make important discoveries, decisions, or fix bugs, save them to engram via mem_save with project: '{project}'."`
 - Skills: orchestrator resolves matching paths from the registry and injects them as `## Skills to load before work` in the sub-agent prompt. Sub-agents read those exact `SKILL.md` files before work.
 
-## Hooks
+#### Language Domain Contract (when delegating)
 
-### Agent Trigger Rules
+- The active persona (if any) controls direct user conversation only — not artifacts the sub-agent produces.
+- Generated technical artifacts default to English unless the user or existing project context clearly requires another language.
+- When delegating, forward this contract so persona voice never becomes the artifact default.
 
-These are organic recommendations, not enforced checkpoints. The AI orchestrator decides when to act on them.
+### Sub-Agent Context Protocol — Engram Continuity
 
-- At **pre-commit**, always, consider running `review-readability`. (everyday event → ONE cheap advisory lens (~1x); full 4R fan-out reserved for pre-pr)
-- At **pre-push**, always, consider running `review-readability`. (everyday event → ONE cheap advisory lens (~1x); 4R fan-out reserved for pre-pr on hot paths / large diffs)
-- At **pre-pr**, when the diff touches `**/auth/**`, `**/update/**`, `**/security/**`, `**/payments/**` OR when the diff exceeds 400 changed lines, **strongly recommend** running `review-risk`, `review-resilience`, `review-readability`, and `review-reliability` in parallel. (full 4R fan-out (~4x) only on hot paths (auth/update/security/payments) or diffs exceeding 400 changed lines)
+- If the orchestrator has prior apply-progress / decisions for a change, pass topic keys or observation IDs — not full artifact dumps — and instruct the sub-agent to `mem_get_observation` for full content.
+- Sub-agents that discover important decisions or bug fixes MUST `mem_save` before returning so the parent session does not lose detail after compaction.
+
+<!-- CODEGRAPH_START -->
+## CodeGraph
+
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+
+- **MCP tools** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them. `codegraph_node` returns one symbol's source + callers, or reads a whole file with line numbers. If the tools are listed but deferred, load them by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` and `codegraph node <symbol-or-file>` print the same output.
+
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+
+### CodeGraph Rules of Thumb
+
+- Prefer CodeGraph for **structural** questions (definitions, callers, impact, flow). Use grep/read for literal text (strings, comments, logs) or after you already have a specific file open.
+- Trust CodeGraph results from a full AST parse; do not re-verify every hit with grep.
+- Prefer `codegraph_explore` / `codegraph_context` over chaining many single-symbol lookups.
+- When a response notes files pending re-index after edits, Read those specific files for accurate content; other files remain authoritative in the index.
+- If `.codegraph/` is missing, do not invent an index — skip CodeGraph or ask the user whether to run `codegraph init` when that is appropriate for the project.
+<!-- CODEGRAPH_END -->

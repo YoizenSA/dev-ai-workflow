@@ -22,7 +22,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // CodegraphInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
@@ -352,8 +351,10 @@ var installCmd = &cobra.Command{
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
 		ranTUI := false
+		installSDD := false
+		sddMode := ""
 
-		if tuiFlag || (agentFlag == "" && !dryRun && !globalFlag) {
+		if shouldRunInstallTUI(tuiFlag, agentFlag, dryRun, cmd.Flags().Changed("global")) {
 			if !isInteractiveTerminal() {
 				fmt.Fprintln(os.Stderr, "Error: install requires --agent or --dry-run when running non-interactively.")
 				fmt.Fprintln(os.Stderr, "Run `ywai install --help` for flags, or run `ywai install` from an interactive terminal.")
@@ -382,6 +383,8 @@ var installCmd = &cobra.Command{
 			scope = result.Scope
 			groupFilter = result.GroupFilter
 			autostartFlag = result.Autostart
+			installSDD = result.InstallSDD
+			sddMode = result.SDDMode
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag
@@ -394,13 +397,23 @@ var installCmd = &cobra.Command{
 				Groups:    groups,
 				AllGroups: allGroups,
 			}
+			// CLI: --sdd-mode single|multi enables optional SDD. Persona is never installed.
+			sddMode = strings.ToLower(strings.TrimSpace(getStringFlag(cmd, "sdd-mode")))
+			if sddMode == "single" || sddMode == "multi" {
+				installSDD = true
+			} else if sddMode != "" {
+				fmt.Fprintf(os.Stderr, "Error: --sdd-mode must be single or multi (got %q)\n", sddMode)
+				os.Exit(1)
+			}
 		}
 
 		installOpts := gentlai.InstallOptions{
-			AgentName: agentFlag,
-			Preset:    preset,
-			Scope:     scope,
-			DryRun:    dryRun,
+			AgentName:  agentFlag,
+			Preset:     preset,
+			Scope:      scope,
+			DryRun:     dryRun,
+			InstallSDD: installSDD,
+			SDDMode:    sddMode,
 		}
 
 		// Only prompt for overwrite when the TUI did not collect it.
@@ -411,181 +424,89 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		executeInstall(installOpts, installMCP, globalOnly, groupFilter, overwriteAgents)
-
-		// Configure autostart if requested
-		if autostartFlag && !dryRun {
-			fmt.Println("\n[4/4] Configuring autostart...")
-			if err := configureAutostart(); err != nil {
-				fmt.Printf("  Warning: failed to configure autostart: %v\n", err)
-			} else {
-				fmt.Println("  Autostart configured successfully")
-			}
+		result := executeInstall(installOpts, installMCP, globalOnly, groupFilter, overwriteAgents, autostartFlag)
+		result.printFooter(applyInstall)
+		if code := result.exitCode(); code != 0 {
+			os.Exit(code)
 		}
 	},
 }
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "One-command upgrade: binary, skills, plugins, control server",
+	Short: "One-command upgrade: binary, skills, profiles, plugins, control server",
 	Long: `Upgrade ywai and re-apply everything it manages so you usually do not
 need a separate install after updating:
 
   - self-update ywai
-  - upgrade gentle-ai / ado (when present)
-  - re-seed skills + copy them into detected agents
+  - upgrade gentle-ai
+  - re-seed skills + agent profiles
+  - re-install gentle-ai ecosystem components
+  - copy ywai extra skills into detected agents
+  - re-install agent profiles + curated AGENTS.md
   - re-wire OpenCode plugins (vision-bridge, background-agents, kanban MCP)
-  - restart the control server
+  - upgrade companion CLIs (ado, codegraph) via the plugins step
+  - restart the control server only if it was already running
 
 Channels:
   default          stable only (GitHub /releases/latest — ignores prereleases)
   --beta           newest prerelease (e.g. vX.Y.Z-beta.N)
 
+Flags:
+  --agent          limit re-apply to one agent
+  --dry-run        preview without writing
+
 After update, restart OpenCode once so it reloads plugins.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		beta, _ := cmd.Flags().GetBool("beta")
-		var warnings []string
-		warn := func(format string, args ...any) {
-			msg := fmt.Sprintf(format, args...)
-			warnings = append(warnings, msg)
-			fmt.Printf("  Warning: %s\n", msg)
-		}
+		agentFlag, _ := cmd.Flags().GetString("agent")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		if beta {
 			fmt.Println("=== ywai update (beta channel) ===")
 		} else {
 			fmt.Println("=== ywai update ===")
 		}
-		fmt.Println("  (binary + skills + plugins — one command is enough)")
+		fmt.Println("  (binary + full managed re-apply — one command is enough)")
 
-		fmt.Println("\n[1/9] Self-updating ywai...")
-		selfUpdate(beta)
+		fmt.Println("\n[pre] Self-updating ywai...")
+		if dryRun {
+			fmt.Println("  Would self-update ywai binary.")
+		} else {
+			selfUpdate(beta)
+		}
 
-		fmt.Println("\n[2/9] Upgrading gentle-ai...")
-		if !gentlai.IsInstalled() {
+		// gentle-ai binary is upgraded here; applyManaged skips a second pass
+		// via SkipGentleAIBinary and still runs ecosystem/profiles/plugins.
+		fmt.Println("\n[pre] Upgrading gentle-ai binary...")
+		if dryRun {
+			fmt.Println("  Would install or upgrade gentle-ai.")
+		} else if !gentlai.IsInstalled() {
 			fmt.Println("  gentle-ai not found, installing...")
 			if err := gentlai.Install(); err != nil {
-				warn("gentle-ai install failed: %v", err)
+				fmt.Printf("  Warning: gentle-ai install failed: %v\n", err)
 			}
-		} else {
-			if err := gentlai.Upgrade(); err != nil {
-				warn("gentle-ai upgrade failed: %v", err)
-			}
+		} else if err := gentlai.Upgrade(); err != nil {
+			fmt.Printf("  Warning: gentle-ai upgrade failed: %v\n", err)
 		}
 
-		fmt.Println("\n[3/9] Upgrading Azure DevOps CLI (`ado`)...")
-		if _, installed := plugins.AdoCLIInfo(); !installed {
-			fmt.Println("  ado CLI not installed; skipping (optional).")
-		} else if err := plugins.InstallAdoCLI(); err != nil {
-			warn("ado CLI upgrade failed: %v", err)
-		} else if v, ok := plugins.AdoCLIInfo(); ok {
-			if v == "" {
-				fmt.Println("  ✓ ado CLI upgraded (version unknown)")
-			} else {
-				fmt.Printf("  ✓ ado CLI upgraded (v%s)\n", v)
-			}
+		result := applyManaged(applyOpts{
+			Mode: applyUpdate,
+			Opts: gentlai.InstallOptions{
+				AgentName: agentFlag,
+				Preset:    "full-gentleman",
+				DryRun:    dryRun,
+			},
+			GlobalOnly:            true,
+			OverwriteAgents:       true,
+			SkipGentleAIBinary:    true,
+			RestartServeIfRunning: true,
+		})
+		// Surface binary-phase soft failures into the summary when we only printed them.
+		result.printFooter(applyUpdate)
+		if code := result.exitCode(); code != 0 {
+			os.Exit(code)
 		}
-
-		agents := agent.Resolve()
-
-		fmt.Println("\n[4/9] Re-seeding skills cache...")
-		reseedData()
-
-		fmt.Println("\n[5/9] Cleaning stale legacy links + pre-copying extra skills...")
-		if len(agents) > 0 {
-			for _, a := range agents {
-				if configDir := filepath.Dir(a.SkillsDir); skills.IsLinkOrJunction(configDir) {
-					warn("[%s] skipped stale legacy-link cleanup because config dir is a symlink/junction: %s", a.Name, configDir)
-				} else {
-					if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
-						warn("[%s] stale legacy-link cleanup failed: %v", a.Name, err)
-					} else if len(removed) > 0 {
-						fmt.Printf("  [%s] Removed stale legacy skill links: %s\n", a.Name, strings.Join(removed, ", "))
-					}
-				}
-				if err := skills.CopyTo(a.SkillsDir); err != nil {
-					warn("[%s] pre-sync skill copy failed: %v", a.Name, err)
-				}
-			}
-		} else {
-			fmt.Println("  No supported agents detected; skipping skill copy.")
-		}
-
-		fmt.Println("\n[6/9] Copying extra skills...")
-		if len(agents) == 0 {
-			warn("no supported agents detected; skills/plugins not re-applied")
-		} else {
-			for _, a := range agents {
-				if err := skills.CopyTo(a.SkillsDir); err != nil {
-					warn("[%s] re-copy skills failed: %v", a.Name, err)
-					continue
-				}
-				fmt.Printf("  [%s] Copied skills\n", a.Name)
-			}
-		}
-
-		fmt.Println("\n[7/9] Re-applying ywai overrides...")
-		if len(agents) > 0 {
-			agentDirs := make(map[string]string, len(agents))
-			for _, a := range agents {
-				agentDirs[a.Name] = a.SkillsDir
-			}
-			if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
-				warn("failed to apply overrides: %v", err)
-			} else {
-				fmt.Println("  ✓ overrides applied")
-			}
-		} else {
-			fmt.Println("  skipped (no agents)")
-		}
-
-		// Family-friendly: update also re-wires plugins so users do not need
-		// a separate `ywai install` after every release (vision-bridge, etc.).
-		fmt.Println("\n[8/9] Re-wiring agent plugins + MCP...")
-		if len(agents) == 0 {
-			fmt.Println("  skipped (no agents)")
-		} else {
-			installPluginsForAgents(agents, false, false)
-			fmt.Println("  ✓ plugins re-wired (vision-bridge, background-agents, kanban MCP)")
-		}
-
-		fmt.Println("\n[9/9] Restarting control server...")
-		if port := serverutil.GetRunningPort(); port > 0 {
-			fmt.Printf("  Stopping server on port %d...\n", port)
-			if err := killPort(port); err != nil {
-				warn("could not kill server on port %d: %v", port, err)
-			} else {
-				fmt.Println("  Server stopped.")
-			}
-		}
-		// Re-launch in background
-		exe, err := selfupdate.ResolvedExecutable()
-		if err != nil {
-			warn("could not find ywai binary: %v", err)
-		} else {
-			serveCmd := exec.Command(exe, "serve", "--background", "--no-update")
-			serveCmd.SysProcAttr = sysProcAttr()
-			serveCmd.Stdout = os.Stdout
-			serveCmd.Stderr = os.Stderr
-			if err := serveCmd.Start(); err != nil {
-				warn("could not restart server: %v", err)
-			} else {
-				fmt.Printf("  Server restarted in background (PID %d)\n", serveCmd.Process.Pid)
-			}
-		}
-
-		if len(warnings) > 0 {
-			fmt.Println("\n=== Done with warnings ===")
-			for _, msg := range warnings {
-				fmt.Printf("  - %s\n", msg)
-			}
-		} else {
-			fmt.Println("\n=== Done! ===")
-		}
-		fmt.Println()
-		fmt.Println("Next step (once):")
-		fmt.Println("  Restart OpenCode so it reloads plugins (vision-bridge, etc.).")
-		fmt.Println("  Optional: open ywai Settings → Vision bridge to pick the vision model.")
 	},
 }
 
@@ -1303,9 +1224,10 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
-	installCmd.Flags().Bool("global", true, "Install global skills only (skip AGENTS.md/REVIEW.md in project)")
-	installCmd.Flags().String("preset", "full-gentleman", "Install preset: full-gentleman, ecosystem-only, minimal, custom")
-	installCmd.Flags().String("scope", "", "Install scope: global (default) or workspace")
+	installCmd.Flags().Bool("global", true, "Run gentle-ai from a neutral dir so it does not write into the current project (default true; pass --global explicitly to skip the install TUI)")
+	installCmd.Flags().String("preset", "full-gentleman", "gentle-ai component preset only (ywai skills always install): full-gentleman, ecosystem-only, minimal")
+	installCmd.Flags().String("scope", "", "gentle-ai --scope: global (default) or workspace")
+	installCmd.Flags().String("sdd-mode", "", "Optional gentle-ai SDD: single or multi (omit to skip SDD; persona is never installed)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
@@ -1313,6 +1235,8 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 
 	updateCmd.Flags().Bool("beta", false, "Upgrade to the newest prerelease (beta) instead of stable latest")
+	updateCmd.Flags().StringP("agent", "a", "", "Limit re-apply to one agent (default: all detected)")
+	updateCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)
@@ -1349,6 +1273,16 @@ func init() {
 
 func isInteractiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// shouldRunInstallTUI decides whether `ywai install` opens the Bubbletea wizard.
+//
+// --global defaults to true (install scope). Its value must not suppress auto-TUI;
+// only an explicitly changed --global, a set --agent, or --dry-run means flag-driven
+// install. --tui always forces the wizard.
+func shouldRunInstallTUI(tuiFlag bool, agentFlag string, dryRun, globalChanged bool) bool {
+	flagDriven := agentFlag != "" || dryRun || globalChanged
+	return tuiFlag || !flagDriven
 }
 
 func getStringFlag(cmd *cobra.Command, name string) string {

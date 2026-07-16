@@ -7,13 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -144,9 +142,46 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		}
 		agentOpts := opts
 		agentOpts.AgentName = a.Name
+		// Base ecosystem never includes sdd — optional SDD runs in a later pass.
+		// Persona is never installed (ywai owns AGENTS.md tone).
+		agentOpts.InstallSDD = false
 		if err := gentlai.InstallEcosystem(agentOpts); err != nil {
 			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
 		}
+	}
+}
+
+// installOptionalGentle installs optional SDD per agent after AGENTS.md.
+func installOptionalGentle(agents []agent.Agent, opts gentlai.InstallOptions, r *applyResult) {
+	if !opts.HasOptionalComponents() {
+		return
+	}
+	for _, a := range agents {
+		configDir := filepath.Dir(a.SkillsDir)
+		if skills.IsLinkOrJunction(configDir) {
+			msg := fmt.Sprintf("[%s] optional SDD skipped (symlink/junction config): %s", a.Name, configDir)
+			if r != nil {
+				r.warnf("%s", msg)
+			} else {
+				fmt.Printf("  Warning: %s\n", msg)
+			}
+			continue
+		}
+		agentOpts := opts
+		agentOpts.AgentName = a.Name
+		if opts.DryRun {
+			fmt.Printf("  [%s] Would install optional SDD mode=%s\n", a.Name, opts.EffectiveSDDMode())
+			continue
+		}
+		if err := gentlai.InstallOptionalComponents(agentOpts); err != nil {
+			if r != nil {
+				r.warnf("[%s] optional SDD failed: %v", a.Name, err)
+			} else {
+				fmt.Printf("  Warning: [%s] optional SDD failed: %v\n", a.Name, err)
+			}
+			continue
+		}
+		fmt.Printf("  [%s] Optional SDD installed (mode=%s)\n", a.Name, opts.EffectiveSDDMode())
 	}
 }
 
@@ -155,11 +190,14 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 
 	for _, a := range agents {
 		if dryRun {
-			fmt.Printf("  [%s] Copying extra skills to %s...\n", a.Name, a.SkillsDir)
+			fmt.Printf("  [%s] Would copy extra skills to %s\n", a.Name, a.SkillsDir)
 			continue
 		}
 
-		_ = skills.CopyTo(a.SkillsDir)
+		if err := skills.CopyTo(a.SkillsDir); err != nil {
+			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
+			continue
+		}
 		fmt.Printf("  [%s] Copied extra skills to %s\n", a.Name, a.SkillsDir)
 	}
 }
@@ -171,114 +209,17 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	return tui.Run(tuiAgents)
 }
 
-// executeInstall is the first-time / full setup path.
-// Day-to-day upgrades should use `ywai update`, which now also re-wires plugins.
-func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool) {
-	var agents []agent.Agent
-	if opts.AgentName != "" {
-		a, err := agent.FindByName(opts.AgentName)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			return
-		}
-		agents = []agent.Agent{*a}
-	} else {
-		agents = agent.Resolve()
-		if len(agents) == 0 {
-			fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
-			return
-		}
-	}
-
-	// When global-only, run gentle-ai from a neutral directory so it does not
-	// write workspace skills (skills/, .sdd/, AGENTS.md) into the current project.
-	if globalOnly {
-		neutralDir := filepath.Join(config.DataDir(), "global-workspace")
-		if err := os.MkdirAll(neutralDir, 0o755); err != nil {
-			fmt.Printf("  Warning: failed to create global-workspace dir: %v\n", err)
-		} else {
-			opts.WorkDir = neutralDir
-		}
-	}
-
-	fmt.Println("=== ywai install ===")
-	if opts.DryRun {
-		fmt.Println("\n[DRY RUN] No changes will be made.")
-	}
-	if globalOnly {
-		fmt.Println("  Global-only: gentle-ai will not write into the current project.")
-	}
-
-	fmt.Println("\n[1/3] Checking gentle-ai...")
-	if opts.DryRun {
-		fmt.Println("  Would install or update gentle-ai if needed.")
-	} else {
-		if err := gentlai.Install(); err != nil {
-			fmt.Printf("  Warning: gentle-ai install/update failed: %v\n", err)
-		}
-		reseedData()
-	}
-
-	fmt.Println("\n[2/3] Detecting agents...")
-	for _, a := range agents {
-		fmt.Printf("  Found: %s (%s)\n", a.Name, a.BinaryName)
-	}
-
-	fmt.Println("\n[3/3] Installing ecosystem + copying extra skills...")
-	installEcosystem(agents, opts.DryRun, opts)
-	copySkillsForAgents(agents, opts.DryRun)
-
-	if !opts.DryRun {
-		agentDirs := make(map[string]string)
-		for _, a := range agents {
-			agentDirs[a.Name] = a.SkillsDir
-		}
-
-		fmt.Println("\n[3.5/3] Installing agent profiles...")
-		installAgentProfiles(agents, opts.DryRun, groupFilter, overwriteAgents)
-
-		fmt.Println("\n[3.6/3] Applying ywai overrides...")
-		_ = overrides.ApplyOpenSpecToSDDOverride(agentDirs)
-
-		// Write ywai's curated AGENTS.md (engram + skills + sub-agents + hooks).
-		// This replaces the AGENTS.md that gentle-ai's sdd/persona components
-		// used to write, and MUST run before installPluginsForAgents so codegraph
-		// can append its own marker-section to the freshly written file.
-		fmt.Println("\n[3.65/3] Writing curated AGENTS.md...")
-		if opts.DryRun {
-			fmt.Println("  Would write curated AGENTS.md (engram + skills + sub-agents + hooks)")
-		} else {
-			agentsMdPath := filepath.Join(config.OpenCodeConfigDir(), "AGENTS.md")
-			if err := agentprofiles.WriteAgentsMd(agentsMdPath); err != nil {
-				fmt.Printf("  Warning: failed to write AGENTS.md: %v\n", err)
-			} else {
-				fmt.Println("  ✓ AGENTS.md written (engram + skills + sub-agents + hooks)")
-			}
-		}
-
-		fmt.Println("\n[3.7/3] Installing plugins...")
-		installPluginsForAgents(agents, opts.DryRun, installMCP)
-
-		fmt.Println("\n[3.8/3] Removing deprecated opencode-quota plugin...")
-		removeQuotaForAgents(agents, opts.DryRun)
-
-		fmt.Println("\n[3.9/3] Setting default_agent...")
-		if err := setDefaultAgent("orchestrator", opts.DryRun); err != nil {
-			fmt.Printf("  Warning: failed to set default_agent: %v\n", err)
-		}
-
-		// Refresh ~/.ywai/version.json so the TUI logo can show the installed
-		// version and flag updates. Throttled network check (once/day); failures
-		// are non-fatal.
-		if err := versionfile.Refresh(version, 24*time.Hour); err != nil {
-			fmt.Printf("  Warning: failed to write version info: %v\n", err)
-		}
-	}
-
-	fmt.Println("\n=== Done! ===")
-	fmt.Println("\nNext steps:")
-	fmt.Println("  1. Open your AI agent in this project")
-	fmt.Println("  2. Run `ywai skills` to see available skills")
+// executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
+func executeInstall(opts gentlai.InstallOptions, installMCP bool, globalOnly bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
+	return applyManaged(applyOpts{
+		Mode:            applyInstall,
+		Opts:            opts,
+		InstallMCP:      installMCP,
+		GlobalOnly:      globalOnly,
+		GroupFilter:     groupFilter,
+		OverwriteAgents: overwriteAgents,
+		Autostart:       autostart,
+	})
 }
 
 func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofiles.GroupFilter, overwriteAgents bool) {

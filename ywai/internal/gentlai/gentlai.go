@@ -113,6 +113,53 @@ type InstallOptions struct {
 	Scope     string // global, workspace
 	WorkDir   string // working directory for gentle-ai (isolates workspace writes); empty = current dir
 	DryRun    bool
+
+	// Optional gentle-ai SDD (off by default). Installed AFTER ywai's curated
+	// AGENTS.md so marker sections are not wiped. Persona is never installed —
+	// ywai always owns tone via its own AGENTS.md.
+	InstallSDD bool
+	SDDMode    string // "single" or "multi" (default multi when InstallSDD)
+}
+
+// ComponentPlan is the gentle-ai component set derived from an install preset.
+type ComponentPlan struct {
+	IncludeEngram bool
+	Ecosystem     []string // components installed after engram (or alone for minimal)
+}
+
+// PlanForPreset maps install presets to gentle-ai --component lists only.
+// ywai extra skills are always copied by the apply pipeline and are not gated here.
+//
+//	full-gentleman / ecosystem-only / "" / custom → engram + skills + context7 + permissions
+//	minimal                                       → skills only (no engram via this plan)
+func PlanForPreset(preset string) ComponentPlan {
+	switch strings.ToLower(strings.TrimSpace(preset)) {
+	case "minimal":
+		return ComponentPlan{
+			IncludeEngram: false,
+			Ecosystem:     []string{"skills"},
+		}
+	case "ecosystem-only", "full-gentleman", "custom", "":
+		return ComponentPlan{
+			IncludeEngram: true,
+			Ecosystem:     append([]string(nil), ecosystemComponents...),
+		}
+	default:
+		return ComponentPlan{
+			IncludeEngram: true,
+			Ecosystem:     append([]string(nil), ecosystemComponents...),
+		}
+	}
+}
+
+// AllComponents returns engram (when included) plus ecosystem components.
+func (p ComponentPlan) AllComponents() []string {
+	if p.IncludeEngram {
+		out := make([]string, 0, 1+len(p.Ecosystem))
+		out = append(out, "engram")
+		return append(out, p.Ecosystem...)
+	}
+	return append([]string(nil), p.Ecosystem...)
 }
 
 func InstallEcosystem(opts InstallOptions) error {
@@ -120,13 +167,15 @@ func InstallEcosystem(opts InstallOptions) error {
 		return fmt.Errorf("gentle-ai is not installed. Run install first.")
 	}
 
+	plan := PlanForPreset(opts.Preset)
+
 	// engram is installed via Homebrew by gentle-ai. On machines without a C
 	// compiler (and without Go) the bottle build fails, which would abort the
 	// whole multi-component install. Install engram on its own so a failure
 	// there never blocks the other components, and fall back to a prebuilt
 	// release binary when gentle-ai cannot install it.
 	var extraEnv []string
-	if !opts.DryRun {
+	if plan.IncludeEngram && !opts.DryRun {
 		if err := installEngramComponent(opts); err != nil {
 			fmt.Printf("  Warning: engram install via gentle-ai failed: %v\n", err)
 			installDir, ferr := installEngramReleaseBinary()
@@ -142,11 +191,21 @@ func InstallEcosystem(opts InstallOptions) error {
 				}
 			}
 		}
+	} else if plan.IncludeEngram && opts.DryRun {
+		fmt.Println("  Would install gentle-ai component: engram")
+	}
+
+	if len(plan.Ecosystem) == 0 {
+		if plan.IncludeEngram {
+			UpgradeEngram()
+		}
+		return nil
 	}
 
 	// Install the remaining components together.
-	args := opts.buildArgs(ecosystemComponents)
-	fmt.Printf("Running gentle-ai install --agent %s (%d components)...\n", opts.AgentName, len(ecosystemComponents))
+	args := opts.buildArgs(plan.Ecosystem)
+	fmt.Printf("Running gentle-ai install --agent %s (%d components, preset %q)...\n",
+		opts.AgentName, len(plan.Ecosystem), opts.effectivePreset())
 	cmd := exec.Command(gentleAIBinaryPath(), args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -161,7 +220,9 @@ func InstallEcosystem(opts InstallOptions) error {
 		return err
 	}
 
-	UpgradeEngram()
+	if plan.IncludeEngram {
+		UpgradeEngram()
+	}
 	return nil
 }
 
@@ -184,18 +245,10 @@ func installEngramComponent(opts InstallOptions, extraEnv ...string) error {
 	return cmd.Run()
 }
 
-// Components to install via gentle-ai (explicit list, no gga).
+// ecosystemComponents are gentle-ai components except engram (installed
+// separately so Homebrew failures cannot abort the others).
 //
-// sdd and persona are intentionally excluded: ywai writes its own curated
-// AGENTS.md (see internal/agents/agents_md.go) instead of letting gentle-ai's
-// sdd/persona components write the gentle-ai marker blocks. SDD and persona
-// remain opt-in via separate setup; they are no longer installed by default.
-var installComponents = []string{
-	"engram", "skills", "context7", "permissions",
-}
-
-// ecosystemComponents are all components except engram, which is installed
-// separately so its (Homebrew-based) failure cannot abort the others.
+// sdd is optional (InstallSDD); persona is never installed (ywai owns AGENTS.md tone).
 var ecosystemComponents = []string{
 	"skills", "context7", "permissions",
 }
@@ -207,9 +260,16 @@ func (o InstallOptions) effectiveScope() string {
 	return o.Scope
 }
 
+func (o InstallOptions) effectivePreset() string {
+	if strings.TrimSpace(o.Preset) == "" {
+		return "full-gentleman"
+	}
+	return o.Preset
+}
+
 func (o InstallOptions) buildArgs(components []string) []string {
 	if len(components) == 0 {
-		components = installComponents
+		components = PlanForPreset(o.Preset).AllComponents()
 	}
 	args := []string{
 		"install",
@@ -223,6 +283,61 @@ func (o InstallOptions) buildArgs(components []string) []string {
 		args = append(args, "--dry-run")
 	}
 	return args
+}
+
+// EffectiveSDDMode returns single|multi (default multi).
+func (o InstallOptions) EffectiveSDDMode() string {
+	m := strings.ToLower(strings.TrimSpace(o.SDDMode))
+	if m == "single" || m == "multi" {
+		return m
+	}
+	return "multi"
+}
+
+// HasOptionalComponents reports whether optional SDD should be installed
+// after the base ecosystem + ywai AGENTS.md write.
+func (o InstallOptions) HasOptionalComponents() bool {
+	return o.InstallSDD
+}
+
+// optionalComponents returns sdd for a follow-up install pass.
+func (o InstallOptions) optionalComponents() []string {
+	if o.InstallSDD {
+		return []string{"sdd"}
+	}
+	return nil
+}
+
+// InstallOptionalComponents installs SDD after the base ecosystem.
+// Call this AFTER writing ywai's curated AGENTS.md so gentle-ai can re-inject
+// SDD marker sections. Never installs persona. SDD may auto-pull engram.
+func InstallOptionalComponents(opts InstallOptions) error {
+	if !opts.HasOptionalComponents() {
+		return nil
+	}
+	if !IsInstalled() {
+		return fmt.Errorf("gentle-ai is not installed. Run install first.")
+	}
+
+	comps := opts.optionalComponents()
+	args := opts.buildArgs(comps)
+	args = append(args, "--sdd-mode", opts.EffectiveSDDMode())
+
+	fmt.Printf("Running gentle-ai install --agent %s (optional: %s)...\n",
+		opts.AgentName, strings.Join(comps, ", "))
+	if opts.DryRun {
+		fmt.Printf("  Would run: gentle-ai %s\n", strings.Join(args, " "))
+		return nil
+	}
+
+	cmd := exec.Command(gentleAIBinaryPath(), args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if opts.WorkDir != "" {
+		cmd.Dir = opts.WorkDir
+	}
+	return cmd.Run()
 }
 
 func UpgradeEngram() {
