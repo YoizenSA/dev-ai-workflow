@@ -69,12 +69,38 @@ async function readYwaiConfig(): Promise<YwaiConfig> {
     return {}
   }
 }
-
+// Check whether a model supports image input using the provider-agnostic
+// live catalog from OpenCode itself (client.provider.list), then falling
+// back to TokenBank and opencode.json. Returns true (don't intercept)
+// when the model's capability cannot be determined.
+// Priority:
+//   1. client.provider.list() — OpenCode's own live model catalog
+//   2. TokenBank live catalog (when configured)
+//   3. opencode.json provider entry
+//   4. Unknown → assume vision (let images pass through)
 async function modelSupportsImage(
+  client: PluginInput["client"],
   providerID: string,
   modelID: string,
 ): Promise<boolean> {
-  // Prefer live TokenBank metadata when available.
+  // 1. OpenCode's live provider catalog — authoritative, no hardcoded lists
+  try {
+    const result = await client.provider.list()
+    const rawProviders = result.data?.all ?? []
+    const providers = rawProviders as Array<{
+      id: string
+      models?: Record<string, { attachment?: boolean; modalities?: { input?: string[] } }>
+    }>
+    const prov = providers.find((p) => p.id === providerID)
+    const model = prov?.models?.[modelID]
+    if (model) {
+      // OpenCode catalog found the model — its capability is authoritative.
+      return model.modalities?.input?.includes("image") === true || model.attachment === true
+    }
+    } catch {
+  }
+
+  // 2. TokenBank live catalog
   const cfg = await readYwaiConfig()
   if (cfg.tokenbank_url && cfg.tokenbank_api_key) {
     try {
@@ -94,15 +120,15 @@ async function modelSupportsImage(
         if (m) {
           if (m.vision) return true
           if (m.modalities?.input?.includes("image")) return true
-          return false
+          return false // explicitly cataloged as non-vision
         }
       }
     } catch {
-      // fall through to opencode.json
+      // fall through
     }
   }
 
-  // Fallback: opencode.json provider entry.
+  // 3. opencode.json fallback
   try {
     const ocPath = path.join(os.homedir(), ".config", "opencode", "opencode.json")
     const oc = JSON.parse(await fs.readFile(ocPath, "utf8")) as {
@@ -117,12 +143,16 @@ async function modelSupportsImage(
       >
     }
     const entry = oc.provider?.[providerID]?.models?.[modelID]
-    if (!entry) return false
-    if (entry.modalities?.input?.includes("image")) return true
-    return Boolean(entry.attachment && entry.modalities?.input?.includes("image"))
+    if (entry) {
+      if (entry.modalities?.input?.includes("image")) return true
+      if (entry.attachment) return true
+    }
   } catch {
-    return false
+    // fall through
   }
+
+  // 4. Unknown → assume vision (safe default: let images pass through)
+  return true
 }
 
 async function resolveVisionModel(cfg: YwaiConfig): Promise<string> {
@@ -272,8 +302,9 @@ async function showToast(
   variant: ToastVariant,
 ): Promise<void> {
   try {
-    // tui is present when OpenCode runs with a UI; typed loosely for SDK drift.
-    const tui = (client as { tui?: { showToast?: (opts: unknown) => Promise<unknown> } }).tui
+    // client.tui is an optional OpenCode UI API.
+    const clientAny = client as { tui?: { showToast?: (opts: unknown) => Promise<unknown> } }
+    const tui = clientAny.tui
     if (!tui?.showToast) return
     await tui.showToast({
       body: { title: "Vision bridge", message, variant },
@@ -297,9 +328,8 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
       )
       if (imageParts.length === 0) return
 
-      const supports = await modelSupportsImage(model.providerID, model.modelID)
+      const supports = await modelSupportsImage(client, model.providerID, model.modelID)
       if (supports) return
-
       const cfg = await readYwaiConfig()
       const visionModel = await resolveVisionModel(cfg)
       const userText = parts
