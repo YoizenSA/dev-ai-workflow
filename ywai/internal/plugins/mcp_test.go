@@ -720,4 +720,3 @@ func assertRawValue(t *testing.T, got, want any) {
 		t.Errorf("value = %v (type %T), want %v (type %T)", got, got, want, want)
 	}
 }
-

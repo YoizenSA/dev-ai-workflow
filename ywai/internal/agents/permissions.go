@@ -44,7 +44,6 @@ var toolRegistry = []toolPattern{
 	// context7 — read-only documentation queries
 	{prefix: "context7_", category: ToolRead},
 
-
 	// Azure DevOps — read tools
 	{prefix: "ado_pr_diff", category: ToolRead},
 	{prefix: "ado_pr_file", category: ToolRead},
