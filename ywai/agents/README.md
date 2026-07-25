@@ -76,7 +76,9 @@ graph TD
 - The orchestrator owns the goal and decides the next step from each handoff.
 - TDD branch: `@qa` writes failing tests → `@dev` makes them pass → `@qa` validates.
 - Fan-out: the orchestrator can spawn multiple `@dev` (or `@qa`) in parallel for disjoint workstreams.
-- Each subagent ends with a `## Handoff (report back to @orchestrator)` block.
+- Each subagent ends with a fenced `handoff` block (including `verified` after write/test work).
+- **Review-then-commit:** `@dev` may edit code but must not `git commit`/`push` (OpenCode permission layer). Commit after `@reviewer` (or the user).
+- **Verify-only orchestrator shell:** the orchestrator can run a small git inspect + test/lint allowlist to spot-check handoffs, not to implement.
 - The `sub-agent-statusline` plugin (installed automatically with `ywai install`) gives real-time visibility into running/completed/failed subagents, elapsed time, and token/context usage.
 
 The orchestrator uses a **capability model** with per-platform adapters. On opencode
@@ -101,7 +103,7 @@ agents/
 │   ├── handoff.md          # Standard handoff format (core subagents → @orchestrator)
 │   ├── handoff-qa.md       # Handoff format for qa-automation subagents (@qa-*)
 │   ├── context-gathering.md # Context gathering protocol
-│   └── tdd.md              # Test-driven development discipline (dev/qa roles)
+│   └── orchestrator-contracts.md # Typed handoff/review contracts (auto-appended to orchestrators)
 ```
 
 Shared sections are appended to an agent's prompt at build time when referenced in the `sections:` frontmatter array (e.g. `sections: [handoff, context-gathering, tdd]`). A section named `foo` resolves to `sections/foo.md`; missing sections are skipped silently.

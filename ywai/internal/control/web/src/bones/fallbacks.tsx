@@ -33,46 +33,6 @@ function BoneBlock({
 	);
 }
 
-export function KanbanBonesFallback() {
-	return (
-		<div className="by-fallback kanban-page" aria-busy="true" aria-label="Loading kanban board">
-			<aside className="by-fallback-sidebar">
-				<BoneLine w="70%" h={14} />
-				<BoneLine w="90%" h={36} />
-				<BoneLine w="85%" h={36} />
-				<BoneLine w="80%" h={36} />
-			</aside>
-			<div className="kanban-main by-fallback-main">
-				<div className="page-header">
-					<div className="page-title">
-						<BoneLine w="42%" h={22} />
-						<BoneLine w="18%" h={12} />
-					</div>
-				</div>
-				<div className="board by-fallback-board">
-					{Array.from({ length: 5 }).map((_, col) => (
-						<div key={col} className="kanban-column by-fallback-col">
-							<div className="kanban-column-header">
-								<BoneLine w="55%" h={12} />
-								<BoneLine w="18px" h={18} className="by-bone-round" />
-							</div>
-							<div className="kanban-column-cards">
-								{Array.from({ length: col % 2 === 0 ? 2 : 1 }).map((__, i) => (
-									<div key={i} className="by-fallback-card">
-										<BoneLine w="40%" h={16} />
-										<BoneLine w="92%" h={12} />
-										<BoneLine w="70%" h={12} />
-									</div>
-								))}
-							</div>
-						</div>
-					))}
-				</div>
-			</div>
-		</div>
-	);
-}
-
 export function MissionsBonesFallback() {
 	return (
 		<div className="by-fallback missions" aria-busy="true" aria-label="Loading missions">
@@ -139,47 +99,6 @@ export function HealthBonesFallback() {
 }
 
 /** Fixture content for boneyard CLI/Vite capture (mirrors real layout). */
-export function KanbanCaptureFixture(): ReactNode {
-	return (
-		<div className="kanban-page">
-			<aside className="session-sidebar" style={{ width: 220, padding: 16 }}>
-				<p>Sessions</p>
-				<div className="delegation-card" style={{ marginBottom: 8, padding: 12 }}>
-					<span className="pill">active</span>
-					<p className="delegation-summary">Ship feature X to production</p>
-				</div>
-				<div className="delegation-card" style={{ padding: 12 }}>
-					<span className="pill">idle</span>
-					<p className="delegation-summary">Investigate flaky tests</p>
-				</div>
-			</aside>
-			<div className="kanban-main" style={{ flex: 1, padding: 16 }}>
-				<div className="page-header">
-					<div className="page-title">
-						<h2>Ship feature X to production</h2>
-						<span className="page-title-project">demo-project</span>
-					</div>
-				</div>
-				<div className="board">
-					{["Backlog", "Todo", "Doing", "Review", "Done"].map((label) => (
-						<div key={label} className="kanban-column">
-							<div className="kanban-column-header">
-								<h2 className="kanban-column-title">{label}</h2>
-								<span className="kanban-column-count">1</span>
-							</div>
-							<div className="kanban-column-cards">
-								<div className="delegation-card" style={{ padding: 12 }}>
-									<span className="pill">dev</span>
-									<p className="delegation-summary">Implement vertical slice</p>
-								</div>
-							</div>
-						</div>
-					))}
-				</div>
-			</div>
-		</div>
-	);
-}
 
 export function MissionsCaptureFixture(): ReactNode {
 	return (

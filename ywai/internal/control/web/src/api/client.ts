@@ -1,9 +1,4 @@
 import type {
-	Session,
-	Delegation,
-	BoardView,
-	GraphView,
-	ActivityEvent,
 	Mission,
 	PlanMission,
 	Project,
@@ -75,100 +70,48 @@ async function requestText(
 	return res.text();
 }
 
-// ─── Kanban API ────────────────────────────────────────────────────────────
+// ─── Models client cache ───────────────────────────────────────────────────
+// Server already caches `opencode models`; this dedupes concurrent UI tabs and
+// keeps a long client TTL so revisits paint instantly. Settings entry uses
+// force:true to revalidate in parallel without blocking first paint.
 
-export const kanbanApi = {
-	// Sessions
-	listSessions: () => request<Session[]>("/api/sessions"),
-	getSession: (id: string) => request<Session>(`/api/sessions/${id}`),
-	createSession: (data: { project: string; goal: string }) =>
-		request<Session>("/api/sessions", {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
-	updateSession: (id: string, data: Partial<Session>) =>
-		request<Session>(`/api/sessions/${id}`, {
-			method: "PATCH",
-			body: JSON.stringify(data),
-		}),
-	deleteSession: (id: string) =>
-		fetch(`${BASE}/api/sessions/${id}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
-	deleteSessionsByProject: (project: string) =>
-		fetch(`${BASE}/api/sessions?project=${encodeURIComponent(project)}`, {
-			method: "DELETE",
-		}).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
-	updateSessionsByProject: (project: string, data: Partial<Session>) =>
-		request<Session>(
-			`/api/sessions?project=${encodeURIComponent(project)}`,
-			{
-				method: "PATCH",
-				body: JSON.stringify(data),
-			},
-		),
+const MODELS_CLIENT_TTL_MS = 60 * 60 * 1000; // 1h — force refresh on Settings open
+let modelsClientCache: { at: number; data: ModelsResponse } | null = null;
+let modelsClientInflight: Promise<ModelsResponse> | null = null;
 
-	// Board — the API returns { session, columns }; the store wants the flat columns.
-	getBoard: async (sessionId: string): Promise<BoardView> => {
-		const data = await request<{ session: Session; columns: BoardView }>(
-			`/api/sessions/${sessionId}/board`,
-		);
-		return data.columns;
-	},
-	getGraph: (sessionId: string) =>
-		request<GraphView>(`/api/sessions/${sessionId}/graph`),
-
-	// Delegations
-	createDelegation: (data: {
-		session_id: string;
-		agent: string;
-		task_summary: string;
-		dependencies?: string[];
-	}) =>
-		request<Delegation>("/api/delegations", {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
-	getDelegation: (id: string) => request<Delegation>(`/api/delegations/${id}`),
-	updateDelegation: (
-		id: string,
-		data: { column?: string; status?: string; blocker?: string },
-	) =>
-		request<Delegation>(`/api/delegations/${id}`, {
-			method: "PATCH",
-			body: JSON.stringify(data),
-		}),
-
-	// Activities
-	createActivity: (
-		delegationId: string,
-		data: { type: string; content: string; options?: string[] },
-	) =>
-		request<ActivityEvent>(`/api/delegations/${delegationId}/activities`, {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
-	getActivities: (delegationId: string) =>
-		request<ActivityEvent[]>(`/api/delegations/${delegationId}/activities`),
-	resolveActivity: (
-		delegationId: string,
-		activityId: string,
-		resolution: string,
-	) =>
-		request<ActivityEvent>(
-			`/api/delegations/${delegationId}/activities/${activityId}`,
-			{
-				method: "PATCH",
-				body: JSON.stringify({ resolution }),
-			},
-		),
-
-	// Pending decisions
-	getPendingDecisions: (sessionId: string) =>
-		request<ActivityEvent[]>(`/api/sessions/${sessionId}/decisions`),
-};
+function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
+	const force = opts?.force === true;
+	const now = Date.now();
+	if (
+		!force &&
+		modelsClientCache &&
+		now - modelsClientCache.at < MODELS_CLIENT_TTL_MS
+	) {
+		return Promise.resolve(modelsClientCache.data);
+	}
+	// Non-force can join an in-flight request; force starts its own path so a
+	// long-running warm does not suppress an explicit Settings revalidate.
+	if (!force && modelsClientInflight) {
+		return modelsClientInflight;
+	}
+	const path = force
+		? "/missions/api/opencode/models?refresh=1"
+		: "/missions/api/opencode/models";
+	const p = request<ModelsResponse>(path)
+		.then((data) => {
+			modelsClientCache = { at: Date.now(), data };
+			if (!force) modelsClientInflight = null;
+			return data;
+		})
+		.catch((err) => {
+			if (!force) modelsClientInflight = null;
+			throw err;
+		});
+	if (!force) {
+		modelsClientInflight = p;
+	}
+	return p;
+}
 
 // ─── Missions API ──────────────────────────────────────────────────────────
 
@@ -255,7 +198,9 @@ export const missionsApi = {
 		),
 
 	// Models & Agents
-	listModels: () => request<ModelsResponse>("/missions/api/opencode/models"),
+	// Client-side singleflight + TTL. Use force:true on Settings entry to kick
+	// a server-side background revalidate while still returning cache fast.
+	listModels: (opts?: { force?: boolean }) => listModelsCached(opts),
 	listAgents: () => request<AgentsResponse>("/missions/api/opencode/agents"),
 	startOpencode: () =>
 		request<{ status: string; message: string; pid?: number }>(
@@ -752,7 +697,7 @@ export const workflowApi = {
 	listMcps: () => request<McpCatalogItem[]>("/api/mcp/catalog"),
 	// Health check for all installed MCP servers.
 	checkHealth: () => request<McpHealthResponse>("/api/mcp/health"),
-	// Handoff contract — the shared Kanban handoff template injected into every sub-agent.
+	// Handoff contract — the shared handoff template injected into every sub-agent.
 	handoffContract: () => request<{ content: string }>("/api/workflows/handoff-contract"),
 	listSections: () => request<{ name: string; content: string }[]>("/api/workflows/sections"),
 };

@@ -68,7 +68,7 @@ const wantWSChannel = "mcp-install"
 // ─── helpers ─────────────────────────────────────────────────────────────
 
 // captureHub is a minimal mcp.Broadcaster used to wire a JobManager
-// without dragging in the kanban / missions hubs. It records every
+// without dragging in the config API / missions hubs. It records every
 // Broadcast call for optional assertion, but the tests in this file
 // do not inspect the recordings — they exist so the JobManager
 // doesn't no-op forever waiting for a nil hub.

@@ -15,9 +15,9 @@ import (
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
@@ -30,6 +30,11 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
+
+// postUpdateEnv marks the process that a self-update re-exec produced, so the
+// new binary can re-apply managed config the old one could not (it is replaced
+// by the exec before any of its own code could run).
+const postUpdateEnv = "YWAI_POST_UPDATE"
 
 // daemonize re-executes the current process without the -b flag and exits the parent.
 // This detaches the server from the terminal so it keeps running in background.
@@ -447,7 +452,8 @@ need a separate install after updating:
   - re-install gentle-ai ecosystem components
   - copy ywai extra skills into detected agents
   - re-install agent profiles + curated AGENTS.md
-  - re-wire OpenCode plugins (vision-bridge, background-agents, kanban MCP)
+  - re-wire OpenCode plugins (vision-bridge, background-agents)
+  - re-apply TokenBank (refresh models) when it is configured
   - upgrade companion CLIs (ado, codegraph) via the plugins step
   - restart the control server only if it was already running
 
@@ -505,6 +511,12 @@ After update, restart OpenCode once so it reloads plugins.`,
 			SkipGentleAIBinary:    true,
 			RestartServeIfRunning: true,
 		})
+		// Re-apply TokenBank last: applyManaged rewrites agent configs, so
+		// re-running the same work as `ywai tokenbank configure` here refreshes
+		// the model list and restores the proxy wiring instead of leaving it
+		// clobbered. Soft failure — a down TokenBank must not fail the update.
+		reapplyTokenBank(dryRun)
+
 		// Surface binary-phase soft failures into the summary when we only printed them.
 		result.printFooter(applyUpdate)
 		if code := result.exitCode(); code != 0 {
@@ -916,26 +928,15 @@ var groupsCmd = &cobra.Command{
 	},
 }
 
-// serveCmd starts the control ywai server (Kanban + Missions).
+// serveCmd starts the control ywai server (config API + Missions).
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the control ywai server (Kanban + Missions)",
-	Long:  "Start the control ywai server combining Kanban and Missions on a single port.",
+	Short: "Start the control ywai server",
+	Long:  "Start the control ywai server (config API + Missions) on a single port.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port, _ := cmd.Flags().GetInt("port")
 		background, _ := cmd.Flags().GetBool("background")
-		noMCP, _ := cmd.Flags().GetBool("no-mcp")
-		mcpOnly, _ := cmd.Flags().GetBool("mcp-only")
 		noUpdate, _ := cmd.Flags().GetBool("no-update")
-
-		// MCP-only mode: talk over stdio, do NOT touch the HTTP port.
-		// NewMCPAdapter will reuse the control server if it is already
-		// running, or start a standalone one if needed.
-		if mcpOnly {
-			adapter := kanban.NewMCPAdapter()
-			adapter.Run()
-			return nil
-		}
 
 		// Ensure the port is available — kill any process holding it and wait
 		// for the OS to release the socket before we try to bind our own server.
@@ -952,8 +953,24 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
+		// A self-update that just re-execs leaves the binary newer than
+		// everything it manages. Re-apply the config that the new binary may
+		// expect, in the NEW process (the old one is gone after re-exec), which
+		// this env marker signals.
+		if os.Getenv(postUpdateEnv) != "" {
+			_ = os.Unsetenv(postUpdateEnv)
+			reapplyTokenBank(false)
+		}
+
 		// Auto-update before starting (skip in MCP-only mode or if --no-update)
-		if !noUpdate {
+		switch {
+		case noUpdate:
+			// explicit opt-out
+		case selfupdate.IsDevBuild(version):
+			// A local build has no release tag, so every check would look like
+			// "behind" and overwrite the binary the developer just compiled.
+			fmt.Fprintln(os.Stderr, "Skipping auto-update: this is a dev build (use `ywai update` to install a release).")
+		default:
 			if newVer, err := selfupdate.Run(version); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: auto-update failed: %v\n", err)
 			} else if newVer != "" {
@@ -963,6 +980,7 @@ var serveCmd = &cobra.Command{
 					return fmt.Errorf("failed to resolve ywai binary after update: %w", err)
 				}
 				fmt.Printf("Updated %s → %s, restarting...\n", version, newVer)
+				_ = os.Setenv(postUpdateEnv, newVer)
 				reexecSelf(exe)
 			}
 		}
@@ -979,14 +997,6 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("failed to start control server: %w", err)
 		}
 
-		// Start MCP adapter in background if not disabled
-		if !noMCP {
-			go func() {
-				adapter := kanban.NewMCPAdapter()
-				adapter.Run()
-			}()
-		}
-
 		fmt.Printf("Server running at http://localhost:%d/\n", s.Port())
 
 		// Block forever
@@ -994,10 +1004,10 @@ var serveCmd = &cobra.Command{
 	},
 }
 
-// uiCmd opens the Kanban UI in the default browser.
+// uiCmd opens the ywai UI in the default browser.
 var uiCmd = &cobra.Command{
 	Use:   "ui",
-	Short: "Open Kanban UI in browser",
+	Short: "Open ywai UI in browser",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port, _ := cmd.Flags().GetInt("port")
 		url := fmt.Sprintf("http://localhost:%d", port)
@@ -1099,6 +1109,31 @@ Example:
 	},
 }
 
+// reapplyTokenBank re-runs the `tokenbank configure` work during `ywai update`
+// when TokenBank credentials are present. ConfigureAll re-fetches the model
+// list, so this also refreshes models. It is a no-op when TokenBank was never
+// set up, and never fails the update.
+func reapplyTokenBank(dryRun bool) {
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg.TokenBankURL == "" || cfg.TokenBankAPIKey == "" {
+		return
+	}
+
+	fmt.Println("\n[post] Re-applying TokenBank configuration...")
+	if dryRun {
+		fmt.Printf("  Would refresh models and re-configure agents against %s.\n", cfg.TokenBankURL)
+		return
+	}
+
+	if errs := tokenbank.ConfigureAll(cfg.TokenBankURL, cfg.TokenBankAPIKey); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Printf("  Warning: %v\n", e)
+		}
+		return
+	}
+	fmt.Printf("  ✓ Models refreshed and agents re-pointed at %s\n", cfg.TokenBankURL)
+}
+
 var tokenbankConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure agents to use TokenBank proxy",
@@ -1171,13 +1206,11 @@ func init() {
 
 	serveCmd.Flags().IntP("port", "p", 5768, "Port for control server")
 	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
-	serveCmd.Flags().Bool("no-mcp", false, "Don't start MCP adapter")
-	serveCmd.Flags().Bool("mcp-only", false, "Run as MCP adapter only (stdio, no HTTP)")
 	serveCmd.Flags().Bool("no-update", false, "Skip auto-update before starting")
 
 	stopCmd.Flags().IntP("port", "p", 5768, "Port to stop (fallback if no PID file)")
 
-	uiCmd.Flags().IntP("port", "p", kanban.DefaultUIPort, "Port for Kanban UI server")
+	uiCmd.Flags().IntP("port", "p", configapi.DefaultUIPort, "Port for the ywai UI server")
 
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(stopCmd)

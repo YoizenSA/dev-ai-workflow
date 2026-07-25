@@ -8,6 +8,8 @@ BA_DIR="$REPO_ROOT/plugins/background-agents"
 BA_BUNDLE="$BA_DIR/dist/background-agents.js"
 VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
+AD_DIR="$REPO_ROOT/plugins/advisor"
+AD_BUNDLE="$AD_DIR/dist/advisor.js"
 
 # Rebuild the React UI so the embedded binary always carries the current
 # frontend. Without this, `ywai install` / `dev.sh install` would ship a stale
@@ -42,12 +44,21 @@ if command -v bun >/dev/null 2>&1; then
     echo "Building vision-bridge plugin (bun bundle)…"
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
+    echo "Building advisor plugin (bun bundle)…"
+    bun build "$AD_DIR/src/index.ts" \
+        --outfile "$AD_BUNDLE" --target node \
+        --external zod --external @opencode-ai/plugin
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then
         echo "using existing vision-bridge bundle as-is"
     else
         echo "WARNING: vision-bridge bundle missing (optional when bun unavailable)"
+    fi
+    if [ -f "$AD_BUNDLE" ]; then
+        echo "using existing advisor bundle as-is"
+    else
+        echo "WARNING: advisor bundle missing (optional when bun unavailable)"
     fi
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
@@ -69,6 +80,12 @@ cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"
 if [ -f "$BA_BUNDLE" ]; then
     cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"
+fi
+if [ -f "$AD_BUNDLE" ]; then
+    cp -a "$AD_BUNDLE" "$EMBED_DIR/plugins/advisor.js"
+fi
+if [ -f "$AD_DIR/command/advisor.md" ]; then
+    cp -a "$AD_DIR/command/advisor.md" "$EMBED_DIR/plugins/advisor.md"
 fi
 if [ -f "$VB_BUNDLE" ]; then
     cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"

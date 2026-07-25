@@ -288,7 +288,7 @@ type mcpToolInfo struct {
 //
 // Returns an empty list (200) when discovery fails: the editor falls back to a
 // free-text input so the user can still type a tool name. This mirrors how
-// kanban's tool discovery degrades gracefully.
+// the config API's tool discovery degrades gracefully.
 func (a *workflowsAPI) handleMcpServerTools(w http.ResponseWriter, r *http.Request) {
 	serverID := r.PathValue("server")
 	if serverID == "" {

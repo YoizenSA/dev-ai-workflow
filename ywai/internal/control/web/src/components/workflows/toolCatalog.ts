@@ -28,7 +28,7 @@ export const TOOL_OPTIONS: ToolOption[] = [
 	{ value: 'skill', label: 'Skill', group: 'meta' },
 	{ value: 'delegate', label: 'Delegate (async)', group: 'meta' },
 	// MCP buckets (expand to wildcards at export)
-	{ value: 'mcp', label: 'MCP (codegraph, context7, kanban)', group: 'mcp' },
+	{ value: 'mcp', label: 'MCP (every configured server)', group: 'mcp' },
 	{ value: 'memory', label: 'Memory (engram)', group: 'mcp' },
 ]
 

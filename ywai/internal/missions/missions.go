@@ -535,7 +535,7 @@ func CancelMissionFromSurface(store *MissionsStore, missionID string) error {
 
 // RetryFeatureFromSurface re-queues a failed feature from any surface.
 // If a broadcast function is provided, it emits a feature_status_changed event
-// so the kanban projector and other UI surfaces pick up the state change.
+// so the push notifier and other UI surfaces pick up the state change.
 func RetryFeatureFromSurface(store *MissionsStore, missionID, featureID string, broadcast ...BroadcastFunc) error {
 	mission, err := store.LoadMission(missionID)
 	if err != nil {

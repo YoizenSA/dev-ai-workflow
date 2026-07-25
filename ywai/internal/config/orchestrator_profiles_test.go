@@ -40,7 +40,10 @@ func TestDefaultOrchestratorModelProfiles_FastUsesFlashEverywhere(t *testing.T) 
 	}
 }
 
-func TestOrchestratorProfiles_UserOverridePersistsAndWinsForActiveProfile(t *testing.T) {
+// The shipped profiles (balanced, fast, deep) are product defaults, not user
+// data: they gain agents as agents are added, so an install must restore them.
+// A setup you want to keep is a profile under your own name, and those persist.
+func TestShippedProfilesAreRestored_CustomProfilesPersist(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -50,7 +53,12 @@ func TestOrchestratorProfiles_UserOverridePersistsAndWinsForActiveProfile(t *tes
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
 	cfg.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
-	cfg.OrchestratorProfiles["fast"].Agents["dev"] = RoleDefault{Model: "opencode-admin/custom-model"}
+	// An edit to a shipped profile...
+	cfg.OrchestratorProfiles["fast"].Agents["dev"] = RoleDefault{Model: "opencode-admin/edited-shipped"}
+	// ...and a profile of the user's own.
+	cfg.OrchestratorProfiles["my-setup"] = OrchestratorModelProfile{
+		Agents: RoleDefaults{"dev": {Model: "opencode-admin/mine"}},
+	}
 
 	if err := os.MkdirAll(DataDir(), 0o755); err != nil {
 		t.Fatalf("create data dir: %v", err)
@@ -64,9 +72,22 @@ func TestOrchestratorProfiles_UserOverridePersistsAndWinsForActiveProfile(t *tes
 		t.Fatalf("load config: %v", err)
 	}
 
-	active := loaded.GetActiveOrchestratorProfile()
-	if got := active.Agents["dev"].Model; got != "opencode-admin/custom-model" {
-		t.Fatalf("expected persisted active profile override, got model=%q", got)
+	if got := loaded.OrchestratorProfiles["fast"].Agents["dev"].Model; got == "opencode-admin/edited-shipped" {
+		t.Error("a shipped profile must be restored, not kept — otherwise new agents never reach it")
+	}
+	if got := loaded.OrchestratorProfiles["my-setup"].Agents["dev"].Model; got != "opencode-admin/mine" {
+		t.Errorf("a custom profile must survive untouched, got %q", got)
+	}
+}
+
+func TestIsShippedProfile(t *testing.T) {
+	for _, name := range []string{"balanced", "fast", "deep"} {
+		if !IsShippedProfile(name) {
+			t.Errorf("%s is shipped and gets overwritten — the UI needs to say so", name)
+		}
+	}
+	if IsShippedProfile("my-setup") {
+		t.Error("a user profile must not be reported as shipped")
 	}
 }
 

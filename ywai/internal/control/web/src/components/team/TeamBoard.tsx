@@ -152,7 +152,7 @@ export default function TeamBoard() {
         </div>
       </div>
 
-      {/* Kanban columns */}
+      {/* Status columns */}
       <div className="team-columns">
         {/* Members column */}
         <div className="team-column">

@@ -46,12 +46,12 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | Subcommand | What it does | When to use |
 |---|---|---|
 | `test` | Run all tests (`go test ./... -v`) | Before every commit |
-| `test-kanban` | Run only kanban tests (`go test ./internal/kanban/... -v`) | After touching kanban code |
+| `test-ui` | Run only control-server UI tests (`go test ./internal/kanban/... ./internal/control/... -v`) | After touching UI/server code |
 | `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
 | `build-full` | Full build WITH embedded skills/agents | Before pushing |
 | `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode |
 | `check` | Full pipeline: test → build-full → verify → install | **Before pushing to main** |
-| `kanban` | Build + install + start kanban UI on port 5768 | To visually test the kanban board |
+| `ui` | Build + install + start the control UI on port 5768 | To visually test the UI |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
 | `version` | Print the current dev version string | Debug |
 | `help` | Show all available subcommands | Reference |
@@ -68,14 +68,14 @@ cd ywai && bash scripts/dev.sh check
 cd ywai && bash scripts/dev.sh build
 ```
 
-**Testing kanban changes:**
+**Testing UI changes:**
 ```bash
-cd ywai && bash scripts/dev.sh test-kanban
+cd ywai && bash scripts/dev.sh test-ui
 ```
 
-**Visual kanban testing:**
+**Visual UI testing:**
 ```bash
-cd ywai && bash scripts/dev.sh kanban
+cd ywai && bash scripts/dev.sh ui
 # Opens http://localhost:5768
 ```
 
@@ -155,7 +155,7 @@ ywai/
 ├── internal/
 │   ├── agent/            # Agent detection (15 supported agents)
 │   ├── agents/           # Profile loader, installers, delegations
-│   ├── control/          # Unified web server (kanban + missions + workflows)
+│   ├── control/          # Unified web server (config API + missions + workflows)
 │   ├── gentlai/          # gentle-ai wrapper (install, sync, upgrade, doctor)
 │   ├── skills/           # Symlink extra skills to agent dirs
 │   ├── workflows/        # Workflow Studio: model, store, validator, exporter

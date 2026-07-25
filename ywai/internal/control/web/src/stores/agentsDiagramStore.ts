@@ -14,7 +14,7 @@ import type {
  * The capability graph (what an agent MAY delegate) is derived server-side from
  * each agent's `permission.task` map. Mutations go through the existing
  * task-permissions / model endpoints — the graph here is the read model plus
- * optimistic local patches mirroring kanbanStore's optimistic-update pattern.
+ * optimistic local patches applied ahead of the server round-trip.
  */
 
 type TaskValue = 'allow' | 'ask' | 'deny'

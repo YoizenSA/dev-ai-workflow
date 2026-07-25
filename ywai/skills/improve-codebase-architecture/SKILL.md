@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.
+description: Guided architecture review — scan a codebase for deepening opportunities, present them as a visual HTML report, then work through whichever one the user picks. Use when the user asks to review, audit, or improve a codebase's architecture, wants to find refactoring candidates, or asks where the design is causing friction. For the vocabulary alone, without the scan, use `codebase-design` instead.
 ---
 
 # Improve Codebase Architecture

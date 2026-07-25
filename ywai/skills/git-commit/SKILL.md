@@ -1,15 +1,8 @@
 ---
 name: git-commit
-description: Git commit standards and conventional commits.
-
+description: Conventional commit standards, branching, SemVer, and changelog conventions. Use when writing a commit or amending one, naming a branch, cutting a release or bumping a version, updating CHANGELOG.md, or when a commit hook rejects a message.
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
-
-## When to Use It
-
-- When creating commits in the repository
-- When preparing a new version or release (SemVer)
-- When updating the project `CHANGELOG.md`
 
 ## Critical Patterns
 
@@ -20,424 +13,50 @@ allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 - **NEVER** bundle multiple logical changes into one commit; keep them atomic and focused
 - **ALWAYS** reference GitHub issues in the body via `Fixes #123`
 
-## Convenciones de Commit (Commit Conventions)
-
-### Conventional Commits
-
-This project uses **Conventional Commits** for structured commit messages:
-
-**Format**:
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-**Types**:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation only changes
-- `style`: Code style changes (formatting, missing semi colons, etc.)
-- `refactor`: Code refactoring without adding features or fixing bugs
-- `perf`: Performance improvement
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks, build process, dependency updates
-- `ci`: CI/CD configuration changes
-
-**Scopes** (common examples):
-- `api`: API changes
-- `backend`: Backend changes
-- `frontend`: Frontend changes
-- `domain`: Domain layer changes
-- `infrastructure`: Infrastructure changes
-- `migration`: Database migrations
-- `docs`: Documentation changes
-- `tests`: Test changes
-
-## Commit Message Examples
-
-### Feature Commit
-
-```bash
-feat(agents): add agent versioning support
-
-- Implement agent version tracking
-- Add version comparison endpoint
-- Add version restoration functionality
-
-Co-authored-by: John Doe <john@example.com>
-```
-
-### Bug Fix Commit
-
-```bash
-fix(webapi): resolve NaN flowId in metrics
-
-- Validate flowId before processing
-- Add error logging for invalid IDs
-- Fix metrics aggregation
-
-Fixes #123
-```
-
-### Refactor Commit
-
-```bash
-refactor(agents): simplify agent creation flow
-
-- Remove duplicate validation logic
-- Consolidate versioning service
-- Improve error handling
-
-BREAKING CHANGE: Agent creation API now requires version parameter
-```
-
-### Documentation Commit
-
-```bash
-docs: update agent skill documentation
-
-- Add integration patterns section
-- Update examples
-- Fix typos in README
-```
-
-## Commit Standards
-
-### Title Guidelines
-
-- Use imperative mood: "add" not "added" or "adds"
-- Don't end with period
-- Limit to 50 characters (including type/scope)
-
-### Body Guidelines
-
-- Wrap at 72 characters
-- Use imperative mood
-- Explain **what** and **why** (not **how**)
-- Reference issues with `Fixes #123`
-
-### Footer Guidelines
-
-- **Breaking changes**: Start with `BREAKING CHANGE:`
-- **References**: `Fixes #123`, `Closes #456`
-- **Co-authors**: For multiple authors
-
-## Git Hooks
-
-### Pre-commit Hook
-
-Configured in `lefthook.yml`:
-
-```yaml
-pre-commit:
-  commands:
-    lint:
-      run: npm run lint:fix
-    typecheck:
-      run: npm run typecheck
-    test:
-      run: npm run test:unit
-```
-
-### Commit Message Hook
-
-Configured in `lefthook.yml`:
-
-```yaml
-commit-msg:
-  commands:
-    validate:
-      run: |
-        PATTERN="^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?: "
-        if ! grep -qE "$PATTERN" {1}; then
-          echo "Commit message must follow conventional format"
-          exit 1
-        fi
-        
-        # Check subject length
-        subject=$(head -n1 {1} | cut -d':' -f2 | sed 's/^\s*//')
-        if [ ${#subject} -gt 50 ]; then
-          echo "Commit subject must be 50 characters or less"
-          exit 1
-        fi
-```
-
-## Versioning
-
-### Semantic Versioning
-
-This project uses **Semantic Versioning** (SemVer):
-
-**Format**: `MAJOR.MINOR.PATCH`
-
-- **MAJOR**: Breaking changes
-- **MINOR**: New features (backward compatible)
-- **PATCH**: Bug fixes (backward compatible)
-
-**Example**: `1.5.0` → `2.0.0` (breaking)
-**Example**: `1.5.0` → `1.6.0` (new feature)
-**Example**: `1.5.0` → `1.5.1` (bug fix)
-
-### Version Bumping
-
-When to increment:
-
-| Change | Type | Example |
-|--------|------|---------|
-| Breaking change | MAJOR | `1.5.0` → `2.0.0` |
-| New feature (backward compatible) | MINOR | `1.5.0` → `1.6.0` |
-| Bug fix (backward compatible) | PATCH | `1.5.0` → `1.5.1` |
-
-### Release Branches
-
-**Naming**: `release/vX.Y.Z`
-
-```bash
-# Create release branch
-git checkout -b release/v1.6.0
-
-# Make release commits
-git commit -m "chore(release): prepare for v1.6.0 release"
-
-# Merge to main
-git checkout main
-git merge release/v1.6.0
-
-# Tag release
-git tag -a v1.6.0 -m "Release v1.6.0"
-```
-
-## Changelog
-
-### Changelog Format
-
-Based on conventional commits, maintain `CHANGELOG.md`:
-
-```markdown
-# Changelog
-
-## [2.0.0] - 2024-01-15
-
-### Added
-- Agent versioning support
-- Agent comparison endpoint
-- Version restoration functionality
-
-### Changed
-- Improved agent creation flow
-- Simplified validation logic
-
-### Deprecated
-- Legacy agent API (use agents/v2)
-
-### Removed
-- Old agent caching mechanism
-
-### Fixed
-- NaN flowId in metrics
-- Agent dirty state tracking
-
-### Security
-- Added input validation for agent names
-- Updated JWT token handling
-```
-
-## Finding Related Code
-
-### Search Git Configuration
-
-```bash
-# Find lefthook configuration
-find . -name "lefthook.yml"
-cat lefthook.yml
-
-# Find commitlint configuration
-find . -name "commitlint*"
-grep -r "commitlint" package.json
-
-# Find version configuration
-grep -r "version" package.json
-```
-
-### Search Commit Patterns
-
-```bash
-# Find recent commits
-git log --oneline -20
-
-# Find commit messages by type
-git log --grep="^feat:" --oneline
-git log --grep="^fix:" --oneline
-
-# Find breaking changes
-git log --grep="BREAKING CHANGE:" --oneline
-```
-
-## Common Patterns
-
-### Feature Addition
-
-```bash
-# Make changes
-git add .
-
-# Commit with proper format
-git commit -m "feat(agents): add agent tools configuration
-
-- Add tool input/output mapping
-- Support integration and piece tool types
-- Add custom description support"
-
-# Push to remote
-git push origin feature/NY/142-agent-tools
-
-# Create PR from feature/NY/142-agent-tools to main
-```
-
-### Bug Fix
-
-```bash
-# Make changes
-git add .
-
-# Commit with reference
-git commit -m "fix(webapi): handle missing agent ID
-
-- Add null check for agentId parameter
-- Return 400 Bad Request instead of 500 error
-- Add error logging
-
-Fixes #456"
-
-# Push
-git push origin fix/NY/456-missing-agent-id
-```
-
-### Breaking Change
-
-```bash
-# Update code to breaking API
-git add .
-
-# Commit with BREAKING CHANGE footer
-git commit -m "feat(agents): restructure agent configuration model
-
-BREAKING CHANGE: Agent configuration now uses new model
-- Old agent format no longer supported
-- Migration required for existing agents
-- See migration guide in docs/migration.md
-
-Migrates #123"
-```
-
-### Release Preparation
-
-```bash
-# Update version in package.json
-npm version minor --no-git-tag-version
-
-# Update CHANGELOG.md
-git add CHANGELOG.md
-git commit -m "chore(release): update CHANGELOG for v1.6.0"
-
-# Create release branch
-git checkout -b release/v1.6.0
-
-# Update any additional files
-vim version.ts
-git commit -am "chore(release): bump version to 1.6.0"
-
-# Merge and tag
-git checkout main
-git merge release/v1.6.0
-git tag -a v1.6.0 -m "Release v1.6.0"
-
-# Push tags and main
-git push origin main --tags
-```
-
-## Troubleshooting
-
-### Commit Hook Failed
-
-**Error**: Commit message doesn't follow format
-
-**Solution**:
-1. Use conventional format: `type(scope): subject`
-2. Keep subject under 50 characters
-3. Use valid types: feat, fix, docs, style, refactor, perf, test, chore, ci
-4. Don't end subject with period
-
-### Pre-commit Hook Failed
-
-**Error**: Linting or tests failed
-
-**Solution**:
-1. Run `npm run lint:fix` to auto-fix issues
-2. Run `npm run typecheck` to check types
-3. Run `npm run test` to verify tests pass
-4. Fix remaining issues manually
-5. Commit again
-
-### Merge Conflicts
-
-**Error**: Git merge conflict
-
-**Solution**:
-```bash
-# Start merge
-git merge feature/NY/142-feature-branch
-
-# Resolve conflicts in conflicted files
-# Edit and save files
-
-# Mark as resolved
-git add <resolved-files>
-
-# Complete merge
-git commit -m "chore: resolve merge conflicts with feature/branch"
-```
-
-## Best Practices
-
-### Small, Focused Commits
-
-- One logical change per commit
-- Keep changes atomic and testable
-- Avoid bundling unrelated changes
-
-### Descriptive Messages
-
-- Explain **what** changed and **why**
-- Include context for future maintainers
-- Reference related issues or PRs
-
-### Consistent Formatting
-
-- Use same format across all commits
-- Follow conventional commits specification
-- Use proper line wrapping (72 characters)
-
-### Test Before Commit
-
-- Run unit tests: `npm run test:unit`
-- Run integration tests: `npm run test:integration`
-- Run linting: `npm run lint`
-- Run type checking: `npm run typecheck`
-
-### Atomic Changes
-
-- Each commit should pass all tests
-- Never commit broken code
-- Use branches for work-in-progress
-
-## Referencias (References)
-- [BRANCHING.md](references/BRANCHING.md)
-- [COMMIT-MESSAGE-FORMAT.md](references/COMMIT-MESSAGE-FORMAT.md)
-- [GIT-HOOKS.md](references/GIT-HOOKS.md)
+## Reference
+
+The detail lives beside this file so the rules above stay readable. Each pointer
+says when to open it:
+
+- [Commit message format](references/COMMIT-MESSAGE-FORMAT.md) — the full type
+  and scope vocabulary, body and footer rules, and worked examples. Open it when
+  you are unsure which type a change is, or need the exact `BREAKING CHANGE`
+  footer shape.
+- [Branching](references/BRANCHING.md) — branch types, naming, and the
+  feature / bugfix / release / hotfix workflows. Open it before creating a
+  branch or cutting a release.
+- [Git hooks](references/GIT-HOOKS.md) — the lefthook setup, what each hook
+  validates, and how to install or bypass them. Open it when a hook rejects a
+  commit or the hooks are not running.
+
+## Versioning and changelog
+
+Version bumps follow SemVer, derived from the commits since the last tag: a
+`BREAKING CHANGE` footer bumps major, `feat` bumps minor, `fix` bumps patch.
+That mapping is the reason the type matters — a commit typed wrong silently
+produces the wrong release.
+
+`CHANGELOG.md` follows Keep a Changelog: group entries under Added, Changed,
+Fixed, Removed, and Deprecated, newest version first, and write for someone
+upgrading rather than for someone reading the diff.
+
+## Discovering the project's setup
+
+The conventions above are the default; a repository may enforce its own. Before
+committing into an unfamiliar repo, check what is actually configured —
+`lefthook.yml` or `.husky/` for hooks, `commitlint*` for accepted types, and
+`git log --oneline -20` for the scopes the project really uses. Match the repo
+you are in over this skill.
+
+## Best practices
+
+One logical change per commit, and every commit passes the suite on its own —
+a commit that only builds together with the next one cannot be reverted or
+bisected, which is what commit history is for.
+
+Explain what changed and why in the body; the diff already shows how. Reference
+the issue (`Fixes #123`) so the context survives after everyone involved has
+forgotten it.
 
 ## Assets
 - `assets/scripts/commit.sh` - Commit automation script

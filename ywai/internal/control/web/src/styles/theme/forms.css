@@ -164,3 +164,32 @@ textarea::-webkit-resizer { background: transparent; }
 .filter-inline .field-label { margin: 0; white-space: nowrap; }
 .filter-inline yd-select, .filter-inline yd-date { display: block; width: max-content; }
 .filter-inline .yd-select-trigger { width: max-content; min-width: 0; gap: 0.45rem; padding-right: 0.7rem; }
+
+/* Linked identity: a workflow node whose system prompt is resolved from a real
+   agent at export time instead of stored on the node. The row states the link;
+   the pre below it shows the resolved text, read-only so it cannot drift from
+   the agent by being edited here. */
+.field-linked {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.4rem 0.55rem;
+  background: var(--surface-soft); border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+.field-linked code {
+  font-size: 0.78rem; color: var(--text-soft);
+}
+.field-linked .badge {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 0.1rem 0.4rem; border-radius: 4px;
+  color: var(--yz-accent); background: var(--yz-accent-soft);
+}
+.field-linked .btn-link {
+  margin-left: auto; padding: 0;
+  font-size: 0.74rem; color: var(--text-muted);
+  background: none; border: none; cursor: pointer; text-decoration: underline;
+}
+.field-linked .btn-link:hover { color: var(--text-soft); }
+.textarea.readonly {
+  max-height: 16rem; overflow: auto; white-space: pre-wrap;
+  color: var(--text-faint); cursor: default;
+}

@@ -284,6 +284,7 @@ test.describe('Feature with proper waiting', () => {
 
 ## References
 
+- [Detailed patterns and implementation](references/patterns-and-implementation.md) — the mistakes that survive a first fix: polling too fast, the cases where a fixed timeout genuinely is correct, domain-specific helpers, and how to debug a wait that never resolves. Open it when a test is still flaky after applying the patterns above.
 - [Playwright Auto-waiting](https://playwright.dev/docs/actionability)
 - [Playwright Assertions](https://playwright.dev/docs/test-assertions)
 - [Playwright Events](https://playwright.dev/docs/events)

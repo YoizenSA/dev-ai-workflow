@@ -83,16 +83,6 @@ var toolRegistry = []toolPattern{
 	{prefix: "engram_mem_session_end", category: ToolAdmin},
 	{prefix: "engram_mem_session_summary", category: ToolAdmin},
 
-	// ywai-kanban — read tools
-	{prefix: "ywai-kanban_get_", category: ToolRead},
-	{prefix: "ywai-kanban_list_sessions", category: ToolRead},
-
-	// ywai-kanban — write tools
-	{prefix: "ywai-kanban_create_", category: ToolWrite},
-	{prefix: "ywai-kanban_delete_session", category: ToolWrite},
-	{prefix: "ywai-kanban_update_delegation", category: ToolWrite},
-	{prefix: "ywai-kanban_add_activity", category: ToolWrite},
-
 	// Delegation — read tools
 	{prefix: "delegate", category: ToolRead},
 	{prefix: "delegation_list", category: ToolRead},
@@ -173,7 +163,7 @@ func isStandardPermissionKey(key string) bool {
 	case "read", "edit", "write", "bash", "glob", "grep", "lsp",
 		"ast_grep", "websearch", "code_search", "webfetch",
 		"task", "delegate", "question", "skill", "memory",
-		"intercom", "ado", "mcp",
+		"intercom", "mcp",
 		"mcp:read", "mcp:write", "mcp:admin":
 		return true
 	default:
@@ -193,15 +183,6 @@ func (c MCPConfig) Enforce(toolName string) bool {
 	// 1. Check explicit per-tool override first
 	if val, ok := c.ToolOverrides[toolName]; ok {
 		return val == "allow"
-	}
-
-	// 1b. Baseline tools every agent may call (unless overridden per-tool
-	// above). Mirrors the always-allow whitelist in buildOpenCodeMarkdown so
-	// ywai's own enforcement agrees with the generated opencode frontmatter.
-	for _, t := range AlwaysAllowedMCPTools {
-		if toolName == t {
-			return true
-		}
 	}
 
 	// 2. Classify the tool to determine its category

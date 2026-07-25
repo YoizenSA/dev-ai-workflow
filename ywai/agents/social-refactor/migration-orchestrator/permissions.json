@@ -1,7 +1,7 @@
 {
   "read": "allow",
-  "glob": "allow",
-  "grep": "allow",
+  "glob": "deny",
+  "grep": "deny",
   "webfetch": "allow",
   "task": "allow",
   "question": "allow",
@@ -11,5 +11,6 @@
   "mcp": "allow",
   "edit": "deny",
   "write": "deny",
-  "bash": "deny"
+  "bash": "verify",
+  "code_search": "deny"
 }

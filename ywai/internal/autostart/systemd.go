@@ -37,19 +37,7 @@ func configureSystemd() error {
 
 	// Create service file
 	servicePath := filepath.Join(serviceDir, systemdServiceName)
-	serviceContent := fmt.Sprintf(`[Unit]
-Description=ywai Unified Server
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=%s serve --background
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-`, binaryPath)
+	serviceContent := systemdUnitContent(binaryPath)
 
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("failed to write service file: %w", err)
@@ -71,6 +59,29 @@ WantedBy=default.target
 	}
 
 	return nil
+}
+
+// systemdUnitContent renders the user service.
+//
+// No --background: systemd IS the supervisor, so it needs the server in the
+// foreground. With Type=simple a forking ExecStart exits immediately, systemd
+// reads that as a crash, Restart=always revives it 5s later, and acquirePort
+// kills the orphan the previous cycle left behind — a restart loop that never
+// serves anything.
+func systemdUnitContent(binaryPath string) string {
+	return fmt.Sprintf(`[Unit]
+Description=ywai Unified Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%s serve
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`, binaryPath)
 }
 
 // disableSystemd removes the systemd service.

@@ -1178,3 +1178,21 @@
 	font-size: 0.8rem;
 	line-height: 1.5;
 }
+
+/* Banner above the read-only identity editor of a linked node. Says where the
+   prompt comes from, so an empty-looking editor is not read as a missing
+   prompt — which is exactly how it read before. */
+.wf-focus-linked {
+	margin-bottom: 8px;
+	padding: 8px 10px;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-soft);
+	background: var(--yz-accent-soft);
+	border-left: 2px solid var(--yz-accent);
+	border-radius: 0 4px 4px 0;
+}
+.wf-focus-linked code {
+	color: var(--yz-accent);
+	font-size: 12px;
+}

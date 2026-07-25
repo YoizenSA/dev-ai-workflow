@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +36,13 @@ type releaseInfo struct {
 
 // githubGET performs an authenticated (when possible) GET against the GitHub API.
 func githubGET(url string) (*http.Response, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
+	return githubGETWithTimeout(url, 15*time.Second)
+}
+
+// githubGETWithTimeout is githubGET with a caller-chosen timeout: asset
+// downloads need minutes, API calls need seconds.
+func githubGETWithTimeout(url string, timeout time.Duration) (*http.Response, error) {
+	client := &http.Client{Timeout: timeout}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -171,6 +179,123 @@ func ResolvedExecutable() (string, error) {
 	return "", fmt.Errorf("cannot resolve ywai executable path")
 }
 
+// DevVersion is the version stamped into builds that were not produced by the
+// release pipeline (goreleaser injects the real tag via ldflags).
+const DevVersion = "dev"
+
+// IsDevBuild reports whether a version string came from a local build rather
+// than a release. Auto-update must skip these, or `ywai serve` overwrites the
+// binary a developer just compiled with whatever is on GitHub — which is
+// exactly what happened to a build stamped "8.16.5-dev+ff82a7b": it did not
+// equal the latest tag, so the updater treated it as a version behind.
+//
+// Any marker a local build can carry counts, not just the bare word: the
+// version is stamped by scripts/dev.sh and by hand, and the failure is silent
+// and destructive when one of those forms is missed.
+func IsDevBuild(v string) bool {
+	t := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(v, "v")))
+	if t == "" || t == DevVersion {
+		return true
+	}
+	// Build metadata (`+sha`) only ever comes from a local build; releases are
+	// plain tags.
+	if strings.Contains(t, "+") {
+		return true
+	}
+	// Pre-release segment naming a local build, e.g. 8.16.5-dev, 8.16.6-next,
+	// 1.2.3-dirty. Release channels use beta/rc/alpha/pre, which must still
+	// auto-update.
+	for _, marker := range []string{"-dev", "-next", "-dirty", "-local", "-snapshot"} {
+		if strings.Contains(t, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// checksumsAsset is the goreleaser-generated manifest published with every
+// release (see .goreleaser.yaml `checksum.name_template`).
+const checksumsAsset = "checksums.txt"
+
+// verifyChecksum fails when the downloaded archive does not match the SHA-256
+// the release published for it.
+//
+// Without this, the updater downloads a binary over the network and executes
+// it on the strength of TLS alone — anything that can serve those bytes (a
+// compromised mirror, a proxy with a trusted cert, a tampered release asset)
+// gets code execution as the user. The manifest is already published; the only
+// thing missing was reading it.
+//
+// A missing or unparsable manifest is a hard failure, not a warning: silently
+// installing an unverified binary is exactly the outcome this prevents.
+func verifyChecksum(archivePath, version, asset string) error {
+	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+		owner, repo, version, checksumsAsset)
+
+	manifest, err := fetchText(url)
+	if err != nil {
+		return fmt.Errorf("cannot fetch %s for %s: %w", checksumsAsset, version, err)
+	}
+	return verifyAgainstManifest(archivePath, asset, manifest)
+}
+
+// verifyAgainstManifest is the pure half of verifyChecksum: no network, so the
+// accept and reject paths are both directly testable.
+func verifyAgainstManifest(archivePath, asset, manifest string) error {
+	want, ok := checksumFor(manifest, asset)
+	if !ok {
+		return fmt.Errorf("%s has no entry for %s", checksumsAsset, asset)
+	}
+
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("open download: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("hash download: %w", err)
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", asset, want, got)
+	}
+	return nil
+}
+
+// checksumFor pulls one asset's hash out of a `<sha256>  <filename>` manifest.
+func checksumFor(manifest, asset string) (string, bool) {
+	for _, line := range strings.Split(manifest, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		// goreleaser writes "hash  name"; some tools prefix the name with '*'.
+		if strings.TrimPrefix(fields[1], "*") == asset {
+			return fields[0], true
+		}
+	}
+	return "", false
+}
+
+func fetchText(url string) (string, error) {
+	resp, err := githubGET(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
 func assetName(version string) string {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
@@ -250,6 +375,12 @@ func downloadAndReplace(version string) (string, error) {
 	archivePath := filepath.Join(tmpDir, filepath.Base(asset))
 	if err := downloadFile(downloadURL, archivePath); err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
+	}
+
+	// Verify before extracting: nothing from the archive is touched, let alone
+	// made executable, until the bytes match what the release published.
+	if err := verifyChecksum(archivePath, version, asset); err != nil {
+		return "", fmt.Errorf("refusing to install %s: %w", version, err)
 	}
 
 	binaryPath := filepath.Join(tmpDir, "ywai")
@@ -335,9 +466,12 @@ func replaceBinary(src, dst string) error {
 	return nil
 }
 
+// downloadFile fetches a release asset. It goes through githubGET so a token,
+// when present, is attached: the API calls are authenticated, and an
+// unauthenticated download would be the one step that breaks if the repo ever
+// stops being public.
 func downloadFile(url, dest string) error {
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
+	resp, err := githubGETWithTimeout(url, 5*time.Minute)
 	if err != nil {
 		return err
 	}

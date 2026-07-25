@@ -19,7 +19,9 @@ func orchestratorBody(wf *Workflow, subAgentIDs map[string]string) string {
 	// The START node configures the orchestrator's own identity: its system
 	// prompt (agentDefinition) is prepended as the parent agent's persona.
 	if s := wf.findNode(NodeTypeStart); s != nil {
-		if def := strings.TrimSpace(s.Data.AgentDefinition); def != "" {
+		// Same resolution as sub-agent nodes: the START node may link to a real
+		// orchestrator under agents/ instead of embedding a copy of its prompt.
+		if def := strings.TrimSpace(resolveAgentDefinition(s)); def != "" {
 			b.WriteString(def + "\n\n")
 		}
 	}

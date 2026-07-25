@@ -1,4 +1,4 @@
-// Package git provides lightweight git status information for the kanban UI.
+// Package git provides lightweight git status information for the control UI.
 package git
 
 import (

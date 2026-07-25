@@ -87,8 +87,14 @@ type NodeData struct {
 	Name             string `json:"name,omitempty"`            // agent name (may differ from node Name)
 	AgentDescription string `json:"description,omitempty"`     // frontmatter description (≤200 chars)
 	AgentDefinition  string `json:"agentDefinition,omitempty"` // system prompt / identity
-	Prompt           string `json:"prompt,omitempty"`          // task to perform
-	AgentType        string `json:"agentType,omitempty"`       // "claudeCode" | "other"
+	// AgentRef links this node to a real agent under agents/ by its profile key
+	// ("core/architect", "qa-automation/qa-dev"). When set, export resolves the
+	// prompt from that AGENT.md at export time, so editing the agent updates
+	// every workflow that references it. AgentDefinition still wins when both
+	// are present — that is the escape hatch for a genuinely one-off node.
+	AgentRef  string `json:"agentRef,omitempty"`
+	Prompt    string `json:"prompt,omitempty"`    // task to perform
+	AgentType string `json:"agentType,omitempty"` // "claudeCode" | "other"
 	// Sections is a comma-separated list of shared prompt sections (from
 	// agents/sections/) injected into this node's prompt on export. Empty means
 	// the export default (handoff for sub-agents).

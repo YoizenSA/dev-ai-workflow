@@ -580,7 +580,7 @@ func renderRulesSection(rules []DelegationRule, triggers []DelegationTrigger) st
 // replaceMarkdownSection replaces the body content under the heading headerText
 // with newContent. If the heading does not exist, the section (heading + "\n\n"
 // + newContent) is appended at the end of the content. (Re-exported here to
-// avoid an import cycle with the kanban package's copy.)
+// avoid an import cycle with the configapi package's copy.)
 func replaceMarkdownSection(content, headerText, headingPrefix, newContent string, includeSubsections bool) string {
 	target := strings.ToLower(strings.TrimSpace(headerText))
 	lines := strings.Split(content, "\n")

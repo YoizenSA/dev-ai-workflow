@@ -142,41 +142,6 @@ func TestClassifyMCPTool_Engram_Admin(t *testing.T) {
 	}
 }
 
-func TestClassifyMCPTool_Kanban_Read(t *testing.T) {
-	tools := []string{
-		"ywai-kanban_get_board",
-		"ywai-kanban_get_activities",
-		"ywai-kanban_get_graph",
-		"ywai-kanban_get_pending_decisions",
-		"ywai-kanban_get_ui_url",
-		"ywai-kanban_list_sessions",
-	}
-	for _, tool := range tools {
-		t.Run(tool, func(t *testing.T) {
-			if got := ClassifyMCPTool(tool); got != ToolRead {
-				t.Errorf("ClassifyMCPTool(%q) = %v (%s), want ToolRead", tool, got, got)
-			}
-		})
-	}
-}
-
-func TestClassifyMCPTool_Kanban_Write(t *testing.T) {
-	tools := []string{
-		"ywai-kanban_create_delegation",
-		"ywai-kanban_create_session",
-		"ywai-kanban_delete_session",
-		"ywai-kanban_update_delegation",
-		"ywai-kanban_add_activity",
-	}
-	for _, tool := range tools {
-		t.Run(tool, func(t *testing.T) {
-			if got := ClassifyMCPTool(tool); got != ToolWrite {
-				t.Errorf("ClassifyMCPTool(%q) = %v (%s), want ToolWrite", tool, got, got)
-			}
-		})
-	}
-}
-
 func TestClassifyMCPTool_Delegation_Read(t *testing.T) {
 	tools := []string{
 		"delegate",
@@ -259,29 +224,6 @@ func TestMCPEnforce_ExplicitDenyBeatsExplicitAllow_PerToolOverride(t *testing.T)
 	}
 	if MCPEnforce(perms, "ado_review") {
 		t.Error("MCPEnforce: explicit per-tool 'deny' should override category 'allow'")
-	}
-}
-
-func TestMCPEnforce_UpdateDelegation_AllowedDespiteMCPDeny(t *testing.T) {
-	// Every agent must be able to report its own card status, even when the
-	// whole mcp bucket (and write category) is denied.
-	perms := map[string]string{
-		"mcp":       "deny",
-		"mcp:write": "deny",
-	}
-	if !MCPEnforce(perms, "ywai-kanban_update_delegation") {
-		t.Error("MCPEnforce: ywai-kanban_update_delegation must be allowed for every agent")
-	}
-}
-
-func TestMCPEnforce_UpdateDelegation_ExplicitPerToolDenyStillWins(t *testing.T) {
-	// The baseline allow is a default, not a hard override: an explicit
-	// per-tool deny in the agent's own config still takes precedence.
-	perms := map[string]string{
-		"ywai-kanban_update_delegation": "deny",
-	}
-	if MCPEnforce(perms, "ywai-kanban_update_delegation") {
-		t.Error("MCPEnforce: explicit per-tool deny should override the baseline allow")
 	}
 }
 
@@ -414,7 +356,6 @@ func TestMCPEnforce_AskAgentConfig(t *testing.T) {
 		"context7_query-docs",
 		"ado_pr",
 		"engram_mem_context",
-		"ywai-kanban_get_board",
 		"delegate",
 	}
 	for _, tool := range readTools {
@@ -430,7 +371,6 @@ func TestMCPEnforce_AskAgentConfig(t *testing.T) {
 		"ado_review",
 		"ado_pr_comment",
 		"engram_mem_save",
-		"ywai-kanban_create_delegation",
 	}
 	for _, tool := range writeTools {
 		t.Run("write_"+tool, func(t *testing.T) {

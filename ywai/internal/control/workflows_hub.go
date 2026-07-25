@@ -42,7 +42,7 @@ type RunDoneEvent struct {
 
 // wsHub mirrors missions/web/hub.go: a fan-out broadcaster for workflow run
 // events. Kept small and self-contained in the control package so workflow
-// streaming stays isolated from the missions/kanban hubs.
+// streaming stays isolated from the missions and config API hubs.
 type wsHub struct {
 	mu        sync.RWMutex
 	clients   map[*wsClient]bool

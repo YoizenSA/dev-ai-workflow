@@ -332,3 +332,69 @@ func TestCountSddAssetsMatchesRemoval(t *testing.T) {
 		t.Errorf("CountSddAssets = %d, but RemoveSddAssets removed %d", count, len(removed))
 	}
 }
+
+// Deleting a skill from the source used to leave it installed forever:
+// webapp-testing outlived its removal and kept contradicting the skill that
+// replaced it. Pruning fixes that, and these pin the line it must not cross —
+// removing something the user wrote.
+func TestPruneRetiredSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	mk := func(name string, ywai bool) string {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(p, "SKILL.md"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if ywai {
+			if err := os.WriteFile(filepath.Join(p, extraSkillMarkerFile), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return p
+	}
+
+	stillShipped := mk("tdd", true)
+	retired := mk("webapp-testing", true)
+	userOwned := mk("my-skill", false)
+	// The dangerous case: the user wrote a skill named like one we retired.
+	collision := mk("dotnet", false)
+
+	removed := pruneRetiredSkills(dir, map[string]bool{"tdd": true})
+
+	if len(removed) != 1 || removed[0] != "webapp-testing" {
+		t.Fatalf("removed = %v, want only the retired ywai skill", removed)
+	}
+	if _, err := os.Stat(retired); !os.IsNotExist(err) {
+		t.Error("a retired ywai skill must be removed")
+	}
+	for _, keep := range []string{stillShipped, userOwned, collision} {
+		if _, err := os.Stat(keep); err != nil {
+			t.Errorf("%s must survive: %v", filepath.Base(keep), err)
+		}
+	}
+}
+
+func TestPruneRetiredSkills_LeavesSymlinksAlone(t *testing.T) {
+	// Links are RemoveStaleYwaiSkillLinks's job — it knows how to check where
+	// they point. Treating one as a directory here could delete its target.
+	dir := t.TempDir()
+	target := t.TempDir()
+	if err := os.Symlink(target, filepath.Join(dir, "linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if removed := pruneRetiredSkills(dir, map[string]bool{}); len(removed) != 0 {
+		t.Errorf("removed = %v, want nothing", removed)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Error("the link target must be untouched")
+	}
+}
+
+func TestPruneRetiredSkills_MissingDirIsNoOp(t *testing.T) {
+	if removed := pruneRetiredSkills(filepath.Join(t.TempDir(), "absent"), map[string]bool{}); removed != nil {
+		t.Errorf("removed = %v, want nil", removed)
+	}
+}

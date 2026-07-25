@@ -13,10 +13,10 @@ package mcp
 //   - DiscoverHTTP: POST a single tools/list JSON-RPC request to a remote
 //     MCP endpoint, return the tool names. 6s safety cap on the http.Client.
 //
-// The transport code here was extracted from ywai/internal/kanban/tool_discovery.go
-// (the old unexported discoverStdioMCPTools and discoverMCPTools). The kanban
+// The transport code here was extracted from ywai/internal/configapi/tool_discovery.go
+// (the old unexported discoverStdioMCPTools and discoverMCPTools). The configapi
 // package now keeps thin wrappers that call into this package; see
-// internal/kanban/tool_discovery.go for those.
+// internal/configapi/tool_discovery.go for those.
 
 import (
 	"bufio"
@@ -91,7 +91,7 @@ func DiscoverStdio(ctx context.Context, command []string, env map[string]string)
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]interface{}{},
 			"clientInfo": map[string]interface{}{
-				"name":    "ywai-kanban",
+				"name":    "ywai",
 				"version": "1.0.0",
 			},
 		},
@@ -162,7 +162,7 @@ func DiscoverStdio(ctx context.Context, command []string, env map[string]string)
 // via ctx; a 6s safety cap is layered on top via http.Client.Timeout.
 //
 // HTTP transport does not implement the MCP initialize handshake in this
-// probe — the existing kanban probe did not either, and the discovery
+// probe — the existing configapi probe did not either, and the discovery
 // contract for HTTP servers is "send tools/list, parse the response". When
 // ctx is canceled or its deadline is exceeded, the returned *url.Error from
 // the http client wraps the ctx error, so errors.Is(err,

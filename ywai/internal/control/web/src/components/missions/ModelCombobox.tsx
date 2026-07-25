@@ -19,7 +19,10 @@ export default function ModelCombobox({ id, label, value, models, onChange, reco
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
 	const selectedModel = models.find((m) => m.id === value);
-	const displayName = selectedModel?.name || selectedModel?.id || "Select model…";
+	// Keep the configured id visible while the catalog is still loading (or
+	// when the id is free-typed and not in the list yet).
+	const displayName =
+		selectedModel?.name || selectedModel?.id || value || "Select model…";
 
 	const filteredModels =
 		searchText.trim() === ""

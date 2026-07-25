@@ -154,7 +154,7 @@ func TestExtractSections(t *testing.T) {
 		want   []string
 	}{
 		{"handoff only", "---\nsections: [handoff]\n---\n\nbody", []string{"handoff"}},
-		{"multiple", "---\nsections: [handoff, kanban]\n---\n\nbody", []string{"handoff", "kanban"}},
+		{"multiple", "---\nsections: [handoff, context-gathering]\n---\n\nbody", []string{"handoff", "context-gathering"}},
 		{"no sections", "---\nname: dev\n---\n\nbody", nil},
 		{"no frontmatter", "# Agent\n\nbody", nil},
 		{"empty array", "---\nsections: []\n---\n\nbody", nil},
@@ -581,10 +581,10 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 		Prompt:      "# Orchestrator\n\nCoordinate.",
 		Mode:        "all",
 		Permission: map[string]string{
-			"edit":   "deny",
-			"ado":    "deny",
-			"memory": "allow",
-			"mcp":    "allow",
+			"edit":     "deny",
+			"intercom": "deny",
+			"memory":   "allow",
+			"mcp":      "allow",
 		},
 	}
 
@@ -605,10 +605,9 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	}
 	// Allow bucket expansions should be present.
 	allowExpansions := map[string]string{
-		`"engram_*": allow`:      "memory",
-		`"codegraph_*": allow`:   "mcp",
-		`"context7_*": allow`:    "mcp",
-		`"ywai-kanban_*": allow`: "mcp",
+		`"engram_*": allow`:    "memory",
+		`"codegraph_*": allow`: "mcp",
+		`"context7_*": allow`:  "mcp",
 	}
 	for pattern, bucket := range allowExpansions {
 		if !strings.Contains(md, pattern) {
@@ -616,38 +615,57 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 		}
 	}
 	// Deny bucket expansions must remain explicit when there is no catch-all.
-	if !strings.Contains(md, `"ado_*": deny`) {
+	if !strings.Contains(md, `"intercom_*": deny`) {
 		t.Error("denied bucket should expand explicitly")
 	}
 }
 
-// TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed verifies that an
-// agent which denies the whole mcp bucket still gets the kanban
-// update_delegation tool whitelisted, so every agent can report its own card
-// status.
-func TestBuildOpenCodeMarkdown_UpdateDelegationAlwaysAllowed(t *testing.T) {
-	profile := AgentProfile{
-		Description: "Restricted subagent",
-		Prompt:      "# Sub\n\nWork.",
-		Mode:        "subagent",
-		Permission: map[string]string{
-			"edit": "deny",
-			"mcp":  "deny",
-		},
+// ADO is driven by the `ado` CLI (see skills/ado), not an MCP server, so there
+// are no ado_* tools left to grant. Keeping the bucket would write permissions
+// for tools that do not exist while the CLI actually needs bash.
+func TestAdoIsNotAPermissionBucket(t *testing.T) {
+	out := ExpandPermissionBuckets(map[string]string{"ado": "allow"})
+	if _, ok := out["ado_*"]; ok {
+		t.Error("ado must no longer expand to ado_* — it is a CLI, not an MCP server")
 	}
+}
 
-	md := BuildOpenCodeMarkdown("dev", profile)
+// MCP tools must be reachable by every kind of agent, and the grant has to
+// follow the servers actually configured on the machine — otherwise adding an
+// MCP server means editing Go before any agent can use it.
+func TestMCPBucketCoversConfiguredServers(t *testing.T) {
+	patterns := mcpBucketPatterns()
+	for _, want := range []string{"codegraph_*", "context7_*"} {
+		found := false
+		for _, p := range patterns {
+			if p == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("mcp bucket lost the shipped pattern %q (got %v)", want, patterns)
+		}
+	}
+	// Servers with a dedicated bucket must not be swept in by the blanket one:
+	// an agent denied "memory" would otherwise regain engram through "mcp".
+	for _, p := range patterns {
+		if p == "engram_*" || p == "intercom_*" {
+			t.Errorf("blanket mcp bucket must not claim %q — it has its own bucket", p)
+		}
+	}
+}
 
-	if strings.Contains(md, `"*": deny`) {
-		t.Fatalf(`must not block externally configured MCPs, got:\n%s`, md)
+// A narrow per-tool rule must survive the broader bucket that overlaps it.
+func TestExpandPermissionBuckets_ExplicitToolBeatsBucket(t *testing.T) {
+	out := ExpandPermissionBuckets(map[string]string{
+		"memory":          "allow",
+		"engram_mem_save": "deny",
+	})
+	if out["engram_*"] != "allow" {
+		t.Errorf("bucket should still expand, got %q", out["engram_*"])
 	}
-	if !strings.Contains(md, "ywai-kanban_update_delegation: allow") {
-		t.Errorf("update_delegation must be whitelisted even when mcp is denied, got:\n%s", md)
-	}
-	// The mcp bucket was denied, so its broad kanban glob must be denied while
-	// the reporting tool keeps its narrow explicit allow.
-	if !strings.Contains(md, `"ywai-kanban_*": deny`) {
-		t.Error(`mcp:deny must render the broad "ywai-kanban_*" deny glob`)
+	if out["engram_mem_save"] != "deny" {
+		t.Errorf("explicit deny must survive the bucket, got %q", out["engram_mem_save"])
 	}
 }
 
@@ -1740,5 +1758,201 @@ func TestRemoveAgentsWithoutDescription(t *testing.T) {
 	// Nested file untouched.
 	if _, err := os.Stat(filepath.Join(dir, "core", "nested.md")); err != nil {
 		t.Error("nested .md should not be removed by the description sweep")
+	}
+}
+
+// Profiles are written before the install cleans retired MCP entries out of the
+// config, so expanding the "mcp" bucket straight from that config would grant a
+// dead server again on the very run meant to remove it.
+func TestMCPBucketSkipsRetiredServers(t *testing.T) {
+	restore := SetMCPServerResolver(func() []string {
+		return []string{"playwright", "ywai-kanban", "ywai-fastfs"}
+	})
+	defer restore()
+
+	for _, p := range mcpBucketPatterns() {
+		if p == "ywai-kanban_*" || p == "ywai-fastfs_*" {
+			t.Errorf("retired server %q was granted again", p)
+		}
+	}
+	found := false
+	for _, p := range mcpBucketPatterns() {
+		if p == "playwright_*" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("a live server must still be granted")
+	}
+}
+
+// A test suite that reports green while the behaviour is broken is the most
+// expensive failure this system can produce, and regenerating a snapshot is the
+// cheapest way for an agent under pressure to manufacture one. Prompt text does
+// not reliably stop it; a denied command does.
+func TestBashRendersAsAllowlistWithFalseGreenDenied(t *testing.T) {
+	md := BuildOpenCodeMarkdown("dev", AgentProfile{
+		Description: "dev", Prompt: "# Dev", Mode: "all",
+		Permission: map[string]string{"bash": "allow", "read": "allow"},
+	})
+
+	if !strings.Contains(md, "  bash:\n") {
+		t.Fatal("bash must render as a nested map so specific commands can be denied inside a general allow")
+	}
+	if !strings.Contains(md, `"*": allow`) {
+		t.Error("the general allow must survive — the agent still has to run its tests")
+	}
+	for _, denied := range []string{`"* -u": deny`, `"*--update-snapshot*": deny`, `"*tsc*--noEmitOnError*": deny`} {
+		if !strings.Contains(md, denied) {
+			t.Errorf("missing denial %s", denied)
+		}
+	}
+}
+
+func TestBashDenyStaysFlat(t *testing.T) {
+	// An agent with no bash at all needs no command allowlist; emitting one
+	// would imply it can run something.
+	md := BuildOpenCodeMarkdown("orchestrator", AgentProfile{
+		Description: "o", Prompt: "# O", Mode: "all",
+		Permission: map[string]string{"bash": "deny"},
+	})
+	if !strings.Contains(md, "  bash: deny\n") {
+		t.Error("a blanket bash deny should stay a single line")
+	}
+	if strings.Contains(md, "update-snapshot") {
+		t.Error("command denials under a blanket deny are noise")
+	}
+}
+
+// bash: verify is the Fusion-style main-agent shell: deny by default, allow
+// only git inspect + a small multi-lang test/lint set. The orchestrator must
+// be able to spot-check handoffs without gaining a write shell.
+func TestBashVerifyRendersAllowlist(t *testing.T) {
+	md := BuildOpenCodeMarkdown("orchestrator", AgentProfile{
+		Description: "o", Prompt: "# O", Mode: "all",
+		Permission: map[string]string{"bash": "verify", "read": "allow"},
+	})
+
+	if !strings.Contains(md, "  bash:\n") {
+		t.Fatal("verify bash must be a nested map")
+	}
+	if !strings.Contains(md, `"*": deny`) {
+		t.Error("verify mode must deny by default")
+	}
+	if strings.Contains(md, `"*": allow`) {
+		t.Error("verify mode must not grant blanket bash allow")
+	}
+	for _, allowed := range []string{
+		`"git diff*": allow`,
+		`"git status*": allow`,
+		`"git log*": allow`,
+		`"git show*": allow`,
+		`"go test*": allow`,
+		`"npm test*": allow`,
+		`"npm run lint*": allow`,
+		`"npm run build*": allow`,
+		`"dotnet test*": allow`,
+		`"pytest*": allow`,
+		`"python -m pytest*": allow`,
+		`"ruff check*": allow`,
+		`"mypy*": allow`,
+	} {
+		if !strings.Contains(md, allowed) {
+			t.Errorf("missing verify allow %s", allowed)
+		}
+	}
+	// Snapshot rewrites must stay blocked even when npm test is allowed.
+	if !strings.Contains(md, `"*--update-snapshot*": deny`) {
+		t.Error("false-green denials must still apply under verify")
+	}
+}
+
+// Code executors own the keyboard for edits, not the release button. Commit
+// and push stay with the review-then-commit path (orchestrator / user).
+func TestNoCommitAgentsDenyGitCommitPush(t *testing.T) {
+	for _, name := range []string{"dev", "qa-dev"} {
+		md := BuildOpenCodeMarkdown(name, AgentProfile{
+			Description: name, Prompt: "# x", Mode: "all",
+			Permission: map[string]string{"bash": "allow", "edit": "allow"},
+		})
+		for _, denied := range []string{
+			`"git commit*": deny`,
+			`"git push*": deny`,
+		} {
+			if !strings.Contains(md, denied) {
+				t.Errorf("%s missing denial %s", name, denied)
+			}
+		}
+	}
+
+	// devops may push/deploy; do not apply the no-commit pack there.
+	md := BuildOpenCodeMarkdown("devops", AgentProfile{
+		Description: "devops", Prompt: "# x", Mode: "all",
+		Permission: map[string]string{"bash": "allow"},
+	})
+	if strings.Contains(md, `"git commit*": deny`) {
+		t.Error("devops must not get the no-commit pack")
+	}
+}
+
+func TestClaudeAndPiMapVerifyBashToNoShell(t *testing.T) {
+	// OpenCode is the enforcement authority for nested bash; other hosts
+	// must not get a full shell when the profile says verify-only.
+	if got := claudeToolsString(map[string]string{"read": "allow", "bash": "verify"}); strings.Contains(got, "Bash") {
+		t.Errorf("claude must not expose Bash for bash:verify, got %q", got)
+	}
+	if got := piToolsString(map[string]string{"read": "allow", "bash": "verify"}); strings.Contains(got, "bash") {
+		t.Errorf("pi must not expose bash for bash:verify, got %q", got)
+	}
+}
+
+// Core orchestrator ships with bash: verify so install renders a nested
+// allowlist (spot-check only), not a write shell.
+func TestCoreOrchestratorBashIsVerify(t *testing.T) {
+	profiles, err := LoadProfiles("../../agents")
+	if err != nil {
+		t.Fatalf("LoadProfiles: %v", err)
+	}
+	p, ok := profiles["core/orchestrator"]
+	if !ok {
+		t.Fatal("core/orchestrator not found")
+	}
+	if p.Permission["bash"] != "verify" {
+		t.Fatalf("bash = %q, want verify", p.Permission["bash"])
+	}
+	md := BuildOpenCodeMarkdown("core/orchestrator", p)
+	if !strings.Contains(md, `"*": deny`) || !strings.Contains(md, `"git status*": allow`) {
+		t.Error("installed orchestrator markdown must render verify allowlist")
+	}
+}
+
+// The prompts of every coordinator tell it not to search — these make it true.
+// An orchestrator that CAN grep will grep, and then it is doing the subagent's
+// job with the subagent's context landing in the coordinator's window.
+func TestCoordinatorsCannotSearch(t *testing.T) {
+	profiles, err := LoadProfiles("../../agents")
+	if err != nil {
+		t.Fatalf("LoadProfiles: %v", err)
+	}
+	for _, name := range []string{
+		"core/orchestrator",
+		"core/planning",
+		"qa-automation/qa-orchestrator",
+		"social-refactor/migration-orchestrator",
+	} {
+		p, ok := profiles[name]
+		if !ok {
+			t.Errorf("%s not found", name)
+			continue
+		}
+		for _, tool := range []string{"glob", "grep"} {
+			if p.Permission[tool] != "deny" {
+				t.Errorf("%s: %s = %q, want deny — the rule must be mechanical, not advisory",
+					name, tool, p.Permission[tool])
+			}
+		}
+		if p.Permission["read"] != "allow" {
+			t.Errorf("%s: read must stay allowed — it reads handoffs and plan files", name)
+		}
 	}
 }

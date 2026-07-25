@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
 	Activity,
 	Book,
@@ -22,15 +22,31 @@ import type {
 	ProviderInfo,
 	OpenCodeConfig as OpenCodeConfigType,
 } from "../../api/types";
-import RoleDefaultsTab from "./RoleDefaultsTab";
-import ReferencesTab from "./ReferencesTab";
-import OrchestratorTab from "./OrchestratorTab";
-import ProfilesTab from "./ProfilesTab";
 import { NotificationsTab } from "./NotificationsTab";
 import SearchSelect from "../shared/SearchSelect";
 import ModelCombobox from "../missions/ModelCombobox";
 import Modal from "../shared/Modal";
 import "./Settings.css";
+
+// Heavy tabs: only pull their JS when the user opens them.
+const RoleDefaultsTab = lazy(() => import("./RoleDefaultsTab"));
+const ReferencesTab = lazy(() => import("./ReferencesTab"));
+const OrchestratorTab = lazy(() => import("./OrchestratorTab"));
+const ProfilesTab = lazy(() => import("./ProfilesTab"));
+
+function TabChunkFallback() {
+	return (
+		<div
+			aria-busy="true"
+			className="skeleton skel-card"
+			style={{ margin: "var(--space-4)" }}
+		>
+			<div className="skel-line title" />
+			<div className="skel-line desc" />
+			<div className="skel-line desc sm" />
+		</div>
+	);
+}
 
 type Tab =
 	| "general"
@@ -102,6 +118,25 @@ const TAB_IDS = TABS.map((t) => t.id);
 export default function Settings() {
 	const [activeTab, setActiveTab] = useUrlTab<Tab>("general", TAB_IDS);
 
+	// On enter: revalidate models (server cache kick) + warm common config
+	// payloads in parallel. Tabs still own their UI state; this only primes
+	// network caches so switching tabs / second visit feels instant.
+	useEffect(() => {
+		void missionsApi.listModels({ force: true }).catch(() => {});
+		void Promise.all([
+			configApi.getConfig().catch(() => null),
+			configApi.listAgents().catch(() => null),
+			configApi.getUserConfig().catch(() => null),
+			configApi.listVisionModels().catch(() => null),
+			configApi.getAgentsMd().catch(() => null),
+			configApi.getSddStatus().catch(() => null),
+			configApi.listTools().catch(() => null),
+			configApi.listSkills().catch(() => null),
+			configApi.listMCP().catch(() => null),
+			configApi.listProviders().catch(() => null),
+		]);
+	}, []);
+
 	return (
 		<div className="settings-page">
 			<header className="page-header">
@@ -129,16 +164,32 @@ export default function Settings() {
 
 			<div className="tab-content">
 				{activeTab === "general" && <GeneralTab />}
-				{activeTab === "roles" && <RoleDefaultsTab />}
+				{activeTab === "roles" && (
+					<Suspense fallback={<TabChunkFallback />}>
+						<RoleDefaultsTab />
+					</Suspense>
+				)}
 				{activeTab === "agents" && <AgentsTab />}
-				{activeTab === "orchestrator" && <OrchestratorTab />}
-				{activeTab === "profiles" && <ProfilesTab />}
+				{activeTab === "orchestrator" && (
+					<Suspense fallback={<TabChunkFallback />}>
+						<OrchestratorTab />
+					</Suspense>
+				)}
+				{activeTab === "profiles" && (
+					<Suspense fallback={<TabChunkFallback />}>
+						<ProfilesTab />
+					</Suspense>
+				)}
 				{activeTab === "skills" && <SkillsTab />}
 				{activeTab === "notifications" && <NotificationsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
 				{activeTab === "tools" && <ToolsTab />}
-				{activeTab === "references" && <ReferencesTab />}
+				{activeTab === "references" && (
+					<Suspense fallback={<TabChunkFallback />}>
+						<ReferencesTab />
+					</Suspense>
+				)}
 			</div>
 		</div>
 	);
@@ -150,8 +201,6 @@ function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [visionModel, setVisionModel] = useState("");
 	// Optional OpenAI-compatible vision provider override. Empty = use TokenBank.
-	const [visionProviderUrl, setVisionProviderUrl] = useState("");
-	const [visionProviderKey, setVisionProviderKey] = useState("");
 	const [agentList, setAgentList] = useState<string[]>([]);
 
 	const [models, setModels] = useState<ModelInfo[]>([]);
@@ -173,21 +222,20 @@ function GeneralTab() {
 	const [sddMessage, setSddMessage] = useState<string | null>(null);
 
 	useEffect(() => {
-		// listProviders() only returns providers declared in opencode.json (3-ish).
-		// missionsApi.listModels() asks opencode CLI which knows the full runtime
-		// list (github-copilot, openai, opencode, etc — 6+). Union both so the
-		// datalist offers everything the user can actually pick.
+		// Fast path only: local config + agents + vision catalog. Never block
+		// first paint on missionsApi.listModels() — that shells out to
+		// `opencode models` (multi-second cold start). Model pickers fill in
+		// once the slow catalog arrives (see second effect below).
 		Promise.all([
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => [] as { name: string }[]),
-			missionsApi.listModels().catch(() => null),
 			configApi.getUserConfig().catch(() => null),
 			configApi.listVisionModels().catch((e: Error) => ({
 				models: [] as Array<{ id: string; name: string }>,
 				current: undefined as string | undefined,
 				error: e?.message ?? "failed to load vision models",
 			})),
-		]).then(([cfg, agents, modelsRes, userCfg, visionRes]) => {
+		]).then(([cfg, agents, userCfg, visionRes]) => {
 			if (cfg) {
 				// opencode.json stores these keys in snake_case; the UI reads
 				// camelCase. Bridge them on load so saved values reappear.
@@ -206,14 +254,7 @@ function GeneralTab() {
 				("current" in (visionRes ?? {}) ? visionRes?.current : undefined) ||
 				"";
 			setVisionModel(preferred ?? "");
-			setVisionProviderUrl(userCfg?.vision_provider_url ?? "");
-			setVisionProviderKey(userCfg?.vision_provider_api_key ?? "");
 			setAgentList((agents ?? []).map((a) => a.name));
-			setModels(
-				modelsRes
-					? Object.values(modelsRes.modelsByProvider ?? {}).flat()
-					: [],
-			);
 			const vModels = (visionRes?.models ?? []).map((m) => ({
 				id: m.id,
 				name: m.name || m.id,
@@ -223,6 +264,20 @@ function GeneralTab() {
 			setVisionModelsError(visionRes?.error ?? null);
 			setLoading(false);
 		});
+
+		// Models: paint from client/server cache immediately, then revalidate
+		// in parallel (force kicks CLI refresh server-side without blocking).
+		const applyModels = (modelsRes: Awaited<
+			ReturnType<typeof missionsApi.listModels>
+		> | null) => {
+			if (!modelsRes) return;
+			setModels(Object.values(modelsRes.modelsByProvider ?? {}).flat());
+		};
+		missionsApi.listModels().then(applyModels).catch(() => {});
+		missionsApi
+			.listModels({ force: true })
+			.then(applyModels)
+			.catch(() => {});
 
 		// Load AGENTS.md
 		configApi
@@ -280,8 +335,6 @@ function GeneralTab() {
 				// Clear override so Settings is the single source of truth
 				vision_model_override: "",
 				// Optional OpenAI-compatible provider override (empty = TokenBank)
-				vision_provider_url: visionProviderUrl.trim(),
-				vision_provider_api_key: visionProviderKey.trim(),
 			});
 
 			setMessage("Saved successfully");
@@ -432,8 +485,8 @@ function GeneralTab() {
 				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
 					When the chat model cannot see images (e.g. DeepSeek), the vision-bridge
 					plugin analyzes attached images with a vision model and injects the text
-					for the chat model. Defaults to TokenBank; set a provider below to use any
-					OpenAI-compatible endpoint instead.
+					for the chat model. The image is analyzed through OpenCode, so any model
+					OpenCode knows works — no separate endpoint or API key needed.
 				</span>
 			</div>
 
@@ -452,7 +505,8 @@ function GeneralTab() {
 				)}
 				{!visionModelsError && visionModels.length === 0 && (
 					<span className="field-hint" style={{ display: "block", marginTop: "0.35rem" }}>
-						No vision models loaded. Configure TokenBank or type a model id.
+						No vision-capable models found in your OpenCode providers. Type a
+						model id as provider/model.
 					</span>
 				)}
 				<button
@@ -464,38 +518,6 @@ function GeneralTab() {
 				>
 					Use catalog default
 				</button>
-			</div>
-
-			{/* Optional provider override — any OpenAI-compatible endpoint */}
-			<div className="field span-2">
-				<label className="field-label" htmlFor="cfg-vision-provider-url">
-					Vision provider URL (optional)
-				</label>
-				<span className="field-hint">
-					OpenAI-compatible base URL. Leave empty to use TokenBank. With a custom
-					provider you must type the vision model id above (no auto-listing).
-				</span>
-				<input
-					id="cfg-vision-provider-url"
-					className="input mono"
-					type="text"
-					placeholder="https://api.openai.com/v1"
-					value={visionProviderUrl}
-					onChange={(e) => setVisionProviderUrl(e.target.value)}
-				/>
-			</div>
-			<div className="field span-2">
-				<label className="field-label" htmlFor="cfg-vision-provider-key">
-					Vision provider API key (optional)
-				</label>
-				<input
-					id="cfg-vision-provider-key"
-					className="input mono"
-					type="password"
-					placeholder="sk-…"
-					value={visionProviderKey}
-					onChange={(e) => setVisionProviderKey(e.target.value)}
-				/>
 			</div>
 
 			{message && (

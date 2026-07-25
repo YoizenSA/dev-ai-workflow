@@ -68,7 +68,7 @@ func (wf *Workflow) countByType() map[string]int {
 }
 
 // hasCycle reports whether the workflow graph contains a cycle, via DFS.
-// Mirrors kanban.Store.HasCycle but operates over the static workflow graph.
+// Operates over the static workflow graph.
 func (wf *Workflow) hasCycle() bool {
 	adj := wf.adjacency()
 

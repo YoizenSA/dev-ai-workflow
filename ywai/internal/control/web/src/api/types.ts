@@ -1,94 +1,3 @@
-// ─── Kanban Types ──────────────────────────────────────────────────────────
-
-export interface Session {
-  id: string
-  project: string
-  goal: string
-  status: 'active' | 'closed'
-  created_at: string
-}
-
-export type DelegationStatus =
-  | 'pending'
-  | 'running'
-  | 'review'
-  | 'changes'
-  | 'blocked'
-  | 'done'
-
-export type DelegationColumn =
-  | 'backlog'
-  | 'ready'
-  | 'in_progress'
-  | 'review'
-  | 'done'
-
-export interface Delegation {
-  id: string
-  session_id: string
-  agent: 'dev' | 'qa' | 'reviewer' | 'architect' | 'devops'
-  task_summary: string
-  status: DelegationStatus
-  column: DelegationColumn
-  dependencies: string[]
-  created_at: string
-  started_at?: string | null
-  completed_at?: string | null
-  handoff?: string
-  handoff_preview?: string
-  blocker?: string
-  pending_action?: boolean
-  latest_activity?: string
-}
-
-export type ActivityType = 'progress' | 'decision' | 'question' | 'blocked'
-
-export interface ActivityEvent {
-  id: string
-  delegation_id: string
-  type: ActivityType
-  content: string
-  options?: string[]
-  resolution?: string
-  created_at: string
-  resolved_at?: string | null
-}
-
-export interface BoardUpdate {
-  type: string
-  payload: unknown
-}
-
-export interface BoardView {
-  backlog: Delegation[]
-  ready: Delegation[]
-  in_progress: Delegation[]
-  review: Delegation[]
-  done: Delegation[]
-}
-
-export interface GraphNode {
-  id: string
-  label: string
-  status: string
-  agent: string
-  task_summary: string
-  column: string
-  handoff_preview?: string
-  pending_action?: boolean
-}
-
-export interface GraphEdge {
-  from: string
-  to: string
-}
-
-export interface GraphView {
-  session: Session
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-}
-
 // ─── Missions Types ────────────────────────────────────────────────────────
 
 export type MissionStatus =
@@ -401,8 +310,6 @@ export interface UserConfig {
   role_defaults?: RoleDefaults
   vision_model?: string
   vision_model_override?: string
-  vision_provider_url?: string
-  vision_provider_api_key?: string
 }
 
 // ─── Memories Types ──────────────────────────────────────────────────────────
@@ -601,6 +508,8 @@ export interface OrchestratorProfile {
 }
 
 export interface OrchestratorProfilesResponse {
+  /** Profiles ywai owns and rewrites on every install; edits to these do not survive. */
+  shipped?: string[];
   profiles: Record<string, OrchestratorProfile>;
   active: string;
 }
@@ -652,6 +561,10 @@ export interface WorkflowNodeData {
 	name?: string;
 	description?: string;
 	agentDefinition?: string;
+	/** Link to a real agent under agents/ ("core/architect"). When set and
+	 *  agentDefinition is empty, the exporter resolves the prompt from that
+	 *  AGENT.md, so the node tracks the agent instead of freezing a copy. */
+	agentRef?: string;
 	prompt?: string;
 	agentType?: string;
 	tools?: string;

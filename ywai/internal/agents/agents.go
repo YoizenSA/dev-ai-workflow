@@ -182,7 +182,7 @@ func promptWithSkills(prompt string, skills []string) string {
 }
 
 // extractSections parses the `sections:` field from YAML frontmatter.
-// Returns a slice of section names (e.g. ["handoff", "kanban"]).
+// Returns a slice of section names (e.g. ["handoff", "context-gathering"]).
 func extractSections(prompt string) []string {
 	if !strings.HasPrefix(prompt, "---") {
 		return nil
@@ -196,7 +196,7 @@ func extractSections(prompt string) []string {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "sections:") {
 			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "sections:"))
-			// Parse YAML array: [handoff, kanban]
+			// Parse YAML array: [handoff, context-gathering]
 			value = strings.Trim(value, "[]")
 			if value == "" {
 				return nil

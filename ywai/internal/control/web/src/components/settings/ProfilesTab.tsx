@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, Check, Save, Plus, Search, Zap } from "lucide-react";
+import { RefreshCw, Check, Save, Plus, Search, Zap, AlertTriangle } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
 import ModelCombobox from "../missions/ModelCombobox";
@@ -51,6 +51,10 @@ export default function ProfilesTab() {
 	}, []);
 
 	const activeProfile = data?.active ?? "";
+	// Editing one of these is allowed but does not last: install rewrites them so
+	// they pick up newly added agents. Saying so beforehand costs a line; finding
+	// out afterwards costs the edit.
+	const isShipped = (data?.shipped ?? []).includes(activeProfile);
 	const currentProfile: OrchestratorProfile | null =
 		data && data.profiles[activeProfile] ? data.profiles[activeProfile] : null;
 
@@ -148,8 +152,11 @@ export default function ProfilesTab() {
 			.finally(() => setResyncing(false));
 	};
 
+	// An empty modelId is a real choice, not a missing one: it clears the
+	// per-agent override so the agent follows the lead model. Only an empty
+	// target list is a no-op.
 	const applyModelToAgents = (modelId: string, names: string[]) => {
-		if (!modelId || names.length === 0) return;
+		if (names.length === 0) return;
 		setDraft((prev) => {
 			const next = { ...prev };
 			for (const name of names) {
@@ -313,8 +320,33 @@ export default function ProfilesTab() {
 							{GROUP_LABELS[g] ?? g}
 						</button>
 					))}
+					{/* Clearing a model is not the same action as setting one: it needs no
+					    selection, and it is the way back to "whatever the lead agent uses"
+					    after experimenting. Kept separate so it cannot fire by accident. */}
+					<button
+						type="button"
+						className="btn btn-sm btn-ghost"
+						disabled={allAgentNames.length === 0}
+						title="Clear every per-agent model so each one follows the lead agent"
+						onClick={() => applyModelToAgents("", allAgentNames)}
+					>
+						Inherit everywhere
+					</button>
 				</div>
 			</div>
+
+			{isShipped && (
+				<div
+					className="field-help"
+					style={{ marginBottom: "0.85rem", display: "flex", gap: "0.4rem", alignItems: "flex-start" }}
+				>
+					<AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+					<span>
+						<strong>{activeProfile}</strong> ships with ywai and is rewritten on every install, so it
+						picks up new agents. To keep changes, save them under a new profile name.
+					</span>
+				</div>
+			)}
 
 			{/* Agent filter */}
 			<div style={{ marginBottom: "1rem" }}>

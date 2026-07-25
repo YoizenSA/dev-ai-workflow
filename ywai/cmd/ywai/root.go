@@ -549,9 +549,12 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			continue
 		}
 
-		// Install kanban MCP (always, required for orchestrator)
-		if err := plugins.InstallKanbanMCP(configPath, a.Name); err != nil {
-			fmt.Printf("  [%s] Warning: failed to install ywai-kanban MCP: %v\n", a.Name, err)
+		// Drop MCP servers ywai used to install and has since removed, so the
+		// agent stops advertising tools whose backing command is gone.
+		if removed, err := plugins.RemoveRetiredMCPs(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to remove retired MCPs: %v\n", a.Name, err)
+		} else if len(removed) > 0 {
+			fmt.Printf("  [%s] Removed retired MCP(s): %s\n", a.Name, strings.Join(removed, ", "))
 		}
 
 		// Remove legacy mcp-vision MCP (replaced by vision-bridge plugin).
@@ -569,6 +572,19 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
 			if err := plugins.InstallVisionBridge(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install vision-bridge plugin: %v\n", a.Name, err)
+			}
+
+			// advisor: a second model reviews each turn and injects notes the
+			// agent can weigh. Inert until advisor_enabled + advisor_model are
+			// set, so installing the bundle costs nothing by itself.
+			if err := plugins.InstallAdvisor(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install advisor plugin: %v\n", a.Name, err)
+			} else if a.Name == "opencode" {
+				// The /advisor command only works where the plugin's tools are
+				// registered, so it ships with the plugin and only for opencode.
+				if err := plugins.InstallAdvisorCommand(config.OpenCodeCommandsDir()); err != nil {
+					fmt.Printf("  [%s] Warning: failed to install /advisor command: %v\n", a.Name, err)
+				}
 			}
 
 			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
@@ -685,6 +701,25 @@ func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
 	}
 }
 
+// managedDefaultAgents are the default_agent values ywai may replace with its
+// own orchestrator: OpenCode's built-ins ("build" is what a fresh install
+// lands on, "plan" its sibling), ywai's own profile, and the one gentle-ai
+// auto-sets. None of these represents a deliberate choice by the user.
+//
+// Any other value does, so install leaves it alone — silently redirecting
+// someone's default agent changes what every new session runs.
+var managedDefaultAgents = map[string]bool{
+	"":                    true,
+	"build":               true,
+	"plan":                true,
+	"orchestrator":        true,
+	"gentle-orchestrator": true,
+}
+
+func isManagedDefaultAgent(name string) bool {
+	return managedDefaultAgents[strings.TrimSpace(name)]
+}
+
 func setDefaultAgent(agentName string, dryRun bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -723,12 +758,20 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 		return fmt.Errorf("parsing opencode.json: %w", err)
 	}
 
-	// Respect a user's explicit choice, but never leave gentle-ai's auto-set
-	// "gentle-orchestrator" as the default — ywai owns orchestration and always
-	// points the default at its own orchestrator profile.
-	if cur, ok := cfg["default_agent"]; ok && cur != "gentle-orchestrator" {
-		fmt.Printf("  default_agent already set to %q\n", cur)
-		return nil
+	// Only claim the default when it is still one nobody deliberately picked:
+	// OpenCode's own built-ins, ywai's own profile, or the one gentle-ai
+	// auto-sets. Anything else is the user's decision and is left untouched —
+	// overwriting it would silently redirect every session they start.
+	if cur, ok := cfg["default_agent"]; ok {
+		name, _ := cur.(string)
+		if !isManagedDefaultAgent(name) {
+			fmt.Printf("  default_agent already set to %q — leaving it\n", name)
+			return nil
+		}
+		if name == agentName {
+			fmt.Printf("  default_agent already %q\n", name)
+			return nil
+		}
 	}
 
 	cfg["default_agent"] = agentName

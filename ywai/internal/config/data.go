@@ -27,6 +27,10 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // that auto-routes images through TokenBank vision for text-only models.
 const VisionBridgeBundleName = "vision-bridge.js"
 
+// AdvisorBundleName is the filename of the advisor opencode plugin: a second
+// model that reviews each turn and injects notes the agent can weigh.
+const AdvisorBundleName = "advisor.js"
+
 // TuiLogoBundleName is the filename of the ywai TUI logo plugin, both in the
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
@@ -342,6 +346,47 @@ func VisionBridgeBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// AdvisorCommandPath resolves the /advisor slash command markdown that ships
+// with the advisor plugin.
+func AdvisorCommandPath() (string, error) {
+	src := filepath.Join(PluginsSourceDir(), "advisor", "command", "advisor.md")
+	if _, err := os.Stat(src); err == nil {
+		return src, nil
+	}
+	seeded := filepath.Join(DataPluginsDir(), "advisor.md")
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+	return "", fmt.Errorf("advisor command markdown not found")
+}
+
+// AdvisorBundlePath resolves the path to the bundled advisor plugin JS.
+// Same resolution order as VisionBridgeBundlePath.
+func AdvisorBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "advisor", "dist", AdvisorBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), AdvisorBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("advisor plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 // TuiLogoBundlePath resolves the path to the ywai TUI logo plugin source. It

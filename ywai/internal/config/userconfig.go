@@ -97,17 +97,26 @@ type UserConfig struct {
 	// OrchestratorProfiles contains user-overridable model profiles for orchestrator roles.
 	OrchestratorProfiles map[string]OrchestratorModelProfile `yaml:"orchestrator_profiles,omitempty" json:"orchestrator_profiles,omitempty"`
 
-	// VisionModel is the default vision model used by vision-bridge.
+	// VisionModel is the default vision model used by vision-bridge. It is any
+	// model OpenCode knows, as "provider/model" or a bare model id resolved
+	// against OpenCode's catalog. Empty means "first vision-capable model".
+	// vision-bridge prompts it through OpenCode, so no endpoint or key is
+	// configured here.
 	VisionModel string `yaml:"vision_model,omitempty" json:"vision_model,omitempty"`
 
 	// VisionModelOverride, when set, overrides VisionModel for vision-bridge calls.
 	VisionModelOverride string `yaml:"vision_model_override,omitempty" json:"vision_model_override,omitempty"`
 
-	// VisionProviderURL / VisionProviderAPIKey optionally point vision-bridge at
-	// any OpenAI-compatible endpoint instead of TokenBank. When empty, vision-bridge
-	// falls back to TokenBankURL / TokenBankAPIKey (the default provider).
-	VisionProviderURL    string `yaml:"vision_provider_url,omitempty" json:"vision_provider_url,omitempty"`
-	VisionProviderAPIKey string `yaml:"vision_provider_api_key,omitempty" json:"vision_provider_api_key,omitempty"`
+	// AdvisorEnabled turns on the advisor plugin: a second model that reviews
+	// each turn and injects a note when it has something concrete. Off by
+	// default — it is a second model call per reviewed turn.
+	AdvisorEnabled bool `yaml:"advisor_enabled,omitempty" json:"advisor_enabled,omitempty"`
+
+	// AdvisorModel is the model the advisor runs on, as "provider/model". A bare
+	// id is rejected rather than guessed: reviewing on an unintended model is
+	// both a wrong review and an unexpected bill. Empty keeps the advisor off
+	// regardless of AdvisorEnabled.
+	AdvisorModel string `yaml:"advisor_model,omitempty" json:"advisor_model,omitempty"`
 }
 
 // ServerConfig contains configuration for the control server
@@ -200,9 +209,7 @@ func (c *UserConfig) ensureDefaults() {
 	if c.RoleDefaults == nil {
 		c.RoleDefaults = DefaultRoleDefaults()
 	}
-	if c.OrchestratorProfiles == nil {
-		c.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
-	}
+	c.OrchestratorProfiles = mergeShippedProfiles(c.OrchestratorProfiles)
 	if c.ActiveOrchestratorProfile == "" {
 		c.ActiveOrchestratorProfile = DefaultOrchestratorModelProfileName
 	}
@@ -211,6 +218,40 @@ func (c *UserConfig) ensureDefaults() {
 	}
 	// VisionModel stays empty when unset so vision-bridge can pick from
 	// TokenBank's live catalog instead of a hardcoded product default.
+}
+
+// mergeShippedProfiles restores the profiles ywai ships and keeps everything
+// else the user has.
+//
+// The shipped profiles (balanced, fast, deep) are product defaults, not user
+// data: they gain agents as agents are added, and a stale copy silently omits
+// them. Previously they were written once, on a config that had none, so any
+// later change to the defaults never reached an existing install.
+//
+// Editing one in the UI therefore does not stick across an install. That is the
+// intended trade: a custom setup is a profile of your own, under a name we do
+// not ship, and those are never touched.
+func mergeShippedProfiles(current map[string]OrchestratorModelProfile) map[string]OrchestratorModelProfile {
+	shipped := DefaultOrchestratorModelProfiles()
+	if current == nil {
+		return shipped
+	}
+	out := make(map[string]OrchestratorModelProfile, len(current)+len(shipped))
+	for name, profile := range current {
+		out[name] = profile
+	}
+	for name, profile := range shipped {
+		out[name] = profile
+	}
+	return out
+}
+
+// IsShippedProfile reports whether a profile name is one ywai owns and
+// overwrites on every install. The UI uses it to warn before an edit that will
+// not survive.
+func IsShippedProfile(name string) bool {
+	_, ok := DefaultOrchestratorModelProfiles()[name]
+	return ok
 }
 
 // GetVisionModel returns the configured vision model preference (override wins),

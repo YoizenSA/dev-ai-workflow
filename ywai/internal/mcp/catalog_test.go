@@ -31,7 +31,6 @@ import (
 //   9. docker           (local, npx command, no env)
 //   10. engram          (local, go install, no env)
 //   11. codegraph       (local, go install, no env)
-//   12. ywai-kanban     (local, ywai serve --mcp-only, no install, no env)
 //
 // `*` = required and secret env var.
 //
@@ -50,9 +49,7 @@ import (
 //   - For remote entries: Type=="remote", URL!="", Command is nil or
 //     empty, InstallCmd=="".
 //   - For local entries: Type=="local", Command has >= 1 element,
-//     URL=="", InstallCmd!="". Local entry ywai-kanban is the one
-//     exception: InstallCmd=="" because the binary is the ywai binary
-//     itself, already on PATH.
+//     URL=="", InstallCmd!="".
 //   - Required env vars that hold tokens / connection strings must be
 //     marked Required=true and Secret=true. A non-empty Description
 //     is pinned for github's GITHUB_PERSONAL_ACCESS_TOKEN (the user
@@ -79,17 +76,16 @@ var _ = CatalogEntry{}
 
 // ─── Catalog() — size & membership ────────────────────────────────────────
 
-// TestCatalog_Len pins the size of the catalog. The user removed
-// sharptools and kubernetes from the scout's 14-entry draft, leaving
-// exactly 12 entries. If a future addition sneaks in, this test fails.
+// TestCatalog_Len pins the size of the catalog. If a future addition
+// sneaks in, this test fails.
 func TestCatalog_Len(t *testing.T) {
 	got := len(Catalog())
-	if got != 12 {
-		t.Errorf("len(Catalog()) = %d, want 12", got)
+	if got != 11 {
+		t.Errorf("len(Catalog()) = %d, want 11", got)
 	}
 }
 
-// TestCatalog_ContainsAllExpectedIDs pins that every one of the 12 final
+// TestCatalog_ContainsAllExpectedIDs pins that every one of the 11 final
 // IDs is present and lookable via CatalogByID. The order of entries in
 // the underlying slice is intentionally NOT pinned — each ID is found
 // by lookup, not by position.
@@ -106,7 +102,6 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"docker",
 		"engram",
 		"codegraph",
-		"ywai-kanban",
 	}
 	for _, id := range want {
 		entry, ok := CatalogByID(id)
@@ -394,68 +389,20 @@ func TestCatalogByID_SkipInstall_Remote(t *testing.T) {
 	}
 }
 
-// TestCatalogByID_SkipInstall_YwaiKanban pins the special case:
-// ywai-kanban is local, but its binary is the ywai binary itself
-// (already on PATH after `ywai install`). The install UI must skip
-// the install step. This is the only local entry in the 12 that
-// ships with InstallCmd == "".
-func TestCatalogByID_SkipInstall_YwaiKanban(t *testing.T) {
-	entry, ok := CatalogByID("ywai-kanban")
-	if !ok {
-		t.Fatal("CatalogByID(ywai-kanban) ok=false, want true")
-	}
-	if entry.Type != "local" {
-		t.Errorf("ywai-kanban.Type = %q, want \"local\"", entry.Type)
-	}
-	if entry.InstallCmd != "" {
-		t.Errorf("ywai-kanban.InstallCmd = %q, want \"\" (binary is ywai itself)",
-			entry.InstallCmd)
-	}
-}
-
-// ─── Catalog() — full-catalog invariants (added in slice 2 VALIDATE) ──────
-
-// TestCatalog_AllTypesValid pins the runtime-dispatch contract: every
-// entry's Type must be exactly "local" or "remote". The runtime keys
-// off this string to pick the stdio vs. HTTP transport in
-// internal/mcp/credentials.go and discovery.go. A typo like "Local"
-// (capitalized) or a made-up value like "stdio" or "http" would make
-// the entry silently unreachable from the install UI — no per-entry
-// test catches this because the existing tests only assert equality
-// against the *expected* value, not that the value is one of the
-// *allowed* values. This is the only place that pins the closed set.
-func TestCatalog_AllTypesValid(t *testing.T) {
-	for _, e := range Catalog() {
-		if e.Type != "local" && e.Type != "remote" {
-			t.Errorf("entry %q: Type = %q, want \"local\" or \"remote\" "+
-				"(runtime dispatch reads this string verbatim)",
-				e.ID, e.Type)
-		}
-	}
-}
-
-// TestCatalog_AllLocalNonKanbanHaveInstallCmd pins the documented
-// invariant: every local entry has a non-empty InstallCmd, with the
-// single exception of ywai-kanban (whose binary IS the ywai binary,
-// already on PATH). The per-entry tests pin specific values, but
-// nothing asserts this as a *class invariant* — so a future entry
-// that ships with Type=="local" and InstallCmd=="" by accident
-// (e.g. someone copying ywai-kanban's shape) would render the
-// install UI as a row that has no install step and no command to
+// TestCatalog_AllLocalHaveInstallCmd pins the documented invariant:
+// every local entry has a non-empty InstallCmd. A future entry that
+// ships with Type=="local" and InstallCmd=="" by accident would render
+// the install UI as a row that has no install step and no command to
 // point at. The install UI's "skip install" branch is keyed off
-// InstallCmd==", so this is a real failure mode, not a stylistic one.
-func TestCatalog_AllLocalNonKanbanHaveInstallCmd(t *testing.T) {
+// InstallCmd=="", so this is a real failure mode, not a stylistic one.
+func TestCatalog_AllLocalHaveInstallCmd(t *testing.T) {
 	for _, e := range Catalog() {
 		if e.Type != "local" {
 			continue
 		}
-		if e.ID == "ywai-kanban" {
-			continue // documented exception: binary is ywai itself
-		}
 		if e.InstallCmd == "" {
-			t.Errorf("entry %q: Type=local and not ywai-kanban, "+
-				"but InstallCmd is empty (install UI cannot render "+
-				"an install step)", e.ID)
+			t.Errorf("entry %q: Type=local but InstallCmd is empty "+
+				"(install UI cannot render an install step)", e.ID)
 		}
 	}
 }

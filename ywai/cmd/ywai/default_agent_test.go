@@ -19,7 +19,14 @@ func TestSetDefaultAgent(t *testing.T) {
 		{"no config file", nil, "orchestrator"},
 		{"empty config", map[string]any{}, "orchestrator"},
 		{"overrides gentle-orchestrator", map[string]any{"default_agent": "gentle-orchestrator"}, "orchestrator"},
+		// OpenCode's own built-ins: a fresh install sits on "build", which is
+		// nobody's deliberate choice, so ywai may claim it.
+		{"claims opencode build default", map[string]any{"default_agent": "build"}, "orchestrator"},
+		{"claims opencode plan default", map[string]any{"default_agent": "plan"}, "orchestrator"},
+		{"keeps orchestrator", map[string]any{"default_agent": "orchestrator"}, "orchestrator"},
 		{"respects user choice", map[string]any{"default_agent": "dev"}, "dev"},
+		{"respects a custom agent", map[string]any{"default_agent": "my-agent"}, "my-agent"},
+		{"respects another ywai agent", map[string]any{"default_agent": "designer"}, "designer"},
 	}
 
 	for _, tc := range cases {
@@ -54,5 +61,31 @@ func TestSetDefaultAgent(t *testing.T) {
 				t.Fatalf("default_agent = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// default_agent decides what runs in every new OpenCode session. Install may
+// claim it only when it still holds a value nobody chose on purpose; taking
+// over a user's own pick would silently redirect all their work.
+func TestIsManagedDefaultAgent(t *testing.T) {
+	claimable := []string{
+		"",                    // never set
+		"build",               // OpenCode's out-of-the-box default
+		"plan",                // its sibling built-in
+		"orchestrator",        // ywai's own
+		"gentle-orchestrator", // auto-set by gentle-ai
+		"  build  ",           // whitespace must not defeat the check
+	}
+	for _, name := range claimable {
+		if !isManagedDefaultAgent(name) {
+			t.Errorf("isManagedDefaultAgent(%q) = false; install would leave a default nobody picked", name)
+		}
+	}
+
+	userChosen := []string{"dev", "ask", "architect", "designer", "my-agent", "qa-orchestrator", "Build"}
+	for _, name := range userChosen {
+		if isManagedDefaultAgent(name) {
+			t.Errorf("isManagedDefaultAgent(%q) = true; install would overwrite the user's choice", name)
+		}
 	}
 }

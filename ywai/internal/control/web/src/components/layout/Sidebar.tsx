@@ -7,7 +7,6 @@ import {
 	Cloud,
 	FolderKanban,
 	Heart,
-	LayoutGrid,
 	LineChart,
 	MessageSquare,
 	PanelLeftClose,
@@ -16,8 +15,6 @@ import {
 	Store,
 	Workflow,
 } from "lucide-react";
-import { useKanbanStore } from "../../stores/kanbanStore";
-import { useMissionsStore } from "../../stores/missionsStore";
 import { ThemeToggle } from "../shared/ThemeToggle";
 import { VersionUpdate } from "./VersionUpdate";
 
@@ -28,18 +25,8 @@ interface SidebarProps {
 	onToggleCollapse?: () => void;
 }
 
+// Core nav (excludes Azure DevOps, rendered after the Beta group).
 const NAV_ITEMS = [
-	{
-		path: "/",
-		label: "Kanban",
-		icon: <LayoutGrid size={20} />,
-	},
-	// ponytail: missions hidden — use kanban board instead
-	// {
-	// 	path: "/missions",
-	// 	label: "Missions",
-	// 	icon: <Sparkles size={20} />,
-	// },
 	{
 		path: "/workflows",
 		label: "Workflows",
@@ -93,15 +80,9 @@ const BETA_ITEMS = [
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
 	const [betaOpen, setBetaOpen] = useState(false);
 	const location = useLocation();
-	const sessionCount = useKanbanStore(
-		(s) => (s.sessions ?? []).filter((sess) => sess.status === "active").length,
-	);
-	const activeMissions = useMissionsStore(
-		(s) =>
-			(Array.isArray(s.missions) ? s.missions : []).filter(
-				(m) => !["completed", "cancelled", "failed"].includes(m.status),
-			).length,
-	);
+	// Core items before ADO; ADO stays after the Beta group.
+	const coreNav = NAV_ITEMS.slice(0, -1);
+	const adoNav = NAV_ITEMS.slice(-1);
 
 	return (
 		<aside className={`sidebar${open ? " open" : ""}`}>
@@ -127,14 +108,8 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 			{/* Navigation */}
 			<nav className="nav">
 				<span className="nav-section-label">CORE</span>
-				{NAV_ITEMS.slice(0, 6).map((item) => {
+				{coreNav.map((item) => {
 					const isActive = location.pathname === item.path;
-					const badge =
-						item.path === "/"
-							? sessionCount
-							: item.path === "/missions"
-								? activeMissions
-								: 0;
 
 					return (
 						<Link
@@ -145,7 +120,6 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 						>
 							{item.icon}
 							<span className="nav-label">{item.label}</span>
-							{badge > 0 && <span className="nav-badge">{badge}</span>}
 						</Link>
 					);
 				})}
@@ -181,7 +155,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 			</div>
 
 			{/* ADO standalone */}
-			{NAV_ITEMS.slice(6).map((item) => {
+			{adoNav.map((item) => {
 				const isActive = location.pathname === item.path;
 				return (
 					<Link

@@ -1,0 +1,332 @@
+{
+  "id": "goal",
+  "name": "goal",
+  "description": "Goal delivery: plan -> design -> implement -> QA exploratory (summary, Gherkin ticket, QA review, fix) -> review.",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "g-signoff",
+      "type": "group",
+      "name": "SIGN-OFF",
+      "position": {
+        "x": 1954,
+        "y": 196
+      },
+      "data": {
+        "label": "SIGN-OFF",
+        "width": 332,
+        "height": 440
+      }
+    },
+    {
+      "id": "g-plan",
+      "type": "group",
+      "name": "PLANNING",
+      "position": {
+        "x": 274,
+        "y": 206
+      },
+      "data": {
+        "label": "PLANNING",
+        "width": 332,
+        "height": 820
+      }
+    },
+    {
+      "id": "g-impl",
+      "type": "group",
+      "name": "IMPLEMENTATION",
+      "position": {
+        "x": 1154,
+        "y": 206
+      },
+      "data": {
+        "label": "IMPLEMENTATION",
+        "width": 332,
+        "height": 650
+      }
+    },
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "position": {
+        "x": 60,
+        "y": 520
+      },
+      "data": {
+        "label": "Feature request",
+        "description": "Technical lead orchestrating the feature delivery cycle.",
+        "agentDefinition": "You are the technical lead orchestrating this workflow. You own the goal, not the keyboard: you decompose the work, delegate each step to the specialist sub-agents in the flow below, read every handoff, and decide the next step. You never write code, tests, or infra yourself.\n\nPrinciples:\n- Own the outcome: keep the goal and acceptance criteria visible across the whole run.\n- Delegate, don't do: every implementation/test/review/infra step goes to its sub-agent via the `task` tool.\n- One clear brief per delegation: objective + context + acceptance criteria + expected artifacts.\n- Close the loop: read each handoff, update the plan, then start the next step.\n- Ask when it branches the plan: use the `question` tool for decisions that change the path.\n\nFollow the flow below in order; do not skip steps.",
+        "model": "inherit"
+      }
+    },
+    {
+      "id": "finder",
+      "type": "subAgent",
+      "name": "finder",
+      "parentId": "g-plan",
+      "position": {
+        "x": 26,
+        "y": 54
+      },
+      "data": {
+        "name": "finder",
+        "description": "Codebase exploration. Locates files, symbols and patterns the feature touches.",
+        "agentRef": "core/finder",
+        "prompt": "Explore the codebase using codegraph and context7. Report a concise map: affected files, patterns, constraints, risks.",
+        "tools": "read, grep, glob, codegraph_*, context7_*, engram_*",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "architect",
+      "type": "subAgent",
+      "name": "architect",
+      "parentId": "g-plan",
+      "position": {
+        "x": 26,
+        "y": 244
+      },
+      "data": {
+        "name": "architect",
+        "description": "Architecture & design from the finder's map.",
+        "agentRef": "core/architect",
+        "prompt": "Design the implementation approach from the finder's map: chosen design, trade-offs, acceptance criteria. Then use the `codebase-design` skill to turn it into an implementation plan split into frontend / backend / infrastructure slices the dev agents can pick up independently.\n\nSkills available (use the `skill` tool): adr-skill, codebase-design, improve-codebase-architecture.",
+        "tools": "read, grep, glob, codegraph_*, context7_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "designer",
+      "type": "subAgent",
+      "name": "designer",
+      "parentId": "g-plan",
+      "position": {
+        "x": 26,
+        "y": 434
+      },
+      "data": {
+        "name": "designer",
+        "description": "UI/UX spec and accessibility review for the approved approach.",
+        "agentRef": "core/designer",
+        "prompt": "From the architect's technical plan, produce the implementable UI spec for the frontend slice: states (default, hover, focus, active, disabled, loading, empty, error), responsive behaviour per breakpoint, exact design tokens rather than raw hex/px, which existing components to reuse, and the accessibility semantics (roles, accessible names, focus order, what changes announce). Read-only — @frontend implements it. Skip with a one-line note if the feature has no UI.",
+        "tools": "read, grep, glob, codegraph_*, context7_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "ask",
+      "type": "askUserQuestion",
+      "name": "approve-plan",
+      "position": {
+        "x": 760,
+        "y": 520
+      },
+      "data": {
+        "questionText": "Review the plan and select an action.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Approve & Start",
+            "description": "Proceed to implementation."
+          },
+          {
+            "id": "reject",
+            "label": "Reject & Re-plan",
+            "description": "Send feedback to re-plan."
+          }
+        ]
+      }
+    },
+    {
+      "id": "fe",
+      "type": "subAgent",
+      "name": "frontend",
+      "parentId": "g-impl",
+      "position": {
+        "x": 26,
+        "y": 54
+      },
+      "data": {
+        "name": "frontend",
+        "description": "Frontend development of the approved plan.",
+        "agentRef": "core/dev",
+        "prompt": "Implement the frontend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): typescript, tailwind-4, git-commit, diagnosing-bugs, tdd.",
+        "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "be",
+      "type": "subAgent",
+      "name": "backend",
+      "parentId": "g-impl",
+      "position": {
+        "x": 26,
+        "y": 254
+      },
+      "data": {
+        "name": "backend",
+        "description": "Backend development of the approved plan.",
+        "agentRef": "core/dev",
+        "prompt": "Implement the backend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): go-testing, git-commit, diagnosing-bugs, codebase-design, tdd.",
+        "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "infra",
+      "type": "subAgent",
+      "name": "infrastructure",
+      "parentId": "g-impl",
+      "position": {
+        "x": 26,
+        "y": 454
+      },
+      "data": {
+        "name": "infrastructure",
+        "description": "Infrastructure setup of the approved plan.",
+        "agentRef": "core/devops",
+        "prompt": "Implement the infrastructure portion of the approved plan (CI, Docker, deploy).\n\nSkills available (use the `skill` tool): devops, docker, git-commit.",
+        "tools": "read, bash, codegraph_*, context7_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "rev",
+      "type": "subAgent",
+      "name": "reviewer",
+      "parentId": "g-signoff",
+      "position": {
+        "x": 26,
+        "y": 54
+      },
+      "data": {
+        "name": "reviewer",
+        "description": "Final code review of the implementation and fixes.",
+        "agentRef": "core/reviewer",
+        "prompt": "Review the implementation and any fixes. Findings by severity with file:line and a fix. State merge-readiness.\n\nSkills available (use the `skill` tool): git-commit.",
+        "tools": "read, grep, glob, bash, codegraph_*, context7_*, engram_*, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff,context-gathering"
+      }
+    },
+    {
+      "id": "gate",
+      "type": "ifElse",
+      "name": "ship-ready",
+      "parentId": "g-signoff",
+      "position": {
+        "x": 26,
+        "y": 244
+      },
+      "data": {
+        "condition": "review clean and scenarios green"
+      }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": "end",
+      "position": {
+        "x": 2400,
+        "y": 520
+      },
+      "data": {
+        "label": "Shipped"
+      }
+    },
+    {
+      "id": "qaflow",
+      "type": "subAgentFlow",
+      "name": "qa-exploratory",
+      "position": {
+        "x": 1620,
+        "y": 300
+      },
+      "data": {
+        "label": "QA exploratory (sub-workflow)",
+        "flowId": "qa-exploratory"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "start",
+      "to": "finder"
+    },
+    {
+      "from": "finder",
+      "to": "architect"
+    },
+    {
+      "from": "architect",
+      "to": "designer"
+    },
+    {
+      "from": "designer",
+      "to": "ask"
+    },
+    {
+      "from": "ask",
+      "to": "fe",
+      "fromPort": "approve"
+    },
+    {
+      "from": "ask",
+      "to": "be",
+      "fromPort": "approve"
+    },
+    {
+      "from": "ask",
+      "to": "infra",
+      "fromPort": "approve"
+    },
+    {
+      "from": "rev",
+      "to": "gate"
+    },
+    {
+      "from": "gate",
+      "to": "end",
+      "fromPort": "true"
+    },
+    {
+      "from": "gate",
+      "to": "fe",
+      "fromPort": "false"
+    },
+    {
+      "from": "fe",
+      "to": "qaflow"
+    },
+    {
+      "from": "be",
+      "to": "qaflow"
+    },
+    {
+      "from": "infra",
+      "to": "qaflow"
+    },
+    {
+      "from": "qaflow",
+      "to": "rev"
+    }
+  ],
+  "createdAt": "2026-06-29T17:00:00Z",
+  "updatedAt": "2026-07-25T00:00:00Z"
+}

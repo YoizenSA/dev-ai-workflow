@@ -316,7 +316,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 	if desc == "" {
 		desc = "Sub-agent for the " + wf.Name + " workflow."
 	}
-	prompt := n.Data.AgentDefinition
+	prompt := resolveAgentDefinition(n)
 	if strings.TrimSpace(prompt) == "" {
 		prompt = n.Data.Prompt
 	}
@@ -325,7 +325,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		prompt = agents.AppendSections(prompt, sections, config.AgentsSourceDir())
 		claudeTools := csvFromPermissions(perm)
 		md := renderClaudeAgentMarkdown(id, desc, claudeTools, n.Data.Model, prompt)
-		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
+		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(prompt) != "" {
 			md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 		}
 		return md
@@ -348,10 +348,46 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		md = injected
 	}
 
-	if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(n.Data.AgentDefinition) != "" {
+	if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(prompt) != "" {
 		md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 	}
 	return md
+}
+
+// resolveAgentDefinition returns the identity prompt for a sub-agent node.
+//
+// A node either carries its own prompt (AgentDefinition) or links to a real
+// agent under agents/ (AgentRef, e.g. "core/architect"). The link is resolved
+// here, at export time, so a workflow tracks the agent instead of holding a
+// copy that silently rots when the agent is edited.
+//
+// AgentDefinition wins when both are set: that is the deliberate override for a
+// node whose prompt genuinely differs from the shared agent. An AgentRef that
+// does not resolve returns empty rather than guessing, and the caller falls
+// back to the node's task prompt.
+func resolveAgentDefinition(n *Node) string {
+	if def := strings.TrimSpace(n.Data.AgentDefinition); def != "" {
+		return def
+	}
+	ref := strings.TrimSpace(n.Data.AgentRef)
+	if ref == "" {
+		return ""
+	}
+	profiles, err := agents.LoadProfiles(config.AgentsSourceDir())
+	if err != nil {
+		return ""
+	}
+	if p, ok := profiles[ref]; ok {
+		return p.Prompt
+	}
+	// Tolerate a bare name ("architect") for a profile stored under a group
+	// ("core/architect") — the UI shows the short name.
+	for key, p := range profiles {
+		if key[strings.LastIndex(key, "/")+1:] == ref {
+			return p.Prompt
+		}
+	}
+	return ""
 }
 
 // subAgentSectionList parses a node's comma-separated Sections field into the
@@ -389,7 +425,7 @@ const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
 // Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
-// Coarse buckets (mcp, memory, delegate, codegraph, context7, ywai-kanban) are
+// Coarse buckets (mcp, memory, delegate, codegraph, context7) are
 // expanded to opencode-native wildcards via ExpandPermissionBuckets so they
 // actually gate the underlying tools.
 func toolsToPermissions(csv, defaults string) map[string]string {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -196,14 +197,39 @@ func findUp(start, target string) string {
 	}
 }
 
+// IsOurRepoByPath reports whether dir is a checkout of this repository.
+//
+// Identification is by Go module path, because that is the only marker nothing
+// else can accidentally satisfy. It previously keyed on a skills subdirectory
+// name (`skills/_shared`, `skills/angular`), which any machine with a personal
+// `~/skills` folder matches — and one did: `$HOME` was identified as the repo,
+// so a server started from home served the user's unrelated `~/skills` and
+// reported no skills at all.
+//
+// A false positive here is not cosmetic: it redirects where skills, agents and
+// workflows are read from.
 func IsOurRepoByPath(dir string) bool {
-	for _, marker := range []string{"_shared", "react-19", "angular"} {
-		if _, err := os.Stat(filepath.Join(dir, SkillsDirName, marker)); err == nil {
+	if dir == "" {
+		return false
+	}
+	// The module lives at the repo root or one level down in ywai/.
+	for _, candidate := range []string{
+		filepath.Join(dir, "go.mod"),
+		filepath.Join(dir, "ywai", "go.mod"),
+	} {
+		data, err := os.ReadFile(candidate)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), modulePath) {
 			return true
 		}
 	}
 	return false
 }
+
+// modulePath identifies this repository Go module.
+const modulePath = "github.com/Yoizen/dev-ai-workflow/ywai"
 
 func isOurRepo(dir string) bool {
 	return IsOurRepoByPath(dir)
@@ -223,4 +249,33 @@ func IsDirPopulated(dir string) bool {
 		return false
 	}
 	return len(entries) > 0
+}
+
+// RetiredMCPServers are MCP server ids ywai used to install and has since
+// removed. Two independent consumers need this list, which is why it lives
+// here rather than beside either one:
+//
+//   - install deletes these entries from the user's config (internal/plugins)
+//   - permission expansion must never grant them again (internal/agents)
+//
+// The second matters because profiles are written before the config cleanup
+// runs: without this filter, an update regenerates permissions from a config
+// that still lists the retired server, so the dead grant is reinstated on the
+// very run meant to remove it.
+//
+// Entries stay here permanently — this is what upgrades installs that predate
+// each removal.
+var RetiredMCPServers = []string{
+	"ywai-kanban", // kanban board removed from ywai
+	"ywai-fastfs", // fastfs MCP removed as redundant with codegraph
+}
+
+// IsRetiredMCPServer reports whether an MCP server id is one ywai retired.
+func IsRetiredMCPServer(id string) bool {
+	for _, r := range RetiredMCPServers {
+		if r == id {
+			return true
+		}
+	}
+	return false
 }

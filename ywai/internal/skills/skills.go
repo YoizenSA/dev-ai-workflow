@@ -74,7 +74,54 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 	if copied == 0 {
 		fmt.Println("  All skills already up to date.")
 	}
+
+	// A full copy is also the moment to drop what we no longer ship. A partial
+	// copy is not: its filter says nothing about the skills it skipped.
+	if len(filterSet) == 0 {
+		if removed := pruneRetiredSkills(agentSkillsDir, extraSkills); len(removed) > 0 {
+			fmt.Printf("  Removed skills ywai no longer ships: %s\n", strings.Join(removed, ", "))
+		}
+	}
 	return nil
+}
+
+// pruneRetiredSkills deletes skills ywai installed and has since stopped
+// shipping, returning what it removed.
+//
+// Without this, deleting a skill from the source leaves it installed forever:
+// `webapp-testing` outlived its removal and kept contradicting the skill that
+// replaced it, and `dotnet` survived years past the commit that dropped it.
+//
+// Ownership is proven, never guessed. A directory is removed only when it
+// carries ywai's marker file — the same proof `ywai uninstall` uses — so a
+// skill the user wrote is untouched even when it shares a name with one we
+// retired.
+func pruneRetiredSkills(agentSkillsDir string, shipped map[string]bool) []string {
+	entries, err := os.ReadDir(agentSkillsDir)
+	if err != nil {
+		return nil
+	}
+
+	var removed []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if shipped[name] {
+			continue
+		}
+		dir := filepath.Join(agentSkillsDir, name)
+		// Only a real directory carrying our marker. A symlink is handled by
+		// RemoveStaleYwaiSkillLinks, which knows how to check its target.
+		if !entry.IsDir() || !hasYwaiExtraMarker(dir) {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Printf("  Warning: failed to remove retired skill %s: %v\n", name, err)
+			continue
+		}
+		removed = append(removed, name)
+	}
+	sort.Strings(removed)
+	return removed
 }
 
 func copyDir(src, dst string) error {
@@ -282,10 +329,18 @@ func hasYwaiExtraMarker(dir string) bool {
 	return err == nil
 }
 
+// skillsSourceDir resolves where skills are read from.
+//
+// The checkout wins when there is one, so a developer editing a skill sees the
+// edit without re-seeding. Everything else reads the seeded copy under ~/.ywai,
+// which exists on every install and does not move.
+//
+// The checkout lookup starts from the working directory, which makes this
+// answer depend on where the process was launched. That is fine for a CLI
+// invocation and wrong for the control server, which systemd starts from the
+// home directory — so callers that outlive a command should pass an explicit
+// root instead (see SetRepoRootOverride).
 func skillsSourceDir() string {
-	// Prefer the source checkout when available. Skills are copied, not linked,
-	// so using the repo source no longer creates rollback/symlink issues for
-	// upstream tools.
 	repo := config.RepoRoot()
 	for _, candidate := range []string{
 		filepath.Join(repo, "ywai", config.SkillsDirName),

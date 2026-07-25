@@ -51,7 +51,7 @@ ywai skills                   # List extra skills
 | `ywai config` | Manage ywai configuration |
 | `ywai doctor` | Run gentle-ai health check |
 | `ywai skill-registry` | Refresh the project skill registry |
-| `ywai serve` | Start the Control UI server (Kanban + Missions on port 5768) |
+| `ywai serve` | Start the Control UI server (port 5768) |
 | `ywai ui` | Open Control UI in the default browser |
 | `ywai daemon` | **Deprecated** — use `ywai serve` instead |
 
@@ -96,7 +96,7 @@ Available configuration options:
 
 ## Control UI
 
-`ywai serve` unifica Kanban + Missions en un solo servidor web con una SPA (React + Vite). Incluye autostart vía systemd/launchd, health checks, y un adaptador MCP opcional.
+`ywai serve` unifica Missions, Workflows y la configuración de agentes en un solo servidor web con una SPA (React + Vite). Incluye autostart vía systemd/launchd y health checks.
 
 ### Quick start
 
@@ -127,7 +127,7 @@ ywai install --autostart
 
 | Endpoint | Description |
 |----------|-------------|
-| `http://localhost:5768/` | Kanban board — track delegations, sessions, and activities |
+| `http://localhost:5768/` | Missions — track missions and their features |
 | `http://localhost:5768/missions/` | Missions dashboard — plan and monitor multi-feature projects |
 | `http://localhost:5768/health` | Health check endpoint |
 | `http://localhost:5768/memories/` | Engram memory management — search, edit, consolidate, timeline |
@@ -145,7 +145,7 @@ Check status: `ywai config get server.autostart`
 ### Deprecated
 
 - `ywai daemon` → use `ywai serve` instead
-- `ywai missions serve` → use `ywai serve` instead (both Kanban and Missions are served on the same port)
+- `ywai missions serve` → use `ywai serve` instead (everything is served on the same port)
 
 ---
 

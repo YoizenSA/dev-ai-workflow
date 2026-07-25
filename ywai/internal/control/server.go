@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/kanban"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
@@ -38,10 +38,10 @@ func RegisterEmbeddedUI(ui func() fs.FS) {
 	embeddedUI = ui
 }
 
-// Server is the unified ywai control server combining Kanban and Missions.
+// Server is the unified ywai control server combining the config API and Missions.
 type Server struct {
 	port      int
-	kanban    *kanban.Server
+	configAPI *configapi.Server
 	missions  *web.Server
 	httpSrv   *http.Server
 	mux       *http.ServeMux
@@ -61,11 +61,7 @@ func New(port int) (*Server, error) {
 		port = DefaultPort
 	}
 
-	kanbanDataDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		kanbanDataDir = filepath.Join(home, ".config", "opencode", "kanban-data")
-	}
-	kServer := kanban.New(port, kanbanDataDir)
+	kServer := configapi.New(port)
 
 	missionsStore, err := missions.OpenStore()
 	if err != nil {
@@ -75,27 +71,23 @@ func New(port int) (*Server, error) {
 
 	s := &Server{
 		port:      port,
-		kanban:    kServer,
+		configAPI: kServer,
 		missions:  mServer,
 		portReady: make(chan struct{}),
 		startedAt: time.Now(),
 	}
 
-	// Reuse the kanban WebSocket hub as the install-job broadcaster. The
-	// JobManager only calls Hub.Broadcast, so a nil hub is a safe no-op;
-	// wiring the kanban hub here means a single WS endpoint fans out
-	// both kanban and install events to the UI.
-	s.jobs = mcp.NewJobManager(s.kanban.Hub())
-
-	// Wire the missions→kanban event bridge
-	projector := NewKanbanProjector(kServer, missionsStore)
-	mServer.SetEventSink(projector.Project)
+	// Reuse the config-server WebSocket hub as the install-job broadcaster.
+	// The JobManager only calls Hub.Broadcast, so a nil hub is a safe no-op;
+	// wiring the hub here means a single WS endpoint fans out install events
+	// to the UI.
+	s.jobs = mcp.NewJobManager(s.configAPI.Hub())
 
 	// Push notification setup
 	pushStore, _ := NewPushStore()
 	if pushStore != nil {
 		s.push = NewPushAPI(pushStore)
-		projector.OnComplete(s.push.sender.Send)
+		mServer.SetEventSink(newFeaturePushSink(s.push.sender.Send))
 	}
 
 	s.teamAPI = NewTeamAPI()
@@ -116,8 +108,8 @@ func (s *Server) buildRoutes() {
 	// Self-update trigger: spawns a detached `ywai update` process.
 	s.mux.HandleFunc("POST /api/update", s.updateHandler)
 
-	// ─── Kanban API ──────────────────────────────────────────────
-	s.mux.HandleFunc("/api/", s.kanbanHandler)
+	// ─── Config API ──────────────────────────────────────────────
+	s.mux.HandleFunc("/api/", s.configAPIHandler)
 
 	// ─── Missions API ────────────────────────────────────────────
 	s.mux.HandleFunc("/missions/api/", s.missionsHandler)
@@ -170,9 +162,9 @@ func (s *Server) buildRoutes() {
 	s.mux.HandleFunc("/", s.serveSPA)
 }
 
-// kanbanHandler forwards requests to the kanban HTTP handler.
-func (s *Server) kanbanHandler(w http.ResponseWriter, r *http.Request) {
-	s.kanban.HTTPHandler().ServeHTTP(w, r)
+// configAPIHandler forwards requests to the config API HTTP handler.
+func (s *Server) configAPIHandler(w http.ResponseWriter, r *http.Request) {
+	s.configAPI.HTTPHandler().ServeHTTP(w, r)
 }
 
 // missionsHandler strips the /missions prefix and forwards to missions handler.
@@ -382,8 +374,8 @@ func guessContentType(path string) string {
 func (s *Server) Start() error {
 	log.Printf("Starting control server on port %d", s.port)
 
-	// Start kanban hub in background
-	go s.kanban.Hub().Run()
+	// Start the config API hub in background
+	go s.configAPI.Hub().Run()
 
 	// Start missions hub in background
 	go s.missions.Hub().Run()

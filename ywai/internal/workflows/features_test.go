@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
 
 // TestSlashCommandOptionsEmittedInCommand verifies the advanced slash-command
@@ -298,10 +300,9 @@ func TestToolsToPermissions(t *testing.T) {
 			csv:      "read,mcp",
 			defaults: "read",
 			want: map[string]string{
-				"read":          "allow",
-				"codegraph_*":   "allow",
-				"context7_*":    "allow",
-				"ywai-kanban_*": "allow",
+				"read":        "allow",
+				"codegraph_*": "allow",
+				"context7_*":  "allow",
 			},
 		},
 		{
@@ -315,6 +316,12 @@ func TestToolsToPermissions(t *testing.T) {
 			},
 		},
 	}
+	// The "mcp" bucket expands to the MCP servers configured on the machine, so
+	// pin the resolver: otherwise this asserts against whatever the developer
+	// running the suite happens to have installed.
+	restore := agents.SetMCPServerResolver(func() []string { return nil })
+	defer restore()
+
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := toolsToPermissions(c.csv, c.defaults)

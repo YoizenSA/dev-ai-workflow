@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
-import type { ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
+import { configApi, missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
+import type { AgentDetail, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
 import MultiSelect from './MultiSelect'
 import {
@@ -382,6 +382,62 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 	)
 }
 
+// IdentityField — the node's system prompt, which comes from one of two places.
+//
+// A LINKED node (agentRef) tracks a real agent under agents/: the exporter reads
+// that AGENT.md at export time, so editing the agent updates every workflow
+// using it. Showing an empty textarea here would suggest the node has no
+// identity, so the link is surfaced instead, with an explicit detach that copies
+// the current text in as an override.
+function IdentityField({ node }: { node: WorkflowNode }) {
+	const ref = (node.data.agentRef ?? '').trim()
+	const [linkedText, setLinkedText] = useState('')
+
+	useEffect(() => {
+		if (!ref) return
+		configApi
+			.getAgent(ref.split('/').pop() as string)
+			.then((a: AgentDetail) => setLinkedText(a?.content ?? ''))
+			.catch(() => setLinkedText(''))
+	}, [ref])
+
+	if (ref) {
+		return (
+			<div className="field">
+				<label className="field-label">System prompt / identity</label>
+				<div className="field-linked">
+					<span className="badge">linked</span>
+					<code>{ref}</code>
+					<button
+						type="button"
+						className="btn-link"
+						onClick={() => update(node, { agentRef: '', agentDefinition: linkedText })}
+					>
+						Detach and edit here
+					</button>
+				</div>
+				<span className="field-help">
+					Resolved from the agent at export time — edit the agent to change every workflow that links it.
+				</span>
+				{linkedText ? <pre className="textarea mono readonly">{linkedText}</pre> : null}
+			</div>
+		)
+	}
+
+	return (
+		<div className="field">
+			<label className="field-label" htmlFor="wf-identity">System prompt / identity</label>
+			<textarea
+				id="wf-identity"
+				className="textarea mono"
+				value={node.data.agentDefinition ?? ''}
+				placeholder="Who the agent IS…"
+				onChange={(e) => update(node, { agentDefinition: e.target.value })}
+			/>
+		</div>
+	)
+}
+
 // SubAgentFields — the richest node: identity, prompts, model/mode, tools.
 function SubAgentFields({ node, models, current }: { node: WorkflowNode; models: ModelInfo[]; current: Workflow }) {
 	const descMissing = !(node.data.description ?? '').trim()
@@ -420,16 +476,7 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 				/>
 				<span className="field-help">Goes into the agent frontmatter. ≤200 chars.</span>
 			</div>
-			<div className="field">
-				<label className="field-label" htmlFor="wf-identity">System prompt / identity</label>
-				<textarea
-					id="wf-identity"
-					className="textarea mono"
-					value={node.data.agentDefinition ?? ''}
-					placeholder="Who the agent IS…"
-					onChange={(e) => update(node, { agentDefinition: e.target.value })}
-				/>
-			</div>
+			<IdentityField node={node} />
 			<div className="field">
 				<label className="field-label" htmlFor="wf-task">Task prompt</label>
 				<textarea
@@ -620,7 +667,7 @@ function AgentBehavior({ node, sections }: { node: WorkflowNode; sections: { nam
 					value={reporting}
 					onChange={(v) => setBehavior({ reporting: v as Reporting })}
 				/>
-				<span className="field-help">How this agent reports back. Standard/QA add the handoff (incl. Kanban update); coordinators report nothing.</span>
+				<span className="field-help">How this agent reports back. Standard/QA add the handoff fence; coordinators report nothing.</span>
 			</div>
 
 			<label className="wf-behavior-toggle">

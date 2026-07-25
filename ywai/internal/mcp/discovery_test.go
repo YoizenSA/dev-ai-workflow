@@ -9,7 +9,7 @@ package mcp
 //	DiscoverHTTP (ctx context.Context, url string) ([]string, error)
 //
 // Both functions are extractions of the probe code already living in
-// ywai/internal/kanban/tool_discovery.go (discoverStdioMCPTools at lines
+// ywai/internal/configapi/tool_discovery.go (discoverStdioMCPTools at lines
 // 69-199 and discoverMCPTools at lines 18-57). That code WORKS; our job
 // here is to pin the *exported contract* so the extraction can land green
 // without re-deciding shape.
@@ -92,7 +92,7 @@ func TestDiscoverStdio_InitializeFails(t *testing.T) {
 // the server responded validly, the discovery just found nothing.
 //
 // Assumption: an empty tools list is NOT an error — the install proceeds
-// with no tools to probe. This matches the existing kanban probe behavior,
+// with no tools to probe. This matches the existing MCP probe behavior,
 // which returns (nil, nil) in this case.
 func TestDiscoverStdio_ToolsListEmpty(t *testing.T) {
 	binDir := writeFakeMCPBin(t, fakeMCPSpec{

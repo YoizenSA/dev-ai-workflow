@@ -140,7 +140,7 @@ func piToolsString(perms map[string]string) string {
 
 	var names []string
 	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && (v == "allow" || v == "ask") {
+		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
 			names = append(names, t.pi)
 		}
 	}
@@ -263,7 +263,7 @@ func claudeToolsString(perms map[string]string) string {
 
 	var names []string
 	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && (v == "allow" || v == "ask") {
+		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
 			names = append(names, t.claude)
 		}
 	}
@@ -271,6 +271,13 @@ func claudeToolsString(perms map[string]string) string {
 		return "Read, Glob, Grep"
 	}
 	return strings.Join(names, ", ")
+}
+
+// toolStringEnabled reports whether a flat host tool string (Claude/PI) should
+// include this opencode permission. bash: verify is OpenCode-only nested
+// enforcement — other hosts get no shell rather than a full shell.
+func toolStringEnabled(_, val string) bool {
+	return val == "allow" || val == "ask"
 }
 
 // stripFrontmatter removes YAML frontmatter from a markdown string.
@@ -433,35 +440,171 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 // ywaiBucketPatterns maps ywai's coarse permission buckets to the opencode-native
 // wildcard patterns that actually gate the underlying MCP tools. opencode matches
 // permission keys as globs against real tool names, so the bare bucket names
-// (e.g. "ado", "memory") never match the prefixed tool ids (ado_pr_create,
-// engram_mem_save) and are silently ignored. Expanding them here makes the
+// (e.g. "memory") never match the prefixed tool ids (engram_mem_save) and are
+// silently ignored. Expanding them here makes the
 // generated permission block enforceable in opencode itself, not just inside
 // ywai's own MCPEnforce layer.
 //
-// The blanket "mcp" bucket enumerates every MCP server not covered by a
-// dedicated bucket above. Kept explicit (one pattern per server) so a new MCP
-// server is a visible, deliberate addition rather than a silent catch-all.
-// AlwaysAllowedMCPTools are MCP tools every agent may call regardless of its
-// coarse mcp bucket permission. Updating a kanban delegation is a self-reporting
-// action (an agent moving its own card / status); the board is decoupled from
-// the mission FSM, so it is low-risk and must not be gated behind the "mcp"
-// bucket. An explicit per-tool deny in the agent's own permission map still
-// wins (see BuildOpenCodeMarkdown), so this is a default, not a hard override.
-var AlwaysAllowedMCPTools = []string{
-	"ywai-kanban_update_delegation",
-}
-
+// The blanket "mcp" bucket covers every MCP server not claimed by a dedicated
+// bucket above. The static entries are the servers ywai installs itself;
+// mcpBucketPatterns extends them with whatever else the user has configured, so
+// granting "mcp" grants the MCP surface that actually exists on the machine
+// rather than a list that has to be edited in Go for every new server.
 var ywaiBucketPatterns = map[string][]string{
-	"ado":      {"ado_*"},
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
-	"mcp":      {"codegraph_*", "context7_*", "ywai-kanban_*"},
+	"mcp":      {"codegraph_*", "context7_*"},
 	// "delegate" launches an async sub-agent (background-agents plugin); the
 	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
 	// status, peek, steer, stop). Without the glob, an agent whitelisted for
 	// "delegate" under the "*: deny" pattern could start a delegation but never
 	// read or control it.
 	"delegate": {"delegate", "delegation_*"},
+}
+
+// bashVerify is a permission value beyond allow/deny/ask: a shell that can run
+// checks but cannot change anything. It lets a coordinator confirm a handoff
+// against real command output instead of trusting the subagent's summary.
+const bashVerify = "verify"
+
+// verifyBashAllowlist is what `bash: verify` permits: inspecting git state and
+// running the project's checks, across the toolchains in use here.
+//
+// Read-only git commands appear without their output-writing forms, which the
+// false-green list denies separately — `git diff --output` would otherwise turn
+// an inspection command into a file writer.
+var verifyBashAllowlist = []string{
+	"git diff*",
+	"git status*",
+	"git log*",
+	"git show*",
+	"git ls-files*",
+	"go test*",
+	"go vet*",
+	"go build*",
+	"gofmt -l*",
+	"npm test*",
+	"npm run lint*",
+	"npm run build*",
+	"npx tsc --noEmit*",
+	"npx vitest run*",
+	"bun test*",
+	"dotnet test*",
+	"dotnet build*",
+	"pytest*",
+}
+
+// commitCapableAgents may commit and push. Everything else that can run a shell
+// is denied both.
+//
+// The list is an allowlist rather than a deny-list of executors so a new agent
+// arrives without release rights: forgetting to add a name costs a blocked
+// command, forgetting to remove one costs an unreviewed push.
+var commitCapableAgents = map[string]bool{
+	"devops": true,
+}
+
+// noCommitBashPatterns keep the release button with the review-then-commit
+// path. Wrapper forms are included because a blocked `git commit` that succeeds
+// as `env git commit` is not a boundary.
+var noCommitBashPatterns = []string{
+	"git commit*",
+	"git push*",
+	"git * commit*",
+	"git * push*",
+	"env git commit*",
+	"env git push*",
+	"git.exe commit*",
+	"git.exe push*",
+}
+
+// falseGreenBashPatterns are commands that make a check pass without making the
+// code correct. They are denied for every agent that can run bash.
+//
+// The failure they prevent is the expensive one: a suite that reports green
+// while the behaviour is broken. Regenerating a snapshot turns a real assertion
+// into a recording of current output, and an agent under pressure to finish
+// reaches for it precisely when the test was about to be useful. No amount of
+// prompt instruction reliably stops that — a denied command does.
+//
+// Formatters and linters that rewrite code are deliberately NOT here: fixing
+// style is not faking a result.
+var falseGreenBashPatterns = []string{
+	// Snapshot rewriting, across the runners in use here.
+	"* -u",
+	"* -u *",
+	"*--update-snapshot*",
+	"*--updateSnapshot*",
+	"*vitest*--update*",
+	"*jest*--ci=false*",
+	"go test *-update*",
+	// Skipping the check rather than passing it.
+	"*--passWithNoTests*",
+	"go test *-run TestNothing*",
+	// Silencing the type checker instead of satisfying it.
+	"*tsc*--noEmitOnError*",
+	"*tsc*--skipLibCheck*--noEmit*",
+}
+
+// verifyBashAllowPatterns is the small shell surface for bash: verify agents
+// (orchestrators). Deny-by-default with these allows: read-only git inspect plus
+// a multi-lang test/lint set so the coordinator can spot-check handoffs without
+// a write shell. Covers stacks ywai agents hit regularly (Go, JS/TS, .NET,
+// Python); keep the list verification-shaped only (no install, no format-write).
+var verifyBashAllowPatterns = []string{
+	"git diff*",
+	"git status*",
+	"git log*",
+	"git show*",
+	// Go
+	"go test*",
+	// JS / TS
+	"npm test*",
+	"npm run lint*",
+	"npm run build*",
+	"npm run typecheck*",
+	"npx tsc --noEmit*",
+	"pnpm test*",
+	"pnpm run lint*",
+	"pnpm run build*",
+	"yarn test*",
+	"yarn lint*",
+	// .NET
+	"dotnet test*",
+	"dotnet build*",
+	// Python
+	"pytest*",
+	"python -m pytest*",
+	"python3 -m pytest*",
+	"python -m unittest*",
+	"python3 -m unittest*",
+	"ruff check*",
+	"mypy *",
+	"mypy*",
+}
+
+// noCommitBashDenyPatterns block commit/push for code executors. Review-then-
+// commit: edits land via the executor; release actions stay with the
+// coordinator/user after review. OpenCode is the enforcement authority; Claude
+// and PI do not get nested bash rules.
+var noCommitBashDenyPatterns = []string{
+	"git commit*",
+	"git push*",
+	"git * commit*",
+	"git * push*",
+	"env git commit*",
+	"env git push*",
+	"git.exe commit*",
+	"git.exe push*",
+	"git.exe * commit*",
+	"git.exe * push*",
+}
+
+// noCommitAgents may edit code but must not commit or push. devops is excluded
+// on purpose: deploy flows legitimately push.
+var noCommitAgents = map[string]bool{
+	"dev":    true,
+	"qa-dev": true,
 }
 
 // openCodeNativePermissionKeys are tools that remain deny-by-default when an
@@ -478,21 +621,131 @@ var openCodeNativePermissionKeys = []string{
 // buckets (ado, memory, intercom, mcp) expanded to the opencode-native wildcard
 // patterns that actually gate the underlying tools. Keys without a bucket mapping
 // pass through unchanged. This mirrors the expansion BuildOpenCodeMarkdown applies
-// at install time so permissions written by any other path (e.g. the kanban
+// at install time so permissions written by any other path (e.g. the config API
 // permissions API patching frontmatter in place) stay enforceable in opencode
 // instead of leaving bare bucket names that opencode silently ignores.
 func ExpandPermissionBuckets(perms map[string]string) map[string]string {
 	out := make(map[string]string, len(perms))
 	for key, val := range perms {
-		if patterns, ok := ywaiBucketPatterns[key]; ok {
-			for _, p := range patterns {
-				out[p] = val
-			}
+		patterns := bucketPatterns(key)
+		if patterns == nil {
+			out[key] = val
 			continue
 		}
-		out[key] = val
+		for _, p := range patterns {
+			// An explicit per-tool rule the profile already set (e.g.
+			// engram_mem_save: deny) must survive the broader bucket.
+			if _, exists := perms[p]; exists && p != key {
+				continue
+			}
+			out[p] = val
+		}
+	}
+	// Re-apply explicit keys last so a narrow rule always beats the bucket it
+	// overlaps, regardless of map iteration order.
+	for key, val := range perms {
+		if bucketPatterns(key) == nil {
+			out[key] = val
+		}
 	}
 	return out
+}
+
+// bucketPatterns returns the tool globs a coarse bucket expands to, or nil when
+// the key is not a bucket. The "mcp" bucket is resolved dynamically so it
+// covers the servers configured on this machine, not just the ones ywai ships.
+func bucketPatterns(key string) []string {
+	if key == "mcp" {
+		return mcpBucketPatterns()
+	}
+	patterns, ok := ywaiBucketPatterns[key]
+	if !ok {
+		return nil
+	}
+	return patterns
+}
+
+// mcpServersFunc resolves the configured MCP servers. It is a variable so the
+// permission expansion stays deterministic under test: reading the developer's
+// real opencode.json would make results depend on whichever MCP servers happen
+// to be installed on the machine running the suite.
+var mcpServersFunc = ConfiguredMCPServers
+
+// SetMCPServerResolver overrides how the blanket "mcp" bucket discovers
+// servers, and returns a function restoring the previous resolver. Intended for
+// tests and for callers exporting against a config other than the user's own.
+func SetMCPServerResolver(fn func() []string) func() {
+	prev := mcpServersFunc
+	if fn == nil {
+		fn = ConfiguredMCPServers
+	}
+	mcpServersFunc = fn
+	return func() { mcpServersFunc = prev }
+}
+
+// ConfiguredMCPServers lists the MCP server ids present in the user's
+// opencode.json, sorted. Missing or unreadable config yields nil — callers fall
+// back to the static patterns rather than failing an install over it.
+func ConfiguredMCPServers() []string {
+	path := config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode")
+	root, err := config.ReadJSONC(path)
+	if err != nil {
+		return nil
+	}
+	raw, ok := root["mcp"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	servers := make([]string, 0, len(raw))
+	for name := range raw {
+		if strings.TrimSpace(name) != "" {
+			servers = append(servers, name)
+		}
+	}
+	sort.Strings(servers)
+	return servers
+}
+
+// dedicatedBucketPrefixes are MCP servers that already have their own bucket,
+// so the blanket "mcp" bucket must not also claim them — otherwise granting
+// "mcp" would silently widen an agent that was deliberately denied "memory".
+var dedicatedBucketPrefixes = map[string]bool{
+	"engram":   true, // memory
+	"intercom": true,
+}
+
+// mcpBucketPatterns is the blanket MCP grant: the servers ywai ships plus every
+// other MCP server configured in opencode.json.
+//
+// MCP tools are meant to be available to every kind of agent — a reviewer that
+// cannot reach the docs server, or a designer that cannot drive the browser, is
+// crippled for no security gain, since the tools are the user's own. Deriving
+// the list from the live config means adding an MCP server makes it usable
+// everywhere without a code change here.
+func mcpBucketPatterns() []string {
+	patterns := append([]string(nil), ywaiBucketPatterns["mcp"]...)
+	seen := map[string]bool{}
+	for _, p := range patterns {
+		seen[p] = true
+	}
+	for _, server := range mcpServersFunc() {
+		if dedicatedBucketPrefixes[server] {
+			continue
+		}
+		// A retired server may still sit in the config when profiles are
+		// written (cleanup runs later in the install), so granting from the
+		// raw config would reinstate the dead permission.
+		if config.IsRetiredMCPServer(server) {
+			continue
+		}
+		p := server + "_*"
+		if !seen[p] {
+			patterns = append(patterns, p)
+			seen[p] = true
+		}
+	}
+	sort.Strings(patterns)
+	return patterns
 }
 
 // BuildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
@@ -506,7 +759,7 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	// which opencode rejects with "Expected string | undefined, got null
 	// description". Fall back to the agent name so the field is always a non-empty
 	// string regardless of how the profile was built (loader, migration,
-	// workflows exporter, kanban).
+	// workflows exporter, config API).
 	description := strings.TrimSpace(profile.Description)
 	if description == "" {
 		description = name
@@ -530,9 +783,39 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	// enforced by opencode, not silently dropped.
 	b.WriteString("permission:\n")
 	emitPermission := func(key, val string) {
+		// bash renders as a nested allow/deny map when the agent may run
+		// commands at all, so specific commands can be denied inside a general
+		// allow. permissions.json is a flat string map and cannot express that.
+		//
+		// Modes:
+		//   deny   → single-line deny (no shell)
+		//   verify → "*": deny + verify allows + false-green denials
+		//   allow  → "*": allow + false-green denials [+ no-commit denials]
+		if key == "bash" && val != "deny" {
+			b.WriteString("  bash:\n")
+			if val == "verify" {
+				b.WriteString(fmt.Sprintf("    %q: deny\n", "*"))
+				for _, pattern := range verifyBashAllowPatterns {
+					b.WriteString(fmt.Sprintf("    %q: allow\n", pattern))
+				}
+			} else {
+				b.WriteString(fmt.Sprintf("    %q: %s\n", "*", val))
+			}
+			for _, pattern := range falseGreenBashPatterns {
+				b.WriteString(fmt.Sprintf("    %q: deny\n", pattern))
+			}
+			// Profile keys may be grouped ("core/dev", "qa-automation/qa-dev");
+			// match the flat agent id OpenCode registers.
+			if noCommitAgents[filepath.Base(name)] && val != "verify" {
+				for _, pattern := range noCommitBashDenyPatterns {
+					b.WriteString(fmt.Sprintf("    %q: deny\n", pattern))
+				}
+			}
+			return
+		}
 		if patterns, ok := ywaiBucketPatterns[key]; ok {
 			for _, p := range patterns {
-				// Quote the key: it contains glob/hyphen chars (e.g. ywai-kanban_*).
+				// Quote the key: it contains glob/hyphen chars (e.g. codegraph_*).
 				b.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
 			}
 			return
@@ -569,13 +852,6 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	sort.Strings(remaining)
 	for _, key := range remaining {
 		emitPermission(key, profile.Permission[key])
-	}
-	// Agents may always update their own kanban handoff unless that exact tool is
-	// explicitly denied. This is more specific than a broad MCP-server pattern.
-	for _, tool := range AlwaysAllowedMCPTools {
-		if _, ok := profile.Permission[tool]; !ok {
-			emitPermission(tool, "allow")
-		}
 	}
 	b.WriteString("---\n\n")
 
@@ -625,6 +901,10 @@ func agentDefaults(name string) (description string, tools []string, model strin
 	case "architect":
 		return "Designs architecture and makes technical decisions",
 			[]string{"Read", "Write", "Edit", "Grep", "Glob", "Bash"}, ""
+	case "designer":
+		// Read-only like architect: specs and design findings, never the diff.
+		return "Designs and audits UI/UX against the design system and accessibility standards",
+			[]string{"Read", "Grep", "Glob"}, ""
 	case "reviewer":
 		return "Reviews code for correctness and quality",
 			[]string{"Read", "Grep", "Glob", "Bash"}, ""

@@ -1,3 +1,2 @@
 typescript
 playwright-e2e-testing
-webapp-testing

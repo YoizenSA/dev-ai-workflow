@@ -7,12 +7,11 @@
 #
 # Subcommands:
 #   test         Run all tests (go test ./... -v)
-#   test-kanban  Run only kanban tests
 #   build        Quick build WITHOUT embedded data (fast iteration)
 #   build-full   Full build WITH embedded data (prepare + -tags embedded)
 #   install      Full build + install to GOPATH
 #   check        Full pipeline: test → build-full → verify → install
-#   kanban       Build + install + start daemon with UI on port 5768
+#   ui           Build + install + start the control server UI on port 5768
 #   mcp-test     Build + install + verify MCP daemon responds
 #   version      Print the version string that would be used
 #   help         Show this usage message
@@ -88,11 +87,11 @@ do_test() {
     ok "All tests passed"
 }
 
-do_test_kanban() {
-    info "Running kanban tests..."
-    cmd "go test ./internal/kanban/... -v"
-    go test ./internal/kanban/... -v
-    ok "Kanban tests passed"
+do_test_ui() {
+    info "Running control-server UI tests..."
+    cmd "go test ./internal/kanban/... ./internal/control/... -v"
+    go test ./internal/kanban/... ./internal/control/... -v
+    ok "UI tests passed"
 }
 
 do_build() {
@@ -166,14 +165,14 @@ do_check() {
     ok "=== Full pipeline complete ==="
 }
 
-do_kanban() {
+do_ui() {
     local version
     version="$(compute_version)"
-    info "Building + installing ywai with kanban support..."
+    info "Building + installing ywai..."
     do_install
 
     echo ""
-    info "Starting kanban daemon with UI on http://localhost:5768 ..."
+    info "Starting the control server with UI on http://localhost:5768 ..."
     cmd "ywai serve --port 5768"
     ywai serve --port 5768
 }
@@ -220,12 +219,11 @@ Usage:  ./scripts/dev.sh <subcommand>
 Subcommands:
 
   test         Run all tests (go test ./... -v)
-  test-kanban  Run only kanban tests
   build        Quick build WITHOUT embedded data (fast iteration)
   build-full   Full build WITH embedded data (prepare + -tags embedded)
   install      Full build + install to GOPATH
   check        Full pipeline: test → build-full → verify → install
-  kanban       Build + install + start daemon with UI on port 5768
+  ui           Build + install + start the control server UI on port 5768
   mcp-test     Build + install + verify MCP daemon responds
   version      Print the version string that would be used
   help         Show this usage message
@@ -241,8 +239,8 @@ case "${1:-help}" in
     test)
         do_test
         ;;
-    test-kanban)
-        do_test_kanban
+    test-ui)
+        do_test_ui
         ;;
     build)
         do_build
@@ -256,8 +254,8 @@ case "${1:-help}" in
     check)
         do_check
         ;;
-    kanban)
-        do_kanban
+    ui)
+        do_ui
         ;;
     mcp-test)
         do_mcp_test

@@ -26,16 +26,19 @@
         "*": "deny",
         "ask": "allow",
         "architect": "allow",
+        "designer": "allow",
         "dev": "allow",
         "qa": "allow",
         "reviewer": "allow",
         "devops": "allow",
         "finder": "allow",
-        "memory": "allow"
+        "memory": "allow",
+        "planning": "allow"
       }
     },
     "ask": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
     "architect": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
+    "designer": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
     "dev": { "task": { "*": "deny", "qa": "allow", "finder": "allow" }, "skip_rules": true },
     "qa": { "task": { "*": "deny", "reviewer": "allow" }, "skip_rules": true },
     "reviewer": { "task": { "*": "deny", "devops": "allow" }, "skip_rules": true },

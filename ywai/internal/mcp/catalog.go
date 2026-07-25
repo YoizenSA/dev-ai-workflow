@@ -158,14 +158,6 @@ var catalog = []CatalogEntry{
 		Tools:      []string{"codegraph_search", "codegraph_context", "codegraph_dependencies"},
 		Docs:       "https://github.com/colbymchenry/codegraph",
 	},
-	{
-		ID: "ywai-kanban", Name: "ywai Kanban",
-		Description: "Track ywai dev tasks on a local kanban board (uses your ywai binary)",
-		Category:    "productivity", Icon: "🗂️",
-		Type: "local", Command: []string{"ywai", "serve", "--mcp-only"},
-		Tools: []string{"create_task", "list_boards", "move_card", "add_comment"},
-		Docs:  "https://github.com/Yoizen/dev-ai-workflow",
-	},
 }
 
 // Catalog returns the canonical list of MCP servers ywai can install.

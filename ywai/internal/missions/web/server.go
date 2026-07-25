@@ -72,6 +72,10 @@ func New(port int, store *missions.MissionsStore) *Server {
 
 	registerRoutes(mux, h)
 
+	// Prefetch model list so Settings/Missions don't block on first open.
+	// `opencode models` is multi-second cold; warm in the background.
+	h.WarmModels()
+
 	s.mux = mux
 	return s
 }
@@ -172,7 +176,7 @@ func (s *Server) Handler() http.Handler {
 	return handler
 }
 
-// SetEventSink sets an optional callback for mission events (e.g., kanban projection).
+// SetEventSink sets an optional callback for mission events (e.g., push notifications).
 func (s *Server) SetEventSink(fn func(evtType string, payload interface{})) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

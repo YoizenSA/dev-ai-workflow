@@ -29,9 +29,29 @@ func configureLaunchd() error {
 		return fmt.Errorf("failed to create LaunchAgents directory: %w", err)
 	}
 
-	// Create plist file
 	plistPath := filepath.Join(agentsDir, launchdPlistName)
-	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	plistContent := launchdPlistContent(binaryPath)
+
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+		return fmt.Errorf("failed to write plist file: %w", err)
+	}
+
+	// Load the agent
+	if _, err := runCommand("launchctl", "load", plistPath); err != nil {
+		return fmt.Errorf("failed to load launchd agent: %w", err)
+	}
+
+	return nil
+}
+
+// launchdPlistContent renders the user agent plist.
+//
+// No --background: launchd IS the supervisor and expects the server in the
+// foreground. A forking process exits immediately, KeepAlive reads that as a
+// crash and relaunches, and acquirePort kills the orphan left by the previous
+// cycle — a relaunch loop that never serves anything.
+func launchdPlistContent(binaryPath string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -41,7 +61,6 @@ func configureLaunchd() error {
     <array>
         <string>%s</string>
         <string>serve</string>
-        <string>--background</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -54,17 +73,6 @@ func configureLaunchd() error {
 </dict>
 </plist>
 `, binaryPath)
-
-	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
-		return fmt.Errorf("failed to write plist file: %w", err)
-	}
-
-	// Load the agent
-	if _, err := runCommand("launchctl", "load", plistPath); err != nil {
-		return fmt.Errorf("failed to load launchd agent: %w", err)
-	}
-
-	return nil
 }
 
 // disableLaunchd removes the launchd agent.

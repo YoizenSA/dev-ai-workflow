@@ -195,6 +195,10 @@ Copy the canonical files from `assets/` and import them once from `styles.css`, 
 
 ## Assets
 
+Asset paths, the skill's own resource layout, and how it stays project-agnostic
+live in [references/docs.md](references/docs.md) — read it when you need the
+file on disk rather than the rule.
+
 ### Brand files (official Yoizen brand kit — color decisions trace back to the palette)
 
 | File(s) | Usage |

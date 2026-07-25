@@ -2,14 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import Modal from '../shared/Modal'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { workflowApi } from '../../api/client'
-import type { WorkflowNode } from '../../api/types'
+import { configApi, workflowApi } from '../../api/client'
+import type { AgentDetail, WorkflowNode } from '../../api/types'
 
 // assembledPrompt rebuilds the exact system prompt the exporter produces for a
 // sub-agent: identity/task base, then each injected section's real text, then
 // the task block when both exist. Mirrors the export default (empty → handoff).
-function assembledPrompt(node: WorkflowNode, sections: { name: string; content: string }[]): string {
-	const identity = (node.data.agentDefinition ?? '').trim()
+function assembledPrompt(
+	node: WorkflowNode,
+	sections: { name: string; content: string }[],
+	linkedIdentity = '',
+): string {
+	// A linked node stores no prompt of its own — the exporter resolves it from
+	// the agent at export time, so the preview has to resolve it too or it shows
+	// a prompt that is missing exactly the part that matters.
+	const identity = ((node.data.agentDefinition ?? '') || linkedIdentity).trim()
 	const task = (node.data.prompt ?? '').trim()
 	const base = identity || task
 	const names = (node.data.sections ?? '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -95,11 +102,30 @@ export default function NodeFocusModal({ nodeId, onClose }: { nodeId: string | n
 		workflowApi.listSections().then((s) => setLibSections(s ?? [])).catch(() => undefined)
 	}, [])
 
+	// Identity of a linked node, fetched from the agent it points at.
+	const agentRef = (node?.data.agentRef ?? '').trim()
+	const [linkedIdentity, setLinkedIdentity] = useState('')
+	useEffect(() => {
+		if (!agentRef) {
+			setLinkedIdentity('')
+			return
+		}
+		configApi
+			.getAgent(agentRef.split('/').pop() as string)
+			.then((a: AgentDetail) => setLinkedIdentity(a?.content ?? ''))
+			.catch(() => setLinkedIdentity(''))
+	}, [agentRef])
+
 	if (!node) return null
 	const field = fields[Math.min(active, fields.length - 1)]
 	const isJson = field.key === '__json'
 	const isAssembled = field.key === '__assembled'
-	const value = (node.data as Record<string, unknown>)[field.key]
+	const rawValue = (node.data as Record<string, unknown>)[field.key]
+	// The identity tab of a linked node shows the agent's prompt, read-only:
+	// editing here would write a copy and silently detach the node from the
+	// agent it is supposed to track.
+	const isLinkedIdentity = field.key === 'agentDefinition' && !!agentRef
+	const value = isLinkedIdentity ? linkedIdentity : rawValue
 
 	return (
 		<Modal open={!!nodeId} onClose={onClose} title={`Focus — ${node.name || node.type}`} width="min(1100px, 92vw)">
@@ -138,23 +164,35 @@ export default function NodeFocusModal({ nodeId, onClose }: { nodeId: string | n
 						/>
 					) : isAssembled ? (
 						<div className="wf-focus-assembled">
-							<pre className="mono">{assembledPrompt(node, libSections)}</pre>
+							<pre className="mono">{assembledPrompt(node, libSections, linkedIdentity)}</pre>
 						</div>
 					) : (
-						<Editor
-							height="60vh"
-							language={field.language}
-							theme="vs-dark"
-							value={typeof value === 'string' ? value : ''}
-							onChange={(v) => updateNode(node.id, { [field.key]: v ?? '' })}
-							options={{
-								minimap: { enabled: false },
-								wordWrap: 'on',
-								fontSize: 13,
-								scrollBeyondLastLine: false,
-								lineNumbers: 'on',
-							}}
-						/>
+						<>
+							{isLinkedIdentity && (
+								<div className="wf-focus-linked">
+									Resolved from <code>{agentRef}</code> at export time. Edit the agent to change
+									every workflow that links it; detach the node to give it a prompt of its own.
+								</div>
+							)}
+							<Editor
+								height={isLinkedIdentity ? '55vh' : '60vh'}
+								language={field.language}
+								theme="vs-dark"
+								value={typeof value === 'string' ? value : ''}
+								onChange={(v) => {
+									if (isLinkedIdentity) return
+									updateNode(node.id, { [field.key]: v ?? '' })
+								}}
+								options={{
+									minimap: { enabled: false },
+									wordWrap: 'on',
+									fontSize: 13,
+									scrollBeyondLastLine: false,
+									lineNumbers: 'on',
+									readOnly: isLinkedIdentity,
+								}}
+							/>
+						</>
 					)}
 				</div>
 			</div>

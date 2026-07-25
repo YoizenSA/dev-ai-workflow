@@ -343,8 +343,8 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		if !ok {
 			t.Fatalf("sub-agent markdown not found at %s", subPath)
 		}
-		if !strings.Contains(sub, "**Status**:") {
-			t.Errorf("opencode sub-agent should contain handoff section (**Status**:), got:\n%s", sub)
+		if !strings.Contains(sub, "## Handoff") {
+			t.Errorf("opencode sub-agent should contain handoff section (## Handoff), got:\n%s", sub)
 		}
 
 		orchPath := filepath.Join(agentsDir, "daily-task-orchestrator.md")
@@ -352,7 +352,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		if !ok {
 			t.Fatalf("orchestrator markdown not found at %s", orchPath)
 		}
-		if strings.Contains(orch, "**Status**:") {
+		if strings.Contains(orch, "## Handoff") {
 			t.Error("opencode orchestrator should NOT contain handoff section")
 		}
 	})
@@ -373,8 +373,8 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		if !ok {
 			t.Fatalf("sub-agent markdown not found at %s", subPath)
 		}
-		if !strings.Contains(sub, "**Status**:") {
-			t.Errorf("claude-code sub-agent should contain handoff section (**Status**:), got:\n%s", sub)
+		if !strings.Contains(sub, "## Handoff") {
+			t.Errorf("claude-code sub-agent should contain handoff section (## Handoff), got:\n%s", sub)
 		}
 
 		orchPath := filepath.Join(agentsDir, "daily-task-orchestrator.md")
@@ -382,7 +382,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		if !ok {
 			t.Fatalf("orchestrator markdown not found at %s", orchPath)
 		}
-		if strings.Contains(orch, "**Status**:") {
+		if strings.Contains(orch, "## Handoff") {
 			t.Error("claude-code orchestrator should NOT contain handoff section")
 		}
 	})
@@ -437,4 +437,70 @@ func keys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// A workflow node may link to a real agent instead of embedding a copy of its
+// prompt. These pin the precedence, because getting it wrong either freezes the
+// prompt again (ref ignored) or silently discards a deliberate override.
+
+func TestResolveAgentDefinition_RefResolvesFromAgentsDir(t *testing.T) {
+	n := &Node{Data: NodeData{AgentRef: "core/architect"}}
+	got := resolveAgentDefinition(n)
+	if got == "" {
+		t.Fatal("agentRef did not resolve — the workflow would fall back to its task prompt")
+	}
+	if !strings.Contains(got, "Architect Agent") {
+		t.Errorf("resolved the wrong agent: %.80q", got)
+	}
+}
+
+func TestResolveAgentDefinition_BareNameResolves(t *testing.T) {
+	if got := resolveAgentDefinition(&Node{Data: NodeData{AgentRef: "designer"}}); !strings.Contains(got, "Designer Agent") {
+		t.Errorf("bare name should resolve to core/designer, got %.80q", got)
+	}
+}
+
+func TestResolveAgentDefinition_InlineDefinitionOverridesRef(t *testing.T) {
+	n := &Node{Data: NodeData{AgentRef: "core/architect", AgentDefinition: "One-off node prompt."}}
+	if got := resolveAgentDefinition(n); got != "One-off node prompt." {
+		t.Errorf("an explicit agentDefinition must win over the ref, got %q", got)
+	}
+}
+
+func TestResolveAgentDefinition_UnknownRefDoesNotGuess(t *testing.T) {
+	if got := resolveAgentDefinition(&Node{Data: NodeData{AgentRef: "nope/missing"}}); got != "" {
+		t.Errorf("unknown ref must resolve empty, got %q", got)
+	}
+}
+
+// The point of the link: editing the agent changes what the workflow exports.
+func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
+	wf := &Workflow{
+		Name: "linked",
+		Nodes: []Node{
+			{ID: "s", Type: NodeTypeStart},
+			{ID: "a", Type: NodeTypeSubAgent, Name: "designer",
+				Data: NodeData{Name: "designer", AgentRef: "core/designer", Prompt: "Spec the screen."}},
+		},
+		Connections: []Connection{{From: "s", To: "a"}},
+	}
+	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	var agentMD string
+	for path, content := range files {
+		if strings.Contains(path, "designer") {
+			agentMD = content
+		}
+	}
+	if agentMD == "" {
+		t.Fatal("no agent file rendered for the linked node")
+	}
+	for _, want := range []string{"Designer Agent", "## Task", "Spec the screen."} {
+		if !strings.Contains(agentMD, want) {
+			t.Errorf("exported linked agent missing %q", want)
+		}
+	}
 }

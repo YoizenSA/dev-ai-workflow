@@ -2,11 +2,13 @@
  * vision-bridge — OpenCode plugin
  *
  * When the active model cannot accept image input (e.g. deepseek-v4-flash),
- * images attached by the user are analyzed via TokenBank's vision models and
- * replaced with text so the text-only model can reason about them.
+ * images attached by the user are analyzed by a vision model and replaced with
+ * text so the text-only model can reason about them.
  *
- * Covers "I pasted an image" for text-only models without requiring native
- * vision support or a separate MCP server.
+ * The analysis runs through OpenCode itself (client.session.prompt), so the
+ * vision model is any model OpenCode already knows — provider resolution,
+ * credentials and wire format are OpenCode's job, not ours. No separate
+ * endpoint or API key is configured here.
  */
 
 import * as fs from "node:fs/promises"
@@ -27,29 +29,15 @@ type AnyPart = {
   [key: string]: unknown
 }
 
+/** A model reference as OpenCode addresses it. */
+export type ModelRef = { providerID: string; modelID: string }
+
 type YwaiConfig = {
-  tokenbank_url?: string
-  tokenbank_api_key?: string
   vision_model?: string
   vision_model_override?: string
-  vision_provider_url?: string
-  vision_provider_api_key?: string
 }
 
-// The vision endpoint is the override provider when set, else TokenBank.
-// Any OpenAI-compatible endpoint (OpenAI, OpenRouter, a local vLLM…) works.
-function visionEndpoint(cfg: YwaiConfig): { url: string; key: string } {
-  return {
-    url: (cfg.vision_provider_url || cfg.tokenbank_url || "").trim(),
-    key: (cfg.vision_provider_api_key || cfg.tokenbank_api_key || "").trim(),
-  }
-}
-
-function stripProviderPrefix(id: string): string {
-  const i = id.lastIndexOf("/")
-  return i >= 0 ? id.slice(i + 1) : id
-}
-
+/** Reads the vision model preference from ~/.ywai/config.yaml. */
 async function readYwaiConfig(): Promise<YwaiConfig> {
   const cfgPath = path.join(os.homedir(), ".ywai", "config.yaml")
   try {
@@ -66,14 +54,7 @@ async function readYwaiConfig(): Promise<YwaiConfig> {
       ) {
         val = val.slice(1, -1)
       }
-      if (
-        key === "tokenbank_url" ||
-        key === "tokenbank_api_key" ||
-        key === "vision_model" ||
-        key === "vision_model_override" ||
-        key === "vision_provider_url" ||
-        key === "vision_provider_api_key"
-      ) {
+      if (key === "vision_model" || key === "vision_model_override") {
         out[key as keyof YwaiConfig] = val
       }
     }
@@ -82,234 +63,244 @@ async function readYwaiConfig(): Promise<YwaiConfig> {
     return {}
   }
 }
-// Check whether a model supports image input using the provider-agnostic
-// live catalog from OpenCode itself (client.provider.list), then falling
-// back to TokenBank and opencode.json. Returns true (don't intercept)
-// when the model's capability cannot be determined.
-// Priority:
-//   1. client.provider.list() — OpenCode's own live model catalog
-//   2. TokenBank live catalog (when configured)
-//   3. opencode.json provider entry
-//   4. Unknown → assume vision (let images pass through)
-async function modelSupportsImage(
-  client: PluginInput["client"],
-  providerID: string,
-  modelID: string,
-): Promise<boolean> {
-  // 1. OpenCode's live provider catalog — authoritative, no hardcoded lists
+
+/** A model entry as returned by client.provider.list(), across OpenCode versions. */
+type CatalogModel = {
+  // Current shape (Provider.Model): capabilities.attachment + capabilities.input.image
+  capabilities?: {
+    attachment?: boolean
+    input?: { image?: boolean; audio?: boolean; video?: boolean; pdf?: boolean }
+  }
+  // Legacy/config shape: flat attachment + modalities.input as a string array
+  attachment?: boolean
+  modalities?: { input?: string[] }
+}
+
+type CatalogProvider = { id: string; models?: Record<string, CatalogModel> }
+
+/**
+ * Read image support off a catalog entry, tolerating both OpenCode shapes.
+ * Returns undefined when the entry carries no capability info at all, so the
+ * caller falls through to the next source instead of assuming "no vision".
+ */
+export function catalogEntrySupportsImage(model: CatalogModel): boolean | undefined {
+  const caps = model.capabilities
+  if (caps) {
+    if (caps.input?.image === true) return true
+    if (caps.attachment === true) return true
+    // capabilities present but no image input → genuinely text-only
+    if (caps.input || caps.attachment !== undefined) return false
+  }
+  if (model.modalities?.input) {
+    return model.modalities.input.includes("image")
+  }
+  if (typeof model.attachment === "boolean") return model.attachment
+  return undefined
+}
+
+/** Fetches OpenCode's live provider catalog; empty on any failure. */
+async function loadCatalog(client: PluginInput["client"]): Promise<CatalogProvider[]> {
   try {
     const result = await client.provider.list()
-    const rawProviders = result.data?.all ?? []
-    const providers = rawProviders as Array<{
-      id: string
-      models?: Record<string, { attachment?: boolean; modalities?: { input?: string[] } }>
-    }>
-    const prov = providers.find((p) => p.id === providerID)
-    const model = prov?.models?.[modelID]
-    if (model) {
-      // OpenCode catalog found the model — its capability is authoritative.
-      return model.modalities?.input?.includes("image") === true || model.attachment === true
-    }
-    } catch {
+    return (result.data?.all ?? []) as CatalogProvider[]
+  } catch {
+    return []
   }
+}
 
-  // 2. TokenBank live catalog
-  const cfg = await readYwaiConfig()
-  if (cfg.tokenbank_url && cfg.tokenbank_api_key) {
-    try {
-      const res = await fetch(
-        `${cfg.tokenbank_url.replace(/\/$/, "")}/api/setup/models`,
-        { headers: { Authorization: `Bearer ${cfg.tokenbank_api_key}` } },
-      )
-      if (res.ok) {
-        const body = (await res.json()) as {
-          models?: Array<{
-            id: string
-            vision?: boolean
-            modalities?: { input?: string[] }
-          }>
-        }
-        const m = body.models?.find((x) => x.id === modelID)
-        if (m) {
-          if (m.vision) return true
-          if (m.modalities?.input?.includes("image")) return true
-          return false // explicitly cataloged as non-vision
-        }
-      }
-    } catch {
-      // fall through
-    }
-  }
+/**
+ * Whether the chat model can accept images.
+ *
+ * OpenCode's live catalog is authoritative. When it does not know the model (or
+ * reports no capability info), fall back to opencode.json, and finally assume
+ * vision so images pass through untouched rather than being needlessly bridged.
+ */
+export function modelSupportsImage(
+  catalog: CatalogProvider[],
+  providerID: string,
+  modelID: string,
+): boolean | undefined {
+  const prov = catalog.find((p) => p.id === providerID)
+  const model = prov?.models?.[modelID]
+  if (!model) return undefined
+  return catalogEntrySupportsImage(model)
+}
 
-  // 3. opencode.json fallback
+/** opencode.json fallback for models missing from the live catalog. */
+async function opencodeConfigSupportsImage(
+  providerID: string,
+  modelID: string,
+): Promise<boolean | undefined> {
   try {
     const ocPath = path.join(os.homedir(), ".config", "opencode", "opencode.json")
     const oc = JSON.parse(await fs.readFile(ocPath, "utf8")) as {
-      provider?: Record<
-        string,
-        {
-          models?: Record<
-            string,
-            { attachment?: boolean; modalities?: { input?: string[] } }
-          >
-        }
-      >
+      provider?: Record<string, { models?: Record<string, CatalogModel> }>
     }
     const entry = oc.provider?.[providerID]?.models?.[modelID]
-    if (entry) {
-      if (entry.modalities?.input?.includes("image")) return true
-      if (entry.attachment) return true
-    }
+    if (!entry) return undefined
+    return catalogEntrySupportsImage(entry)
   } catch {
-    // fall through
-  }
-
-  // 4. Unknown → assume vision (safe default: let images pass through)
-  return true
-}
-
-async function resolveVisionModel(cfg: YwaiConfig): Promise<string> {
-  // Settings is the source of truth: vision_model_override > vision_model.
-  const preferred = stripProviderPrefix(
-    (cfg.vision_model_override || cfg.vision_model || "").trim(),
-  )
-  if (preferred) {
-    return preferred
-  }
-  // A custom provider has no vision-flagged catalog (only TokenBank exposes
-  // /api/setup/models), so the model id must be set explicitly.
-  if (cfg.vision_provider_url) {
-    return ""
-  }
-  // Empty setting → first vision model from TokenBank catalog.
-  if (!cfg.tokenbank_url || !cfg.tokenbank_api_key) {
-    return ""
-  }
-  try {
-    const res = await fetch(
-      `${cfg.tokenbank_url.replace(/\/$/, "")}/api/setup/models`,
-      { headers: { Authorization: `Bearer ${cfg.tokenbank_api_key}` } },
-    )
-    if (!res.ok) return ""
-    const body = (await res.json()) as {
-      models?: Array<{
-        id: string
-        vision?: boolean
-        modalities?: { input?: string[] }
-      }>
-    }
-    const vision = (body.models ?? []).filter(
-      (m) => m.vision || m.modalities?.input?.includes("image"),
-    )
-    return vision[0]?.id ?? ""
-  } catch {
-    return ""
+    return undefined
   }
 }
 
-async function toDataURI(part: AnyPart): Promise<string | null> {
-  const url = part.url ?? ""
-  if (url.startsWith("data:image/")) return url
-  if (url.startsWith("file://")) {
-    try {
-      const filePath = decodeURIComponent(url.replace("file://", ""))
-      const buf = await fs.readFile(filePath)
-      const mime = part.mime || "image/png"
-      return `data:${mime};base64,${buf.toString("base64")}`
-    } catch {
-      return null
+/**
+ * Picks the vision model to analyze with.
+ *
+ * The configured preference wins (accepting "provider/model" or a bare model id
+ * resolved against the catalog). With no preference, the first vision-capable
+ * model in OpenCode's catalog is used.
+ */
+export function resolveVisionModel(
+  catalog: CatalogProvider[],
+  preference: string,
+): ModelRef | undefined {
+  const pref = preference.trim()
+  if (pref) {
+    const slash = pref.indexOf("/")
+    if (slash > 0) {
+      const providerID = pref.slice(0, slash)
+      const modelID = pref.slice(slash + 1)
+      // Trust an explicit provider/model even when absent from the catalog:
+      // the user may have configured it outside the listed providers.
+      return { providerID, modelID }
+    }
+    // Bare model id — find the provider that offers it.
+    for (const prov of catalog) {
+      if (prov.models?.[pref]) return { providerID: prov.id, modelID: pref }
+    }
+    return undefined
+  }
+
+  for (const prov of catalog) {
+    for (const [modelID, model] of Object.entries(prov.models ?? {})) {
+      if (catalogEntrySupportsImage(model) === true) {
+        return { providerID: prov.id, modelID }
+      }
     }
   }
-  // Absolute path without scheme (rare)
-  if (url.startsWith("/") || /^[A-Za-z]:\\/.test(url)) {
-    try {
-      const buf = await fs.readFile(url)
-      const mime = part.mime || "image/png"
-      return `data:${mime};base64,${buf.toString("base64")}`
-    } catch {
-      return null
-    }
-  }
-  return null
+  return undefined
 }
 
+/** Formats a model ref the way OpenCode displays it. */
+function formatModel(m: ModelRef): string {
+  return `${m.providerID}/${m.modelID}`
+}
+
+const VISION_SYSTEM_PROMPT = [
+  "You are a vision assistant. Look at the attached image carefully.",
+  "Respond in clear English.",
+  "First describe exactly what you see: layout, UI elements, text (transcribe it), colors, icons, logos, errors, and any important visual details.",
+  "Be specific and factual. Do not invent content that is not visible.",
+  "When the user's own message is included, treat it as the reason the image was",
+  "attached: answer it directly after the description, and let it guide which",
+  "details matter most.",
+].join("\n")
+
+/**
+ * Collects the text the user actually typed with the image.
+ *
+ * Synthetic parts are skipped: OpenCode injects its own text (agent hints and
+ * similar) into the same message, and forwarding those as "the user's message"
+ * would misdirect the vision model.
+ */
+export function collectUserText(parts: AnyPart[]): string {
+  return parts
+    .filter((p) => p.type === "text" && !p.synthetic && typeof p.text === "string")
+    .map((p) => p.text!.trim())
+    .filter(Boolean)
+    .join("\n")
+}
+
+/**
+ * Builds the user turn sent alongside the image.
+ *
+ * The text the user typed with the image is forwarded verbatim — it is usually
+ * what makes the image interpretable ("why does this button look wrong?"), and
+ * without it the vision model describes the picture blind to the actual
+ * question.
+ */
+export function buildVisionPrompt(userText: string): string {
+  const text = userText.trim()
+  if (!text) {
+    return "Describe this image, then end with a short one-paragraph summary."
+  }
+  return [
+    "The user attached this image along with the following message:",
+    "",
+    text,
+    "",
+    "Describe the image, then answer that message using what you can see.",
+  ].join("\n")
+}
+
+/** Pulls the assistant's text out of a session.prompt response. */
+export function extractText(parts: Array<{ type?: string; text?: string }>): string {
+  return parts
+    .filter((p) => p?.type === "text" && typeof p.text === "string")
+    .map((p) => p.text!.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim()
+}
+
+/**
+ * Analyzes one image by prompting the vision model through OpenCode.
+ *
+ * Runs in a throwaway child session so the analysis never lands in the user's
+ * conversation, and with tools disabled so it is a plain completion.
+ */
 async function analyzeImage(
-  cfg: YwaiConfig,
-  visionModel: string,
-  dataURI: string,
-  prompt: string,
+  client: PluginInput["client"],
+  bridgeSessions: Set<string>,
+  parentID: string,
+  visionModel: ModelRef,
+  imagePart: AnyPart,
+  userText: string,
 ): Promise<string> {
-  const { url, key } = visionEndpoint(cfg)
-  if (!url || !key) {
-    throw new Error("No vision provider configured in ~/.ywai/config.yaml")
-  }
-  if (!visionModel) {
-    throw new Error("No vision model configured")
+  const created = await client.session.create({
+    body: { parentID, title: "vision-bridge" },
+  })
+  const sessionID = (created.data as { id?: string } | undefined)?.id
+  if (!sessionID) {
+    throw new Error("could not create the analysis session")
   }
 
-  const res = await fetch(
-    `${url.replace(/\/$/, "")}/v1/chat/completions`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+  // Marked before prompting: the nested chat.message hook must skip this
+  // session instead of trying to bridge the image a second time.
+  bridgeSessions.add(sessionID)
+  try {
+    const res = await client.session.prompt({
+      path: { id: sessionID },
+      body: {
         model: visionModel,
-        max_tokens: 1500,
-        messages: [
+        system: VISION_SYSTEM_PROMPT,
+        tools: {},
+        parts: [
+          { type: "text", text: buildVisionPrompt(userText) },
           {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: dataURI } },
-            ],
+            type: "file",
+            mime: imagePart.mime || "image/png",
+            url: imagePart.url ?? "",
+            ...(imagePart.filename ? { filename: imagePart.filename } : {}),
           },
         ],
-      }),
-    },
-  )
+      },
+    })
 
-  const text = await res.text()
-  if (!res.ok) {
-    throw new Error(`TokenBank vision error (${res.status}): ${text.slice(0, 300)}`)
+    const parts = (res.data?.parts ?? []) as Array<{ type?: string; text?: string }>
+    const text = extractText(parts)
+    if (!text) throw new Error("the vision model returned no text")
+    return text
+  } finally {
+    bridgeSessions.delete(sessionID)
+    // Best-effort cleanup — a leftover child session is noise, not a failure.
+    try {
+      await client.session.delete({ path: { id: sessionID } })
+    } catch {
+      // ignore
+    }
   }
-  const body = JSON.parse(text) as {
-    choices?: Array<{
-      message?: {
-        content?: string | null | Array<{ type?: string; text?: string }>
-        reasoning_content?: string | null
-      }
-    }>
-  }
-  const message = body.choices?.[0]?.message
-  const content = normalizeAssistantText(message?.content, message?.reasoning_content)
-  if (!content) {
-    throw new Error("TokenBank vision returned empty content")
-  }
-  return content
-}
-
-/** Flatten OpenAI-style content + reasoning_content into a single string. */
-function normalizeAssistantText(
-  content: string | null | undefined | Array<{ type?: string; text?: string }>,
-  reasoning?: string | null,
-): string {
-  let text = ""
-  if (typeof content === "string") {
-    text = content.trim()
-  } else if (Array.isArray(content)) {
-    text = content
-      .map((part) => (typeof part?.text === "string" ? part.text : ""))
-      .join("")
-      .trim()
-  }
-  if (text) return text
-  if (typeof reasoning === "string" && reasoning.trim()) {
-    return reasoning.trim()
-  }
-  return ""
 }
 
 type ToastVariant = "info" | "success" | "warning" | "error"
@@ -335,9 +326,15 @@ async function showToast(
 
 const VisionBridgePlugin: Plugin = async (ctx) => {
   const { client } = ctx
+  // Sessions this plugin drives itself. Prompting the vision model re-enters
+  // chat.message with the same image part, so without this the bridge would
+  // recurse whenever the vision model is misconfigured as non-vision.
+  const bridgeSessions = new Set<string>()
 
   return {
     "chat.message": async (input, output) => {
+      if (input.sessionID && bridgeSessions.has(input.sessionID)) return
+
       const model = input.model
       if (!model?.modelID || !model.providerID) return
 
@@ -347,34 +344,56 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
       )
       if (imageParts.length === 0) return
 
-      const supports = await modelSupportsImage(client, model.providerID, model.modelID)
+      const catalog = await loadCatalog(client)
+      const supports =
+        modelSupportsImage(catalog, model.providerID, model.modelID) ??
+        (await opencodeConfigSupportsImage(model.providerID, model.modelID)) ??
+        true // unknown → let images through natively
       if (supports) return
+
       const cfg = await readYwaiConfig()
-      const visionModel = await resolveVisionModel(cfg)
-      const userText = parts
-        .filter((p) => p.type === "text" && p.text)
-        .map((p) => p.text!.trim())
-        .filter(Boolean)
-        .join("\n")
-      // Always ask the vision model (in English) for a concrete visual description.
-      // If the user also wrote a question, answer it after describing what is visible.
-      const prompt = [
-        "You are a vision assistant. Look at the attached image carefully.",
-        "Respond in clear English.",
-        "First describe exactly what you see: layout, UI elements, text (transcribe it), colors, icons, logos, errors, and any important visual details.",
-        "Be specific and factual. Do not invent content that is not visible.",
-        userText
-          ? `Then answer the user's request about the image:\n${userText}`
-          : "If there is no further question, end with a short one-paragraph summary of the image.",
-      ].join("\n")
+      const visionModel = resolveVisionModel(
+        catalog,
+        cfg.vision_model_override || cfg.vision_model || "",
+      )
+      const userText = collectUserText(parts)
 
       const n = imageParts.length
-      const modelLabel = visionModel || "vision model"
+      if (!visionModel) {
+        // Say which model triggered the bridge — otherwise the user cannot tell
+        // why it ran at all.
+        await showToast(
+          client,
+          `${formatModel(model)} cannot see images and no vision model is configured`,
+          "error",
+        )
+        const notice =
+          `[Vision bridge] ${formatModel(model)} cannot accept images and no vision model ` +
+          `is available. Set one in ywai Settings → Vision bridge.`
+        output.parts.length = 0
+        output.parts.push(
+          ...(parts.map((p) =>
+            p.type === "file" && p.mime?.startsWith("image/")
+              ? {
+                  id: p.id,
+                  type: "text",
+                  messageID: p.messageID,
+                  sessionID: p.sessionID,
+                  synthetic: true,
+                  text: notice,
+                }
+              : p,
+          ) as typeof output.parts),
+        )
+        return
+      }
+
+      const modelLabel = formatModel(visionModel)
       await showToast(
         client,
         n === 1
-          ? `Analyzing image with ${modelLabel}…`
-          : `Analyzing ${n} images with ${modelLabel}…`,
+          ? `${formatModel(model)} has no vision — analyzing image with ${modelLabel}…`
+          : `${formatModel(model)} has no vision — analyzing ${n} images with ${modelLabel}…`,
         "info",
       )
 
@@ -388,20 +407,14 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
         }
 
         try {
-          const dataURI = await toDataURI(part)
-          if (!dataURI) {
-            failed++
-            next.push({
-              id: part.id,
-              type: "text",
-              messageID: part.messageID,
-              sessionID: part.sessionID,
-              synthetic: true,
-              text: `[Vision bridge] Could not read image ${part.filename ?? "(unnamed)"}.`,
-            })
-            continue
-          }
-          const analysis = await analyzeImage(cfg, visionModel, dataURI, prompt)
+          const analysis = await analyzeImage(
+            client,
+            bridgeSessions,
+            input.sessionID,
+            visionModel,
+            part,
+            userText,
+          )
           ok++
           next.push({
             id: part.id,
@@ -411,7 +424,7 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
             synthetic: true,
             // Keep wording positive: "cannot see images" made chat models claim the bridge failed.
             text:
-              `[Image analysis via ${visionModel}]\n` +
+              `[Image analysis via ${modelLabel}]\n` +
               `The user attached an image. Below is a description produced by the vision model ` +
               `(the chat model should treat this as ground truth about the image):\n\n${analysis}`,
           })
@@ -425,7 +438,7 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
             sessionID: part.sessionID,
             synthetic: true,
             text:
-              `[Vision bridge error] Could not analyze the attached image with the configured vision model. ` +
+              `[Vision bridge error] Could not analyze the attached image with ${modelLabel}. ` +
               `Details: ${msg}`,
           })
         }
