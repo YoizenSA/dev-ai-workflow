@@ -27,6 +27,7 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	model?: string
 	mode?: string
 	tools?: string
+	agentRef?: string
 	agentType?: string
 	delegateTo?: string
 	executionMode?: string
@@ -96,9 +97,18 @@ function subtitle(d: WorkflowNodePayload): string {
 // node type surfaces its defining fields directly on the canvas.
 function chips(d: WorkflowNodePayload): { k: string; v: string }[] {
 	switch (d.__type) {
+		// A linked node looks identical to a one-off one without this chip, so the
+		// canvas gives no way to tell which nodes track a real agent.
+		case 'start':
+			return d.agentRef ? [{ k: 'agent', v: d.agentRef }] : []
 		case 'subAgent': {
 			const out: { k: string; v: string }[] = []
-			if (d.model) out.push({ k: 'model', v: d.model })
+			if (d.agentRef) out.push({ k: 'agent', v: d.agentRef })
+			// A linked node with no explicit model takes its agent's tier from the
+			// active profile at export time, so "inherit" here would be a lie.
+			if (d.model && d.model !== 'inherit') out.push({ k: 'model', v: d.model })
+			else if (d.agentRef) out.push({ k: 'model', v: 'from profile' })
+			else if (d.model) out.push({ k: 'model', v: d.model })
 			if (d.mode) out.push({ k: 'mode', v: d.mode })
 			if (d.tools) out.push({ k: 'tools', v: d.tools })
 			return out
