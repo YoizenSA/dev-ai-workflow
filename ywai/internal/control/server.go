@@ -46,7 +46,6 @@ type Server struct {
 	mux       *http.ServeMux
 	portReady chan struct{}
 	startedAt time.Time
-	mu        sync.Mutex
 	startErr  error
 	jobs      *mcp.JobManager
 	workflows *workflowsAPI

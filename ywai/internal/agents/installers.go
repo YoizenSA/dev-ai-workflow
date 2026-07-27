@@ -457,62 +457,6 @@ var ywaiBucketPatterns = map[string][]string{
 	"delegate": {"delegate", "delegation_*"},
 }
 
-// bashVerify is a permission value beyond allow/deny/ask: a shell that can run
-// checks but cannot change anything. It lets a coordinator confirm a handoff
-// against real command output instead of trusting the subagent's summary.
-const bashVerify = "verify"
-
-// verifyBashAllowlist is what `bash: verify` permits: inspecting git state and
-// running the project's checks, across the toolchains in use here.
-//
-// Read-only git commands appear without their output-writing forms, which the
-// false-green list denies separately — `git diff --output` would otherwise turn
-// an inspection command into a file writer.
-var verifyBashAllowlist = []string{
-	"git diff*",
-	"git status*",
-	"git log*",
-	"git show*",
-	"git ls-files*",
-	"go test*",
-	"go vet*",
-	"go build*",
-	"gofmt -l*",
-	"npm test*",
-	"npm run lint*",
-	"npm run build*",
-	"npx tsc --noEmit*",
-	"npx vitest run*",
-	"bun test*",
-	"dotnet test*",
-	"dotnet build*",
-	"pytest*",
-}
-
-// commitCapableAgents may commit and push. Everything else that can run a shell
-// is denied both.
-//
-// The list is an allowlist rather than a deny-list of executors so a new agent
-// arrives without release rights: forgetting to add a name costs a blocked
-// command, forgetting to remove one costs an unreviewed push.
-var commitCapableAgents = map[string]bool{
-	"devops": true,
-}
-
-// noCommitBashPatterns keep the release button with the review-then-commit
-// path. Wrapper forms are included because a blocked `git commit` that succeeds
-// as `env git commit` is not a boundary.
-var noCommitBashPatterns = []string{
-	"git commit*",
-	"git push*",
-	"git * commit*",
-	"git * push*",
-	"env git commit*",
-	"env git push*",
-	"git.exe commit*",
-	"git.exe push*",
-}
-
 // falseGreenBashPatterns are commands that make a check pass without making the
 // code correct. They are denied for every agent that can run bash.
 //
