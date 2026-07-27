@@ -5,7 +5,6 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Cloud,
-	FolderKanban,
 	Heart,
 	LineChart,
 	MessageSquare,
@@ -60,11 +59,6 @@ const NAV_ITEMS = [
 ];
 
 const BETA_ITEMS = [
-	{
-		path: "/hub",
-		label: "Hub",
-		icon: <FolderKanban size={20} />,
-	},
 	{
 		path: "/chat",
 		label: "Chat",

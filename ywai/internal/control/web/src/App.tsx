@@ -7,7 +7,6 @@ import McpStore from './components/mcp-store/McpStore'
 import AdoConfig from './components/ado-config/AdoConfig'
 import WorkflowEditor from './components/workflows/WorkflowEditor'
 import Chat from './components/chat/Chat'
-import { HubPage } from './components/hub/HubPage'
 import { HealthDashboard } from './components/health/HealthDashboard'
 
 function App() {
@@ -23,8 +22,8 @@ function App() {
           <Route path="/mcp-store" element={<McpStore />} />
           <Route path="/ado" element={<AdoConfig />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/hub" element={<HubPage />} />
           <Route path="/health" element={<HealthDashboard />} />
+          <Route path="/hub" element={<Navigate to="/workflows" replace />} />
         </Routes>
       </Layout>
     </Router>

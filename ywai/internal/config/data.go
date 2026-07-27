@@ -2,10 +2,12 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -96,7 +98,8 @@ func RegisterEmbeddedWorkflows(workflowsFS func() fs.FS) {
 }
 
 // SeedWorkflowsFromEmbedded copies the embedded seed workflows into the user's
-// data dir, never overwriting an existing workflow.
+// data dir. Existing files are not replaced, but agentRef links from the seed
+// are re-applied (see reconcileSeedWorkflowAgentLinks).
 func SeedWorkflowsFromEmbedded() error {
 	if err := EnsureDataDir(); err != nil {
 		return err
@@ -114,13 +117,13 @@ func SeedWorkflowsFromEmbedded() error {
 		if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
 			return nil
 		}
-		dstPath := filepath.Join(dstDir, filepath.Base(path))
-		if _, statErr := os.Stat(dstPath); statErr == nil {
-			return nil // never clobber a user's workflow
-		}
 		data, readErr := fs.ReadFile(fsys, path)
 		if readErr != nil {
 			return readErr
+		}
+		dstPath := filepath.Join(dstDir, filepath.Base(path))
+		if _, statErr := os.Stat(dstPath); statErr == nil {
+			return reconcileSeedWorkflowAgentLinks(dstPath, data)
 		}
 		return os.WriteFile(dstPath, data, 0o644)
 	})
@@ -172,8 +175,9 @@ func SeedAgentsFrom(repoRoot string) error {
 }
 
 // SeedWorkflowsFrom copies the bundled seed workflows (ywai/workflows/*.json)
-// into the user's data dir. It never overwrites an existing workflow, so a
-// user's own edits to a seeded workflow survive re-seeding.
+// into the user's data dir. Existing workflows are not fully replaced (layout
+// and custom nodes survive), but agentRef links from the seed are re-applied so
+// install/update re-attaches real agents like core/orchestrator on goal's start.
 func SeedWorkflowsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err
@@ -188,19 +192,131 @@ func SeedWorkflowsFrom(repoRoot string) error {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		dstPath := filepath.Join(dstDir, entry.Name())
-		if _, err := os.Stat(dstPath); err == nil {
-			continue // never clobber a user's workflow
-		}
 		data, err := os.ReadFile(filepath.Join(srcDir, entry.Name()))
 		if err != nil {
 			return fmt.Errorf("failed to read %s: %w", entry.Name(), err)
+		}
+		dstPath := filepath.Join(dstDir, entry.Name())
+		if _, err := os.Stat(dstPath); err == nil {
+			if err := reconcileSeedWorkflowAgentLinks(dstPath, data); err != nil {
+				return fmt.Errorf("reconcile agent links in %s: %w", entry.Name(), err)
+			}
+			continue
 		}
 		if err := os.WriteFile(dstPath, data, 0o644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", dstPath, err)
 		}
 	}
 	return nil
+}
+
+// seed workflow JSON shapes (only the fields we repair).
+type seedWF struct {
+	Nodes []seedNode `json:"nodes"`
+}
+
+type seedNode struct {
+	ID   string       `json:"id"`
+	Type string       `json:"type"`
+	Data seedNodeData `json:"data"`
+}
+
+type seedNodeData struct {
+	AgentRef        string `json:"agentRef,omitempty"`
+	AgentDefinition string `json:"agentDefinition,omitempty"`
+}
+
+// reconcileSeedWorkflowAgentLinks re-applies agentRef links from a seed workflow
+// onto an existing user copy without clobbering positions, connections, or
+// other node fields.
+//
+// Why: Seed used to skip any existing file entirely. Users who Detach'd the
+// start node's identity (or older saves that baked agentDefinition) kept an
+// inert inline prompt forever, even after install/update. Re-linking seed
+// agentRefs on install restores the shared agent (e.g. core/orchestrator).
+//
+// Policy per matching node id (start | subAgent only):
+//   - seed has agentRef → dest gets that agentRef
+//   - if seed has empty agentDefinition → clear dest agentDefinition so the
+//     link is not overridden at export time
+func reconcileSeedWorkflowAgentLinks(dstPath string, seedJSON []byte) error {
+	var seed seedWF
+	if err := json.Unmarshal(seedJSON, &seed); err != nil {
+		return fmt.Errorf("parse seed: %w", err)
+	}
+	seedByID := map[string]seedNode{}
+	for _, n := range seed.Nodes {
+		if n.Type != "start" && n.Type != "subAgent" {
+			continue
+		}
+		if strings.TrimSpace(n.Data.AgentRef) == "" {
+			continue
+		}
+		seedByID[n.ID] = n
+	}
+	if len(seedByID) == 0 {
+		return nil
+	}
+
+	raw, err := os.ReadFile(dstPath)
+	if err != nil {
+		return err
+	}
+
+	// Preserve unknown fields: mutate via map structure.
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("parse dest: %w", err)
+	}
+	nodes, _ := doc["nodes"].([]any)
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	changed := false
+	for i, rawNode := range nodes {
+		nm, ok := rawNode.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := nm["id"].(string)
+		typ, _ := nm["type"].(string)
+		if typ != "start" && typ != "subAgent" {
+			continue
+		}
+		sn, ok := seedByID[id]
+		if !ok {
+			continue
+		}
+		data, _ := nm["data"].(map[string]any)
+		if data == nil {
+			data = map[string]any{}
+			nm["data"] = data
+		}
+		wantRef := strings.TrimSpace(sn.Data.AgentRef)
+		gotRef, _ := data["agentRef"].(string)
+		gotDef, _ := data["agentDefinition"].(string)
+		if strings.TrimSpace(gotRef) != wantRef {
+			data["agentRef"] = wantRef
+			changed = true
+		}
+		// Seed tracks a real agent: drop inline prompt so agentRef wins on export.
+		if strings.TrimSpace(sn.Data.AgentDefinition) == "" && strings.TrimSpace(gotDef) != "" {
+			delete(data, "agentDefinition")
+			changed = true
+		}
+		nodes[i] = nm
+	}
+	if !changed {
+		return nil
+	}
+	doc["nodes"] = nodes
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+	return os.WriteFile(dstPath, out, 0o644)
 }
 
 func SeedAgentsFromEmbedded() error {

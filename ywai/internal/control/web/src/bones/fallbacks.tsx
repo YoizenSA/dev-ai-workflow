@@ -15,24 +15,6 @@ function BoneLine({ w = "100%", h = 12, className = "" }: { w?: string; h?: numb
 	);
 }
 
-function BoneBlock({
-	w = "100%",
-	h = 80,
-	className = "",
-}: {
-	w?: string;
-	h?: number;
-	className?: string;
-}) {
-	return (
-		<div
-			className={`by-bone by-bone-block ${className}`}
-			style={{ width: w, height: h }}
-			aria-hidden
-		/>
-	);
-}
-
 export function MissionsBonesFallback() {
 	return (
 		<div className="by-fallback missions" aria-busy="true" aria-label="Loading missions">
@@ -56,23 +38,6 @@ export function MissionsBonesFallback() {
 					</div>
 				))}
 			</div>
-		</div>
-	);
-}
-
-export function HubBonesFallback() {
-	return (
-		<div className="by-fallback hub-page" aria-busy="true" aria-label="Loading projects">
-			<div className="by-fallback-grid">
-				{Array.from({ length: 3 }).map((_, i) => (
-					<div key={i} className="by-fallback-card by-fallback-card-pad">
-						<BoneLine w="45%" h={18} />
-						<BoneLine w="80%" h={12} />
-						<BoneLine w="60%" h={12} />
-					</div>
-				))}
-			</div>
-			<BoneBlock w="140px" h={36} className="by-bone-btn" />
 		</div>
 	);
 }
@@ -119,25 +84,6 @@ export function MissionsCaptureFixture(): ReactNode {
 					</div>
 				))}
 			</div>
-		</div>
-	);
-}
-
-export function HubCaptureFixture(): ReactNode {
-	return (
-		<div className="hub-page" style={{ padding: 16 }}>
-			<div className="hub-page__list" style={{ display: "grid", gap: 12 }}>
-				{[1, 2, 3].map((n) => (
-					<div key={n} className="card card-pad" style={{ padding: 16 }}>
-						<h3>Project {n}</h3>
-						<p>/home/user/projects/app-{n}</p>
-						<span className="pill">opencode</span>
-					</div>
-				))}
-			</div>
-			<button type="button" className="btn btn-primary">
-				Add Project
-			</button>
 		</div>
 	);
 }

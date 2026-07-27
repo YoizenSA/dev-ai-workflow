@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Check, FileText, SquareCheck, X } from "lucide-react";
 import MemoryRecallEval from "./MemoryRecallEval";
+import SessionAnalytics from "./SessionAnalytics";
 import "./Evals.css";
 
-type EvalKind = "tasks" | "recall";
+type EvalKind = "tasks" | "recall" | "sessions";
 
 interface TaskResult {
   taskId: string;
@@ -41,14 +42,14 @@ interface EvalRun {
 }
 
 export default function Evals() {
-  const [kind, setKind] = useState<EvalKind>("tasks");
+  const [kind, setKind] = useState<EvalKind>("sessions");
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<EvalRun | null>(null);
 
   useEffect(() => {
-    if (kind === "tasks") fetchRuns();
+    if (kind === "tasks") void fetchRuns();
   }, [kind]);
 
   async function fetchRuns() {
@@ -86,12 +87,18 @@ export default function Evals() {
           <span className="page-eyebrow">Benchmarks</span>
           <h1 className="page-title">Evals</h1>
           <p className="page-subtitle">
-            Measure agent accuracy and memory retrieval quality across benchmark runs
+            Benchmarks, memory recall, and live OpenCode skill/tool usage by project
           </p>
         </div>
       </header>
 
       <div className="tabs">
+        <button
+          className={`tab${kind === "sessions" ? " active" : ""}`}
+          onClick={() => setKind("sessions")}
+        >
+          Session Analytics
+        </button>
         <button
           className={`tab${kind === "tasks" ? " active" : ""}`}
           onClick={() => setKind("tasks")}
@@ -106,7 +113,9 @@ export default function Evals() {
         </button>
       </div>
 
-      {kind === "recall" ? (
+      {kind === "sessions" ? (
+        <SessionAnalytics />
+      ) : kind === "recall" ? (
         <MemoryRecallEval />
       ) : loading ? (
         <div className="skeleton skel-card" style={{ margin: 'var(--space-4)' }} aria-busy="true">
@@ -121,8 +130,20 @@ export default function Evals() {
           <div className="empty-icon">
             <FileText size={24} />
           </div>
-          <p className="empty-title">No benchmark runs yet</p>
-          <p className="empty-desc">Run <code>ywai eval run</code> to measure agent performance on standard tasks</p>
+          <p className="empty-title">No synthetic task runs yet</p>
+          <p className="empty-desc">
+            Agent task harness is not wired yet. Use{" "}
+            <strong>Session Analytics</strong> to rank real agents, skills and models
+            from OpenCode (same as <code>ywai eval run</code>).
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setKind("sessions")}
+            style={{ marginTop: "var(--space-3)" }}
+          >
+            Open Session Analytics
+          </button>
         </div>
       ) : (
         <div className="eval-runs-list">

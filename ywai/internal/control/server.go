@@ -131,9 +131,6 @@ func (s *Server) buildRoutes() {
 	// ─── Settings maintenance API (SDD cleanup, etc.) ───────────
 	s.registerSettingsRoutes()
 
-	// ─── Hub (project registry) API ────────────────────────────
-	s.registerHubRoutes()
-
 	// ─── Health monitoring API ──────────────────────────────────
 	s.registerHealthRoutes()
 
@@ -148,6 +145,9 @@ func (s *Server) buildRoutes() {
 
 	// ─── Skills CRUD API ────────────────────────────────────────
 	s.registerSkillsRoutes()
+
+	// ─── Evals / Session Analytics API ──────────────────────────
+	s.registerEvalsRoutes()
 
 	// ─── Chat API ───────────────────────────────────────────────
 	// Proxies to a local OpenCode server when one is running.

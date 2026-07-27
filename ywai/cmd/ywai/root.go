@@ -29,6 +29,13 @@ var rootCmd = &cobra.Command{
 	Short: "One command to set up your AI dev environment",
 	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Lightweight read-only commands must not seed skills/agents/workflows
+		// (and must not print "no embedded data" noise).
+		if skipDataSeeding(cmd) {
+			_ = versionfile.Touch(version)
+			return
+		}
+
 		repo := config.RepoRoot()
 		isRealRepo := config.IsOurRepoByPath(repo) && repo != config.DataDir()
 
@@ -94,6 +101,32 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Version = version
+}
+
+// skipDataSeeding reports commands that only need the binary + local DBs,
+// not ~/.ywai skills/agents/workflows seeding.
+func skipDataSeeding(cmd *cobra.Command) bool {
+	// Walk to the leaf command name (e.g. "run" under "eval").
+	names := make([]string, 0, 4)
+	for c := cmd; c != nil; c = c.Parent() {
+		if n := c.Name(); n != "" && n != "ywai" {
+			names = append(names, n)
+		}
+	}
+	// names are leaf→root; reverse sense via contains on the chain.
+	joined := strings.Join(names, " ")
+	// Direct leaves / parents we always skip.
+	skip := map[string]bool{
+		"eval": true, "completion": true, "help": true,
+		"version": true, "stop": true, "ui": true,
+	}
+	for _, n := range names {
+		if skip[n] {
+			return true
+		}
+	}
+	_ = joined
+	return false
 }
 
 func Execute() int {
