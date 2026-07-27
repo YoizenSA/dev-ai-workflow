@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -225,14 +226,7 @@ func quoteMermaid(label, openShape, closeShape string) string {
 // topological order. Branching nodes (askUserQuestion/ifElse/switch) describe
 // their options/conditions so the LLM knows how to route.
 func buildSteps(wf *Workflow, subAgentIDs map[string]string) []string {
-	order, err := wf.topoOrder()
-	if err != nil {
-		// Cyclic: fall back to node declaration order.
-		order = make([]string, len(wf.Nodes))
-		for i := range wf.Nodes {
-			order[i] = wf.Nodes[i].ID
-		}
-	}
+	layers := wf.executionLayers()
 	byID := wf.nodeByID()
 	// Outgoing edges grouped by source, keyed by port for branching nodes.
 	outByPort := make(map[string]map[string][]string) // nodeID -> port -> []targetID
@@ -245,20 +239,52 @@ func buildSteps(wf *Workflow, subAgentIDs map[string]string) []string {
 		outByPort[c.From] = ports
 	}
 
-	steps := make([]string, 0, len(order))
-	for _, id := range order {
-		n, ok := byID[id]
-		if !ok {
-			continue
+	back := wf.backEdges()
+	steps := make([]string, 0, len(wf.Nodes))
+	for _, layer := range layers {
+		// Render the layer first: group nodes and unsupported types produce no
+		// step, so a layer of three can still collapse to a single instruction.
+		rendered := make([]string, 0, len(layer))
+		for _, id := range layer {
+			n, ok := byID[id]
+			if !ok {
+				continue
+			}
+			if s := stepForNode(n, subAgentIDs, outByPort[id], byID, back); s != "" {
+				rendered = append(rendered, s)
+			}
 		}
-		if s := stepForNode(n, subAgentIDs, outByPort[id], byID); s != "" {
-			steps = append(steps, s)
+		switch len(rendered) {
+		case 0:
+			continue
+		case 1:
+			steps = append(steps, rendered[0])
+		default:
+			steps = append(steps, parallelStep(rendered))
 		}
 	}
 	return steps
 }
 
-func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]string, byID map[string]*Node) string {
+// parallelStep renders a layer of independent nodes as one fan-out instruction.
+//
+// Nothing flows between these nodes, so running them in sequence buys nothing
+// and costs the sum of their wall time instead of the slowest one. The exported
+// prompt has to say so explicitly: an orchestrator reading a numbered list
+// assumes the numbers are an order.
+func parallelStep(rendered []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "**Run these %d in parallel.** They are independent — no result "+
+		"flows between them. Dispatch every one of them before waiting on any, then "+
+		"collect all the handoffs before moving on.", len(rendered))
+	for _, s := range rendered {
+		// Indent continuation lines so nested bullets stay under their item.
+		b.WriteString("\n   - " + strings.ReplaceAll(s, "\n   ", "\n     "))
+	}
+	return b.String()
+}
+
+func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]string, byID map[string]*Node, back map[string]bool) string {
 	switch n.Type {
 	case NodeTypeStart:
 		return "**Start.** Begin the workflow."
@@ -291,15 +317,20 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 			b.WriteString("\n   - " + desc)
 		}
 		b.WriteString("\n   Route to the branch matching the user's choice.")
+		b.WriteString(routingLines(n, outs, byID, subAgentIDs, back))
 		return b.String()
 	case NodeTypeIfElse:
-		return fmt.Sprintf("**Branch (if/else)** on condition: %s. Follow the matching outgoing edge.", quoteInline(n.Data.Condition))
+		var b strings.Builder
+		fmt.Fprintf(&b, "**Branch (if/else)** on condition: %s", quoteInline(n.Data.Condition))
+		b.WriteString(routingLines(n, outs, byID, subAgentIDs, back))
+		return b.String()
 	case NodeTypeSwitch, NodeTypeBranch:
 		var b strings.Builder
 		fmt.Fprintf(&b, "**Switch** on: %s", quoteInline(n.Data.Expression))
 		for _, br := range n.Data.Branches {
 			b.WriteString("\n   - " + br.Label + " → " + br.Value)
 		}
+		b.WriteString(routingLines(n, outs, byID, subAgentIDs, back))
 		return b.String()
 	case NodeTypeSkill:
 		mode := n.Data.ExecutionMode
@@ -316,6 +347,89 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		return "" // visual only
 	}
 	return ""
+}
+
+// DefaultMaxRounds caps a rework loop when the node does not set its own.
+//
+// A loop with no cap is a budget leak: "review → fix → review" repeats until
+// something external stops it. Two rounds is the point where a third pass
+// stops being a fix and starts being a disagreement for a human to settle.
+const DefaultMaxRounds = 2
+
+// routingLines renders where each outgoing port of a branching node goes.
+//
+// Naming the targets is the whole point: "follow the matching outgoing edge"
+// tells an orchestrator that a choice exists but not what the choices are, so
+// it guesses. Back edges are called out as rework and carry the round cap.
+func routingLines(n *Node, outs map[string][]string, byID map[string]*Node, subAgentIDs map[string]string, back map[string]bool) string {
+	ports := make([]string, 0, len(outs))
+	for p := range outs {
+		ports = append(ports, p)
+	}
+	sort.Slice(ports, func(i, j int) bool {
+		rank := func(p string) int {
+			switch p {
+			case "true":
+				return 0
+			case "false":
+				return 1
+			default:
+				return 2
+			}
+		}
+		if rank(ports[i]) != rank(ports[j]) {
+			return rank(ports[i]) < rank(ports[j])
+		}
+		return ports[i] < ports[j]
+	})
+
+	var b strings.Builder
+	hasRework := false
+	for _, port := range ports {
+		for _, target := range outs[port] {
+			t, ok := byID[target]
+			if !ok {
+				continue
+			}
+			label := port
+			if label == "" {
+				label = "→"
+			}
+			b.WriteString("\n   - " + label + " → " + stepTargetName(t, subAgentIDs))
+			if back[n.ID+"->"+target] {
+				hasRework = true
+				b.WriteString(" *(rework — loops back)*")
+			}
+		}
+	}
+	if hasRework {
+		max := n.Data.MaxRounds
+		if max <= 0 {
+			max = DefaultMaxRounds
+		}
+		fmt.Fprintf(&b, "\n   - Rework limit: at most %d loop(s). Send only the nodes the "+
+			"review actually flagged, not the whole stage. If it still fails after %d, stop "+
+			"and report what is blocking instead of looping again.", max, max)
+	}
+	return b.String()
+}
+
+// stepTargetName names a node the way the execution steps refer to it: a
+// sub-agent by the id the orchestrator delegates to, anything else by label.
+func stepTargetName(n *Node, subAgentIDs map[string]string) string {
+	if n.Type == NodeTypeSubAgent {
+		if id := subAgentIDs[n.ID]; id != "" {
+			return "sub-agent `" + id + "`"
+		}
+	}
+	label := strings.TrimSpace(n.Data.Label)
+	if label == "" {
+		label = strings.TrimSpace(n.Name)
+	}
+	if label == "" {
+		label = n.ID
+	}
+	return "**" + label + "**"
 }
 
 // quoteInline wraps a free-text instruction in quotes for readability in the

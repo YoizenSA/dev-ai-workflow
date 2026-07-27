@@ -123,6 +123,10 @@ type NodeData struct {
 
 	// ifElse
 	Condition string `json:"condition,omitempty"`
+	// MaxRounds caps how many times a branch may loop back to an earlier node.
+	// Zero means DefaultMaxRounds. Only meaningful on a node that owns a back
+	// edge; ignored everywhere else.
+	MaxRounds int `json:"maxRounds,omitempty"`
 
 	// switch
 	Expression string         `json:"expression,omitempty"`
