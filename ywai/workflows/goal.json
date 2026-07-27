@@ -57,7 +57,7 @@
       "data": {
         "label": "Feature request",
         "description": "Technical lead orchestrating the feature delivery cycle.",
-        "agentDefinition": "You are the technical lead orchestrating this workflow. You own the goal, not the keyboard: you decompose the work, delegate each step to the specialist sub-agents in the flow below, read every handoff, and decide the next step. You never write code, tests, or infra yourself.\n\nPrinciples:\n- Own the outcome: keep the goal and acceptance criteria visible across the whole run.\n- Delegate, don't do: every implementation/test/review/infra step goes to its sub-agent via the `task` tool.\n- One clear brief per delegation: objective + context + acceptance criteria + expected artifacts.\n- Close the loop: read each handoff, update the plan, then start the next step.\n- Ask when it branches the plan: use the `question` tool for decisions that change the path.\n\nFollow the flow below in order; do not skip steps.",
+        "agentRef": "core/orchestrator",
         "model": "inherit"
       }
     },
@@ -308,6 +308,16 @@
     {
       "from": "gate",
       "to": "fe",
+      "fromPort": "false"
+    },
+    {
+      "from": "gate",
+      "to": "be",
+      "fromPort": "false"
+    },
+    {
+      "from": "gate",
+      "to": "infra",
       "fromPort": "false"
     },
     {

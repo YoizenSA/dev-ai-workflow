@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
 import { configApi, missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
-import type { AgentDetail, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
+import type { AgentDetail, AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
 import MultiSelect from './MultiSelect'
 import {
@@ -368,16 +368,10 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 				/>
 				<span className="field-help">Leave empty for coordinator defaults. Uncheck to restrict.</span>
 			</div>
-			<div className="field">
-				<label className="field-label" htmlFor="wf-orch-prompt">System prompt / identity</label>
-				<textarea
-					id="wf-orch-prompt"
-					className="textarea mono"
-					value={node.data.agentDefinition ?? ''}
-					placeholder="Who the orchestrator IS (prepended to the generated flow instructions)…"
-					onChange={(e) => update(node, { agentDefinition: e.target.value })}
-				/>
-			</div>
+			<IdentityField
+				node={node}
+				placeholder="Who the orchestrator IS (prepended to the generated flow instructions)…"
+			/>
 		</>
 	)
 }
@@ -389,9 +383,10 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 // using it. Showing an empty textarea here would suggest the node has no
 // identity, so the link is surfaced instead, with an explicit detach that copies
 // the current text in as an override.
-function IdentityField({ node }: { node: WorkflowNode }) {
+function IdentityField({ node, placeholder }: { node: WorkflowNode; placeholder?: string }) {
 	const ref = (node.data.agentRef ?? '').trim()
 	const [linkedText, setLinkedText] = useState('')
+	const [agents, setAgents] = useState<AgentInfo[]>([])
 
 	useEffect(() => {
 		if (!ref) return
@@ -399,6 +394,16 @@ function IdentityField({ node }: { node: WorkflowNode }) {
 			.getAgent(ref.split('/').pop() as string)
 			.then((a: AgentDetail) => setLinkedText(a?.content ?? ''))
 			.catch(() => setLinkedText(''))
+	}, [ref])
+
+	// Attach candidates. Loaded only while detached, since the picker is the one
+	// thing the linked view does not show.
+	useEffect(() => {
+		if (ref) return
+		configApi
+			.listAgents()
+			.then(setAgents)
+			.catch(() => setAgents([]))
 	}, [ref])
 
 	if (ref) {
@@ -431,11 +436,37 @@ function IdentityField({ node }: { node: WorkflowNode }) {
 				id="wf-identity"
 				className="textarea mono"
 				value={node.data.agentDefinition ?? ''}
-				placeholder="Who the agent IS…"
+				placeholder={placeholder ?? 'Who the agent IS…'}
 				onChange={(e) => update(node, { agentDefinition: e.target.value })}
 			/>
+			<div className="field-linked">
+				<span className="field-help">or link a real agent:</span>
+				<YdSelect
+					options={agentRefOptions(agents)}
+					value=""
+					// Attaching must clear agentDefinition: the prompt above wins over
+					// agentRef at export time, so leaving it would make the link inert.
+					onChange={(v) => v && update(node, { agentRef: v, agentDefinition: '' })}
+					ariaLabel="Link to an existing agent"
+				/>
+			</div>
+			<span className="field-help">
+				Linking replaces the text above and tracks the agent — edit the agent to update every
+				workflow that links it.
+			</span>
 		</div>
 	)
+}
+
+// agentRefOptions turns the agent list into agentRef values ("core/architect"),
+// which is the key the exporter resolves against agents/.
+function agentRefOptions(agents: AgentInfo[]): SelectOption[] {
+	const opts: SelectOption[] = [{ value: '', label: 'Link an agent…' }]
+	for (const a of [...agents].sort((x, y) => x.name.localeCompare(y.name))) {
+		const ref = a.group ? `${a.group}/${a.name}` : a.name
+		opts.push({ value: ref, label: ref })
+	}
+	return opts
 }
 
 // SubAgentFields — the richest node: identity, prompts, model/mode, tools.
