@@ -4,11 +4,17 @@
       "display_name": "Balanced",
       "description": "Sensible cost/quality tradeoff per agent",
       "agents": {
+        "advisor": {
+          "model": "opencode-admin/glm-5.2"
+        },
         "architect": {
           "model": "opencode-admin/glm-5.2"
         },
         "ask": {
           "model": "opencode-admin/minimax-m3"
+        },
+        "designer": {
+          "model": "opencode-admin/glm-5.2"
         },
         "dev": {
           "model": "opencode-admin/deepseek-v4-flash"
@@ -38,6 +44,9 @@
           "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
+          "model": "opencode-admin/glm-5.2"
+        },
+        "planning": {
           "model": "opencode-admin/glm-5.2"
         },
         "qa": {
@@ -70,10 +79,16 @@
       "display_name": "Fast",
       "description": "Speed/cost-optimized — flash model for every agent",
       "agents": {
+        "advisor": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
         "architect": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "ask": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "designer": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "dev": {
@@ -104,6 +119,9 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "orchestrator": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "planning": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa": {
@@ -136,11 +154,17 @@
       "display_name": "Deep",
       "description": "Higher-reasoning — top models for design/review, strong elsewhere",
       "agents": {
+        "advisor": {
+          "model": "opencode-admin/kimi-k2.7-code"
+        },
         "architect": {
           "model": "opencode-admin/glm-5.2"
         },
         "ask": {
           "model": "opencode-admin/mimo-v2.5-pro"
+        },
+        "designer": {
+          "model": "opencode-admin/glm-5.2"
         },
         "dev": {
           "model": "opencode-admin/kimi-k2.7-code"
@@ -171,6 +195,9 @@
         },
         "orchestrator": {
           "model": "opencode-admin/qwen3.7-max"
+        },
+        "planning": {
+          "model": "opencode-admin/glm-5.2"
         },
         "qa": {
           "model": "opencode-admin/deepseek-v4-pro"

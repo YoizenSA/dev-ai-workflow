@@ -46,6 +46,47 @@ type Exporter struct {
 	commandsDir string
 	agentsDir   string
 	target      string
+
+	// profileModels caches the active orchestrator profile's per-agent models,
+	// loaded lazily on the first node that needs it. nil means "not loaded yet".
+	profileModels map[string]string
+}
+
+// profileModel returns the model the active orchestrator profile assigns to a
+// linked agent, or "" when the profile says nothing about it.
+//
+// Workflow sub-agents are exported under generated ids (goal-frontend), so the
+// profile — which keys agents by their real name (dev, finder) — can never
+// reach them directly. Resolving through agentRef is what puts an exported node
+// back under the profile it already belongs to: switching balanced→deep then
+// moves the whole workflow, instead of leaving it pinned to the session model.
+func (e *Exporter) profileModel(agentRef string) string {
+	ref := strings.TrimSpace(agentRef)
+	if ref == "" {
+		return ""
+	}
+	if e.profileModels == nil {
+		e.profileModels = map[string]string{}
+		if cfg, err := config.LoadConfig(); err == nil && cfg != nil {
+			for name, rd := range cfg.GetActiveOrchestratorProfile().Agents {
+				if m := strings.TrimSpace(rd.Model); m != "" {
+					e.profileModels[name] = m
+				}
+			}
+		}
+	}
+	// Profiles key agents by bare name; agentRef carries the group path.
+	return e.profileModels[ref[strings.LastIndex(ref, "/")+1:]]
+}
+
+// nodeModel resolves the model for a node: its explicit choice first, then the
+// active profile via its linked agent. Empty means "inherit", which the
+// frontmatter omits so the runtime decides.
+func (e *Exporter) nodeModel(n *Node) string {
+	if m := strings.TrimSpace(n.Data.Model); m != "" && m != "inherit" {
+		return m
+	}
+	return e.profileModel(n.Data.AgentRef)
 }
 
 // NewExporter builds an Exporter targeting the real opencode config dirs.
@@ -256,7 +297,7 @@ func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID strin
 	perm := toolsToPermissions(orchTools, defaultOrchestratorTools)
 	if e.target == TargetClaudeCode {
 		claudeTools := csvFromPermissions(perm)
-		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), claudeTools, orchestratorModel(wf), body)
+		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), claudeTools, e.orchestratorModel(wf), body)
 	}
 	profile := agents.AgentProfile{
 		Name:        orchestratorID,
@@ -267,7 +308,7 @@ func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID strin
 		Group:       wf.Name,
 	}
 	md := agents.BuildOpenCodeMarkdown(orchestratorID, profile)
-	md = injectModel(md, orchestratorModel(wf))
+	md = injectModel(md, e.orchestratorModel(wf))
 
 	// Delegation: orchestrator may delegate to every subAgent in the workflow.
 	taskMap := map[string]string{"*": "deny"}
@@ -290,11 +331,11 @@ func orchestratorDescription(wf *Workflow) string {
 	return "Orchestrator for the " + wf.Name + " workflow."
 }
 
-func orchestratorModel(wf *Workflow) string {
+// orchestratorModel resolves the parent agent's model from the START node,
+// which links to a real orchestrator like any other node.
+func (e *Exporter) orchestratorModel(wf *Workflow) string {
 	if s := wf.findNode(NodeTypeStart); s != nil {
-		if m := strings.TrimSpace(s.Data.Model); m != "" && m != "inherit" {
-			return m
-		}
+		return e.nodeModel(s)
 	}
 	return ""
 }
@@ -340,7 +381,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 	}
 	profile.Prompt = agents.AppendSections(profile.Prompt, sections, config.AgentsSourceDir())
 	md := agents.BuildOpenCodeMarkdown(id, profile)
-	md = injectModel(md, n.Data.Model)
+	md = injectModel(md, e.nodeModel(n))
 
 	// Delegation: derived from the sub-agent's outgoing edges to other sub-agents.
 	taskMap := delegationMapFromOutgoing(wf, n.ID, subAgentIDs)
