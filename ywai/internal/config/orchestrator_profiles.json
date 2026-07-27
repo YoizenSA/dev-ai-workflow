@@ -5,25 +5,25 @@
       "description": "Sensible cost/quality tradeoff per agent",
       "agents": {
         "advisor": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "architect": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "ask": {
           "model": "opencode-admin/minimax-m3"
         },
         "designer": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/kimi-k3"
         },
         "dev": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "devops": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "exploratory-orchestrator": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "feature-summary": {
           "model": "opencode-admin/minimax-m3"
@@ -50,16 +50,16 @@
           "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "planner-draft": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "planner-scout": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "planning": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "qa": {
           "model": "opencode-admin/minimax-m3"
@@ -185,88 +185,88 @@
       "description": "Higher-reasoning — top models for design/review, strong elsewhere",
       "agents": {
         "advisor": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/grok-4.5"
         },
         "architect": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "ask": {
-          "model": "opencode-admin/mimo-v2.5-pro"
+          "model": "opencode-admin/minimax-m3"
         },
         "designer": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/kimi-k3"
         },
         "dev": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/glm-5.2"
         },
         "devops": {
           "model": "opencode-admin/deepseek-v4-pro"
         },
         "exploratory-orchestrator": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "feature-summary": {
-          "model": "opencode-admin/mimo-v2.5-pro"
+          "model": "opencode-admin/minimax-m3"
         },
         "finder": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "memory": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "migration-orchestrator": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-planner": {
           "model": "opencode-admin/glm-5.2"
         },
         "migration-scope": {
-          "model": "opencode-admin/mimo-v2.5-pro"
+          "model": "opencode-admin/minimax-m3"
         },
         "migration-validator": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/glm-5.2"
         },
         "migration-validator-focused": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/grok-4.5"
         },
         "planner-draft": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "planner-scout": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "planning": {
-          "model": "opencode-admin/glm-5.2"
+          "model": "opencode-admin/grok-4.5"
         },
         "qa": {
-          "model": "opencode-admin/deepseek-v4-pro"
-        },
-        "qa-analyst": {
-          "model": "opencode-admin/mimo-v2.5-pro"
-        },
-        "qa-ask": {
-          "model": "opencode-admin/mimo-v2.5-pro"
-        },
-        "qa-dev": {
-          "model": "opencode-admin/kimi-k2.7-code"
-        },
-        "qa-finder": {
           "model": "opencode-admin/minimax-m3"
         },
+        "qa-analyst": {
+          "model": "opencode-admin/minimax-m3"
+        },
+        "qa-ask": {
+          "model": "opencode-admin/minimax-m3"
+        },
+        "qa-dev": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "qa-finder": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
         "qa-orchestrator": {
-          "model": "opencode-admin/qwen3.7-max"
+          "model": "opencode-admin/glm-5.2"
         },
         "qa-reviewer": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/glm-5.2"
         },
         "reviewer": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/glm-5.2"
         },
         "test-author": {
-          "model": "opencode-admin/kimi-k2.7-code"
+          "model": "opencode-admin/deepseek-v4-flash"
         }
       }
     }
