@@ -41,26 +41,26 @@ type SessionDayCount struct {
 
 // SessionAnalyticsSum holds top-line KPIs.
 type SessionAnalyticsSum struct {
-	Sessions            int     `json:"sessions"`
-	Projects            int     `json:"projects"`
-	SkillCalls          int     `json:"skillCalls"`
-	DistinctSkills      int     `json:"distinctSkills"`
-	ToolCalls           int     `json:"toolCalls"`
-	TotalCost           float64 `json:"totalCost"`
-	TokensInput         int64   `json:"tokensInput"`
-	TokensOutput        int64   `json:"tokensOutput"`
-	TokensReasoning     int64   `json:"tokensReasoning"`
-	TokensCacheRead     int64   `json:"tokensCacheRead"`
-	TokensCacheWrite    int64   `json:"tokensCacheWrite"`
-	SessionsWithSkill   int     `json:"sessionsWithSkill"`
-	ChildSessions       int     `json:"childSessions"`
-	RootSessions        int     `json:"rootSessions"`
-	AvgToolsPerSession  float64 `json:"avgToolsPerSession"`
-	AvgCostPerSession   float64 `json:"avgCostPerSession"`
-	SkillCoverage       float64 `json:"skillCoverage"` // sessionsWithSkill / sessions
-	DelegationCalls     int     `json:"delegationCalls"`
-	InstalledSkills     int     `json:"installedSkills"`
-	UnusedSkillCount    int     `json:"unusedSkillCount"`
+	Sessions           int     `json:"sessions"`
+	Projects           int     `json:"projects"`
+	SkillCalls         int     `json:"skillCalls"`
+	DistinctSkills     int     `json:"distinctSkills"`
+	ToolCalls          int     `json:"toolCalls"`
+	TotalCost          float64 `json:"totalCost"`
+	TokensInput        int64   `json:"tokensInput"`
+	TokensOutput       int64   `json:"tokensOutput"`
+	TokensReasoning    int64   `json:"tokensReasoning"`
+	TokensCacheRead    int64   `json:"tokensCacheRead"`
+	TokensCacheWrite   int64   `json:"tokensCacheWrite"`
+	SessionsWithSkill  int     `json:"sessionsWithSkill"`
+	ChildSessions      int     `json:"childSessions"`
+	RootSessions       int     `json:"rootSessions"`
+	AvgToolsPerSession float64 `json:"avgToolsPerSession"`
+	AvgCostPerSession  float64 `json:"avgCostPerSession"`
+	SkillCoverage      float64 `json:"skillCoverage"` // sessionsWithSkill / sessions
+	DelegationCalls    int     `json:"delegationCalls"`
+	InstalledSkills    int     `json:"installedSkills"`
+	UnusedSkillCount   int     `json:"unusedSkillCount"`
 }
 
 // SessionProjectStat is one OpenCode project row with usage stats.

@@ -78,10 +78,10 @@ func loadSessionAnalyticsFast(ctx context.Context, dbPath string, q AnalyticsQue
 		Sessions int    `json:"sessions"`
 	}
 	type metaRow struct {
-		Root      int   `json:"root"`
-		Child     int   `json:"child"`
-		Reasoning int64 `json:"reasoning"`
-		CacheRead int64 `json:"cache_read"`
+		Root       int   `json:"root"`
+		Child      int   `json:"child"`
+		Reasoning  int64 `json:"reasoning"`
+		CacheRead  int64 `json:"cache_read"`
 		CacheWrite int64 `json:"cache_write"`
 	}
 
