@@ -381,12 +381,3 @@ func (wm *WorkspaceManager) GetIntegrationWorktreePath(missionID, featureID stri
 	}
 	return filepath.Join(dataHome, "ywai", "worktrees", missionID, "integration-"+featureID)
 }
-
-// CleanupMission removes all worktrees for a mission.
-func (wm *WorkspaceManager) CleanupMission(missionID string, features []Feature) {
-	for _, feat := range features {
-		if feat.WorktreePath != "" {
-			_ = wm.RemoveWorktree(feat.WorktreePath, feat.Branch)
-		}
-	}
-}

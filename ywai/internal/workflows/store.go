@@ -49,11 +49,6 @@ func NewStore(baseDir string) *Store {
 	return &Store{baseDir: baseDir}
 }
 
-// BaseDir returns the root directory for workflow JSON files.
-func (s *Store) BaseDir() string {
-	return s.baseDir
-}
-
 // List returns metadata for every persisted workflow, sorted by name. Only the
 // top-level fields are read; node graphs are skipped to keep listings light.
 func (s *Store) List() ([]Summary, error) {

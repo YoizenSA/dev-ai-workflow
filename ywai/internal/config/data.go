@@ -48,10 +48,6 @@ func EnsureDataDir() error {
 	return nil
 }
 
-func ShouldSeedData() bool {
-	return !IsDirPopulated(DataSkillsDir())
-}
-
 func SeedSkillsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err

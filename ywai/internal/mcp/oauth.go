@@ -343,15 +343,3 @@ func EnsureValidToken(ctx context.Context, entry CatalogEntry) (*OAuthToken, err
 	}
 	return CachedLoadToken(entry.ID)
 }
-
-// OAuthTokenEnv returns a map suitable for MergeEnv that injects the
-// OAuth access token as an env var (Bearer token in the format the MCP
-// server expects: "AUTHORIZATION" → "Bearer <token>").
-func OAuthTokenEnv(entry CatalogEntry, tok *OAuthToken) map[string]string {
-	if tok == nil || tok.AccessToken == "" {
-		return nil
-	}
-	return map[string]string{
-		"AUTHORIZATION": "Bearer " + tok.AccessToken,
-	}
-}

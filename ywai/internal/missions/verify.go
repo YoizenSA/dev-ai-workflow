@@ -132,34 +132,6 @@ func exitCodeFromError(err error) int {
 	return -1
 }
 
-// E2EVerifier is a pluggable E2E testing interface (FASE 5).
-// Implementations can use browser automation, API testing tools, etc.
-type E2EVerifier interface {
-	// VerifyE2E runs end-to-end tests in the given worktree path.
-	VerifyE2E(ctx context.Context, worktreePath string, mission *Mission, feature *Feature) (VerifyResult, error)
-}
-
-// CheckCleanStreak checks if a feature has met the required clean verify streak.
-// Returns true if the feature has at least `required` consecutive clean runs.
-func CheckCleanStreak(feature *Feature, required int) bool {
-	if required <= 0 {
-		return true
-	}
-	var consecutive int
-	// Count from the end (most recent first)
-	for i := len(feature.VerifyRuns) - 1; i >= 0; i-- {
-		if feature.VerifyRuns[i].Passed {
-			consecutive++
-			if consecutive >= required {
-				return true
-			}
-		} else {
-			break // streak broken
-		}
-	}
-	return false
-}
-
 // RunCleanStreak runs the verifier up to `required` consecutive passing times.
 // It is the FASE 5 clean-streak gate: a feature is only considered verified
 // when the verifier passes `required` times in a row.

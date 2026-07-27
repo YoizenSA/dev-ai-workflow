@@ -77,6 +77,79 @@ type captureHub struct {
 	msgs [][]byte
 }
 
+func TestGetFullCatalog_MatchesCanonicalMCPCatalog(t *testing.T) {
+	got := getFullCatalog()
+	want := mcp.Catalog()
+	if len(got) != len(want) {
+		t.Fatalf("len(getFullCatalog()) = %d, want %d (canonical mcp.Catalog)", len(got), len(want))
+	}
+	byID := make(map[string]McpCatalogEntry, len(got))
+	for _, e := range got {
+		byID[e.ID] = e
+	}
+	for _, ce := range want {
+		entry, ok := byID[ce.ID]
+		if !ok {
+			t.Errorf("catalog missing id %q", ce.ID)
+			continue
+		}
+		if entry.Type != ce.Type {
+			t.Errorf("%s type = %q, want %q", ce.ID, entry.Type, ce.Type)
+		}
+		if entry.URL != ce.URL {
+			t.Errorf("%s url = %q, want %q", ce.ID, entry.URL, ce.URL)
+		}
+		if len(entry.RequiredEnv) != len(ce.RequiredEnv) {
+			t.Errorf("%s requiredEnv len = %d, want %d", ce.ID, len(entry.RequiredEnv), len(ce.RequiredEnv))
+		}
+		// Install path looks up mcp.CatalogByID — store must not advertise
+		// servers that install cannot find.
+		if _, ok := mcp.CatalogByID(entry.ID); !ok {
+			t.Errorf("store advertises %q but mcp.CatalogByID misses it", entry.ID)
+		}
+	}
+	// Fake leftovers that used to appear in the store-only catalog.
+	for _, ghost := range []string{"kubernetes", "sharptools", "ywai-kanban"} {
+		if _, ok := byID[ghost]; ok {
+			t.Errorf("catalog still exposes fake entry %q", ghost)
+		}
+	}
+}
+
+func TestHandleMcpCatalog_IncludesRequiredEnvForGithub(t *testing.T) {
+	s := &Server{mux: http.NewServeMux()}
+	s.registerMcpStoreRoutes()
+	req := httptest.NewRequest(http.MethodGet, "/api/mcp/catalog", nil)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	var items []McpCatalogItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var github *McpCatalogItem
+	for i := range items {
+		if items[i].ID == "github" {
+			github = &items[i]
+			break
+		}
+	}
+	if github == nil {
+		t.Fatal("github not in catalog response")
+	}
+	if len(github.RequiredEnv) == 0 {
+		t.Fatal("github requiredEnv empty — UI would hide credentials form")
+	}
+	if github.RequiredEnv[0].Name != "GITHUB_PERSONAL_ACCESS_TOKEN" {
+		t.Errorf("requiredEnv[0].Name = %q, want GITHUB_PERSONAL_ACCESS_TOKEN", github.RequiredEnv[0].Name)
+	}
+	if github.Source != "catalog" {
+		t.Errorf("source = %q, want catalog", github.Source)
+	}
+}
+
 func TestMcpCatalogStatus_DisabledIsActionable(t *testing.T) {
 	entry := McpCatalogEntry{ID: "jam", Type: "remote", URL: "https://example.test/mcp"}
 

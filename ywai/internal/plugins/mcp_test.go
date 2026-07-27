@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
@@ -139,94 +138,6 @@ func readConfigRoot(t *testing.T, path string) map[string]any {
 	var root map[string]any
 	readJSON(t, path, &root)
 	return root
-}
-
-// readMCPServer returns the mcpServers[name] (claude-code / pi) or mcp[name]
-// (opencode / default) entry as a map.
-func readMCPServer(t *testing.T, path, agentName, name string) map[string]any {
-	t.Helper()
-	root := readConfigRoot(t, path)
-
-	key := mcpConfigKey(agentName)
-	mcp, ok := root[key].(map[string]any)
-	if !ok {
-		t.Fatalf("config has no %q block; got keys %v", key, rootKeys(root))
-	}
-	entry, ok := mcp[name].(map[string]any)
-	if !ok {
-		t.Fatalf("%q has no %q entry; got entries %v", key, name, mapKeys(mcp))
-	}
-	return entry
-}
-
-// assertOpencodeCommand asserts the entry's "command" field equals want.
-// (Used for the opencode "mcp" format where command is a full argv array.)
-func assertOpencodeCommand(t *testing.T, entry map[string]any, want []any) {
-	t.Helper()
-	got, ok := entry["command"].([]any)
-	if !ok {
-		t.Fatalf("entry.command is not []any; got %T (%v)", entry["command"], entry["command"])
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("entry.command = %v, want %v (migration did not happen)", got, want)
-	}
-}
-
-// assertClaudeCodeArgs asserts the entry's "args" field equals want and the
-// "command" field is "ywai". (Used for the claude-code / pi "mcpServers"
-// format where command is a string and args is the argv array.)
-func assertClaudeCodeArgs(t *testing.T, entry map[string]any, want []any) {
-	t.Helper()
-	if cmd, _ := entry["command"].(string); cmd != "ywai" {
-		t.Errorf("entry.command = %q, want \"ywai\"", cmd)
-	}
-	got, ok := entry["args"].([]any)
-	if !ok {
-		t.Fatalf("entry.args is not []any; got %T (%v)", entry["args"], entry["args"])
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("entry.args = %v, want %v (migration did not happen)", got, want)
-	}
-}
-
-func rootKeys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-func mapKeys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-// readMCPRaw returns the raw value of mcp[name] without asserting a specific
-// type. Use this to verify defensive behavior where a malformed ywai-kanban
-// entry (string, null, array, ...) is preserved as-is instead of being
-// replaced.
-func readMCPRaw(t *testing.T, path, agentName, name string) any {
-	t.Helper()
-	root := readConfigRoot(t, path)
-	key := mcpConfigKey(agentName)
-	mcp, ok := root[key].(map[string]any)
-	if !ok {
-		t.Fatalf("config has no %q block; got keys %v", key, rootKeys(root))
-	}
-	return mcp[name]
-}
-
-// assertRawValue asserts the raw mcp value equals want using reflect.DeepEqual,
-// so it works uniformly for strings, numbers, nil, arrays, and maps.
-func assertRawValue(t *testing.T, got, want any) {
-	t.Helper()
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("value = %v (type %T), want %v (type %T)", got, got, want, want)
-	}
 }
 
 // Every retired server must be swept in one pass, and the caller needs to know

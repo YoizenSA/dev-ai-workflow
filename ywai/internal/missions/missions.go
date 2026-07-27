@@ -2,15 +2,12 @@ package missions
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"sync"
 	"time"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/events"
 )
 
 // DefaultBaseDir is the default directory for all mission data.
@@ -53,9 +50,8 @@ type EngineConfig struct {
 	VerifyCleanStreak int // default 1; number of clean verify runs required per feature (FASE 5)
 	RepoResolver      RepoResolver
 	Validation        ValidationConfig
-	EventStore        events.Store // optional event sourcing; nil = no events emitted
-	AgentsDir         string       // path to agents/core directory for stable instructions caching
-	BaseRef           string       // git ref to branch feature worktrees from (default: repo HEAD)
+	AgentsDir         string // path to agents/core directory for stable instructions caching
+	BaseRef           string // git ref to branch feature worktrees from (default: repo HEAD)
 }
 
 // DefaultEngineConfig returns sensible defaults.
@@ -101,8 +97,6 @@ func IsValidTransition(current, next MissionStatus) error {
 	return fmt.Errorf("invalid mission transition: %s → %s", current, next)
 }
 
-// emitEvent writes an event to the configured event store (if any).
-// It is a no-op when EventStore is nil.
 // cleanupFeatureWorktree removes the worktree for a feature if workspace manager is active.
 func (e *Engine) cleanupFeatureWorktree(feature *Feature) {
 	if e.workspaceMgr != nil && feature.WorktreePath != "" {
@@ -233,40 +227,6 @@ func (e *Engine) runFeaturesSequentially(ctx context.Context, mission *Mission) 
 	return nil
 }
 
-func (e *Engine) emitEvent(sessionID, missionID string, eventType events.EventType, data interface{}) {
-	if e.config.EventStore == nil {
-		return
-	}
-
-	seq, err := e.config.EventStore.LastSequence(sessionID)
-	if err != nil {
-		log.Printf("event sourcing: failed to get last sequence: %v", err)
-		return
-	}
-
-	var dataBytes []byte
-	if data != nil {
-		dataBytes, err = json.Marshal(data)
-		if err != nil {
-			log.Printf("event sourcing: failed to marshal event data: %v", err)
-			return
-		}
-	}
-
-	event := events.Event{
-		ID:        fmt.Sprintf("%s-%d", missionID, seq+1),
-		SessionID: sessionID,
-		MissionID: missionID,
-		Type:      eventType,
-		Data:      dataBytes,
-		Sequence:  seq + 1,
-		Timestamp: time.Now(),
-	}
-	if err := e.config.EventStore.Append(event); err != nil {
-		log.Printf("event sourcing: failed to append event: %v", err)
-	}
-}
-
 // NewEngine creates a new mission orchestration engine.
 func NewEngine(store *MissionsStore, config EngineConfig, broadcast BroadcastFunc) *Engine {
 	if broadcast == nil {
@@ -321,8 +281,6 @@ func (e *Engine) RunMission(missionID string) error {
 		return fmt.Errorf("load mission: %w", err)
 	}
 
-	e.emitEvent(mission.ID, mission.ID, events.EventMissionCreated, nil)
-
 	// Set up workspace manager if a RepoResolver is configured
 	if e.config.RepoResolver != nil && mission.Project != "" {
 		repoPath, err := e.config.RepoResolver.Resolve(mission.Project)
@@ -362,7 +320,6 @@ func (e *Engine) RunMission(missionID string) error {
 		if err := e.store.SaveMission(mission); err != nil {
 			return fmt.Errorf("save mission: %w", err)
 		}
-		e.emitEvent(mission.ID, mission.ID, events.EventMissionStarted, nil)
 	}
 
 	// Recover any in-progress features from a previous crash
@@ -413,9 +370,6 @@ func (e *Engine) RunMission(missionID string) error {
 				mission.Status = newStatus
 				mission.UpdatedAt = time.Now()
 				_ = e.store.SaveMission(mission)
-				e.emitEvent(mission.ID, mission.ID, events.EventMissionValidated, map[string]string{
-					"milestone": ms.Name,
-				})
 			}
 
 			e.broadcast("mission_status_changed", map[string]interface{}{
@@ -473,7 +427,6 @@ func (e *Engine) RunMission(missionID string) error {
 			if err := GenerateMissionReport(e.store, mission); err != nil {
 				log.Printf("Warning: could not generate mission report: %v", err)
 			}
-			e.emitEvent(mission.ID, mission.ID, events.EventMissionCompleted, nil)
 		}
 	} else {
 		newStatus, tErr := TransitionMissionStatus(mission.Status, MissionFailed)
@@ -484,7 +437,6 @@ func (e *Engine) RunMission(missionID string) error {
 			mission.Status = newStatus
 			mission.UpdatedAt = time.Now()
 			_ = e.store.SaveMission(mission)
-			e.emitEvent(mission.ID, mission.ID, events.EventMissionFailed, nil)
 		}
 	}
 
@@ -517,20 +469,6 @@ func PauseMission(store *MissionsStore, missionID string) error {
 	mission.UpdatedAt = time.Now()
 
 	return store.SaveMission(mission)
-}
-
-// CancelMissionFromSurface cancels a mission from any surface (CLI, TUI, Web UI).
-func CancelMissionFromSurface(store *MissionsStore, missionID string) error {
-	mission, err := store.LoadMission(missionID)
-	if err != nil {
-		return err
-	}
-
-	if mission.Status != MissionActive && mission.Status != MissionPaused {
-		return fmt.Errorf("%w: cannot cancel mission in state %q", ErrInvalidTransition, mission.Status)
-	}
-
-	return CancelMission(store, mission)
 }
 
 // RetryFeatureFromSurface re-queues a failed feature from any surface.
@@ -575,18 +513,6 @@ func RetryFeatureFromSurface(store *MissionsStore, missionID, featureID string, 
 // callable from the engine.
 func (vp *ValidationPipeline) PersistReport(missionID, milestoneName string, report *ValidationReport) error {
 	return vp.persistResults(missionID, milestoneName, report)
-}
-
-// ─── Original Public API ───────────────────────────────────────────────────
-
-// StartInteractivePlanning begins an interactive planning session.
-func StartInteractivePlanning(store *MissionsStore) (*Mission, error) {
-	return RunInteractivePlanning(store, os.Stdin, os.Stdout, "")
-}
-
-// StartInteractivePlanningWithProject begins an interactive planning session with a project name.
-func StartInteractivePlanningWithProject(store *MissionsStore, project string) (*Mission, error) {
-	return RunInteractivePlanning(store, os.Stdin, os.Stdout, project)
 }
 
 // OpenStore opens (or creates) the missions store at the default location.

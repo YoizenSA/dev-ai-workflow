@@ -17,22 +17,12 @@ import (
 //   undefined: Catalog
 //   undefined: CatalogByID
 //
-// The 12 final catalog entries were decided by the user during slice 1
-// of this TDD flow (see memory #192 in the ywai project). The IDs are:
+// Canonical IDs (keep in sync with catalog.go). `*` = required secret env.
 //
-//   1. context7         (remote, no install, no env)
-//   2. microsoft-learn  (remote, no install, no env)
-//   3. jam              (remote, no install, no env)
-//   4. chrome-devtools  (local, npx command, no env)
-//   5. playwright       (local, npx command, no env)
-//   6. git              (local, npx command, no env)
-//   7. github           (local, npx command, GITHUB_PERSONAL_ACCESS_TOKEN*)
-//   8. postgres         (local, npx command, DATABASE_URL*)
-//   9. docker           (local, npx command, no env)
-//   10. engram          (local, go install, no env)
-//   11. codegraph       (local, go install, no env)
-//
-// `*` = required and secret env var.
+//   context7, microsoft-learn, jam (remote)
+//   chrome-devtools, playwright, git, github*, postgres*, mysql*, docker
+//   engram, codegraph, filesystem
+//   brave-search*, puppeteer, codemod
 //
 // Assumptions baked into the tests (anything not pinned here is left to
 // @dev to decide without being locked down):
@@ -42,8 +32,7 @@ import (
 //     Command, URL, InstallCmd, RequiredEnv. Description, Category,
 //     Icon, Popular, Tools, and Docs are NOT asserted on here (per the
 //     slice 2 constraint to not pin unverified shape details).
-//   - Catalog() returns a slice of length 12 (post-decisions; sharptools
-//     and kubernetes were removed).
+//   - Catalog() length is pinned in TestCatalog_Len.
 //   - CatalogByID uses idiomatic second-return-`ok` style: an unknown id
 //     returns a zero-value CatalogEntry and false.
 //   - For remote entries: Type=="remote", URL!="", Command is nil or
@@ -77,18 +66,17 @@ var _ = CatalogEntry{}
 // ─── Catalog() — size & membership ────────────────────────────────────────
 
 // TestCatalog_Len pins the size of the catalog. If a future addition
-// sneaks in, this test fails.
+// sneaks in without updating this test, it fails.
 func TestCatalog_Len(t *testing.T) {
+	const want = 16
 	got := len(Catalog())
-	if got != 11 {
-		t.Errorf("len(Catalog()) = %d, want 11", got)
+	if got != want {
+		t.Errorf("len(Catalog()) = %d, want %d", got, want)
 	}
 }
 
-// TestCatalog_ContainsAllExpectedIDs pins that every one of the 11 final
-// IDs is present and lookable via CatalogByID. The order of entries in
-// the underlying slice is intentionally NOT pinned — each ID is found
-// by lookup, not by position.
+// TestCatalog_ContainsAllExpectedIDs pins that every known ID is present
+// and lookable via CatalogByID. Order is not pinned.
 func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 	want := []string{
 		"context7",
@@ -102,6 +90,14 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"docker",
 		"engram",
 		"codegraph",
+		"filesystem",
+		"brave-search",
+		"mysql",
+		"puppeteer",
+		"codemod",
+	}
+	if len(want) != len(Catalog()) {
+		t.Fatalf("want list len %d != Catalog() len %d — update both", len(want), len(Catalog()))
 	}
 	for _, id := range want {
 		entry, ok := CatalogByID(id)

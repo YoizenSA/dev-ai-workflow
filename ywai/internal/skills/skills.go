@@ -17,10 +17,6 @@ func CopyTo(agentSkillsDir string) error {
 	return copyFiltered(agentSkillsDir, nil)
 }
 
-func CopyFiltered(agentSkillsDir string, filter []string) error {
-	return copyFiltered(agentSkillsDir, filter)
-}
-
 func copyFiltered(agentSkillsDir string, filter []string) error {
 	srcDir := skillsSourceDir()
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {

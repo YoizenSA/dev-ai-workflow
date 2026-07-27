@@ -89,8 +89,8 @@ do_test() {
 
 do_test_ui() {
     info "Running control-server UI tests..."
-    cmd "go test ./internal/kanban/... ./internal/control/... -v"
-    go test ./internal/kanban/... ./internal/control/... -v
+    cmd "go test ./internal/configapi/... ./internal/control/... -v"
+    go test ./internal/configapi/... ./internal/control/... -v
     ok "UI tests passed"
 }
 

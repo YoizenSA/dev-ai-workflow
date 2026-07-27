@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Globe, Search, Star } from 'lucide-react';
+import { Search, Star } from 'lucide-react';
 import './McpStore.css';
 
 interface McpServer {
@@ -36,8 +36,6 @@ type InstallState = {
 	errorMessage?: string;
 	tools?: string[];
 };
-
-const categories = ['All', 'Documentation', 'Browser', 'Testing', 'Memory', 'Code Analysis', 'Core', 'Integration', 'Database', 'DevOps'];
 
 type TargetAgent = 'opencode' | 'pi' | 'claude-code';
 
@@ -170,10 +168,10 @@ function McpCard({
 							))}
 						</div>
 					)}
-					{server.url && (
+					{(server.docs || server.url) && (
 						<a
 							className="mcp-store-card-link"
-							href={server.url}
+							href={server.docs || server.url}
 							target="_blank"
 							rel="noopener noreferrer"
 							onClick={(e) => e.stopPropagation()}
@@ -435,8 +433,10 @@ export function McpStore() {
 
 	const installedCount = servers.filter((s) => s.installed).length;
 
-	const customMcps = filteredServers.filter((s) => s.source === 'custom');
-	const registryMcps = filteredServers.filter((s) => s.source === 'registry');
+	const categories = useMemo(() => {
+		const set = new Set(servers.map((s) => s.category).filter(Boolean));
+		return ['All', ...Array.from(set).sort()];
+	}, [servers]);
 
 	if (loading) {
 		return (
@@ -568,29 +568,13 @@ export function McpStore() {
 						No servers found. Try adjusting your search or filters.
 					</div>
 				) : (
-					<>
-						{customMcps.length > 0 && (
-							<div className="mcp-store-section">
-								<h2 className="mcp-store-section-title">
-									<Star size={16} fill="currentColor" />
-									Recommended
-								</h2>
-								<div className="mcp-store-section-grid">{customMcps.map(renderCard)}</div>
-							</div>
-						)}
-
-						{registryMcps.length > 0 && (
-							<div className="mcp-store-section">
-								<h2 className="mcp-store-section-title">
-									<Globe size={16} />
-									Community
-								</h2>
-								<div className="mcp-store-section-grid">
-									{registryMcps.map(renderCard)}
-								</div>
-							</div>
-						)}
-					</>
+					<div className="mcp-store-section">
+						<h2 className="mcp-store-section-title">
+							<Star size={16} fill="currentColor" />
+							Catalog
+						</h2>
+						<div className="mcp-store-section-grid">{filteredServers.map(renderCard)}</div>
+					</div>
 				)}
 			</div>
 		</div>

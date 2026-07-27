@@ -323,11 +323,6 @@ func vsCodeUserDir(home string) string {
 func isDarwin() bool  { return runtime.GOOS == "darwin" }
 func isWindows() bool { return runtime.GOOS == "windows" }
 
-// AgentsSourceDir returns the path to ywai/agents/ directory.
-func AgentsSourceDir() string {
-	return config.AgentsSourceDir()
-}
-
 // InstallOpenCodeMarkdown writes agent profiles as flat .md files to
 // ~/.config/opencode/agents/. opencode derives the agent id from the file's
 // path under the agents dir, so agents are written FLAT at the root using their
@@ -443,7 +438,7 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 // (e.g. "memory") never match the prefixed tool ids (engram_mem_save) and are
 // silently ignored. Expanding them here makes the
 // generated permission block enforceable in opencode itself, not just inside
-// ywai's own MCPEnforce layer.
+// a separate runtime gate.
 //
 // The blanket "mcp" bucket covers every MCP server not claimed by a dedicated
 // bucket above. The static entries are the servers ywai installs itself;

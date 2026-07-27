@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
@@ -17,11 +16,10 @@ const DefaultUIPort = 5768
 
 // Server is the embedded HTTP server for the config/UI API.
 type Server struct {
-	port      int
-	hub       *Hub
-	httpSrv   *http.Server
-	mux       *http.ServeMux
-	portReady chan struct{} // closed when port is assigned
+	port    int
+	hub     *Hub
+	httpSrv *http.Server
+	mux     *http.ServeMux
 }
 
 // New creates a new config/UI API server listening on the given port.
@@ -83,10 +81,9 @@ func New(port int) *Server {
 	mux.Handle("GET /", uiHandler())
 
 	return &Server{
-		port:      port,
-		hub:       hub,
-		mux:       mux,
-		portReady: make(chan struct{}),
+		port: port,
+		hub:  hub,
+		mux:  mux,
 	}
 }
 
@@ -120,11 +117,6 @@ func (s *Server) Start() error {
 	// Capture the actual port (useful when port 0 is used)
 	s.port = ln.Addr().(*net.TCPAddr).Port
 
-	// Signal that port is ready (for async starts)
-	if s.portReady != nil {
-		close(s.portReady)
-	}
-
 	if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("configapi: server error: %w", err)
 	}
@@ -145,13 +137,6 @@ func (s *Server) Port() int {
 	return s.port
 }
 
-// WaitForPort blocks until the server has a port assigned (for async starts).
-// Returns the assigned port.
-func (s *Server) WaitForPort() int {
-	<-s.portReady
-	return s.port
-}
-
 // HTTPHandler returns the HTTP handler for the config API server.
 // This allows the server to be mounted in other muxes.
 func (s *Server) HTTPHandler() http.Handler {
@@ -161,31 +146,4 @@ func (s *Server) HTTPHandler() http.Handler {
 // Hub returns the WebSocket hub for the config API server.
 func (s *Server) Hub() *Hub {
 	return s.hub
-}
-
-var (
-	defaultServer   *Server
-	defaultServerMu sync.Mutex
-)
-
-// GetOrStart returns the default config API server, starting it if needed.
-// If the server is already running, it returns the existing instance.
-// port is the desired port (0 for random). If the port is in use, it falls back to random.
-func GetOrStart(port int) (*Server, error) {
-	defaultServerMu.Lock()
-	defer defaultServerMu.Unlock()
-
-	if defaultServer != nil {
-		return defaultServer, nil
-	}
-
-	s := New(port)
-	go func() {
-		if err := s.Start(); err != nil {
-			log.Printf("configapi: server error: %v", err)
-		}
-	}()
-	s.WaitForPort() // wait for server to be ready
-	defaultServer = s
-	return s, nil
 }

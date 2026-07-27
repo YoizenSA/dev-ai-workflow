@@ -1,7 +1,6 @@
 package control
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -395,18 +394,6 @@ func (s *Server) Start() error {
 	return s.httpSrv.Serve(listener)
 }
 
-// Stop shuts down the control server.
-func (s *Server) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.httpSrv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		s.httpSrv.Shutdown(ctx)
-	}
-}
-
 // Port returns the server port.
 func (s *Server) Port() int {
 	return s.port
@@ -444,21 +431,4 @@ func GetOrStart(port int) (*Server, error) {
 	}
 	defaultServer = s
 	return s, nil
-}
-
-// IsRunning checks if the control server is currently running.
-func IsRunning() bool {
-	defaultServerMu.Lock()
-	defer defaultServerMu.Unlock()
-	return defaultServer != nil
-}
-
-// GetPort returns the port of the running control server, or 0 if not running.
-func GetPort() int {
-	defaultServerMu.Lock()
-	defer defaultServerMu.Unlock()
-	if defaultServer == nil {
-		return 0
-	}
-	return defaultServer.Port()
 }

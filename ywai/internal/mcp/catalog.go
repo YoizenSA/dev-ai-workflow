@@ -3,10 +3,8 @@ package mcp
 // catalog.go — the canonical list of MCP servers ywai knows how to install.
 //
 // Each CatalogEntry pins what the install UI needs to render a row and
-// what the runtime needs to launch the server. The 12 entries here are
-// the ones settled in slice 1 of the "Real MCP Install" plan (see
-// memory #192 in the ywai project). The list is closed: kubernetes and
-// sharptools were removed. To add or remove a server, edit catalog.
+// what the runtime needs to launch the server. Edit this slice to add
+// or remove servers; catalog_test.go pins IDs and length.
 
 // CatalogEntry describes a single MCP server ywai can install.
 //
@@ -158,6 +156,90 @@ var catalog = []CatalogEntry{
 		Tools:      []string{"codegraph_search", "codegraph_context", "codegraph_dependencies"},
 		Docs:       "https://github.com/colbymchenry/codegraph",
 	},
+	{
+		ID: "filesystem", Name: "Filesystem",
+		Description: "Read and write files under allowed directories (defaults to current workspace)",
+		Category:    "core", Icon: "📁", Popular: true,
+		// "." is resolved relative to the agent process cwd (usually the project root).
+		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "."},
+		InstallCmd: "npx -y @modelcontextprotocol/server-filesystem",
+		Tools:      []string{"read_file", "write_file", "list_directory", "search_files", "get_file_info"},
+		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+	},
+	{
+		ID: "brave-search", Name: "Brave Search",
+		Description: "Web search via Brave Search API",
+		Category:    "search", Icon: "🔍", Popular: true,
+		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-brave-search"},
+		InstallCmd: "npx -y @modelcontextprotocol/server-brave-search",
+		RequiredEnv: []EnvSpec{{
+			Name:        "BRAVE_API_KEY",
+			Description: "API key from https://brave.com/search/api/",
+			Required:    true,
+			Secret:      true,
+		}},
+		Tools: []string{"brave_web_search", "brave_local_search"},
+		Docs:  "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+	},
+	{
+		ID: "mysql", Name: "MySQL",
+		Description: "Query MySQL databases (read-oriented MCP server)",
+		Category:    "database", Icon: "🐬", Popular: true,
+		Type: "local", Command: []string{"npx", "-y", "mcp-server-mysql@latest"},
+		InstallCmd: "npx -y mcp-server-mysql@latest",
+		RequiredEnv: []EnvSpec{
+			{
+				Name:        "MYSQL_HOST",
+				Description: "MySQL host (e.g. 127.0.0.1)",
+				Required:    true,
+				Secret:      false,
+			},
+			{
+				Name:        "MYSQL_PORT",
+				Description: "MySQL port (default 3306)",
+				Required:    false,
+				Secret:      false,
+			},
+			{
+				Name:        "MYSQL_USER",
+				Description: "MySQL username",
+				Required:    true,
+				Secret:      false,
+			},
+			{
+				Name:        "MYSQL_PASS",
+				Description: "MySQL password",
+				Required:    true,
+				Secret:      true,
+			},
+			{
+				Name:        "MYSQL_DB",
+				Description: "Database name",
+				Required:    true,
+				Secret:      false,
+			},
+		},
+		Tools: []string{"mysql_query", "list_tables", "describe_table"},
+		Docs:  "https://www.npmjs.com/package/mcp-server-mysql",
+	},
+	{
+		ID: "puppeteer", Name: "Puppeteer",
+		Description: "Browser automation with Puppeteer (navigate, screenshot, click)",
+		Category:    "testing", Icon: "🐶",
+		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-puppeteer"},
+		InstallCmd: "npx -y @modelcontextprotocol/server-puppeteer",
+		Tools:      []string{"puppeteer_navigate", "puppeteer_screenshot", "puppeteer_click", "puppeteer_fill", "puppeteer_evaluate"},
+		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
+	},
+	{
+		ID: "codemod", Name: "Codemod",
+		Description: "Large-scale code migrations and AST-based codemods via the Codemod CLI",
+		Category:    "devtools", Icon: "♻️", Popular: true,
+		Type: "local", Command: []string{"npx", "-y", "codemod", "mcp"},
+		InstallCmd: "npm i -g codemod",
+		Tools:      []string{"codemod_run", "codemod_search", "codemod_status"},
+		Docs:       "https://docs.codemod.com",
+	},
 }
 
 // Catalog returns the canonical list of MCP servers ywai can install.
@@ -166,8 +248,7 @@ func Catalog() []CatalogEntry { return catalog }
 
 // CatalogByID looks up a single catalog entry by its ID. The second
 // return is true when the ID is known, false otherwise (in which case
-// the returned entry is the zero-value CatalogEntry). Linear scan is
-// fine: the catalog is closed at 12 entries.
+// the returned entry is the zero-value CatalogEntry).
 func CatalogByID(id string) (CatalogEntry, bool) {
 	for _, e := range catalog {
 		if e.ID == id {

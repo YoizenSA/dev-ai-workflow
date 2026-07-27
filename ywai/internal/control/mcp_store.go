@@ -17,20 +17,31 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
+// McpEnvSpec is the JSON shape of a credential the install UI must collect.
+type McpEnvSpec struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Secret      bool   `json:"secret"`
+}
+
 // McpCatalogEntry represents a single MCP server in the catalog.
+// Fields mirror mcp.CatalogEntry so the store UI and install pipeline share
+// one source of truth (internal/mcp/catalog.go).
 type McpCatalogEntry struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
-	Icon        string   `json:"icon"`
-	Popular     bool     `json:"popular"`
-	Type        string   `json:"type"`
-	Command     []string `json:"command,omitempty"`
-	URL         string   `json:"url,omitempty"`
-	InstallCmd  string   `json:"installCmd,omitempty"`
-	Tools       []string `json:"tools"`
-	Docs        string   `json:"docs"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Category    string       `json:"category"`
+	Icon        string       `json:"icon"`
+	Popular     bool         `json:"popular"`
+	Type        string       `json:"type"`
+	Command     []string     `json:"command,omitempty"`
+	URL         string       `json:"url,omitempty"`
+	InstallCmd  string       `json:"installCmd,omitempty"`
+	RequiredEnv []McpEnvSpec `json:"requiredEnv,omitempty"`
+	Tools       []string     `json:"tools"`
+	Docs        string       `json:"docs"`
 }
 
 // McpCatalogItem combines a catalog entry with its installed status.
@@ -48,190 +59,42 @@ type McpCatalogItem struct {
 // mcpConfigMu guards concurrent reads/writes to the config file.
 var mcpConfigMu sync.Mutex
 
-// getFullCatalog returns the custom MCP catalog.
+// getFullCatalog returns the canonical MCP catalog used by install + UI.
+// ponytail: one catalog — never re-list servers here; edit internal/mcp/catalog.go.
 func getFullCatalog() []McpCatalogEntry {
-	return customMcpCatalog
+	src := mcp.Catalog()
+	out := make([]McpCatalogEntry, 0, len(src))
+	for _, e := range src {
+		out = append(out, catalogEntryFromMCP(e))
+	}
+	return out
 }
 
-// customMcpCatalog is our local catalog for MCPs not in the official registry.
-var customMcpCatalog = []McpCatalogEntry{
-	{
-		ID:          "context7",
-		Name:        "Context7",
-		Description: "Up-to-date library documentation and code examples. Query any framework or library for current API docs.",
-		Category:    "docs",
-		Icon:        "DOC",
-		Popular:     true,
-		Type:        "remote",
-		URL:         "https://mcp.context7.com/mcp",
-		Tools:       []string{"query-docs", "resolve-library-id"},
-		Docs:        "https://context7.com",
-	},
-	{
-		ID:          "chrome-devtools",
-		Name:        "Chrome DevTools",
-		Description: "Inspect and debug web pages directly from your agent. Access DOM, console, network, and performance data.",
-		Category:    "browser",
-		Icon:        "BRW",
-		Popular:     true,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@anthropic-ai/chrome-devtools-mcp"},
-		InstallCmd:  "npx -y @anthropic-ai/chrome-devtools-mcp",
-		Tools:       []string{"navigate", "screenshot", "evaluate-js", "get-dom", "get-console", "get-network"},
-		Docs:        "https://github.com/anthropics/chrome-devtools-mcp",
-	},
-	{
-		ID:          "playwright",
-		Name:        "Playwright",
-		Description: "Browser automation and E2E testing. Control Chromium, Firefox, and WebKit programmatically.",
-		Category:    "testing",
-		Icon:        "BRW",
-		Popular:     true,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@playwright/mcp@latest"},
-		InstallCmd:  "npx -y @playwright/mcp@latest",
-		Tools:       []string{"browser-navigate", "browser-click", "browser-type", "browser-screenshot", "browser-evaluate", "browser-select"},
-		Docs:        "https://github.com/microsoft/playwright-mcp",
-	},
-	{
-		ID:          "engram",
-		Name:        "Engram",
-		Description: "Persistent memory system for AI agents. Store and recall observations across sessions with full-text search.",
-		Category:    "memory",
-		Icon:        "MEM",
-		Popular:     true,
-		Type:        "local",
-		Command:     []string{"engram", "mcp"},
-		InstallCmd:  "go install github.com/nahuelyoizen/engram/cmd/engram@latest",
-		Tools:       []string{"mem-save", "mem-search", "mem-context", "mem-get-observation", "mem-session-summary", "mem-review"},
-		Docs:        "https://github.com/nahuelyoizen/engram",
-	},
-	{
-		ID:          "codegraph",
-		Name:        "CodeGraph",
-		Description: "Tree-sitter-parsed knowledge graph of your codebase. Sub-millisecond structural queries for symbols, callers, and call paths.",
-		Category:    "code-analysis",
-		Icon:        "COD",
-		Popular:     true,
-		Type:        "local",
-		Command:     []string{"codegraph", "serve", "--mcp"},
-		InstallCmd:  "npm i -g @colbymchenry/codegraph",
-		Tools:       []string{"codegraph-search", "codegraph-node", "codegraph-callers", "codegraph-callees", "codegraph-trace", "codegraph-impact", "codegraph-context", "codegraph-explore", "codegraph-files", "codegraph-status"},
-		Docs:        "https://github.com/colbymchenry/codegraph",
-	},
-	{
-		ID:          "git",
-		Name:        "Git",
-		Description: "Git repository operations. Read logs, diffs, branches, and commit history without leaving your agent.",
-		Category:    "core",
-		Icon:        "COR",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@modelcontextprotocol/server-git"},
-		InstallCmd:  "npx -y @modelcontextprotocol/server-git",
-		Tools:       []string{"git-status", "git-log", "git-diff", "git-show", "git-blame", "git-branch-list", "git-commit-history"},
-		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
-	},
-	{
-		ID:          "github",
-		Name:        "GitHub",
-		Description: "GitHub API integration. Manage repos, issues, PRs, and workflows directly from your agent.",
-		Category:    "integration",
-		Icon:        "OPS",
-		Popular:     true,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		InstallCmd:  "npx -y @modelcontextprotocol/server-github",
-		Tools:       []string{"create-repo", "list-repos", "get-file-contents", "create-issue", "list-issues", "create-pull-request", "list-pull-requests"},
-		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
-	},
-	{
-		ID:          "postgres",
-		Name:        "PostgreSQL",
-		Description: "Query and manage PostgreSQL databases. Execute SQL, inspect schemas, and analyze query performance.",
-		Category:    "database",
-		Icon:        "DB",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@modelcontextprotocol/server-postgres"},
-		InstallCmd:  "npx -y @modelcontextprotocol/server-postgres",
-		Tools:       []string{"query", "list-tables", "describe-table", "explain-query", "list-databases"},
-		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
-	},
-	{
-		ID:          "docker",
-		Name:        "Docker",
-		Description: "Manage Docker containers, images, volumes, and networks. Build, run, and inspect containers.",
-		Category:    "devops",
-		Icon:        "OPS",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@modelcontextprotocol/server-docker"},
-		InstallCmd:  "npx -y @modelcontextprotocol/server-docker",
-		Tools:       []string{"list-containers", "create-container", "start-container", "stop-container", "remove-container", "list-images", "build-image"},
-		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/docker",
-	},
-	{
-		ID:          "kubernetes",
-		Name:        "Kubernetes",
-		Description: "Manage Kubernetes clusters, pods, services, and deployments. Inspect resources and troubleshoot issues.",
-		Category:    "devops",
-		Icon:        "OPS",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"npx", "-y", "@anthropic-ai/kubernetes-mcp"},
-		InstallCmd:  "npx -y @anthropic-ai/kubernetes-mcp",
-		Tools:       []string{"list-pods", "get-pod", "list-services", "list-deployments", "kubectl-exec", "describe-resource"},
-		Docs:        "https://github.com/anthropics/kubernetes-mcp",
-	},
-	{
-		ID:          "microsoft-learn",
-		Name:        "Microsoft Learn",
-		Description: "Search Microsoft documentation, Azure docs, and learn.microsoft.com content for up-to-date technical references.",
-		Category:    "docs",
-		Icon:        "DOC",
-		Popular:     false,
-		Type:        "remote",
-		URL:         "https://learn.microsoft.com/api/mcp",
-		Tools:       []string{"search-docs", "get-article", "list-articles", "get-api-reference"},
-		Docs:        "https://learn.microsoft.com",
-	},
-	{
-		ID:          "jam",
-		Name:        "Jam",
-		Description: "Browser extension for capturing bugs, screenshots, and console logs directly into your workflow.",
-		Category:    "testing",
-		Icon:        "TST",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"jam-mcp"},
-		Tools:       []string{"capture-screenshot", "get-console-logs", "report-bug"},
-		Docs:        "https://jam.dev",
-	},
-	{
-		ID:          "sharptools",
-		Name:        "SharpTools",
-		Description: "C# code analysis and .NET development tools. Roslyn-based syntax analysis, ILSpy decompilation, and Git integration.",
-		Category:    "dotnet",
-		Icon:        "NET",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"sharptools"},
-		Tools:       []string{"analyze-code", "decompile", "syntax-tree", "git-blame"},
-		Docs:        "https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/",
-	},
-	{
-		ID:          "ywai-kanban",
-		Name:        "ywai Kanban",
-		Description: "Kanban board for tracking AI agent delegations and task progress in ywai workflows.",
-		Category:    "project-management",
-		Icon:        "PM",
-		Popular:     false,
-		Type:        "local",
-		Command:     []string{"ywai", "serve", "--mcp-only"},
-		Tools:       []string{"create_session", "create_delegation", "update_delegation", "get_board"},
-		Docs:        "https://github.com/Yoizen/dev-ai-workflow",
-	},
+func catalogEntryFromMCP(e mcp.CatalogEntry) McpCatalogEntry {
+	req := make([]McpEnvSpec, len(e.RequiredEnv))
+	for i, s := range e.RequiredEnv {
+		req[i] = McpEnvSpec{
+			Name:        s.Name,
+			Description: s.Description,
+			Required:    s.Required,
+			Secret:      s.Secret,
+		}
+	}
+	return McpCatalogEntry{
+		ID:          e.ID,
+		Name:        e.Name,
+		Description: e.Description,
+		Category:    e.Category,
+		Icon:        e.Icon,
+		Popular:     e.Popular,
+		Type:        e.Type,
+		Command:     e.Command,
+		URL:         e.URL,
+		InstallCmd:  e.InstallCmd,
+		RequiredEnv: req,
+		Tools:       e.Tools,
+		Docs:        e.Docs,
+	}
 }
 
 // registerMcpStoreRoutes registers MCP store API routes.
@@ -257,8 +120,7 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 		// Return catalog without installed status on error.
 		items := make([]McpCatalogItem, len(fullCatalog))
 		for i, entry := range fullCatalog {
-			source := "custom"
-			items[i] = McpCatalogItem{McpCatalogEntry: entry, Source: source}
+			items[i] = McpCatalogItem{McpCatalogEntry: entry, Source: "catalog"}
 		}
 		writeJSON(w, http.StatusOK, items)
 		return
@@ -280,13 +142,12 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		source := "custom"
 		status, label, message, action := mcpCatalogStatus(entry, installed, enabled, cfg)
 		items[i] = McpCatalogItem{
 			McpCatalogEntry: entry,
 			Installed:       installed,
 			Enabled:         enabled,
-			Source:          source,
+			Source:          "catalog",
 			Status:          status,
 			StatusLabel:     label,
 			StatusMessage:   message,
@@ -676,23 +537,10 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 	var command []string
 	var url string
 
-	fullCatalog := getFullCatalog()
-	for i := range fullCatalog {
-		if fullCatalog[i].ID == id {
-			entryType = fullCatalog[i].Type
-			command = fullCatalog[i].Command
-			url = fullCatalog[i].URL
-			break
-		}
-	}
-
-	// Fallback to mcp package catalog.
-	if entryType == "" {
-		if ce, ok := mcp.CatalogByID(id); ok {
-			entryType = ce.Type
-			command = ce.Command
-			url = ce.URL
-		}
+	if ce, ok := mcp.CatalogByID(id); ok {
+		entryType = ce.Type
+		command = ce.Command
+		url = ce.URL
 	}
 
 	item := mcpHealthItem{ID: id}
@@ -833,20 +681,6 @@ func writeMcpConfig(mcp map[string]interface{}) error {
 	}
 
 	return nil
-}
-
-// GetInstalledMcpIDs returns the IDs of currently installed MCPs.
-// Exported for use by other packages.
-func GetInstalledMcpIDs() ([]string, error) {
-	mcpConfig, err := readMcpConfig()
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(mcpConfig))
-	for id := range mcpConfig {
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
 
 // projectMcpConfigFilePath returns the path to the project-local MCP config file.

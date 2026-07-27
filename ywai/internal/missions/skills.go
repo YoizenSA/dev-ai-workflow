@@ -127,35 +127,6 @@ func (sl *SkillLoader) parseSkill(content []byte) (*Skill, error) {
 	return skill, nil
 }
 
-// LoadAllSkills loads all available skills from the mission directory.
-func (sl *SkillLoader) LoadAllSkills() (map[string]*Skill, error) {
-	skillsDir := filepath.Join(sl.missionDir, "skills")
-
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]*Skill{}, nil // No skills directory yet
-		}
-		return nil, fmt.Errorf("read skills directory: %w", err)
-	}
-
-	skills := make(map[string]*Skill)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		skill, err := sl.LoadSkill(entry.Name())
-		if err != nil {
-			// Skip invalid skills but log
-			continue
-		}
-		skills[entry.Name()] = skill
-	}
-
-	return skills, nil
-}
-
 // globalSkillsSourceDir returns the directory where ywai ships its bundled
 // skills (ywai/skills/ in the repo checkout or ~/.ywai/skills for an installed
 // binary). It is the third resolution tier after per-mission and default
