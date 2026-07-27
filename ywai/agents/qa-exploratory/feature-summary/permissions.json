@@ -1,0 +1,20 @@
+{
+  "read": "allow",
+  "edit": "deny",
+  "write": "deny",
+  "bash": "deny",
+  "glob": "allow",
+  "grep": "allow",
+  "lsp": "allow",
+  "ast_grep": "deny",
+  "websearch": "deny",
+  "webfetch": "deny",
+  "code_search": "allow",
+  "task": "allow",
+  "delegate": "deny",
+  "question": "allow",
+  "skill": "allow",
+  "memory": "allow",
+  "intercom": "allow",
+  "mcp": "allow"
+}

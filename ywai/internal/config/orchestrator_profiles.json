@@ -22,6 +22,12 @@
         "devops": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
+        "exploratory-orchestrator": {
+          "model": "opencode-admin/glm-5.2"
+        },
+        "feature-summary": {
+          "model": "opencode-admin/minimax-m3"
+        },
         "finder": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
@@ -45,6 +51,12 @@
         },
         "orchestrator": {
           "model": "opencode-admin/glm-5.2"
+        },
+        "planner-draft": {
+          "model": "opencode-admin/glm-5.2"
+        },
+        "planner-scout": {
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "planning": {
           "model": "opencode-admin/glm-5.2"
@@ -72,6 +84,9 @@
         },
         "reviewer": {
           "model": "opencode-admin/glm-5.2"
+        },
+        "test-author": {
+          "model": "opencode-admin/deepseek-v4-flash"
         }
       }
     },
@@ -97,6 +112,12 @@
         "devops": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
+        "exploratory-orchestrator": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "feature-summary": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
         "finder": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
@@ -119,6 +140,12 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "orchestrator": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "planner-draft": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "planner-scout": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "planning": {
@@ -146,6 +173,9 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "reviewer": {
+          "model": "opencode-admin/deepseek-v4-flash"
+        },
+        "test-author": {
           "model": "opencode-admin/deepseek-v4-flash"
         }
       }
@@ -172,6 +202,12 @@
         "devops": {
           "model": "opencode-admin/deepseek-v4-pro"
         },
+        "exploratory-orchestrator": {
+          "model": "opencode-admin/qwen3.7-max"
+        },
+        "feature-summary": {
+          "model": "opencode-admin/mimo-v2.5-pro"
+        },
         "finder": {
           "model": "opencode-admin/minimax-m3"
         },
@@ -195,6 +231,12 @@
         },
         "orchestrator": {
           "model": "opencode-admin/qwen3.7-max"
+        },
+        "planner-draft": {
+          "model": "opencode-admin/glm-5.2"
+        },
+        "planner-scout": {
+          "model": "opencode-admin/minimax-m3"
         },
         "planning": {
           "model": "opencode-admin/glm-5.2"
@@ -221,6 +263,9 @@
           "model": "opencode-admin/kimi-k2.7-code"
         },
         "reviewer": {
+          "model": "opencode-admin/kimi-k2.7-code"
+        },
+        "test-author": {
           "model": "opencode-admin/kimi-k2.7-code"
         }
       }

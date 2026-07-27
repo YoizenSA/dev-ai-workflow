@@ -13,7 +13,8 @@
         "y": 300
       },
       "data": {
-        "label": "Implemented feature"
+        "label": "Implemented feature",
+        "agentRef": "qa-exploratory/exploratory-orchestrator"
       }
     },
     {
@@ -27,10 +28,10 @@
       "data": {
         "name": "feature-summary",
         "description": "Summarize the implemented functionality and its use cases for QA.",
-        "agentDefinition": "Read the implemented feature and its diff, then write a QA-ready summary: inputs, main flows, side effects, and edge cases — anchored to the code, not the ticket.\nDone when every changed behavior is captured and a QA could design exploratory tests from your summary alone. Read-only: never modify code.",
+        "agentRef": "qa-exploratory/feature-summary",
         "prompt": "The feature is implemented. Produce the QA-ready summary of functionality and use cases.",
         "model": "inherit",
-        "mode": "all",
+        "mode": "subagent",
         "tools": "read, grep, glob, codegraph_*",
         "sections": "handoff-qa,context-gathering"
       }
@@ -46,10 +47,10 @@
       "data": {
         "name": "test-author",
         "description": "Create an Azure DevOps Exploratory Test child work item and write Gherkin scenarios.",
-        "agentDefinition": "From the feature summary, create an Azure DevOps Exploratory Test work item linked to the user story and write its scenarios in Gherkin (Given/When/Then), using the Azure DevOps CLI/skill to create and attach it.\nDone when every use case and edge case in the summary maps to at least one scenario on the work item. Author tests only — never implement the feature.",
+        "agentRef": "qa-exploratory/test-author",
         "prompt": "Using the feature summary, create the Azure DevOps Exploratory Test work item linked to the user story and write the scenarios in Gherkin.\n\nSkills available (use the `skill` tool): azure-devops, playwright-e2e-testing.",
         "model": "inherit",
-        "mode": "all",
+        "mode": "subagent",
         "tools": "read, write, bash, skill",
         "sections": "handoff-qa,context-gathering"
       }
