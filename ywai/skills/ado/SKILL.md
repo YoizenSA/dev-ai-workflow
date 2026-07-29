@@ -42,6 +42,8 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - `references/commands.md` — full command list, flags, examples, error handling.
 - `references/workflows.md` — task playbooks: code review a PR, create/update
   work items, create a PR or chain, find pending work.
+- `references/templates.md` — work item body templates per type, and the HTML
+  (fields) vs Markdown (comments) formatting rule. Read before drafting one.
 - `references/setup.md` — install, `ado init`, profiles/PAT, and `.adoconfig.toml`
   rules (including whether `ado wi create` is enabled, allowed types, required fields).
 

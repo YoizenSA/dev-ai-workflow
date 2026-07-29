@@ -23,9 +23,14 @@ Guidelines:
 ## Create a work item
 
 1. Check the project rules first: read `[work_item.create]` in `.adoconfig.toml` (enabled? allowed types? required fields?).
-2. Unsure about valid types: `ado wi types`.
-3. Create: `ado wi create --title "<t>" --type <Type> [--description "<d>"] [--priority <n>] [--parent <id>]`.
-4. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
+2. Unsure about valid types: `ado wi types` — names differ per process (`User Story` vs `Product Backlog Item` vs `Requirement`).
+3. Draft the body with `templates.md` — `--description` is HTML, comments are Markdown.
+4. Create: `ado wi create --title "<t>" --type <Type> [--description "<d>"] [--priority <n>] [--parent <id>]`.
+5. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
+6. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+
+Confirm with the user before creating when the request is ambiguous, the item is
+high-impact (Feature/Epic), or no type was specified.
 
 If creation is rejected, the error names the violated rule — fix the flag, don't retry blindly.
 
