@@ -512,3 +512,53 @@
   font-size: 0.8rem;
   padding: 4px 10px;
 }
+
+/* ─── Agent Benchmarks ─────────────────────────────────────────── */
+.bench { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+
+.bench-config {
+  display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-end;
+  padding: var(--space-4); border: 1px solid var(--border); border-radius: 8px;
+}
+.bench-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; }
+.bench-field > span { color: var(--text-muted); font-weight: 500; }
+.bench-models { flex: 1 1 100%; }
+
+.bench-model-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px; max-height: 190px; overflow-y: auto; padding-right: 4px;
+}
+.bench-chip {
+  display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  font-family: var(--font-mono, monospace); font-size: 0.72rem;
+}
+.bench-chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.bench-note { font-size: 0.78rem; line-height: 1.5; margin: 0; }
+
+.bench-run { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.bench-run-head {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border);
+}
+/* The table carries eleven numeric columns; let it scroll instead of the page. */
+.bench-run .table-wrap { overflow-x: auto; }
+
+/* The tabs are this page's only navigation, and the analytics content below them is
+   tall enough to scroll them out of reach once it loads. Pin them to the top of the
+   scroll container, above the content, so switching views never depends on where the
+   page happens to be scrolled. */
+.evals-tabs {
+  /* As a child of the vertically constrained .content flex container, this navigation
+     must retain its intrinsic height when analytics content loads below it. */
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  /* Surfaces are exposed as RGB triplets (--surf-N-rgb), not ready-made colours, so an
+     opaque backdrop has to be built the same way the topbar builds its own. Naming a
+     plain --surf-1 silently falls through to the hardcoded fallback and paints white
+     over a dark theme. */
+  background: rgb(var(--surf-2-rgb));
+}

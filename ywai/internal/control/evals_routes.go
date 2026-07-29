@@ -9,16 +9,16 @@ import (
 	"time"
 )
 
-// registerEvalsRoutes wires Agent Benchmarks stubs + Session Analytics API.
+// registerEvalsRoutes wires Agent Benchmarks + Session Analytics API.
 func (s *Server) registerEvalsRoutes() {
 	s.mux.HandleFunc("GET /api/evals/runs", s.handleEvalRuns)
 	s.mux.HandleFunc("GET /api/evals/session-analytics", s.handleSessionAnalytics)
+	s.registerBenchRoutes()
 }
 
-// handleEvalRuns returns synthetic benchmark runs.
-// The harness is not wired yet; keep an empty list so the UI does not 404.
+// handleEvalRuns returns benchmark runs, newest first.
 func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"runs": []any{}})
+	writeJSON(w, http.StatusOK, map[string]any{"runs": benchRuns.list()})
 }
 
 type analyticsCacheEntry struct {
@@ -29,7 +29,11 @@ type analyticsCacheEntry struct {
 var (
 	analyticsCacheMu sync.Mutex
 	analyticsCache   = map[string]analyticsCacheEntry{}
-	analyticsTTL     = 45 * time.Second
+	// A full scan reads multi-gigabyte OpenCode databases and takes tens of seconds, so
+	// a short TTL just guarantees every visit pays for it again. Session history changes
+	// slowly enough that a stale-by-minutes view is fine, and the UI offers an explicit
+	// regenerate for when it is not.
+	analyticsTTL = 30 * time.Minute
 )
 
 func (s *Server) handleSessionAnalytics(w http.ResponseWriter, r *http.Request) {

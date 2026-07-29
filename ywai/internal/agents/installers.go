@@ -754,6 +754,15 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		}
 		if patterns, ok := ywaiBucketPatterns[key]; ok {
 			for _, p := range patterns {
+				// A profile that names the exact pattern is overriding its bucket on
+				// purpose. Emitting the bucket's value too would write the same YAML key
+				// twice, and the last one wins — so a bucket expanded after an explicit
+				// deny silently handed the tool back. Let the explicit entry stand alone.
+				// `p == key` is the bucket naming itself (delegate → delegate,
+				// delegation_*), which is the bucket working, not an override.
+				if _, explicit := profile.Permission[p]; explicit && p != key {
+					continue
+				}
 				// Quote the key: it contains glob/hyphen chars (e.g. codegraph_*).
 				b.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
 			}

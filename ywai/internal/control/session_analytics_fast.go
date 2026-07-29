@@ -239,6 +239,28 @@ func loadSessionAnalyticsFast(ctx context.Context, dbPath string, q AnalyticsQue
 		}
 	}
 
+	// 11 engram adherence
+	if len(chunks) > 11 {
+		var eng []struct {
+			Sessions    int `json:"sessions"`
+			WriteOnly   int `json:"write_only"`
+			WithSummary int `json:"with_summary"`
+			Saves       int `json:"saves"`
+			Searches    int `json:"searches"`
+			Updates     int `json:"updates"`
+		}
+		if err := json.Unmarshal(chunks[11], &eng); err == nil && len(eng) > 0 {
+			out.Engram = SessionEngramStats{
+				Sessions:    eng[0].Sessions,
+				WriteOnly:   eng[0].WriteOnly,
+				WithSummary: eng[0].WithSummary,
+				Saves:       eng[0].Saves,
+				Searches:    eng[0].Searches,
+				Updates:     eng[0].Updates,
+			}
+		}
+	}
+
 	applyShares(out.Agents, totalSessions)
 	applyShares(out.Models, totalSessions)
 	applyShares(out.Skills, skillCalls)
@@ -465,6 +487,29 @@ ORDER BY cnt DESC;
   COALESCE(SUM(tokens_cache_read), 0) AS cache_read,
   COALESCE(SUM(tokens_cache_write), 0) AS cache_write
 FROM sa_sess;
+`)
+
+	// 11 engram adherence. Rolled up from a per-session pass so "wrote without ever
+	// searching" and "closed with a summary" can be counted as sessions, which is the
+	// unit the memory protocol is written in — a raw call count cannot show either.
+	b.WriteString(`SELECT
+  COUNT(*) AS sessions,
+  COALESCE(SUM(CASE WHEN saves > 0 AND searches = 0 THEN 1 ELSE 0 END), 0) AS write_only,
+  COALESCE(SUM(CASE WHEN summaries > 0 THEN 1 ELSE 0 END), 0) AS with_summary,
+  COALESCE(SUM(saves), 0) AS saves,
+  COALESCE(SUM(searches), 0) AS searches,
+  COALESCE(SUM(updates), 0) AS updates
+FROM (
+  SELECT
+    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_save' THEN 1 ELSE 0 END) AS saves,
+    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_search' THEN 1 ELSE 0 END) AS searches,
+    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_update' THEN 1 ELSE 0 END) AS updates,
+    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_session_summary' THEN 1 ELSE 0 END) AS summaries
+  FROM part pt
+  JOIN sa_sess ss ON ss.session_id = pt.session_id
+  WHERE pt.data LIKE '%"tool":"engram_%'
+  GROUP BY pt.session_id
+);
 `)
 
 	return b.String()

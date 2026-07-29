@@ -118,6 +118,8 @@ func printEvalReport(a *control.SessionAnalytics, top int) {
 	fmt.Printf("Cost / tokens: $%.4f · %s in / %s out\n\n",
 		s.TotalCost, compactInt(s.TokensInput), compactInt(s.TokensOutput))
 
+	printEngram(a)
+
 	printRankTable("Most used agents", a.Agents, top, "sessions", true)
 	printRankTable("Most used skills", a.Skills, top, "calls", false)
 	printRankTable("Most used models", a.Models, top, "sessions", true)
@@ -141,6 +143,35 @@ func printEvalReport(a *control.SessionAnalytics, top int) {
 
 	fmt.Println("UI: open http://localhost:5768/evals (Session Analytics tab)")
 	fmt.Println("    ywai serve --no-update   # if the control UI is not running")
+}
+
+// printEngram reports memory adherence, not call volume. Persistent memory only pays
+// off when it is read back, so the lines that matter are the sessions that wrote
+// without ever searching, the ones that never closed with a summary, and how often a
+// stored memory was corrected instead of another one piled on top.
+func printEngram(a *control.SessionAnalytics) {
+	e := a.Engram
+	if e.Sessions == 0 {
+		return
+	}
+	fmt.Println("Memory (engram)")
+	fmt.Printf("  Used in:        %d sessions (%.0f%% of all sessions)\n", e.Sessions, e.Coverage*100)
+	pct := func(n int) float64 {
+		if e.Sessions == 0 {
+			return 0
+		}
+		return float64(n) / float64(e.Sessions) * 100
+	}
+	fmt.Printf("  Write-only:     %d (%.0f%%) saved but never searched\n", e.WriteOnly, pct(e.WriteOnly))
+	fmt.Printf("  Closed w/ sum.: %d (%.0f%%) ran mem_session_summary\n", e.WithSummary, pct(e.WithSummary))
+	fmt.Printf("  Calls:          %d saves · %d searches · %d updates\n", e.Saves, e.Searches, e.Updates)
+	if e.Saves > 0 && e.Updates*20 < e.Saves {
+		fmt.Printf("  ! %d saves against %d updates — memories are appended, never corrected\n", e.Saves, e.Updates)
+	}
+	if e.WriteOnly*2 > e.Sessions {
+		fmt.Println("  ! most sessions using memory only write to it; it is a log, not recall")
+	}
+	fmt.Println()
 }
 
 func printRankTable(title string, rows []control.SessionNamedCount, top int, unit string, showCost bool) {

@@ -499,6 +499,10 @@ class DelegationManager {
 			)
 		}
 
+		// Read before the force-delete below: deleting a session cascades to its messages
+		// and parts, and a stop is supposed to keep whatever the agent had already produced.
+		const captured = await this.getResult(delegation)
+
 		// Confirm the abort took effect; if the session is still running after the grace
 		// window, force-delete it (the only hard kill the SDK offers).
 		if (!(await this.confirmSessionStopped(delegation.sessionID))) {
@@ -515,7 +519,7 @@ class DelegationManager {
 			}
 		}
 
-		await this.finalizeDelegation(delegation.id, "cancelled", "Stopped by supervisor")
+		await this.finalizeDelegation(delegation.id, "cancelled", "Stopped by supervisor", captured)
 		return `🛑 Delegation "${delegation.id}" stopped. Partial output (if any) saved — delegation_read("${delegation.id}").`
 	}
 
@@ -1198,35 +1202,44 @@ class DelegationManager {
 		return null
 	}
 
-	private async resolveDelegationResult(delegation: DelegationRecord): Promise<string> {
+	/**
+	 * `captured` is a transcript already read by the caller. Stop and timeout must read
+	 * before they delete the session — `session.delete` cascades to messages and parts —
+	 * so they hand the transcript in rather than letting us re-read a session that is gone.
+	 */
+	private async resolveDelegationResult(
+		delegation: DelegationRecord,
+		captured?: string,
+	): Promise<string> {
 		if (delegation.status === "error") {
 			return `Error: ${delegation.error || "Delegation failed."}`
 		}
 
 		if (delegation.status === "cancelled") {
-			const partial = await this.getResult(delegation)
+			const partial = captured ?? (await this.getResult(delegation))
 			return `${partial}\n\n[STOPPED BY SUPERVISOR]`
 		}
 
 		if (delegation.status === "timeout") {
-			const partial = await this.getResult(delegation)
+			const partial = captured ?? (await this.getResult(delegation))
 			return `${partial}\n\n[TIMEOUT REACHED]`
 		}
 
-		return await this.getResult(delegation)
+		return captured ?? (await this.getResult(delegation))
 	}
 
 	private async finalizeDelegation(
 		delegationId: string,
 		status: DelegationTerminalStatus,
 		error?: string,
+		captured?: string,
 	): Promise<void> {
 		const { transitioned, delegation } = this.markTerminal(delegationId, status, error)
 		if (!transitioned || !delegation) return
 
 		await this.debugLog(`finalizeDelegation(${delegation.id}, ${status}) started`)
 
-		const resolvedResult = await this.resolveDelegationResult(delegation)
+		const resolvedResult = await this.resolveDelegationResult(delegation, captured)
 		delegation.result = resolvedResult
 
 		if (resolvedResult.trim().length > 0) {
@@ -1472,20 +1485,41 @@ class DelegationManager {
 
 		await this.debugLog(`handleTimeout for delegation ${delegation.id}`)
 
-		// Try to cancel the session
+		// Abort stops the token burn without destroying anything, so it goes first.
 		try {
-			await this.client.session.delete({
-				path: { id: delegation.sessionID },
-			})
-			this.cleanedChildSessions.add(delegation.sessionID)
+			await this.client.session.abort({ path: { id: delegation.sessionID } })
 		} catch {
-			// Ignore
+			// Best-effort; the force-delete below is the fallback hard kill.
+		}
+
+		// Read the transcript BEFORE any delete. `session.delete` cascades to messages and
+		// parts, so deleting first is what turned every timeout into "produced no output":
+		// a run's partial work was already gone by the time we asked it for a result.
+		const captured = await this.getResult(delegation)
+
+		// Deleting is the only hard kill the SDK offers, not cleanup — so it is reserved for
+		// a session that ignored the abort and would otherwise keep burning tokens behind a
+		// "timeout" label. A session that actually stopped keeps its transcript, which stays
+		// readable and lands in OpenCode's DB where usage analysis can still see the run.
+		if (!(await this.confirmSessionStopped(delegation.sessionID))) {
+			try {
+				await this.client.session.delete({ path: { id: delegation.sessionID } })
+				this.cleanedChildSessions.add(delegation.sessionID)
+				await this.debugLog(`handleTimeout: force-deleted lingering session for ${delegation.id}`)
+			} catch (error) {
+				await this.debugLog(
+					`handleTimeout: force-delete failed for ${delegation.id}: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				)
+			}
 		}
 
 		await this.finalizeDelegation(
 			delegation.id,
 			"timeout",
 			`Delegation timed out after ${Math.round(delegation.maxRunTimeMs / 1000)}s`,
+			captured,
 		)
 	}
 
@@ -1515,7 +1549,7 @@ class DelegationManager {
 
 			if (!messageData || messageData.length === 0) {
 				await this.debugLog(`getResult: No messages found for session ${delegation.sessionID}`)
-				return `Delegation "${delegation.description}" completed but produced no output.`
+				return `Delegation "${delegation.title || delegation.id}" completed but produced no output.`
 			}
 
 			await this.debugLog(
@@ -1532,7 +1566,7 @@ class DelegationManager {
 				await this.debugLog(
 					`getResult: No assistant messages found in ${JSON.stringify(messageData.map((m) => ({ role: m.info.role, keys: Object.keys(m) })))}`,
 				)
-				return `Delegation "${delegation.description}" completed but produced no assistant response.`
+				return `Delegation "${delegation.title || delegation.id}" completed but produced no assistant response.`
 			}
 
 			const lastMessage = assistantMessages[assistantMessages.length - 1]
@@ -1545,7 +1579,7 @@ class DelegationManager {
 				await this.debugLog(
 					`getResult: No text parts found in message: ${JSON.stringify(lastMessage)}`,
 				)
-				return `Delegation "${delegation.description}" completed but produced no text content.`
+				return `Delegation "${delegation.title || delegation.id}" completed but produced no text content.`
 			}
 
 			return textParts.map((p) => p.text).join("\n")
@@ -1553,7 +1587,7 @@ class DelegationManager {
 			await this.debugLog(
 				`getResult error: ${error instanceof Error ? error.message : "Unknown error"}`,
 			)
-			return `Delegation "${delegation.description}" completed but result could not be retrieved: ${
+			return `Delegation "${delegation.title || delegation.id}" completed but result could not be retrieved: ${
 				error instanceof Error ? error.message : "Unknown error"
 			}`
 		}

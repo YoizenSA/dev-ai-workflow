@@ -1,0 +1,14 @@
+{
+  "id": "find-session-deletes",
+  "name": "Trace every child-session delete",
+  "agent": "finder",
+  "description": "Multi-hop trace: four of the five call sites are direct, but maybeCleanupChildSession is only reachable by following readOutput -> markRetrieved, so it separates models that follow a call chain from models that stop at the first grep.",
+  "brief": "In this repository, find EVERY code path in the background-agents plugin that deletes an OpenCode child session. Report each one as an absolute path with a line number and one line on when it fires. Then state how many distinct call sites you found.",
+  "expect": [
+    { "needle": "handletimeout", "label": "handleTimeout" },
+    { "needle": "stopdelegation", "label": "stopDelegation" },
+    { "needle": "maybecleanupchildsession", "label": "maybeCleanupChildSession", "hard": true },
+    { "needle": "deletedelegation", "label": "deleteDelegation" },
+    { "needle": "metadata.ts", "label": "metadata.ts scratch session" }
+  ]
+}

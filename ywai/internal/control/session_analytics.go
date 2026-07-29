@@ -27,6 +27,7 @@ type SessionAnalytics struct {
 	ToolCategories []SessionNamedCount  `json:"toolCategories"`
 	UnusedSkills   []string             `json:"unusedSkills"`
 	Projects       []SessionProjectStat `json:"projects"`
+	Engram         SessionEngramStats   `json:"engram"`
 	Skills         []SessionNamedCount  `json:"skills"`
 	Tools          []SessionNamedCount  `json:"tools"`
 	Agents         []SessionNamedCount  `json:"agents"`
@@ -61,6 +62,21 @@ type SessionAnalyticsSum struct {
 	DelegationCalls    int     `json:"delegationCalls"`
 	InstalledSkills    int     `json:"installedSkills"`
 	UnusedSkillCount   int     `json:"unusedSkillCount"`
+}
+
+// SessionEngramStats measures how persistent memory is actually used, not just how
+// often it is called. Memory only pays off when it is read back, so the telling
+// numbers are the sessions that write without ever searching, the ones that never
+// close with a summary, and how rarely a stored memory is corrected instead of
+// another one piled on top.
+type SessionEngramStats struct {
+	Sessions    int     `json:"sessions"`    // sessions that called any engram tool
+	WriteOnly   int     `json:"writeOnly"`   // saved but never searched
+	WithSummary int     `json:"withSummary"` // closed with mem_session_summary
+	Saves       int     `json:"saves"`
+	Searches    int     `json:"searches"`
+	Updates     int     `json:"updates"`
+	Coverage    float64 `json:"coverage"` // sessions using engram / all sessions
 }
 
 // SessionProjectStat is one OpenCode project row with usage stats.
@@ -137,8 +153,14 @@ func openOpenCodeDB(path string) (*sql.DB, error) {
 //
 // Prefers the system `sqlite3` CLI (fast on multi-GB DBs). Falls back to the
 // pure-Go modernc driver when sqlite3 is not installed.
+// A sandboxed editor records into its own OpenCode install, so the canonical DB
+// is usually not the only one. Each install is read on its own — a UNION across
+// attached DBs reads the same rows but loses the per-table indexes, and `part`
+// is large enough (hundreds of thousands of JSON blobs, scanned six times) that
+// the difference is seconds versus minutes. Aggregates are combined afterwards.
 func LoadSessionAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*SessionAnalytics, error) {
-	if dbPath == "" {
+	explicit := dbPath != ""
+	if !explicit {
 		dbPath = defaultOpenCodeDBPath()
 	}
 	if q.ToolsLimit <= 0 {
@@ -151,6 +173,22 @@ func LoadSessionAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) 
 		q.Days = 0
 	}
 
+	primary, err := loadOneAnalytics(ctx, dbPath, q)
+	if err != nil || explicit {
+		return primary, err
+	}
+	for _, extra := range discoverExtraOpenCodeDBs(dbPath) {
+		// One unreadable install must not blank the whole report.
+		other, err := loadOneAnalytics(ctx, extra, q)
+		if err != nil {
+			continue
+		}
+		mergeAnalytics(primary, other, q)
+	}
+	return primary, nil
+}
+
+func loadOneAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*SessionAnalytics, error) {
 	if fast, err := loadSessionAnalyticsFast(ctx, dbPath, q); err == nil {
 		enrichAnalytics(fast)
 		return fast, nil
@@ -495,6 +533,7 @@ func enrichAnalytics(a *SessionAnalytics) {
 
 	s := &a.Summary
 	if s.Sessions > 0 {
+		a.Engram.Coverage = float64(a.Engram.Sessions) / float64(s.Sessions)
 		s.AvgToolsPerSession = float64(s.ToolCalls) / float64(s.Sessions)
 		s.AvgCostPerSession = s.TotalCost / float64(s.Sessions)
 		s.SkillCoverage = float64(s.SessionsWithSkill) / float64(s.Sessions)

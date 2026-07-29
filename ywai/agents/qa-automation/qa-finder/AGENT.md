@@ -5,7 +5,7 @@ description: >
   Trigger: Explore codebase, find test areas, "what needs testing", coverage gaps.
 role: explorer
 mode: all
-sections: [handoff-qa, context-gathering]
+sections: [handoff-qa]
 ---
 
 # QA Finder Agent

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Check, FileText, SquareCheck, X } from "lucide-react";
+import AgentBenchmarks from "./AgentBenchmarks";
 import MemoryRecallEval from "./MemoryRecallEval";
 import SessionAnalytics from "./SessionAnalytics";
 import "./Evals.css";
@@ -41,8 +42,22 @@ interface EvalRun {
   summary: RunSummary;
 }
 
+function initialKind(): EvalKind {
+  // Deep-linkable so a tab is reachable by URL: ?tab=tasks opens Agent Benchmarks
+  // directly, which also keeps the view shareable and survives a reload.
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return t === "tasks" || t === "recall" || t === "sessions" ? t : "sessions";
+}
+
 export default function Evals() {
-  const [kind, setKind] = useState<EvalKind>("sessions");
+  const [kind, setKindState] = useState<EvalKind>(initialKind);
+
+  const setKind = (next: EvalKind) => {
+    setKindState(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url);
+  };
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +107,7 @@ export default function Evals() {
         </div>
       </header>
 
-      <div className="tabs">
+      <div className="tabs evals-tabs">
         <button
           className={`tab${kind === "sessions" ? " active" : ""}`}
           onClick={() => setKind("sessions")}
@@ -117,6 +132,8 @@ export default function Evals() {
         <SessionAnalytics />
       ) : kind === "recall" ? (
         <MemoryRecallEval />
+      ) : kind === "tasks" ? (
+        <AgentBenchmarks />
       ) : loading ? (
         <div className="skeleton skel-card" style={{ margin: 'var(--space-4)' }} aria-busy="true">
           <div className="skel-line title" />

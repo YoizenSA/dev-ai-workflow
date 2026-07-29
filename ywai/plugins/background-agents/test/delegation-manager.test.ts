@@ -121,10 +121,16 @@ function createFakeClient(): { client: OpencodeClient; state: FakeClientState } 
 			},
 			delete: async (input: { path: { id: string } }) => {
 				state.deletedSessions.push(input.path.id)
+				// OpenCode's schema cascades session -> message -> part on delete, so a
+				// deleted session has no transcript left to read. The fake used to keep
+				// serving messages after a delete, which let read-after-delete bugs pass.
+				state.messagesBySession.set(input.path.id, [])
 				return {}
 			},
 			messages: async (input: { path: { id: string } }) => ({
-				data: state.messagesBySession.get(input.path.id) ?? defaultTranscript,
+				data: state.deletedSessions.includes(input.path.id)
+					? []
+					: (state.messagesBySession.get(input.path.id) ?? defaultTranscript),
 			}),
 		},
 	}
@@ -572,8 +578,58 @@ describe("timeouts", () => {
 		const output = await manager.readOutput("ses_parent", record.id)
 		expect(record.status).toBe("timeout")
 		expect(output).toContain("[TIMEOUT REACHED]")
-		// handleTimeout tears the session down.
-		expect(state.deletedSessions).toContain(record.sessionID)
+		// The abort settles the session, so the force-delete hard kill is not needed and
+		// the transcript survives for inspection.
+		expect(state.abortedSessions).toContain(record.sessionID)
+		expect(state.deletedSessions).not.toContain(record.sessionID)
+	})
+
+	test("timeout keeps the work the agent had already produced", async () => {
+		const { manager, state } = await setup()
+		const record = await manager.delegate(delegateInput({ maxRunTimeMs: 80 }))
+		state.messagesBySession.set(record.sessionID, [
+			{
+				info: { role: "assistant" },
+				parts: [{ type: "text", text: "Found the handler at src/api/routes.ts:88" }],
+			},
+		])
+
+		const output = await manager.readOutput("ses_parent", record.id)
+
+		// The transcript is read before any teardown: deleting cascades to messages, so
+		// reading afterwards returned nothing and every timed-out run was reported as
+		// "produced no output" with its work already destroyed.
+		expect(output).toContain("src/api/routes.ts:88")
+		expect(output).toContain("[TIMEOUT REACHED]")
+		expect(output).not.toContain("produced no output")
+	})
+
+	test("stop keeps the work the agent had already produced", async () => {
+		const { manager, state } = await setup()
+		const record = await manager.delegate(delegateInput())
+		state.messagesBySession.set(record.sessionID, [
+			{
+				info: { role: "assistant" },
+				parts: [{ type: "text", text: "Partial scan: 3 of 9 modules mapped" }],
+			},
+		])
+
+		await manager.stopDelegation("ses_parent", record.id)
+		const output = await manager.readOutput("ses_parent", record.id)
+
+		expect(output).toContain("3 of 9 modules mapped")
+		expect(output).toContain("[STOPPED BY SUPERVISOR]")
+	})
+
+	test("a run that truly produced nothing is labelled, never \"undefined\"", async () => {
+		const { manager, state } = await setup()
+		const record = await manager.delegate(delegateInput({ maxRunTimeMs: 80 }))
+		state.messagesBySession.set(record.sessionID, [])
+
+		const output = await manager.readOutput("ses_parent", record.id)
+
+		expect(output).toContain("produced no output")
+		expect(output).not.toContain("undefined")
 	})
 
 	test("unlimited delegation (0) has no deadline and read defers to the notification", async () => {
@@ -592,24 +648,26 @@ describe("timeouts", () => {
 })
 
 describe("child session cleanup", () => {
-	test("reading a finished delegation deletes its child session exactly once", async () => {
+	test("a read finished delegation keeps its child session and stays re-readable", async () => {
 		const { manager, state } = await setup()
 		const record = await manager.delegate(delegateInput())
 
 		state.promptResolvers.get(record.sessionID)?.resolve({})
 		await waitFor(() => record.status === "complete")
-
-		// Finishing alone must NOT delete the child session: it stays navigable until read.
 		expect(state.deletedSessions).not.toContain(record.sessionID)
 
 		const output = await manager.readOutput("ses_parent", record.id)
 		expect(output).toContain("FINAL RESULT")
-		await waitFor(() => state.deletedSessions.includes(record.sessionID))
 
-		// Re-reading is served from the persisted artifact and never double-deletes.
+		// Reading no longer evicts the child session. Deleting cascades to messages and
+		// parts, so cleaning up on read destroyed the only record of how the run went —
+		// including for runs that timed out or looped, which are the ones worth inspecting.
+		await sleep(100)
+		expect(state.deletedSessions).not.toContain(record.sessionID)
+
 		const again = await manager.readOutput("ses_parent", record.id)
 		expect(again).toContain("FINAL RESULT")
-		expect(state.deletedSessions.filter((id) => id === record.sessionID).length).toBe(1)
+		expect(state.deletedSessions).not.toContain(record.sessionID)
 	})
 
 	test("a running delegation's session is never cleaned up by a (deferred) read", async () => {

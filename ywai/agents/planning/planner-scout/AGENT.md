@@ -6,7 +6,7 @@ description: >
   Trigger: Planning research, "what does this touch", pre-plan exploration.
 role: finder
 mode: subagent
-sections: [handoff, context-gathering]
+sections: [handoff]
 ---
 
 # Planner Scout Agent

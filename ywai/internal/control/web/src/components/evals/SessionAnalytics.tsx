@@ -259,7 +259,22 @@ export default function SessionAnalytics({ autoRun = true }: { autoRun?: boolean
     return list.slice(0, 12);
   }, [data, showAllUnused]);
 
-  const runEval = () => void fetchData({ refresh: true });
+  // Regenerating rescans multi-gigabyte databases and takes tens of seconds, so it is
+  // never triggered implicitly: the cached view loads instantly and a full rescan is
+  // confirmed, with the age of what is on screen so the choice is informed.
+  const runEval = () => {
+    const age = data?.generatedAt
+      ? Math.round((Date.now() - new Date(data.generatedAt).getTime()) / 60000)
+      : null;
+    const shown =
+      age === null
+        ? "No analysis is loaded yet."
+        : `The analysis on screen was generated ${age < 1 ? "less than a minute" : `${age} minute${age === 1 ? "" : "s"}`} ago.`;
+    if (!window.confirm(`${shown}\n\nRescan OpenCode now? This re-reads the full session history and usually takes 20-60 seconds.`)) {
+      return;
+    }
+    void fetchData({ refresh: true });
+  };
 
   return (
     <div className="session-analytics">

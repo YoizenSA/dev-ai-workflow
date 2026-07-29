@@ -1956,3 +1956,37 @@ func TestCoordinatorsCannotSearch(t *testing.T) {
 		}
 	}
 }
+
+// An explicit pattern must beat the bucket that also covers it. YAML keeps the last
+// duplicate key, so emitting both silently handed the tool back: an orchestrator that
+// denied "codegraph_*" while allowing the "mcp" bucket ended up with it allowed.
+func TestExplicitPatternOverridesItsBucket(t *testing.T) {
+	profile := AgentProfile{
+		Name:        "orchestrator",
+		Description: "Coordinator",
+		Prompt:      "# Orchestrator",
+		Mode:        "primary",
+		Permission: map[string]string{
+			"read":        "deny",
+			"mcp":         "allow",
+			"codegraph_*": "deny",
+		},
+	}
+
+	md := BuildOpenCodeMarkdown("orchestrator", profile)
+
+	if strings.Contains(md, `"codegraph_*": allow`) {
+		t.Errorf("explicit deny must not be re-granted by the mcp bucket:\n%s", md)
+	}
+	if !strings.Contains(md, `"codegraph_*": deny`) {
+		t.Errorf("explicit deny must survive:\n%s", md)
+	}
+	if strings.Count(md, `"codegraph_*"`) != 1 {
+		t.Errorf("codegraph_* must be written exactly once, got %d:\n%s",
+			strings.Count(md, `"codegraph_*"`), md)
+	}
+	// The rest of the bucket is untouched by the override.
+	if !strings.Contains(md, `"context7_*": allow`) {
+		t.Errorf("unoverridden bucket members must still expand:\n%s", md)
+	}
+}
