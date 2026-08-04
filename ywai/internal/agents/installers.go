@@ -707,7 +707,6 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString("---\n")
 	b.WriteString(fmt.Sprintf("description: %s\n", description))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
-	b.WriteString("temperature: 0.1\n")
 	if profile.Group != "" {
 		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
 	}

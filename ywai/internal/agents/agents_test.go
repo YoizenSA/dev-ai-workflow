@@ -512,8 +512,8 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	if !strings.Contains(markdown, "mode: subagent") {
 		t.Error("markdown should contain mode")
 	}
-	if !strings.Contains(markdown, "temperature: 0.1") {
-		t.Error("markdown should contain temperature")
+	if strings.Contains(markdown, "temperature:") {
+		t.Error("markdown should not set temperature; leave model default")
 	}
 	if !strings.Contains(markdown, "permission:") {
 		t.Error("markdown should contain permission section")
