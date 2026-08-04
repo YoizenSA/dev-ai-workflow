@@ -20,10 +20,10 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "devops": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "exploratory-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-pro"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "feature-summary": {
           "model": "opencode-admin/minimax-m3"
