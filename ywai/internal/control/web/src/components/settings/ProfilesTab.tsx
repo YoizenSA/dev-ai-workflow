@@ -277,53 +277,6 @@ export default function ProfilesTab() {
 				</p>
 			)}
 
-			{/* OMP modelRoles — editable like the per-agent models. */}
-			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
-				<div
-					className="card"
-					style={{ margin: "0 0 1rem", padding: "0.75rem 1rem", background: "var(--surface)" }}
-				>
-					<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-						<span style={{ fontWeight: 600, fontSize: 13 }}>OMP modelRoles</span>
-						<span className="pill pill-muted">oh-my-pi</span>
-						{ompDirty && <span className="pill pill-success">unsaved</span>}
-					</div>
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.5rem" }}>
-						{Object.keys(data.omp_model_roles)
-							.sort()
-							.map((role) => (
-								<div key={role} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-									<span
-										style={{
-											fontFamily: "var(--font-mono)",
-											fontSize: 12,
-											color: "var(--text-muted)",
-											minWidth: 70,
-										}}
-									>
-										{role}
-									</span>
-									<div style={{ flex: 1, minWidth: 0 }}>
-										<ModelCombobox
-											id={`omp-role-model-${role}`}
-											label=""
-											value={ompDraft[role] ?? ""}
-											models={models}
-											onChange={(v) => {
-												setOmpDraft((prev) => ({ ...prev, [role]: v }));
-												setOmpDirty(true);
-											}}
-										/>
-									</div>
-								</div>
-							))}
-					</div>
-					<p className="muted" style={{ margin: "0.5rem 0 0", fontSize: 11 }}>
-						Written to ~/.omp/agent/config.yml on save. Empty value falls back to the derived mapping.
-					</p>
-				</div>
-			)}
-
 			{/* Bulk actions */}
 			<div
 				style={{
@@ -388,6 +341,54 @@ export default function ProfilesTab() {
 					</button>
 				</div>
 			</div>
+
+			{/* OMP modelRoles — editable like the per-agent models. Below Quick set
+			    so the dropdown never covers the sticky bulk bar. */}
+			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
+				<div
+					className="card"
+					style={{ margin: "0 0 1rem", padding: "0.75rem 1rem", background: "var(--surface)" }}
+				>
+					<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+						<span style={{ fontWeight: 600, fontSize: 13 }}>OMP modelRoles</span>
+						<span className="pill pill-muted">oh-my-pi</span>
+						{ompDirty && <span className="pill pill-success">unsaved</span>}
+					</div>
+					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.5rem" }}>
+						{Object.keys(data.omp_model_roles)
+							.sort()
+							.map((role) => (
+								<div key={role} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+									<span
+										style={{
+											fontFamily: "var(--font-mono)",
+											fontSize: 12,
+											color: "var(--text-muted)",
+											minWidth: 70,
+										}}
+									>
+										{role}
+									</span>
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<ModelCombobox
+											id={`omp-role-model-${role}`}
+											label=""
+											value={ompDraft[role] ?? ""}
+											models={models}
+											onChange={(v) => {
+												setOmpDraft((prev) => ({ ...prev, [role]: v }));
+												setOmpDirty(true);
+											}}
+										/>
+									</div>
+								</div>
+							))}
+					</div>
+					<p className="muted" style={{ margin: "0.5rem 0 0", fontSize: 11 }}>
+						Written to ~/.omp/agent/config.yml on save. Empty value falls back to the derived mapping.
+					</p>
+				</div>
+			)}
 
 			{isShipped && (
 				<div
