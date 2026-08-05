@@ -516,6 +516,8 @@ export interface OrchestratorProfilesResponse {
   active: string;
   /** What the active profile maps into omp's modelRoles (~/.omp/agent/config.yml). */
   omp_model_roles?: Record<string, string>;
+  /** Bare agent name → the folder it lives under (core, qa-automation, …). */
+  agent_groups?: Record<string, string>;
 }
 
 // ─── Workflow Studio Types ─────────────────────────────────────────────────

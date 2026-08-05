@@ -799,6 +799,314 @@
 	margin: 0;
 }
 
+/* =========================================================
+   Profiles tab — cards, profile pills, group sub-tabs,
+   quick set, OMP grid, agent table
+   ========================================================= */
+.profiles-root {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
+}
+
+.profiles-root .alert {
+	margin: 0;
+}
+
+/* --- Profile selector pills --- */
+.profiles-pills {
+	display: flex;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.profiles-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-md);
+	border: 1px solid var(--panel-border);
+	background: var(--surface-soft);
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+	font-weight: 500;
+	cursor: pointer;
+	transition: border-color var(--t-base) var(--ease-out), background var(--t-base) var(--ease-out),
+		color var(--t-base) var(--ease-out);
+}
+
+.profiles-pill:hover {
+	border-color: var(--panel-border-strong);
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.profiles-pill.active {
+	border-color: var(--yz-accent);
+	background: var(--yz-accent-soft);
+	color: var(--tint-accent);
+	font-weight: 600;
+}
+
+.profiles-pill.active .profiles-pill-dot {
+	background: var(--yz-accent);
+	box-shadow: 0 0 8px var(--yz-accent);
+}
+
+.profiles-pill-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	flex-shrink: 0;
+	transition: background var(--t-base) var(--ease-out);
+}
+
+.profiles-pill-name {
+	white-space: nowrap;
+}
+
+.profiles-pill-tag {
+	font-size: var(--text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	padding: 1px 6px;
+	border-radius: var(--radius-sm);
+	background: rgba(var(--slate-rgb), 0.2);
+	color: var(--text-muted);
+}
+
+.profiles-pill.ghost {
+	border-style: dashed;
+}
+
+.profiles-description {
+	margin: var(--space-3) 0 0;
+	font-size: var(--text-sm);
+}
+
+/* --- Shipped-profile notice --- */
+.profiles-shipped-note {
+	display: flex;
+	gap: var(--space-2);
+	align-items: flex-start;
+	margin-top: var(--space-3);
+	padding: var(--space-3);
+	border-radius: var(--radius-md);
+	background: var(--warning-soft);
+	border: 1px solid var(--warning-border);
+	color: var(--text-soft);
+	font-size: var(--text-sm);
+	line-height: 1.5;
+}
+
+.profiles-shipped-note svg {
+	color: var(--warning);
+}
+
+/* --- Section header scope/tags helpers --- */
+.profiles-scope {
+	font-size: var(--text-sm);
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.profiles-section-tags {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+}
+
+/* --- Quick set bar --- */
+.profiles-quickset {
+	display: flex;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	align-items: stretch;
+}
+
+.profiles-quickset-picker {
+	flex: 1 1 280px;
+	min-width: 200px;
+}
+
+.profiles-quickset-actions {
+	display: flex;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+/* --- OMP modelRoles grid --- */
+.profiles-omp-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: var(--space-3);
+}
+
+.profiles-omp-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.profiles-omp-role {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	min-width: 80px;
+}
+
+.profiles-omp-picker {
+	flex: 1;
+	min-width: 0;
+}
+
+.profiles-omp-help {
+	margin: var(--space-3) 0 0;
+	font-size: var(--text-2xs);
+}
+
+/* --- Group sub-tabs (segmented control) --- */
+.profiles-subtabs {
+	display: flex;
+	gap: var(--space-1);
+	flex-wrap: wrap;
+	padding: var(--space-1);
+	background: var(--surface-soft);
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-md);
+	margin-bottom: var(--space-4);
+	overflow-x: auto;
+}
+
+.profiles-subtab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--text-muted);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+	white-space: nowrap;
+	transition: color var(--t-base) var(--ease-out), background var(--t-base) var(--ease-out);
+}
+
+.profiles-subtab:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.profiles-subtab.active {
+	color: var(--text);
+	background: color-mix(in srgb, var(--yz-accent) 18%, transparent);
+	font-weight: 600;
+}
+
+.profiles-subtab-count {
+	font-size: var(--text-2xs);
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: var(--radius-sm);
+	background: rgba(var(--slate-rgb), 0.2);
+	color: var(--text-muted);
+}
+
+.profiles-subtab.active .profiles-subtab-count {
+	background: rgba(var(--yz-accent-rgb), 0.25);
+	color: var(--tint-accent);
+}
+
+/* --- Agent filter --- */
+.profiles-filter {
+	position: relative;
+	margin-bottom: var(--space-3);
+}
+
+.profiles-filter-icon {
+	position: absolute;
+	left: 10px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--text-muted);
+	pointer-events: none;
+}
+
+.profiles-filter .input {
+	padding-left: 32px;
+}
+
+/* --- Agent model table --- */
+.profiles-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.profiles-table th {
+	text-align: left;
+	padding: var(--space-2) var(--space-3);
+	font-size: var(--text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+	border-bottom: 1px solid var(--panel-border);
+}
+
+.profiles-table th:last-child {
+	width: 62%;
+}
+
+.profiles-table td {
+	padding: var(--space-2) var(--space-3);
+	border-bottom: 1px solid var(--panel-border);
+	vertical-align: middle;
+}
+
+.profiles-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.profiles-table-agent-name {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	color: var(--text);
+}
+
+.profiles-model-cell {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.profiles-model-picker {
+	flex: 1 1 220px;
+	min-width: 200px;
+}
+
+.profiles-quickchips {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+}
+
+.profiles-quickchip {
+	font-size: var(--text-2xs);
+	padding: 0.15rem 0.45rem;
+}
+
+.profiles-empty {
+	margin: var(--space-4) 0;
+}
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
 	.settings-page {
@@ -837,5 +1145,13 @@
 
 	.permissions-grid {
 		grid-template-columns: 1fr;
+	}
+
+	.profiles-omp-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.profiles-quickset {
+		flex-direction: column;
 	}
 }

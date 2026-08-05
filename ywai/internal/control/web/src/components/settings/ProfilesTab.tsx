@@ -1,22 +1,33 @@
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, Check, Save, Plus, Search, Zap, AlertTriangle } from "lucide-react";
+import { RefreshCw, Save, Plus, Search, Zap, AlertTriangle, Boxes } from "lucide-react";
 import { configApi, missionsApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
 import ModelCombobox from "../missions/ModelCombobox";
 
-// Group an agent name by its family for readable sectioning.
-function agentGroup(name: string): string {
-	if (name.startsWith("qa-")) return "qa-automation";
-	if (name.startsWith("migration-")) return "social-refactor";
-	return "core";
-}
+// Preferred display order for the real agents/ folders. Unknown folders append
+// alphabetically so a new group still shows up without a code change.
+const GROUP_ORDER = ["core", "planning", "qa-automation", "qa-exploratory", "social-refactor"];
 
-const GROUP_ORDER = ["core", "qa-automation", "social-refactor"];
-const GROUP_LABELS: Record<string, string> = {
-	core: "Core",
-	"qa-automation": "QA Automation",
-	"social-refactor": "Social Refactor",
-};
+// Human label for a folder slug; falls back to a Title-Case version of the slug.
+function groupLabel(slug: string): string {
+	switch (slug) {
+		case "core":
+			return "Core";
+		case "planning":
+			return "Planning";
+		case "qa-automation":
+			return "QA Automation";
+		case "qa-exploratory":
+			return "QA Exploratory";
+		case "social-refactor":
+			return "Social Refactor";
+		default:
+			return slug
+				.split("-")
+				.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+				.join(" ");
+	}
+}
 
 export default function ProfilesTab() {
 	const [data, setData] = useState<OrchestratorProfilesResponse | null>(null);
@@ -35,6 +46,8 @@ export default function ProfilesTab() {
 	const [agentFilter, setAgentFilter] = useState("");
 	// Bulk model selector value.
 	const [bulkModel, setBulkModel] = useState("");
+	// Active group sub-tab.
+	const [activeGroup, setActiveGroup] = useState<string>("core");
 
 	const fetchProfiles = () => {
 		setLoading(true);
@@ -99,7 +112,14 @@ export default function ProfilesTab() {
 				omp_model_roles: ompDraft,
 			})
 			.then((res) => {
-				setData({ profiles: res.profiles, active: res.active });
+				// Merge so we keep shipped/omp_model_roles/agent_groups that the
+				// update response omits. The old code replaced `data` wholesale and
+				// silently dropped them, blanking the OMP section after a save.
+				setData((prev) =>
+					prev
+						? { ...prev, profiles: res.profiles, active: res.active }
+						: { profiles: res.profiles, active: res.active },
+				);
 				setDirty(false);
 				setOmpDirty(false);
 				setMessage(
@@ -139,7 +159,11 @@ export default function ProfilesTab() {
 				agents,
 			})
 			.then((res) => {
-				setData({ profiles: res.profiles, active: res.active });
+				setData((prev) =>
+					prev
+						? { ...prev, profiles: res.profiles, active: res.active }
+						: { profiles: res.profiles, active: res.active },
+				);
 				setMessage(`Profile "${displayName}" created — select it to activate and edit`);
 			})
 			.catch((err) => setMessage(`Error: ${err.message}`))
@@ -151,10 +175,7 @@ export default function ProfilesTab() {
 		setMessage(null);
 		configApi
 			.resyncOrchestratorProfiles()
-			.then((res) => {
-				setData(res);
-				setMessage("Profiles resynced from seed");
-			})
+			.then((res) => setData(res))
 			.catch((err) => setMessage(`Error: ${err.message}`))
 			.finally(() => setResyncing(false));
 	};
@@ -177,17 +198,48 @@ export default function ProfilesTab() {
 	const profileNames = data ? Object.keys(data.profiles) : [];
 	const lowerFilter = agentFilter.toLowerCase();
 	const allAgentNames = useMemo(
-		() =>
-			Object.keys(draft).sort((a, b) => {
-				const ga = GROUP_ORDER.indexOf(agentGroup(a));
-				const gb = GROUP_ORDER.indexOf(agentGroup(b));
-				return ga !== gb ? ga - gb : a.localeCompare(b);
-			}),
+		() => Object.keys(draft).sort((a, b) => a.localeCompare(b)),
 		[draft],
 	);
-	const agentNames = useMemo(
-		() => allAgentNames.filter((name) => name.toLowerCase().includes(lowerFilter)),
-		[allAgentNames, lowerFilter],
+
+	// Folder for an agent, from the backend's agent_groups map. Fall back to the
+	// legacy "core" bucket so an unknown agent is still editable somewhere.
+	const agentGroups = data?.agent_groups ?? {};
+	const folderOf = (name: string) => agentGroups[name] ?? "core";
+
+	// All groups present in the data, in the preferred order, unknowns appended.
+	const groups = useMemo(() => {
+		const present = new Set(Object.values(agentGroups));
+		// Also include any group referenced by an agent the map missed.
+		for (const name of allAgentNames) present.add(folderOf(name));
+		present.delete("");
+		const ordered = GROUP_ORDER.filter((g) => present.has(g));
+		for (const g of [...present].sort()) {
+			if (!ordered.includes(g)) ordered.push(g);
+		}
+		return ordered;
+	}, [agentGroups, allAgentNames, agentGroups]);
+
+	const agentsByGroup = useMemo(() => {
+		const acc: Record<string, string[]> = {};
+		for (const name of allAgentNames) {
+			const g = folderOf(name);
+			(acc[g] ||= []).push(name);
+		}
+		return acc;
+	}, [allAgentNames, agentGroups]);
+
+	// Keep a valid active group when the roster changes (e.g. profile switch).
+	useEffect(() => {
+		if (groups.length === 0) return;
+		if (!groups.includes(activeGroup)) setActiveGroup(groups[0]);
+	}, [groups, activeGroup]);
+
+	// Agents visible in the current sub-tab, after the name filter.
+	const groupAgents = agentsByGroup[activeGroup] ?? [];
+	const visibleAgents = useMemo(
+		() => groupAgents.filter((name) => name.toLowerCase().includes(lowerFilter)),
+		[groupAgents, lowerFilter],
 	);
 
 	// Models currently in use somewhere in this profile, useful as quick chips.
@@ -200,318 +252,320 @@ export default function ProfilesTab() {
 		[inUseModelIds, models],
 	);
 
-	const allAgentGroups = useMemo(
-		() =>
-			allAgentNames.reduce<Record<string, string[]>>((acc, name) => {
-				const g = agentGroup(name);
-				(acc[g] ||= []).push(name);
-				return acc;
-			}, {}),
-		[allAgentNames],
-	);
-
 	if (loading && !data) {
 		return (
-			<div className="card card-pad">
-				<div className="loading-inline">
-					<div className="spinner" />
-					<span>Loading profiles…</span>
+			<div className="settings-section">
+				<div className="settings-section-body">
+					<div className="loading-inline">
+						<div className="spinner" />
+						<span>Loading profiles…</span>
+					</div>
 				</div>
 			</div>
 		);
 	}
 
-	return (
-		<div className="card card-pad">
-			<div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-				<h3>Orchestrator Profiles</h3>
-				<button type="button" className="btn btn-sm" onClick={handleSave} disabled={saving || (!dirty && !ompDirty)}>
-					<Save size={14} />
-					{saving ? "Saving…" : "Save"}
-				</button>
-			</div>
+	const isDirty = dirty || ompDirty;
 
+	return (
+		<div className="profiles-root">
 			{message && (
 				<div
 					className={`alert ${message.startsWith("Error") ? "alert-danger" : "alert-success"}`}
-					style={{ marginBottom: "1rem" }}
 				>
 					{message}
 				</div>
 			)}
 
-			{/* Profile selector */}
-			<div style={{ marginBottom: "1.5rem" }}>
-				<div style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>Active Profile</div>
-				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-					{profileNames.map((name) => (
-						<button
-							key={name}
-							type="button"
-							className={`pill ${activeProfile === name ? "pill-success" : "pill-muted"}`}
-							style={{ cursor: "pointer" }}
-							onClick={() => handleActiveChange(name)}
-							disabled={saving}
-						>
-							{activeProfile === name && <Check size={12} style={{ marginRight: 4 }} />}
-							{data?.profiles[name]?.display_name ?? name}
-						</button>
-					))}
-					<button
-						type="button"
-						className="pill pill-muted"
-						style={{ cursor: "pointer" }}
-						onClick={handleAddProfile}
-						disabled={saving}
-						title="Create a new profile seeded from the current one"
-					>
-						<Plus size={12} style={{ marginRight: 4 }} />
-						Add profile
-					</button>
-				</div>
-			</div>
-
-			{currentProfile && (
-				<p className="muted" style={{ margin: "0 0 1rem" }}>
-					{currentProfile.description}
-				</p>
-			)}
-
-			{/* Bulk actions */}
-			<div
-				style={{
-					position: "sticky",
-					top: 0,
-					zIndex: 10,
-					backgroundColor: "var(--surface, inherit)",
-					padding: "0.75rem",
-					margin: "0 -0.75rem 1rem",
-					borderRadius: "8px",
-					border: "1px solid var(--color-border, #ddd)",
-					display: "flex",
-					gap: "0.75rem",
-					flexWrap: "wrap",
-					alignItems: "center",
-				}}
-			>
-				<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 1 260px" }}>
-					<Zap size={14} />
-					<span style={{ fontWeight: 600, fontSize: "14px" }}>Quick set</span>
-					<div style={{ flex: 1, minWidth: 160 }}>
-						<ModelCombobox
-							id="bulk-model"
-							label=""
-							value={bulkModel}
-							models={models}
-							onChange={setBulkModel}
-						/>
-					</div>
-				</div>
-				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+			{/* ── Profile selector ─────────────────────────────────────────── */}
+			<section className="settings-section">
+				<div className="settings-section-header">
+					<h2>
+						<Boxes size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+						Orchestrator Profiles
+					</h2>
 					<button
 						type="button"
 						className="btn btn-sm"
-						disabled={!bulkModel || allAgentNames.length === 0}
-						onClick={() => applyModelToAgents(bulkModel, allAgentNames)}
+						onClick={handleSave}
+						disabled={saving || !isDirty}
 					>
-						All agents
+						<Save size={14} />
+						{saving ? "Saving…" : "Save"}
 					</button>
-					{GROUP_ORDER.filter((g) => allAgentGroups[g]?.length).map((g) => (
+				</div>
+				<div className="settings-section-body">
+					<div className="profiles-pills">
+						{profileNames.map((name) => {
+							const p = data?.profiles[name];
+							const isActive = activeProfile === name;
+							return (
+								<button
+									key={name}
+									type="button"
+									className={`profiles-pill ${isActive ? "active" : ""}`}
+									onClick={() => handleActiveChange(name)}
+									disabled={saving}
+									title={p?.description}
+								>
+									<span className="profiles-pill-dot" />
+									<span className="profiles-pill-name">
+										{p?.display_name ?? name}
+									</span>
+									{(data?.shipped ?? []).includes(name) && (
+										<span className="profiles-pill-tag">seed</span>
+									)}
+								</button>
+							);
+						})}
 						<button
-							key={g}
 							type="button"
-							className="btn btn-sm btn-ghost"
-							disabled={!bulkModel}
-							onClick={() => applyModelToAgents(bulkModel, allAgentGroups[g])}
+							className="profiles-pill ghost"
+							onClick={handleAddProfile}
+							disabled={saving}
+							title="Create a new profile seeded from the current one"
 						>
-							{GROUP_LABELS[g] ?? g}
+							<Plus size={14} />
+							<span className="profiles-pill-name">New</span>
 						</button>
-					))}
-					{/* Clearing a model is not the same action as setting one: it needs no
-					    selection, and it is the way back to "whatever the lead agent uses"
-					    after experimenting. Kept separate so it cannot fire by accident. */}
+					</div>
+
+					{currentProfile && (
+						<p className="profiles-description muted">
+							{currentProfile.description}
+						</p>
+					)}
+
+					{isShipped && (
+						<div className="profiles-shipped-note">
+							<AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+							<span>
+								<strong>{activeProfile}</strong> ships with ywai: its agent roster is
+								refreshed on every install (so new agents appear), but your model and
+								OMP modelRoles choices persist. For a fully custom setup, save under a
+								new profile name.
+							</span>
+						</div>
+					)}
+				</div>
+			</section>
+
+			{/* ── Quick set (operates on the active group sub-tab) ─────────── */}
+			<section className="settings-section">
+				<div className="settings-section-header">
+					<h2>
+						<Zap size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+						Quick set
+					</h2>
+					<span className="profiles-scope muted">
+						applies to: {groupLabel(activeGroup)}
+					</span>
+				</div>
+				<div className="settings-section-body">
+					<div className="profiles-quickset">
+						<div className="profiles-quickset-picker">
+							<ModelCombobox
+								id="bulk-model"
+								label=""
+								value={bulkModel}
+								models={models}
+								onChange={setBulkModel}
+							/>
+						</div>
+						<div className="profiles-quickset-actions">
+							<button
+								type="button"
+								className="btn btn-sm"
+								disabled={!bulkModel || groupAgents.length === 0}
+								onClick={() => applyModelToAgents(bulkModel, groupAgents)}
+							>
+								This group ({groupAgents.length})
+							</button>
+							<button
+								type="button"
+								className="btn btn-sm"
+								disabled={!bulkModel || allAgentNames.length === 0}
+								onClick={() => applyModelToAgents(bulkModel, allAgentNames)}
+							>
+								All agents
+							</button>
+							{/* Clearing a model is not the same action as setting one: it needs no
+							    selection, and it is the way back to "whatever the lead agent uses"
+							    after experimenting. Kept separate so it cannot fire by accident. */}
+							<button
+								type="button"
+								className="btn btn-sm btn-ghost"
+								disabled={groupAgents.length === 0}
+								title="Clear every per-agent model in this group so each follows the lead agent"
+								onClick={() => applyModelToAgents("", groupAgents)}
+							>
+								Inherit here
+							</button>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			{/* ── OMP modelRoles — editable like the per-agent models. ──────── */}
+			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
+				<section className="settings-section">
+					<div className="settings-section-header">
+						<h2>OMP modelRoles</h2>
+						<div className="profiles-section-tags">
+							<span className="pill pill-muted">oh-my-pi</span>
+							{ompDirty && <span className="pill pill-success">unsaved</span>}
+						</div>
+					</div>
+					<div className="settings-section-body">
+						<div className="profiles-omp-grid">
+							{Object.keys(data.omp_model_roles)
+								.sort()
+								.map((role) => (
+									<div key={role} className="profiles-omp-row">
+										<span className="profiles-omp-role">{role}</span>
+										<div className="profiles-omp-picker">
+											<ModelCombobox
+												id={`omp-role-model-${role}`}
+												label=""
+												value={ompDraft[role] ?? ""}
+												models={models}
+												onChange={(v) => {
+													setOmpDraft((prev) => ({ ...prev, [role]: v }));
+													setOmpDirty(true);
+												}}
+											/>
+										</div>
+									</div>
+								))}
+						</div>
+						<p className="muted profiles-omp-help">
+							Written to ~/.omp/agent/config.yml on save. Empty value falls back to the
+							derived mapping.
+						</p>
+					</div>
+				</section>
+			)}
+
+			{/* ── Per-agent models, grouped by folder sub-tabs ─────────────── */}
+			<section className="settings-section">
+				<div className="settings-section-header">
+					<h2>Agent models</h2>
 					<button
 						type="button"
 						className="btn btn-sm btn-ghost"
-						disabled={allAgentNames.length === 0}
-						title="Clear every per-agent model so each one follows the lead agent"
-						onClick={() => applyModelToAgents("", allAgentNames)}
+						onClick={handleResync}
+						disabled={resyncing}
 					>
-						Inherit everywhere
+						<RefreshCw size={14} className={resyncing ? "spin" : ""} />
+						{resyncing ? "Resyncing…" : "Resync from Seed"}
 					</button>
 				</div>
-			</div>
-
-			{/* OMP modelRoles — editable like the per-agent models. Below Quick set
-			    so the dropdown never covers the sticky bulk bar. */}
-			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
-				<div
-					className="card"
-					style={{ margin: "0 0 1rem", padding: "0.75rem 1rem", background: "var(--surface)" }}
-				>
-					<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-						<span style={{ fontWeight: 600, fontSize: 13 }}>OMP modelRoles</span>
-						<span className="pill pill-muted">oh-my-pi</span>
-						{ompDirty && <span className="pill pill-success">unsaved</span>}
-					</div>
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.5rem" }}>
-						{Object.keys(data.omp_model_roles)
-							.sort()
-							.map((role) => (
-								<div key={role} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-									<span
-										style={{
-											fontFamily: "var(--font-mono)",
-											fontSize: 12,
-											color: "var(--text-muted)",
-											minWidth: 70,
-										}}
+				<div className="settings-section-body">
+					{groups.length > 0 && (
+						<div className="profiles-subtabs" role="tablist">
+							{groups.map((g) => {
+								const count = agentsByGroup[g]?.length ?? 0;
+								return (
+									<button
+										key={g}
+										type="button"
+										role="tab"
+										aria-selected={activeGroup === g}
+										className={`profiles-subtab ${activeGroup === g ? "active" : ""}`}
+										onClick={() => setActiveGroup(g)}
 									>
-										{role}
-									</span>
-									<div style={{ flex: 1, minWidth: 0 }}>
-										<ModelCombobox
-											id={`omp-role-model-${role}`}
-											label=""
-											value={ompDraft[role] ?? ""}
-											models={models}
-											onChange={(v) => {
-												setOmpDraft((prev) => ({ ...prev, [role]: v }));
-												setOmpDirty(true);
-											}}
-										/>
-									</div>
-								</div>
-							))}
-					</div>
-					<p className="muted" style={{ margin: "0.5rem 0 0", fontSize: 11 }}>
-						Written to ~/.omp/agent/config.yml on save. Empty value falls back to the derived mapping.
-					</p>
-				</div>
-			)}
-
-			{isShipped && (
-				<div
-					className="field-help"
-					style={{ marginBottom: "0.85rem", display: "flex", gap: "0.4rem", alignItems: "flex-start" }}
-				>
-					<AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-					<span>
-						<strong>{activeProfile}</strong> ships with ywai: its agent roster is refreshed on
-						every install (so new agents appear), but your model and OMP modelRoles choices
-						persist. For a fully custom setup, save under a new profile name.
-					</span>
-				</div>
-			)}
-
-			{/* Agent filter */}
-			<div style={{ marginBottom: "1rem" }}>
-				<div style={{ position: "relative" }}>
-					<Search
-						size={14}
-						style={{
-							position: "absolute",
-							left: "10px",
-							top: "50%",
-							transform: "translateY(-50%)",
-							color: "var(--text-muted)",
-							pointerEvents: "none",
-						}}
-					/>
-					<input
-						type="text"
-						className="input"
-						placeholder="Filter agents…"
-						value={agentFilter}
-						onChange={(e) => setAgentFilter(e.target.value)}
-						style={{ paddingLeft: "32px" }}
-					/>
-				</div>
-			</div>
-
-			{/* Editable per-agent model table */}
-			{agentNames.length > 0 ? (
-				<table style={{ width: "100%", borderCollapse: "collapse" }}>
-					<thead>
-						<tr>
-							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)" }}>Agent</th>
-							<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--color-border, #ddd)", width: "60%" }}>Model</th>
-						</tr>
-					</thead>
-					<tbody>
-						{agentNames.flatMap((name, i) => {
-							const group = agentGroup(name);
-							const prevGroup = i > 0 ? agentGroup(agentNames[i - 1]) : null;
-							const rows = [];
-							if (group !== prevGroup) {
-								rows.push(
-									<tr key={`grp-${group}`}>
-										<td colSpan={2} style={{ padding: "0.6rem 0.75rem 0.2rem", fontWeight: 600 }} className="muted">
-											{GROUP_LABELS[group] ?? group}
-										</td>
-									</tr>,
+										{groupLabel(g)}
+										<span className="profiles-subtab-count">{count}</span>
+									</button>
 								);
-							}
-							// Show quick chips for models used by other agents.
-							const quickModels = inUseModels.filter((m) => m.id !== draft[name]).slice(0, 4);
-							rows.push(
-								<tr key={name}>
-									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)", verticalAlign: "middle" }}>
-										{name}
-									</td>
-									<td style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--color-border, #eee)" }}>
-										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-											<div style={{ flex: "1 1 220px", minWidth: 220 }}>
-												<ModelCombobox
-													id={`orch-profile-model-${name}`}
-													label=""
-													value={draft[name] ?? ""}
-													models={models}
-													onChange={(v) => {
-														setDraft((prev) => ({ ...prev, [name]: v }));
-														setDirty(true);
-													}}
-												/>
-											</div>
-											{quickModels.length > 0 && (
-												<div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-													{quickModels.map((m) => (
-														<button
-															key={m.id}
-															type="button"
-															className="pill pill-muted"
-															title={m.name || m.id}
-															onClick={() => {
-																setDraft((prev) => ({ ...prev, [name]: m.id }));
+							})}
+						</div>
+					)}
+
+					<div className="profiles-filter">
+						<Search
+							size={14}
+							className="profiles-filter-icon"
+						/>
+						<input
+							type="text"
+							className="input"
+							placeholder="Filter agents…"
+							value={agentFilter}
+							onChange={(e) => setAgentFilter(e.target.value)}
+						/>
+					</div>
+
+					{visibleAgents.length > 0 ? (
+						<table className="profiles-table">
+							<thead>
+								<tr>
+									<th>Agent</th>
+									<th>Model</th>
+								</tr>
+							</thead>
+							<tbody>
+								{visibleAgents.map((name) => {
+									// Show quick chips for models used by other agents.
+									const quickModels = inUseModels
+										.filter((m) => m.id !== draft[name])
+										.slice(0, 4);
+									return (
+										<tr key={name}>
+											<td className="profiles-table-agent">
+												<span className="profiles-table-agent-name">{name}</span>
+											</td>
+											<td>
+												<div className="profiles-model-cell">
+													<div className="profiles-model-picker">
+														<ModelCombobox
+															id={`orch-profile-model-${name}`}
+															label=""
+															value={draft[name] ?? ""}
+															models={models}
+															onChange={(v) => {
+																setDraft((prev) => ({ ...prev, [name]: v }));
 																setDirty(true);
 															}}
-															style={{ fontSize: "11px", padding: "0.15rem 0.45rem" }}
-														>
-															{m.name || m.id}
-														</button>
-													))}
+														/>
+													</div>
+													{quickModels.length > 0 && (
+														<div className="profiles-quickchips">
+															{quickModels.map((m) => (
+																<button
+																	key={m.id}
+																	type="button"
+																	className="pill pill-muted profiles-quickchip"
+																	title={m.name || m.id}
+																	onClick={() => {
+																		setDraft((prev) => ({
+																			...prev,
+																			[name]: m.id,
+																		}));
+																		setDirty(true);
+																	}}
+																>
+																	{m.name || m.id}
+																</button>
+															))}
+														</div>
+													)}
 												</div>
-											)}
-										</div>
-									</td>
-								</tr>,
-							);
-							return rows;
-						})}
-					</tbody>
-				</table>
-			) : (
-				<p className="muted">
-					{agentFilter ? "No agents match your filter" : "No agent model mappings for this profile"}
-				</p>
-			)}
-
-			<div style={{ marginTop: "1.5rem" }}>
-				<button type="button" className="btn btn-sm btn-ghost" onClick={handleResync} disabled={resyncing}>
-					<RefreshCw size={14} className={resyncing ? "spin" : ""} />
-					{resyncing ? "Resyncing…" : "Resync from Seed"}
-				</button>
-			</div>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					) : (
+						<p className="muted profiles-empty">
+							{agentFilter
+								? "No agents match your filter"
+								: "No agent model mappings for this group"}
+						</p>
+					)}
+				</div>
+			</section>
 		</div>
 	);
 }

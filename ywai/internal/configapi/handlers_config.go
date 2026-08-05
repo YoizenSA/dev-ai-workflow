@@ -807,11 +807,13 @@ func (h *Handlers) GetOrchestratorProfiles(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	mergedProfiles, agentGroups := withAllInstalledAgents(cfg.OrchestratorProfiles)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"profiles":        withAllInstalledAgents(cfg.OrchestratorProfiles),
+		"profiles":        mergedProfiles,
 		"active":          cfg.ActiveOrchestratorProfile,
 		"shipped":         shippedProfileNames(cfg.OrchestratorProfiles),
 		"omp_model_roles": OmpModelRolesFor(cfg.GetActiveOrchestratorProfile()),
+		"agent_groups":    agentGroups,
 	})
 }
 
@@ -836,10 +838,34 @@ func shippedProfileNames(profiles map[string]userconfig.OrchestratorModelProfile
 // which is how `planning`, `designer` and `advisor` came to be unlistable.
 // Deriving the list from the installed profiles instead means adding an agent
 // is enough to make it configurable.
-func withAllInstalledAgents(profiles map[string]userconfig.OrchestratorModelProfile) map[string]userconfig.OrchestratorModelProfile {
+//
+// Returns the merged profiles plus agentGroups: bare agent name → the folder it
+// lives under (e.g. "qa-automation", "social-refactor"), derived from the
+// loader's slash-path key. The UI uses agentGroups to group agents by their real
+// agents/ folder instead of guessing from name prefixes.
+func withAllInstalledAgents(
+	profiles map[string]userconfig.OrchestratorModelProfile,
+) (map[string]userconfig.OrchestratorModelProfile, map[string]string) {
 	installed, err := agentprofiles.LoadProfiles(userconfig.AgentsSourceDir())
 	if err != nil || len(installed) == 0 {
-		return profiles
+		return profiles, map[string]string{}
+	}
+
+	// Bare name → folder (first segment of the loader's slash-path key).
+	// Prefer AgentProfile.Group when the manifest (groups.json) set it; fall
+	// back to the folder prefix so unmanifested agents still land somewhere.
+	agentGroups := make(map[string]string, len(installed))
+	for key, prof := range installed {
+		bare := key[strings.LastIndex(key, "/")+1:]
+		if prof.Group != "" {
+			agentGroups[bare] = prof.Group
+			continue
+		}
+		if idx := strings.Index(key, "/"); idx > 0 {
+			agentGroups[bare] = key[:idx]
+		} else {
+			agentGroups[bare] = "core"
+		}
 	}
 
 	names := make([]string, 0, len(installed))
@@ -862,7 +888,7 @@ func withAllInstalledAgents(profiles map[string]userconfig.OrchestratorModelProf
 		}
 		out[profileName] = merged
 	}
-	return out
+	return out, agentGroups
 }
 
 // SetActiveOrchestratorProfile sets the active orchestrator profile by name.
@@ -982,9 +1008,11 @@ func (h *Handlers) ResyncOrchestratorProfiles(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	mergedProfiles, agentGroups := withAllInstalledAgents(cfg.OrchestratorProfiles)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"profiles": withAllInstalledAgents(cfg.OrchestratorProfiles),
-		"active":   cfg.ActiveOrchestratorProfile,
+		"profiles":     mergedProfiles,
+		"active":       cfg.ActiveOrchestratorProfile,
+		"agent_groups": agentGroups,
 	})
 }
 

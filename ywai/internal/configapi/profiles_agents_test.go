@@ -16,7 +16,7 @@ func TestWithAllInstalledAgents(t *testing.T) {
 		}},
 	}
 
-	out := withAllInstalledAgents(stored)
+	out, groups := withAllInstalledAgents(stored)
 	agents := out["balanced"].Agents
 
 	if agents["dev"].Model != "anthropic/claude-sonnet-5" {
@@ -34,5 +34,14 @@ func TestWithAllInstalledAgents(t *testing.T) {
 	}
 	if len(stored["balanced"].Agents) != 1 {
 		t.Error("the stored profile must not be mutated")
+	}
+	if len(groups) == 0 {
+		t.Error("agent_groups must be populated so the UI can group by folder")
+	}
+	// Every installed agent should map to a non-empty folder.
+	for name, folder := range groups {
+		if folder == "" {
+			t.Errorf("agent %s has an empty folder", name)
+		}
 	}
 }
