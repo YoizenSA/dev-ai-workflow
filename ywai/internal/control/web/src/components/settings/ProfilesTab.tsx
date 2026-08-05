@@ -397,8 +397,9 @@ export default function ProfilesTab() {
 				>
 					<AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
 					<span>
-						<strong>{activeProfile}</strong> ships with ywai and is rewritten on every install, so it
-						picks up new agents. To keep changes, save them under a new profile name.
+						<strong>{activeProfile}</strong> ships with ywai: its agent roster is refreshed on
+						every install (so new agents appear), but your model and OMP modelRoles choices
+						persist. For a fully custom setup, save under a new profile name.
 					</span>
 				</div>
 			)}

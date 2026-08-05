@@ -141,19 +141,26 @@ func TestOrchestrationPolicyCloneDeepCopies(t *testing.T) {
 
 // The shipped profiles (balanced, fast, deep) are product defaults, not user
 // data: they gain agents as agents are added, so an install must restore them.
-// A setup you want to keep is a profile under your own name, and those persist.
-func TestShippedProfilesAreRestored_CustomProfilesPersist(t *testing.T) {
+// A shipped profile is rebuilt from the seed (so new agents reach it) but the
+// user's per-agent model overrides and OMP modelRoles survive. A setup you
+// want fully your own lives under a name we do not ship, and passes through
+// untouched.
+func TestShippedProfilesMergeUserOverrides_NewAgentsAppear(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 
+	seed := DefaultOrchestratorModelProfiles()
+
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
 	cfg.OrchestratorProfiles = DefaultOrchestratorModelProfiles()
-	// An edit to a shipped profile...
-	cfg.OrchestratorProfiles["fast"].Agents["dev"] = RoleDefault{Model: "opencode-admin/edited-shipped"}
+	fast := cfg.OrchestratorProfiles["fast"]
+	fast.Agents["dev"] = RoleDefault{Model: "opencode-admin/edited-shipped"}
+	fast.OmpModelRoles = map[string]string{"default": "opencode-go/deepseek-v4-flash"}
+	cfg.OrchestratorProfiles["fast"] = fast
 	// ...and a profile of the user's own.
 	cfg.OrchestratorProfiles["my-setup"] = OrchestratorModelProfile{
 		Agents: RoleDefaults{"dev": {Model: "opencode-admin/mine"}},
@@ -170,9 +177,15 @@ func TestShippedProfilesAreRestored_CustomProfilesPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-
-	if got := loaded.OrchestratorProfiles["fast"].Agents["dev"].Model; got == "opencode-admin/edited-shipped" {
-		t.Error("a shipped profile must be restored, not kept — otherwise new agents never reach it")
+	fastLoaded := loaded.OrchestratorProfiles["fast"]
+	if got := fastLoaded.Agents["dev"].Model; got != "opencode-admin/edited-shipped" {
+		t.Errorf("shipped profile model override must survive reinstall, got %q", got)
+	}
+	if got := fastLoaded.Agents["qa"].Model; got != seed["fast"].Agents["qa"].Model {
+		t.Errorf("seed agent not overridden must keep the seed model, got %q want %q", got, seed["fast"].Agents["qa"].Model)
+	}
+	if fastLoaded.OmpModelRoles["default"] != "opencode-go/deepseek-v4-flash" {
+		t.Errorf("OMP modelRoles override must survive, got %q", fastLoaded.OmpModelRoles["default"])
 	}
 	if got := loaded.OrchestratorProfiles["my-setup"].Agents["dev"].Model; got != "opencode-admin/mine" {
 		t.Errorf("a custom profile must survive untouched, got %q", got)

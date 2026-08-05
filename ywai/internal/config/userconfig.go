@@ -237,11 +237,37 @@ func mergeShippedProfiles(current map[string]OrchestratorModelProfile) map[strin
 		return shipped
 	}
 	out := make(map[string]OrchestratorModelProfile, len(current)+len(shipped))
+	// Custom profiles pass through verbatim.
 	for name, profile := range current {
-		out[name] = profile
+		if _, isShipped := shipped[name]; !isShipped {
+			out[name] = profile
+		}
 	}
-	for name, profile := range shipped {
-		out[name] = profile
+	for name, seed := range shipped {
+		existing, ok := current[name]
+		if !ok {
+			out[name] = seed
+			continue
+		}
+		// Seed owns the agent roster + display/description so new agents appear.
+		merged := seed.Clone()
+		if d := strings.TrimSpace(existing.Description); d != "" {
+			merged.Description = d
+		}
+		if dn := strings.TrimSpace(existing.DisplayName); dn != "" {
+			merged.DisplayName = dn
+		}
+		// The user's per-agent model choices survive a reinstall.
+		for role, rd := range existing.Agents {
+			if strings.TrimSpace(rd.Model) != "" {
+				merged.Agents[role] = rd
+			}
+		}
+		// OMP modelRoles overrides are user-owned — never re-seeded away.
+		if len(existing.OmpModelRoles) > 0 {
+			merged.OmpModelRoles = cloneStringMap(existing.OmpModelRoles)
+		}
+		out[name] = merged
 	}
 	return out
 }
