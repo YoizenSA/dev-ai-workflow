@@ -185,6 +185,77 @@ Body.
 	}
 }
 
+// TestApplyOmpModelRoles verifies the profile → omp modelRoles mapping:
+// sourced roles are set from the active profile, unrelated keys and roles
+// survive, and omp being absent is a no-op.
+func TestApplyOmpModelRoles(t *testing.T) {
+	home := t.TempDir()
+	setTestHomeDir(t, home)
+
+	ompDir := filepath.Join(home, ".omp", "agent")
+	if err := os.MkdirAll(ompDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := `theme:
+  dark: titanium
+setupVersion: 1
+modelRoles:
+  advisor: openai-codex/gpt-5.6-sol:high
+  vision: opencode-go/gpt-5.6-luna
+  default: opencode-go/deepseek-v4-flash
+defaultThinkingLevel: auto
+`
+	path := filepath.Join(ompDir, "config.yml")
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	profile := userconfig.OrchestratorModelProfile{
+		Agents: userconfig.RoleDefaults{
+			"orchestrator": {Model: "opencode-admin/grok-4.5"},
+			"qa":           {Model: "opencode-admin/minimax-m3"},
+			"architect":    {Model: "opencode-admin/grok-4.5"},
+			"designer":     {Model: "opencode-admin/kimi-k3"},
+			"advisor":      {Model: "opencode-admin/grok-4.5"},
+			"dev":          {Model: "opencode-admin/deepseek-v4-flash"},
+		},
+	}
+	if !applyOmpModelRoles(profile) {
+		t.Fatal("expected config.yml update when omp is installed")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for role, want := range map[string]string{
+		"default":  "grok-4.5",   // ← orchestrator
+		"smol":     "minimax-m3", // ← qa
+		"plan":     "grok-4.5",   // ← architect
+		"designer": "kimi-k3",
+		"advisor":  "grok-4.5",
+		"commit":   "deepseek-v4-flash", // ← dev
+	} {
+		if !strings.Contains(content, role+": "+want) {
+			t.Errorf("modelRoles.%s = want %q, got:\n%s", role, want, content)
+		}
+	}
+	// Unrelated keys and unsourced roles survive.
+	for _, keep := range []string{"setupVersion: 1", "vision: opencode-go/gpt-5.6-luna", "defaultThinkingLevel: auto"} {
+		if !strings.Contains(content, keep) {
+			t.Errorf("config.yml lost %q, got:\n%s", keep, content)
+		}
+	}
+
+	// No-op when omp is not installed.
+	home2 := t.TempDir()
+	setTestHomeDir(t, home2)
+	if applyOmpModelRoles(profile) {
+		t.Error("applyOmpModelRoles must be a no-op when ~/.omp/agent is absent")
+	}
+}
+
 // TestApplyOrchestrationPolicy_FlipsOpenCodeJSON mirrors the edit/write/bash
 // flip into the legacy opencode.json agent entry so the two sources of truth
 // cannot disagree after a deep activation.

@@ -37,7 +37,7 @@ type InstallState = {
 	tools?: string[];
 };
 
-type TargetAgent = 'opencode' | 'pi' | 'claude-code';
+type TargetAgent = 'opencode' | 'pi' | 'claude-code' | 'omp';
 
 function CredentialsForm({
 	server,
@@ -517,6 +517,7 @@ export function McpStore() {
 					<option value="opencode">OpenCode</option>
 					<option value="pi">Pi</option>
 					<option value="claude-code">Claude Code</option>
+					<option value="omp">OMP</option>
 				</select>
 			</div>
 

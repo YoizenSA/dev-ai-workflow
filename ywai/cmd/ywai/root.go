@@ -583,7 +583,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 	for _, a := range agents {
 		// Install MCP for agents that support it
-		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" && a.Name != "pi" {
+		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" && a.Name != "pi" && a.Name != "omp" {
 			continue
 		}
 

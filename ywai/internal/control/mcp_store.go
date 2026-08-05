@@ -292,7 +292,7 @@ func (s *Server) handleMcpInstall(w http.ResponseWriter, r *http.Request) {
 	if target == "" {
 		target = "opencode"
 	}
-	if target != "opencode" && target != "pi" && target != "claude-code" {
+	if target != "opencode" && target != "pi" && target != "claude-code" && target != "omp" {
 		writeJSON(w, http.StatusBadRequest, mcpErrorResponse{Error: "invalid target_agent: " + target})
 		return
 	}

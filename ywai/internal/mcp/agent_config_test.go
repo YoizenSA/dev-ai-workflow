@@ -231,6 +231,27 @@ func TestEntryTargetPath_Pi(t *testing.T) {
 	}
 }
 
+// TestEntryTargetPath_Omp pins the omp path: $HOME/.omp/agent/mcp.json
+// (oh-my-pi's user-level MCP config; project-level .omp/mcp.json is not
+// ywai-managed).
+func TestEntryTargetPath_Omp(t *testing.T) {
+	home := t.TempDir()
+	setTestHomeDir(t, home)
+
+	got, err := EntryTargetPath("omp")
+	if err != nil {
+		t.Fatalf("EntryTargetPath(omp) err = %v, want nil", err)
+	}
+	want := filepath.Join(home, ".omp", "agent", "mcp.json")
+	if got != want {
+		t.Errorf("EntryTargetPath(omp) = %q, want %q", got, want)
+	}
+
+	if key, err := topLevelKey("omp"); err != nil || key != "mcpServers" {
+		t.Errorf("topLevelKey(omp) = %q, %v; want mcpServers", key, err)
+	}
+}
+
 // TestEntryTargetPath_Unknown pins the not-found path. ywai only ships
 // the three targets above; passing an unknown string must surface as
 // an error (not a silent empty path, not a panic). The error message

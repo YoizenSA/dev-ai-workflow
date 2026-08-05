@@ -769,7 +769,7 @@ describe('handleUninstall', () => {
 
 // ----- Target control helper -------------------------------------------------
 
-type TargetValue = 'opencode' | 'pi' | 'claude-code';
+type TargetValue = 'opencode' | 'pi' | 'claude-code' | 'omp';
 
 type TargetControl = {
 	kind: 'select' | 'radio' | 'button';
@@ -855,14 +855,14 @@ async function findTargetControl(
 // ----- 1-3. Rendering and default state --------------------------------------
 
 describe('TargetSelector — rendering and default state', () => {
-	it('TestTargetSelector_RendersThreeOptions: renders a control with 3 options (opencode, pi, claude-code)', async () => {
+	it('TestTargetSelector_RendersThreeOptions: renders a control with 4 options (opencode, pi, claude-code, omp)', async () => {
 		const user = userEvent.setup();
 		await renderWithCatalog([makeServer()]);
 		const control = await findTargetControl(user);
 		expect(control.values).toEqual(
-			expect.arrayContaining(['opencode', 'pi', 'claude-code'])
+			expect.arrayContaining(['opencode', 'pi', 'claude-code', 'omp'])
 		);
-		expect(control.values.length).toBe(3);
+		expect(control.values.length).toBe(4);
 	});
 
 	it('TestTargetSelector_DefaultsToOpencode: default selection is opencode', async () => {

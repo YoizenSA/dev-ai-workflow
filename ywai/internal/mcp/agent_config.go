@@ -1,9 +1,9 @@
 package mcp
 
 // agent_config.go — multi-format persistence of MCP server configs for the
-// three agent targets ywai supports. Atomicity via write-to-tmp + os.Rename
-// (POSIX-atomic on the same FS); concurrency via a per-target mutex held
-// for the whole read-modify-write.
+// agent targets ywai supports (opencode, pi, omp, claude-code). Atomicity via
+// write-to-tmp + os.Rename (POSIX-atomic on the same FS); concurrency via a
+// per-target mutex held for the whole read-modify-write.
 
 import (
 	"encoding/json"
@@ -29,6 +29,10 @@ func EntryTargetPath(target string) (string, error) {
 		return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
 	case "pi":
 		return filepath.Join(home, ".pi", "agent", "mcp.json"), nil
+	case "omp":
+		// oh-my-pi reads ~/.omp/agent/mcp.json (user level) or .omp/mcp.json
+		// (per project); the user-level file is the ywai-managed one.
+		return filepath.Join(home, ".omp", "agent", "mcp.json"), nil
 	case "claude-code":
 		return filepath.Join(home, ".claude.json"), nil
 	default:
@@ -40,7 +44,7 @@ func topLevelKey(target string) (string, error) {
 	switch target {
 	case "opencode":
 		return "mcp", nil
-	case "pi", "claude-code":
+	case "pi", "claude-code", "omp":
 		return "mcpServers", nil
 	default:
 		return "", fmt.Errorf("unknown mcp target %q", target)

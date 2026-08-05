@@ -12,7 +12,7 @@ sections by role:
 
 | Agent | sections |
 |---|---|
-| qa-analyst / qa-ask / qa-dev / qa-finder / qa-reviewer | `[handoff-qa, context-gathering]` |
+| qa-analyst / qa-ask / qa-dev / qa-reviewer | `[handoff-qa, context-gathering]` |
 | qa-orchestrator | `[handoff]` |
 
 So the selection is **per node/role**, not per workflow — even one family mixes

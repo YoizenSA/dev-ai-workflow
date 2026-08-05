@@ -746,7 +746,91 @@ func ApplyActiveOrchestratorProfile() (int, error) {
 	if applyOrchestrationPolicy(profile.Orchestration) {
 		applied++
 	}
+	if applyOmpModelRoles(profile) {
+		applied++
+	}
 	return applied, nil
+}
+
+// ompModelRoleSources maps omp's modelRoles (config.yml) to ywai orchestrator
+// agents. For each omp role, the first agent (priority order) with a non-empty
+// model in the active profile supplies the value; roles without a source are
+// left untouched.
+var ompModelRoleSources = []struct {
+	Role   string
+	Agents []string
+}{
+	{"default", []string{"orchestrator", "dev"}},
+	{"smol", []string{"qa", "ask", "finder"}},
+	{"plan", []string{"architect", "planning"}},
+	{"designer", []string{"designer"}},
+	{"advisor", []string{"advisor"}},
+	{"commit", []string{"dev", "orchestrator"}},
+}
+
+// applyOmpModelRoles writes the active profile's models into omp's
+// ~/.omp/agent/config.yml modelRoles block — the only model config omp honors
+// (a model: line in agent markdown is inert for omp). Roles without a ywai
+// source and unrelated config.yml keys stay untouched. No-op when omp is not
+// installed or the file is unreadable. Returns true when the file changed.
+func applyOmpModelRoles(profile userconfig.OrchestratorModelProfile) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	if _, err := os.Stat(dir); err != nil {
+		return false // omp not installed
+	}
+	path := filepath.Join(dir, "config.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return false
+	}
+	roles, _ := root["modelRoles"].(map[string]any)
+	if roles == nil {
+		roles = map[string]any{}
+	}
+	changed := false
+	for _, src := range ompModelRoleSources {
+		if model := firstProfileModel(profile, src.Agents); model != "" && roles[src.Role] != model {
+			roles[src.Role] = model
+			changed = true
+		}
+	}
+	if !changed {
+		return false
+	}
+	root["modelRoles"] = roles
+	out, err := yaml.Marshal(root)
+	if err != nil {
+		return false
+	}
+	_ = os.WriteFile(path+".bak", data, 0o600)
+	return os.WriteFile(path, out, 0o600) == nil
+}
+
+// firstProfileModel returns the first non-empty model among the given ywai
+// agent names in the profile, with the opencode provider prefix stripped
+// ("opencode-admin/deepseek-v4-flash" → "deepseek-v4-flash"). omp resolves
+// bare model ids by fuzzy match against its own providers; an opencode
+// provider id would not resolve on omp.
+func firstProfileModel(profile userconfig.OrchestratorModelProfile, agents []string) string {
+	for _, name := range agents {
+		m := strings.TrimSpace(profile.Agents[name].Model)
+		if m == "" {
+			continue
+		}
+		if i := strings.IndexByte(m, '/'); i >= 0 {
+			m = m[i+1:]
+		}
+		return m
+	}
+	return ""
 }
 
 const (

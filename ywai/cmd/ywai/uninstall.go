@@ -530,7 +530,7 @@ func retiredMCPsIn(configPath, agentName string) []string {
 		return nil
 	}
 	key := "mcp"
-	if agentName == "claude-code" || agentName == "pi" {
+	if agentName == "claude-code" || agentName == "pi" || agentName == "omp" {
 		key = "mcpServers"
 	}
 	mcp, _ := root[key].(map[string]any)
