@@ -970,6 +970,12 @@
 	font-size: var(--text-2xs);
 }
 
+.profiles-omp-section {
+	overflow: visible;
+	position: relative;
+	z-index: 20;
+}
+
 /* --- Group sub-tabs (segmented control) --- */
 .profiles-subtabs {
 	display: flex;

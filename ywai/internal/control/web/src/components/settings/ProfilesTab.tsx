@@ -408,7 +408,7 @@ export default function ProfilesTab() {
 
 			{/* ── OMP modelRoles — editable like the per-agent models. ──────── */}
 			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
-				<section className="settings-section">
+				<section className="settings-section profiles-omp-section">
 					<div className="settings-section-header">
 						<h2>OMP modelRoles</h2>
 						<div className="profiles-section-tags">
