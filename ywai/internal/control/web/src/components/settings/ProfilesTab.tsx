@@ -270,6 +270,30 @@ export default function ProfilesTab() {
 				</p>
 			)}
 
+			{/* OMP modelRoles — what the active profile writes into omp. */}
+			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
+				<div
+					className="card"
+					style={{ margin: "0 0 1rem", padding: "0.75rem 1rem", background: "var(--surface)" }}
+				>
+					<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+						<span style={{ fontWeight: 600, fontSize: 13 }}>OMP modelRoles</span>
+						<span className="pill pill-muted">oh-my-pi</span>
+					</div>
+					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.35rem" }}>
+						{Object.entries(data.omp_model_roles).map(([role, model]) => (
+							<div key={role} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+								<span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role}</span>
+								<span style={{ fontFamily: "var(--font-mono)" }}>{model}</span>
+							</div>
+						))}
+					</div>
+					<p className="muted" style={{ margin: "0.5rem 0 0", fontSize: 11 }}>
+						Written to ~/.omp/agent/config.yml on activation / save.
+					</p>
+				</div>
+			)}
+
 			{/* Bulk actions */}
 			<div
 				style={{

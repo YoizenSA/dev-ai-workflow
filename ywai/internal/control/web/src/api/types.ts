@@ -512,6 +512,8 @@ export interface OrchestratorProfilesResponse {
   shipped?: string[];
   profiles: Record<string, OrchestratorProfile>;
   active: string;
+  /** What the active profile maps into omp's modelRoles (~/.omp/agent/config.yml). */
+  omp_model_roles?: Record<string, string>;
 }
 
 // ─── Workflow Studio Types ─────────────────────────────────────────────────

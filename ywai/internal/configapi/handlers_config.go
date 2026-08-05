@@ -808,9 +808,10 @@ func (h *Handlers) GetOrchestratorProfiles(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"profiles": withAllInstalledAgents(cfg.OrchestratorProfiles),
-		"active":   cfg.ActiveOrchestratorProfile,
-		"shipped":  shippedProfileNames(cfg.OrchestratorProfiles),
+		"profiles":        withAllInstalledAgents(cfg.OrchestratorProfiles),
+		"active":          cfg.ActiveOrchestratorProfile,
+		"shipped":         shippedProfileNames(cfg.OrchestratorProfiles),
+		"omp_model_roles": OmpModelRolesFor(cfg.GetActiveOrchestratorProfile()),
 	})
 }
 
@@ -893,17 +894,12 @@ func (h *Handlers) SetActiveOrchestratorProfile(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Apply the profile: write each agent's model into its config (opencode.json
-	// + markdown frontmatter). The markdown is what opencode enforces, so it
-	// takes effect both when the agent runs directly and when it is delegated to.
+	// Apply the profile: models into every host config + the orchestration
+	// policy (orchestrator markdown/permissions) + omp modelRoles. The central
+	// ApplyActiveOrchestratorProfile keeps the three in one path.
 	applied := 0
-	for agentName, rd := range cfg.OrchestratorProfiles[req.Name].Agents {
-		if rd.Model == "" {
-			continue
-		}
-		if applyAgentModel(agentName, rd.Model) {
-			applied++
-		}
+	if n, err := ApplyActiveOrchestratorProfile(); err == nil {
+		applied = n
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "saved", "agents_applied": applied})
@@ -952,16 +948,12 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// If editing the active profile, apply the new per-agent models right away.
+	// If editing the active profile, apply the new models + orchestration
+	// policy + omp modelRoles right away (central apply path).
 	applied := 0
 	if cfg.ActiveOrchestratorProfile == name {
-		for agentName, rd := range existing.Agents {
-			if rd.Model == "" {
-				continue
-			}
-			if applyAgentModel(agentName, rd.Model) {
-				applied++
-			}
+		if n, err := ApplyActiveOrchestratorProfile(); err == nil {
+			applied = n
 		}
 	}
 

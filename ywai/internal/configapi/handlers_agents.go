@@ -768,6 +768,25 @@ var ompModelRoleSources = []struct {
 	{"commit", []string{"dev", "orchestrator"}},
 }
 
+// ompModelRolesFor computes the omp modelRoles map from a profile: for each
+// omp role, the first mapped ywai agent with a model wins. Roles without a
+// source are omitted.
+func ompModelRolesFor(profile userconfig.OrchestratorModelProfile) map[string]string {
+	out := map[string]string{}
+	for _, src := range ompModelRoleSources {
+		if m := firstProfileModel(profile, src.Agents); m != "" {
+			out[src.Role] = m
+		}
+	}
+	return out
+}
+
+// OmpModelRolesFor is the exported form used by the profiles API so the UI can
+// show what the active profile would write into omp's modelRoles.
+func OmpModelRolesFor(profile userconfig.OrchestratorModelProfile) map[string]string {
+	return ompModelRolesFor(profile)
+}
+
 // applyOmpModelRoles writes the active profile's models into omp's
 // ~/.omp/agent/config.yml modelRoles block — the only model config omp honors
 // (a model: line in agent markdown is inert for omp). Roles without a ywai
@@ -796,9 +815,9 @@ func applyOmpModelRoles(profile userconfig.OrchestratorModelProfile) bool {
 		roles = map[string]any{}
 	}
 	changed := false
-	for _, src := range ompModelRoleSources {
-		if model := firstProfileModel(profile, src.Agents); model != "" && roles[src.Role] != model {
-			roles[src.Role] = model
+	for role, model := range ompModelRolesFor(profile) {
+		if roles[role] != model {
+			roles[role] = model
 			changed = true
 		}
 	}
