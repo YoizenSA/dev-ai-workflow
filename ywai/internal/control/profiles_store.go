@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // ProfileStore manages named orchestrator configuration profiles.
@@ -50,27 +52,75 @@ func NewProfileStore() (*ProfileStore, error) {
 	}
 	s := &ProfileStore{dir: dir}
 
-	// Bootstrap default profile on first run.
-	if _, err := os.Stat(s.profilePath("default")); os.IsNotExist(err) {
-		def := Profile{
-			Name:      "default",
-			Config:    ProfileConfig{}, // no model overrides
-			IsDefault: true,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		if err := s.saveLocked(def); err != nil {
-			return nil, fmt.Errorf("bootstrap default profile: %w", err)
-		}
-		// Mark active if no active file exists.
-		if _, err := os.Stat(s.activePath()); os.IsNotExist(err) {
-			if err := os.WriteFile(s.activePath(), []byte("default"), 0644); err != nil {
-				return nil, fmt.Errorf("set default active: %w", err)
-			}
-		}
+	// Bootstrap shipped model profiles (balanced / fast / deep) so the web UI
+	// matches userconfig orchestrator_profiles.json. Existing user profiles stay.
+	if err := s.ensureShippedModelProfiles(); err != nil {
+		return nil, err
 	}
 
 	return s, nil
+}
+
+// ensureShippedModelProfiles writes balanced/fast/deep from the embedded seed
+// when missing, and sets active to balanced when unset.
+func (s *ProfileStore) ensureShippedModelProfiles() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	seeded := config.DefaultOrchestratorModelProfiles()
+	for name, mp := range seeded {
+		path := s.profilePath(name)
+		if _, err := os.Stat(path); err == nil {
+			continue // already present
+		}
+		agents := make(map[string]ProfileAgentConfig, len(mp.Agents))
+		for role, rd := range mp.Agents {
+			if rd.Model == "" {
+				continue
+			}
+			agents[role] = ProfileAgentConfig{Model: rd.Model}
+		}
+		p := Profile{
+			Name: name,
+			Config: ProfileConfig{
+				Agents: agents,
+			},
+			IsDefault: name == config.DefaultOrchestratorModelProfileName,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := s.saveLocked(p); err != nil {
+			return fmt.Errorf("bootstrap profile %q: %w", name, err)
+		}
+	}
+
+	// Keep a "default" alias pointing at balanced agents if neither exists as active.
+	if _, err := os.Stat(s.profilePath("default")); os.IsNotExist(err) {
+		if bal, ok := seeded[config.DefaultOrchestratorModelProfileName]; ok {
+			agents := make(map[string]ProfileAgentConfig, len(bal.Agents))
+			for role, rd := range bal.Agents {
+				if rd.Model != "" {
+					agents[role] = ProfileAgentConfig{Model: rd.Model}
+				}
+			}
+			_ = s.saveLocked(Profile{
+				Name: "default", Config: ProfileConfig{Agents: agents},
+				IsDefault: true, CreatedAt: now, UpdatedAt: now,
+			})
+		}
+	}
+
+	if _, err := os.Stat(s.activePath()); os.IsNotExist(err) {
+		active := config.DefaultOrchestratorModelProfileName
+		if _, err := os.Stat(s.profilePath(active)); err != nil {
+			active = "default"
+		}
+		if err := os.WriteFile(s.activePath(), []byte(active), 0644); err != nil {
+			return fmt.Errorf("set default active: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *ProfileStore) profilePath(name string) string {

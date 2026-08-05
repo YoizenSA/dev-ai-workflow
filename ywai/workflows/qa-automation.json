@@ -108,21 +108,21 @@
     {
       "id": "finder",
       "type": "subAgent",
-      "name": "qa-finder",
+      "name": "finder",
       "parentId": "g-plan",
       "position": {
         "x": 26,
         "y": 254
       },
       "data": {
-        "name": "qa-finder",
-        "description": "QA finder agent for codebase exploration and test coverage analysis. Trigger: Explore codebase, find test areas, \"what needs testing\", coverage gaps.",
-        "agentRef": "qa-automation/qa-finder",
-        "prompt": "Explore the codebase and report what needs testing: affected files, existing tests, coverage gaps, and patterns for @qa-dev to follow. Read-only.\n\nSkills available (use the `skill` tool): playwright-e2e-testing.",
+        "name": "finder",
+        "description": "Core codebase explorer with QA scout mode. Trigger: Explore codebase, find test areas, coverage gaps.",
+        "agentRef": "core/finder",
+        "prompt": "QA scout: explore the codebase and report what needs testing — affected files, existing tests, coverage gaps, selectors (data-testid), external mocks, and patterns for @qa-dev. Read-only.\n\nSkills available (use the `skill` tool): playwright-e2e-testing.",
         "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, intercom, mcp",
         "model": "inherit",
         "mode": "subagent",
-        "sections": "handoff-qa,context-gathering"
+        "sections": "handoff,context-gathering"
       }
     },
     {

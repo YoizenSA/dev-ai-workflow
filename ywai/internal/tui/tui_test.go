@@ -9,9 +9,10 @@ import (
 )
 
 func testAgents() []agent.Agent {
+	// Both must be profile-install hosts (windsurf is detected but not installable).
 	return []agent.Agent{
 		{Name: "opencode", BinaryName: "opencode"},
-		{Name: "windsurf", BinaryName: "windsurf"},
+		{Name: "pi", BinaryName: "pi"},
 	}
 }
 
@@ -65,9 +66,32 @@ func TestNewModel_MultipleAgentsHasAll(t *testing.T) {
 }
 
 func TestNewModel_SingleAgentNoAll(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("opencode"))
 	if len(m.agents) != 1 {
 		t.Fatalf("expected 1 agent option, got %d", len(m.agents))
+	}
+}
+
+func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
+	// windsurf/gemini may be on PATH but ywai has no profile install for them.
+	m := NewModel([]agent.Agent{
+		{Name: "opencode", BinaryName: "opencode"},
+		{Name: "windsurf", BinaryName: "windsurf"},
+		{Name: "gemini-cli", BinaryName: "gemini"},
+		{Name: "omp", BinaryName: "omp"},
+	})
+	names := make([]string, 0, len(m.agents))
+	for _, a := range m.agents {
+		names = append(names, a.Name)
+	}
+	// opencode + omp + all
+	if len(m.agents) != 3 {
+		t.Fatalf("expected 3 options (2 supported + all), got %d: %v", len(m.agents), names)
+	}
+	for _, n := range names {
+		if n == "windsurf" || n == "gemini-cli" {
+			t.Fatalf("unsupported host %q must not appear in install list: %v", n, names)
+		}
 	}
 }
 
@@ -147,18 +171,18 @@ func TestStepFlow_OptionsToMCP_WhenClaudeCode(t *testing.T) {
 	}
 }
 
-func TestStepFlow_OptionsToConfirm_WhenWindsurf(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+func TestStepFlow_OptionsToConfirm_WhenCursor(t *testing.T) {
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
-	sendKey(&m, "enter") // select windsurf -> options
+	sendKey(&m, "enter") // select cursor -> options
 	sendKey(&m, "enter") // options -> confirm (skip MCP)
 	if m.step != stepConfirm {
-		t.Fatalf("expected stepConfirm for windsurf (skip MCP), got %d", m.step)
+		t.Fatalf("expected stepConfirm for cursor (skip MCP), got %d", m.step)
 	}
 }
 
 func TestShouldShowMCPStep_All_WithOpencode(t *testing.T) {
-	m := NewModel(testAgents()) // has opencode + windsurf
+	m := NewModel(testAgents()) // has opencode + pi
 	goToCustomInstall(&m)
 	// Navigate to "all" (index 2)
 	sendKey(&m, "down")
@@ -174,18 +198,18 @@ func TestShouldShowMCPStep_All_WithOpencode(t *testing.T) {
 
 func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 	agents := []agent.Agent{
-		{Name: "windsurf", BinaryName: "windsurf"},
 		{Name: "cursor", BinaryName: "cursor"},
+		{Name: "pi", BinaryName: "pi"},
 	}
 	m := NewModel(agents)
 	m.selectedAgent = "all"
 	if m.shouldShowMCPStep() {
-		t.Fatal("shouldShowMCPStep should be false when 'all' has no opencode/kilocode")
+		t.Fatal("shouldShowMCPStep should be false when 'all' has no opencode/kilocode/claude")
 	}
 }
 
 func TestOptionsStep_CyclePreset(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Cursor starts at 0 (Preset)
@@ -211,7 +235,7 @@ func TestOptionsStep_CyclePreset(t *testing.T) {
 }
 
 func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Navigate to Global only (row 2)
@@ -234,7 +258,7 @@ func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
 }
 
 func TestOptionsStep_NavigationBounds(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Try going up from 0
@@ -253,10 +277,10 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 }
 
 func TestEscNavigation(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
-	sendKey(&m, "enter") // options -> confirm (windsurf skips MCP)
+	sendKey(&m, "enter") // options -> confirm (cursor skips MCP)
 	if m.step != stepConfirm {
 		t.Fatalf("expected stepConfirm, got %d", m.step)
 	}
@@ -301,7 +325,7 @@ func TestEscNavigation_WithMCP(t *testing.T) {
 }
 
 func TestEscNavigation_QuickInstall(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToQuickInstall(&m)
 	sendKey(&m, "enter") // agent -> confirm (quick)
 	if m.step != stepConfirm {
@@ -314,7 +338,7 @@ func TestEscNavigation_QuickInstall(t *testing.T) {
 }
 
 func TestGlobalOnly_NotHardcoded(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	if !m.GlobalOnly() {
 		t.Fatal("GlobalOnly should be true by default")
 	}
@@ -325,8 +349,8 @@ func TestGlobalOnly_NotHardcoded(t *testing.T) {
 }
 
 func TestResult_AllFields(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
-	m.selectedAgent = "windsurf"
+	m := NewModel(singleAgent("cursor"))
+	m.selectedAgent = "cursor"
 	m.presetIdx = 1
 	m.scopeIdx = 1
 	m.globalOnly = true
@@ -336,8 +360,8 @@ func TestResult_AllFields(t *testing.T) {
 	m.confirmed = true
 
 	r := m.Result()
-	if r.Agent != "windsurf" {
-		t.Fatalf("Agent=%q, want windsurf", r.Agent)
+	if r.Agent != "cursor" {
+		t.Fatalf("Agent=%q, want cursor", r.Agent)
 	}
 	if r.Preset != "ecosystem-only" {
 		t.Fatalf("Preset=%q, want ecosystem-only", r.Preset)
@@ -360,8 +384,8 @@ func TestResult_AllFields(t *testing.T) {
 }
 
 func TestResult_OptionalOffByDefault(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
-	m.selectedAgent = "windsurf"
+	m := NewModel(singleAgent("cursor"))
+	m.selectedAgent = "cursor"
 	m.confirmed = true
 	r := m.Result()
 	if r.InstallSDD {
@@ -373,7 +397,7 @@ func TestResult_OptionalOffByDefault(t *testing.T) {
 }
 
 func TestOptionsStep_CycleSDD(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	for i := 0; i < 5; i++ {
@@ -426,7 +450,7 @@ func TestViewConfirm_ShowsQuickInstallMode(t *testing.T) {
 }
 
 func TestViewOptions_Renders(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	m.step = stepOptions
 	view := m.viewOptions()
 
@@ -442,7 +466,7 @@ func TestViewOptions_Renders(t *testing.T) {
 }
 
 func TestBreadcrumbs_IncludesOptions(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	m.step = stepOptions
 	bc := m.renderBreadcrumbs()
 	if !strings.Contains(bc, "Options") {
@@ -451,7 +475,7 @@ func TestBreadcrumbs_IncludesOptions(t *testing.T) {
 }
 
 func TestBreadcrumbs_HidesOptionsInQuickMode(t *testing.T) {
-	m := NewModel(singleAgent("windsurf"))
+	m := NewModel(singleAgent("cursor"))
 	m.quickInstall = true
 	m.step = stepConfirm
 	bc := m.renderBreadcrumbs()

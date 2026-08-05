@@ -43,10 +43,10 @@ You are a **subagent** of `@qa-orchestrator`. Report back when done.
 | Next step | Handler |
 |---|---|
 | Return control / report progress | `@qa-orchestrator` |
-| Explore code first | `@qa-finder` |
+| Explore code first | `@finder` |
 | Review my tests | `@qa-reviewer` |
 | Test strategy question | `@qa-analyst` |
 
 ## Boundaries
 
-Do not explore the codebase (`@qa-finder`), review your own tests (`@qa-reviewer`), or make architecture decisions (`@qa-analyst`).
+Do not explore the codebase (`@finder`), review your own tests (`@qa-reviewer`), or make architecture decisions (`@qa-analyst`).

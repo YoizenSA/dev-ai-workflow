@@ -1,7 +1,11 @@
 package tokenbank
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestApplyVisionCapabilities_TextOnly(t *testing.T) {
@@ -112,5 +116,106 @@ func TestInjectModelLimits_RespectsVision(t *testing.T) {
 	mimo := models["mimo-v2.5"].(map[string]interface{})
 	if mimo["attachment"] != true {
 		t.Fatalf("mimo attachment = %v, want true", mimo["attachment"])
+	}
+}
+
+func TestBuildOmpTokenBankProvider(t *testing.T) {
+	p := BuildOmpTokenBankProvider("https://tb.example/v1", "tb-key", []ModelInfo{
+		{ID: "flash", Name: "Flash", MaxInputTokens: 1000, MaxOutputToken: 200},
+		{ID: "vision", Name: "", Vision: true},
+	})
+	if p["baseUrl"] != "https://tb.example/v1" {
+		t.Fatalf("baseUrl = %v", p["baseUrl"])
+	}
+	if p["api"] != "openai-completions" {
+		t.Fatalf("api = %v", p["api"])
+	}
+	if p["authHeader"] != true {
+		t.Fatalf("authHeader = %v", p["authHeader"])
+	}
+	if p["apiKey"] != "tb-key" {
+		t.Fatalf("apiKey = %v", p["apiKey"])
+	}
+	models := p["models"].([]interface{})
+	if len(models) != 2 {
+		t.Fatalf("models len = %d", len(models))
+	}
+	m0 := models[0].(map[string]interface{})
+	if m0["contextWindow"] != 1000 || m0["maxTokens"] != 200 {
+		t.Fatalf("flash limits = %+v", m0)
+	}
+	m1 := models[1].(map[string]interface{})
+	if m1["name"] != "vision" {
+		t.Fatalf("empty name should fall back to id, got %v", m1["name"])
+	}
+	inputs := m1["input"].([]interface{})
+	if len(inputs) != 2 || inputs[1] != "image" {
+		t.Fatalf("vision input = %v, want [text image]", inputs)
+	}
+}
+
+func TestWriteAndReadOmpYAMLRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "models.yml")
+
+	// Seed with an unrelated provider so merge must keep it.
+	seed := map[string]interface{}{
+		"providers": map[string]interface{}{
+			"ollama": map[string]interface{}{
+				"baseUrl": "http://127.0.0.1:11434",
+				"auth":    "none",
+			},
+		},
+	}
+	if err := WriteYAMLFile(path, seed); err != nil {
+		t.Fatal(err)
+	}
+
+	existing, err := ReadYAMLFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers := existing["providers"].(map[string]interface{})
+	providers[OmpProviderID] = BuildOmpTokenBankProvider(
+		"https://tb.example/v1", "k", []ModelInfo{{ID: "m1", Name: "M1"}},
+	)
+	existing["providers"] = providers
+	if err := WriteYAMLFile(path, existing); err != nil {
+		t.Fatal(err)
+	}
+
+	// Backup should exist after second write
+	if _, err := os.Stat(path + ".bak"); err != nil {
+		t.Fatalf("expected .bak after overwrite: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]interface{}
+	if err := yaml.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	provs := got["providers"].(map[string]interface{})
+	if _, ok := provs["ollama"]; !ok {
+		t.Fatal("existing ollama provider was wiped")
+	}
+	tb, ok := provs[OmpProviderID].(map[string]interface{})
+	if !ok {
+		t.Fatal("tokenbank-proxy missing")
+	}
+	if tb["baseUrl"] != "https://tb.example/v1" {
+		t.Fatalf("baseUrl = %v", tb["baseUrl"])
+	}
+}
+
+func TestReadYAMLFileMissing(t *testing.T) {
+	got, err := ReadYAMLFile(filepath.Join(t.TempDir(), "nope.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want empty map, got %v", got)
 	}
 }

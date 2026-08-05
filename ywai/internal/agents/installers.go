@@ -154,15 +154,80 @@ func piToolsString(perms map[string]string) string {
 // Frontmatter uses PI.dev format: lowercase name/description/tools, no mode/permission.
 // Respects overwrite: when false, skips existing files (same as InstallOpenCodeMarkdown).
 func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
+	return installPiStyleAgents(agentsDir, profiles, overwrite, piToolsString, false)
+}
+
+// InstallOmp writes core + qa-automation agent .md files to ~/.omp/agent/agents/
+// for oh-my-pi. Same markdown shape as Pi (name/description/tools), flat basenames.
+// Migration/social groups are skipped — use OpenCode for those catalogs.
+func InstallOmp(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
+	return installPiStyleAgents(agentsDir, FilterOmpInstallProfiles(profiles), overwrite, ompToolsString, true)
+}
+
+// FilterCoreAgentProfiles keeps agents from the core group (or known core base
+// names when Group is unset). Keys are flattened to the OpenCode/OMP id
+// (filepath.Base).
+func FilterCoreAgentProfiles(profiles map[string]AgentProfile) map[string]AgentProfile {
+	return filterProfilesByGroups(profiles, map[string]bool{"core": true}, coreAgentBases())
+}
+
+// FilterOmpInstallProfiles keeps core + qa-automation groups for OMP installs.
+func FilterOmpInstallProfiles(profiles map[string]AgentProfile) map[string]AgentProfile {
+	return filterProfilesByGroups(profiles, map[string]bool{
+		"core": true, "qa-automation": true,
+	}, coreAgentBases())
+}
+
+func coreAgentBases() map[string]bool {
+	return map[string]bool{
+		"orchestrator": true, "ask": true, "dev": true, "qa": true,
+		"architect": true, "designer": true, "advisor": true, "reviewer": true,
+		"devops": true, "finder": true, "memory": true, "planning": true,
+	}
+}
+
+func filterProfilesByGroups(profiles map[string]AgentProfile, groups map[string]bool, emptyGroupBases map[string]bool) map[string]AgentProfile {
+	out := make(map[string]AgentProfile, len(profiles))
+	for name, p := range profiles {
+		base := filepath.Base(name)
+		keep := groups[p.Group]
+		if p.Group == "" && emptyGroupBases[base] {
+			keep = true
+		}
+		// qa-* basenames when group is empty but name looks like qa-automation
+		if !keep && p.Group == "" && strings.HasPrefix(base, "qa-") {
+			keep = groups["qa-automation"]
+		}
+		if !keep {
+			continue
+		}
+		p.Name = base
+		out[base] = p
+	}
+	return out
+}
+
+// installPiStyleAgents is shared by Pi and OMP markdown agent installs.
+// When flat is true, nested keys like core/dev become dev.md at agentsDir root.
+func installPiStyleAgents(
+	agentsDir string,
+	profiles map[string]AgentProfile,
+	overwrite bool,
+	toolsFn func(map[string]string) string,
+	flat bool,
+) error {
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return fmt.Errorf("create dir %s: %w", agentsDir, err)
 	}
 
 	installed := 0
 	for name, profile := range profiles {
-		targetPath := filepath.Join(agentsDir, name+".md")
+		id := name
+		if flat {
+			id = filepath.Base(name)
+		}
+		targetPath := filepath.Join(agentsDir, id+".md")
 
-		// Ensure parent directory exists for nested agent names
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
 			continue
@@ -174,14 +239,15 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 			}
 		}
 
-		toolsStr := piToolsString(profile.Permission)
+		toolsStr := toolsFn(profile.Permission)
 		prompt := stripFrontmatter(profile.Prompt)
+		desc := profile.Description
+		if desc == "" {
+			desc = id
+		}
 
-		// Use a folded block scalar for the description (same as InstallClaude):
-		// descriptions can contain ": " and literal quotes (e.g. `Trigger: "build X"`),
-		// which break an inline YAML scalar. The folded block keeps them safe.
 		content := fmt.Sprintf("---\nname: %s\ndescription: >\n  %s\ntools: %s\n---\n\n%s",
-			name, profile.Description, toolsStr, prompt)
+			id, desc, toolsStr, prompt)
 
 		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
@@ -194,6 +260,36 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, agentsDir)
 	}
 	return nil
+}
+
+// ompToolsString maps ywai permissions to OMP tool names (lowercase, comma-separated).
+func ompToolsString(perms map[string]string) string {
+	order := []struct{ oc, omp string }{
+		{"read", "read"},
+		{"edit", "edit"},
+		{"write", "write"},
+		{"bash", "bash"},
+		{"glob", "glob"},
+		{"grep", "grep"},
+		{"websearch", "web_search"},
+		{"task", "task"},
+		{"todowrite", "todo"},
+		{"question", "ask"},
+	}
+	var names []string
+	seen := map[string]bool{}
+	for _, t := range order {
+		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
+			if !seen[t.omp] {
+				names = append(names, t.omp)
+				seen[t.omp] = true
+			}
+		}
+	}
+	if len(names) == 0 {
+		return "read, glob, grep"
+	}
+	return strings.Join(names, ", ")
 }
 
 // InstallCursor writes agent .md files to ~/.cursor/agents/.
@@ -393,6 +489,23 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
+// retiredAgentBases are agents removed from ywai that may still be installed
+// on a user's hosts from a previous release. The install sweeps them so stale
+// files don't keep showing up as runnable agents after an upgrade.
+var retiredAgentBases = []string{"qa-finder"}
+
+// RemoveRetiredAgents deletes installed agent markdown for retired bases from
+// agentsDir. Returns the number of files removed.
+func RemoveRetiredAgents(agentsDir string) int {
+	removed := 0
+	for _, base := range retiredAgentBases {
+		if err := os.Remove(filepath.Join(agentsDir, base+".md")); err == nil {
+			removed++
+		}
+	}
+	return removed
+}
+
 // RemoveAgentsWithoutDescription deletes every flat .md in agentsDir whose
 // frontmatter has no description (or an empty one). opencode rejects such files
 // with "Expected string | undefined, got null description", so leaving them in
@@ -520,6 +633,35 @@ var verifyBashAllowPatterns = []string{
 	"ruff check*",
 	"mypy *",
 	"mypy*",
+}
+
+// BashPermissionBlockLines renders the opencode frontmatter lines for a bash
+// permission value. deny → a scalar "  bash: deny"; allow/verify → a nested
+// block with the shared false-green guardrails (plus the no-commit denials for
+// code executors, which only opencode can enforce). baseName is the flat agent
+// id used for the no-commit lookup.
+func BashPermissionBlockLines(val, baseName string) []string {
+	if val == "deny" {
+		return []string{"  bash: deny"}
+	}
+	lines := []string{"  bash:"}
+	if val == "verify" {
+		lines = append(lines, fmt.Sprintf("    %q: deny", "*"))
+		for _, pattern := range verifyBashAllowPatterns {
+			lines = append(lines, fmt.Sprintf("    %q: allow", pattern))
+		}
+	} else {
+		lines = append(lines, fmt.Sprintf("    %q: %s", "*", val))
+	}
+	for _, pattern := range falseGreenBashPatterns {
+		lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
+	}
+	if noCommitAgents[baseName] && val != "verify" {
+		for _, pattern := range noCommitBashDenyPatterns {
+			lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
+		}
+	}
+	return lines
 }
 
 // noCommitBashDenyPatterns block commit/push for code executors. Review-then-
@@ -729,25 +871,9 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		//   deny   → single-line deny (no shell)
 		//   verify → "*": deny + verify allows + false-green denials
 		//   allow  → "*": allow + false-green denials [+ no-commit denials]
-		if key == "bash" && val != "deny" {
-			b.WriteString("  bash:\n")
-			if val == "verify" {
-				b.WriteString(fmt.Sprintf("    %q: deny\n", "*"))
-				for _, pattern := range verifyBashAllowPatterns {
-					b.WriteString(fmt.Sprintf("    %q: allow\n", pattern))
-				}
-			} else {
-				b.WriteString(fmt.Sprintf("    %q: %s\n", "*", val))
-			}
-			for _, pattern := range falseGreenBashPatterns {
-				b.WriteString(fmt.Sprintf("    %q: deny\n", pattern))
-			}
-			// Profile keys may be grouped ("core/dev", "qa-automation/qa-dev");
-			// match the flat agent id OpenCode registers.
-			if noCommitAgents[filepath.Base(name)] && val != "verify" {
-				for _, pattern := range noCommitBashDenyPatterns {
-					b.WriteString(fmt.Sprintf("    %q: deny\n", pattern))
-				}
+		if key == "bash" {
+			for _, line := range BashPermissionBlockLines(val, filepath.Base(name)) {
+				b.WriteString(line + "\n")
 			}
 			return
 		}
@@ -837,8 +963,8 @@ var opencodeToPiTool = map[string]string{
 func agentDefaults(name string) (description string, tools []string, model string) {
 	switch name {
 	case "orchestrator":
-		return "Technical lead that decomposes work and delegates to subagents",
-			[]string{"member_prompt", "member_steer", "member_wait", "task_*", "message_*"}, ""
+		return "Technical lead: solo/thin act or full multi-agent delivery",
+			[]string{"member_prompt", "member_steer", "member_wait", "task_*", "message_*", "Read", "Write", "Edit", "Bash", "Grep", "Glob"}, ""
 	case "dev":
 		return "Implements features, fixes bugs, and refactors code",
 			[]string{"Read", "Write", "Edit", "Bash", "Grep", "Glob"}, ""

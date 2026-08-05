@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/host"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 	"github.com/creack/pty"
 )
@@ -23,6 +23,8 @@ import (
 type runRequest struct {
 	Args  string `json:"args"`            // forwarded to the orchestrator as $ARGUMENTS
 	Model string `json:"model,omitempty"` // optional model override
+	// Host selects the runtime: opencode (default), pi, omp.
+	Host string `json:"host,omitempty"`
 }
 
 // runResponse is the 202 reply confirming a run started.
@@ -70,10 +72,17 @@ func (a *workflowsAPI) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Export first so the orchestrator/agents/command reflect the saved workflow.
-	// Dry-run is not useful here: the opencode CLI reads the files from disk, so
-	// we must actually write them.
-	if _, err := a.exporter.Apply(wf); err != nil {
+	// Export to the selected host so the runtime reads current agents from disk.
+	hostID, err := host.ParseID(req.Host)
+	if err != nil {
+		cancel()
+		a.runs.finish(name, 1, err)
+		writeWorkflowsError(w, http.StatusBadRequest, err)
+		return
+	}
+	req.Host = string(hostID)
+	exporter := workflows.NewExporterForTarget(string(hostID))
+	if _, err := exporter.Apply(wf); err != nil {
 		cancel()
 		a.runs.finish(name, 1, fmt.Errorf("export failed: %w", err))
 		writeWorkflowsError(w, http.StatusInternalServerError, err)
@@ -113,13 +122,13 @@ func (a *workflowsAPI) handleInput(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
-// runWorkflow is the background worker: spawns opencode, streams output to the
-// hub, and records the result in the run store when it exits.
+// runWorkflow is the background worker: spawns the selected host CLI, streams
+// output to the hub, and records the result in the run store when it exits.
 func (a *workflowsAPI) runWorkflow(ctx context.Context, wf *workflows.Workflow, req runRequest, runID string) {
 	hub := a.hub
 	hub.broadcastEvent(eventRunStarted, RunStartedEvent{Workflow: wf.Name, RunID: runID})
 
-	exitCode, runErr := a.spawnOpencode(ctx, wf, req, runID)
+	exitCode, runErr := a.spawnHostRun(ctx, wf, req, runID)
 
 	a.runs.finish(wf.Name, exitCode, runErr)
 	var errMsg string
@@ -134,47 +143,43 @@ func (a *workflowsAPI) runWorkflow(ctx context.Context, wf *workflows.Workflow, 
 	})
 }
 
-// spawnOpencode launches `opencode run --agent <name>-orchestrator [model] args`
-// under a PTY so the agent flushes output line-by-line (opencode block-buffers
-// when stdout is not a TTY, which would starve the live panel). The PTY merges
-// stdout+stderr into one stream, so we read it as "stdout". Returns the exit
-// code (0 on success) and any error.
-//
-// ctx is the caller's cancellable context: cancelling it (via Stop) kills the
-// opencode process. A 30m timeout is layered on top so a forgotten run can't
-// run forever.
-func (a *workflowsAPI) spawnOpencode(ctx context.Context, wf *workflows.Workflow, req runRequest, runID string) (int, error) {
-	opencodePath, err := missions.DetectOpencode()
+// spawnHostRun launches the host CLI (opencode / pi / omp) under a PTY so output
+// flushes line-by-line. Host defaults to opencode.
+func (a *workflowsAPI) spawnHostRun(ctx context.Context, wf *workflows.Workflow, req runRequest, runID string) (int, error) {
+	hostID, err := host.ParseID(req.Host)
 	if err != nil {
-		return 1, fmt.Errorf("opencode is not available: %w", err)
+		return 1, err
+	}
+	snap := host.Snapshot(hostID)
+	if !snap.WorkflowRun {
+		return 1, fmt.Errorf("host %s does not support workflow run from the control UI", hostID)
 	}
 
 	orchestrator := wf.Name + "-orchestrator"
-	args := []string{"run", "--agent", orchestrator}
-	if strings.TrimSpace(req.Model) != "" {
-		args = append(args, "--model", req.Model)
-	}
-	// The orchestrator prompt forwards $ARGUMENTS; passing it as the task text
-	// makes the args available to the workflow.
 	task := strings.TrimSpace(req.Args)
 	if task == "" {
 		task = "Run the workflow."
 	}
-	args = append(args, task)
 
-	// Layer a generous timeout on top of the caller's cancel context: workflows
-	// can run long, but a forgotten run shouldn't run forever.
+	// Layer a generous timeout on top of the caller's cancel context.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, opencodePath, args...)
+	cmd, err := host.Command(ctx, host.RunSpec{
+		Host:   hostID,
+		Agent:  orchestrator,
+		Model:  req.Model,
+		Prompt: task,
+	})
+	if err != nil {
+		return 1, err
+	}
 
-	// Start under a PTY so opencode flushes as it works instead of dumping the
-	// whole buffer on exit. pty.StartWithSize attaches cmd to a new PTY and
-	// returns the PTY's master end as the combined stdout+stderr reader.
+	// Start under a PTY so the agent flushes as it works instead of dumping the
+	// whole buffer on exit.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return 1, fmt.Errorf("start opencode (pty): %w", err)
+		return 1, fmt.Errorf("start %s (pty): %w", hostID, err)
 	}
 	// Store ptmx in the run record so the user can send input during execution.
 	a.runs.setPtmx(wf.Name, ptmx)

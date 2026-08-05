@@ -292,10 +292,14 @@ func (c *UserConfig) GetRoleDefault(role string) RoleDefault {
 func (c *UserConfig) GetActiveOrchestratorProfile() OrchestratorModelProfile {
 	if c != nil {
 		if profile, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; ok {
-			return profile.Clone()
+			p := profile.Clone()
+			p.Orchestration = p.Orchestration.Normalize()
+			return p
 		}
 	}
-	return DefaultOrchestratorModelProfiles()[DefaultOrchestratorModelProfileName]
+	p := DefaultOrchestratorModelProfiles()[DefaultOrchestratorModelProfileName]
+	p.Orchestration = p.Orchestration.Normalize()
+	return p
 }
 
 // GetOrchestratorAgentModel returns the active profile's model for an agent,

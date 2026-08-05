@@ -466,11 +466,15 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 		"deploy-dev: allow",
 		"deploy-qa: allow",
 		"Typed Contracts (orchestrator)",
-		"verdict: ship | ship-with-nits | block",
 	} {
 		if !strings.Contains(orch, want) {
 			t.Errorf("orchestrator missing %q:\n%s", want, orch)
 		}
+	}
+	// Ship gate may be YAML or JSON form inside the contracts section.
+	if !strings.Contains(orch, "ship | ship-with-nits | block") &&
+		!strings.Contains(orch, `"ship | ship-with-nits | block"`) {
+		t.Errorf("orchestrator missing review verdict options:\n%s", orch)
 	}
 }
 

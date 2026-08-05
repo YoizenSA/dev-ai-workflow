@@ -32,11 +32,14 @@ type ExportPlan struct {
 }
 
 // Export targets. opencode renders agents with opencode permission blocks under
-// ~/.config/opencode; claude-code renders Claude-native frontmatter under
-// ~/.claude. Both share the orchestrator + sub-agents + slash-command structure.
+// ~/.config/opencode; claude-code / pi / omp use name+description+tools markdown
+// under their respective agents dirs. Structure (orchestrator + sub-agents +
+// slash command) is shared.
 const (
 	TargetOpenCode   = "opencode"
 	TargetClaudeCode = "claude-code"
+	TargetPi         = "pi"
+	TargetOMP        = "omp"
 )
 
 // Exporter renders a workflow into a target's artifacts. The target directories
@@ -107,6 +110,18 @@ func NewExporterForTarget(target string) *Exporter {
 			commandsDir: config.ClaudeCommandsDir(),
 			agentsDir:   config.ClaudeAgentsDir(),
 			target:      TargetClaudeCode,
+		}
+	case TargetPi:
+		return &Exporter{
+			commandsDir: config.PiCommandsDir(),
+			agentsDir:   config.PiAgentsDir(),
+			target:      TargetPi,
+		}
+	case TargetOMP:
+		return &Exporter{
+			commandsDir: config.OmpCommandsDir(),
+			agentsDir:   config.OmpAgentsDir(),
+			target:      TargetOMP,
 		}
 	default:
 		return NewExporter()
@@ -295,9 +310,12 @@ func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID strin
 		orchTools = s.Data.Tools
 	}
 	perm := toolsToPermissions(orchTools, defaultOrchestratorTools)
-	if e.target == TargetClaudeCode {
-		claudeTools := csvFromPermissions(perm)
-		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), claudeTools, e.orchestratorModel(wf), body)
+	if e.target == TargetClaudeCode || e.target == TargetPi || e.target == TargetOMP {
+		toolsCSV := csvFromPermissions(perm)
+		if e.target == TargetPi || e.target == TargetOMP {
+			toolsCSV = strings.ToLower(toolsCSV)
+		}
+		return renderClaudeAgentMarkdown(orchestratorID, orchestratorDescription(wf), toolsCSV, e.orchestratorModel(wf), body)
 	}
 	profile := agents.AgentProfile{
 		Name:        orchestratorID,
@@ -362,10 +380,13 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		prompt = n.Data.Prompt
 	}
 	sections := subAgentSectionList(n.Data.Sections)
-	if e.target == TargetClaudeCode {
+	if e.target == TargetClaudeCode || e.target == TargetPi || e.target == TargetOMP {
 		prompt = agents.AppendSections(prompt, sections, config.AgentsSourceDir())
-		claudeTools := csvFromPermissions(perm)
-		md := renderClaudeAgentMarkdown(id, desc, claudeTools, n.Data.Model, prompt)
+		toolsCSV := csvFromPermissions(perm)
+		if e.target == TargetPi || e.target == TargetOMP {
+			toolsCSV = strings.ToLower(toolsCSV)
+		}
+		md := renderClaudeAgentMarkdown(id, desc, toolsCSV, n.Data.Model, prompt)
 		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(prompt) != "" {
 			md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 		}

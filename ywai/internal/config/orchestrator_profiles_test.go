@@ -40,6 +40,105 @@ func TestDefaultOrchestratorModelProfiles_FastUsesFlashEverywhere(t *testing.T) 
 	}
 }
 
+// TestSeedProfilesShipOrchestration pins the orchestration blocks of the three
+// shipped profiles (design doc "orchestrator-execution-modes.md" §4).
+func TestSeedProfilesShipOrchestration(t *testing.T) {
+	profiles := DefaultOrchestratorModelProfiles()
+
+	cases := []struct {
+		name      string
+		mode      string
+		soloWrite bool
+		review    string
+		hops      int
+	}{
+		{"fast", "solo", true, "never", 1},
+		{"balanced", "thin", true, "on_ship", 1},
+		{"deep", "full", false, "always", 2},
+	}
+	for _, tc := range cases {
+		p, ok := profiles[tc.name]
+		if !ok {
+			t.Fatalf("missing profile %q", tc.name)
+		}
+		pol := p.Orchestration
+		if pol.DefaultMode != tc.mode {
+			t.Errorf("%s default_mode = %q, want %q", tc.name, pol.DefaultMode, tc.mode)
+		}
+		if pol.SoloWriteAllowed() != tc.soloWrite {
+			t.Errorf("%s allow_solo_write = %v, want %v", tc.name, pol.SoloWriteAllowed(), tc.soloWrite)
+		}
+		if pol.RequireReview != tc.review {
+			t.Errorf("%s require_review = %q, want %q", tc.name, pol.RequireReview, tc.review)
+		}
+		if pol.MaxHopsBeforeEscalate == nil || *pol.MaxHopsBeforeEscalate != tc.hops {
+			t.Errorf("%s max_hops_before_escalate = %v, want %d", tc.name, pol.MaxHopsBeforeEscalate, tc.hops)
+		}
+		if len(pol.EscalateOn) == 0 {
+			t.Errorf("%s escalate_on must not be empty", tc.name)
+		}
+	}
+}
+
+// TestOrchestrationPolicyNormalize pins the fallback for profiles that ship no
+// orchestration block (user-created profiles keep working unchanged).
+func TestOrchestrationPolicyNormalize(t *testing.T) {
+	got := (OrchestrationPolicy{}).Normalize()
+	if got.DefaultMode != "thin" {
+		t.Errorf("default_mode = %q, want thin", got.DefaultMode)
+	}
+	if !got.SoloWriteAllowed() {
+		t.Error("allow_solo_write must default to true")
+	}
+	if got.MaxHopsBeforeEscalate == nil || *got.MaxHopsBeforeEscalate != 1 {
+		t.Errorf("max_hops_before_escalate = %v, want 1", got.MaxHopsBeforeEscalate)
+	}
+	if got.RequireReview != "on_ship" {
+		t.Errorf("require_review = %q, want on_ship", got.RequireReview)
+	}
+	if !reflect.DeepEqual(got.EscalateOn, DefaultEscalateOn) {
+		t.Errorf("escalate_on = %v, want %v", got.EscalateOn, DefaultEscalateOn)
+	}
+
+	false_ := false
+	deny := OrchestrationPolicy{DefaultMode: "full", AllowSoloWrite: &false_}.Normalize()
+	if deny.SoloWriteAllowed() {
+		t.Error("explicit allow_solo_write=false must stay false after Normalize")
+	}
+	if deny.RequireReview != "on_ship" {
+		t.Errorf("require_review should still be defaulted, got %q", deny.RequireReview)
+	}
+
+	// An explicit 0 hops is a deliberate choice ("escalate on any delegation")
+	// and must survive Normalize instead of being treated as unset.
+	zero := 0
+	explicitZero := OrchestrationPolicy{MaxHopsBeforeEscalate: &zero}.Normalize()
+	if explicitZero.MaxHopsBeforeEscalate == nil || *explicitZero.MaxHopsBeforeEscalate != 0 {
+		t.Errorf("explicit max_hops_before_escalate=0 must survive Normalize, got %v", explicitZero.MaxHopsBeforeEscalate)
+	}
+}
+
+// TestOrchestrationPolicyCloneDeepCopies guards against aliasing: mutating a
+// clone's EscalateOn / AllowSoloWrite / MaxHopsBeforeEscalate must not touch
+// the original.
+func TestOrchestrationPolicyCloneDeepCopies(t *testing.T) {
+	p := DefaultOrchestrationPolicy()
+	c := p.Clone()
+	c.EscalateOn[0] = "changed"
+	c.AllowSoloWrite = nil
+	c.MaxHopsBeforeEscalate = nil
+
+	if p.EscalateOn[0] == "changed" {
+		t.Error("clone EscalateOn aliases the original slice")
+	}
+	if p.AllowSoloWrite == nil {
+		t.Error("clone AllowSoloWrite aliases the original pointer")
+	}
+	if p.MaxHopsBeforeEscalate == nil {
+		t.Error("clone MaxHopsBeforeEscalate aliases the original pointer")
+	}
+}
+
 // The shipped profiles (balanced, fast, deep) are product defaults, not user
 // data: they gain agents as agents are added, so an install must restore them.
 // A setup you want to keep is a profile under your own name, and those persist.

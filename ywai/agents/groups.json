@@ -38,8 +38,7 @@
         "qa-automation/qa-analyst",
         "qa-automation/qa-ask",
         "qa-automation/qa-dev",
-        "qa-automation/qa-reviewer",
-        "qa-automation/qa-finder"
+        "qa-automation/qa-reviewer"
       ]
     }
   }

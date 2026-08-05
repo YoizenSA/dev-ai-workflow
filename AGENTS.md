@@ -137,6 +137,7 @@ cd ywai && bash scripts/dev.sh ui
 | Trae IDE | `trae-ide` | Config dir `~/.trae/` |
 | Windsurf | `windsurf` | Config dir `~/.codeium/windsurf/` |
 | Pi | `pi` | Binary in PATH |
+| Oh My Pi (OMP) | `omp` | Binary `omp` in PATH or `~/.omp/agent/` |
 
 ---
 

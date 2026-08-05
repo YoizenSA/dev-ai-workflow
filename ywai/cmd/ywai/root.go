@@ -148,10 +148,10 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 		return []agent.Agent{*a}
 	}
 
-	agents := agent.Resolve()
+	agents := agent.FilterProfileInstallAgents(agent.Resolve())
 	if len(agents) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: no supported agents detected in PATH.")
-		fmt.Fprintln(os.Stderr, "Supported: opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex")
+		fmt.Fprintln(os.Stderr, "Error: no supported agents detected.")
+		fmt.Fprintln(os.Stderr, "Supported (profile install): "+strings.Join(agent.ProfileInstallHosts, ", "))
 		return nil
 	}
 	return agents
@@ -289,8 +289,10 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		// --all-groups flag: install everything
 		profiles, err = agentprofiles.LoadProfiles(sourceDir)
 	} else if len(filter.Groups) == 0 {
-		// No groups specified: install core only
-		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{Groups: []string{}})
+		// Default: core + qa-automation (orchestrator stack + QA agents)
+		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{
+			Groups: []string{"qa-automation"},
+		})
 	} else {
 		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, filter)
 	}
@@ -342,6 +344,10 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// the delegation filter sees only valid installed agents.
 			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
 
+			// Remove agents retired from ywai (e.g. qa-finder) still installed
+			// from a previous release.
+			agentprofiles.RemoveRetiredAgents(agentsDir)
+
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json (permission.task) and the rules +
 			// triggers are rendered into each agent's markdown prompt body.
@@ -372,10 +378,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		case "claude-code":
 			agentsDir := filepath.Join(home, ".claude", "agents")
 			_ = agentprofiles.InstallClaude(agentsDir, profiles)
+			agentprofiles.RemoveRetiredAgents(agentsDir)
 
 		case "cursor":
 			agentsDir := filepath.Join(home, ".cursor", "agents")
 			_ = agentprofiles.InstallCursor(agentsDir, profiles)
+			agentprofiles.RemoveRetiredAgents(agentsDir)
 
 		case "vscode-copilot":
 			promptsDir := agentprofiles.VSCodePromptsDir()
@@ -390,12 +398,24 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
 			}
+			agentprofiles.RemoveRetiredAgents(agentsDir)
 			teamProfilesDir := filepath.Join(home, ".pi", "agent")
 			if err := agentprofiles.InstallPiTeamProfiles(teamProfilesDir, profiles, overwriteAgents); err != nil {
 				fmt.Printf("  [%s] Warning: teammate profiles: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Teammate profiles generated\n", a.Name)
 			}
+
+		case "omp":
+			// oh-my-pi: CORE agents only (fast harness host). Models via
+			// `ywai tokenbank configure --agent omp`.
+			agentsDir := filepath.Join(home, ".omp", "agent", "agents")
+			if err := agentprofiles.InstallOmp(agentsDir, profiles, overwriteAgents); err != nil {
+				fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
+			} else {
+				fmt.Printf("  [%s] Core agent profiles installed → %s\n", a.Name, agentsDir)
+			}
+			agentprofiles.RemoveRetiredAgents(agentsDir)
 
 			// Auto-install PI.dev plugins required for orchestrator
 			if piBin, err := exec.LookPath("pi"); err == nil {

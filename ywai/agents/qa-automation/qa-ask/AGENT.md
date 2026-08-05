@@ -32,8 +32,8 @@ You are a **subagent** of `@qa-orchestrator`. Report back when done.
 |---|---|
 | Return control | `@qa-orchestrator` |
 | Write the tests | `@qa-dev` |
-| Explore code | `@qa-finder` |
+| Explore code | `@finder` |
 
 ## Boundaries
 
-Do not write complete tests (`@qa-dev`), review code (`@qa-reviewer`), or explore the codebase (`@qa-finder`).
+Do not write complete tests (`@qa-dev`), review code (`@qa-reviewer`), or explore the codebase (`@finder`).

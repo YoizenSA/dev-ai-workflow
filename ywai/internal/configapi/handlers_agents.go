@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
+	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // GET /api/config/agents
@@ -637,10 +638,30 @@ func (h *Handlers) PutAgentModel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"model": model})
 }
 
-// applyAgentModel writes an agent's model into opencode.json (agent.<name>.model)
-// and its markdown frontmatter (the source of truth opencode enforces). An empty
-// model clears the override. Returns true if the agent was found in either
-// location. Shared by PutAgentModel and orchestrator-profile activation.
+// ApplyAgentModel is the exported multi-host form of applyAgentModel.
+// Used by install, control UI profile activation, and config API.
+func ApplyAgentModel(name, model string) bool {
+	return applyAgentModel(name, model)
+}
+
+// agentMarkdownSearchDirs returns host dirs where ywai writes agent .md files.
+func agentMarkdownSearchDirs() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".config", "opencode", "agents"),
+		filepath.Join(home, ".pi", "agent", "agents"),
+		filepath.Join(home, ".omp", "agent", "agents"),
+		filepath.Join(home, ".claude", "agents"),
+		filepath.Join(home, ".cursor", "agents"),
+	}
+}
+
+// applyAgentModel writes an agent's model into opencode.json (when present)
+// and every installed host markdown copy (opencode, pi, omp, claude, cursor).
+// An empty model clears the override. Returns true if any location was updated.
 func applyAgentModel(name, model string) bool {
 	model = strings.TrimSpace(model)
 	found := false
@@ -676,17 +697,365 @@ func applyAgentModel(name, model string) bool {
 		}
 	}
 
-	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
-		if mdContent, err := os.ReadFile(mdPath); err == nil {
-			updated := setScalarFrontmatterField(string(mdContent), "model", model)
-			_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
-			if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
-				found = true
+	// All host markdown trees ywai installs into (flat or one group subdir).
+	for _, dir := range agentMarkdownSearchDirs() {
+		mdPath := resolveAgentFile(dir, name)
+		if mdPath == "" {
+			// Also try basename for grouped keys (core/dev → dev).
+			if base := filepath.Base(name); base != name {
+				mdPath = resolveAgentFile(dir, base)
 			}
+		}
+		if mdPath == "" {
+			continue
+		}
+		mdContent, err := os.ReadFile(mdPath)
+		if err != nil {
+			continue
+		}
+		updated := setScalarFrontmatterField(string(mdContent), "model", model)
+		_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+		if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
+			found = true
 		}
 	}
 
 	return found
+}
+
+// ApplyActiveOrchestratorProfile writes the active userconfig model profile
+// (balanced / fast / deep / custom) into every installed agent markdown on all
+// hosts, and materializes the profile's orchestration policy into the
+// orchestrator agent (generated section + edit/write permission flip). Returns
+// how many agent roles were applied at least once (policy counts as one).
+func ApplyActiveOrchestratorProfile() (int, error) {
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		return 0, err
+	}
+	profile := cfg.GetActiveOrchestratorProfile()
+	applied := 0
+	for agentName, rd := range profile.Agents {
+		if rd.Model == "" {
+			continue
+		}
+		if applyAgentModel(agentName, rd.Model) {
+			applied++
+		}
+	}
+	if applyOrchestrationPolicy(profile.Orchestration) {
+		applied++
+	}
+	return applied, nil
+}
+
+const (
+	orchestrationPolicyMarkerStart = "<!-- ywai:orchestration-policy -->"
+	orchestrationPolicyMarkerEnd   = "<!-- /ywai:orchestration-policy -->"
+)
+
+// orchestrationPolicySection renders the profile's orchestration policy as a
+// self-contained markdown block (without the delimiting markers).
+func orchestrationPolicySection(policy userconfig.OrchestrationPolicy) string {
+	policy = policy.Normalize()
+	soloWrite := "true"
+	if !policy.SoloWriteAllowed() {
+		soloWrite = "false"
+	}
+	hops := 1
+	if policy.MaxHopsBeforeEscalate != nil {
+		hops = *policy.MaxHopsBeforeEscalate
+	}
+	return fmt.Sprintf(`## Orchestration policy (installed from active profile)
+
+This block is generated at install / profile-switch time — do not edit.
+
+- **default_mode**: %s
+- **allow_solo_write**: %s
+- **max_hops_before_escalate**: %d
+- **require_review**: %s
+- **escalate_on**: %s
+
+When the user gives no explicit signal, use **default_mode** as the triage
+fallback (replacing the static table default). Solo/thin may edit directly
+only when **allow_solo_write** is true; full never edits product code itself.
+`,
+		policy.DefaultMode, soloWrite, hops,
+		policy.RequireReview, strings.Join(policy.EscalateOn, ", "))
+}
+
+// applyOrchestrationPolicy writes the active profile's orchestration policy
+// into the installed orchestrator agent on every host: a generated policy
+// section in the body, plus the edit/write permission flip (opencode
+// permission: block; pi/omp/claude tools: list). Returns true if any host was
+// updated.
+func applyOrchestrationPolicy(policy userconfig.OrchestrationPolicy) bool {
+	found := false
+	section := orchestrationPolicySection(policy)
+	for _, dir := range agentMarkdownSearchDirs() {
+		mdPath := resolveAgentFile(dir, "orchestrator")
+		if mdPath == "" {
+			continue
+		}
+		content, err := os.ReadFile(mdPath)
+		if err != nil {
+			continue
+		}
+		updated := upsertPolicySection(string(content), section)
+		updated = applySoloWritePermissions(updated, policy.SoloWriteAllowed())
+		if updated == string(content) {
+			continue
+		}
+		_ = os.WriteFile(mdPath+".bak", content, 0644)
+		if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
+			found = true
+		}
+	}
+	if applyOrchestrationPolicyToOpenCodeJSON(policy.SoloWriteAllowed()) {
+		found = true
+	}
+	return found
+}
+
+// upsertPolicySection replaces the previous generated policy block (marker
+// delimited) or appends a new one at the end of the body.
+func upsertPolicySection(content, section string) string {
+	block := orchestrationPolicyMarkerStart + "\n" + section + orchestrationPolicyMarkerEnd + "\n"
+	start := strings.Index(content, orchestrationPolicyMarkerStart)
+	end := strings.Index(content, orchestrationPolicyMarkerEnd)
+	if start >= 0 && end > start {
+		end += len(orchestrationPolicyMarkerEnd)
+		return content[:start] + block + content[end:]
+	}
+	return strings.TrimRight(content, "\n") + "\n\n" + block
+}
+
+// applySoloWritePermissions flips the orchestrator's write surface on the
+// installed markdown: opencode permission: block scalars (edit/write) + the
+// bash block, and the pi/omp/claude tools: list. The flip is symmetric — a
+// deny→allow cycle restores edit/write and bash to the baseline posture.
+func applySoloWritePermissions(content string, allow bool) string {
+	val := "deny"
+	if allow {
+		val = "allow"
+	}
+	content = replacePermissionScalar(content, "edit", val)
+	content = replacePermissionScalar(content, "write", val)
+	content = replaceBashBlock(content, val)
+	return syncToolsList(content, allow)
+}
+
+// replaceBashBlock swaps the frontmatter bash entry to the given permission
+// value using the same rendering as install (agents.BashPermissionBlockLines),
+// so guardrail denials (false-green, no-commit) are preserved on re-allow.
+func replaceBashBlock(content, val string) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		return content
+	}
+	lines := strings.Split(fm, "\n")
+	replaced := false
+	inPerm := false
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "permission:" {
+			inPerm = true
+			continue
+		}
+		if !inPerm {
+			continue
+		}
+		if lines[i] != trimmed { // indented → inside the permission block
+			if strings.HasPrefix(trimmed, "bash:") {
+				block := agents.BashPermissionBlockLines(val, "orchestrator")
+				head := append([]string(nil), lines[:i]...)
+				head = append(head, block...)
+				// Skip the old bash children (4-space indented patterns). Lines
+				// at 2-space indent are permission-block siblings (edit, write,
+				// read) and must survive.
+				j := i + 1
+				for j < len(lines) && strings.HasPrefix(lines[j], "    ") {
+					j++
+				}
+				lines = append(head, lines[j:]...)
+				replaced = true
+				break
+			}
+			continue
+		}
+		inPerm = false
+	}
+	if !replaced {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
+}
+
+// syncToolsList makes a pi/omp/claude-style "tools:" frontmatter list match the
+// solo-write policy: deny removes edit/write tokens, allow re-adds them (they
+// are the install baseline). Reversible in both directions.
+func syncToolsList(content string, allow bool) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		return content
+	}
+	lines := strings.Split(fm, "\n")
+	changed := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if line != trimmed || !strings.HasPrefix(trimmed, "tools:") {
+			continue
+		}
+		var kept []string
+		hasEdit, hasWrite := false, false
+		for _, t := range strings.Split(strings.TrimSpace(strings.TrimPrefix(trimmed, "tools:")), ",") {
+			t = strings.TrimSpace(t)
+			// Claude-style lists capitalize tool names (Edit, Write); pi/omp
+			// use lowercase. Compare case-insensitively.
+			low := strings.ToLower(t)
+			if low == "edit" {
+				hasEdit = true
+			}
+			if low == "write" {
+				hasWrite = true
+			}
+			if t != "" && (allow || (low != "edit" && low != "write")) {
+				kept = append(kept, t)
+			}
+		}
+		if allow {
+			// Re-add the install baseline (edit/write) using the list's casing
+			// so claude-style capitalized lists stay capitalized, inserted right
+			// after the read token to mirror the install ordering.
+			editName, writeName := "edit", "write"
+			for _, t := range kept {
+				if t != "" && t[0] >= 'A' && t[0] <= 'Z' {
+					editName, writeName = "Edit", "Write"
+					break
+				}
+			}
+			inserted := false
+			for idx, t := range kept {
+				if strings.EqualFold(t, "read") {
+					out := append([]string(nil), kept[:idx+1]...)
+					if !hasEdit {
+						out = append(out, editName)
+					}
+					if !hasWrite {
+						out = append(out, writeName)
+					}
+					kept = append(out, kept[idx+1:]...)
+					inserted = true
+					break
+				}
+			}
+			if !inserted {
+				if !hasEdit {
+					kept = append(kept, editName)
+				}
+				if !hasWrite {
+					kept = append(kept, writeName)
+				}
+			}
+		}
+		lines[i] = "tools: " + strings.Join(kept, ",")
+		changed = true
+	}
+	if !changed {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
+}
+
+// applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/write/bash flip into
+// the opencode.json agent.orchestrator.permission map when that entry exists
+// (legacy installs; markdown-only installs have no such entry). Keeps the two
+// sources of truth from disagreeing.
+func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
+	path, err := opencodeConfigPath()
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var config map[string]json.RawMessage
+	if json.Unmarshal(data, &config) != nil {
+		return false
+	}
+	var agents map[string]json.RawMessage
+	if raw, ok := config["agent"]; !ok || json.Unmarshal(raw, &agents) != nil {
+		return false
+	}
+	orchestratorRaw, ok := agents["orchestrator"]
+	if !ok {
+		return false
+	}
+	var agentCfg map[string]json.RawMessage
+	if json.Unmarshal(orchestratorRaw, &agentCfg) != nil {
+		return false
+	}
+	var perms map[string]json.RawMessage
+	permRaw, ok := agentCfg["permission"]
+	if !ok || json.Unmarshal(permRaw, &perms) != nil {
+		return false
+	}
+	val := "deny"
+	if allow {
+		val = "allow"
+	}
+	for _, key := range []string{"edit", "write", "bash"} {
+		if _, ok := perms[key]; ok {
+			v, _ := json.Marshal(val)
+			perms[key] = v
+		}
+	}
+	updated, _ := json.Marshal(perms)
+	agentCfg["permission"] = updated
+	agentJSON, _ := json.Marshal(agentCfg)
+	agents["orchestrator"] = agentJSON
+	agentsJSON, _ := json.Marshal(agents)
+	config["agent"] = agentsJSON
+	pretty, _ := json.MarshalIndent(config, "", "  ")
+	_ = os.WriteFile(path+".bak", data, 0644)
+	return os.WriteFile(path, pretty, 0644) == nil
+}
+
+// replacePermissionScalar sets a 2-space-indented scalar inside the frontmatter
+// permission: block (e.g. "  edit: deny"). No-op when the key is absent, so
+// user tweaks outside the two flipped keys survive.
+func replacePermissionScalar(content, key, value string) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		return content
+	}
+	lines := strings.Split(fm, "\n")
+	replaced := false
+	inPerm := false
+	prefix := "  " + key + ":"
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "permission:" {
+			inPerm = true
+			continue
+		}
+		if !inPerm {
+			continue
+		}
+		if line != trimmed { // indented → inside the block
+			if strings.HasPrefix(line, prefix) {
+				lines[i] = fmt.Sprintf("  %s: %s", key, value)
+				replaced = true
+			}
+			continue
+		}
+		inPerm = false // unindented → block ended
+	}
+	if !replaced {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
 }
 
 // GET /api/config/agents/graph

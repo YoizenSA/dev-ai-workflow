@@ -648,12 +648,13 @@ export const workflowApi = {
 			{ method: "POST", body: JSON.stringify({ instruction, model, history }) },
 		),
 
-	// Run: export + spawn the orchestrator via opencode. Returns once the run has
-	// started (status 202); output is streamed over the workflows WebSocket hub.
-	run: (name: string, args: string, model?: string) =>
+	// Run: export + spawn the orchestrator on the selected host (opencode by
+	// default; pi/omp also supported). Returns once the run has started (status
+	// 202); output is streamed over the workflows WebSocket hub.
+	run: (name: string, args: string, model?: string, host?: string) =>
 		request<{ status: string; runId: string }>(`/api/workflows/${name}/run`, {
 			method: "POST",
-			body: JSON.stringify({ args, model }),
+			body: JSON.stringify({ args, model, host }),
 		}),
 
 	// Stop: cancel an in-progress run (kills the opencode process).

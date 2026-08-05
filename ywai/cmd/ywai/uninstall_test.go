@@ -167,7 +167,7 @@ func TestInstallsAgentsAsJSONKeys_OnlyOpenCodeFormats(t *testing.T) {
 			t.Errorf("%s should use the JSON-key install path", name)
 		}
 	}
-	for _, name := range []string{"gemini-cli", "windsurf", "claude-code", "pi", "cursor", "codex"} {
+	for _, name := range []string{"gemini-cli", "windsurf", "claude-code", "pi", "omp", "cursor", "codex"} {
 		if installsAgentsAsJSONKeys(name) {
 			t.Errorf("%s must not have its config's agent object touched", name)
 		}
@@ -182,6 +182,10 @@ func TestProfileDirsFor_KilocodeHasNoFileDir(t *testing.T) {
 	}
 	if dirs := profileDirsFor("opencode", "/home/u"); len(dirs) != 1 {
 		t.Errorf("opencode should have exactly one profile directory, got %v", dirs)
+	}
+	if dirs := profileDirsFor("omp", "/home/u"); len(dirs) != 1 ||
+		dirs[0] != "/home/u/.omp/agent/agents" {
+		t.Errorf("omp profile dir = %v, want [~/.omp/agent/agents]", dirs)
 	}
 }
 

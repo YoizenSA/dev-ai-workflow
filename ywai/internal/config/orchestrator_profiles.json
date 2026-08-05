@@ -3,6 +3,13 @@
     "balanced": {
       "display_name": "Balanced",
       "description": "Sensible cost/quality tradeoff per agent",
+      "orchestration": {
+        "default_mode": "thin",
+        "allow_solo_write": true,
+        "max_hops_before_escalate": 1,
+        "require_review": "on_ship",
+        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+      },
       "agents": {
         "advisor": {
           "model": "opencode-admin/grok-4.5"
@@ -71,9 +78,6 @@
           "model": "opencode-admin/minimax-m3"
         },
         "qa-dev": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "qa-finder": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-orchestrator": {
@@ -93,6 +97,13 @@
     "fast": {
       "display_name": "Fast",
       "description": "Speed/cost-optimized — flash model for every agent",
+      "orchestration": {
+        "default_mode": "solo",
+        "allow_solo_write": true,
+        "max_hops_before_escalate": 1,
+        "require_review": "never",
+        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+      },
       "agents": {
         "advisor": {
           "model": "opencode-admin/deepseek-v4-flash"
@@ -163,9 +174,6 @@
         "qa-dev": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
-        "qa-finder": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
         "qa-orchestrator": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
@@ -183,6 +191,13 @@
     "deep": {
       "display_name": "Deep",
       "description": "Higher-reasoning — top models for design/review, strong elsewhere",
+      "orchestration": {
+        "default_mode": "full",
+        "allow_solo_write": false,
+        "max_hops_before_escalate": 2,
+        "require_review": "always",
+        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+      },
       "agents": {
         "advisor": {
           "model": "opencode-admin/grok-4.5"
@@ -251,9 +266,6 @@
           "model": "opencode-admin/minimax-m3"
         },
         "qa-dev": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "qa-finder": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-orchestrator": {

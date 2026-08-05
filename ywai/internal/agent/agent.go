@@ -133,6 +133,14 @@ var KnownAgents = []struct {
 			return filepath.Join(homeDir(), ".pi", "agent", "npm", "node_modules", "gentle-pi", "skills")
 		},
 	},
+	{
+		// oh-my-pi (omp) — Pi fork with its own config tree under ~/.omp/
+		Name:   "omp",
+		Binary: "omp",
+		SkillsPath: func() string {
+			return filepath.Join(homeDir(), ".omp", "agent", "skills")
+		},
+	},
 }
 
 func homeDir() string {
@@ -266,8 +274,20 @@ func detectByConfigDir(name, skillsDir string) bool {
 	}
 
 	parentDir := filepath.Dir(skillsDir)
-	agentMarker := filepath.Join(parentDir, "AGENTS.md")
-	if _, err := os.Stat(agentMarker); err != nil {
+	// Shared markers: AGENTS.md (most hosts). OMP also has models.yml / config.yml
+	// under ~/.omp/agent even before skills are created.
+	markers := []string{"AGENTS.md"}
+	if name == "omp" {
+		markers = append(markers, "models.yml", "models.yaml", "models.json", "config.yml")
+	}
+	found := false
+	for _, m := range markers {
+		if _, err := os.Stat(filepath.Join(parentDir, m)); err == nil {
+			found = true
+			break
+		}
+	}
+	if !found {
 		return false
 	}
 
@@ -300,6 +320,9 @@ func SettingsPaths() map[string]string {
 		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli":  pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 		"pi":          pathIfExists(filepath.Join(home, ".pi", "agent", "mcp.json")),
+		// OMP models live in models.yml; expose the agent dir for callers that
+		// only need "is configured" via a path (tokenbank / install hooks).
+		"omp": pathIfExists(filepath.Join(home, ".omp", "agent", "models.yml")),
 	}
 }
 
@@ -315,8 +338,43 @@ func AvailableNames() []string {
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
 		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
-		"openclaw", "trae-ide", "pi",
+		"openclaw", "trae-ide", "pi", "omp",
 	}
+}
+
+// ProfileInstallHosts are agents for which ywai actually installs agent
+// profiles (see install switch in cmd/ywai/root.go). Detection may find more
+// binaries on PATH; install UI and default install target only these.
+var ProfileInstallHosts = []string{
+	"opencode",
+	"kilocode",
+	"claude-code",
+	"cursor",
+	"vscode-copilot",
+	"pi",
+	"omp",
+}
+
+// SupportsProfileInstall reports whether ywai has a real profile-install path
+// for this agent (not just "binary found on PATH").
+func SupportsProfileInstall(name string) bool {
+	for _, h := range ProfileInstallHosts {
+		if h == name {
+			return true
+		}
+	}
+	return false
+}
+
+// FilterProfileInstallAgents keeps only agents with a real ywai install path.
+func FilterProfileInstallAgents(agents []Agent) []Agent {
+	out := make([]Agent, 0, len(agents))
+	for _, a := range agents {
+		if SupportsProfileInstall(a.Name) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // Resolve returns agents based on user config or auto-detection.

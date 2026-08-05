@@ -14,6 +14,7 @@ vi.mock("../api/client", () => ({
 		validate: vi.fn(),
 		export: vi.fn(),
 		aiEdit: vi.fn(),
+		run: vi.fn(),
 	},
 }));
 
@@ -29,6 +30,7 @@ const mockApi = workflowApi as unknown as {
 	validate: ReturnType<typeof vi.fn>;
 	export: ReturnType<typeof vi.fn>;
 	aiEdit: ReturnType<typeof vi.fn>;
+	run: ReturnType<typeof vi.fn>;
 };
 
 const WORKFLOW: Workflow = {
@@ -160,6 +162,43 @@ describe("saveCurrent rollback", () => {
 		expect(useWorkflowStore.getState().dirty).toBe(true);
 		expect(useWorkflowStore.getState().error).toBe("disk full");
 	});
+});
+
+describe("runWorkflow", () => {
+	it("forwards the selected host to the run API", async () => {
+		class FakeWebSocket {
+			onmessage: unknown = null
+			onclose: unknown = null
+			close() {}
+		}
+		vi.stubGlobal("WebSocket", FakeWebSocket)
+		try {
+			useWorkflowStore.setState({ current: WORKFLOW })
+			mockApi.run.mockResolvedValue({ status: "started", runId: "r1" })
+			await useWorkflowStore.getState().runWorkflow("do the thing", undefined, "pi")
+			expect(mockApi.run).toHaveBeenCalledWith("w", "do the thing", undefined, "pi")
+			expect(useWorkflowStore.getState().runId).toBe("r1")
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	it("runs opencode by default when no host is given", async () => {
+		class FakeWebSocket {
+			onmessage: unknown = null
+			onclose: unknown = null
+			close() {}
+		}
+		vi.stubGlobal("WebSocket", FakeWebSocket)
+		try {
+			useWorkflowStore.setState({ current: WORKFLOW })
+			mockApi.run.mockResolvedValue({ status: "started", runId: "r2" })
+			await useWorkflowStore.getState().runWorkflow("", undefined)
+			expect(mockApi.run).toHaveBeenCalledWith("w", "", undefined, undefined)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
 });
 
 describe("exportCurrent", () => {

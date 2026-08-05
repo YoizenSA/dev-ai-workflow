@@ -52,15 +52,14 @@
         "qa-analyst": "allow",
         "qa-ask": "allow",
         "qa-dev": "allow",
-        "qa-finder": "allow",
+        "finder": "allow",
         "qa-reviewer": "allow"
       }
     },
-    "qa-analyst": { "task": { "*": "deny", "qa-finder": "allow" }, "skip_rules": true },
-    "qa-dev": { "task": { "*": "deny", "qa-reviewer": "allow" }, "skip_rules": true },
-    "qa-ask": { "task": { "*": "deny" }, "skip_rules": true },
-    "qa-finder": { "task": { "*": "deny" }, "skip_rules": true },
-    "qa-reviewer": { "task": { "*": "deny" }, "skip_rules": true },
+    "qa-analyst": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
+    "qa-dev": { "task": { "*": "deny", "qa-reviewer": "allow", "finder": "allow" }, "skip_rules": true },
+    "qa-ask": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
+    "qa-reviewer": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
 
     "migration-orchestrator": {
       "task": {

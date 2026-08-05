@@ -10,13 +10,13 @@ import (
 
 // ─── AvailableNames ───────────────────────────────────────────────────────
 
-func TestAvailableNames_ContainsAll15Agents(t *testing.T) {
+func TestAvailableNames_ContainsAllKnownAgents(t *testing.T) {
 	names := AvailableNames()
 	expected := []string{
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
 		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
-		"openclaw", "trae-ide", "pi",
+		"openclaw", "trae-ide", "pi", "omp",
 	}
 
 	if len(names) != len(expected) {
@@ -118,6 +118,18 @@ func TestKnownAgents_PiExists(t *testing.T) {
 	if !found {
 		t.Fatal("pi not found in KnownAgents")
 	}
+}
+
+func TestKnownAgents_OmpExists(t *testing.T) {
+	for _, ka := range KnownAgents {
+		if ka.Name == "omp" {
+			if ka.Binary != "omp" {
+				t.Fatalf("omp binary = %q, want omp", ka.Binary)
+			}
+			return
+		}
+	}
+	t.Fatal("omp not found in KnownAgents")
 }
 
 func TestKnownAgents_EachHasSkillsPath(t *testing.T) {

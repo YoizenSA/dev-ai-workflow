@@ -105,6 +105,42 @@ func ClaudeCommandsDir() string {
 	return filepath.Join(ClaudeConfigDir(), "commands")
 }
 
+// PiAgentsDir is where Pi loads agent markdown (~/.pi/agent/agents).
+func PiAgentsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".pi", "agent", "agents")
+}
+
+// PiCommandsDir is a ywai-managed slash-command mirror for Pi (optional).
+func PiCommandsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".pi", "agent", "commands")
+}
+
+// OmpAgentsDir is where OMP loads agent markdown (~/.omp/agent/agents).
+func OmpAgentsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".omp", "agent", "agents")
+}
+
+// OmpCommandsDir is a ywai-managed slash-command mirror for OMP (optional).
+func OmpCommandsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".omp", "agent", "commands")
+}
+
 func RepoRoot() string {
 	if repoRootOverride != "" {
 		return repoRootOverride

@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 )
 
 // profileStore is the singleton instance used by the handlers.
@@ -204,7 +207,32 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, existing)
+	// If this is the active profile, push models to all host agent files.
+	applied := 0
+	if active, _ := store.GetActive(); active == name {
+		for role, ac := range cfg.Agents {
+			if ac.Model == "" {
+				continue
+			}
+			if configapi.ApplyAgentModel(role, ac.Model) {
+				applied++
+			}
+		}
+		// Also refresh the orchestration policy from userconfig when this is a
+		// shipped profile (models + edit/write flip on the orchestrator).
+		if ucfg, err := config.LoadConfig(); err == nil {
+			if _, ok := ucfg.OrchestratorProfiles[name]; ok {
+				if n, err := configapi.ApplyActiveOrchestratorProfile(); err == nil && n > applied {
+					applied = n
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"profile":        existing,
+		"agents_applied": applied,
+	})
 }
 
 // handleDeleteProfile deletes a profile by name.
@@ -239,7 +267,8 @@ func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// handleActivateProfile sets a profile as the active one.
+// handleActivateProfile sets a profile as the active one and writes each
+// role's model into installed agent markdown on all hosts (opencode/pi/omp/…).
 // POST /api/profiles/activate/{name}
 func (s *Server) handleActivateProfile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -263,5 +292,43 @@ func (s *Server) handleActivateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"active": name})
+	// Apply models to disk agents + keep userconfig active in sync when the
+	// name matches a shipped orchestrator profile (balanced/fast/deep).
+	applied := 0
+	if p, err := store.Get(name); err == nil {
+		for role, ac := range p.Config.Agents {
+			if ac.Model == "" {
+				continue
+			}
+			if configapi.ApplyAgentModel(role, ac.Model) {
+				applied++
+			}
+		}
+	}
+	if cfg, err := config.LoadConfig(); err == nil {
+		if _, ok := cfg.OrchestratorProfiles[name]; ok {
+			cfg.ActiveOrchestratorProfile = name
+			_ = config.SaveConfig(cfg)
+			// Shipped profile: re-apply from userconfig (models + orchestration
+			// policy) so the orchestrator's generated policy and edit/write
+			// permissions follow the activated profile.
+			if n, err := configapi.ApplyActiveOrchestratorProfile(); err == nil && n > applied {
+				applied = n
+			}
+		} else {
+			// Custom UI profile: not in userconfig. Point userconfig back at the
+			// shipped default so a later `ywai install` applies a known baseline
+			// instead of the previously-active profile's models/policy silently
+			// reverting this activation.
+			if cfg.ActiveOrchestratorProfile != config.DefaultOrchestratorModelProfileName {
+				cfg.ActiveOrchestratorProfile = config.DefaultOrchestratorModelProfileName
+				_ = config.SaveConfig(cfg)
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"active":         name,
+		"agents_applied": applied,
+	})
 }

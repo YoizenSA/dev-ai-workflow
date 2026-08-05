@@ -185,7 +185,7 @@ interface WorkflowState {
 	// Export + spawn the orchestrator via opencode. Opens a WebSocket to stream
 	// output; runOutput fills as lines arrive. The promise resolves once the run
 	// starts (status 202); output continues asynchronously.
-	runWorkflow: (args: string, model?: string) => Promise<void>
+	runWorkflow: (args: string, model?: string, host?: string) => Promise<void>
 
 	// Stop the active run (kills the opencode process server-side).
 	stopWorkflow: () => Promise<void>
@@ -464,7 +464,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 	},
 
-	runWorkflow: async (args, model) => {
+	runWorkflow: async (args, model, host) => {
 		const { current } = get()
 		if (!current) return
 		set({ running: true, error: null, runOutput: [], runId: null })
@@ -505,7 +505,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 					}
 				}
 			})
-			const res = await workflowApi.run(current.name, args, model)
+			const res = await workflowApi.run(current.name, args, model, host)
 			runId = res.runId
 			set({ runId: res.runId })
 			useCommentaryStore.getState().startRun(res.runId)

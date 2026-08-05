@@ -63,7 +63,18 @@ import './WorkflowEditor.css'
 const EXPORT_TARGETS = [
 	{ value: 'opencode', label: 'opencode', dir: '~/.config/opencode' },
 	{ value: 'claude-code', label: 'Claude Code', dir: '~/.claude' },
+	{ value: 'pi', label: 'pi', dir: '~/.pi/agent' },
+	{ value: 'omp', label: 'omp', dir: '~/.omp/agent' },
 ] as const
+
+// Collapse an absolute artifact path to ~<dir> for the active target, e.g.
+// /home/u/.pi/agent/agents/x.md → ~/.pi/agent/agents/x.md.
+const shortExportPath = (path: string, dir?: string) => {
+	const seg = dir?.replace(/^~/, '')
+	if (!seg) return path
+	const i = path.lastIndexOf(seg)
+	return i >= 0 ? `~${path.slice(i)}` : path
+}
 
 const PALETTE_TYPES: WorkflowNodeType[] = [
 	'subAgent',
@@ -141,9 +152,12 @@ function WorkflowEditorInner() {
 	const [aiModel, setAiModel] = useState('')
 	const aiModels = useOpencodeModels()
 	const [exportTarget, setExportTarget] = useState('opencode')
+	const targetMeta = EXPORT_TARGETS.find((t) => t.value === exportTarget)
 	// Run modal: args prompt before spawning the orchestrator.
 	const [runOpen, setRunOpen] = useState(false)
 	const [runArgs, setRunArgs] = useState('')
+	// Host the orchestrator runs on (opencode default; pi/omp supported).
+	const [runHost, setRunHost] = useState('opencode')
 	// Run output panel visibility.
 	const [runPanelOpen, setRunPanelOpen] = useState(false)
 	// Slash command options modal (workflow-level frontmatter).
@@ -466,8 +480,8 @@ function WorkflowEditorInner() {
 	const handleRun = useCallback(async () => {
 		setRunOpen(false)
 		setRunPanelOpen(true)
-		await runWorkflow(runArgs, aiModel || undefined)
-	}, [runWorkflow, runArgs, aiModel])
+		await runWorkflow(runArgs, aiModel || undefined, runHost)
+	}, [runWorkflow, runArgs, aiModel, runHost])
 
 	const handleRename = useCallback(async () => {
 		const v = renameValue.trim()
@@ -939,8 +953,8 @@ function WorkflowEditorInner() {
 					<div className="export-plan">
 						<p>
 							{exportPlan.dryRun
-								? `Dry-run preview. These files would be written for ${exportTarget === 'claude-code' ? 'Claude Code (~/.claude)' : 'opencode (~/.config/opencode)'}:`
-								: `✅ Files written. Restart ${exportTarget === 'claude-code' ? 'Claude Code' : 'opencode'} to pick them up.`}
+								? `Dry-run preview. These files would be written for ${targetMeta ? `${targetMeta.label} (${targetMeta.dir})` : exportTarget}:`
+								: `✅ Files written. Restart ${targetMeta?.label ?? exportTarget} to pick them up.`}
 						</p>
 						{exportPlan.dryRun && exportPlan.estimatedTokens > 0 && (
 							<p className="wf-token-hint">
@@ -953,7 +967,7 @@ function WorkflowEditorInner() {
 						{(exportPlan.files ?? []).map((f, i) => (
 							<div className={`artifact kind-${f.kind}`} key={i}>
 								<span className="kind">{f.kind}</span>
-								<span>{f.path.replace(/^.*\.config\/opencode/, '~/.config/opencode').replace(/^.*\.claude/, '~/.claude')}</span>
+								<span>{shortExportPath(f.path, targetMeta?.dir)}</span>
 							</div>
 						))}
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1013,6 +1027,20 @@ function WorkflowEditorInner() {
 							autoFocus
 						/>
 						<span className="field-help">Leave empty to run with the workflow's default task.</span>
+					</div>
+					<div className="field">
+						<label className="field-label" id="wf-run-host-label">Runtime</label>
+						<YdSelect
+							options={[
+								{ value: 'opencode', label: 'opencode' },
+								{ value: 'pi', label: 'pi' },
+								{ value: 'omp', label: 'omp' },
+							]}
+							value={runHost}
+							onChange={setRunHost}
+							ariaLabelledby="wf-run-host-label"
+						/>
+						<span className="field-help">Host that spawns the orchestrator (pi/omp supported server-side).</span>
 					</div>
 					<div className="field">
 						<label className="field-label">Model (optional)</label>

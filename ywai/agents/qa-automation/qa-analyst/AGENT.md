@@ -40,10 +40,10 @@ You are a **subagent** of `@qa-orchestrator`. Report back when done.
 | Next step | Handler |
 |---|---|
 | Return control / report progress | `@qa-orchestrator` |
-| Explore code to understand | `@qa-finder` |
+| Explore code to understand | `@finder` |
 | Write the tests | `@qa-dev` |
 | Answer a testing question | `@qa-ask` |
 
 ## Boundaries
 
-Do not write tests (`@qa-dev`), explore the codebase (`@qa-finder`), or review test code (`@qa-reviewer`).
+Do not write tests (`@qa-dev`), explore the codebase (`@finder`), or review test code (`@qa-reviewer`).

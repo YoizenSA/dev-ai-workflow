@@ -230,10 +230,13 @@ type Model struct {
 // ──────────────────────────────────────────────────────────────────────────────
 
 // NewModel creates a new TUI model with detected agents.
+// Only agents with a real ywai profile-install path are listed (opencode, pi,
+// omp, claude-code, …) — not every binary Detect() finds on PATH.
 func NewModel(detectedAgents []agent.Agent) Model {
-	hasAll := len(detectedAgents) > 1
-	agentOpts := make([]agentOption, 0, len(detectedAgents))
-	for _, a := range detectedAgents {
+	installable := agent.FilterProfileInstallAgents(detectedAgents)
+	hasAll := len(installable) > 1
+	agentOpts := make([]agentOption, 0, len(installable)+1)
+	for _, a := range installable {
 		agentOpts = append(agentOpts, agentOption{
 			Name:     a.Name,
 			Binary:   a.BinaryName,
@@ -305,6 +308,8 @@ func (m *Model) LoadGroups(sourceDir string) error {
 	m.availableGroups = nil
 	m.groupNames = nil
 	m.selectedGroups = make(map[string]bool)
+	// Default on: core + qa-automation. Migration/social stay opt-in.
+	defaultOn := map[string]bool{"core": true, "qa-automation": true}
 	// Core is always first
 	if def, ok := manifest.Groups["core"]; ok {
 		m.availableGroups = append(m.availableGroups, def)
@@ -318,7 +323,7 @@ func (m *Model) LoadGroups(sourceDir string) error {
 		}
 		m.availableGroups = append(m.availableGroups, def)
 		m.groupNames = append(m.groupNames, name)
-		m.selectedGroups[name] = false
+		m.selectedGroups[name] = defaultOn[name]
 	}
 	return nil
 }
@@ -922,7 +927,7 @@ func (m *Model) viewAgent() string {
 		pad := strings.Repeat(" ", maxNameLen-len(a.Name)+2)
 
 		if a.Name == "all" {
-			desc := descStyle.Render("Install for all detected agents")
+			desc := descStyle.Render("Install for all supported agents")
 			b.WriteString(fmt.Sprintf("  %s %s%s%s\n", cursor, name, pad, desc))
 		} else {
 			check := checkStyle.Render("✓")

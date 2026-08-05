@@ -10,12 +10,18 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/versionfile"
 )
+
+// applyActiveModelProfile writes balanced/fast/deep (active) models into all host agent files.
+func applyActiveModelProfile() (int, error) {
+	return configapi.ApplyActiveOrchestratorProfile()
+}
 
 // applyMode selects which managed phases run after binary upgrades.
 type applyMode int
@@ -148,7 +154,9 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++
 	}
 	if plan.InstallProfiles {
-		n++
+		n++ // Installing agent profiles
+		n++ // Applying orchestrator model profile
+		n++ // Configuring TokenBank providers
 	}
 	if plan.ApplyOverrides {
 		n++
@@ -270,6 +278,24 @@ func applyManaged(o applyOpts) applyResult {
 	if plan.InstallProfiles {
 		steps.next("Installing agent profiles")
 		installAgentProfiles(agents, o.Opts.DryRun, o.GroupFilter, o.OverwriteAgents)
+
+		// Write active model profile (balanced/fast/deep) into each agent .md
+		// on every host we just installed.
+		steps.next("Applying orchestrator model profile")
+		if o.Opts.DryRun {
+			fmt.Println("  Would apply active orchestrator model profile to installed agents")
+		} else {
+			n, err := applyActiveModelProfile()
+			if err != nil {
+				r.warnf("model profile apply: %v", err)
+			} else {
+				fmt.Printf("  ✓ model profile applied to %d agent role(s)\n", n)
+			}
+		}
+
+		// TokenBank proxy into opencode / pi / omp / copilot when credentials exist.
+		steps.next("Configuring TokenBank providers")
+		reapplyTokenBank(o.Opts.DryRun)
 	}
 
 	// ── overrides ─────────────────────────────────────────────────────────

@@ -66,9 +66,9 @@ You are a **subagent** of `@qa-orchestrator`. Report back when done.
 |---|---|
 | Return control / report verdict | `@qa-orchestrator` |
 | Fix issues found | `@qa-dev` |
-| Explore related code | `@qa-finder` |
+| Explore related code | `@finder` |
 | Strategy question | `@qa-analyst` |
 
 ## Boundaries
 
-Do not write tests (`@qa-dev`), explore the codebase (`@qa-finder`), or make architecture decisions (`@qa-analyst`).
+Do not write tests (`@qa-dev`), explore the codebase (`@finder`), or make architecture decisions (`@qa-analyst`).

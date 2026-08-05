@@ -1581,6 +1581,68 @@ func TestPiToolsString(t *testing.T) {
 	}
 }
 
+func TestFilterCoreAgentProfiles(t *testing.T) {
+	in := map[string]AgentProfile{
+		"core/dev":             {Name: "core/dev", Group: "core", Description: "d"},
+		"core/orchestrator":    {Name: "core/orchestrator", Group: "core", Description: "o"},
+		"qa-automation/qa-dev": {Name: "qa-automation/qa-dev", Group: "qa-automation", Description: "q"},
+		"finder":               {Name: "finder", Group: "", Description: "f"}, // known core base
+	}
+	got := FilterCoreAgentProfiles(in)
+	if len(got) != 3 {
+		t.Fatalf("want 3 core profiles, got %d: %v", len(got), got)
+	}
+	if _, ok := got["dev"]; !ok {
+		t.Fatal("expected flat key dev")
+	}
+	if _, ok := got["qa-dev"]; ok {
+		t.Fatal("qa-dev must not be in core filter")
+	}
+	if _, ok := got["finder"]; !ok {
+		t.Fatal("finder base name should pass with empty group")
+	}
+}
+
+func TestInstallOmpCoreAndQA(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "omp", "agent", "agents")
+
+	profiles := map[string]AgentProfile{
+		"core/dev": {
+			Name: "core/dev", Group: "core", Description: "Developer agent",
+			Prompt: "# Dev\n\nBody.", Permission: map[string]string{"read": "allow", "edit": "allow", "task": "allow"},
+		},
+		"qa-automation/qa-dev": {
+			Name: "qa-automation/qa-dev", Group: "qa-automation", Description: "QA dev",
+			Prompt: "# QA\n", Permission: map[string]string{"read": "allow"},
+		},
+		"social-refactor/migration-orchestrator": {
+			Name: "migration-orchestrator", Group: "social-refactor", Description: "mig",
+			Prompt: "# M\n", Permission: map[string]string{"read": "allow"},
+		},
+	}
+	if err := InstallOmp(agentsDir, profiles, true); err != nil {
+		t.Fatalf("InstallOmp: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "dev.md")); err != nil {
+		t.Fatalf("dev.md missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "qa-dev.md")); err != nil {
+		t.Fatalf("qa-dev.md should install for OMP: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "migration-orchestrator.md")); err == nil {
+		t.Fatal("migration-orchestrator must not install on OMP")
+	}
+	data, _ := os.ReadFile(filepath.Join(agentsDir, "dev.md"))
+	content := string(data)
+	if !strings.Contains(content, "name: dev") {
+		t.Error("want flat name: dev")
+	}
+	if !strings.Contains(content, "task") {
+		t.Errorf("omp tools should include task when allowed, got:\n%s", content)
+	}
+}
+
 func TestInstallPi(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "pi", "agent", "agents")
@@ -1761,6 +1823,34 @@ func TestRemoveAgentsWithoutDescription(t *testing.T) {
 	}
 }
 
+// RemoveRetiredAgents deletes exactly the retired bases (qa-finder) and leaves
+// every current agent and unrelated file alone.
+func TestRemoveRetiredAgents(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"orchestrator.md", "qa-finder.md", "dev.md", "other.md"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("---\ndescription: x\n---\n\nbody."), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed := RemoveRetiredAgents(dir)
+	if removed != 1 {
+		t.Fatalf("expected 1 removal (qa-finder), got %d", removed)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "qa-finder.md")); err == nil {
+		t.Error("qa-finder.md should have been removed")
+	}
+	for _, kept := range []string{"orchestrator.md", "dev.md", "other.md"} {
+		if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+			t.Errorf("current agent %s must not be removed", kept)
+		}
+	}
+	// Idempotent.
+	if again := RemoveRetiredAgents(dir); again != 0 {
+		t.Errorf("second sweep removed %d files, want 0", again)
+	}
+}
+
 // Profiles are written before the install cleans retired MCP entries out of the
 // config, so expanding the "mcp" bucket straight from that config would grant a
 // dead server again on the very run meant to remove it.
@@ -1906,9 +1996,10 @@ func TestClaudeAndPiMapVerifyBashToNoShell(t *testing.T) {
 	}
 }
 
-// Core orchestrator ships with bash: verify so install renders a nested
-// allowlist (spot-check only), not a write shell.
-func TestCoreOrchestratorBashIsVerify(t *testing.T) {
+// Core orchestrator is solo-capable: full shell + search/edit so mode=solo can
+// act without a subagent hop. Protocol (not permissions) keeps full mode from
+// editing product code.
+func TestCoreOrchestratorIsSoloCapable(t *testing.T) {
 	profiles, err := LoadProfiles("../../agents")
 	if err != nil {
 		t.Fatalf("LoadProfiles: %v", err)
@@ -1917,25 +2008,29 @@ func TestCoreOrchestratorBashIsVerify(t *testing.T) {
 	if !ok {
 		t.Fatal("core/orchestrator not found")
 	}
-	if p.Permission["bash"] != "verify" {
-		t.Fatalf("bash = %q, want verify", p.Permission["bash"])
+	for _, tool := range []string{"bash", "edit", "write", "glob", "grep", "read"} {
+		if p.Permission[tool] != "allow" {
+			t.Errorf("%s = %q, want allow (solo path)", tool, p.Permission[tool])
+		}
 	}
 	md := BuildOpenCodeMarkdown("core/orchestrator", p)
-	if !strings.Contains(md, `"*": deny`) || !strings.Contains(md, `"git status*": allow`) {
-		t.Error("installed orchestrator markdown must render verify allowlist")
+	if !strings.Contains(md, `"*": allow`) {
+		t.Error("installed orchestrator markdown must render bash allow for solo mode")
+	}
+	if !strings.Contains(p.Prompt, "solo") || !strings.Contains(p.Prompt, "thin") || !strings.Contains(p.Prompt, "full") {
+		t.Error("orchestrator prompt must document solo|thin|full modes")
 	}
 }
 
-// The prompts of every coordinator tell it not to search — these make it true.
-// An orchestrator that CAN grep will grep, and then it is doing the subagent's
-// job with the subagent's context landing in the coordinator's window.
+// Pure coordinators (not the adaptive core orchestrator) must not search —
+// search is @finder / specialists. core/orchestrator is excluded: solo/thin
+// need grep/glob mechanically allowed.
 func TestCoordinatorsCannotSearch(t *testing.T) {
 	profiles, err := LoadProfiles("../../agents")
 	if err != nil {
 		t.Fatalf("LoadProfiles: %v", err)
 	}
 	for _, name := range []string{
-		"core/orchestrator",
 		"core/planning",
 		"qa-automation/qa-orchestrator",
 		"social-refactor/migration-orchestrator",

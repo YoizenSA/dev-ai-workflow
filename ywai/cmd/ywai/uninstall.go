@@ -268,6 +268,8 @@ func profileDirsFor(agentName, home string) []string {
 		return []string{filepath.Join(home, ".cursor", "agents")}
 	case "pi":
 		return []string{filepath.Join(home, ".pi", "agent", "agents")}
+	case "omp":
+		return []string{filepath.Join(home, ".omp", "agent", "agents")}
 	default:
 		return nil
 	}

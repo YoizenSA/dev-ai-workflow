@@ -6,9 +6,9 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 
 | Agent | Role | Best For |
 |-------|------|----------|
-| `orchestrator` | Technical Lead | Multi-step goals: plan → test/implement → review → ship via delegation |
-| `ask` | Research & Q&A | Quick questions, explanations, research, analysis |
-| `finder` | Codebase Explorer | Search, navigate, and explore files and code (read-only) |
+| `orchestrator` | Technical Lead | Goals: **solo** (act alone), **thin** (0–1 hop), or **full** multi-agent delivery |
+| `ask` | Research & Q&A | Primary for questions, explanations, analysis (read-only) |
+| `finder` | Codebase Explorer | Only scout: locate code, delivery scout, QA scout (read-only) |
 | `dev` | Developer | Implementation, coding, debugging, refactoring |
 | `qa` | QA Engineer | Testing, test strategy, quality assurance |
 | `architect` | Architect | Design decisions, patterns, system design |
@@ -17,11 +17,27 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 | `memory` | Memory Specialist | Memory consolidation, deduplication, structured plans |
 | `planning` | Planning | Plan mode: research → clarify → draft plan → approval gate (read-only until approved) |
 
+**One scout:** use `@finder` for all exploration (including QA). There is no separate `qa-finder`.  
+**Models:** `fast` / `balanced` / `deep` profiles set per-agent models (Settings → Profiles in the web UI).  
+**Install default groups:** `core` + `qa-automation`. TokenBank + active model profile are applied on install when credentials exist.
+
+## Execution modes (`orchestrator`)
+
+| Mode | When | Behavior |
+|------|------|----------|
+| `solo` | One file / clear small fix / Q&A | Orchestrator acts alone (search + edit + verify). Zero subagents. |
+| `thin` | Clear "do X", limited scope | Prefer act alone; at most one sync `task` hop. |
+| `full` | Multi-phase, ordered deps, ship | Classic SCOUT → PLAN → implement/test → review. No product edits by orchestrator. |
+
+- **Risk** (auth, migrations, public API, …) decides TDD/review — not mode size alone.
+- Unsure → **thin**, never full.
+- See `docs/design/orchestrator-execution-modes.md`.
+
 ## Delegation Flow
 
-The `orchestrator` is a `primary` agent that owns a goal and delegates to the
-specialist subagents, collecting a standard **handoff** from each before deciding
-the next step.
+In **full** mode the orchestrator owns the goal and delegates to specialists,
+collecting a standard **handoff** from each before deciding the next step.
+In **solo** / **thin** it may implement directly.
 
 ```mermaid
 graph TD
@@ -73,13 +89,13 @@ graph TD
 ```
 
 **Key points:**
-- The orchestrator owns the goal and decides the next step from each handoff.
-- TDD branch: `@qa` writes failing tests → `@dev` makes them pass → `@qa` validates.
-- Fan-out: the orchestrator can spawn multiple `@dev` (or `@qa`) in parallel for disjoint workstreams.
-- Each subagent ends with a fenced `handoff` block (including `verified` after write/test work).
-- **Review-then-commit:** `@dev` may edit code but must not `git commit`/`push` (OpenCode permission layer). Commit after `@reviewer` (or the user).
-- **Verify-only orchestrator shell:** the orchestrator can run a small git inspect + test/lint allowlist to spot-check handoffs, not to implement.
-- The `sub-agent-statusline` plugin (installed automatically with `ywai install`) gives real-time visibility into running/completed/failed subagents, elapsed time, and token/context usage.
+- Mode first: solo/thin skip the mermaid pipeline; full uses it.
+- TDD/review follow **risk policy** (and user/project strict TDD), not file count.
+- Fan-out: multiple `@dev` only for disjoint workstreams.
+- Subagents end with a compact JSON `handoff` fence (`verified` after write/test work).
+- **`@dev`:** no `git commit`/`push` (OpenCode). In **solo**, orchestrator may local-commit; no push unless the user asks.
+- In **full**, orchestrator does not edit product code — writes go through subagents.
+- The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
 The orchestrator uses a **capability model** with per-platform adapters. On opencode
 it delegates via `task` (sync) and `delegate` (async), asks decisions with `question`,
@@ -176,8 +192,11 @@ cat ywai/agents/dev/AGENT.md
 | OpenCode | `~/.config/opencode/agents/*.md` | `description`, `mode`, `permission:` block | ✅ Full support |
 | Claude Code | `~/.claude/agents/*.md` | `name`, `description`, `tools:` (PascalCase) | ✅ Full support |
 | PI.dev | `~/.pi/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) | ✅ Full support |
+| OMP (oh-my-pi) | `~/.omp/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) — **core group only** | ✅ Core agents |
 | Cursor | `~/.cursor/agents/*.md` | (same as Claude) | ✅ Full support |
 | VS Code Copilot | `~/.config/Code/User/prompts/*.instructions.md` | `name`, `description`, `applyTo` | ✅ Full support |
+
+TokenBank models for OMP: `ywai tokenbank configure --agent omp` → `~/.omp/agent/models.yml`.
 
 ## Philosophy
 

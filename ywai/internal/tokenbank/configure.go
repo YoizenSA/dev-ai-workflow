@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ---------------------------------------------------------------------------
@@ -192,6 +194,155 @@ func ConfigurePi(baseURL, apiKey string) error {
 
 	fmt.Printf("  ✓ Pi configured: %s\n", configPath)
 	fmt.Printf("    Provider: tokenbank-proxy → %s/v1\n", resp.Origin)
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// OMP (oh-my-pi)
+// ---------------------------------------------------------------------------
+
+// OmpProviderID is the provider key written into ~/.omp/agent/models.yml.
+const OmpProviderID = "tokenbank-proxy"
+
+// OmpConfigPath returns ~/.omp/agent/models.yml (OMP's preferred models file).
+func OmpConfigPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".omp", "agent", "models.yml")
+}
+
+// ConfigureOmp merges the TokenBank OpenAI-compatible proxy into OMP's models.yml.
+//
+// TokenBank does not need a dedicated "omp" setup target: we build a valid
+// openai-completions provider from GET /api/setup/models + credentials.
+// Existing providers in models.yml are preserved; tokenbank-proxy is replaced.
+func ConfigureOmp(baseURL, apiKey string) error {
+	configPath := OmpConfigPath()
+
+	modelsResp, err := FetchModels(baseURL, apiKey)
+	if err != nil {
+		return fmt.Errorf("fetching models for omp: %w", err)
+	}
+
+	origin := strings.TrimRight(modelsResp.Origin, "/")
+	if origin == "" {
+		origin = strings.TrimRight(baseURL, "/")
+	}
+	v1Base := origin + "/v1"
+
+	provider := BuildOmpTokenBankProvider(v1Base, apiKey, modelsResp.Models)
+
+	existing, err := ReadYAMLFile(configPath)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		existing = map[string]interface{}{}
+	}
+
+	providers, _ := existing["providers"].(map[string]interface{})
+	if providers == nil {
+		providers = map[string]interface{}{}
+	}
+	providers[OmpProviderID] = provider
+	existing["providers"] = providers
+
+	if err := WriteYAMLFile(configPath, existing); err != nil {
+		return err
+	}
+
+	fmt.Printf("  ✓ OMP configured: %s\n", configPath)
+	fmt.Printf("    Provider: %s → %s\n", OmpProviderID, v1Base)
+	fmt.Printf("    Models: %d (use: omp models %s  or  /model %s/<id>)\n",
+		len(modelsResp.Models), OmpProviderID, OmpProviderID)
+	return nil
+}
+
+// BuildOmpTokenBankProvider builds the OMP models.yml provider entry for TokenBank.
+func BuildOmpTokenBankProvider(v1Base, apiKey string, models []ModelInfo) map[string]interface{} {
+	modelEntries := make([]interface{}, 0, len(models))
+	for _, m := range models {
+		name := m.Name
+		if name == "" {
+			name = m.ID
+		}
+		entry := map[string]interface{}{
+			"id":   m.ID,
+			"name": name,
+			"api":  "openai-completions",
+		}
+		if m.MaxInputTokens > 0 {
+			entry["contextWindow"] = m.MaxInputTokens
+		} else {
+			entry["contextWindow"] = 128000
+		}
+		if m.MaxOutputToken > 0 {
+			entry["maxTokens"] = m.MaxOutputToken
+		} else {
+			entry["maxTokens"] = 16384
+		}
+		// input modalities
+		inputs := []interface{}{"text"}
+		if IsVisionModel(m) {
+			inputs = append(inputs, "image")
+		}
+		entry["input"] = inputs
+		entry["cost"] = map[string]interface{}{
+			"input":      0,
+			"output":     0,
+			"cacheRead":  0,
+			"cacheWrite": 0,
+		}
+		modelEntries = append(modelEntries, entry)
+	}
+
+	return map[string]interface{}{
+		"baseUrl":    v1Base,
+		"apiKey":     apiKey, // OMP: env name if set, else literal token
+		"api":        "openai-completions",
+		"authHeader": true,
+		"models":     modelEntries,
+	}
+}
+
+// ReadYAMLFile reads a YAML object file. Missing file → empty map.
+func ReadYAMLFile(path string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	data = []byte(strings.TrimLeft(string(data), "\ufeff"))
+	var result map[string]interface{}
+	if err := yaml.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	if result == nil {
+		result = map[string]interface{}{}
+	}
+	return result, nil
+}
+
+// WriteYAMLFile writes a YAML file with backup of the previous contents.
+func WriteYAMLFile(path string, data interface{}) error {
+	if _, err := os.Stat(path); err == nil {
+		backup := path + ".bak"
+		if err := os.Rename(path, backup); err != nil {
+			return fmt.Errorf("backing up %s: %w", path, err)
+		}
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating directory %s: %w", dir, err)
+	}
+	content, err := yaml.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("marshaling YAML: %w", err)
+	}
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
 	return nil
 }
 
@@ -396,6 +547,7 @@ func ConfigureAll(baseURL, apiKey string) []error {
 	}{
 		{"opencode", ConfigureOpenCode},
 		{"pi", ConfigurePi},
+		{"omp", ConfigureOmp},
 		{"copilot", ConfigureCopilot},
 	}
 
