@@ -505,6 +505,8 @@ export interface OrchestratorProfile {
   is_seed?: boolean;
   // Keyed by agent name (dev, qa, architect, qa-analyst, migration-planner, …).
   agents?: Record<string, OrchestratorModelMapping>;
+  /** Explicit omp modelRoles overrides for this profile (verbatim values). */
+  omp_model_roles?: Record<string, string>;
 }
 
 export interface OrchestratorProfilesResponse {

@@ -918,9 +918,10 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var body struct {
-		DisplayName string                            `json:"display_name"`
-		Description string                            `json:"description"`
-		Agents      map[string]userconfig.RoleDefault `json:"agents"`
+		DisplayName   string                            `json:"display_name"`
+		Description   string                            `json:"description"`
+		Agents        map[string]userconfig.RoleDefault `json:"agents"`
+		OmpModelRoles map[string]string                 `json:"omp_model_roles"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + err.Error()})
@@ -941,6 +942,9 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 	}
 	existing.Description = body.Description
 	existing.Agents = userconfig.RoleDefaults(body.Agents)
+	if body.OmpModelRoles != nil {
+		existing.OmpModelRoles = body.OmpModelRoles
+	}
 	cfg.OrchestratorProfiles[name] = existing
 
 	if err := userconfig.SaveConfig(cfg); err != nil {

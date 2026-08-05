@@ -254,6 +254,41 @@ defaultThinkingLevel: auto
 	if applyOmpModelRoles(profile) {
 		t.Error("applyOmpModelRoles must be a no-op when ~/.omp/agent is absent")
 	}
+
+	// Explicit profile overrides win over the derivation and are written
+	// verbatim (provider id included); unsourced roles can be added.
+	home3 := t.TempDir()
+	setTestHomeDir(t, home3)
+	ompDir3 := filepath.Join(home3, ".omp", "agent")
+	if err := os.MkdirAll(ompDir3, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ompDir3, "config.yml"), []byte("setupVersion: 1\nmodelRoles:\n  default: old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	overridden := profile.Clone()
+	overridden.OmpModelRoles = map[string]string{
+		"default": "opencode-go/deepseek-v4-flash", // verbatim, provider included
+		"vision":  "opencode-go/gpt-5.6-luna",      // not in the mapping table
+	}
+	if !applyOmpModelRoles(overridden) {
+		t.Fatal("expected override apply to update config.yml")
+	}
+	data3, err := os.ReadFile(filepath.Join(ompDir3, "config.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content3 := string(data3)
+	if !strings.Contains(content3, "default: opencode-go/deepseek-v4-flash") {
+		t.Errorf("explicit override must be written verbatim, got:\n%s", content3)
+	}
+	if !strings.Contains(content3, "vision: opencode-go/gpt-5.6-luna") {
+		t.Errorf("unsourced role override must be written, got:\n%s", content3)
+	}
+	// Derived roles still appear alongside the overrides.
+	if !strings.Contains(content3, "smol: minimax-m3") {
+		t.Errorf("derived roles must survive next to overrides, got:\n%s", content3)
+	}
 }
 
 // TestApplyOrchestrationPolicy_FlipsOpenCodeJSON mirrors the edit/write/bash

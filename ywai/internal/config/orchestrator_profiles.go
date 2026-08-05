@@ -22,6 +22,11 @@ type OrchestratorModelProfile struct {
 	// permission flip) when the profile is active. Missing → balanced-like
 	// defaults via Normalize, so older profiles keep working unchanged.
 	Orchestration OrchestrationPolicy `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	// OmpModelRoles overrides omp's modelRoles (config.yml) for this profile,
+	// editable like the per-agent models. Values are written verbatim
+	// (provider included). Roles absent here fall back to the derived mapping
+	// (ompModelRoleSources in configapi).
+	OmpModelRoles map[string]string `yaml:"omp_model_roles,omitempty" json:"omp_model_roles,omitempty"`
 }
 
 // OrchestrationPolicy is the orchestration behavior a profile ships. It is not
@@ -130,7 +135,19 @@ func cloneOrchestratorProfiles(src map[string]OrchestratorModelProfile) map[stri
 func (p OrchestratorModelProfile) Clone() OrchestratorModelProfile {
 	p.Agents = cloneRoleDefaults(p.Agents)
 	p.Orchestration = p.Orchestration.Clone()
+	p.OmpModelRoles = cloneStringMap(p.OmpModelRoles)
 	return p
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
 }
 
 func cloneRoleDefaults(src RoleDefaults) RoleDefaults {

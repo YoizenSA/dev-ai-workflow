@@ -388,7 +388,12 @@ export const configApi = {
 		request<OrchestratorProfilesResponse>("/api/config/user/orchestrator-profiles/resync", { method: "POST" }),
 	updateOrchestratorProfile: (
 		name: string,
-		profile: { display_name?: string; description?: string; agents: Record<string, { model: string }> },
+		profile: {
+			display_name?: string
+			description?: string
+			agents: Record<string, { model: string }>
+			omp_model_roles?: Record<string, string>
+		},
 	) =>
 		request<OrchestratorProfilesResponse & { agents_applied: number }>(
 			`/api/config/user/orchestrator-profiles/${encodeURIComponent(name)}`,

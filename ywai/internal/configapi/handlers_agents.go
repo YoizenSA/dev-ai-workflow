@@ -769,13 +769,20 @@ var ompModelRoleSources = []struct {
 }
 
 // ompModelRolesFor computes the omp modelRoles map from a profile: for each
-// omp role, the first mapped ywai agent with a model wins. Roles without a
-// source are omitted.
+// omp role, the first mapped ywai agent with a model wins. Explicit per-profile
+// overrides (profile.OmpModelRoles) win over the derivation and are written
+// verbatim — the user may pick an omp-specific provider id, or add roles the
+// mapping table does not cover (vision, task, slow).
 func ompModelRolesFor(profile userconfig.OrchestratorModelProfile) map[string]string {
 	out := map[string]string{}
 	for _, src := range ompModelRoleSources {
 		if m := firstProfileModel(profile, src.Agents); m != "" {
 			out[src.Role] = m
+		}
+	}
+	for role, m := range profile.OmpModelRoles {
+		if m = strings.TrimSpace(m); m != "" {
+			out[role] = m
 		}
 	}
 	return out

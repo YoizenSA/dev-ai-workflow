@@ -28,6 +28,9 @@ export default function ProfilesTab() {
 	// Editable draft of the active profile's per-agent models.
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [dirty, setDirty] = useState(false);
+	// Editable draft of the active profile's omp modelRoles (like the agents).
+	const [ompDraft, setOmpDraft] = useState<Record<string, string>>({});
+	const [ompDirty, setOmpDirty] = useState(false);
 	// Filter agents by name.
 	const [agentFilter, setAgentFilter] = useState("");
 	// Bulk model selector value.
@@ -65,6 +68,8 @@ export default function ProfilesTab() {
 			Object.fromEntries(Object.entries(agents).map(([name, m]) => [name, m.model ?? ""])),
 		);
 		setDirty(false);
+		setOmpDraft(data?.omp_model_roles ?? {});
+		setOmpDirty(false);
 		setAgentFilter("");
 		setBulkModel("");
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,10 +96,12 @@ export default function ProfilesTab() {
 			.updateOrchestratorProfile(activeProfile, {
 				description: currentProfile?.description,
 				agents: Object.fromEntries(Object.entries(draft).map(([n, m]) => [n, { model: m }])),
+				omp_model_roles: ompDraft,
 			})
 			.then((res) => {
 				setData({ profiles: res.profiles, active: res.active });
 				setDirty(false);
+				setOmpDirty(false);
 				setMessage(
 					activeProfile === res.active
 						? `Profile saved — applied to ${res.agents_applied} agent(s)`
@@ -218,7 +225,7 @@ export default function ProfilesTab() {
 		<div className="card card-pad">
 			<div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 				<h3>Orchestrator Profiles</h3>
-				<button type="button" className="btn btn-sm" onClick={handleSave} disabled={saving || !dirty}>
+				<button type="button" className="btn btn-sm" onClick={handleSave} disabled={saving || (!dirty && !ompDirty)}>
 					<Save size={14} />
 					{saving ? "Saving…" : "Save"}
 				</button>
@@ -270,7 +277,7 @@ export default function ProfilesTab() {
 				</p>
 			)}
 
-			{/* OMP modelRoles — what the active profile writes into omp. */}
+			{/* OMP modelRoles — editable like the per-agent models. */}
 			{data?.omp_model_roles && Object.keys(data.omp_model_roles).length > 0 && (
 				<div
 					className="card"
@@ -279,17 +286,40 @@ export default function ProfilesTab() {
 					<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
 						<span style={{ fontWeight: 600, fontSize: 13 }}>OMP modelRoles</span>
 						<span className="pill pill-muted">oh-my-pi</span>
+						{ompDirty && <span className="pill pill-success">unsaved</span>}
 					</div>
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.35rem" }}>
-						{Object.entries(data.omp_model_roles).map(([role, model]) => (
-							<div key={role} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
-								<span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role}</span>
-								<span style={{ fontFamily: "var(--font-mono)" }}>{model}</span>
-							</div>
-						))}
+					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.5rem" }}>
+						{Object.keys(data.omp_model_roles)
+							.sort()
+							.map((role) => (
+								<div key={role} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+									<span
+										style={{
+											fontFamily: "var(--font-mono)",
+											fontSize: 12,
+											color: "var(--text-muted)",
+											minWidth: 70,
+										}}
+									>
+										{role}
+									</span>
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<ModelCombobox
+											id={`omp-role-model-${role}`}
+											label=""
+											value={ompDraft[role] ?? ""}
+											models={models}
+											onChange={(v) => {
+												setOmpDraft((prev) => ({ ...prev, [role]: v }));
+												setOmpDirty(true);
+											}}
+										/>
+									</div>
+								</div>
+							))}
 					</div>
 					<p className="muted" style={{ margin: "0.5rem 0 0", fontSize: 11 }}>
-						Written to ~/.omp/agent/config.yml on activation / save.
+						Written to ~/.omp/agent/config.yml on save. Empty value falls back to the derived mapping.
 					</p>
 				</div>
 			)}
