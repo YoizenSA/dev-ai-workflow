@@ -72,6 +72,7 @@ export default function ModelCombobox({ id, label, value, models, onChange, reco
 					type="text"
 					className="input"
 					placeholder="Search models…"
+					title={displayName}
 					value={isOpen ? searchText : displayName}
 					onChange={(e) => setSearchText(e.target.value)}
 					onFocus={() => setIsOpen(true)}
@@ -81,6 +82,9 @@ export default function ModelCombobox({ id, label, value, models, onChange, reco
 					style={{
 						paddingRight: "32px",
 						cursor: "pointer",
+						textOverflow: "ellipsis",
+						whiteSpace: "nowrap",
+						overflow: "hidden",
 					}}
 				/>
 				<div
