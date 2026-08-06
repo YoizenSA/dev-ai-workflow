@@ -69,16 +69,15 @@ func IsInstalled() bool {
 	return gentleAIBinaryPath() != ""
 }
 
+// Install installs gentle-ai only when it is missing. Upgrading an existing
+// install is `ywai update`'s job (it calls Upgrade explicitly), so `ywai
+// install` never moves a working gentle-ai version underneath the user.
 func Install() error {
 	if IsInstalled() {
 		if version := CurrentVersion(); version != "" {
-			fmt.Printf("gentle-ai already installed (%s).\n", version)
+			fmt.Printf("gentle-ai already installed (%s) — run `ywai update` to upgrade it.\n", version)
 		} else {
-			fmt.Println("gentle-ai already installed.")
-		}
-		fmt.Println("Checking gentle-ai for updates...")
-		if err := Upgrade(); err != nil {
-			return fmt.Errorf("gentle-ai upgrade failed: %w", err)
+			fmt.Println("gentle-ai already installed — run `ywai update` to upgrade it.")
 		}
 		return nil
 	}

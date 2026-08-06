@@ -237,10 +237,10 @@ func applyManaged(o applyOpts) applyResult {
 	if !o.SkipGentleAIBinary {
 		steps.next("Checking gentle-ai")
 		if o.Opts.DryRun {
-			fmt.Println("  Would install or update gentle-ai if needed.")
+			fmt.Println("  Would install gentle-ai if missing (upgrades belong to `ywai update`).")
 		} else {
 			if err := gentlai.Install(); err != nil {
-				r.warnf("gentle-ai install/update failed: %v", err)
+				r.warnf("gentle-ai install failed: %v", err)
 			}
 		}
 	}
