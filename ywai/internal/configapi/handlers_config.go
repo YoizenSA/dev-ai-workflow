@@ -808,12 +808,14 @@ func (h *Handlers) GetOrchestratorProfiles(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	mergedProfiles, agentGroups := withAllInstalledAgents(cfg.OrchestratorProfiles)
+	activeProfile := cfg.GetActiveOrchestratorProfile()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"profiles":        mergedProfiles,
-		"active":          cfg.ActiveOrchestratorProfile,
-		"shipped":         shippedProfileNames(cfg.OrchestratorProfiles),
-		"omp_model_roles": OmpModelRolesFor(cfg.GetActiveOrchestratorProfile()),
-		"agent_groups":    agentGroups,
+		"profiles":           mergedProfiles,
+		"active":             cfg.ActiveOrchestratorProfile,
+		"shipped":            shippedProfileNames(cfg.OrchestratorProfiles),
+		"omp_model_roles":    OmpModelRolesFor(activeProfile),
+		"omp_thinking_level": activeProfile.OmpThinkingLevel,
+		"agent_groups":       agentGroups,
 	})
 }
 
@@ -944,10 +946,11 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var body struct {
-		DisplayName   string                            `json:"display_name"`
-		Description   string                            `json:"description"`
-		Agents        map[string]userconfig.RoleDefault `json:"agents"`
-		OmpModelRoles map[string]string                 `json:"omp_model_roles"`
+		DisplayName      string                            `json:"display_name"`
+		Description      string                            `json:"description"`
+		Agents           map[string]userconfig.RoleDefault `json:"agents"`
+		OmpModelRoles    map[string]string                 `json:"omp_model_roles"`
+		OmpThinkingLevel string                            `json:"omp_thinking_level"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + err.Error()})
@@ -971,6 +974,9 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 	if body.OmpModelRoles != nil {
 		existing.OmpModelRoles = body.OmpModelRoles
 	}
+	if strings.TrimSpace(body.OmpThinkingLevel) != "" {
+		existing.OmpThinkingLevel = strings.TrimSpace(body.OmpThinkingLevel)
+	}
 	cfg.OrchestratorProfiles[name] = existing
 
 	if err := userconfig.SaveConfig(cfg); err != nil {
@@ -987,11 +993,17 @@ func (h *Handlers) UpdateOrchestratorProfile(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	mergedProfiles, agentGroups := withAllInstalledAgents(cfg.OrchestratorProfiles)
+	activeProfile := cfg.GetActiveOrchestratorProfile()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":         "saved",
-		"agents_applied": applied,
-		"profiles":       cfg.OrchestratorProfiles,
-		"active":         cfg.ActiveOrchestratorProfile,
+		"status":             "saved",
+		"agents_applied":     applied,
+		"profiles":           mergedProfiles,
+		"active":             cfg.ActiveOrchestratorProfile,
+		"shipped":            shippedProfileNames(cfg.OrchestratorProfiles),
+		"agent_groups":       agentGroups,
+		"omp_model_roles":    OmpModelRolesFor(activeProfile),
+		"omp_thinking_level": activeProfile.OmpThinkingLevel,
 	})
 }
 

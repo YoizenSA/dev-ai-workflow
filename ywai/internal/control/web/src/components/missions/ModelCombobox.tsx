@@ -61,7 +61,7 @@ export default function ModelCombobox({ id, label, value, models, onChange, reco
 	}, []);
 
 	return (
-		<div className="field">
+		<div className="field model-combobox">
 			<label className="field-label" htmlFor={id}>
 				{label}
 			</label>

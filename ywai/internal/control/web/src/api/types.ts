@@ -507,15 +507,19 @@ export interface OrchestratorProfile {
   agents?: Record<string, OrchestratorModelMapping>;
   /** Explicit omp modelRoles overrides for this profile (verbatim values). */
   omp_model_roles?: Record<string, string>;
+  /** omp's global defaultThinkingLevel for this profile. */
+  omp_thinking_level?: string;
 }
 
 export interface OrchestratorProfilesResponse {
-  /** Profiles ywai owns and rewrites on every install; edits to these do not survive. */
+  /** Profiles ywai owns and rewrites on every install; edits to these persist. */
   shipped?: string[];
   profiles: Record<string, OrchestratorProfile>;
   active: string;
   /** What the active profile maps into omp's modelRoles (~/.omp/agent/config.yml). */
   omp_model_roles?: Record<string, string>;
+  /** Effective omp thinking level written to config.yml. */
+  omp_thinking_level?: string;
   /** Bare agent name → the folder it lives under (core, qa-automation, …). */
   agent_groups?: Record<string, string>;
 }

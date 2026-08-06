@@ -10,6 +10,18 @@
         "require_review": "on_ship",
         "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
       },
+      "omp_model_roles": {
+        "advisor": "opencode-admin/grok-4.5",
+        "commit": "opencode-admin/deepseek-v4-flash",
+        "default": "opencode-admin/deepseek-v4-flash",
+        "designer": "opencode-admin/kimi-k3",
+        "plan": "opencode-admin/grok-4.5",
+        "slow": "deepseek/deepseek-v4-flash",
+        "smol": "deepseek/deepseek-v4-flash",
+        "task": "deepseek/deepseek-v4-flash",
+        "vision": "opencode-go/gpt-5.6-luna"
+      },
+      "omp_thinking_level": "auto",
       "agents": {
         "advisor": {
           "model": "opencode-admin/grok-4.5"
@@ -104,6 +116,12 @@
         "require_review": "never",
         "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
       },
+      "omp_model_roles": {
+        "slow": "opencode-admin/deepseek-v4-flash",
+        "task": "opencode-admin/deepseek-v4-flash",
+        "vision": "opencode-admin/deepseek-v4-flash"
+      },
+      "omp_thinking_level": "low",
       "agents": {
         "advisor": {
           "model": "opencode-admin/deepseek-v4-flash"
@@ -198,6 +216,12 @@
         "require_review": "always",
         "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
       },
+      "omp_model_roles": {
+        "slow": "opencode-admin/grok-4.5",
+        "task": "opencode-admin/deepseek-v4-flash",
+        "vision": "opencode-go/gpt-5.6-luna"
+      },
+      "omp_thinking_level": "high",
       "agents": {
         "advisor": {
           "model": "opencode-admin/grok-4.5"

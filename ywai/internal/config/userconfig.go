@@ -263,9 +263,11 @@ func mergeShippedProfiles(current map[string]OrchestratorModelProfile) map[strin
 				merged.Agents[role] = rd
 			}
 		}
-		// OMP modelRoles overrides are user-owned — never re-seeded away.
 		if len(existing.OmpModelRoles) > 0 {
 			merged.OmpModelRoles = cloneStringMap(existing.OmpModelRoles)
+		}
+		if strings.TrimSpace(existing.OmpThinkingLevel) != "" {
+			merged.OmpThinkingLevel = strings.TrimSpace(existing.OmpThinkingLevel)
 		}
 		out[name] = merged
 	}
@@ -320,11 +322,17 @@ func (c *UserConfig) GetActiveOrchestratorProfile() OrchestratorModelProfile {
 		if profile, ok := c.OrchestratorProfiles[c.ActiveOrchestratorProfile]; ok {
 			p := profile.Clone()
 			p.Orchestration = p.Orchestration.Normalize()
+			if strings.TrimSpace(p.OmpThinkingLevel) == "" {
+				p.OmpThinkingLevel = "auto"
+			}
 			return p
 		}
 	}
 	p := DefaultOrchestratorModelProfiles()[DefaultOrchestratorModelProfileName]
 	p.Orchestration = p.Orchestration.Normalize()
+	if strings.TrimSpace(p.OmpThinkingLevel) == "" {
+		p.OmpThinkingLevel = "auto"
+	}
 	return p
 }
 

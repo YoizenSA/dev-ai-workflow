@@ -8,6 +8,10 @@ import ModelCombobox from "../missions/ModelCombobox";
 // alphabetically so a new group still shows up without a code change.
 const GROUP_ORDER = ["core", "planning", "qa-automation", "qa-exploratory", "social-refactor"];
 
+// omp modelRoles the backend derivation does not cover. Listed here so they get
+// an empty row and can be set from the UI; the derived roles arrive from the API.
+const OMP_EXTRA_ROLES = ["vision", "task", "slow"];
+
 // Human label for a folder slug; falls back to a Title-Case version of the slug.
 function groupLabel(slug: string): string {
 	switch (slug) {
@@ -39,8 +43,9 @@ export default function ProfilesTab() {
 	// Editable draft of the active profile's per-agent models.
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [dirty, setDirty] = useState(false);
-	// Editable draft of the active profile's omp modelRoles (like the agents).
+	// Editable OMP role models and global thinking level.
 	const [ompDraft, setOmpDraft] = useState<Record<string, string>>({});
+	const [ompThinkingDraft, setOmpThinkingDraft] = useState("auto");
 	const [ompDirty, setOmpDirty] = useState(false);
 	// Filter agents by name.
 	const [agentFilter, setAgentFilter] = useState("");
@@ -82,6 +87,7 @@ export default function ProfilesTab() {
 		);
 		setDirty(false);
 		setOmpDraft(data?.omp_model_roles ?? {});
+		setOmpThinkingDraft(data?.omp_thinking_level ?? currentProfile?.omp_thinking_level ?? "auto");
 		setOmpDirty(false);
 		setAgentFilter("");
 		setBulkModel("");
@@ -109,7 +115,11 @@ export default function ProfilesTab() {
 			.updateOrchestratorProfile(activeProfile, {
 				description: currentProfile?.description,
 				agents: Object.fromEntries(Object.entries(draft).map(([n, m]) => [n, { model: m }])),
-				omp_model_roles: ompDraft,
+				// Drop empty rows: an unset extra role must not persist as "".
+				omp_model_roles: Object.fromEntries(
+					Object.entries(ompDraft).filter(([, m]) => m.trim() !== ""),
+				),
+				omp_thinking_level: ompThinkingDraft,
 			})
 			.then((res) => {
 				// Merge so we keep shipped/omp_model_roles/agent_groups that the
@@ -117,8 +127,19 @@ export default function ProfilesTab() {
 				// silently dropped them, blanking the OMP section after a save.
 				setData((prev) =>
 					prev
-						? { ...prev, profiles: res.profiles, active: res.active }
-						: { profiles: res.profiles, active: res.active },
+						? {
+								...prev,
+								profiles: res.profiles,
+								active: res.active,
+								omp_model_roles: res.omp_model_roles ?? prev.omp_model_roles,
+								omp_thinking_level: res.omp_thinking_level ?? prev.omp_thinking_level,
+							}
+						: {
+								profiles: res.profiles,
+								active: res.active,
+								omp_model_roles: res.omp_model_roles,
+								omp_thinking_level: res.omp_thinking_level,
+							},
 				);
 				setDirty(false);
 				setOmpDirty(false);
@@ -416,9 +437,31 @@ export default function ProfilesTab() {
 							{ompDirty && <span className="pill pill-success">unsaved</span>}
 						</div>
 					</div>
+					<div className="profiles-omp-thinking">
+						<label htmlFor="omp-thinking-level">Thinking level</label>
+						<select
+							id="omp-thinking-level"
+							value={ompThinkingDraft}
+							onChange={(e) => {
+								setOmpThinkingDraft(e.target.value);
+								setOmpDirty(true);
+							}}
+						>
+							{["auto", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => (
+								<option key={level} value={level}>{level}</option>
+							))}
+						</select>
+						<span>omp defaultThinkingLevel</span>
+					</div>
 					<div className="settings-section-body">
 						<div className="profiles-omp-grid">
-							{Object.keys(data.omp_model_roles)
+							{[
+								...new Set([
+									...Object.keys(data.omp_model_roles),
+									...Object.keys(ompDraft),
+									...OMP_EXTRA_ROLES,
+								]),
+							]
 								.sort()
 								.map((role) => (
 									<div key={role} className="profiles-omp-row">

@@ -27,6 +27,9 @@ type OrchestratorModelProfile struct {
 	// (provider included). Roles absent here fall back to the derived mapping
 	// (ompModelRoleSources in configapi).
 	OmpModelRoles map[string]string `yaml:"omp_model_roles,omitempty" json:"omp_model_roles,omitempty"`
+	// OmpThinkingLevel is omp's global defaultThinkingLevel for this profile.
+	// Valid values are auto, minimal, low, medium, high, xhigh, and max.
+	OmpThinkingLevel string `yaml:"omp_thinking_level,omitempty" json:"omp_thinking_level,omitempty"`
 }
 
 // OrchestrationPolicy is the orchestration behavior a profile ships. It is not

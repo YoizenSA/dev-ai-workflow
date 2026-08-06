@@ -393,6 +393,7 @@ export const configApi = {
 			description?: string
 			agents: Record<string, { model: string }>
 			omp_model_roles?: Record<string, string>
+			omp_thinking_level?: string
 		},
 	) =>
 		request<OrchestratorProfilesResponse & { agents_applied: number }>(

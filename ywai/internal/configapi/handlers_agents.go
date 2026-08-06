@@ -828,6 +828,10 @@ func applyOmpModelRoles(profile userconfig.OrchestratorModelProfile) bool {
 			changed = true
 		}
 	}
+	if thinking := strings.TrimSpace(profile.OmpThinkingLevel); thinking != "" && root["defaultThinkingLevel"] != thinking {
+		root["defaultThinkingLevel"] = thinking
+		changed = true
+	}
 	if !changed {
 		return false
 	}
