@@ -1,12 +1,29 @@
 import { describe, expect, test } from "bun:test"
+import * as entry from "../src/index"
 import {
   buildVisionPrompt,
   collectUserText,
   catalogEntrySupportsImage,
   extractText,
   modelSupportsImage,
+  resolveImageSupport,
   resolveVisionModel,
-} from "../src/index"
+} from "../src/capabilities"
+
+describe("plugin entry surface", () => {
+  // OpenCode's loader calls EVERY exported function as a plugin factory. When
+  // the helpers were exported from the entry, it invoked resolveVisionModel
+  // with the plugin input, `preference.trim()` threw, and registration aborted
+  // silently — images went straight to text-only models. Keep the entry to a
+  // single default export.
+  test("exports only the default plugin", () => {
+    expect(Object.keys(entry)).toEqual(["default"])
+  })
+
+  test("the default export is the plugin factory", () => {
+    expect(typeof entry.default).toBe("function")
+  })
+})
 
 // OpenCode's live catalog (Provider.Model) nests capabilities:
 //   capabilities.attachment + capabilities.input.image
@@ -87,6 +104,29 @@ describe("modelSupportsImage", () => {
   test("unknown model falls through", () => {
     expect(modelSupportsImage(catalog, "opencode-admin", "nope")).toBeUndefined()
     expect(modelSupportsImage(catalog, "other", "kimi-k3")).toBeUndefined()
+  })
+})
+
+describe("resolveImageSupport — opencode.json beats the live catalog", () => {
+  // Real case: tokenbank marks opencode-admin/gpt-5.6-luna text-only in
+  // opencode.json, but OpenCode's live catalog merges models.dev data by model
+  // id and reports capabilities.input.image = true. Trusting the catalog first
+  // made the bridge return early, so the image reached a model that drops it.
+  test("config says text-only, catalog says vision → bridge", () => {
+    expect(resolveImageSupport(false, true)).toBe(false)
+  })
+
+  test("config says vision, catalog says text-only → pass through", () => {
+    expect(resolveImageSupport(true, false)).toBe(true)
+  })
+
+  test("config silent → catalog decides", () => {
+    expect(resolveImageSupport(undefined, false)).toBe(false)
+    expect(resolveImageSupport(undefined, true)).toBe(true)
+  })
+
+  test("both silent → assume vision, never bridge blindly", () => {
+    expect(resolveImageSupport(undefined, undefined)).toBe(true)
   })
 })
 
