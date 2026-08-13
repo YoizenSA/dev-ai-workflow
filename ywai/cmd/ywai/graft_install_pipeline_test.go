@@ -73,3 +73,26 @@ func TestInstallPipeline_NoCodegraphEntryPoints(t *testing.T) {
 		}
 	}
 }
+
+func TestInstallPipeline_NoGentleAIUserCopy(t *testing.T) {
+	banned := []string{
+		"Checking gentle-ai",
+		"Installing gentle-ai",
+		"gentle-ai ecosystem",
+		"gentle-ai will not write",
+		"Would install gentle-ai",
+		"Installing optional gentle-ai",
+	}
+	for _, file := range []string{"apply.go", "root.go"} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		body := string(data)
+		for _, s := range banned {
+			if strings.Contains(body, s) {
+				t.Errorf("%s still shows %q to the user", file, s)
+			}
+		}
+	}
+}

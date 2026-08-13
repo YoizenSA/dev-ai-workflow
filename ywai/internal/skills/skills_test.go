@@ -54,6 +54,75 @@ func TestSkillsSourceDirFallsBackToRepoWhenCacheEmpty(t *testing.T) {
 	}
 }
 
+func TestCopyTo_SkipsUnchangedSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+
+	repoSkillsDir := filepath.Join(repo, "skills")
+	writeSkill(t, repoSkillsDir, "yz-ui", true)
+	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
+	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatal(err)
+	}
+	stamp := filepath.Join(agentSkillsDir, "yz-ui", "keep.txt")
+	if err := os.WriteFile(stamp, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stamp); err != nil {
+		t.Fatal("unchanged skill was recopied")
+	}
+}
+
+func TestCopyTo_RecopiesWhenSourceChanges(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+
+	repoSkillsDir := filepath.Join(repo, "skills")
+	writeSkill(t, repoSkillsDir, "yz-ui", true)
+	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
+	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatal(err)
+	}
+	stamp := filepath.Join(agentSkillsDir, "yz-ui", "keep.txt")
+	if err := os.WriteFile(stamp, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoSkillsDir, "yz-ui", "SKILL.md"), []byte("# changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stamp); !os.IsNotExist(err) {
+		t.Fatal("changed skill must be recopied")
+	}
+}
+
 func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -89,6 +89,21 @@ func TestAdoVersionFromBinary_NoPackageJSON(t *testing.T) {
 	}
 }
 
+func TestInstallAdoCLI_SkipsWhenPresent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PATH rewrite")
+	}
+	dir := t.TempDir()
+	name := "ado"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	if err := InstallAdoCLI(); err != nil {
+		t.Fatalf("InstallAdoCLI with ado on PATH: %v", err)
+	}
+}
+
 func TestAdoCLILatestVersion_UsesInjectedFn(t *testing.T) {
 	// Stub the registry call so the test never hits the network.
 	orig := adoLatestFn

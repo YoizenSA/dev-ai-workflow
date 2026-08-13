@@ -54,6 +54,27 @@ func TestWireEngramMCP_WritesDetectedHosts(t *testing.T) {
 	}
 }
 
+func TestWireEngramMCP_SkipsSetupWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	putFakeEngramOnPATH(t)
+
+	origSetup := runEngramSetup
+	origPresent := engramSetupPresent
+	runEngramSetup = func(string) error { t.Fatal("setup must not run"); return nil }
+	engramSetupPresent = func(string) bool { return true }
+	t.Cleanup(func() {
+		runEngramSetup = origSetup
+		engramSetupPresent = origPresent
+	})
+
+	if err := WireEngramMCP([]string{"opencode", "pi"}); err != nil {
+		t.Fatalf("WireEngramMCP: %v", err)
+	}
+}
+
 func TestWireEngramMCP_SkipsUnsupportedHosts(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

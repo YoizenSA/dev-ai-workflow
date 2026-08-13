@@ -2,6 +2,8 @@
 
 **Hacé esto:** `ywai update` → reiniciá OpenCode → `ywai doctor`
 
+`ywai update` ya no rehace lo instalado: Engram/ado/skills/`engram setup` se saltan si no cambiaron.
+
 Si OpenCode no arranca (`ConfigInvalidError` en `mcp.graft`): el update reescribe el entry al formato de OpenCode (`type: local`, `command` array, `enabled`).
 
 ---

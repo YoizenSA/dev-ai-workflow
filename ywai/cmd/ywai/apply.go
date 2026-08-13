@@ -145,9 +145,6 @@ func (s *stepCounter) next(title string) {
 
 func countApplySteps(plan managedPlan, o applyOpts) int {
 	n := 0
-	if !o.SkipGentleAIBinary {
-		n++ // gentle-ai binary
-	}
 	n++ // reseed
 	n++ // list agents
 	n++ // ecosystem
@@ -231,23 +228,11 @@ func applyManaged(o applyOpts) applyResult {
 		fmt.Println("\n[DRY RUN] No changes will be made.")
 	}
 	if o.GlobalOnly {
-		fmt.Println("  Global-only: gentle-ai will not write into the current project.")
+		fmt.Println("  Global-only: will not write into the current project.")
 	}
 	fmt.Printf("  Preset: %s\n", normalizePreset(o.Opts.Preset))
 
 	steps := stepCounter{total: countApplySteps(plan, o)}
-
-	// ── gentle-ai binary ──────────────────────────────────────────────────
-	if !o.SkipGentleAIBinary {
-		steps.next("Checking gentle-ai")
-		if o.Opts.DryRun {
-			fmt.Println("  Would install gentle-ai if missing (upgrades belong to `ywai update`).")
-		} else {
-			if err := gentlai.Install(); err != nil {
-				r.warnf("gentle-ai install failed: %v", err)
-			}
-		}
-	}
 
 	// ── reseed ────────────────────────────────────────────────────────────
 	steps.next("Re-seeding skills + agent profile cache")
@@ -264,7 +249,7 @@ func applyManaged(o applyOpts) applyResult {
 	}
 
 	// ── ecosystem ─────────────────────────────────────────────────────────
-	steps.next("Installing gentle-ai ecosystem")
+	steps.next("Installing Engram")
 	installEcosystem(agents, o.Opts.DryRun, o.Opts)
 
 	// ── extra skills (always; presets only change gentle-ai components) ───
@@ -338,7 +323,7 @@ func applyManaged(o applyOpts) applyResult {
 
 	// ── optional gentle-ai SDD (after AGENTS.md; never persona) ────────────
 	if o.Opts.HasOptionalComponents() {
-		steps.next("Installing optional gentle-ai SDD")
+		steps.next("Installing optional SDD")
 		installOptionalGentle(agents, o.Opts, &r)
 	}
 

@@ -28,11 +28,11 @@ func TestCountApplySteps_Stable(t *testing.T) {
 		t.Fatalf("full install with autostart should have many steps, got %d", n)
 	}
 
-	// Skipping binary + no autostart/restart reduces count.
-	o2 := applyOpts{SkipGentleAIBinary: true}
+	// No autostart/restart reduces count. The gentle-ai binary step is gone.
+	o2 := applyOpts{}
 	n2 := countApplySteps(plan, o2)
 	if n2 >= n {
-		t.Fatalf("skipping binary/autostart should reduce steps: n=%d n2=%d", n, n2)
+		t.Fatalf("no autostart should reduce steps: n=%d n2=%d", n, n2)
 	}
 }
 

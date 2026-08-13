@@ -41,6 +41,9 @@ var adoPluginPackageNames = []string{
 // conflicts under npm's strict resolver (npm 7+), blocking a plain install.
 // This flag is the standard workaround for global CLI installs.
 func InstallAdoCLI() error {
+	if _, err := exec.LookPath("ado"); err == nil {
+		return nil
+	}
 	if _, err := exec.LookPath("npm"); err != nil {
 		return fmt.Errorf("npm not found in PATH — install Node.js, then run `npm i -g %s --legacy-peer-deps`", AdoNPMPackage)
 	}

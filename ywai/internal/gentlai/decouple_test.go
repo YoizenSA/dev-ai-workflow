@@ -70,6 +70,41 @@ func TestInstall_GentleAIBinaryUntouched(t *testing.T) {
 //
 // Slice 1 acceptance: ywai install must install engram via the release path
 // without invoking gentle-ai.
+func TestInstallEngram_SkipsDownloadWhenCurrent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(binDir, "engram")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho engram 1.20.0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	origLatest := fetchLatestEngram
+	origDownload := downloadReleaseFile
+	t.Cleanup(func() {
+		fetchLatestEngram = origLatest
+		downloadReleaseFile = origDownload
+	})
+	fetchLatestEngram = func() (string, error) { return "v1.20.0", nil }
+	downloadReleaseFile = func(string, string) error {
+		t.Fatal("must not download when engram is already current")
+		return nil
+	}
+
+	dir, err := InstallEngram()
+	if err != nil {
+		t.Fatalf("InstallEngram: %v", err)
+	}
+	if dir != binDir {
+		t.Fatalf("install dir = %q, want %q", dir, binDir)
+	}
+}
+
 func TestInstallEngram_FunctionExported(t *testing.T) {
 	var _ func() (string, error) = InstallEngram
 }

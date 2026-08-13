@@ -137,15 +137,11 @@ func InstallEcosystem(opts InstallOptions) error {
 			if err != nil {
 				return fmt.Errorf("failed to install engram: %w", err)
 			}
-			fmt.Printf("  Engram installed into %s\n", installDir)
+			fmt.Printf("  Engram ready in %s\n", installDir)
 			UpgradeEngram()
 		}
 	}
 
-	if len(plan.Ecosystem) > 0 {
-		fmt.Printf("  Skipping gentle-ai ecosystem components [%s] — decoupled; ywai-native replacements land in later slices.\n",
-			strings.Join(plan.Ecosystem, ", "))
-	}
 	return nil
 }
 
@@ -216,7 +212,7 @@ func InstallOptionalComponents(opts InstallOptions) error {
 	comps := opts.optionalComponents()
 	// Slice 1 decoupling: optional components (SDD) are not delegated to
 	// `gentle-ai install`; a ywai-native SDD flow lands in a later slice.
-	fmt.Printf("Skipping optional gentle-ai components [%s] — decoupled; ywai-native SDD lands in a later slice.\n",
+	fmt.Printf("Skipping optional SDD components [%s] — ywai-native SDD lands in a later slice.\n",
 		strings.Join(comps, ", "))
 	if opts.DryRun {
 		return nil
@@ -428,8 +424,25 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
+var (
+	fetchLatestEngram   = latestEngramRelease
+	downloadReleaseFile = downloadFile
+)
+
 func latestEngramRelease() (string, error) {
 	return latestRelease(engramOwner, engramRepo)
+}
+
+func installedEngramVersion() string {
+	exe := findBinary(engramBin)
+	if exe == "" {
+		return ""
+	}
+	out, err := exec.Command(exe, "version").Output()
+	if err != nil {
+		return ""
+	}
+	return versionPattern.FindString(string(out))
 }
 
 // installEngramReleaseBinary downloads the latest prebuilt engram binary into a
@@ -457,9 +470,14 @@ func installEngramReleaseBinary() (string, error) {
 		return "", fmt.Errorf("no writable bin directory found in home")
 	}
 
-	version, err := latestEngramRelease()
+	version, err := fetchLatestEngram()
 	if err != nil {
 		return "", fmt.Errorf("failed to check latest engram release: %w", err)
+	}
+
+	if current := installedEngramVersion(); current != "" && normalizeVersion(current) == normalizeVersion(version) {
+		fmt.Printf("  Engram already %s\n", version)
+		return installDir, nil
 	}
 
 	archiveName := assetName(engramBin, version)
@@ -479,7 +497,7 @@ func installEngramReleaseBinary() (string, error) {
 
 	archivePath := filepath.Join(tmpDir, archiveName)
 	fmt.Printf("  Downloading %s...\n", downloadURL)
-	if err := downloadFile(downloadURL, archivePath); err != nil {
+	if err := downloadReleaseFile(downloadURL, archivePath); err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
 	}
 

@@ -162,8 +162,8 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 	for _, a := range agents {
 		configDir := filepath.Dir(a.SkillsDir)
 		if skills.IsLinkOrJunction(configDir) {
-			fmt.Printf("  Warning: [%s] gentle-ai install skipped because config dir is a symlink/junction: %s\n", a.Name, configDir)
-			fmt.Println("    gentle-ai currently refuses to atomically write through linked config directories; leaving existing upstream skills untouched.")
+			fmt.Printf("  Warning: [%s] Engram install skipped because config dir is a symlink/junction: %s\n", a.Name, configDir)
+			fmt.Println("    leaving existing skills untouched.")
 			continue
 		}
 		if dryRun {
@@ -186,7 +186,7 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 			done = append(done, a.Name)
 		}
 	}
-	summarizeAgents(dryRun, "gentle-ai ecosystem", done)
+	summarizeAgents(dryRun, "Engram", done)
 
 	if !gentlai.PlanForPreset(opts.Preset).IncludeEngram {
 		return

@@ -82,4 +82,7 @@ func TestInstallOutputNoGentleAiAcronym(t *testing.T) {
 	if strings.Contains(out, "GGA") {
 		t.Errorf("should not mention GGA, got: %s", out)
 	}
+	if strings.Contains(strings.ToLower(out), "gentle-ai") {
+		t.Errorf("install must not mention gentle-ai (ywai owns the pipeline), got: %s", out)
+	}
 }

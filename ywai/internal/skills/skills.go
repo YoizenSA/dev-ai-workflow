@@ -1,7 +1,10 @@
 package skills
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +13,8 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
+
+var errSkillChanged = errors.New("skill source differs")
 
 const extraSkillMarkerFile = ".ywai-extra"
 const learnYwaiSkillName = "learn-ywai"
@@ -36,6 +41,7 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 
 	extraSkills := ywaiExtraSkillNames(srcDir)
 	copied := 0
+	skipped := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -51,6 +57,11 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 
 		src := filepath.Join(srcDir, name)
 		dst := filepath.Join(agentSkillsDir, name)
+
+		if skillUnchanged(src, dst) {
+			skipped++
+			continue
+		}
 
 		if pathExists(dst) {
 			if err := removeExistingSkillPath(dst); err != nil {
@@ -70,12 +81,18 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 			}
 		}
 
-		fmt.Printf("  Copied skill: %s\n", name)
 		copied++
 	}
 
-	if copied == 0 {
+	switch {
+	case copied == 0 && skipped == 0:
 		fmt.Println("  All skills already up to date.")
+	case copied == 0:
+		fmt.Printf("  %d skill(s) already current\n", skipped)
+	case skipped == 0:
+		fmt.Printf("  Updated %d skill(s)\n", copied)
+	default:
+		fmt.Printf("  Updated %d skill(s), %d already current\n", copied, skipped)
 	}
 
 	// A full copy is also the moment to drop what we no longer ship. A partial
@@ -86,6 +103,39 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 		}
 	}
 	return nil
+}
+
+// skillUnchanged reports whether every file in src is already present in dst
+// with identical bytes. Extra files in dst (bundled docs) are ignored.
+func skillUnchanged(src, dst string) bool {
+	if !pathExists(dst) || !hasYwaiExtraMarker(dst) {
+		return false
+	}
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		want, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		got, err := os.ReadFile(filepath.Join(dst, rel))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(want, got) {
+			return errSkillChanged
+		}
+		return nil
+	})
+	return err == nil
 }
 
 // pruneRetiredSkills deletes skills ywai installed and has since stopped

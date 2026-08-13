@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
@@ -24,13 +25,33 @@ var engramSetupHosts = map[string]bool{
 	"pi":       true,
 }
 
-var runEngramSetup = defaultRunEngramSetup
+var (
+	runEngramSetup     = defaultRunEngramSetup
+	engramSetupPresent = defaultEngramSetupPresent
+)
 
 func defaultRunEngramSetup(agent string) error {
 	cmd := exec.Command("engram", "setup", agent)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func defaultEngramSetupPresent(host string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	switch host {
+	case "opencode":
+		_, err = os.Stat(filepath.Join(home, ".config", "opencode", "plugins", "engram.ts"))
+		return err == nil
+	case "pi":
+		_, err = os.Stat(filepath.Join(home, ".pi", "agent", "npm", "node_modules", "gentle-engram"))
+		return err == nil
+	default:
+		return false
+	}
 }
 
 // WireEngramMCP writes the catalog `engram mcp` entry into each supported
@@ -54,7 +75,7 @@ func WireEngramMCP(hosts []string) error {
 		if _, err := mcp.WriteAgentConfig(host, "engram", shape); err != nil {
 			return fmt.Errorf("failed to wire engram MCP for %s: %w", host, err)
 		}
-		if engramSetupHosts[host] {
+		if engramSetupHosts[host] && !engramSetupPresent(host) {
 			if err := runEngramSetup(host); err != nil {
 				fmt.Printf("  Warning: engram setup %s failed: %v\n", host, err)
 			}
