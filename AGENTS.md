@@ -223,6 +223,7 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 | `devops` | Azure Pipelines, Helm charts, Kubernetes |
 | `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
 | `git-commit` | Conventional commits |
+| `ywai` | Agents enable/disable MCP, switch profiles, enable groups |
 
 ---
 

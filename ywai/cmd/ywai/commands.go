@@ -506,6 +506,22 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  No cached plugins to clear.")
 		}
 
+		// CodeGraph was retired in favour of Graft. Sweep the leftover global
+		// npm CLI and this repo's index so they stop shadowing Graft.
+		fmt.Println("\n[cleanup] Removing retired CodeGraph CLI/index...")
+		cwd, _ := os.Getwd()
+		if removed, err := plugins.RemoveRetiredCLIs(cwd, dryRun); err != nil {
+			fmt.Printf("  Warning: %v\n", err)
+		} else if len(removed) > 0 {
+			verb := "✓ removed"
+			if dryRun {
+				verb = "Would remove"
+			}
+			fmt.Printf("  %s: %s\n", verb, strings.Join(removed, ", "))
+		} else {
+			fmt.Println("  Nothing to remove.")
+		}
+
 		result := applyManaged(applyOpts{
 			Mode: applyUpdate,
 			Opts: gentlai.InstallOptions{
