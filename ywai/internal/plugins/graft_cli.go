@@ -116,8 +116,10 @@ func WireGraftMCP() error {
 	return nil
 }
 
-// writeGraftMCPEntry adds the graft MCP server to the given config file
-// if it is not already present, then writes the file back.
+// writeGraftMCPEntry writes the graft MCP server in the target's native
+// shape. OpenCode/kilocode require type+command-array+enabled; Claude/pi
+// use command+args. Always overwrites so a previous Claude-shaped write
+// cannot leave OpenCode unable to boot.
 func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
@@ -129,12 +131,17 @@ func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 		mcpMap = map[string]any{}
 		root[key] = mcpMap
 	}
-	if _, exists := mcpMap["graft"]; !exists {
-		mcpMap["graft"] = map[string]any{
-			"command": command[0],
-			"args":    command[1:],
-		}
-		root[key] = mcpMap
-	}
+	entry := mcp.CatalogEntry{Type: "local", Command: command}
+	mcpMap["graft"] = mcp.BuildEntryShape(mcpShapeTarget(agentName), entry, nil)
+	root[key] = mcpMap
 	return config.WriteJSONC(configPath, root)
+}
+
+// mcpShapeTarget maps hosts that share OpenCode's mcp object to the
+// "opencode" BuildEntryShape branch (type: local, command as argv).
+func mcpShapeTarget(agentName string) string {
+	if mcpConfigKey(agentName) == "mcp" {
+		return "opencode"
+	}
+	return agentName
 }

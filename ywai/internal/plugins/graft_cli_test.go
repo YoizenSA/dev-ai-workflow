@@ -23,6 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // Compile-time guards. Missing names → test binary fails to build,
@@ -36,6 +38,59 @@ var (
 // gives the suite a PASS once the compile-time guards succeed. It
 // exercises the pure, testable seam of the slice (version parsing)
 // without touching the npm / `graft mcp` binary seams.
+func TestWriteGraftMCPEntry_OpenCodeShape(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.json")
+	if err := os.WriteFile(path, []byte(`{"mcp":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeGraftMCPEntry(path, "opencode", []string{"graft", "mcp"}); err != nil {
+		t.Fatalf("writeGraftMCPEntry: %v", err)
+	}
+
+	assertOpenCodeGraftShape(t, path)
+}
+
+func TestWriteGraftMCPEntry_RepairsLegacyClaudeShape(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.json")
+	legacy := `{"mcp":{"graft":{"command":"graft","args":["mcp"]}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeGraftMCPEntry(path, "opencode", []string{"graft", "mcp"}); err != nil {
+		t.Fatalf("writeGraftMCPEntry: %v", err)
+	}
+
+	assertOpenCodeGraftShape(t, path)
+}
+
+func assertOpenCodeGraftShape(t *testing.T, path string) {
+	t.Helper()
+	root, err := config.ReadJSONC(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpMap, _ := root["mcp"].(map[string]any)
+	got, _ := mcpMap["graft"].(map[string]any)
+	if got["type"] != "local" {
+		t.Errorf("type = %#v, want local", got["type"])
+	}
+	if got["enabled"] != true {
+		t.Errorf("enabled = %#v, want true", got["enabled"])
+	}
+	cmd, ok := got["command"].([]any)
+	if !ok {
+		t.Fatalf("command = %#v, want [graft mcp] array", got["command"])
+	}
+	if len(cmd) != 2 || cmd[0] != "graft" || cmd[1] != "mcp" {
+		t.Errorf("command = %#v, want [graft mcp]", cmd)
+	}
+	if _, hasArgs := got["args"]; hasArgs {
+		t.Errorf("args must not be set on opencode graft entry: %#v", got)
+	}
+}
+
 func TestPlugins_GraftSurfacePresent(t *testing.T) {
 	t.Log("InstallGraftCLI and WireGraftMCP are exported by internal/plugins")
 

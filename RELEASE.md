@@ -2,6 +2,8 @@
 
 **Hacé esto:** `ywai update` → reiniciá OpenCode → `ywai doctor`
 
+Si OpenCode no arranca (`ConfigInvalidError` en `mcp.graft`): el update reescribe el entry al formato de OpenCode (`type: local`, `command` array, `enabled`).
+
 ---
 
 ## Obligatorio — qué cambia para vos
