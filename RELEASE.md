@@ -22,6 +22,11 @@
 | `diks` | Notas de infra en `Infra/wiki` (Obsidian/Zettelkasten) |
 | `i-have-adhd` | Estilo de salida: acción primero, pasos numerados, sin recap |
 | `experiment/infra-docs` + `infra-docsv2` | Agentes primarios para docs DIKS de infra |
+
+## Skills actualizados
+
+| Qué | Qué cambió |
+|---|---|
 | diagnosing-bugs | Redactar secretos + template HITL |
 | tdd | Cuándo mockear + ejemplos buenos y malos |
 
