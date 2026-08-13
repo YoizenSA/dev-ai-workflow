@@ -11,11 +11,11 @@
         "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
       },
       "omp_model_roles": {
-        "advisor": "opencode-admin/grok-4.5",
+        "advisor": "opencode-admin/deepseek-v4-pro",
         "commit": "opencode-admin/deepseek-v4-flash",
         "default": "opencode-admin/deepseek-v4-flash",
         "designer": "opencode-admin/kimi-k3",
-        "plan": "opencode-admin/grok-4.5",
+        "plan": "opencode-admin/deepseek-v4-pro",
         "slow": "deepseek/deepseek-v4-flash",
         "smol": "deepseek/deepseek-v4-flash",
         "task": "deepseek/deepseek-v4-flash",
@@ -24,13 +24,13 @@
       "omp_thinking_level": "auto",
       "agents": {
         "advisor": {
-          "model": "opencode-admin/grok-4.5"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "architect": {
-          "model": "opencode-admin/grok-4.5"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "ask": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "designer": {
           "model": "opencode-admin/kimi-k3"
@@ -45,7 +45,7 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "feature-summary": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "finder": {
           "model": "opencode-admin/deepseek-v4-flash"
@@ -60,7 +60,7 @@
           "model": "opencode-admin/glm-5.2"
         },
         "migration-scope": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "migration-validator": {
           "model": "opencode-admin/glm-5.2"
@@ -69,25 +69,25 @@
           "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
-          "model": "opencode-admin/grok-4.5"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "planner-draft": {
-          "model": "opencode-admin/grok-4.5"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "planner-scout": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "planning": {
-          "model": "opencode-admin/grok-4.5"
+          "model": "opencode-admin/deepseek-v4-pro"
         },
         "qa": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-analyst": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-ask": {
-          "model": "opencode-admin/minimax-m3"
+          "model": "opencode-admin/deepseek-v4-flash"
         },
         "qa-dev": {
           "model": "opencode-admin/deepseek-v4-flash"
