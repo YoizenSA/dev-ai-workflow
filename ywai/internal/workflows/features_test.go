@@ -300,7 +300,7 @@ func TestToolsToPermissions(t *testing.T) {
 			csv:      "read,mcp",
 			defaults: "read",
 			want: map[string]string{
-				"read":        "allow",
+				"read":       "allow",
 				"graft_*":    "allow",
 				"context7_*": "allow",
 			},
