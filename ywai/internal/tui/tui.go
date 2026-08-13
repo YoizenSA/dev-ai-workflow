@@ -135,12 +135,12 @@ var (
 		"global":    "Skills shared across all your projects (~/.local)",
 		"workspace": "Skills only in this project (current directory)",
 	}
-	// Optional gentle-ai SDD (index 0 = off). Persona is never installed.
+	// Optional SDD (index 0 = off). Persona is never installed.
 	sddChoices = []string{"off", "single", "multi"}
 	sddDescs   = map[string]string{
-		"off":    "Do not install gentle-ai SDD (ywai skills still install)",
-		"single": "gentle-ai SDD orchestrator in single-agent mode",
-		"multi":  "gentle-ai SDD orchestrator in multi-agent mode",
+		"off":    "Do not install SDD (ywai skills still install)",
+		"single": "SDD orchestrator in single-agent mode",
+		"multi":  "SDD orchestrator in multi-agent mode",
 	}
 )
 
@@ -164,7 +164,7 @@ type TUIResult struct {
 	Preset          string
 	Scope           string
 	Autostart       bool
-	// Optional gentle-ai SDD (false = skip). Persona is never installed.
+	// Optional SDD (false = skip). Persona is never installed.
 	InstallSDD  bool
 	SDDMode     string // single|multi when InstallSDD
 	GroupFilter agents.GroupFilter
@@ -274,7 +274,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
-			{Name: "Check gentle-ai", Status: "pending"},
+			{Name: "Check ecosystem", Status: "pending"},
 			{Name: "Install ecosystem", Status: "pending"},
 			{Name: "Copy extra skills", Status: "pending"},
 			{Name: "Install agent profiles", Status: "pending"},

@@ -32,7 +32,7 @@
         "prompt": "The feature is implemented. Produce the QA-ready summary of functionality and use cases.",
         "model": "inherit",
         "mode": "subagent",
-        "tools": "read, grep, glob, codegraph_*",
+        "tools": "read, grep, glob, graft_*",
         "sections": "handoff-qa,context-gathering"
       }
     },

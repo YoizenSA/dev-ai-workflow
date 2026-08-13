@@ -697,33 +697,33 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
-		// Install the `codegraph` CLI (CodeGraph from colbymchenry/codegraph).
-		// Non-fatal: if the curl-installer and npm fallback both fail, the user
-		// can run `npm i -g @colbymchenry/codegraph` manually later.
-		fmt.Println("\n  Installing CodeGraph CLI (`codegraph`)...")
-		if err := plugins.InstallCodegraphCLI(); err != nil {
+		// Install the `graft` CLI (Graft from nanonets/graft).
+		// Non-fatal: if npm is missing or the install fails, the user
+		// can run `npm i -g @nanonets/graft` manually later.
+		fmt.Println("\n  Installing Graft CLI (`graft`)...")
+		if err := plugins.InstallGraftCLI(); err != nil {
 			fmt.Printf("  Warning: %v\n", err)
-		} else if v, ok := plugins.CodegraphInfo(); ok {
+		} else if v, ok := plugins.GraftInfo(); ok {
 			if v == "" {
-				fmt.Println("  ✓ codegraph CLI installed (version unknown)")
+				fmt.Println("  ✓ graft CLI installed (version unknown)")
 			} else {
-				fmt.Printf("  ✓ codegraph CLI installed (v%s)\n", v)
+				fmt.Printf("  ✓ graft CLI installed (v%s)\n", v)
 			}
 		}
 
-		// Wire the codegraph MCP server into the agent config by delegating to
-		// codegraph's own installer. codegraph owns its config shape AND its
-		// AGENTS.md marker section — ywai does NOT write either itself.
-		fmt.Println("  Wiring CodeGraph MCP into opencode via `codegraph install`...")
-		if err := plugins.WireCodegraphMCP(); err != nil {
+		// Wire the graft MCP server into the agent config natively
+		// (`graft mcp` entry written by ywai, not `graft init`), so no
+		// instruction files are rewritten unexpectedly.
+		fmt.Println("  Wiring Graft MCP into agent configs...")
+		if err := plugins.WireGraftMCP(); err != nil {
 			fmt.Printf("  Warning: %v\n", err)
 		} else {
-			fmt.Println("  ✓ codegraph MCP wired (opencode)")
+			fmt.Println("  ✓ graft MCP wired")
 		}
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
-		fmt.Println("  Would install CodeGraph CLI (`codegraph`)")
-		fmt.Println("  Would wire CodeGraph MCP into opencode")
+		fmt.Println("  Would install Graft CLI (`graft`)")
+		fmt.Println("  Would wire Graft MCP into opencode")
 	}
 }
 

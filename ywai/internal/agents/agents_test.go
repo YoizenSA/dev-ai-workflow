@@ -605,9 +605,9 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	}
 	// Allow bucket expansions should be present.
 	allowExpansions := map[string]string{
-		`"engram_*": allow`:    "memory",
-		`"codegraph_*": allow`: "mcp",
-		`"context7_*": allow`:  "mcp",
+		`"engram_*": allow`:   "memory",
+		`"graft_*": allow`:    "mcp",
+		`"context7_*": allow`: "mcp",
 	}
 	for pattern, bucket := range allowExpansions {
 		if !strings.Contains(md, pattern) {

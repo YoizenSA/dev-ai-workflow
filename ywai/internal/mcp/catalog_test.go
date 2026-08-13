@@ -21,7 +21,7 @@ import (
 //
 //   context7, microsoft-learn, jam (remote)
 //   chrome-devtools, playwright, git, github*, postgres*, mysql*, docker
-//   engram, codegraph, filesystem
+//   engram, graft, filesystem
 //   brave-search*, puppeteer, codemod
 //
 // Assumptions baked into the tests (anything not pinned here is left to
@@ -89,7 +89,7 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"postgres",
 		"docker",
 		"engram",
-		"codegraph",
+		"graft",
 		"filesystem",
 		"brave-search",
 		"mysql",
@@ -274,7 +274,7 @@ func TestCatalogByID_LocalWithCommand_Playwright(t *testing.T) {
 // TestCatalogByID_GoInstall_Engram pins the go-install path. The
 // engram entry uses `go install` instead of npx; the InstallCmd must
 // reflect that. This is the path that distinguishes the two CLI-style
-// MCP servers (engram, codegraph) from the npm-style ones.
+// MCP servers (engram, graft) from the npm-style ones.
 func TestCatalogByID_GoInstall_Engram(t *testing.T) {
 	entry, ok := CatalogByID("engram")
 	if !ok {

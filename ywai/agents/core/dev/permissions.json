@@ -17,6 +17,6 @@
   "mcp": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "codegraph_*": "allow",
+  "graft_*": "allow",
   "context7_*": "allow"
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // CodegraphInfo, install helpers
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -334,8 +334,8 @@ func startOpencodeServe() {
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install gentle-ai + ecosystem + extra skills",
-	Long:  "Full setup: gentle-ai, ecosystem, extra skills, and optional project init.",
+	Short: "Set up the ywai environment: Engram, skills, profiles, plugins, optional SDD",
+	Long:  "ywai-owned setup: direct Engram, extra skills, agent profiles, plugins/Graft, optional SDD, and project init.",
 	Run: func(cmd *cobra.Command, args []string) {
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -447,14 +447,13 @@ var updateCmd = &cobra.Command{
 need a separate install after updating:
 
   - self-update ywai
-  - upgrade gentle-ai
   - re-seed skills + agent profiles
-  - re-install gentle-ai ecosystem components
   - copy ywai extra skills into detected agents
   - re-install agent profiles + curated AGENTS.md
+  - re-link Engram memory
   - re-wire OpenCode plugins (vision-bridge, background-agents)
   - re-apply TokenBank (refresh models) when it is configured
-  - upgrade companion CLIs (ado, codegraph) via the plugins step
+  - upgrade companion CLIs (ado, graft) via the plugins step
   - restart the control server only if it was already running
 
 Channels:
@@ -483,20 +482,6 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  Would self-update ywai binary.")
 		} else {
 			selfUpdate(beta)
-		}
-
-		// gentle-ai binary is upgraded here; applyManaged skips a second pass
-		// via SkipGentleAIBinary and still runs ecosystem/profiles/plugins.
-		fmt.Println("\n[pre] Upgrading gentle-ai binary...")
-		if dryRun {
-			fmt.Println("  Would install or upgrade gentle-ai.")
-		} else if !gentlai.IsInstalled() {
-			fmt.Println("  gentle-ai not found, installing...")
-			if err := gentlai.Install(); err != nil {
-				fmt.Printf("  Warning: gentle-ai install failed: %v\n", err)
-			}
-		} else if err := gentlai.Upgrade(); err != nil {
-			fmt.Printf("  Warning: gentle-ai upgrade failed: %v\n", err)
 		}
 
 		result := applyManaged(applyOpts{
@@ -570,28 +555,28 @@ var skillsCmd = &cobra.Command{
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Run gentle-ai health check",
-	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, CodeGraph.",
+	Short: "Read-only ecosystem health diagnostics",
+	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, Graft.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := gentlai.Doctor(); err != nil {
 			return err
 		}
-		printCodegraphDoctor()
+		printGraftDoctor()
 		return nil
 	},
 }
 
-// printCodegraphDoctor reports CodeGraph readiness.
-func printCodegraphDoctor() {
+// printGraftDoctor reports Graft readiness.
+func printGraftDoctor() {
 	fmt.Println("\n── ywai fast path ──")
-	if v, ok := plugins.CodegraphInfo(); ok {
+	if v, ok := plugins.GraftInfo(); ok {
 		if v != "" {
-			fmt.Printf("  codegraph: installed (%s)\n", v)
+			fmt.Printf("  graft: installed (%s)\n", v)
 		} else {
-			fmt.Println("  codegraph: installed (version unknown)")
+			fmt.Println("  graft: installed (version unknown)")
 		}
 	} else {
-		fmt.Println("  codegraph: NOT on PATH (run ywai install / install codegraph)")
+		fmt.Println("  graft: NOT on PATH (run ywai install / install graft)")
 	}
 }
 
@@ -838,7 +823,7 @@ var configResetCmd = &cobra.Command{
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show ywai installation status",
-	Long:  "Display information about ywai, gentle-ai, and detected agents",
+	Long:  "Display information about ywai, optional gentle-ai, and detected agents",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("=== ywai Status ===")
 
@@ -851,12 +836,12 @@ var statusCmd = &cobra.Command{
 		// Data directory
 		fmt.Printf("Data dir: %s\n", config.DataDir())
 
-		// gentle-ai status
-		fmt.Println("\n=== gentle-ai ===")
+		// Optional gentle-ai status; ywai does not manage it.
+		fmt.Println("\n=== Optional: gentle-ai ===")
 		if gentlai.IsInstalled() {
-			fmt.Println("Status: Installed")
+			fmt.Println("Status: Installed (optional, unmanaged by ywai)")
 		} else {
-			fmt.Println("Status: Not installed")
+			fmt.Println("Status: Not installed (optional, unmanaged by ywai)")
 		}
 
 		// Detected agents
@@ -1225,10 +1210,10 @@ func init() {
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("ponytail", false, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace")
-	installCmd.Flags().Bool("global", true, "Run gentle-ai from a neutral dir so it does not write into the current project (default true; pass --global explicitly to skip the install TUI)")
-	installCmd.Flags().String("preset", "full-gentleman", "gentle-ai component preset only (ywai skills always install): full-gentleman, ecosystem-only, minimal")
-	installCmd.Flags().String("scope", "", "gentle-ai --scope: global (default) or workspace")
-	installCmd.Flags().String("sdd-mode", "", "Optional gentle-ai SDD: single or multi (omit to skip SDD; persona is never installed)")
+	installCmd.Flags().Bool("global", true, "Install global config only; skip project init (default true; pass --global explicitly to skip the install TUI)")
+	installCmd.Flags().String("preset", "full-gentleman", "ywai component preset: full-gentleman, ecosystem-only, minimal")
+	installCmd.Flags().String("scope", "", "ywai install scope: global (default) or workspace")
+	installCmd.Flags().String("sdd-mode", "", "Optional SDD: single or multi (omit to skip SDD; persona is never installed)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")

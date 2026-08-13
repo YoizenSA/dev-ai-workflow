@@ -74,8 +74,8 @@
         "name": "finder",
         "description": "Codebase exploration. Locates files, symbols and patterns the feature touches.",
         "agentRef": "core/finder",
-        "prompt": "Explore the codebase using codegraph and context7. Report a concise map: affected files, patterns, constraints, risks.",
-        "tools": "read, grep, glob, codegraph_*, context7_*, engram_*",
+        "prompt": "Explore the codebase using graft and context7. Report a concise map: affected files, patterns, constraints, risks.",
+        "tools": "read, grep, glob, graft_*, context7_*, engram_*",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -95,7 +95,7 @@
         "description": "Architecture & design from the finder's map.",
         "agentRef": "core/architect",
         "prompt": "Design the implementation approach from the finder's map: chosen design, trade-offs, acceptance criteria. Then use the `codebase-design` skill to turn it into an implementation plan split into frontend / backend / infrastructure slices the dev agents can pick up independently.\n\nSkills available (use the `skill` tool): adr-skill, codebase-design, improve-codebase-architecture.",
-        "tools": "read, grep, glob, codegraph_*, context7_*, skill",
+        "tools": "read, grep, glob, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -115,7 +115,7 @@
         "description": "UI/UX spec and accessibility review for the approved approach.",
         "agentRef": "core/designer",
         "prompt": "From the architect's technical plan, produce the implementable UI spec for the frontend slice: states (default, hover, focus, active, disabled, loading, empty, error), responsive behaviour per breakpoint, exact design tokens rather than raw hex/px, which existing components to reuse, and the accessibility semantics (roles, accessible names, focus order, what changes announce). Read-only — @frontend implements it. Skip with a one-line note if the feature has no UI.",
-        "tools": "read, grep, glob, codegraph_*, context7_*, skill",
+        "tools": "read, grep, glob, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -159,7 +159,7 @@
         "description": "Frontend development of the approved plan.",
         "agentRef": "core/dev",
         "prompt": "Implement the frontend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): typescript, tailwind-4, git-commit, diagnosing-bugs, tdd.",
-        "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
+        "tools": "read, edit, write, bash, grep, glob, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -179,7 +179,7 @@
         "description": "Backend development of the approved plan.",
         "agentRef": "core/dev",
         "prompt": "Implement the backend portion of the approved plan. Small atomic changes, follow existing patterns.\n\nSkills available (use the `skill` tool): go-testing, git-commit, diagnosing-bugs, codebase-design, tdd.",
-        "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
+        "tools": "read, edit, write, bash, grep, glob, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -199,7 +199,7 @@
         "description": "Infrastructure setup of the approved plan.",
         "agentRef": "core/devops",
         "prompt": "Implement the infrastructure portion of the approved plan (CI, Docker, deploy).\n\nSkills available (use the `skill` tool): devops, docker, git-commit.",
-        "tools": "read, bash, codegraph_*, context7_*, skill",
+        "tools": "read, bash, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -219,7 +219,7 @@
         "description": "Final code review of the implementation and fixes.",
         "agentRef": "core/reviewer",
         "prompt": "Review the implementation and any fixes. Findings by severity with file:line and a fix. State merge-readiness.\n\nSkills available (use the `skill` tool): git-commit.",
-        "tools": "read, grep, glob, bash, codegraph_*, context7_*, engram_*, skill",
+        "tools": "read, grep, glob, bash, graft_*, context7_*, engram_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"

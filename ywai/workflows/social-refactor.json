@@ -100,7 +100,7 @@
         "description": "Implement the migration plan (or remediate findings).",
         "agentRef": "core/dev",
         "prompt": "Implement the migration plan (or remediate the validator's findings). Build to spec, update the tracker, and set plan status: implemented when all files exist.",
-        "tools": "read, edit, write, bash, grep, glob, codegraph_*, context7_*, skill",
+        "tools": "read, edit, write, bash, grep, glob, graft_*, context7_*, skill",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"

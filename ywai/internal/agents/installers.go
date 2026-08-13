@@ -561,7 +561,7 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 var ywaiBucketPatterns = map[string][]string{
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
-	"mcp":      {"codegraph_*", "context7_*"},
+	"mcp":      {"graft_*", "context7_*"},
 	// "delegate" launches an async sub-agent (background-agents plugin); the
 	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
 	// status, peek, steer, stop). Without the glob, an agent whitelisted for
@@ -888,7 +888,7 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 				if _, explicit := profile.Permission[p]; explicit && p != key {
 					continue
 				}
-				// Quote the key: it contains glob/hyphen chars (e.g. codegraph_*).
+				// Quote the key: it contains glob/hyphen chars (e.g. graft_*).
 				b.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
 			}
 			return

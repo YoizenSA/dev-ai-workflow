@@ -34,75 +34,37 @@ type githubRelease struct {
 	TagName string `json:"tag_name"`
 }
 
-// gentleAIBinaryPath resolves the full path to the gentle-ai binary.
-// It checks PATH first, then falls back to known install locations
-// (~/.local/bin, ~/go/bin, ~/.bin) where the release binary may have
-// been placed by installGentleAIReleaseBinaryFirstTime when Go was
-// not available. This is critical on Windows where ~/.local/bin is
-// typically not in PATH.
-func gentleAIBinaryPath() string {
-	if path, err := exec.LookPath(config.GentleAIBin); err == nil {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	exeName := config.GentleAIBin
-	if runtime.GOOS == "windows" {
-		exeName += ".exe"
-	}
-	for _, dir := range []string{
-		filepath.Join(home, ".local", "bin"),
-		filepath.Join(home, "go", "bin"),
-		filepath.Join(home, ".bin"),
-	} {
-		candidate := filepath.Join(dir, exeName)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate
-		}
-	}
-	return ""
-}
-
 func IsInstalled() bool {
-	return gentleAIBinaryPath() != ""
+	return findBinary(config.GentleAIBin) != ""
 }
 
 // Install installs gentle-ai only when it is missing. Upgrading an existing
 // install is `ywai update`'s job (it calls Upgrade explicitly), so `ywai
 // install` never moves a working gentle-ai version underneath the user.
+// Install no longer provisions the gentle-ai binary. The gentle-ai binary is
+// optional for ywai: engram is installed through ywai's own release path
+// (InstallEngram) and skills/profiles/plugins are applied by the ywai
+// pipeline. This is the slice-1 decoupling contract: ywai install must never
+// install gentle-ai.
 func Install() error {
 	if IsInstalled() {
 		if version := CurrentVersion(); version != "" {
-			fmt.Printf("gentle-ai already installed (%s) — run `ywai update` to upgrade it.\n", version)
+			fmt.Printf("gentle-ai already installed (%s) — ywai does not manage it.\n", version)
 		} else {
-			fmt.Println("gentle-ai already installed — run `ywai update` to upgrade it.")
+			fmt.Println("gentle-ai already installed — ywai does not manage it.")
 		}
 		return nil
 	}
-
-	// Prefer go install when Go is available.
-	_, err := exec.LookPath("go")
-	if err == nil {
-		fmt.Println("Installing gentle-ai...")
-		cmd := exec.Command("go", "install", "github.com/Gentleman-Programming/gentle-ai/cmd/gentle-ai@latest")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to install gentle-ai: %w", err)
-		}
-		fmt.Println("gentle-ai installed successfully.")
-		return nil
-	}
-
-	// Fallback: download pre-built release binary.
-	fmt.Println("Go not found. Downloading pre-built gentle-ai binary...")
-	if err := installGentleAIReleaseBinaryFirstTime(); err != nil {
-		return fmt.Errorf("failed to install gentle-ai: %w", err)
-	}
-	fmt.Println("gentle-ai installed successfully.")
+	fmt.Println("gentle-ai is not installed; ywai no longer installs it.")
 	return nil
+}
+
+// InstallEngram installs the engram binary through ywai's own manual release
+// path (installEngramReleaseBinary) and returns the directory it was
+// installed into. It never invokes the gentle-ai binary. Slice 1 contract:
+// ywai installs engram itself for non-minimal presets.
+func InstallEngram() (string, error) {
+	return installEngramReleaseBinary()
 }
 
 // InstallOptions holds all configurable options for gentle-ai install.
@@ -162,86 +124,32 @@ func (p ComponentPlan) AllComponents() []string {
 }
 
 func InstallEcosystem(opts InstallOptions) error {
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed. Run install first.")
-	}
-
 	plan := PlanForPreset(opts.Preset)
 
-	// engram is installed via Homebrew by gentle-ai. On machines without a C
-	// compiler (and without Go) the bottle build fails, which would abort the
-	// whole multi-component install. Install engram on its own so a failure
-	// there never blocks the other components, and fall back to a prebuilt
-	// release binary when gentle-ai cannot install it.
-	var extraEnv []string
-	if plan.IncludeEngram && !opts.DryRun {
-		if err := installEngramComponent(opts); err != nil {
-			fmt.Printf("  Warning: engram install via gentle-ai failed: %v\n", err)
-			installDir, ferr := installEngramReleaseBinary()
-			if ferr != nil {
-				fmt.Printf("  Warning: engram prebuilt-binary fallback failed: %v\n", ferr)
-			} else {
-				fmt.Println("  engram installed from prebuilt release binary.")
-				extraEnv = pathEnvWith(installDir)
-				// Retry the engram component now that the binary exists so
-				// gentle-ai can wire up the engram MCP config without brew.
-				if rerr := installEngramComponent(opts, extraEnv...); rerr != nil {
-					fmt.Printf("  Warning: engram MCP wiring still failed: %v\n", rerr)
-				}
+	// Slice 1 decoupling: engram is installed through ywai's own release
+	// path, never via `gentle-ai install`. The gentle-ai ecosystem
+	// components (skills/context7/permissions) have no ywai-native
+	// replacement in this slice — context7 is out of scope and skills are
+	// seeded by the apply pipeline — so they are reported and skipped
+	// rather than delegated to the gentle-ai binary.
+	if plan.IncludeEngram {
+		if opts.DryRun {
+			fmt.Println("  Would install engram (ywai release path).")
+		} else {
+			installDir, err := InstallEngram()
+			if err != nil {
+				return fmt.Errorf("failed to install engram: %w", err)
 			}
-		}
-	} else if plan.IncludeEngram && opts.DryRun {
-		fmt.Println("  Would install gentle-ai component: engram")
-	}
-
-	if len(plan.Ecosystem) == 0 {
-		if plan.IncludeEngram {
+			fmt.Printf("  Engram installed into %s\n", installDir)
 			UpgradeEngram()
 		}
-		return nil
 	}
 
-	// Install the remaining components together.
-	args := opts.buildArgs(plan.Ecosystem)
-	fmt.Printf("Running gentle-ai install --agent %s (%d components, preset %q)...\n",
-		opts.AgentName, len(plan.Ecosystem), opts.effectivePreset())
-	cmd := exec.Command(gentleAIBinaryPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if opts.WorkDir != "" {
-		cmd.Dir = opts.WorkDir
-	}
-	if len(extraEnv) > 0 {
-		cmd.Env = extraEnv
-	}
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	if plan.IncludeEngram {
-		UpgradeEngram()
+	if len(plan.Ecosystem) > 0 {
+		fmt.Printf("  Skipping gentle-ai ecosystem components [%s] — decoupled; ywai-native replacements land in later slices.\n",
+			strings.Join(plan.Ecosystem, ", "))
 	}
 	return nil
-}
-
-// installEngramComponent runs `gentle-ai install --component engram` in
-// isolation. extraEnv, when provided, replaces the subprocess environment
-// (used to inject a PATH that includes a freshly downloaded engram binary).
-func installEngramComponent(opts InstallOptions, extraEnv ...string) error {
-	args := opts.buildArgs([]string{"engram"})
-	fmt.Printf("Running gentle-ai install --agent %s --component engram...\n", opts.AgentName)
-	cmd := exec.Command(gentleAIBinaryPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if opts.WorkDir != "" {
-		cmd.Dir = opts.WorkDir
-	}
-	if len(extraEnv) > 0 {
-		cmd.Env = extraEnv
-	}
-	return cmd.Run()
 }
 
 // ecosystemComponents are gentle-ai components except engram (installed
@@ -314,29 +222,16 @@ func InstallOptionalComponents(opts InstallOptions) error {
 	if !opts.HasOptionalComponents() {
 		return nil
 	}
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed. Run install first.")
-	}
 
 	comps := opts.optionalComponents()
-	args := opts.buildArgs(comps)
-	args = append(args, "--sdd-mode", opts.EffectiveSDDMode())
-
-	fmt.Printf("Running gentle-ai install --agent %s (optional: %s)...\n",
-		opts.AgentName, strings.Join(comps, ", "))
+	// Slice 1 decoupling: optional components (SDD) are not delegated to
+	// `gentle-ai install`; a ywai-native SDD flow lands in a later slice.
+	fmt.Printf("Skipping optional gentle-ai components [%s] — decoupled; ywai-native SDD lands in a later slice.\n",
+		strings.Join(comps, ", "))
 	if opts.DryRun {
-		fmt.Printf("  Would run: gentle-ai %s\n", strings.Join(args, " "))
 		return nil
 	}
-
-	cmd := exec.Command(gentleAIBinaryPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if opts.WorkDir != "" {
-		cmd.Dir = opts.WorkDir
-	}
-	return cmd.Run()
+	return nil
 }
 
 func UpgradeEngram() {
@@ -378,58 +273,49 @@ func UpgradeEngram() {
 	}
 }
 
+// Upgrade no longer shells out to the gentle-ai binary. Slice 1 contract:
+// `ywai update` must not run `gentle-ai upgrade`. It preserves only the
+// ywai/engram-owned behavior — refreshing the engram binary when an update
+// is available.
 func Upgrade() error {
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed")
+	UpgradeEngram()
+	return nil
+}
+
+// Doctor runs ywai-native health checks. Slice 1 contract: it must not
+// require the gentle-ai binary and must not depend on .gentle-ai paths.
+// It reports on ywai data locations and the tool binaries ywai works with;
+// gentle-ai is optional and its absence is not an error.
+func Doctor() error {
+	fmt.Println("Running ywai health checks...")
+
+	if _, err := os.Stat(config.DataDir()); err == nil {
+		fmt.Printf("  [ok]  ywai:data-dir          %s\n", config.DataDir())
+	} else {
+		fmt.Printf("  [warn] ywai:data-dir          %s missing (run `ywai install`)\n", config.DataDir())
 	}
 
-	beforeVersion := CurrentVersion()
-	fmt.Println("Upgrading gentle-ai...")
-	cmd := exec.Command(gentleAIBinaryPath(), "upgrade")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	upgradeErr := cmd.Run()
-
-	// gentle-ai intentionally reports "manual update required" for some Windows
-	// install methods while still exiting successfully. ywai owns the one-command
-	// update experience, so close that gap by replacing the resolved .exe with
-	// the latest release binary when the version did not change.
-	if runtime.GOOS == "windows" {
-		if err := ensureLatestWindowsBinary(beforeVersion); err != nil {
-			if upgradeErr != nil {
-				return fmt.Errorf("%v; direct Windows update also failed: %w", upgradeErr, err)
-			}
-			return err
+	for _, bin := range []string{"git", "go", "graft", "node", "npm", engramBin} {
+		if _, err := exec.LookPath(bin); err == nil {
+			fmt.Printf("  [ok]  %-22s found\n", bin)
+		} else {
+			fmt.Printf("  [warn] %-22s not found\n", bin)
 		}
 	}
 
-	return upgradeErr
-}
-
-// Doctor runs gentle-ai doctor for a read-only health check.
-func Doctor() error {
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed")
+	// gentle-ai is optional for ywai; report, never fail.
+	if _, err := exec.LookPath(config.GentleAIBin); err == nil {
+		fmt.Println("  [ok]  gentle-ai               found (optional)")
+	} else {
+		fmt.Println("  [info] gentle-ai               not found (optional; ywai does not require it)")
 	}
-	cmd := exec.Command(gentleAIBinaryPath(), "doctor")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	return nil
 }
 
-// SkillRegistryRefresh runs gentle-ai skill-registry refresh.
+// SkillRegistryRefresh is a no-op: it never resolves or executes gentle-ai.
 func SkillRegistryRefresh(cwd string) error {
-	if !IsInstalled() {
-		return fmt.Errorf("gentle-ai is not installed")
-	}
-	args := []string{"skill-registry", "refresh"}
-	if cwd != "" {
-		args = append(args, "--cwd", cwd)
-	}
-	cmd := exec.Command(gentleAIBinaryPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return nil
 }
 
 func findBinary(name string) string {
@@ -447,16 +333,6 @@ func findBinary(name string) string {
 }
 
 func CurrentVersion() string {
-	for _, args := range [][]string{{"--version"}, {"version"}} {
-		cmd := exec.Command(gentleAIBinaryPath(), args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil && len(out) == 0 {
-			continue
-		}
-		if version := parseVersion(string(out)); version != "" {
-			return version
-		}
-	}
 	return ""
 }
 
@@ -467,40 +343,6 @@ func parseVersion(output string) string {
 
 func normalizeVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimSpace(version), "v")
-}
-
-func ensureLatestWindowsBinary(beforeVersion string) error {
-	latest, err := latestGentleAIRelease()
-	if err != nil {
-		return fmt.Errorf("failed to check latest gentle-ai release: %w", err)
-	}
-
-	afterVersion := CurrentVersion()
-	if normalizeVersion(afterVersion) == normalizeVersion(latest) {
-		if beforeVersion != "" && normalizeVersion(beforeVersion) != normalizeVersion(afterVersion) {
-			fmt.Printf("  gentle-ai updated: %s → %s\n", beforeVersion, afterVersion)
-		}
-		return nil
-	}
-
-	currentLabel := afterVersion
-	if currentLabel == "" {
-		currentLabel = "unknown"
-	}
-	fmt.Printf("  gentle-ai is still %s after upstream upgrade; installing release binary %s...\n", currentLabel, latest)
-
-	if err := installGentleAIReleaseBinary(latest); err != nil {
-		return err
-	}
-
-	finalVersion := CurrentVersion()
-	if normalizeVersion(finalVersion) != normalizeVersion(latest) {
-		resolved := findBinary(config.GentleAIBin)
-		return fmt.Errorf("installed gentle-ai %s, but PATH still resolves %q as version %q", latest, resolved, finalVersion)
-	}
-
-	fmt.Printf("  gentle-ai updated: %s → %s\n", currentLabel, finalVersion)
-	return nil
 }
 
 // latestRelease returns the tag name of the latest GitHub release for the given
@@ -536,64 +378,6 @@ func latestRelease(owner, repo string) (string, error) {
 	return release.TagName, nil
 }
 
-func latestGentleAIRelease() (string, error) {
-	return latestRelease(gentleAIOwner, gentleAIRepo)
-}
-
-func installGentleAIReleaseBinary(version string) error {
-	target := findBinary(config.GentleAIBin)
-	if target == "" {
-		return fmt.Errorf("gentle-ai binary not found in PATH")
-	}
-
-	if isScoopShim(target) {
-		fmt.Println("  Detected Scoop-managed gentle-ai; running scoop update gentle-ai...")
-		return runCommand("scoop", "update", config.GentleAIBin)
-	}
-
-	lowerTarget := strings.ToLower(target)
-	if strings.HasSuffix(lowerTarget, ".ps1") || strings.HasSuffix(lowerTarget, ".cmd") || strings.HasSuffix(lowerTarget, ".bat") {
-		return fmt.Errorf("resolved gentle-ai is a shim (%s); use the official installer or package manager for that install method", target)
-	}
-
-	archiveName := assetName(config.GentleAIBin, version)
-	downloadURL := fmt.Sprintf(
-		"https://github.com/%s/%s/releases/download/%s/%s",
-		gentleAIOwner,
-		gentleAIRepo,
-		version,
-		archiveName,
-	)
-
-	tmpDir, err := os.MkdirTemp("", "gentle-ai-update-*")
-	if err != nil {
-		return fmt.Errorf("cannot create temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	archivePath := filepath.Join(tmpDir, archiveName)
-	fmt.Printf("  Downloading %s...\n", downloadURL)
-	if err := downloadFile(downloadURL, archivePath); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-
-	binaryPath, err := extractNamedBinary(archivePath, tmpDir, config.GentleAIBin)
-	if err != nil {
-		return fmt.Errorf("extract failed: %w", err)
-	}
-
-	if err := replaceBinary(target, binaryPath); err != nil {
-		return fmt.Errorf("replace failed: %w", err)
-	}
-
-	return nil
-}
-
-func isScoopShim(path string) bool {
-	normalized := strings.ReplaceAll(strings.ToLower(filepath.Clean(path)), "\\", "/")
-	return strings.Contains(normalized, "/scoop/shims/")
-}
-
 // assetName builds the release archive name for a binary following the
 // "{bin}_{version}_{os}_{arch}.{ext}" convention shared by gentle-ai and engram.
 func assetName(binName, version string) string {
@@ -625,102 +409,6 @@ func downloadFile(url, dest string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	return err
-}
-
-// installGentleAIReleaseBinaryFirstTime downloads the latest release binary
-// to a user-local bin directory (~/.local/bin or ~/go/bin) when Go is not available.
-func installGentleAIReleaseBinaryFirstTime() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("cannot determine home directory: %w", err)
-	}
-
-	// Pick a writable install directory.
-	var installDir string
-	for _, dir := range []string{
-		filepath.Join(home, ".local", "bin"),
-		filepath.Join(home, "go", "bin"),
-		filepath.Join(home, ".bin"),
-	} {
-		if err := os.MkdirAll(dir, 0o755); err == nil {
-			installDir = dir
-			break
-		}
-	}
-	if installDir == "" {
-		return fmt.Errorf("no writable bin directory found in home")
-	}
-
-	version, err := latestGentleAIRelease()
-	if err != nil {
-		return fmt.Errorf("failed to check latest release: %w", err)
-	}
-
-	archiveName := assetName(config.GentleAIBin, version)
-	downloadURL := fmt.Sprintf(
-		"https://github.com/%s/%s/releases/download/%s/%s",
-		gentleAIOwner,
-		gentleAIRepo,
-		version,
-		archiveName,
-	)
-
-	tmpDir, err := os.MkdirTemp("", "gentle-ai-install-*")
-	if err != nil {
-		return fmt.Errorf("cannot create temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	archivePath := filepath.Join(tmpDir, archiveName)
-	fmt.Printf("  Downloading %s...\n", downloadURL)
-	if err := downloadFile(downloadURL, archivePath); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-
-	binaryPath, err := extractNamedBinary(archivePath, tmpDir, config.GentleAIBin)
-	if err != nil {
-		return fmt.Errorf("extract failed: %w", err)
-	}
-
-	if err := os.Chmod(binaryPath, 0o755); err != nil {
-		return err
-	}
-
-	target := filepath.Join(installDir, config.GentleAIBin)
-	if err := os.Rename(binaryPath, target); err != nil {
-		return fmt.Errorf("cannot move binary into place: %w", err)
-	}
-
-	fmt.Printf("  Installed to %s\n", target)
-
-	// Warn if the install directory is not in PATH.
-	pathEnv := os.Getenv("PATH")
-	if !strings.Contains(pathEnv, installDir) {
-		fmt.Printf("  Warning: %s is not in your PATH. Add it or restart your shell.\n", installDir)
-	}
-
-	return nil
-}
-
-func replaceBinary(target, replacement string) error {
-	if err := os.Chmod(replacement, 0o755); err != nil {
-		return err
-	}
-
-	backup := target + ".bak"
-	_ = os.Remove(backup)
-
-	if err := os.Rename(target, backup); err != nil {
-		return fmt.Errorf("cannot backup old binary: %w", err)
-	}
-
-	if err := os.Rename(replacement, target); err != nil {
-		_ = os.Rename(backup, target)
-		return fmt.Errorf("cannot move new binary into place: %w", err)
-	}
-
-	_ = os.Remove(backup)
-	return nil
 }
 
 func runCommand(name string, args ...string) error {

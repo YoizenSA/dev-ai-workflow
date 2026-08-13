@@ -1,6 +1,6 @@
 # AGENTS.md
 
-ywai-managed instructions. Scope is limited to two concerns: **Engram memory** and **sub-agent strategy**. Persona, SDD, skill catalogs, review hooks, and CodeGraph own their own surfaces — do not add them here.
+ywai-managed instructions. Scope is limited to two concerns: **Engram memory** and **sub-agent strategy**. Persona, SDD, skill catalogs, review hooks, and Graft own their own surfaces — do not add them here.
 
 ## Engram Persistent Memory
 

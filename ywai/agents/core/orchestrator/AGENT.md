@@ -55,7 +55,7 @@ Announce once per task (user-visible, short): `mode: <solo|thin|full> · risk: <
 
 Act as a single agent: search, edit, verify yourself. **Zero** `task`/`delegate` unless you must escalate.
 
-- Prefer codegraph → grep/glob → ranged reads. Batch independent tools.
+- Prefer graft → grep/glob → ranged reads. Batch independent tools.
 - Local `git commit` OK when the user wants the fix landed; **no** `git push` unless the user explicitly asks.
 - Skip SCOUT/PLAN/REVIEW ceremony. Apply **risk** gates below if risk is not low.
 

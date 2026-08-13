@@ -19,7 +19,7 @@ Report absolute paths with line numbers and one line on what each hit is, so the
 ## Search strategy (latency = turns)
 
 - **Batch** independent greps/reads in one turn. One tool per turn is the failure mode.
-- **CodeGraph first**, grep second. `codegraph_explore` is often enough.
+- **Graft first**, grep second. `graft_find_code` is often enough.
 - **Outline / slice** before full-file read. Dump whole files only when you need most of them.
 - **Stop** when the question is answered.
 

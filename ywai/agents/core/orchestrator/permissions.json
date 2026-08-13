@@ -15,7 +15,7 @@
   "delegate": "allow",
   "question": "allow",
   "skill": "allow",
-  "codegraph_*": "allow",
+  "graft_*": "allow",
   "memory": "allow",
   "intercom": "allow",
   "mcp": "allow"

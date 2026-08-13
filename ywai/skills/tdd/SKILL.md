@@ -13,6 +13,8 @@ A discipline for writing code test-first. Two roles share it: `@qa` writes faili
 
 A test is a spec: `it('user can checkout with a valid cart')` tells you a capability exists. Test the behavior the public interface promises, not how it's built. The warning sign is coupling — if renaming a private function breaks a test without any behavior changing, that test was wired to the implementation. Rewrite it to go through the public interface.
 
+See [tests.md](tests.md) for good/bad test examples and [mocking.md](mocking.md) for mocking guidelines — mock at system boundaries only, never your own modules.
+
 ## Red → Green → Refactor
 
 One loop, three beats. Each beat earns the next.
@@ -66,6 +68,7 @@ Run this against each test before moving to the next slice.
 [ ] Test describes behavior, not implementation
 [ ] Test uses the public interface only
 [ ] Test would survive an internal refactor
+[ ] Expected values are independent (known literals), not recomputed the way the code does
 [ ] Code is minimal for this test
 [ ] No speculative features added
 ```

@@ -17,7 +17,7 @@
   "mcp": "allow",
   "memory": "allow",
   "intercom": "deny",
-  "codegraph_*": "allow",
+  "graft_*": "allow",
   "context7_*": "allow",
   "engram_mem_save": "deny",
   "engram_mem_save_prompt": "deny",

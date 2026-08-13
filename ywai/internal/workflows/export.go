@@ -487,7 +487,7 @@ const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
 // Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
-// Coarse buckets (mcp, memory, delegate, codegraph, context7) are
+// Coarse buckets (mcp, memory, delegate, graft, context7) are
 // expanded to opencode-native wildcards via ExpandPermissionBuckets so they
 // actually gate the underlying tools.
 func toolsToPermissions(csv, defaults string) map[string]string {

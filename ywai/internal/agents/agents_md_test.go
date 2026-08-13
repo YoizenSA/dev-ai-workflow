@@ -40,7 +40,7 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 // codegraph install writes its own AGENTS.md marker section (see
 // plugins.WireCodegraphMCP). ywai must not author that surface too, or the two
 // installers fight over the same block.
-func TestWriteAgentsMd_LeavesCodegraphToItsOwnInstaller(t *testing.T) {
+func TestWriteAgentsMd_LeavesGraftToItsOwnInstaller(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "AGENTS.md")
 	if err := WriteAgentsMd(path); err != nil {
@@ -54,7 +54,7 @@ func TestWriteAgentsMd_LeavesCodegraphToItsOwnInstaller(t *testing.T) {
 
 	for _, forbidden := range []string{"CODEGRAPH_START", "CODEGRAPH_END", "codegraph_explore"} {
 		if strings.Contains(string(got), forbidden) {
-			t.Errorf("AGENTS.md must not contain %q — codegraph owns that section", forbidden)
+			t.Errorf("AGENTS.md must not contain %q — graft owns that section", forbidden)
 		}
 	}
 }
