@@ -187,6 +187,37 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		}
 	}
 	summarizeAgents(dryRun, "gentle-ai ecosystem", done)
+
+	if !gentlai.PlanForPreset(opts.Preset).IncludeEngram {
+		return
+	}
+	hosts := engramMCPHostNames(agents)
+	if dryRun {
+		if len(hosts) > 0 {
+			fmt.Printf("  Would wire engram MCP for %s\n", strings.Join(hosts, ", "))
+		}
+		return
+	}
+	if len(hosts) == 0 {
+		return
+	}
+	fmt.Println("  Wiring Engram MCP into agent configs...")
+	if err := plugins.WireEngramMCP(hosts); err != nil {
+		fmt.Printf("  Warning: %v\n", err)
+		return
+	}
+	fmt.Printf("  ✓ engram MCP wired for %s\n", strings.Join(hosts, ", "))
+}
+
+func engramMCPHostNames(agents []agent.Agent) []string {
+	var hosts []string
+	for _, a := range agents {
+		switch a.Name {
+		case "opencode", "pi", "omp", "claude-code":
+			hosts = append(hosts, a.Name)
+		}
+	}
+	return hosts
 }
 
 // summarizeAgents prints one line per phase instead of chattering per agent.

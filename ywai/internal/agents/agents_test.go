@@ -2091,9 +2091,9 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 		Prompt:      "# Orchestrator",
 		Mode:        "primary",
 		Permission: map[string]string{
-			"read":     "deny",
-			"mcp":      "allow",
-			"graft_*":  "deny",
+			"read":    "deny",
+			"mcp":     "allow",
+			"graft_*": "deny",
 		},
 	}
 

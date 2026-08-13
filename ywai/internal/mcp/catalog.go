@@ -143,9 +143,9 @@ var catalog = []CatalogEntry{
 		Description: "Persistent memory for AI sessions: save, search, and recall past decisions",
 		Category:    "memory", Icon: "🧠", Popular: true,
 		Type: "local", Command: []string{"engram", "mcp"},
-		InstallCmd: "go install github.com/nahuelyoizen/engram/cmd/engram@latest",
+		InstallCmd: "go install github.com/Gentleman-Programming/engram/cmd/engram@latest",
 		Tools:      []string{"mem_search", "mem_save", "mem_get", "mem_context"},
-		Docs:       "https://github.com/nahuelyoizen/engram",
+		Docs:       "https://github.com/Gentleman-Programming/engram",
 	},
 	{
 		ID: "graft", Name: "Graft",

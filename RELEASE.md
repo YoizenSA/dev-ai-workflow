@@ -1,13 +1,15 @@
 # ywai — release note
 
-**Hacé esto:** `ywai update`
+**Hacé esto:** `ywai update` → reiniciá OpenCode → `ywai doctor`
+
 ---
 
 ## Obligatorio — qué cambia para vos
 
 1. **Vision-bridge ahora corre.** Las imágenes en modelos sin visión se describen. El `attachment: false` de la config gana sobre el catálogo.
 2. **CodeGraph se fue. Graft es el indexador.** Los MCP `codegraph` que quedaron se limpian en install/update.
-3. **`ywai` ya no instala ni actualiza gentle-ai.** Gestiona Engram, skills, perfiles, plugins y Graft.
+   Por qué Graft: local, $0, sin API key; grafo exacto (file:line + callers); determinístico y versionado con git.
+3. **`ywai` instala y configura Engram.** Ya no toca gentle-ai. Baja el binario de Gentleman-Programming/engram y escribe el MCP en opencode, pi, omp y claude-code (si los tenés). En opencode y pi también corre `engram setup`.
 4. **`ywai update` limpia la cache de plugins de OpenCode** (statusline, ponytail, ADO/quota retirados) para resolver la última versión publicada.
 5. **`ywai install` arranca el control server** si está apagado (`serve --background --no-update`). `--dry-run` no lo arranca.
 

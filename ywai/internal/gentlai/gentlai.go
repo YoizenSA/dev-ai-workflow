@@ -20,9 +20,6 @@ import (
 )
 
 const (
-	gentleAIOwner = "Gentleman-Programming"
-	gentleAIRepo  = "gentle-ai"
-
 	engramOwner = "Gentleman-Programming"
 	engramRepo  = "engram"
 	engramBin   = "engram"
@@ -165,13 +162,6 @@ func (o InstallOptions) effectiveScope() string {
 		return "global"
 	}
 	return o.Scope
-}
-
-func (o InstallOptions) effectivePreset() string {
-	if strings.TrimSpace(o.Preset) == "" {
-		return "full-gentleman"
-	}
-	return o.Preset
 }
 
 func (o InstallOptions) buildArgs(components []string) []string {
@@ -436,29 +426,6 @@ func runCommand(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-// pathEnvWith returns a copy of the current environment with dir prepended to
-// PATH, so a freshly downloaded binary in dir is found by child processes.
-func pathEnvWith(dir string) []string {
-	if dir == "" {
-		return os.Environ()
-	}
-	env := os.Environ()
-	out := make([]string, 0, len(env))
-	replaced := false
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			out = append(out, "PATH="+dir+string(os.PathListSeparator)+strings.TrimPrefix(kv, "PATH="))
-			replaced = true
-			continue
-		}
-		out = append(out, kv)
-	}
-	if !replaced {
-		out = append(out, "PATH="+dir)
-	}
-	return out
 }
 
 func latestEngramRelease() (string, error) {
