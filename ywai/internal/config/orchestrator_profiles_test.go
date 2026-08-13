@@ -11,8 +11,8 @@ import (
 func TestDefaultOrchestratorModelProfiles_SeedsThreeProfiles(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 
-	if len(profiles) != 3 {
-		t.Fatalf("expected exactly 3 seeded orchestrator profiles, got %d", len(profiles))
+	if len(profiles) != 4 {
+		t.Fatalf("expected 4 seeded orchestrator profiles, got %d", len(profiles))
 	}
 
 	for _, name := range []string{"balanced", "fast", "deep"} {
@@ -28,6 +28,26 @@ func TestDefaultOrchestratorModelProfiles_SeedsThreeProfiles(t *testing.T) {
 			if profile.Agents[agent].Model == "" {
 				t.Fatalf("expected profile %q to define a model for agent %q", name, agent)
 			}
+		}
+	}
+}
+
+func TestInheritProfileHasNoPinnedModels(t *testing.T) {
+	p, ok := DefaultOrchestratorModelProfiles()["inherit"]
+	if !ok {
+		t.Fatal("expected shipped profile inherit")
+	}
+	if p.DisplayName == "" {
+		t.Fatal("inherit needs a display name")
+	}
+	for name, rd := range p.Agents {
+		if strings.TrimSpace(rd.Model) != "" {
+			t.Errorf("inherit must not pin %s to %q", name, rd.Model)
+		}
+	}
+	for role, model := range p.OmpModelRoles {
+		if strings.TrimSpace(model) != "" {
+			t.Errorf("inherit must not pin omp role %s to %q", role, model)
 		}
 	}
 }
@@ -194,7 +214,7 @@ func TestShippedProfilesMergeUserOverrides_NewAgentsAppear(t *testing.T) {
 }
 
 func TestIsShippedProfile(t *testing.T) {
-	for _, name := range []string{"balanced", "fast", "deep"} {
+	for _, name := range []string{"balanced", "fast", "deep", "inherit"} {
 		if !IsShippedProfile(name) {
 			t.Errorf("%s is shipped and gets overwritten — the UI needs to say so", name)
 		}

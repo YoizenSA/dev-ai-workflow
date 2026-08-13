@@ -149,6 +149,7 @@ func TestRemoveRetiredMCPs_RemovesAllAndReports(t *testing.T) {
 			"ywai-kanban": map[string]any{"type": "local", "enabled": true},
 			"ywai-fastfs": map[string]any{"type": "local", "enabled": true},
 			"codegraph":   map[string]any{"type": "local", "enabled": true},
+			"graft":       map[string]any{"type": "local", "enabled": true},
 		},
 		"model": "provider/model",
 	})
@@ -157,8 +158,8 @@ func TestRemoveRetiredMCPs_RemovesAllAndReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveRetiredMCPs() error = %v", err)
 	}
-	if len(removed) != 2 {
-		t.Fatalf("removed = %v, want both retired servers", removed)
+	if len(removed) != 3 {
+		t.Fatalf("removed = %v, want all retired servers", removed)
 	}
 
 	root := readConfigRoot(t, path)
@@ -169,7 +170,10 @@ func TestRemoveRetiredMCPs_RemovesAllAndReports(t *testing.T) {
 	if _, still := mcp["ywai-kanban"]; still {
 		t.Error("ywai-kanban survived")
 	}
-	if _, ok := mcp["codegraph"]; !ok {
+	if _, still := mcp["codegraph"]; still {
+		t.Error("codegraph survived — replaced by graft, must be swept")
+	}
+	if _, ok := mcp["graft"]; !ok {
 		t.Error("a live MCP server must not be collateral damage")
 	}
 	if root["model"] != "provider/model" {
@@ -181,7 +185,7 @@ func TestRemoveRetiredMCPs_RemovesAllAndReports(t *testing.T) {
 // on every install churns the user's config and its formatting for no reason.
 func TestRemoveRetiredMCPs_NoOpWhenClean(t *testing.T) {
 	path := writeAgentConfig(t, "opencode.json", map[string]any{
-		"mcp": map[string]any{"codegraph": map[string]any{"enabled": true}},
+		"mcp": map[string]any{"graft": map[string]any{"enabled": true}},
 	})
 
 	removed, err := RemoveRetiredMCPs(path, "opencode")

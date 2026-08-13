@@ -95,6 +95,48 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	}
 }
 
+func TestCopyToBundlesLearnYwaiDocs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+
+	repoSkillsDir := filepath.Join(repo, "skills")
+	writeSkill(t, repoSkillsDir, "learn-ywai", true)
+
+	page := filepath.Join(repo, "docs", "src", "content", "docs", "getting-started", "index.mdx")
+	if err := os.MkdirAll(filepath.Dir(page), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(page, []byte("# Primeros pasos\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
+	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatalf("CopyTo: %v", err)
+	}
+
+	got := filepath.Join(agentSkillsDir, "learn-ywai", "references", "docs", "getting-started", "index.mdx")
+	data, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatalf("bundled doc missing: %v", err)
+	}
+	if string(data) != "# Primeros pasos\n" {
+		t.Fatalf("bundled doc = %q", data)
+	}
+}
+
 func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

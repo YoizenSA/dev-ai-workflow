@@ -7,25 +7,34 @@ import { Card, Aside } from '@astrojs/starlight/components';
 
 # Comandos CLI
 
+ywai instala y actualiza **su propio** entorno: Engram, skills, perfiles, plugins y Graft. No instala ni actualiza gentle-ai.
+
 ## Quick reference
 
 | Comando | Qué hace | Cuándo usarlo |
 |---|---|---|
-| `ywai install` | Instala agentes + skills + config | Primera vez |
-| `ywai update` | Actualiza gentle-ai + skills | Después de actualizar |
-| `ywai upgrade` | Actualiza el binario de ywai | Nueva versión de ywai |
-| `ywai doctor` | Verifica la instalación | Si algo no funciona |
-| `ywai skills` | Lista skills disponibles | Ver qué hay instalado |
+| `ywai install` | Engram, skills, perfiles, plugins/Graft, SDD opcional | Primera vez |
+| `ywai update` | Binario + re-aplica todo lo que ywai gestiona | Después de una release |
+| `ywai upgrade` | Solo el binario de ywai | Si no querés re-aplicar perfiles |
+| `ywai doctor` | Diagnóstico de solo lectura | Si algo no funciona |
+| `ywai skills` | Lista skills extra | Ver qué hay instalado |
 | `ywai agents` | Lista agentes detectados | Verificar configuración |
 | `ywai skill-registry` | Refresca registro de skills | Después de modificar skills |
 | `ywai kanban` | Abre el tablero visual | Monitorear agentes |
 | `ywai serve` | Inicia servidor como servicio | Servidor always-on |
+| `ywai mcp list` | Lista MCP en opencode.json | Ver qué está on/off |
+| `ywai mcp enable/disable <id>` | Activa o desactiva un MCP instalado | Sin desinstalar |
+| `ywai profile list` | Lista profiles (balanced/fast/deep/inherit) | Ver el activo |
+| `ywai profile use <name>` | Cambia profile y aplica modelos | `inherit` no pinea modelos |
+| `ywai groups` | Lista grupos de agentes | Ver core / qa / experiment |
+| `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar social-refactor, etc. |
+| `ywai groups disable <name>` | Quita esos perfiles (no core) | Apagar un grupo |
 
 ## Detalles
 
 ### `ywai install`
 
-Instala gentle-ai, skills y la configuración completa.
+Setup de ywai: Engram directo, skills extra, perfiles de agentes, plugins (incluye Graft), SDD opcional e init de proyecto.
 
 ```bash
 ywai install                    # Instalación completa
@@ -34,41 +43,52 @@ ywai install --agent opencode   # Solo para un agente
 ywai install --preset minimal   # Preset específico
 ```
 
-**Presets:**
+**Presets** (qué componentes ywai aplica; los skills extra se copian siempre):
 
 | Preset | Qué instala |
 |---|---|
 | `full-gentleman` | Todo (default) |
-| `ecosystem-only` | Solo gentle-ai, sin skills extra |
-| `minimal` | Solo lo esencial |
+| `ecosystem-only` | Ecosistema de perfiles/plugins, sin extras opcionales |
+| `minimal` | Lo esencial |
+
+**Flags útiles:** `--mcp` (Microsoft Learn MCP), `--ponytail` (plugin YAGNI), `--scope global|workspace`, `--sdd-mode single|multi`, `--group` / `--all-groups`.
 
 ### `ywai update`
 
-Actualiza gentle-ai, re-sincroniza skills y regenera el registro.
+Un comando alcanza: actualiza el binario y re-aplica lo gestionado.
 
 ```bash
 ywai update
+ywai update --beta          # último prerelease
+ywai update --dry-run
+ywai update --agent opencode
 ```
 
 **Qué hace:**
-1. Actualiza gentle-ai
-2. Re-sincroniza skills
-3. Regenera registro de skills
-4. Verifica enlaces
+1. Self-update del binario ywai
+2. Re-seed de skills y perfiles
+3. Copia skills extra a los agentes detectados
+4. Reinstala perfiles + `AGENTS.md` curado
+5. Re-enlaza Engram
+6. Re-cablea plugins de OpenCode y CLIs compañeras (ado, graft)
+7. Reinicia el control server **solo** si ya estaba corriendo
+
+Después, reiniciá OpenCode una vez para que recargue plugins.
 
 ### `ywai doctor`
 
-Verifica que la instalación esté correcta.
+Chequeo de solo lectura. No escribe nada.
 
 ```bash
 ywai doctor
 ```
 
 **Qué verifica:**
-- gentle-ai instalado y actualizado
-- Skills correctamente enlazados
-- Rutas de configuración válidas
-- Sin conflictos entre agentes
+- Binarios del ecosistema
+- `state.json`
+- Engram
+- Espacio en disco
+- Graft en PATH
 
 ### `ywai serve`
 
@@ -88,6 +108,7 @@ ywai serve --status  # Ver estado
 | `--dry-run` | Vista previa | `ywai install --dry-run` |
 | `--cwd` | Directorio | `ywai skill-registry --cwd /mi/proyecto` |
 | `--preset` | Preset | `ywai install --preset minimal` |
+| `--beta` | Canal prerelease (solo update) | `ywai update --beta` |
 
 <Aside type="tip">
 Siempre corre `ywai doctor` después de instalar o actualizar.

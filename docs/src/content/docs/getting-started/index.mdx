@@ -26,7 +26,11 @@ import { Steps, Card, Aside } from '@astrojs/starlight/components';
    ywai doctor
    ```
 
-4. **Abrir opencode y usar**
+4. **Abrir opencode (o Pi) y usar**
+   ```
+   /learn-ywai
+   ```
+   o pedir trabajo directo:
    ```
    @dev Hola, ¿qué podés hacer?
    ```
@@ -53,6 +57,8 @@ ywai detecta automáticamente qué agente AI estás usando (opencode, Claude Cod
 |---|---|---|
 | **Agentes** | Especialistas que trabajan como equipo | [Agentes →](/dev-ai-workflow/agents) |
 | **Skills** | Guías de tecnologías (React, Tailwind, etc.) | [Skills →](/dev-ai-workflow/skills) |
+| **Graft** | Grafo del repo: símbolos, callers, spans. Los agentes lo usan antes de grep | [Finder →](/dev-ai-workflow/agents/finder) |
+| **Engram** | Memoria persistente entre sesiones | [Memory →](/dev-ai-workflow/agents/memory) |
 | **Commands** | Slash commands para flujos completos | [Commands →](/dev-ai-workflow/workflows/commands) |
 | **Kanban** | Tablero visual para monitorear agentes | [Kanban →](/dev-ai-workflow/kanban) |
 
@@ -60,9 +66,9 @@ ywai detecta automáticamente qué agente AI estás usando (opencode, Claude Cod
 
 | Comando | Qué hace |
 |---|---|
-| `ywai install` | Instala todo (agentes + skills + config) |
-| `ywai update` | Actualiza a la última versión |
-| `ywai doctor` | Verifica que todo funcione |
+| `ywai install` | Engram, skills, perfiles, plugins/Graft |
+| `ywai update` | Binario + re-aplica el entorno gestionado |
+| `ywai doctor` | Diagnóstico de solo lectura (Engram, Graft, state) |
 | `ywai skills` | Lista los skills disponibles |
 | `ywai kanban` | Abre el tablero visual |
 

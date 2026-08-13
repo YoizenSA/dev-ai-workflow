@@ -1,0 +1,13 @@
+{
+  "read": "allow",
+  "edit": "allow",
+  "write": "allow",
+  "bash": "allow",
+  "task": "allow",
+  "question": "allow",
+  "skill": "allow",
+  "graft_*": "allow",
+  "context7_*": "allow",
+  "engram_*": "allow",
+  "mcp": "allow"
+}

@@ -12,6 +12,7 @@ import (
 )
 
 const extraSkillMarkerFile = ".ywai-extra"
+const learnYwaiSkillName = "learn-ywai"
 
 func CopyTo(agentSkillsDir string) error {
 	return copyFiltered(agentSkillsDir, nil)
@@ -61,6 +62,12 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 		if err := copyDir(src, dst); err != nil {
 			fmt.Printf("  Warning: failed to copy skill %s: %v\n", name, err)
 			continue
+		}
+
+		if name == learnYwaiSkillName {
+			if err := bundleLearnYwaiDocs(dst); err != nil {
+				fmt.Printf("  Warning: failed to bundle learn-ywai docs: %v\n", err)
+			}
 		}
 
 		fmt.Printf("  Copied skill: %s\n", name)
@@ -323,6 +330,32 @@ func ywaiExtraSkillNames(srcDir string) map[string]bool {
 func hasYwaiExtraMarker(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, extraSkillMarkerFile))
 	return err == nil
+}
+
+func bundleLearnYwaiDocs(skillDst string) error {
+	src := findOfficialDocsDir()
+	if src == "" {
+		return nil
+	}
+	dst := filepath.Join(skillDst, "references", "docs")
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	return copyDir(src, dst)
+}
+
+func findOfficialDocsDir() string {
+	root := config.RepoRoot()
+	candidates := []string{
+		filepath.Join(root, "docs", "src", "content", "docs"),
+		filepath.Join(root, "..", "docs", "src", "content", "docs"),
+	}
+	for _, p := range candidates {
+		if config.IsDirPopulated(p) {
+			return p
+		}
+	}
+	return ""
 }
 
 // skillsSourceDir resolves where skills are read from.

@@ -635,7 +635,7 @@ func TestAdoIsNotAPermissionBucket(t *testing.T) {
 // MCP server means editing Go before any agent can use it.
 func TestMCPBucketCoversConfiguredServers(t *testing.T) {
 	patterns := mcpBucketPatterns()
-	for _, want := range []string{"codegraph_*", "context7_*"} {
+	for _, want := range []string{"graft_*", "context7_*"} {
 		found := false
 		for _, p := range patterns {
 			if p == want {
@@ -644,6 +644,13 @@ func TestMCPBucketCoversConfiguredServers(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("mcp bucket lost the shipped pattern %q (got %v)", want, patterns)
+		}
+	}
+	// Retired servers must never be re-granted through the bucket, even when
+	// they still sit in the config during an upgrade.
+	for _, p := range patterns {
+		if p == "codegraph_*" {
+			t.Errorf("blanket mcp bucket must not claim %q — codegraph is retired", p)
 		}
 	}
 	// Servers with a dedicated bucket must not be swept in by the blanket one:
@@ -2052,9 +2059,31 @@ func TestCoordinatorsCannotSearch(t *testing.T) {
 	}
 }
 
+// The experiment group must expose its experimental agents through the group
+// loader so `ywai agents --group experiment` can install them.
+func TestLoadProfilesByGroup_ExperimentGroup(t *testing.T) {
+	profiles, err := LoadProfilesByGroup("../../agents", GroupFilter{Groups: []string{"experiment"}})
+	if err != nil {
+		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
+	}
+	p, ok := profiles["experiment/infra-docs"]
+	if !ok {
+		t.Fatalf("experiment/infra-docs not found in experiment group: %v", keys(profiles))
+	}
+	if p.Mode != "primary" {
+		t.Errorf("infra-docs mode = %q, want primary", p.Mode)
+	}
+	if p.Permission["read"] != "allow" || p.Permission["edit"] != "allow" {
+		t.Errorf("infra-docs must read/write notes: read=%q edit=%q", p.Permission["read"], p.Permission["edit"])
+	}
+	if p.Permission["bash"] != "allow" || p.Permission["task"] != "allow" {
+		t.Errorf("infra-docs must support its git flow and delegated lookup: bash=%q task=%q", p.Permission["bash"], p.Permission["task"])
+	}
+}
+
 // An explicit pattern must beat the bucket that also covers it. YAML keeps the last
 // duplicate key, so emitting both silently handed the tool back: an orchestrator that
-// denied "codegraph_*" while allowing the "mcp" bucket ended up with it allowed.
+// denied "graft_*" while allowing the "mcp" bucket ended up with it allowed.
 func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 	profile := AgentProfile{
 		Name:        "orchestrator",
@@ -2062,23 +2091,23 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 		Prompt:      "# Orchestrator",
 		Mode:        "primary",
 		Permission: map[string]string{
-			"read":        "deny",
-			"mcp":         "allow",
-			"codegraph_*": "deny",
+			"read":     "deny",
+			"mcp":      "allow",
+			"graft_*":  "deny",
 		},
 	}
 
 	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
-	if strings.Contains(md, `"codegraph_*": allow`) {
+	if strings.Contains(md, `"graft_*": allow`) {
 		t.Errorf("explicit deny must not be re-granted by the mcp bucket:\n%s", md)
 	}
-	if !strings.Contains(md, `"codegraph_*": deny`) {
+	if !strings.Contains(md, `"graft_*": deny`) {
 		t.Errorf("explicit deny must survive:\n%s", md)
 	}
-	if strings.Count(md, `"codegraph_*"`) != 1 {
-		t.Errorf("codegraph_* must be written exactly once, got %d:\n%s",
-			strings.Count(md, `"codegraph_*"`), md)
+	if strings.Count(md, `"graft_*"`) != 1 {
+		t.Errorf("graft_* must be written exactly once, got %d:\n%s",
+			strings.Count(md, `"graft_*"`), md)
 	}
 	// The rest of the bucket is untouched by the override.
 	if !strings.Contains(md, `"context7_*": allow`) {

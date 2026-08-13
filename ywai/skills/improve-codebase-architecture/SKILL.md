@@ -23,7 +23,7 @@ This command is _informed_ by the project's domain model and built on a shared d
 
 Read the project's domain glossary (`AGENTS.md`) and any ADRs in the area you're touching first.
 
-Then use `@finder` to walk the codebase. Don't follow rigid heuristics — explore organically and note where you experience friction:
+Then use `@finder` to walk the codebase — fallback to `explore` (or any read-only explore-type sub-agent) when the ywai profile is absent. Don't follow rigid heuristics — explore organically and note where you experience friction:
 
 - Where does understanding one concept require bouncing between many small modules?
 - Where are modules **shallow** — interface nearly as complex as the implementation?

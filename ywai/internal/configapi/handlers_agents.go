@@ -736,9 +736,7 @@ func ApplyActiveOrchestratorProfile() (int, error) {
 	profile := cfg.GetActiveOrchestratorProfile()
 	applied := 0
 	for agentName, rd := range profile.Agents {
-		if rd.Model == "" {
-			continue
-		}
+		// Empty model is inherit: clear any previous pin on the agent file.
 		if applyAgentModel(agentName, rd.Model) {
 			applied++
 		}

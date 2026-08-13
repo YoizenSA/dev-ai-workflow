@@ -37,8 +37,8 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 	}
 }
 
-// codegraph install writes its own AGENTS.md marker section (see
-// plugins.WireCodegraphMCP). ywai must not author that surface too, or the two
+// graft install writes its own AGENTS.md marker section (see
+// plugins.WireGraftMCP). ywai must not author that surface too, or the two
 // installers fight over the same block.
 func TestWriteAgentsMd_LeavesGraftToItsOwnInstaller(t *testing.T) {
 	dir := t.TempDir()

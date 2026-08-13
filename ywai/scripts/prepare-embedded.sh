@@ -75,6 +75,16 @@ mkdir -p "$EMBED_DIR/plugins"
 mkdir -p "$EMBED_DIR/workflows"
 
 cp -a "$REPO_ROOT/skills/." "$EMBED_DIR/skills/"
+
+# Official Astro MDX lives in the repo docs/ site. Bundle a copy inside
+# learn-ywai so /learn-ywai can teach without the website or a checkout.
+DOCS_SRC="$REPO_ROOT/../docs/src/content/docs"
+LEARN_DOCS="$EMBED_DIR/skills/learn-ywai/references/docs"
+if [ -d "$DOCS_SRC" ] && [ -d "$EMBED_DIR/skills/learn-ywai" ]; then
+    mkdir -p "$LEARN_DOCS"
+    cp -a "$DOCS_SRC/." "$LEARN_DOCS/"
+    echo "Bundled official docs into learn-ywai"
+fi
 cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
 cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"

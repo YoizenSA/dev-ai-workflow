@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -400,37 +401,72 @@ func (s *Server) handleMcpToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mcpConfig, err := readMcpConfig()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to read config: %v", err)})
-		return
-	}
-
-	entry, ok := mcpConfig[req.ID]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("MCP %q is not installed", req.ID)})
-		return
-	}
-
-	m, ok := entry.(map[string]interface{})
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid MCP config entry"})
-		return
-	}
-
-	m["enabled"] = req.Enabled
-	mcpConfig[req.ID] = m
-
-	if err := writeMcpConfig(mcpConfig); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write config: %v", err)})
+	if err := SetMcpEnabled(req.ID, req.Enabled); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrMCPNotInstalled) {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": fmt.Sprintf("MCP %q %s", req.ID, map[bool]string{true: "enabled", false: "disabled"}[req.Enabled]),
-		"entry":   m,
 	})
+}
+
+// InstalledMCP is one server from the host opencode.json mcp section.
+type InstalledMCP struct {
+	ID      string
+	Enabled bool
+}
+
+// ErrMCPNotInstalled is returned when SetMcpEnabled cannot find the id.
+var ErrMCPNotInstalled = errors.New("MCP is not installed")
+
+// ListInstalledMCP returns MCP servers configured in opencode.json.
+func ListInstalledMCP() ([]InstalledMCP, error) {
+	mcpConfig, err := readMcpConfig()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InstalledMCP, 0, len(mcpConfig))
+	for id, raw := range mcpConfig {
+		item := InstalledMCP{ID: id, Enabled: true}
+		if m, ok := raw.(map[string]interface{}); ok {
+			if v, has := m["enabled"]; has {
+				if b, ok := v.(bool); ok {
+					item.Enabled = b
+				}
+			}
+		}
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// SetMcpEnabled flips enabled on an installed MCP in opencode.json.
+func SetMcpEnabled(id string, enabled bool) error {
+	if id == "" {
+		return fmt.Errorf("id is required")
+	}
+	mcpConfig, err := readMcpConfig()
+	if err != nil {
+		return err
+	}
+	entry, ok := mcpConfig[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrMCPNotInstalled, id)
+	}
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid MCP config entry")
+	}
+	m["enabled"] = enabled
+	mcpConfig[id] = m
+	return writeMcpConfig(mcpConfig)
 }
 
 // handleMcpStatus returns the status of a specific MCP server.

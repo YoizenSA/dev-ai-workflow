@@ -303,7 +303,8 @@ func IsDirPopulated(dir string) bool {
 // each removal.
 var RetiredMCPServers = []string{
 	"ywai-kanban", // kanban board removed from ywai
-	"ywai-fastfs", // fastfs MCP removed as redundant with codegraph
+	"ywai-fastfs", // fastfs MCP removed as redundant with graft
+	"codegraph",   // codegraph MCP replaced by graft (repo context graph)
 }
 
 // IsRetiredMCPServer reports whether an MCP server id is one ywai retired.

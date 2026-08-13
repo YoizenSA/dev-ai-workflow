@@ -2,6 +2,7 @@ package configapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -907,30 +908,44 @@ func (h *Handlers) SetActiveOrchestratorProfile(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
 		return
 	}
-	cfg, err := userconfig.LoadConfig()
+	applied, err := ActivateOrchestratorProfile(req.Name)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if _, ok := cfg.OrchestratorProfiles[req.Name]; !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "profile not found: " + req.Name})
-		return
-	}
-	cfg.ActiveOrchestratorProfile = req.Name
-	if err := userconfig.SaveConfig(cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrOrchestratorProfileNotFound) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
-	// Apply the profile: models into every host config + the orchestration
-	// policy (orchestrator markdown/permissions) + omp modelRoles. The central
-	// ApplyActiveOrchestratorProfile keeps the three in one path.
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "saved", "agents_applied": applied})
+}
+
+// ErrOrchestratorProfileNotFound is returned when ActivateOrchestratorProfile
+// is given a name that is not in the user's config.
+var ErrOrchestratorProfileNotFound = errors.New("profile not found")
+
+// ActivateOrchestratorProfile persists the active name and applies models.
+func ActivateOrchestratorProfile(name string) (int, error) {
+	if name == "" {
+		return 0, fmt.Errorf("name is required")
+	}
+	cfg, err := userconfig.LoadConfig()
+	if err != nil {
+		return 0, err
+	}
+	if _, ok := cfg.OrchestratorProfiles[name]; !ok {
+		return 0, fmt.Errorf("%w: %s", ErrOrchestratorProfileNotFound, name)
+	}
+	cfg.ActiveOrchestratorProfile = name
+	if err := userconfig.SaveConfig(cfg); err != nil {
+		return 0, err
+	}
 	applied := 0
 	if n, err := ApplyActiveOrchestratorProfile(); err == nil {
 		applied = n
 	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "saved", "agents_applied": applied})
+	return applied, nil
 }
 
 // UpdateOrchestratorProfile replaces a profile's editable fields (display name,

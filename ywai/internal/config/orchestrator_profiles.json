@@ -305,6 +305,47 @@
           "model": "opencode-admin/deepseek-v4-flash"
         }
       }
+    },
+    "inherit": {
+      "display_name": "Inherit",
+      "description": "No pinned models — agents inherit the session/lead model",
+      "orchestration": {
+        "default_mode": "thin",
+        "allow_solo_write": true,
+        "max_hops_before_escalate": 1,
+        "require_review": "on_ship",
+        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+      },
+      "omp_thinking_level": "auto",
+      "agents": {
+        "advisor": {},
+        "architect": {},
+        "ask": {},
+        "designer": {},
+        "dev": {},
+        "devops": {},
+        "exploratory-orchestrator": {},
+        "feature-summary": {},
+        "finder": {},
+        "memory": {},
+        "migration-orchestrator": {},
+        "migration-planner": {},
+        "migration-scope": {},
+        "migration-validator": {},
+        "migration-validator-focused": {},
+        "orchestrator": {},
+        "planner-draft": {},
+        "planner-scout": {},
+        "planning": {},
+        "qa": {},
+        "qa-analyst": {},
+        "qa-ask": {},
+        "qa-dev": {},
+        "qa-orchestrator": {},
+        "qa-reviewer": {},
+        "reviewer": {},
+        "test-author": {}
+      }
     }
   }
 }

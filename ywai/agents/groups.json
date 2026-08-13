@@ -29,7 +29,9 @@
     },
     "experiment": {
       "description": "Experimental and temporary agents",
-      "agents": []
+      "agents": [
+        "experiment/infra-docs"
+      ]
     },
     "qa-automation": {
       "description": "QA automation and testing agents for manual QA testers learning automation",

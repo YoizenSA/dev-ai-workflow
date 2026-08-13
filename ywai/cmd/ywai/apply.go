@@ -13,6 +13,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/versionfile"
@@ -185,6 +186,9 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 	if o.RestartServeIfRunning {
 		n++
 	}
+	if o.Mode == applyInstall {
+		n++ // ensure control server running
+	}
 	return n
 }
 
@@ -267,6 +271,11 @@ func applyManaged(o applyOpts) applyResult {
 	if plan.CopyExtraSkills {
 		steps.next("Copying ywai extra skills")
 		copySkillsForAgents(agents, o.Opts.DryRun)
+		if o.Opts.DryRun {
+			fmt.Println("  Would install /learn-ywai slash command")
+		} else if err := plugins.InstallLearnYwaiCommand(plugins.DefaultLearnYwaiCommandDirs()...); err != nil {
+			fmt.Printf("  Warning: failed to install /learn-ywai: %v\n", err)
+		}
 	}
 
 	agentDirs := make(map[string]string, len(agents))
@@ -383,6 +392,12 @@ func applyManaged(o applyOpts) applyResult {
 		restartControlServerIfRunning(&r, o.Opts.DryRun)
 	}
 
+	// ── control server start (install: ensure it is running) ──────────────
+	if o.Mode == applyInstall {
+		steps.next("Starting control server (if not running)")
+		ensureControlServerRunning(&r, o.Opts.DryRun)
+	}
+
 	return r
 }
 
@@ -432,3 +447,46 @@ func restartControlServerIfRunning(r *applyResult, dryRun bool) {
 	}
 	fmt.Printf("  Server restarted in background (PID %d)\n", serveCmd.Process.Pid)
 }
+
+// ensureControlServerRunning starts the control server in the background when
+// it is not already healthy (mirrors `ywai serve -b`). Install uses this so a
+// successful install leaves the control server up; dry runs only preview.
+func ensureControlServerRunning(r *applyResult, dryRun bool) {
+	port := detectRunningServer()
+	if port > 0 {
+		fmt.Printf("  Control server already running on port %d\n", port)
+		return
+	}
+	if dryRun {
+		fmt.Println("  Would start control server in background")
+		return
+	}
+	if err := launchControlServer(); err != nil {
+		r.warnf("could not start control server: %v", err)
+	}
+}
+
+// startControlServer launches the current binary with `serve --background`,
+// detaching it from the terminal just like `ywai serve -b`.
+func startControlServer() error {
+	exe, err := selfupdate.ResolvedExecutable()
+	if err != nil {
+		return err
+	}
+	serveCmd := exec.Command(exe, "serve", "--background", "--no-update")
+	serveCmd.SysProcAttr = sysProcAttr()
+	serveCmd.Stdout = os.Stdout
+	serveCmd.Stderr = os.Stderr
+	if err := serveCmd.Start(); err != nil {
+		return err
+	}
+	fmt.Printf("  Control server started in background (PID %d)\n", serveCmd.Process.Pid)
+	return nil
+}
+
+// Injectable seams so tests can stub the health check and the launch without
+// touching a real server or spawning a process.
+var (
+	detectRunningServer = serverutil.GetRunningPort
+	launchControlServer = startControlServer
+)

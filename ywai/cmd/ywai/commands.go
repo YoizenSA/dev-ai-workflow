@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -452,6 +453,8 @@ need a separate install after updating:
   - re-install agent profiles + curated AGENTS.md
   - re-link Engram memory
   - re-wire OpenCode plugins (vision-bridge, background-agents)
+  - clear cached OpenCode npm plugins so they re-resolve to the latest
+    published version on next start (e.g. subagent-statusline)
   - re-apply TokenBank (refresh models) when it is configured
   - upgrade companion CLIs (ado, graft) via the plugins step
   - restart the control server only if it was already running
@@ -482,6 +485,25 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  Would self-update ywai binary.")
 		} else {
 			selfUpdate(beta)
+		}
+
+		// OpenCode caches npm plugin installs and reuses the cached copy
+		// without re-resolving @latest, so a stale cache pins plugins to old
+		// versions (e.g. opencode-subagent-statusline). Clear the entries for
+		// the plugins ywai manages so the next OpenCode start fetches the
+		// latest published versions.
+		fmt.Println("\n[plugins] Clearing OpenCode plugin cache...")
+		cleared, err := plugins.ClearPluginCache(dryRun)
+		if err != nil {
+			fmt.Printf("  Warning: failed to clear plugin cache: %v\n", err)
+		} else if len(cleared) > 0 {
+			if dryRun {
+				fmt.Printf("  Would clear cached plugin(s): %s\n", strings.Join(cleared, ", "))
+			} else {
+				fmt.Printf("  ✓ cleared cached plugin(s): %s\n", strings.Join(cleared, ", "))
+			}
+		} else {
+			fmt.Println("  No cached plugins to clear.")
 		}
 
 		result := applyManaged(applyOpts{
@@ -883,32 +905,119 @@ var statusCmd = &cobra.Command{
 
 var groupsCmd = &cobra.Command{
 	Use:   "groups",
-	Short: "List available agent groups",
-	Long:  "List available agent groups from groups.json. Core group is always installed.",
+	Short: "List, enable, or disable agent groups",
+	Long:  "Core is always installed. enable copies that group's profiles; disable removes them (not core).",
+	RunE:  runGroupsList,
+}
+
+func agentsSourceDir() (string, error) {
+	if config.IsDirPopulated(config.AgentsSourceDir()) {
+		return config.AgentsSourceDir(), nil
+	}
+	if err := config.SeedAgentsFromEmbedded(); err != nil {
+		return "", fmt.Errorf("no agent data available: %w", err)
+	}
+	return config.DataAgentsDir(), nil
+}
+
+func runGroupsList(cmd *cobra.Command, args []string) error {
+	sourceDir, err := agentsSourceDir()
+	if err != nil {
+		return err
+	}
+	manifest, err := agentprofiles.LoadGroupManifest(sourceDir)
+	if err != nil {
+		return err
+	}
+	names, err := agentprofiles.ListGroups(sourceDir)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		fmt.Println("No groups found.")
+		return nil
+	}
+	for _, name := range names {
+		note := ""
+		if name == "core" {
+			note = " (always on)"
+		}
+		desc := ""
+		if def, ok := manifest.Groups[name]; ok {
+			desc = def.Description
+		}
+		if desc != "" {
+			fmt.Printf("  %s%s\t%s\n", name, note, desc)
+		} else {
+			fmt.Printf("  %s%s\n", name, note)
+		}
+	}
+	return nil
+}
+
+var groupsEnableCmd = &cobra.Command{
+	Use:   "enable <group>",
+	Short: "Install a group's agent profiles on detected hosts",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !config.IsDirPopulated(config.DataAgentsDir()) {
-			if err := config.SeedAgentsFromEmbedded(); err != nil {
-				return fmt.Errorf("no agent data available: %w", err)
-			}
-		}
-		var names []string
-		var err error
-		// Try source dir first (has latest groups when running from source checkout),
-		// fall back to data dir (seeded/embedded).
-		names, err = agentprofiles.ListGroups(config.AgentsSourceDir())
-		if err != nil {
-			names, err = agentprofiles.ListGroups(config.DataAgentsDir())
-		}
+		name := args[0]
+		sourceDir, err := agentsSourceDir()
 		if err != nil {
 			return err
 		}
-		if len(names) == 0 {
-			fmt.Println("No groups found.")
+		if _, err := agentprofiles.GroupAgentBasenames(sourceDir, name); err != nil {
+			return err
+		}
+		if name == "core" {
+			fmt.Println("core is always installed")
 			return nil
 		}
-		for _, name := range names {
-			fmt.Println(name)
+		hosts := agent.FilterProfileInstallAgents(agent.Resolve())
+		if len(hosts) == 0 {
+			return fmt.Errorf("no compatible host detected (opencode, claude-code, pi, omp)")
 		}
+		installAgentProfiles(hosts, false, agentprofiles.GroupFilter{Groups: []string{name}}, false)
+		fmt.Printf("Group %s enabled\n", name)
+		return nil
+	},
+}
+
+var groupsDisableCmd = &cobra.Command{
+	Use:   "disable <group>",
+	Short: "Remove a group's agent profiles (not core)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		sourceDir, err := agentsSourceDir()
+		if err != nil {
+			return err
+		}
+		bases, err := agentprofiles.GroupAgentBasenames(sourceDir, name)
+		if err != nil {
+			return err
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		var any int
+		for _, host := range agent.FilterProfileInstallAgents(agent.Resolve()) {
+			for _, dir := range profileDirsFor(host.Name, home) {
+				removed, err := agentprofiles.DisableGroupAgents(dir, name, bases)
+				if err != nil {
+					return err
+				}
+				for _, id := range removed {
+					fmt.Printf("  [%s] removed %s\n", host.Name, id)
+					any++
+				}
+			}
+		}
+		if any == 0 && name != "core" {
+			fmt.Printf("Group %s: nothing installed to remove\n", name)
+			return nil
+		}
+		fmt.Printf("Group %s disabled\n", name)
 		return nil
 	},
 }
@@ -1062,7 +1171,104 @@ var tokenbankSetupCmd = &cobra.Command{
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "MCP servers and authentication",
+	Short: "List, enable, disable, and authenticate MCP servers",
+}
+
+var mcpListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List MCP servers in opencode.json",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		list, err := control.ListInstalledMCP()
+		if err != nil {
+			return err
+		}
+		if len(list) == 0 {
+			fmt.Println("No MCP servers configured in opencode.json.")
+			return nil
+		}
+		for _, s := range list {
+			state := "enabled"
+			if !s.Enabled {
+				state = "disabled"
+			}
+			fmt.Printf("  %s\t%s\n", s.ID, state)
+		}
+		return nil
+	},
+}
+
+var mcpEnableCmd = &cobra.Command{
+	Use:   "enable <server-id>",
+	Short: "Enable an installed MCP server",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := control.SetMcpEnabled(args[0], true); err != nil {
+			return err
+		}
+		fmt.Printf("MCP %s enabled\n", args[0])
+		return nil
+	},
+}
+
+var mcpDisableCmd = &cobra.Command{
+	Use:   "disable <server-id>",
+	Short: "Disable an installed MCP server (keeps the config)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := control.SetMcpEnabled(args[0], false); err != nil {
+			return err
+		}
+		fmt.Printf("MCP %s disabled\n", args[0])
+		return nil
+	},
+}
+
+var profileCmd = &cobra.Command{
+	Use:   "profile",
+	Short: "List or switch orchestrator model profiles (balanced, fast, deep, inherit)",
+}
+
+var profileListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List orchestrator profiles",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			return err
+		}
+		names := make([]string, 0, len(cfg.OrchestratorProfiles))
+		for name := range cfg.OrchestratorProfiles {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			mark := "  "
+			if name == cfg.ActiveOrchestratorProfile {
+				mark = "* "
+			}
+			p := cfg.OrchestratorProfiles[name]
+			label := p.DisplayName
+			if label == "" {
+				label = name
+			}
+			fmt.Printf("%s%s\t%s\n", mark, name, label)
+		}
+		return nil
+	},
+}
+
+var profileUseCmd = &cobra.Command{
+	Use:   "use <name>",
+	Short: "Activate an orchestrator profile and apply models",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		n, err := configapi.ActivateOrchestratorProfile(args[0])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Active profile: %s (%d agents applied)\n", args[0], n)
+		return nil
+	},
 }
 
 var mcpAuthCmd = &cobra.Command{
@@ -1238,6 +1444,8 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 
 	rootCmd.AddCommand(statusCmd)
+	groupsCmd.AddCommand(groupsEnableCmd)
+	groupsCmd.AddCommand(groupsDisableCmd)
 	rootCmd.AddCommand(groupsCmd)
 
 	// TokenBank commands
@@ -1251,8 +1459,15 @@ func init() {
 	rootCmd.AddCommand(tokenbankCmd)
 
 	// MCP commands
+	mcpCmd.AddCommand(mcpListCmd)
+	mcpCmd.AddCommand(mcpEnableCmd)
+	mcpCmd.AddCommand(mcpDisableCmd)
 	mcpCmd.AddCommand(mcpAuthCmd)
 	rootCmd.AddCommand(mcpCmd)
+
+	profileCmd.AddCommand(profileListCmd)
+	profileCmd.AddCommand(profileUseCmd)
+	rootCmd.AddCommand(profileCmd)
 }
 
 func isInteractiveTerminal() bool {
