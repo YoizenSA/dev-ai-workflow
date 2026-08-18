@@ -22,6 +22,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencodeprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
@@ -280,12 +281,12 @@ func startOpencodeServe() {
 		return // a real opencode server is already reachable
 	}
 
-	// Resolve the opencode binary (PATH, well-known dirs, login-shell which).
-	binPath := agent.FindBinary("opencode")
+	// Resolve OpenCode 2 (opencode2). No v1 `opencode` fallback.
+	binPath := agent.FindBinary("opencode2")
 	if binPath == "" {
-		fmt.Fprintln(os.Stderr, "Warning: opencode binary not found (looked in PATH, "+
-			"~/.opencode/bin, ~/.local/bin, and login-shell which). "+
-			"Install opencode or set OPENCODE_URL to point at a running server.")
+		fmt.Fprintln(os.Stderr, "Warning: opencode2 binary not found (looked in PATH, "+
+			"~/.opencode2/bin, ~/.local/bin, and login-shell which). "+
+			"Install OpenCode 2 or set OPENCODE_URL to point at a running server.")
 		return
 	}
 
@@ -483,8 +484,14 @@ After update, restart OpenCode once so it reloads plugins.`,
 		fmt.Println("\n[pre] Self-updating ywai...")
 		if dryRun {
 			fmt.Println("  Would self-update ywai binary.")
-		} else {
-			selfUpdate(beta)
+		} else if newVer := selfUpdate(beta); newVer != "" {
+			exe, err := selfupdate.ResolvedExecutable()
+			if err != nil {
+				fmt.Printf("  Warning: updated to %s but cannot restart: %v\n", newVer, err)
+			} else {
+				fmt.Println("  Restarting with the new binary...")
+				reexecSelf(exe)
+			}
 		}
 
 		// OpenCode caches npm plugin installs and reuses the cached copy
@@ -1237,6 +1244,45 @@ var mcpDisableCmd = &cobra.Command{
 	},
 }
 
+var runOpenCodeCmd = &cobra.Command{
+	Use:   "run <dev|qa|infra>",
+	Short: "Launch OpenCode in an isolated role profile",
+	Long: `Launch OpenCode with OPENCODE_CONFIG_DIR and XDG_DATA_HOME pointed at
+~/.ywai/opencode-profiles/<name>/. Seeded by ywai install.
+
+Example:
+  ywai run qa
+  ywai run dev -- --model opencode/gpt-5`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := opencodeprofile.ParseName(args[0])
+		if err != nil {
+			return err
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		dirs, err := opencodeprofile.DirsFor(home, name)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(dirs.Config); err != nil {
+			return fmt.Errorf("profile %q is not installed; run ywai install first", name)
+		}
+		bin, err := exec.LookPath("opencode2")
+		if err != nil {
+			return fmt.Errorf("opencode2 not found in PATH")
+		}
+		oc := exec.Command(bin, args[1:]...)
+		oc.Env = append(os.Environ(), opencodeprofile.LaunchEnv(dirs, name)...)
+		oc.Stdin = os.Stdin
+		oc.Stdout = os.Stdout
+		oc.Stderr = os.Stderr
+		return oc.Run()
+	},
+}
+
 var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "List or switch orchestrator model profiles (balanced, fast, deep, inherit)",
@@ -1482,6 +1528,7 @@ func init() {
 	profileCmd.AddCommand(profileListCmd)
 	profileCmd.AddCommand(profileUseCmd)
 	rootCmd.AddCommand(profileCmd)
+	rootCmd.AddCommand(runOpenCodeCmd)
 }
 
 func isInteractiveTerminal() bool {

@@ -12,7 +12,7 @@ import (
 )
 
 // PonytailNPMPackage is the official OpenCode plugin package for ponytail.
-// OpenCode resolves npm package names listed in the config "plugin" array.
+// OpenCode resolves npm package names listed in the config "plugins" array.
 const PonytailNPMPackage = "@dietrichgebert/ponytail"
 
 // PonytailClaudeMarketplaceSource is the GitHub owner/repo shorthand passed to
@@ -28,7 +28,7 @@ var claudeCLI = "claude"
 
 // InstallPonytail installs the official ponytail plugin for the given agent.
 //
-//   - opencode / kilocode: appends PonytailNPMPackage to the config "plugin" array
+//   - opencode / kilocode: appends PonytailNPMPackage to the config "plugins" array
 //     (OpenCode resolves the npm package at load time; no global npm install).
 //   - claude-code: runs non-interactive Claude CLI marketplace add + plugin install
 //     (`claude plugin marketplace add DietrichGebert/ponytail` then
@@ -99,7 +99,7 @@ func formatCmdOutput(out string) string {
 	return "\n" + out
 }
 
-// patchOpenCodePluginName appends pluginName to the config's "plugin" array
+// patchOpenCodePluginName appends pluginName to the config's "plugins" array
 // if it is not already present. Creates the config file when missing.
 func patchOpenCodePluginName(configPath, pluginName string) error {
 	root := map[string]any{}
@@ -115,11 +115,11 @@ func patchOpenCodePluginName(configPath, pluginName string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins, _ := root["plugin"].([]any)
+	plugins := v2Plugins(root)
 	if !containsPluginPath(plugins, pluginName) {
 		plugins = append(plugins, pluginName)
 	}
-	root["plugin"] = plugins
+	writePlugins(root, plugins)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)

@@ -34,7 +34,7 @@ func orchestratorBody(wf *Workflow, subAgentIDs map[string]string) string {
 
 	// Step-by-step instructions.
 	b.WriteString("## Execution steps\n\n")
-	b.WriteString("Follow these steps in order. Use the `task` tool to delegate to sub-agents, ")
+	b.WriteString("Follow these steps in order. Use the `subagent` tool to delegate to sub-agents, ")
 	b.WriteString("the `skill` tool to load referenced skills, and the `question` tool to ask ")
 	b.WriteString("the user when a choice is required. Do not skip steps.\n\n")
 
@@ -299,7 +299,7 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		if task == "" {
 			task = "Perform the agent's role."
 		}
-		return fmt.Sprintf("**Delegate to sub-agent `%s`** using the `task` tool with: %s", id, quoteInline(task))
+		return fmt.Sprintf("**Delegate to sub-agent `%s`** using the `subagent` tool with: %s", id, quoteInline(task))
 	case NodeTypePrompt:
 		p := strings.TrimSpace(n.Data.Prompt)
 		if p == "" {

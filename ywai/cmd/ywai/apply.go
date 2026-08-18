@@ -155,6 +155,7 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++ // Installing agent profiles
 		n++ // Applying orchestrator model profile
 		n++ // Configuring TokenBank providers
+		n++ // Seeding isolated OpenCode profiles
 	}
 	if plan.ApplyOverrides {
 		n++
@@ -345,6 +346,11 @@ func applyManaged(o applyOpts) applyResult {
 		if err := setDefaultAgent("orchestrator", o.Opts.DryRun); err != nil {
 			r.warnf("failed to set default_agent: %v", err)
 		}
+	}
+
+	if plan.InstallProfiles {
+		steps.next("Seeding isolated OpenCode profiles (dev, qa, infra)")
+		seedOpenCodeIsolatedProfiles(o.Opts.DryRun, o.OverwriteAgents || o.Mode == applyUpdate)
 	}
 
 	// ── version file ──────────────────────────────────────────────────────

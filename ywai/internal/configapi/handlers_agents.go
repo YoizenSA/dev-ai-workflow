@@ -349,12 +349,15 @@ func (h *Handlers) GetAgentPermissions(w http.ResponseWriter, r *http.Request) {
 
 // ValidPermissionKeys is the canonical set of allowed permission keys.
 // Includes all built-in Pi tools plus extended categories (memory, intercom, ado, mcp).
+// v2 action names (shell, subagent) are accepted as synonyms and normalized
+// onto the internal keys at render time.
 var ValidPermissionKeys = map[string]bool{
 	// File & code tools
 	"read":        true,
 	"edit":        true,
 	"write":       true,
 	"bash":        true,
+	"shell":       true, // v2 name for bash
 	"glob":        true,
 	"grep":        true,
 	"lsp":         true,
@@ -364,6 +367,7 @@ var ValidPermissionKeys = map[string]bool{
 	"webfetch":    true,
 	// Task & orchestration (consolidated: task=full todo, delegate=full subagent)
 	"task":     true,
+	"subagent": true, // v2 name for task
 	"delegate": true,
 	"question": true,
 	"skill":    true,
@@ -490,19 +494,8 @@ func (h *Handlers) GetAgentTaskPermissions(w http.ResponseWriter, r *http.Reques
 	path, err := opencodeConfigPath()
 	if err == nil {
 		if data, err := os.ReadFile(path); err == nil {
-			taskRaw := lookupAgentPermissionKey(data, name, "task")
-			if len(taskRaw) > 0 {
-				// Object form: {"*": "deny", "sub-agent": "allow"}.
-				var asMap map[string]string
-				if json.Unmarshal(taskRaw, &asMap) == nil {
-					result = asMap
-				} else {
-					// Scalar form: "allow"/"ask"/"deny".
-					var asStr string
-					if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
-						result["*"] = asStr
-					}
-				}
+			if m, ok := lookupAgentTaskMap(data, name); ok {
+				result = m
 			}
 		}
 	}
@@ -943,64 +936,42 @@ func upsertPolicySection(content, section string) string {
 }
 
 // applySoloWritePermissions flips the orchestrator's write surface on the
-// installed markdown: opencode permission: block scalars (edit/write) + the
-// bash block, and the pi/omp/claude tools: list. The flip is symmetric — a
-// deny→allow cycle restores edit/write and bash to the baseline posture.
+// installed markdown: the v2 rules' broad edit/shell entries (and the pi/omp/
+// claude tools: list). The flip is symmetric — a deny→allow cycle restores
+// edit and shell to the allow posture with the guardrail denials intact.
+// Verify allowlist patterns are dropped on deny (they would keep granting
+// shell under a broad deny) and are not reconstructed on re-allow.
 func applySoloWritePermissions(content string, allow bool) string {
-	val := "deny"
-	if allow {
-		val = "allow"
-	}
-	content = replacePermissionScalar(content, "edit", val)
-	content = replacePermissionScalar(content, "write", val)
-	content = replaceBashBlock(content, val)
-	return syncToolsList(content, allow)
-}
-
-// replaceBashBlock swaps the frontmatter bash entry to the given permission
-// value using the same rendering as install (agents.BashPermissionBlockLines),
-// so guardrail denials (false-green, no-commit) are preserved on re-allow.
-func replaceBashBlock(content, val string) string {
-	fm, body := parseFrontmatter(content)
+	fm, _ := parseFrontmatter(content)
 	if fm == "" {
 		return content
 	}
-	lines := strings.Split(fm, "\n")
-	replaced := false
-	inPerm := false
-	for i := 0; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "permission:" {
-			inPerm = true
-			continue
-		}
-		if !inPerm {
-			continue
-		}
-		if lines[i] != trimmed { // indented → inside the permission block
-			if strings.HasPrefix(trimmed, "bash:") {
-				block := agents.BashPermissionBlockLines(val, "orchestrator")
-				head := append([]string(nil), lines[:i]...)
-				head = append(head, block...)
-				// Skip the old bash children (4-space indented patterns). Lines
-				// at 2-space indent are permission-block siblings (edit, write,
-				// read) and must survive.
-				j := i + 1
-				for j < len(lines) && strings.HasPrefix(lines[j], "    ") {
-					j++
-				}
-				lines = append(head, lines[j:]...)
-				replaced = true
-				break
-			}
-			continue
-		}
-		inPerm = false
+	rules, hasRules := agents.ParsePermissionRulesYAML(fm)
+	if !hasRules {
+		// pi/omp/claude-style file: no v2 rules block, sync the tools list.
+		return syncToolsList(content, allow)
 	}
-	if !replaced {
-		return content
+	effect := "deny"
+	if allow {
+		effect = "allow"
 	}
-	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
+	var out []agents.PermissionRule
+	broadEdit, broadShell := false, false
+	for _, r := range rules {
+		switch {
+		case r.Action == "edit" && r.Resource == "*" && !broadEdit:
+			r.Effect = effect
+			broadEdit = true
+		case r.Action == "shell" && r.Resource == "*" && !broadShell:
+			r.Effect = effect
+			broadShell = true
+		case r.Action == "shell" && !allow && r.Effect == "allow":
+			// Verify-posture allowlist: dead weight under a broad deny.
+			continue
+		}
+		out = append(out, r)
+	}
+	return replacePermissionsBlock(content, out)
 }
 
 // syncToolsList makes a pi/omp/claude-style "tools:" frontmatter list match the
@@ -1079,10 +1050,10 @@ func syncToolsList(content string, allow bool) string {
 	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
 }
 
-// applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/write/bash flip into
-// the opencode.json agent.orchestrator.permission map when that entry exists
-// (legacy installs; markdown-only installs have no such entry). Keeps the two
-// sources of truth from disagreeing.
+// applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/shell flip into the
+// opencode.json agent.orchestrator entry when it exists (markdown-only installs
+// have no such entry). Always writes a v2 `permissions` rule array. A leftover
+// v1 `permission` map is converted at this boundary and not written back.
 func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	path, err := opencodeConfigPath()
 	if err != nil {
@@ -1096,11 +1067,11 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	if json.Unmarshal(data, &config) != nil {
 		return false
 	}
-	var agents map[string]json.RawMessage
-	if raw, ok := config["agent"]; !ok || json.Unmarshal(raw, &agents) != nil {
+	var agentsMap map[string]json.RawMessage
+	if raw, ok := config["agent"]; !ok || json.Unmarshal(raw, &agentsMap) != nil {
 		return false
 	}
-	orchestratorRaw, ok := agents["orchestrator"]
+	orchestratorRaw, ok := agentsMap["orchestrator"]
 	if !ok {
 		return false
 	}
@@ -1108,66 +1079,80 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	if json.Unmarshal(orchestratorRaw, &agentCfg) != nil {
 		return false
 	}
-	var perms map[string]json.RawMessage
-	permRaw, ok := agentCfg["permission"]
-	if !ok || json.Unmarshal(permRaw, &perms) != nil {
-		return false
-	}
-	val := "deny"
+	effect := "deny"
 	if allow {
-		val = "allow"
+		effect = "allow"
 	}
-	for _, key := range []string{"edit", "write", "bash"} {
-		if _, ok := perms[key]; ok {
-			v, _ := json.Marshal(val)
-			perms[key] = v
+
+	var rules []agents.PermissionRule
+	if rulesRaw, ok := agentCfg["permissions"]; ok {
+		if json.Unmarshal(rulesRaw, &rules) != nil {
+			return false
+		}
+	} else {
+		permRaw, ok := agentCfg["permission"]
+		if !ok {
+			return false
+		}
+		var perms map[string]any
+		if json.Unmarshal(permRaw, &perms) != nil {
+			return false
+		}
+		internal := map[string]string{}
+		var task map[string]string
+		for k, v := range perms {
+			if k == "task" {
+				if m, ok := v.(map[string]any); ok {
+					task = make(map[string]string, len(m))
+					for id, ev := range m {
+						if s, ok := ev.(string); ok {
+							task[id] = s
+						}
+					}
+				} else if s, ok := v.(string); ok && s != "" {
+					task = map[string]string{"*": s}
+				}
+				continue
+			}
+			if s, ok := v.(string); ok && s != "" {
+				internal[k] = s
+				continue
+			}
+			if k == "bash" {
+				internal[k] = "verify"
+			}
+		}
+		rules = agents.RulesFromPermissionMap("orchestrator", internal)
+		if len(task) > 0 {
+			rules = agents.ReplaceSubagentRules(rules, task)
 		}
 	}
-	updated, _ := json.Marshal(perms)
-	agentCfg["permission"] = updated
+	var out []agents.PermissionRule
+	broadEdit, broadShell := false, false
+	for _, r := range rules {
+		switch {
+		case r.Action == "edit" && r.Resource == "*" && !broadEdit:
+			r.Effect = effect
+			broadEdit = true
+		case r.Action == "shell" && r.Resource == "*" && !broadShell:
+			r.Effect = effect
+			broadShell = true
+		case r.Action == "shell" && !allow && r.Effect == "allow":
+			continue
+		}
+		out = append(out, r)
+	}
+	updated, _ := json.Marshal(out)
+	agentCfg["permissions"] = updated
+	delete(agentCfg, "permission")
+
 	agentJSON, _ := json.Marshal(agentCfg)
-	agents["orchestrator"] = agentJSON
-	agentsJSON, _ := json.Marshal(agents)
+	agentsMap["orchestrator"] = agentJSON
+	agentsJSON, _ := json.Marshal(agentsMap)
 	config["agent"] = agentsJSON
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 	_ = os.WriteFile(path+".bak", data, 0644)
 	return os.WriteFile(path, pretty, 0644) == nil
-}
-
-// replacePermissionScalar sets a 2-space-indented scalar inside the frontmatter
-// permission: block (e.g. "  edit: deny"). No-op when the key is absent, so
-// user tweaks outside the two flipped keys survive.
-func replacePermissionScalar(content, key, value string) string {
-	fm, body := parseFrontmatter(content)
-	if fm == "" {
-		return content
-	}
-	lines := strings.Split(fm, "\n")
-	replaced := false
-	inPerm := false
-	prefix := "  " + key + ":"
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "permission:" {
-			inPerm = true
-			continue
-		}
-		if !inPerm {
-			continue
-		}
-		if line != trimmed { // indented → inside the block
-			if strings.HasPrefix(line, prefix) {
-				lines[i] = fmt.Sprintf("  %s: %s", key, value)
-				replaced = true
-			}
-			continue
-		}
-		inPerm = false // unindented → block ended
-	}
-	if !replaced {
-		return content
-	}
-	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
 }
 
 // GET /api/config/agents/graph
@@ -1248,17 +1233,8 @@ func (h *Handlers) GetAgentGraph(w http.ResponseWriter, r *http.Request) {
 		// agents live only as .md files and never touch opencode.json, so without
 		// this fallback their delegation edges would be missing from the graph.
 		var taskMap map[string]string
-		taskRaw := lookupAgentPermissionKey(configData, name, "task")
-		if len(taskRaw) > 0 {
-			if json.Unmarshal(taskRaw, &taskMap) != nil {
-				taskMap = nil
-				// Scalar form: "allow"/"ask"/"deny" applies to all targets.
-				var asStr string
-				if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
-					node.HasWildcard = true
-					node.WildcardValue = asStr
-				}
-			}
+		if m, ok := lookupAgentTaskMap(configData, name); ok {
+			taskMap = m
 		}
 		if taskMap == nil && !node.HasWildcard {
 			if mdPath := resolveAgentFile(agentsDirPath, name); mdPath != "" {
@@ -1313,6 +1289,17 @@ func taskMapFromMarkdown(mdPath string) map[string]string {
 	fm, _ := parseFrontmatter(string(data))
 	if fm == "" {
 		return nil
+	}
+	if rules, ok := agents.ParsePermissionRulesYAML(fm); ok {
+		out := map[string]string{}
+		for _, r := range rules {
+			if r.Action == "subagent" {
+				out[r.Resource] = r.Effect
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
 	}
 	var doc struct {
 		Permission struct {
@@ -1374,6 +1361,73 @@ func lookupAgentField(configData []byte, name, key string) json.RawMessage {
 		return nil
 	}
 	return agent[key]
+}
+
+// lookupAgentTaskMap returns the delegation map for agent.<name> from
+// opencode.json: v2 subagent rules (agent.<name>.permissions) first, the
+// legacy v1 permission.task map/scalar as fallback. ok is false when neither
+// form is present.
+func lookupAgentTaskMap(configData []byte, name string) (map[string]string, bool) {
+	var config map[string]json.RawMessage
+	if json.Unmarshal(configData, &config) != nil {
+		return nil, false
+	}
+	agentRaw, ok := config["agent"]
+	if !ok {
+		return nil, false
+	}
+	var agentsMap map[string]json.RawMessage
+	if json.Unmarshal(agentRaw, &agentsMap) != nil {
+		return nil, false
+	}
+	agentData, ok := agentsMap[name]
+	if !ok {
+		return nil, false
+	}
+	var agent map[string]json.RawMessage
+	if json.Unmarshal(agentData, &agent) != nil {
+		return nil, false
+	}
+	if rulesRaw, ok := agent["permissions"]; ok {
+		var rules []struct {
+			Action   string `json:"action"`
+			Resource string `json:"resource"`
+			Effect   string `json:"effect"`
+		}
+		if json.Unmarshal(rulesRaw, &rules) == nil {
+			out := map[string]string{}
+			for _, r := range rules {
+				if r.Action == "subagent" {
+					out[r.Resource] = r.Effect
+				}
+			}
+			if len(out) > 0 {
+				return out, true
+			}
+		}
+	}
+	// Legacy v1: permission.task object or scalar.
+	permRaw, ok := agent["permission"]
+	if !ok {
+		return nil, false
+	}
+	var perm map[string]json.RawMessage
+	if json.Unmarshal(permRaw, &perm) != nil {
+		return nil, false
+	}
+	taskRaw, ok := perm["task"]
+	if !ok {
+		return nil, false
+	}
+	var asMap map[string]string
+	if json.Unmarshal(taskRaw, &asMap) == nil {
+		return asMap, true
+	}
+	var asStr string
+	if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
+		return map[string]string{"*": asStr}, true
+	}
+	return nil, false
 }
 
 // lookupAgentPermissionKey returns the raw JSON value of agent.<name>.permission.<key>

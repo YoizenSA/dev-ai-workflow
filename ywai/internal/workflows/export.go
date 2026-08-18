@@ -177,7 +177,7 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	orchestratorID := wf.Name + "-orchestrator"
 
 	// The orchestrator may delegate to every subAgent node (via the native
-	// `task` tool), so its permission.task whitelist is the set of sub-agent ids.
+	// `subagent` tool), so its subagent-action whitelist is the set of ids.
 	orchTaskTargets := make([]string, 0, len(subAgentIDs))
 	for _, id := range subAgentIDs {
 		orchTaskTargets = append(orchTaskTargets, id)
@@ -300,10 +300,10 @@ func sanitizeSlug(s string) string {
 
 // renderOrchestratorMarkdown builds the orchestrator agent frontmatter + body.
 // The orchestrator's tools come from the START node's `tools` field (CSV). When
-// empty, coordinator defaults are used (read/glob/grep/task/skill/question/
-// delegate). The permission.task sub-map restricts delegation to this
-// workflow's sub-agents only (one allow per subAgent node), matching the
-// preconfigured orchestrator's model.
+// empty, coordinator defaults are used (read/glob/grep/subagent/skill/question/
+// delegate). Subagent action rules restrict delegation to this workflow's
+// sub-agents only (one allow per subAgent node), matching the preconfigured
+// orchestrator's model.
 func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
 	orchTools := ""
 	if s := wf.findNode(NodeTypeStart); s != nil {
@@ -365,7 +365,7 @@ func (e *Exporter) orchestratorModel(wf *Workflow) string {
 func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subAgentIDs map[string]string) string {
 	perm := toolsToPermissions(n.Data.Tools, defaultSubAgentTools)
 	// Sub-agents default to "subagent" mode: they don't appear in the agent
-	// selector (only invocable via `task` by the orchestrator). The user can
+	// selector (only invocable via `subagent` by the orchestrator). The user can
 	// override with "all" if they want the agent selectable.
 	mode := n.Data.Mode
 	if mode == "" {
@@ -476,17 +476,17 @@ func subAgentSectionList(csv string) []string {
 
 // defaultOrchestratorTools is applied when the START node has no tools set.
 // Coordinator-only: read + ask + skill + context (mcp bucket). No edit/write/
-// bash — the orchestrator never touches code directly. (delegate/delegation_*
+// shell — the orchestrator never touches code directly. (delegate/delegation_*
 // are added by BuildOpenCodeMarkdown's AlwaysAllowed path when needed.)
-const defaultOrchestratorTools = "read,glob,grep,task,skill,question,mcp"
+const defaultOrchestratorTools = "read,glob,grep,subagent,skill,question,mcp"
 
 // defaultSubAgentTools is applied when a subAgent node has no tools set.
-// Full implementer: read + write + edit + bash + skill + context (mcp bucket).
-const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
+// Full implementer: read + write + edit + shell + skill + context (mcp bucket).
+const defaultSubAgentTools = "read,edit,write,shell,glob,grep,skill,subagent,mcp"
 
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
-// Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
+// Each entry may carry a ":deny" suffix to block a tool (e.g. "shell:deny").
 // Coarse buckets (mcp, memory, delegate, graft, context7) are
 // expanded to opencode-native wildcards via ExpandPermissionBuckets so they
 // actually gate the underlying tools.
@@ -528,7 +528,7 @@ func csvFromPermissions(perm map[string]string) string {
 	return strings.Join(allowed, ",")
 }
 
-// delegationMapFromOutgoing builds the permission.task map for a subAgent node.
+// delegationMapFromOutgoing builds the subagent-action whitelist for a node.
 // Delegation targets come from TWO sources:
 //  1. Outgoing edges to other subAgent nodes in the graph (the visible flow).
 //  2. The node's `delegateTo` field — explicit agent ids (comma-separated) this
@@ -640,54 +640,55 @@ func renderClaudeAgentMarkdown(id, description, tools, model, body string) strin
 }
 
 // renderCommandMarkdown builds the slash command file users invoke as /<name>.
-// It targets the workflow's orchestrator agent and forwards $ARGUMENTS. When
-// the workflow carries SlashCommandOptions, the advanced frontmatter fields
-// (allowed-tools, model, context, disable-model-invocation, argument-hint,
-// hooks) are emitted.
+// It targets the workflow's orchestrator agent and forwards $ARGUMENTS. The
+// v2 command schema is description/agent/model (+ body-as-template); the
+// Claude Code target additionally emits its own advanced frontmatter fields
+// (allowed-tools, context, disable-model-invocation, argument-hint, hooks).
 func (e *Exporter) renderCommandMarkdown(wf *Workflow, orchestratorID string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("description: ")
 	b.WriteString(yamlQuote(orchestratorDescription(wf)))
 	b.WriteByte('\n')
-	// Advanced slash-command options (optional). Only emitted when set so the
-	// default output stays unchanged for workflows that don't use them.
+	// model only when set and not "default" (default is implicit).
 	if opt := wf.SlashCommandOptions; opt != nil {
-		if v := strings.TrimSpace(opt.AllowedTools); v != "" {
-			b.WriteString("allowed-tools: ")
-			b.WriteString(v)
-			b.WriteByte('\n')
-		}
-		// model only when set and not "default" (default is implicit).
 		if m := strings.TrimSpace(opt.Model); m != "" && m != "default" {
 			b.WriteString("model: ")
 			b.WriteString(m)
 			b.WriteByte('\n')
 		}
-		if c := strings.TrimSpace(opt.Context); c != "" && c != "default" {
-			b.WriteString("context: ")
-			b.WriteString(c)
-			b.WriteByte('\n')
-		}
-		if opt.DisableModelInvocation {
-			b.WriteString("disable-model-invocation: true\n")
-		}
-		if ah := strings.TrimSpace(opt.ArgumentHint); ah != "" {
-			b.WriteString("argument-hint: ")
-			b.WriteString(yamlQuote(ah))
-			b.WriteByte('\n')
-		}
-		if opt.Hooks != nil {
-			renderHooksFrontmatter(&b, opt.Hooks)
+		// Claude Code-only advanced options — v2 opencode has no equivalent
+		// command fields, so they are skipped for the opencode target.
+		if e.target == TargetClaudeCode {
+			if v := strings.TrimSpace(opt.AllowedTools); v != "" {
+				b.WriteString("allowed-tools: ")
+				b.WriteString(v)
+				b.WriteByte('\n')
+			}
+			if c := strings.TrimSpace(opt.Context); c != "" && c != "default" {
+				b.WriteString("context: ")
+				b.WriteString(c)
+				b.WriteByte('\n')
+			}
+			if opt.DisableModelInvocation {
+				b.WriteString("disable-model-invocation: true\n")
+			}
+			if ah := strings.TrimSpace(opt.ArgumentHint); ah != "" {
+				b.WriteString("argument-hint: ")
+				b.WriteString(yamlQuote(ah))
+				b.WriteByte('\n')
+			}
+			if opt.Hooks != nil {
+				renderHooksFrontmatter(&b, opt.Hooks)
+			}
 		}
 	}
-	// Claude Code slash commands have no `agent:`/`subtask:` keys; the body just
-	// drives the conversation. opencode binds the command to its orchestrator agent.
+	// opencode binds the command to its orchestrator agent (v2: agent is a
+	// valid command field; subtask is a no-op and is not emitted).
 	if e.target != TargetClaudeCode {
 		b.WriteString("agent: ")
 		b.WriteString(orchestratorID)
 		b.WriteByte('\n')
-		b.WriteString("subtask: true\n")
 	}
 	b.WriteString("---\n\n")
 	b.WriteString("Execute the **" + wf.Name + "** workflow")

@@ -425,6 +425,23 @@ type InstalledMCP struct {
 // ErrMCPNotInstalled is returned when SetMcpEnabled cannot find the id.
 var ErrMCPNotInstalled = errors.New("MCP is not installed")
 
+// mcpEntryEnabled resolves whether an opencode.json MCP entry is enabled.
+// v2 uses "disabled" (absent = enabled); legacy installs may still carry an
+// "enabled" bool, which keeps working as a fallback.
+func mcpEntryEnabled(m map[string]interface{}) bool {
+	if v, has := m["disabled"]; has {
+		if b, ok := v.(bool); ok && b {
+			return false
+		}
+	}
+	if v, has := m["enabled"]; has {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return true
+}
+
 // ListInstalledMCP returns MCP servers configured in opencode.json.
 func ListInstalledMCP() ([]InstalledMCP, error) {
 	mcpConfig, err := readMcpConfig()
@@ -435,11 +452,7 @@ func ListInstalledMCP() ([]InstalledMCP, error) {
 	for id, raw := range mcpConfig {
 		item := InstalledMCP{ID: id, Enabled: true}
 		if m, ok := raw.(map[string]interface{}); ok {
-			if v, has := m["enabled"]; has {
-				if b, ok := v.(bool); ok {
-					item.Enabled = b
-				}
-			}
+			item.Enabled = mcpEntryEnabled(m)
 		}
 		out = append(out, item)
 	}
@@ -464,7 +477,13 @@ func SetMcpEnabled(id string, enabled bool) error {
 	if !ok {
 		return fmt.Errorf("invalid MCP config entry")
 	}
-	m["enabled"] = enabled
+	if enabled {
+		delete(m, "disabled")
+		delete(m, "enabled")
+	} else {
+		m["disabled"] = true
+		delete(m, "enabled")
+	}
 	mcpConfig[id] = m
 	return writeMcpConfig(mcpConfig)
 }
@@ -498,12 +517,7 @@ func (s *Server) handleMcpStatus(w http.ResponseWriter, r *http.Request) {
 	var configMap map[string]interface{}
 	if m, ok := configEntry.(map[string]interface{}); ok {
 		configMap = m
-		// If enabled field is missing, default to true
-		if enabledVal, hasEnabled := m["enabled"]; hasEnabled {
-			if e, ok := enabledVal.(bool); ok {
-				enabled = e
-			}
-		}
+		enabled = mcpEntryEnabled(m)
 	}
 
 	result := map[string]interface{}{
@@ -681,7 +695,7 @@ func readMcpConfig() (map[string]interface{}, error) {
 		return map[string]interface{}{}, nil
 	}
 
-	return mcpSection, nil
+	return collectOpenCodeServers(mcpSection), nil
 }
 
 // writeMcpConfig writes the mcp section back to opencode.json,
@@ -705,7 +719,8 @@ func writeMcpConfig(mcp map[string]interface{}) error {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
-	full["mcp"] = mcp
+	existing, _ := full["mcp"].(map[string]interface{})
+	full["mcp"] = nestOpenCodeMCP(existing, mcp)
 
 	out, err := json.MarshalIndent(full, "", "  ")
 	if err != nil {
@@ -717,6 +732,50 @@ func writeMcpConfig(mcp map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+func openCodeReservedMCPKey(k string) bool {
+	return k == "servers" || k == "timeout"
+}
+
+func collectOpenCodeServers(mcp map[string]interface{}) map[string]interface{} {
+	out := map[string]interface{}{}
+	if mcp == nil {
+		return out
+	}
+	if nested, ok := mcp["servers"].(map[string]interface{}); ok {
+		for k, v := range nested {
+			out[k] = v
+		}
+	}
+	for k, v := range mcp {
+		if openCodeReservedMCPKey(k) {
+			continue
+		}
+		if _, ok := v.(map[string]interface{}); ok {
+			if _, exists := out[k]; !exists {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+func nestOpenCodeMCP(mcp map[string]interface{}, servers map[string]interface{}) map[string]interface{} {
+	next := map[string]interface{}{"servers": servers}
+	if mcp == nil {
+		return next
+	}
+	for k, v := range mcp {
+		if k == "servers" {
+			continue
+		}
+		if _, isObj := v.(map[string]interface{}); isObj && !openCodeReservedMCPKey(k) {
+			continue
+		}
+		next[k] = v
+	}
+	return next
 }
 
 // projectMcpConfigFilePath returns the path to the project-local MCP config file.

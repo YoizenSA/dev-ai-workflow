@@ -16,28 +16,29 @@ func RemoveQuota(configPath string) error {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
-	pluginsRaw, ok := root["plugin"]
-	if !ok {
-		// No plugins, nothing to remove
+	_, hadPlugins := root["plugins"]
+	_, hadLegacy := root["plugin"]
+	if !hadPlugins && !hadLegacy {
 		return nil
 	}
 
-	plugins, ok := pluginsRaw.([]any)
-	if !ok {
-		return nil
-	}
-
+	plugins := v2Plugins(root)
 	quotaPlugin := "@slkiser/opencode-quota"
 	filteredPlugins := []any{}
 	for _, p := range plugins {
 		if pStr, ok := p.(string); ok && pStr == quotaPlugin {
-			continue // Skip the quota plugin
+			continue
+		}
+		if m, ok := p.(map[string]any); ok {
+			if pkg, _ := m["package"].(string); pkg == quotaPlugin {
+				continue
+			}
 		}
 		filteredPlugins = append(filteredPlugins, p)
 	}
 
-	if len(filteredPlugins) != len(plugins) {
-		root["plugin"] = filteredPlugins
+	if len(filteredPlugins) != len(plugins) || hadLegacy {
+		writePlugins(root, filteredPlugins)
 		if err := config.WriteJSONC(configPath, root); err != nil {
 			return fmt.Errorf("failed to write %s: %w", configPath, err)
 		}

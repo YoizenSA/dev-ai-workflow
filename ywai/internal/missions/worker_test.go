@@ -74,7 +74,41 @@ func testHandoff() *WorkerHandoff {
 
 // ─── DetectOpencode Tests ──────────────────────────────────────────────────
 
-// VAL-ENG-WORK-002: opencode binary detection
+// VAL-ENG-WORK-002: OpenCode 2 binary detection (opencode2 only)
+func TestDetectOpencodeLooksForOpencode2(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "opencode2")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	path, err := DetectOpencode()
+	if err != nil {
+		t.Fatalf("DetectOpencode: %v", err)
+	}
+	if filepath.Base(path) != "opencode2" {
+		t.Fatalf("DetectOpencode must resolve opencode2, got %q", path)
+	}
+}
+
+func TestDetectOpencodeIgnoresV1Opencode(t *testing.T) {
+	dir := t.TempDir()
+	v1 := filepath.Join(dir, "opencode")
+	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	path, err := DetectOpencode()
+	if err == nil {
+		t.Fatalf("DetectOpencode must not use v1 opencode, got %q", path)
+	}
+	if path != "" {
+		t.Fatalf("expected empty path, got %q", path)
+	}
+}
+
 func TestDetectOpencodeFound(t *testing.T) {
 	path, err := DetectOpencode()
 	if err != nil {

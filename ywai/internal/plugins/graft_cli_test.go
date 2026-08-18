@@ -51,6 +51,35 @@ func TestWriteGraftMCPEntry_OpenCodeShape(t *testing.T) {
 	assertOpenCodeGraftShape(t, path)
 }
 
+func TestWriteGraftMCPEntry_NestsUnderServersAndLiftsSiblings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.json")
+	legacy := `{"mcp":{"timeout":15000,"context7":{"type":"remote","url":"https://x"},"graft":{"command":"graft","args":["mcp"]}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeGraftMCPEntry(path, "opencode", []string{"graft", "mcp"}); err != nil {
+		t.Fatalf("writeGraftMCPEntry: %v", err)
+	}
+
+	assertOpenCodeGraftShape(t, path)
+	root, err := config.ReadJSONC(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpMap := root["mcp"].(map[string]any)
+	if mcpMap["timeout"] != float64(15000) && mcpMap["timeout"] != 15000 {
+		t.Fatalf("timeout not preserved: %#v", mcpMap["timeout"])
+	}
+	if _, ok := mcpMap["context7"]; ok {
+		t.Fatal("context7 must be lifted into mcp.servers")
+	}
+	servers := mcpMap["servers"].(map[string]any)
+	if _, ok := servers["context7"].(map[string]any); !ok {
+		t.Fatalf("context7 missing from servers: %#v", servers)
+	}
+}
+
 func TestWriteGraftMCPEntry_RepairsLegacyClaudeShape(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "opencode.json")
 	legacy := `{"mcp":{"graft":{"command":"graft","args":["mcp"]}}}`
@@ -72,12 +101,23 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	mcpMap, _ := root["mcp"].(map[string]any)
-	got, _ := mcpMap["graft"].(map[string]any)
+	if mcpMap == nil {
+		t.Fatal("missing mcp")
+	}
+	if _, flat := mcpMap["graft"].(map[string]any); flat {
+		t.Fatal("graft must not be a sibling of mcp.servers")
+	}
+	servers, ok := mcpMap["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp.servers missing: %v", mcpMap)
+	}
+	got, _ := servers["graft"].(map[string]any)
 	if got["type"] != "local" {
 		t.Errorf("type = %#v, want local", got["type"])
 	}
-	if got["enabled"] != true {
-		t.Errorf("enabled = %#v, want true", got["enabled"])
+	// v2: servers are enabled by default; an "enabled" flag must not be written.
+	if _, has := got["enabled"]; has {
+		t.Errorf("enabled = %#v, want absent (v2: absent = enabled)", got["enabled"])
 	}
 	cmd, ok := got["command"].([]any)
 	if !ok {

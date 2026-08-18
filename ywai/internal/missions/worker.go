@@ -176,7 +176,7 @@ func (wm *WorkerManager) resolveSkillsForFeature(mission *Mission, feature *Feat
 // binaries installed via nvm/asdf/etc. (not in the raw process PATH) are found
 // via the login-shell `which` fallback and well-known dirs.
 func DetectOpencode() (string, error) {
-	if path := agent.FindBinary("opencode"); path != "" {
+	if path := agent.FindBinary("opencode2"); path != "" {
 		return path, nil
 	}
 	return "", ErrOpencodeNotFound

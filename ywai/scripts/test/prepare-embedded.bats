@@ -28,8 +28,8 @@ setup() {
 
     # Background-agents source tree — the bundle dist/ DOES NOT exist,
     # which is the scenario under test.
-    mkdir -p "$TEST_TMPDIR/plugins/background-agents/src/plugin"
-    touch "$TEST_TMPDIR/plugins/background-agents/src/plugin/background-agents.ts"
+    mkdir -p "$TEST_TMPDIR/plugins/background-agents-v2/src"
+    touch "$TEST_TMPDIR/plugins/background-agents-v2/src/index.ts"
 
     # Copy the real script-under-test into the mock tree so $0 resolves
     # inside TEST_TMPDIR and REPO_ROOT / BA_DIR / BA_BUNDLE follow suit.

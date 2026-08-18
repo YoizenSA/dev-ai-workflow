@@ -3,16 +3,9 @@ import { $ } from "bun"
 import * as os from "node:os"
 import * as path from "node:path"
 
-// OpenCode loads a plugin by importing the bundle and calling its export. It
-// rejects the whole module — silently, into its own log file — when an export
-// is not a callable plugin factory: "Plugin export is not a function".
-//
-// This cost a full debugging session. Re-exporting the helpers from index.ts
-// (`export * from "./emission-guard"`) shipped 20 exports including classes,
-// and the plugin never loaded while every unit test still passed. Nothing but
-// running it inside OpenCode showed the failure, so it is pinned here.
+// OpenCode v2 loads a plugin by importing the bundle and reading { id, setup }.
 describe("bundle shape", () => {
-  test("exports exactly one callable plugin", async () => {
+  test("exports exactly one v2 plugin object", async () => {
     const out = path.join(os.tmpdir(), `advisor-bundle-${Date.now()}.js`)
     await $`bun build ${import.meta.dir}/../src/index.ts --outfile ${out} --target node`.quiet()
 
@@ -20,14 +13,16 @@ describe("bundle shape", () => {
     const names = Object.keys(mod)
 
     expect(names).toEqual(["default"])
-    expect(typeof mod.default).toBe("function")
+    expect(typeof mod.default).toBe("object")
+    expect(mod.default.id).toBe("advisor")
+    expect(typeof mod.default.setup).toBe("function")
 
-    // A class would satisfy `typeof === "function"` and still throw when the
-    // loader calls it without `new`.
-    const hooks = await mod.default(
-      { client: {}, directory: os.tmpdir() },
-      { configPath: path.join(os.tmpdir(), "definitely-absent.yaml") },
-    )
-    expect(hooks).toBeDefined()
+    await mod.default.setup({
+      directory: os.tmpdir(),
+      options: { configPath: path.join(os.tmpdir(), "definitely-absent.yaml") },
+      tool: { transform: async () => {} },
+      event: { subscribe: async () => {} },
+      session: { hook: async () => {} },
+    })
   })
 })

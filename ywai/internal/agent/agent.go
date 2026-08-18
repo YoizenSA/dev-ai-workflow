@@ -24,7 +24,7 @@ var KnownAgents = []struct {
 }{
 	{
 		Name:   "opencode",
-		Binary: "opencode",
+		Binary: "opencode2", // OpenCode 2 CLI; v1 `opencode` is not used.
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".config", "opencode", "skills")
 		},

@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth for agent delegations + prompt rules. Applied on every `ywai install`: the `task` map goes to opencode.json (agent.<name>.permission.task); the `rules` table + `triggers` are rendered into the agent's markdown prompt body. Edit this file and re-run `ywai install` to propagate. The Orchestrator UI reads/writes the installed copies.",
+  "_comment": "Source of truth for agent delegations + prompt rules. Applied on every `ywai install`: the `task` map goes to opencode.json and the agent markdown as v2 subagent permission rules (action: subagent); the `rules` table + `triggers` are rendered into the agent's markdown prompt body. Edit this file and re-run `ywai install` to propagate. The Orchestrator UI reads/writes the installed copies.",
   "defaults": {
     "_comment": "rules + triggers applied to every agent listed below that does not override them. Overridable per-agent.",
     "rules": [

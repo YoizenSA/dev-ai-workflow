@@ -4,8 +4,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_DIR="$REPO_ROOT/internal/control/web"
 EMBED_DIR="$REPO_ROOT/cmd/ywai/embedded_data"
-BA_DIR="$REPO_ROOT/plugins/background-agents"
-BA_BUNDLE="$BA_DIR/dist/background-agents.js"
+BA_DIR="$REPO_ROOT/plugins/background-agents-v2"
+BA_BUNDLE="$BA_DIR/dist/background-agents-v2.js"
 VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
@@ -39,7 +39,7 @@ fi
 if command -v bun >/dev/null 2>&1; then
     echo "Building background-agents plugin (bun bundle)…"
     bun install --cwd "$BA_DIR"
-    bun build "$BA_DIR/src/plugin/background-agents.ts" \
+    bun build "$BA_DIR/src/index.ts" \
         --outfile "$BA_BUNDLE" --target node
     echo "Building vision-bridge plugin (bun bundle)…"
     bun build "$VB_DIR/src/index.ts" \
@@ -63,7 +63,7 @@ elif [ -f "$BA_BUNDLE" ]; then
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
     echo "       The background-agents plugin is required; refusing to ship a release without it." >&2
-    echo "       Install bun (https://bun.sh) or commit plugins/background-agents/dist/background-agents.js." >&2
+    echo "       Install bun (https://bun.sh) or commit plugins/background-agents-v2/dist/background-agents-v2.js." >&2
     exit 1
 fi
 
@@ -89,7 +89,7 @@ cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
 cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"
 if [ -f "$BA_BUNDLE" ]; then
-    cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"
+    cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents-v2.js"
 fi
 if [ -f "$AD_BUNDLE" ]; then
     cp -a "$AD_BUNDLE" "$EMBED_DIR/plugins/advisor.js"

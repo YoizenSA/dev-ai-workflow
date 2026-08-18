@@ -152,7 +152,7 @@ func adoLatestFromRegistry() (string, error) {
 // idempotent and safe to call on configs that never had the plugin.
 //
 //   - opencode-format configs (opencode/kilocode): drops any entry from the
-//     "plugin" array that references the ADO package (as a bare string spec or a
+//     "plugins" array that references the ADO package (as a bare string spec or a
 //     ["<pkg>", {...}] pair).
 //   - claude-code / pi configs: drops any matching spec from the "packages"
 //     array.
@@ -209,17 +209,19 @@ func adoPluginConfigFilePath() string {
 	return filepath.Join(home, ".config", "opencode", "ado-plugin.json")
 }
 
-// removeFromPluginArray strips any ADO entry from root["plugin"], which is an
-// opencode array of either bare plugin specs or ["<spec>", {opts}] pairs.
+// removeFromPluginArray strips any ADO entry from the v2 "plugins" array
+// (migrating a leftover "plugin" key first). Entries may be a bare spec,
+// {package, options}, or ["<spec>", {opts}].
 // Reports whether the root was modified.
 func removeFromPluginArray(root map[string]any, packages []string) bool {
-	raw, ok := root["plugin"].([]any)
-	if !ok || len(raw) == 0 {
-		return false
+	_, hadLegacy := root["plugin"]
+	raw := v2Plugins(root)
+	if len(raw) == 0 && !hadLegacy {
+		return hadLegacy
 	}
 
 	filtered := make([]any, 0, len(raw))
-	changed := false
+	changed := hadLegacy
 	for _, entry := range raw {
 		if isAdoPluginEntry(entry, packages) {
 			changed = true
@@ -228,19 +230,19 @@ func removeFromPluginArray(root map[string]any, packages []string) bool {
 		filtered = append(filtered, entry)
 	}
 	if changed {
-		if len(filtered) == 0 {
-			delete(root, "plugin")
-		} else {
-			root["plugin"] = filtered
-		}
+		writePlugins(root, filtered)
 	}
 	return changed
 }
 
-// isAdoPluginEntry reports whether a "plugin" array element references one of
+// isAdoPluginEntry reports whether a "plugins" array element references one of
 // the ADO package names, as either a bare spec string or a ["<spec>", opts] pair.
 func isAdoPluginEntry(entry any, packages []string) bool {
 	if spec, ok := entry.(string); ok {
+		return matchesAdoPackage(spec, packages)
+	}
+	if m, ok := entry.(map[string]any); ok {
+		spec, _ := m["package"].(string)
 		return matchesAdoPackage(spec, packages)
 	}
 	pair, ok := entry.([]any)

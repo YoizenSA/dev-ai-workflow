@@ -61,7 +61,7 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 
 	t.Run("already_present_left_alone", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{
-			"plugin": []any{PonytailNPMPackage, "other"},
+			"plugins": []any{PonytailNPMPackage, "other"},
 		})
 
 		if err := InstallPonytail("opencode", path); err != nil {

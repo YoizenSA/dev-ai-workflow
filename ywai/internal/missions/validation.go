@@ -260,7 +260,7 @@ func (vp *ValidationPipeline) RunScrutinyValidator(ctx context.Context, features
 	}
 
 	// Attempt to detect a reviewer binary
-	reviewerPath, err := exec.LookPath("opencode")
+	reviewerPath, err := exec.LookPath("opencode2")
 	if err != nil {
 		// No reviewer available — fall back to structural validation
 		return vp.structuralValidation(features), nil

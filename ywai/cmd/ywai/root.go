@@ -158,16 +158,8 @@ func detectAgents(cmd *cobra.Command) []agent.Agent {
 }
 
 func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOptions) {
-	var done []string
 	for _, a := range agents {
-		configDir := filepath.Dir(a.SkillsDir)
-		if skills.IsLinkOrJunction(configDir) {
-			fmt.Printf("  Warning: [%s] Engram install skipped because config dir is a symlink/junction: %s\n", a.Name, configDir)
-			fmt.Println("    leaving existing skills untouched.")
-			continue
-		}
 		if dryRun {
-			done = append(done, a.Name)
 			continue
 		}
 		if removed, err := skills.RemoveStaleYwaiSkillLinks(a.SkillsDir); err != nil {
@@ -175,29 +167,24 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		} else if len(removed) > 0 {
 			fmt.Printf("  [%s] Removed stale legacy skill links: %s\n", a.Name, strings.Join(removed, ", "))
 		}
-		agentOpts := opts
-		agentOpts.AgentName = a.Name
-		// Base ecosystem never includes sdd — optional SDD runs in a later pass.
-		// Persona is never installed (ywai owns AGENTS.md tone).
-		agentOpts.InstallSDD = false
-		if err := gentlai.InstallEcosystem(agentOpts); err != nil {
-			fmt.Printf("  Warning: ecosystem install failed for %s: %v\n", a.Name, err)
-		} else {
-			done = append(done, a.Name)
-		}
 	}
-	summarizeAgents(dryRun, "Engram", done)
 
 	if !gentlai.PlanForPreset(opts.Preset).IncludeEngram {
 		return
 	}
-	hosts := engramMCPHostNames(agents)
+	opts.InstallSDD = false
 	if dryRun {
-		if len(hosts) > 0 {
+		fmt.Println("  Would install Engram once")
+		if hosts := engramMCPHostNames(agents); len(hosts) > 0 {
 			fmt.Printf("  Would wire engram MCP for %s\n", strings.Join(hosts, ", "))
 		}
 		return
 	}
+	if err := gentlai.InstallEcosystem(opts); err != nil {
+		fmt.Printf("  Warning: failed to install Engram: %v\n", err)
+	}
+
+	hosts := engramMCPHostNames(agents)
 	if len(hosts) == 0 {
 		return
 	}
@@ -380,7 +367,7 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			agentprofiles.RemoveRetiredAgents(agentsDir)
 
 			// Apply the default delegation graph (agents/delegations.json): the
-			// task map goes to opencode.json (permission.task) and the rules +
+			// task map goes to opencode.json + agent markdown as v2 subagent
 			// triggers are rendered into each agent's markdown prompt body.
 			// Idempotent + safe to re-run.
 			if doc, err := agentprofiles.LoadDelegations(sourceDir); err != nil {
@@ -497,7 +484,7 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 
 // selfUpdate upgrades the binary. When beta is true, uses the newest GitHub
 // prerelease; otherwise uses /releases/latest (stable only).
-func selfUpdate(beta bool) {
+func selfUpdate(beta bool) string {
 	var (
 		newVersion string
 		err        error
@@ -513,11 +500,11 @@ func selfUpdate(beta bool) {
 		if beta {
 			fmt.Println("  Tip: pin a tag with install.sh, e.g.")
 			fmt.Println("    curl -fsSL https://github.com/YoizenSA/dev-ai-workflow/releases/download/vX.Y.Z-beta.N/install.sh | bash -s -- vX.Y.Z-beta.N")
-			return
+			return ""
 		}
 		fmt.Println("  Falling back to go install...")
 		selfUpdateViaGo()
-		return
+		return ""
 	}
 
 	if newVersion == "" {
@@ -526,10 +513,11 @@ func selfUpdate(beta bool) {
 		} else {
 			fmt.Println("  Already up to date.")
 		}
-		return
+		return ""
 	}
 
 	fmt.Printf("  Updated: %s → %s\n", version, newVersion)
+	return newVersion
 }
 
 func selfUpdateViaGo() {

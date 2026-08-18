@@ -106,7 +106,7 @@ func ModelsPath(id ID) string {
 func BinaryName(id ID) string {
 	switch id {
 	case OpenCode:
-		return "opencode"
+		return "opencode2"
 	case Pi:
 		return "pi"
 	case OMP:

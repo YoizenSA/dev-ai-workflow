@@ -109,12 +109,12 @@ func buildFakeOpencodeStub() (string, error) {
 }
 
 // fakeOpencodeExeName returns the platform-appropriate executable name so
-// exec.LookPath("opencode") resolves it via PATHEXT on Windows.
+// exec.LookPath("opencode2") resolves it via PATHEXT on Windows.
 func fakeOpencodeExeName() string {
 	if runtime.GOOS == "windows" {
-		return "opencode.exe"
+		return "opencode2.exe"
 	}
-	return "opencode"
+	return "opencode2"
 }
 
 // writeFakeOpencodeBin materializes a fake opencode executable implementing spec

@@ -30,17 +30,10 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	// Get or create agent section
-	agentsRaw, ok := root["agent"]
-	if !ok {
-		agentsRaw = map[string]any{}
-		root["agent"] = agentsRaw
-	}
-	agents, ok := agentsRaw.(map[string]any)
-	if !ok {
-		agents = map[string]any{}
-		root["agent"] = agents
-	}
+	_, hadLegacyAgent := root["agent"]
+	agents := openCodeJSONAgents(root)
+	root["agents"] = agents
+	delete(root, "agent")
 
 	installed := 0
 	for name, profile := range profiles {
@@ -50,29 +43,20 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 			if !ok {
 				continue
 			}
-			existingPrompt, ok := existingMap["prompt"].(string)
-			if !ok || !strings.HasPrefix(existingPrompt, "---") {
+			existingPrompt := openCodeJSONSystem(existingMap)
+			if !strings.HasPrefix(existingPrompt, "---") {
 				continue
 			}
-			existingMap["mode"] = profile.Mode
-			existingMap["description"] = profile.Description
-			existingMap["prompt"] = profile.Prompt
-			existingMap["permission"] = profile.Permission
-			delete(existingMap, "tools") // remove deprecated tools field
+			agents[name] = openCodeV2JSONEntry(name, profile)
 			installed++
 			continue
 		}
 
-		agents[name] = map[string]any{
-			"mode":        profile.Mode,
-			"description": profile.Description,
-			"prompt":      profile.Prompt,
-			"permission":  profile.Permission,
-		}
+		agents[name] = openCodeV2JSONEntry(name, profile)
 		installed++
 	}
 
-	if installed == 0 {
+	if installed == 0 && !hadLegacyAgent {
 		return nil
 	}
 
@@ -82,6 +66,57 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 
 	fmt.Printf("  Installed %d agent profiles\n", installed)
 	return nil
+}
+
+// openCodeJSONAgents returns the v2 agents map, folding leftover v1 `agent`
+// entries into v2 shape and never leaving both keys in the file.
+func openCodeJSONAgents(root map[string]any) map[string]any {
+	agents := map[string]any{}
+	if raw, ok := root["agents"].(map[string]any); ok {
+		for name, entry := range raw {
+			if m, ok := entry.(map[string]any); ok {
+				agents[name] = normalizeOpenCodeJSONAgent(name, m)
+			} else {
+				agents[name] = entry
+			}
+		}
+	}
+	if raw, ok := root["agent"].(map[string]any); ok {
+		for name, entry := range raw {
+			if _, exists := agents[name]; exists {
+				continue
+			}
+			if m, ok := entry.(map[string]any); ok {
+				agents[name] = normalizeOpenCodeJSONAgent(name, m)
+			} else {
+				agents[name] = entry
+			}
+		}
+	}
+	return agents
+}
+
+func normalizeOpenCodeJSONAgent(name string, m map[string]any) map[string]any {
+	return openCodeV2JSONEntry(name, mapToAgentProfile(name, m))
+}
+
+func openCodeV2JSONEntry(name string, profile AgentProfile) map[string]any {
+	return map[string]any{
+		"mode":        profile.Mode,
+		"description": profile.Description,
+		"system":      profile.Prompt,
+		"permissions": RulesToJSONShape(RulesFromPermissionMap(filepath.Base(name), profile.Permission)),
+	}
+}
+
+func openCodeJSONSystem(m map[string]any) string {
+	if s, ok := m["system"].(string); ok && s != "" {
+		return s
+	}
+	if s, ok := m["prompt"].(string); ok {
+		return s
+	}
+	return ""
 }
 
 // InstallClaude writes agent .md files to ~/.claude/agents/.
@@ -635,11 +670,9 @@ var verifyBashAllowPatterns = []string{
 	"mypy*",
 }
 
-// BashPermissionBlockLines renders the opencode frontmatter lines for a bash
-// permission value. deny → a scalar "  bash: deny"; allow/verify → a nested
-// block with the shared false-green guardrails (plus the no-commit denials for
-// code executors, which only opencode can enforce). baseName is the flat agent
-// id used for the no-commit lookup.
+// BashPermissionBlockLines is the v1 renderer kept only for the kilocode (v1
+// fork) JSON install path. OpenCode v2 agents get shell rules via
+// RulesFromPermissionMap instead.
 func BashPermissionBlockLines(val, baseName string) []string {
 	if val == "deny" {
 		return []string{"  bash: deny"}
@@ -686,16 +719,6 @@ var noCommitBashDenyPatterns = []string{
 var noCommitAgents = map[string]bool{
 	"dev":    true,
 	"qa-dev": true,
-}
-
-// openCodeNativePermissionKeys are tools that remain deny-by-default when an
-// agent omits them from permissions.json. MCP server tools intentionally do not
-// appear here: OpenCode leaves unlisted tools enabled, so newly configured MCPs
-// are available immediately and can be disabled by name when needed.
-var openCodeNativePermissionKeys = []string{
-	"read", "edit", "write", "bash", "glob", "grep", "list", "lsp",
-	"ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite",
-	"delegate", "question", "skill", "external_directory", "doom_loop",
 }
 
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
@@ -773,15 +796,31 @@ func ConfiguredMCPServers() []string {
 	if err != nil {
 		return nil
 	}
-	raw, ok := root["mcp"].(map[string]any)
-	if !ok {
+	set := map[string]bool{}
+	// v1/current layout: servers directly under "mcp".
+	if raw, ok := root["mcp"].(map[string]any); ok {
+		for name := range raw {
+			if strings.TrimSpace(name) != "" {
+				set[name] = true
+			}
+		}
+	}
+	// v2 layout: servers nested under mcp.servers.
+	if mcp, ok := root["mcp"].(map[string]any); ok {
+		if servers, ok := mcp["servers"].(map[string]any); ok {
+			for name := range servers {
+				if strings.TrimSpace(name) != "" {
+					set[name] = true
+				}
+			}
+		}
+	}
+	if len(set) == 0 {
 		return nil
 	}
-	servers := make([]string, 0, len(raw))
-	for name := range raw {
-		if strings.TrimSpace(name) != "" {
-			servers = append(servers, name)
-		}
+	servers := make([]string, 0, len(set))
+	for name := range set {
+		servers = append(servers, name)
 	}
 	sort.Strings(servers)
 	return servers
@@ -853,78 +892,13 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
 	}
 
-	// Permission as nested YAML using the "*: deny" + whitelist pattern
-	// (same as opencode's built-in agents like explore). This ensures only
-	// the explicitly allowed tools are exposed to the LLM — denied tools
-	// are filtered out by opencode's resolveTools() before the request.
-	//
-	// ywai's coarse buckets (ado, memory, intercom, mcp) are expanded to
-	// opencode-native wildcard patterns so the deny/allow is actually
-	// enforced by opencode, not silently dropped.
-	b.WriteString("permission:\n")
-	emitPermission := func(key, val string) {
-		// bash renders as a nested allow/deny map when the agent may run
-		// commands at all, so specific commands can be denied inside a general
-		// allow. permissions.json is a flat string map and cannot express that.
-		//
-		// Modes:
-		//   deny   → single-line deny (no shell)
-		//   verify → "*": deny + verify allows + false-green denials
-		//   allow  → "*": allow + false-green denials [+ no-commit denials]
-		if key == "bash" {
-			for _, line := range BashPermissionBlockLines(val, filepath.Base(name)) {
-				b.WriteString(line + "\n")
-			}
-			return
-		}
-		if patterns, ok := ywaiBucketPatterns[key]; ok {
-			for _, p := range patterns {
-				// A profile that names the exact pattern is overriding its bucket on
-				// purpose. Emitting the bucket's value too would write the same YAML key
-				// twice, and the last one wins — so a bucket expanded after an explicit
-				// deny silently handed the tool back. Let the explicit entry stand alone.
-				// `p == key` is the bucket naming itself (delegate → delegate,
-				// delegation_*), which is the bucket working, not an override.
-				if _, explicit := profile.Permission[p]; explicit && p != key {
-					continue
-				}
-				// Quote the key: it contains glob/hyphen chars (e.g. graft_*).
-				b.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
-			}
-			return
-		}
-		// Quote keys with YAML-special characters (*, :, #, etc.).
-		if key == "*" || strings.ContainsAny(key, "*:#&!|>',[]{}%`@") {
-			b.WriteString(fmt.Sprintf("  %q: %s\n", key, val))
-		} else {
-			b.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
-		}
-	}
-
-	// Emit explicit restrictions, but do not add a catch-all "*: deny" rule.
-	// OpenCode enables unlisted tools by default, which keeps MCP servers added
-	// outside ywai available without requiring a release for each new server.
-	// Native tool restrictions remain explicit in each profile's permissions.json.
-	written := map[string]bool{}
-	for _, key := range openCodeNativePermissionKeys {
-		val := profile.Permission[key]
-		if val == "" {
-			val = "deny"
-		}
-		emitPermission(key, val)
-		written[key] = true
-	}
-	// Append custom tool permissions deterministically. They include explicit
-	// MCP overrides, which still take precedence over the permissive default.
-	var remaining []string
-	for k := range profile.Permission {
-		if !written[k] {
-			remaining = append(remaining, k)
-		}
-	}
-	sort.Strings(remaining)
-	for _, key := range remaining {
-		emitPermission(key, profile.Permission[key])
+	// Permissions as the v2 ordered rule array (see permissions_v2.go). Omitted
+	// native actions default to deny, so only the explicitly allowed surface is
+	// exposed; coarse buckets (memory, intercom, mcp) expand to the wildcard
+	// action names that actually gate the underlying tools.
+	rules := RulesFromPermissionMap(filepath.Base(name), profile.Permission)
+	for _, line := range RenderPermissionRulesYAML(rules) {
+		b.WriteString(line + "\n")
 	}
 	b.WriteString("---\n\n")
 

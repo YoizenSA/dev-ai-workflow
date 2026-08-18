@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestBinaryName_OpenCodeIsOpenCode2(t *testing.T) {
+	if got := BinaryName(OpenCode); got != "opencode2" {
+		t.Fatalf("BinaryName(OpenCode)=%q want opencode2", got)
+	}
+}
+
 func TestParseID(t *testing.T) {
 	cases := map[string]ID{
 		"":            OpenCode,

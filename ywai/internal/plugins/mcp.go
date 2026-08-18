@@ -32,16 +32,30 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 	}
 
 	var removed []string
-	for _, id := range config.RetiredMCPServers {
-		if _, exists := mcp[id]; exists {
-			delete(mcp, id)
-			removed = append(removed, id)
+	if key == "mcp" {
+		servers := collectOpenCodeServers(mcp)
+		for _, id := range config.RetiredMCPServers {
+			if _, exists := servers[id]; exists {
+				delete(servers, id)
+				removed = append(removed, id)
+			}
 		}
+		if len(removed) == 0 {
+			return nil, nil
+		}
+		root[key] = nestOpenCodeMCP(mcp, servers)
+	} else {
+		for _, id := range config.RetiredMCPServers {
+			if _, exists := mcp[id]; exists {
+				delete(mcp, id)
+				removed = append(removed, id)
+			}
+		}
+		if len(removed) == 0 {
+			return nil, nil
+		}
+		root[key] = mcp
 	}
-	if len(removed) == 0 {
-		return nil, nil
-	}
-	root[key] = mcp
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return nil, fmt.Errorf("failed to write %s: %w", configPath, err)
@@ -73,20 +87,19 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 			root[key] = mcp
 		}
 	} else {
-		// opencode format
+		// OpenCode v2: mcp.servers.<id> (type/url; no "enabled").
 		mcp, _ := root[key].(map[string]any)
 		if mcp == nil {
 			mcp = map[string]any{}
-			root[key] = mcp
 		}
-		if _, exists := mcp["microsoft-learn"]; !exists {
-			mcp["microsoft-learn"] = map[string]any{
-				"type":    "remote",
-				"url":     "https://learn.microsoft.com/api/mcp",
-				"enabled": true,
+		servers := collectOpenCodeServers(mcp)
+		if _, exists := servers["microsoft-learn"]; !exists {
+			servers["microsoft-learn"] = map[string]any{
+				"type": "remote",
+				"url":  "https://learn.microsoft.com/api/mcp",
 			}
-			root[key] = mcp
 		}
+		root[key] = nestOpenCodeMCP(mcp, servers)
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
@@ -110,14 +123,67 @@ func RemoveVisionMCP(configPath, agentName string) error {
 	if mcp == nil {
 		return nil
 	}
-	if _, exists := mcp["mcp-vision"]; !exists {
-		return nil
+	if key == "mcp" {
+		servers := collectOpenCodeServers(mcp)
+		if _, exists := servers["mcp-vision"]; !exists {
+			return nil
+		}
+		delete(servers, "mcp-vision")
+		root[key] = nestOpenCodeMCP(mcp, servers)
+	} else {
+		if _, exists := mcp["mcp-vision"]; !exists {
+			return nil
+		}
+		delete(mcp, "mcp-vision")
+		root[key] = mcp
 	}
-	delete(mcp, "mcp-vision")
-	root[key] = mcp
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
 	return nil
+}
+
+func openCodeReservedMCPKey(k string) bool {
+	return k == "servers" || k == "timeout"
+}
+
+func collectOpenCodeServers(mcp map[string]any) map[string]any {
+	out := map[string]any{}
+	if mcp == nil {
+		return out
+	}
+	if nested, ok := mcp["servers"].(map[string]any); ok {
+		for k, v := range nested {
+			out[k] = v
+		}
+	}
+	for k, v := range mcp {
+		if openCodeReservedMCPKey(k) {
+			continue
+		}
+		if _, ok := v.(map[string]any); ok {
+			if _, exists := out[k]; !exists {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	next := map[string]any{"servers": servers}
+	if mcp == nil {
+		return next
+	}
+	for k, v := range mcp {
+		if k == "servers" {
+			continue
+		}
+		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
+			continue
+		}
+		next[k] = v
+	}
+	return next
 }

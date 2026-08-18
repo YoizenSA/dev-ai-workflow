@@ -278,6 +278,24 @@ func TestOpencodeEnv_CorrectsSnapXDG(t *testing.T) {
 	}
 }
 
+func TestResolveOpencodeBin_PrefersOpenCode2(t *testing.T) {
+	dir := t.TempDir()
+	v1 := filepath.Join(dir, "opencode")
+	v2 := filepath.Join(dir, "opencode2")
+	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(v2, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	got := resolveOpencodeBin()
+	if got != v2 {
+		t.Fatalf("resolveOpencodeBin() = %q, want %q", got, v2)
+	}
+}
+
 func envContains(env []string, kv string) bool {
 	for _, e := range env {
 		if e == kv {
