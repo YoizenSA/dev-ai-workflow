@@ -1093,8 +1093,18 @@ var serveCmd = &cobra.Command{
 			// "behind" and overwrite the binary the developer just compiled.
 			fmt.Fprintln(os.Stderr, "Skipping auto-update: this is a dev build (use `ywai update` to install a release).")
 		default:
-			if newVer, err := selfupdate.Run(version); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: auto-update failed: %v\n", err)
+			// Stay on the channel this binary came from. Only one install is
+			// live at a time: a beta must follow betas and a stable must follow
+			// stables, otherwise starting the server drags a beta back to
+			// stable behind the user's back.
+			update := selfupdate.Run
+			channel := "stable"
+			if selfupdate.IsPrerelease(version) {
+				update = selfupdate.RunBeta
+				channel = "beta"
+			}
+			if newVer, err := update(version); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: auto-update (%s channel) failed: %v\n", channel, err)
 			} else if newVer != "" {
 				// Binary was replaced — re-exec with the new version
 				exe, err := selfupdate.ResolvedExecutable()

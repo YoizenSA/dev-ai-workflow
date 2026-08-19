@@ -124,6 +124,16 @@ func pickLatestPrerelease(releases []releaseInfo) (tag string, ok bool) {
 
 // isPrereleaseTag reports whether a tag looks like a beta/rc/pre channel even
 // if the GitHub "prerelease" flag was not set.
+// IsPrerelease reports whether a version string is a prerelease (beta, rc,
+// alpha, pre). Callers use it to keep a binary on the channel it came from:
+// a beta build must auto-update to the next beta, never sideways into stable.
+// `ywai serve` used to call Run (stable) unconditionally, so every server
+// start silently downgraded a beta install back to the latest stable release —
+// and since serve restarts on every `ywai update`, a beta could never stick.
+func IsPrerelease(version string) bool {
+	return isPrereleaseTag(version)
+}
+
 func isPrereleaseTag(tag string) bool {
 	t := strings.ToLower(strings.TrimPrefix(tag, "v"))
 	// semver pre-release segment starts after the first '-'
