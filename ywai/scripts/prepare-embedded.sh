@@ -38,7 +38,11 @@ if ! command -v bun >/dev/null 2>&1; then
 fi
 if command -v bun >/dev/null 2>&1; then
     echo "Building background-agents plugin (bun bundle)…"
-    bun install --cwd "$BA_DIR"
+    # --frozen-lockfile: CI runs a different bun than most devs, and a plain
+    # install rewrites bun.lock. That leaves the tree dirty and GoReleaser
+    # refuses to release ("git is in a dirty state"), which is what broke the
+    # v8.24.0-beta.1 release.
+    bun install --frozen-lockfile --cwd "$BA_DIR"
     bun build "$BA_DIR/src/index.ts" \
         --outfile "$BA_BUNDLE" --target node
     echo "Building vision-bridge plugin (bun bundle)…"
