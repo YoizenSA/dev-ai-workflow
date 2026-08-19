@@ -43,14 +43,12 @@ func sendKey(m *Model, key string) {
 
 // Helper: navigate from welcome to custom install mode
 func goToCustomInstall(m *Model) {
-	sendKey(m, "enter") // welcome -> installMode
 	sendKey(m, "down")  // select custom (index 1)
 	sendKey(m, "enter") // installMode -> agent
 }
 
 // Helper: navigate from welcome to quick install mode
 func goToQuickInstall(m *Model) {
-	sendKey(m, "enter") // welcome -> installMode
 	// quick is index 0 (default)
 	sendKey(m, "enter") // installMode -> agent
 }
@@ -97,22 +95,23 @@ func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
 
 func TestNewModel_Defaults(t *testing.T) {
 	m := NewModel(testAgents())
-	if m.step != stepWelcome {
-		t.Fatal("initial step should be stepWelcome")
+	if m.step != stepInstallMode {
+		t.Fatal("the wizard must open on the first real question, not a splash screen")
 	}
-	if m.presetIdx != 0 || presetChoices[0] != "full-gentleman" {
-		t.Fatal("default preset should be full-gentleman")
-	}
-	if m.globalOnly != true {
-		t.Fatal("globalOnly should default to true")
+	if strings.Contains(m.viewOptions(), "Scope") || strings.Contains(m.viewOptions(), "Global only") {
+		t.Fatal("options must not expose retired scope controls")
 	}
 }
 
-func TestStepFlow_WelcomeToInstallMode(t *testing.T) {
+// The first keystroke must answer a question, not dismiss a splash screen.
+func TestStepFlow_FirstEnterSelectsInstallMode(t *testing.T) {
 	m := NewModel(testAgents())
 	sendKey(&m, "enter")
-	if m.step != stepInstallMode {
-		t.Fatalf("expected stepInstallMode after enter on welcome, got %d", m.step)
+	if m.step != stepAgent {
+		t.Fatalf("expected stepAgent after the first enter, got %d", m.step)
+	}
+	if !m.quickInstall {
+		t.Fatal("enter on the default row should have picked Quick Install")
 	}
 }
 
@@ -171,13 +170,14 @@ func TestStepFlow_OptionsToMCP_WhenClaudeCode(t *testing.T) {
 	}
 }
 
-func TestStepFlow_OptionsToConfirm_WhenCursor(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+// vscode-copilot has no MCP surface, so Options goes straight to Confirm.
+func TestStepFlow_OptionsToConfirm_WhenNoMCPHost(t *testing.T) {
+	m := NewModel(singleAgent("vscode-copilot"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // select cursor -> options
 	sendKey(&m, "enter") // options -> confirm (skip MCP)
 	if m.step != stepConfirm {
-		t.Fatalf("expected stepConfirm for cursor (skip MCP), got %d", m.step)
+		t.Fatalf("expected stepConfirm for a host without MCP, got %d", m.step)
 	}
 }
 
@@ -198,7 +198,7 @@ func TestShouldShowMCPStep_All_WithOpencode(t *testing.T) {
 
 func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 	agents := []agent.Agent{
-		{Name: "cursor", BinaryName: "cursor"},
+		{Name: "vscode-copilot", BinaryName: "code"},
 		{Name: "pi", BinaryName: "pi"},
 	}
 	m := NewModel(agents)
@@ -208,57 +208,8 @@ func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 	}
 }
 
-func TestOptionsStep_CyclePreset(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
-	goToCustomInstall(&m)
-	sendKey(&m, "enter") // agent -> options
-	// Cursor starts at 0 (Preset)
-	if m.presetIdx != 0 {
-		t.Fatal("presetIdx should start at 0")
-	}
-	sendKey(&m, "right") // cycle preset forward
-	if m.presetIdx != 1 {
-		t.Fatalf("expected presetIdx=1 after right, got %d", m.presetIdx)
-	}
-	sendKey(&m, "right")
-	if m.presetIdx != 2 {
-		t.Fatalf("expected presetIdx=2, got %d", m.presetIdx)
-	}
-	sendKey(&m, "right") // wraps around
-	if m.presetIdx != 0 {
-		t.Fatalf("expected presetIdx=0 after wrap, got %d", m.presetIdx)
-	}
-	sendKey(&m, "left") // wraps backward
-	if m.presetIdx != 2 {
-		t.Fatalf("expected presetIdx=2 after left wrap, got %d", m.presetIdx)
-	}
-}
-
-func TestOptionsStep_CycleGlobalOnly(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
-	goToCustomInstall(&m)
-	sendKey(&m, "enter") // agent -> options
-	// Navigate to Global only (row 2)
-	sendKey(&m, "down") // -> Scope
-	sendKey(&m, "down") // -> Global only
-	if m.optionsCursor != 2 {
-		t.Fatalf("expected optionsCursor=2, got %d", m.optionsCursor)
-	}
-	if !m.globalOnly {
-		t.Fatal("globalOnly should be true initially")
-	}
-	sendKey(&m, "right")
-	if m.globalOnly {
-		t.Fatal("globalOnly should be false after toggle")
-	}
-	sendKey(&m, " ") // space also toggles
-	if !m.globalOnly {
-		t.Fatal("globalOnly should be true after second toggle")
-	}
-}
-
 func TestOptionsStep_NavigationBounds(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Try going up from 0
@@ -266,7 +217,7 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 	if m.optionsCursor != 0 {
 		t.Fatalf("cursor should stay at 0, got %d", m.optionsCursor)
 	}
-	// Go to bottom (5 = Overwrite agents). With no groups loaded the cursor
+	// Go to bottom (Autostart). With no groups loaded the cursor
 	// stops at the last option row instead of jumping to group selection.
 	for i := 0; i < 10; i++ {
 		sendKey(&m, "down")
@@ -277,7 +228,7 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 }
 
 func TestEscNavigation(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	sendKey(&m, "enter") // options -> confirm (cursor skips MCP)
@@ -296,9 +247,9 @@ func TestEscNavigation(t *testing.T) {
 	if m.step != stepInstallMode {
 		t.Fatalf("expected stepInstallMode on esc from agent, got %d", m.step)
 	}
-	sendKey(&m, "esc") // installMode -> welcome
-	if m.step != stepWelcome {
-		t.Fatalf("expected stepWelcome on esc from installMode, got %d", m.step)
+	sendKey(&m, "esc") // installMode is the first step: esc quits
+	if !m.quitting {
+		t.Fatal("esc on the first step should quit, not walk back to a splash screen")
 	}
 }
 
@@ -325,7 +276,7 @@ func TestEscNavigation_WithMCP(t *testing.T) {
 }
 
 func TestEscNavigation_QuickInstall(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	goToQuickInstall(&m)
 	sendKey(&m, "enter") // agent -> confirm (quick)
 	if m.step != stepConfirm {
@@ -337,40 +288,16 @@ func TestEscNavigation_QuickInstall(t *testing.T) {
 	}
 }
 
-func TestGlobalOnly_NotHardcoded(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
-	if !m.GlobalOnly() {
-		t.Fatal("GlobalOnly should be true by default")
-	}
-	m.globalOnly = false
-	if m.GlobalOnly() {
-		t.Fatal("GlobalOnly should reflect model state")
-	}
-}
-
 func TestResult_AllFields(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
-	m.selectedAgent = "cursor"
-	m.presetIdx = 1
-	m.scopeIdx = 1
-	m.globalOnly = true
+	m := NewModel(singleAgent("vscode-copilot"))
+	m.selectedAgent = "vscode-copilot"
 	m.installMicrosoftLearnMCP = true
 	m.installPonytail = true
-	m.sddIdx = 2 // multi
 	m.confirmed = true
 
 	r := m.Result()
-	if r.Agent != "cursor" {
-		t.Fatalf("Agent=%q, want cursor", r.Agent)
-	}
-	if r.Preset != "ecosystem-only" {
-		t.Fatalf("Preset=%q, want ecosystem-only", r.Preset)
-	}
-	if r.Scope != "workspace" {
-		t.Fatalf("Scope=%q, want workspace", r.Scope)
-	}
-	if !r.GlobalOnly {
-		t.Fatal("GlobalOnly should be true")
+	if r.Agent != "vscode-copilot" {
+		t.Fatalf("Agent=%q, want vscode-copilot", r.Agent)
 	}
 	if !r.MCP {
 		t.Fatal("MCP should be true")
@@ -378,59 +305,48 @@ func TestResult_AllFields(t *testing.T) {
 	if !r.Ponytail {
 		t.Fatal("Ponytail should be true")
 	}
-	if !r.InstallSDD || r.SDDMode != "multi" {
-		t.Fatalf("SDD = %v/%q, want true/multi", r.InstallSDD, r.SDDMode)
-	}
 }
 
-func TestResult_OptionalOffByDefault(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
-	m.selectedAgent = "cursor"
+func TestResult_PonytailOnByDefault(t *testing.T) {
+	m := NewModel(singleAgent("vscode-copilot"))
+	m.selectedAgent = "vscode-copilot"
 	m.confirmed = true
 	r := m.Result()
-	if r.InstallSDD {
-		t.Fatalf("SDD must be off by default: %+v", r)
+	if !r.Ponytail {
+		t.Fatalf("Ponytail must be on by default: %+v", r)
 	}
-	if r.Ponytail {
-		t.Fatalf("Ponytail must be off by default: %+v", r)
+	if r.MCP {
+		t.Fatalf("MCP must stay off by default: %+v", r)
 	}
 }
 
-func TestOptionsStep_CycleSDD(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+// The Options step ends on Autostart: SDD is gone, so is the preset.
+func TestOptionsStep_LastRowIsAutostart(t *testing.T) {
+	m := NewModel(singleAgent("vscode-copilot"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
-	for i := 0; i < 5; i++ {
+	for i := 0; i < optionsRowCount; i++ {
 		sendKey(&m, "down")
 	}
-	if m.optionsCursor != 5 {
-		t.Fatalf("expected optionsCursor=5 (SDD), got %d", m.optionsCursor)
+	if want := optionsRowCount - 1; m.optionsCursor != want {
+		t.Fatalf("cursor must clamp at the last row %d, got %d", want, m.optionsCursor)
 	}
-	if m.sddIdx != 0 {
-		t.Fatal("SDD should start off")
-	}
+	before := m.autostart
 	sendKey(&m, "right")
-	if m.sddIdx != 1 {
-		t.Fatalf("SDD idx=%d, want 1 (single)", m.sddIdx)
-	}
-	sendKey(&m, "right")
-	if m.sddIdx != 2 {
-		t.Fatalf("SDD idx=%d, want 2 (multi)", m.sddIdx)
+	if m.autostart == before {
+		t.Fatal("the last row should toggle autostart")
 	}
 }
 
 func TestViewConfirm_ShowsAllOptions(t *testing.T) {
 	m := NewModel(singleAgent("opencode"))
 	m.selectedAgent = "opencode"
-	m.presetIdx = 0
-	m.scopeIdx = 0
-	m.globalOnly = true
 	m.installMicrosoftLearnMCP = true
 	m.installPonytail = true
 
 	view := m.viewConfirm()
 
-	checks := []string{"opencode", "full-gentleman", "global", "yes", "all extra skills", "Microsoft Learn MCP", "Ponytail"}
+	checks := []string{"opencode", "all extra skills", "Microsoft Learn MCP", "Ponytail"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewConfirm missing %q", c)
@@ -450,14 +366,19 @@ func TestViewConfirm_ShowsQuickInstallMode(t *testing.T) {
 }
 
 func TestViewOptions_Renders(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	m.step = stepOptions
 	view := m.viewOptions()
 
-	checks := []string{"Preset", "Scope", "Global only", "SDD", "full-gentleman", "global", "yes", "off"}
+	checks := []string{"Overwrite agents", "Autostart", "yes"}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
 			t.Errorf("viewOptions missing %q", c)
+		}
+	}
+	for _, gone := range []string{"Preset", "SDD", "Scope", "Global only"} {
+		if strings.Contains(view, gone) {
+			t.Errorf("viewOptions must not ask about %q any more", gone)
 		}
 	}
 	if strings.Contains(view, "Persona") {
@@ -466,7 +387,7 @@ func TestViewOptions_Renders(t *testing.T) {
 }
 
 func TestBreadcrumbs_IncludesOptions(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	m.step = stepOptions
 	bc := m.renderBreadcrumbs()
 	if !strings.Contains(bc, "Options") {
@@ -475,7 +396,7 @@ func TestBreadcrumbs_IncludesOptions(t *testing.T) {
 }
 
 func TestBreadcrumbs_HidesOptionsInQuickMode(t *testing.T) {
-	m := NewModel(singleAgent("cursor"))
+	m := NewModel(singleAgent("vscode-copilot"))
 	m.quickInstall = true
 	m.step = stepConfirm
 	bc := m.renderBreadcrumbs()
@@ -513,8 +434,8 @@ func TestPonytailToggle(t *testing.T) {
 	if m.step != stepMCP {
 		t.Fatalf("expected stepMCP, got %d", m.step)
 	}
-	if m.installPonytail {
-		t.Fatal("Ponytail should start as false")
+	if !m.installPonytail {
+		t.Fatal("Ponytail should start as true")
 	}
 	if m.optionalPluginCursor != 0 {
 		t.Fatalf("optionalPluginCursor=%d, want 0", m.optionalPluginCursor)
@@ -523,16 +444,16 @@ func TestPonytailToggle(t *testing.T) {
 	if m.optionalPluginCursor != 1 {
 		t.Fatalf("optionalPluginCursor=%d, want 1", m.optionalPluginCursor)
 	}
-	sendKey(&m, " ") // toggle ponytail
-	if !m.installPonytail {
-		t.Fatal("Ponytail should be true after space toggle")
+	sendKey(&m, " ") // toggle ponytail off
+	if m.installPonytail {
+		t.Fatal("Ponytail should be false after space toggle")
 	}
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should remain false when toggling Ponytail")
 	}
-	sendKey(&m, " ") // toggle off
-	if m.installPonytail {
-		t.Fatal("Ponytail should be false after second toggle")
+	sendKey(&m, " ") // toggle back on
+	if !m.installPonytail {
+		t.Fatal("Ponytail should be true after second toggle")
 	}
 }
 

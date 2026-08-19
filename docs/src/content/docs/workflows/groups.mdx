@@ -11,7 +11,9 @@ import { Aside } from '@astrojs/starlight/components';
 
 Equipos predefinidos de agentes diseñados para trabajar juntos en tareas específicas.
 
-## Los 3 grupos
+## Los grupos
+
+`ywai install` instala **core + qa-automation**. Los otros: `ywai groups enable <name>`. Disable quita esos `.md` (no core). El install también **prunea** leftovers (gentle, grupos apagados).
 
 ### Core
 
@@ -49,7 +51,6 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 | `qa-orchestrator` | Coordina testing |
 | `qa-analyst` | Estrategia |
 | `qa-dev` | Escribe tests |
-| `qa-finder` | Busca código |
 | `qa-reviewer` | Revisa tests |
 | `qa-ask` | Preguntas de testing |
 
@@ -65,7 +66,8 @@ Social Refactor:
   migration-orchestrator → [migration-planner, migration-scope, migration-validator, dev]
 
 QA Automation:
-  qa-orchestrator → [qa-analyst, qa-dev, qa-finder, qa-reviewer, qa-ask]
+  qa-orchestrator → [qa-analyst, qa-dev, qa-reviewer, qa-ask]
+  (exploración: @finder)
 ```
 
 ## Cuándo usar cada grupo
@@ -78,5 +80,5 @@ QA Automation:
 | Testing completo | QA Automation |
 
 <Aside type="tip">
-No necesitás invocar los grupos directamente. El orchestrator elige el grupo correcto según la tarea.
+Para instalar un grupo extra: `ywai groups enable social-refactor`. El orchestrator no instala grupos solo.
 </Aside>

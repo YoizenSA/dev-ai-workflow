@@ -26,11 +26,9 @@ type ServerClient struct {
 // (e.g. "http://127.0.0.1:4096").
 func NewServerClient(baseURL string) *ServerClient {
 	return &ServerClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: defaultTimeout,
-		},
-		useCLI: true,
+		baseURL:    baseURL,
+		httpClient: authenticatedHTTPClient(defaultTimeout),
+		useCLI:     true,
 	}
 }
 

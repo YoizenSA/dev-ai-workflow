@@ -101,8 +101,8 @@ describe("plugin activation", () => {
         },
       },
       tool: {
-        transform: async (fn: (draft: { add: (name: string) => void }) => void) => {
-          fn({ add: (name: string) => tools.push(name) })
+        transform: async (fn: (draft: { add: (spec: { name: string }) => void }) => void) => {
+          fn({ add: (spec: { name: string }) => tools.push(spec.name) })
         },
       },
       session: { hook: async () => {} },

@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // configLocks holds one *sync.Mutex per target, fetched via lockFor.
@@ -23,6 +25,9 @@ func EntryTargetPath(target string) (string, error) {
 	}
 	switch target {
 	case "opencode":
+		if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
+			return config.FindJSONCPath(dir, "opencode"), nil
+		}
 		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 			return filepath.Join(xdg, "opencode", "opencode.json"), nil
 		}
@@ -78,6 +83,10 @@ func BuildEntryShape(target string, entry CatalogEntry, creds map[string]string)
 			// v2 renamed env → environment; servers are enabled by default.
 			shape["environment"] = stringMapToAny(creds)
 		}
+		if entry.DefaultDisabled {
+			// v2: absent = on. `enabled` is ignored; use `disabled`.
+			shape["disabled"] = true
+		}
 		return shape
 	}
 	shape["command"] = entry.Command[0]
@@ -85,7 +94,7 @@ func BuildEntryShape(target string, entry CatalogEntry, creds map[string]string)
 	if len(creds) > 0 {
 		shape["env"] = stringMapToAny(creds)
 	}
-	shape["enabled"] = true
+	shape["enabled"] = !entry.DefaultDisabled
 	return shape
 }
 
@@ -289,9 +298,28 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 }
 
 func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	next := map[string]any{"servers": servers}
+	clean := map[string]any{}
+	for id, raw := range servers {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			clean[id] = raw
+			continue
+		}
+		next := make(map[string]any, len(entry))
+		for k, v := range entry {
+			next[k] = v
+		}
+		if enabled, ok := next["enabled"].(bool); ok {
+			delete(next, "enabled")
+			if !enabled {
+				next["disabled"] = true
+			}
+		}
+		clean[id] = next
+	}
+	out := map[string]any{"servers": clean}
 	if mcp == nil {
-		return next
+		return out
 	}
 	for k, v := range mcp {
 		if k == "servers" {
@@ -300,9 +328,9 @@ func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any 
 		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
 			continue
 		}
-		next[k] = v
+		out[k] = v
 	}
-	return next
+	return out
 }
 
 // writeRootAtomic serializes root as indented JSON, writes to a sibling

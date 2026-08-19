@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,8 +18,7 @@ import (
 
 // OpenCode config path.
 func OpenCodeConfigPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "opencode", "opencode.json")
+	return filepath.Join(config.OpenCodeConfigDir(), "opencode.json")
 }
 
 // ConfigureOpenCode merges the tokenbank provider into opencode.json.

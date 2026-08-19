@@ -172,9 +172,28 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 }
 
 func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	next := map[string]any{"servers": servers}
+	clean := map[string]any{}
+	for id, raw := range servers {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			clean[id] = raw
+			continue
+		}
+		next := make(map[string]any, len(entry))
+		for k, v := range entry {
+			next[k] = v
+		}
+		if enabled, ok := next["enabled"].(bool); ok {
+			delete(next, "enabled")
+			if !enabled {
+				next["disabled"] = true
+			}
+		}
+		clean[id] = next
+	}
+	out := map[string]any{"servers": clean}
 	if mcp == nil {
-		return next
+		return out
 	}
 	for k, v := range mcp {
 		if k == "servers" {
@@ -183,7 +202,7 @@ func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any 
 		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
 			continue
 		}
-		next[k] = v
+		out[k] = v
 	}
-	return next
+	return out
 }

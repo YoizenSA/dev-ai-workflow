@@ -41,9 +41,9 @@ const plugin = define({
     const configPath = typeof ctx.options?.configPath === "string" ? ctx.options.configPath : CONFIG_PATH
     const config = await loadConfig(configPath)
 
-    await ctx.tool.transform((draft: { add: (name: string, spec: unknown) => void }) => {
+    await ctx.tool.transform((draft: { add: (spec: unknown) => void }) => {
       for (const spec of controlTools(configPath)) {
-        draft.add(spec.name, spec)
+        draft.add(spec)
       }
     })
 

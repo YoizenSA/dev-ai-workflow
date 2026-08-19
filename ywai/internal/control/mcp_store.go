@@ -762,9 +762,28 @@ func collectOpenCodeServers(mcp map[string]interface{}) map[string]interface{} {
 }
 
 func nestOpenCodeMCP(mcp map[string]interface{}, servers map[string]interface{}) map[string]interface{} {
-	next := map[string]interface{}{"servers": servers}
+	clean := map[string]interface{}{}
+	for id, raw := range servers {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			clean[id] = raw
+			continue
+		}
+		next := make(map[string]interface{}, len(entry))
+		for k, v := range entry {
+			next[k] = v
+		}
+		if enabled, ok := next["enabled"].(bool); ok {
+			delete(next, "enabled")
+			if !enabled {
+				next["disabled"] = true
+			}
+		}
+		clean[id] = next
+	}
+	out := map[string]interface{}{"servers": clean}
 	if mcp == nil {
-		return next
+		return out
 	}
 	for k, v := range mcp {
 		if k == "servers" {
@@ -773,9 +792,9 @@ func nestOpenCodeMCP(mcp map[string]interface{}, servers map[string]interface{})
 		if _, isObj := v.(map[string]interface{}); isObj && !openCodeReservedMCPKey(k) {
 			continue
 		}
-		next[k] = v
+		out[k] = v
 	}
-	return next
+	return out
 }
 
 // projectMcpConfigFilePath returns the path to the project-local MCP config file.

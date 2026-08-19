@@ -43,12 +43,13 @@ Terminal markers: `COMPLETED` (include the validated plan path), `AWAITING_INPUT
 
 | Tool | Use for |
 |---|---|
-| `task` | The sequential spine — every phase that needs the previous handoff. Returns it inline. |
-| `delegate` | Fan-out across independent workstreams. Returns an ID; the handoff arrives by notification. |
-| `delegation_read(id)` | Reading an async handoff after its `<task-notification>`. |
+| `delegate(mode="sync")` | The sequential spine — every phase that needs the previous handoff. Returns it inline. |
+| `delegate` (async default) | Fan-out across independent workstreams. Returns an ID; the handoff arrives by notification. |
+| `delegation_read(id)` | Reading an async handoff after its completion notification. |
+| `delegation_peek` / `delegation_steer` / `delegation_stop` | Supervise a running async hop. |
 | `delegation_list()` | Recovery only, e.g. after compaction. Never to check completion. |
 
-Never poll for completion — wait for the `<task-notification>`. Async delegations run in **isolated sessions**, so their file writes are not in your context: anything that changes code goes through sequential `task`, and `delegate` is for research, spikes, and validation summaries that come back as handoffs. A delegated subagent cannot delegate further, so briefs must be self-contained.
+Wait for the completion notification. Delegate through `delegate`. Async delegations run in **isolated sessions**, so their file writes are not in your context: anything that changes code goes through sequential `delegate(mode="sync")`, and async `delegate` is for research, spikes, and validation summaries that come back as handoffs. A delegated subagent cannot delegate further, so briefs must be self-contained.
 
 Every brief carries **Goal · Context (plan path, scope graph, prior handoffs) · Acceptance criteria · Expected artifacts · Constraints · Return format**.
 
@@ -56,7 +57,7 @@ Every brief carries **Goal · Context (plan path, scope graph, prior handoffs) �
 
 Parallelize only across genuinely disjoint work: child plans on different page groups, focused validations with no shared parity rows, disjoint scope sub-trees, separate legacy-module spikes. Each brief names the exact pages, components, or parity rows it owns.
 
-Keep it sequential whenever slices share files, page templates, a tracker row, or the same plan file; for build → validate → remediate on one plan; and for parent validation, which waits on every child reaching `validated`. Cap fan-out at **6 delegations**, then merge, resolve conflicts, and land the aggregation through a sequential `task` before continuing the spine.
+Keep it sequential whenever slices share files, page templates, a tracker row, or the same plan file; for build → validate → remediate on one plan; and for parent validation, which waits on every child reaching `validated`. Cap fan-out at **6 delegations**, then merge, resolve conflicts, and land the aggregation through a sequential `delegate(mode="sync")` before continuing the spine.
 
 ## Progress tracker
 

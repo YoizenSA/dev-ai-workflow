@@ -47,6 +47,7 @@ func TestDetect_PrefersOpenCode2Binary(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 
 	binDir := t.TempDir()
 	v1 := filepath.Join(binDir, "opencode")
@@ -235,6 +236,7 @@ func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 
 	// Without any file, should fall back to .json
 	paths := SettingsPaths()

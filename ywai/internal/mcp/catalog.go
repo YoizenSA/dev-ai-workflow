@@ -36,6 +36,10 @@ type CatalogEntry struct {
 	Tools       []string
 	Docs        string
 
+	// DefaultDisabled: OpenCode v2 treats a missing enabled flag as on.
+	// Set this so install writes enabled:false instead of omitting it.
+	DefaultDisabled bool
+
 	// OAuth fields for remote servers that need authentication.
 	// AuthType is "oauth" when OAuth is required; empty otherwise.
 	AuthType         string
@@ -234,8 +238,9 @@ var catalog = []CatalogEntry{
 	{
 		ID: "codemod", Name: "Codemod",
 		Description: "Large-scale code migrations and AST-based codemods via the Codemod CLI",
-		Category:    "devtools", Icon: "♻️", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "codemod", "mcp"},
+		Category:    "devtools", Icon: "♻️",
+		DefaultDisabled: true,
+		Type:            "local", Command: []string{"npx", "-y", "codemod", "mcp"},
 		InstallCmd: "npm i -g codemod",
 		Tools:      []string{"codemod_run", "codemod_search", "codemod_status"},
 		Docs:       "https://docs.codemod.com",

@@ -1,6 +1,6 @@
 ---
 name: angular
-description: Angular development patterns. Trigger: Angular components, signals, inject, zoneless, project structure, file placement, forms, validation, performance optimization, lazy loading, images.
+description: "Angular patterns. Trigger: components, signals, inject, zoneless, forms, validation, lazy loading, file placement."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

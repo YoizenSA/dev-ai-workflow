@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useThemeStore } from '../../stores/themeStore';
 
 // Inline Lucide paths (sun + moon). lucide-react lands in slice G; the

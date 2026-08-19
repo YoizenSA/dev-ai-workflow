@@ -44,11 +44,6 @@ type RoleDefaults map[string]RoleDefault
 
 // UserConfig represents the user's ywai configuration file
 type UserConfig struct {
-	// Default preset for installations
-	DefaultPreset string `yaml:"default_preset,omitempty" json:"default_preset,omitempty"`
-
-	// Default SDD mode
-	DefaultSDDMode string `yaml:"default_sdd_mode,omitempty" json:"default_sdd_mode,omitempty"`
 
 	// Default persona
 	DefaultPersona string `yaml:"default_persona,omitempty" json:"default_persona,omitempty"`
@@ -187,8 +182,6 @@ func SaveConfig(config *UserConfig) error {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *UserConfig {
 	return &UserConfig{
-		DefaultPreset:             "full-gentleman",
-		DefaultSDDMode:            "single",
 		DefaultPersona:            "gentleman",
 		DefaultScope:              "global",
 		DefaultTUI:                true,

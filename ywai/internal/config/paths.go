@@ -55,10 +55,13 @@ func DataWorkflowsDir() string {
 	return filepath.Join(DataDir(), WorkflowsDirName)
 }
 
-// OpenCodeConfigDir returns the opencode config directory (~/.config/opencode).
-// opencode stores its agents, commands, skills, and config here. Several
-// packages hardcode this path; these helpers centralize it.
+// OpenCodeConfigDir returns the active OpenCode configuration directory. It
+// honors OPENCODE_CONFIG_DIR, which hosts such as Orca set when they launch
+// OpenCode with an isolated configuration; otherwise it uses ~/.config/opencode.
 func OpenCodeConfigDir() string {
+	if dir := strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_DIR")); dir != "" {
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."

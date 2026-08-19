@@ -80,6 +80,7 @@ func setTestHomeDir(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 }
 
 // shapeHasKey reports whether the shape map has the given top-level key.
@@ -200,6 +201,7 @@ func TestEntryTargetPath_Opencode_Default(t *testing.T) {
 func TestEntryTargetPath_Opencode_WithXDG(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 	// HOME should NOT affect the result when XDG is set. We still
 	// point HOME somewhere predictable so a buggy implementation
 	// that ignores XDG and falls back to HOME cannot accidentally
@@ -381,6 +383,28 @@ func TestBuildEntryShape_Opencode_Remote(t *testing.T) {
 	if shapeHasKey(got, "command") {
 		t.Errorf("opencode context7 shape has command = %v, want absent (remote has no subprocess)",
 			got["command"])
+	}
+}
+
+func TestBuildEntryShape_Opencode_CodemodDisabledByDefault(t *testing.T) {
+	codemod, ok := CatalogByID("codemod")
+	if !ok {
+		t.Fatal("CatalogByID(codemod) ok=false")
+	}
+	if !codemod.DefaultDisabled {
+		t.Fatal("codemod must be DefaultDisabled")
+	}
+	if codemod.Popular {
+		t.Fatal("codemod must not be Popular (not a default install pick)")
+	}
+
+	got := BuildEntryShape("opencode", codemod, nil)
+	if v, has := got["enabled"]; has {
+		t.Fatalf("opencode v2 ignores enabled; must not emit it, got %v", v)
+	}
+	disabled, ok := got["disabled"].(bool)
+	if !ok || !disabled {
+		t.Fatalf("opencode codemod disabled = %v (%T), want true", got["disabled"], got["disabled"])
 	}
 }
 

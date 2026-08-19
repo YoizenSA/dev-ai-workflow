@@ -3,11 +3,19 @@
   "edit": "allow",
   "write": "allow",
   "bash": "allow",
-  "task": "allow",
+  "glob": "allow",
+  "grep": "allow",
+  "websearch": "allow",
+  "webfetch": "allow",
+  "code_search": "allow",
+  "task": "deny",
+  "delegate": "deny",
   "question": "allow",
   "skill": "allow",
+  "mcp": "allow",
+  "memory": "allow",
+  "intercom": "allow",
   "graft_*": "allow",
   "context7_*": "allow",
-  "engram_*": "allow",
-  "mcp": "allow"
+  "engram_*": "allow"
 }

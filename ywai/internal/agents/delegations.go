@@ -14,6 +14,13 @@ import (
 // expected next to the agent profiles (ywai/agents/delegations.json).
 const DelegationsFile = "delegations.json"
 
+// OpenCode v2 model-facing delegation tools (Code Mode / opencode2).
+// Permission action remains `subagent`; the callable tool is `delegate`.
+const (
+	OpenCodeDelegateToolHint      = "Delegate with OpenCode v2 `delegate`. Use `mode: \"sync\"` when the next step needs the result, `mode: \"async\"` (default) for independent work. Supervise with `delegation_peek` / `delegation_steer` / `delegation_stop` / `delegation_read`.\n"
+	OpenCodeDelegateSemanticGuard = "Semantic guard: **delegate** means the native `delegate` tool launching a configured sub-agent. Permission action `subagent` gates who may be launched. Delegation is that tool call; scripts, Python, and Bash are execution.\n\n"
+)
+
 // DelegationRule is one row of the "Delegation Rules" table.
 type DelegationRule struct {
 	Action   string `json:"action"`
@@ -420,11 +427,19 @@ func injectTaskPermission(content string, task map[string]string) (string, bool)
 	}
 	rules = ReplaceSubagentRules(rules, task)
 
-	// Keep every frontmatter line except the v2 permissions block and any
-	// legacy v1 permission block; both are re-emitted from the rules below.
+	// Keep every frontmatter line except the v2 permissions block, any legacy
+	// v1 permission block, and `group:`. The permission blocks are re-emitted
+	// from the rules below. `group:` is dropped because opencode v2 accepts a
+	// fixed agent key set; an unknown key sends the whole file down the legacy
+	// v1 decode path, which drops the v2 permissions array. Group membership
+	// lives in GroupSidecarFile. Stripping it here also cleans files installed
+	// before that move, since this rewriter otherwise preserves them forever.
 	var kept []string
 	for i := 0; i < len(fmLines); i++ {
 		trimmed := strings.TrimSpace(fmLines[i])
+		if strings.HasPrefix(trimmed, "group:") {
+			continue
+		}
 		if trimmed == "permissions:" || trimmed == "permission:" ||
 			strings.HasPrefix(trimmed, "permission:") {
 			for i+1 < len(fmLines) && (isIndented(fmLines[i+1]) || strings.TrimSpace(fmLines[i+1]) == "") {
@@ -503,7 +518,7 @@ func applyRulesToMarkdown(agentsDir string, doc *DelegationsDoc) error {
 		if updated == string(data) {
 			continue // nothing changed
 		}
-		_ = os.WriteFile(path+".bak", data, 0o644)
+		_ = WriteAgentBackup(path, data)
 		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
 			fmt.Printf("  Warning: failed to write delegation rules to %s: %v\n", path, err)
 			continue
@@ -537,13 +552,14 @@ func renderRulesSection(rules []DelegationRule, triggers []DelegationTrigger) st
 			}
 			b.WriteString(fmt.Sprintf("| %s | %s | %s |\n", action, inline, delegate))
 		}
-		b.WriteString("\nUse OpenCode's native `subagent` tool for delegated work.\n")
+		b.WriteString("\n")
+		b.WriteString(OpenCodeDelegateToolHint)
 	}
 
 	if len(triggers) > 0 {
 		b.WriteString("\n#### Mandatory Delegation Triggers\n\n")
 		b.WriteString("These gates are **non-skippable hard gates**, not recommendations.\n\n")
-		b.WriteString("Semantic guard: **delegate** means using OpenCode's native `subagent` tool to invoke a configured sub-agent. Running local scripts, Python, or Bash inline is execution, not delegation.\n\n")
+		b.WriteString(OpenCodeDelegateSemanticGuard)
 		for i, t := range triggers {
 			name := strings.TrimSpace(t.Name)
 			if name == "" {

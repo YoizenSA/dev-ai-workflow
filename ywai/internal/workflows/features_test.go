@@ -487,6 +487,11 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 			t.Errorf("orchestrator missing %q:\n%s", want, orch)
 		}
 	}
+	// The contracts block comes from a single source; appending it twice would
+	// silently double the orchestrator prompt.
+	if n := strings.Count(orch, "## Typed Contracts (orchestrator)"); n != 1 {
+		t.Errorf("contracts section appears %d times, want 1", n)
+	}
 	// Ship gate may be YAML or JSON form inside the contracts section.
 	if !strings.Contains(orch, "ship | ship-with-nits | block") &&
 		!strings.Contains(orch, `"ship | ship-with-nits | block"`) {

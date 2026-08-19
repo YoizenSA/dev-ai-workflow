@@ -181,6 +181,29 @@ func TestInstallMicrosoftLearnMCP_OpenCodeV2Nest(t *testing.T) {
 	}
 }
 
+func TestInstallMicrosoftLearnMCP_StripsLegacyEnabled(t *testing.T) {
+	path := writeAgentConfig(t, "opencode.json", map[string]any{
+		"mcp": map[string]any{
+			"jam": map[string]any{
+				"type":    "remote",
+				"url":     "https://mcp.jam.dev/mcp",
+				"enabled": false,
+			},
+		},
+	})
+	if err := InstallMicrosoftLearnMCP(path, "opencode"); err != nil {
+		t.Fatalf("InstallMicrosoftLearnMCP: %v", err)
+	}
+	root := readConfigRoot(t, path)
+	entry := opencodeServers(t, root)["jam"].(map[string]any)
+	if _, has := entry["enabled"]; has {
+		t.Fatal("v2 must not persist enabled")
+	}
+	if entry["disabled"] != true {
+		t.Fatalf("enabled:false must become disabled:true, got %v", entry)
+	}
+}
+
 func writeAgentConfig(t *testing.T, filename string, data map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()

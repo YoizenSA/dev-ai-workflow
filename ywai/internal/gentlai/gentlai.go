@@ -59,164 +59,31 @@ func Install() error {
 // InstallEngram installs the engram binary through ywai's own manual release
 // path (installEngramReleaseBinary) and returns the directory it was
 // installed into. It never invokes the gentle-ai binary. Slice 1 contract:
-// ywai installs engram itself for non-minimal presets.
+// ywai installs engram itself.
 func InstallEngram() (string, error) {
 	return installEngramReleaseBinary()
 }
 
-// InstallOptions holds all configurable options for gentle-ai install.
+// InstallOptions holds configurable ecosystem installation options.
 type InstallOptions struct {
 	AgentName string
-	Preset    string // full-gentleman, ecosystem-only, minimal, custom
-	Scope     string // global, workspace
-	WorkDir   string // working directory for gentle-ai (isolates workspace writes); empty = current dir
 	DryRun    bool
-
-	// Optional gentle-ai SDD (off by default). Installed AFTER ywai's curated
-	// AGENTS.md so marker sections are not wiped. Persona is never installed —
-	// ywai always owns tone via its own AGENTS.md.
-	InstallSDD bool
-	SDDMode    string // "single" or "multi" (default multi when InstallSDD)
 }
 
-// ComponentPlan is the gentle-ai component set derived from an install preset.
-type ComponentPlan struct {
-	IncludeEngram bool
-	Ecosystem     []string // components installed after engram (or alone for minimal)
-}
-
-// PlanForPreset maps install presets to gentle-ai --component lists only.
-// ywai extra skills are always copied by the apply pipeline and are not gated here.
-//
-//	full-gentleman / ecosystem-only / "" / custom → engram + skills + context7 + permissions
-//	minimal                                       → skills only (no engram via this plan)
-func PlanForPreset(preset string) ComponentPlan {
-	switch strings.ToLower(strings.TrimSpace(preset)) {
-	case "minimal":
-		return ComponentPlan{
-			IncludeEngram: false,
-			Ecosystem:     []string{"skills"},
-		}
-	case "ecosystem-only", "full-gentleman", "custom", "":
-		return ComponentPlan{
-			IncludeEngram: true,
-			Ecosystem:     append([]string(nil), ecosystemComponents...),
-		}
-	default:
-		return ComponentPlan{
-			IncludeEngram: true,
-			Ecosystem:     append([]string(nil), ecosystemComponents...),
-		}
-	}
-}
-
-// AllComponents returns engram (when included) plus ecosystem components.
-func (p ComponentPlan) AllComponents() []string {
-	if p.IncludeEngram {
-		out := make([]string, 0, 1+len(p.Ecosystem))
-		out = append(out, "engram")
-		return append(out, p.Ecosystem...)
-	}
-	return append([]string(nil), p.Ecosystem...)
-}
-
+// InstallEcosystem installs Engram. It used to select a gentle-ai component
+// list from an install preset, but ywai installs Engram through its own release
+// path and seeds skills itself, so there is nothing left to choose.
 func InstallEcosystem(opts InstallOptions) error {
-	plan := PlanForPreset(opts.Preset)
-
-	// Slice 1 decoupling: engram is installed through ywai's own release
-	// path, never via `gentle-ai install`. The gentle-ai ecosystem
-	// components (skills/context7/permissions) have no ywai-native
-	// replacement in this slice — context7 is out of scope and skills are
-	// seeded by the apply pipeline — so they are reported and skipped
-	// rather than delegated to the gentle-ai binary.
-	if plan.IncludeEngram {
-		if opts.DryRun {
-			fmt.Println("  Would install engram (ywai release path).")
-		} else {
-			installDir, err := InstallEngram()
-			if err != nil {
-				return fmt.Errorf("failed to install engram: %w", err)
-			}
-			fmt.Printf("  Engram ready in %s\n", installDir)
-			UpgradeEngram()
-		}
-	}
-
-	return nil
-}
-
-// ecosystemComponents are gentle-ai components except engram (installed
-// separately so Homebrew failures cannot abort the others).
-//
-// sdd is optional (InstallSDD); persona is never installed (ywai owns AGENTS.md tone).
-var ecosystemComponents = []string{
-	"skills", "context7", "permissions",
-}
-
-func (o InstallOptions) effectiveScope() string {
-	if o.Scope == "" {
-		return "global"
-	}
-	return o.Scope
-}
-
-func (o InstallOptions) buildArgs(components []string) []string {
-	if len(components) == 0 {
-		components = PlanForPreset(o.Preset).AllComponents()
-	}
-	args := []string{
-		"install",
-		"--agent", o.AgentName,
-		"--scope", o.effectiveScope(),
-	}
-	for _, c := range components {
-		args = append(args, "--component", c)
-	}
-	if o.DryRun {
-		args = append(args, "--dry-run")
-	}
-	return args
-}
-
-// EffectiveSDDMode returns single|multi (default multi).
-func (o InstallOptions) EffectiveSDDMode() string {
-	m := strings.ToLower(strings.TrimSpace(o.SDDMode))
-	if m == "single" || m == "multi" {
-		return m
-	}
-	return "multi"
-}
-
-// HasOptionalComponents reports whether optional SDD should be installed
-// after the base ecosystem + ywai AGENTS.md write.
-func (o InstallOptions) HasOptionalComponents() bool {
-	return o.InstallSDD
-}
-
-// optionalComponents returns sdd for a follow-up install pass.
-func (o InstallOptions) optionalComponents() []string {
-	if o.InstallSDD {
-		return []string{"sdd"}
-	}
-	return nil
-}
-
-// InstallOptionalComponents installs SDD after the base ecosystem.
-// Call this AFTER writing ywai's curated AGENTS.md so gentle-ai can re-inject
-// SDD marker sections. Never installs persona. SDD may auto-pull engram.
-func InstallOptionalComponents(opts InstallOptions) error {
-	if !opts.HasOptionalComponents() {
-		return nil
-	}
-
-	comps := opts.optionalComponents()
-	// Slice 1 decoupling: optional components (SDD) are not delegated to
-	// `gentle-ai install`; a ywai-native SDD flow lands in a later slice.
-	fmt.Printf("Skipping optional SDD components [%s] — ywai-native SDD lands in a later slice.\n",
-		strings.Join(comps, ", "))
 	if opts.DryRun {
+		fmt.Println("  Would install engram (ywai release path).")
 		return nil
 	}
+	installDir, err := InstallEngram()
+	if err != nil {
+		return fmt.Errorf("failed to install engram: %w", err)
+	}
+	fmt.Printf("  Engram ready in %s\n", installDir)
+	UpgradeEngram()
 	return nil
 }
 
@@ -296,11 +163,6 @@ func Doctor() error {
 		fmt.Println("  [info] gentle-ai               not found (optional; ywai does not require it)")
 	}
 
-	return nil
-}
-
-// SkillRegistryRefresh is a no-op: it never resolves or executes gentle-ai.
-func SkillRegistryRefresh(cwd string) error {
 	return nil
 }
 

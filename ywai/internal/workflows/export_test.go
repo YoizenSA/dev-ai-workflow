@@ -47,11 +47,11 @@ func exportFixture() *Workflow {
 func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 	wf := exportFixture()
 	body := orchestratorBody(wf, map[string]string{"news": "daily-task-news-briefing"})
-	if !strings.Contains(body, "`subagent` tool") {
-		t.Fatalf("orchestrator body must tell the model to use the subagent tool:\n%s", body)
+	if !strings.Contains(body, "`delegate`") {
+		t.Fatalf("orchestrator body must tell the model to use OpenCode v2 delegate:\n%s", body)
 	}
-	if strings.Contains(body, "`task` tool") {
-		t.Fatalf("orchestrator body must not mention the v1 task tool:\n%s", body)
+	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
+		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
 	}
 }
 

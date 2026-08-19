@@ -143,3 +143,24 @@ func TestReplaceMarkdownSection_RoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch:\nwant:\n%s\ngot:\n%s", original, again)
 	}
 }
+
+// Regression: repeated scalar edits used to add a pair of blank lines to the
+// frontmatter on every call, because parseFrontmatter returned the delimiter
+// newlines and Split/Join round-tripped them into real lines. Installed agent
+// files accumulated dozens of blank lines between "---" and the first key.
+func TestSetScalarFrontmatterField_Idempotent(t *testing.T) {
+	content := "---\ndescription: agent\nmode: all\n---\n\nbody\n"
+
+	once := setScalarFrontmatterField(content, "model", "prov/a")
+	if strings.HasPrefix(once, "---\n\n") {
+		t.Fatalf("blank line after opening delimiter:\n%q", once)
+	}
+
+	got := once
+	for i := 0; i < 5; i++ {
+		got = setScalarFrontmatterField(got, "model", "prov/a")
+	}
+	if got != once {
+		t.Fatalf("not idempotent after 5 rewrites:\nfirst: %q\nlast:  %q", once, got)
+	}
+}

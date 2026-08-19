@@ -8,15 +8,15 @@ import (
 )
 
 func TestInstallPonytail_OpenCode(t *testing.T) {
-	t.Run("creates_plugin_array_when_missing", func(t *testing.T) {
+	t.Run("does_not_add_plugin_when_missing", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{})
 
 		if err := InstallPonytail("opencode", path); err != nil {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
-		if arr := pluginArray(t, path); !containsString(arr, PonytailNPMPackage) {
-			t.Errorf("plugin array %v does not contain %q", arr, PonytailNPMPackage)
+		if arr := pluginArray(t, path); len(arr) != 0 {
+			t.Errorf("plugin array = %v, want empty", arr)
 		}
 	})
 
@@ -33,13 +33,15 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 		if !containsString(arr, "some-other-plugin") {
 			t.Errorf("plugin array %v dropped pre-existing entry", arr)
 		}
-		if !containsString(arr, PonytailNPMPackage) {
-			t.Errorf("plugin array %v does not contain %q", arr, PonytailNPMPackage)
+		if containsString(arr, PonytailNPMPackage) {
+			t.Errorf("plugin array %v still contains %q", arr, PonytailNPMPackage)
 		}
 	})
 
-	t.Run("idempotent_no_duplicate", func(t *testing.T) {
-		path := writeAgentConfig(t, "opencode.json", map[string]any{})
+	t.Run("idempotent_removal", func(t *testing.T) {
+		path := writeAgentConfig(t, "opencode.json", map[string]any{
+			"plugins": []any{PonytailNPMPackage, "other"},
+		})
 
 		for i := 0; i < 2; i++ {
 			if err := InstallPonytail("opencode", path); err != nil {
@@ -48,18 +50,12 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 		}
 
 		arr := pluginArray(t, path)
-		count := 0
-		for _, v := range arr {
-			if s, _ := v.(string); s == PonytailNPMPackage {
-				count++
-			}
-		}
-		if count != 1 {
-			t.Errorf("plugin array %v contains %q %d times, want exactly 1", arr, PonytailNPMPackage, count)
+		if len(arr) != 1 || !containsString(arr, "other") || containsString(arr, PonytailNPMPackage) {
+			t.Errorf("plugin array = %v, want only preserved entry", arr)
 		}
 	})
 
-	t.Run("already_present_left_alone", func(t *testing.T) {
+	t.Run("removes_legacy_entry", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{
 			"plugins": []any{PonytailNPMPackage, "other"},
 		})
@@ -69,8 +65,8 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 		}
 
 		arr := pluginArray(t, path)
-		if len(arr) != 2 {
-			t.Errorf("plugin array length = %d, want 2 (no reshuffle/dup): %v", len(arr), arr)
+		if len(arr) != 1 || !containsString(arr, "other") || containsString(arr, PonytailNPMPackage) {
+			t.Errorf("plugin array = %v, want only preserved entry", arr)
 		}
 	})
 }

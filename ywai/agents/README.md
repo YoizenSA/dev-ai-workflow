@@ -26,7 +26,7 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 | Mode | When | Behavior |
 |------|------|----------|
 | `solo` | One file / clear small fix / Q&A | Orchestrator acts alone (search + edit + verify). Zero subagents. |
-| `thin` | Clear "do X", limited scope | Prefer act alone; at most one sync `task` hop. |
+| `thin` | Clear "do X", limited scope | Prefer act alone; at most one sync `delegate` hop. |
 | `full` | Multi-phase, ordered deps, ship | Classic SCOUT → PLAN → implement/test → review. No product edits by orchestrator. |
 
 - **Risk** (auth, migrations, public API, …) decides TDD/review — not mode size alone.
@@ -97,11 +97,13 @@ graph TD
 - In **full**, orchestrator does not edit product code — writes go through subagents.
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
-The orchestrator uses a **capability model** with per-platform adapters. On opencode
-it delegates via `task` (sync) and `delegate` (async), asks decisions with `question`,
-and tracks plans with `todowrite`. On Claude Code it uses `Agent`/`Task` and
-`TaskCreate`/`Update`. On PI.dev it uses subagent tools. All hosts fall back to
-`@mention` routing when the native tool is unavailable.
+The orchestrator uses a **capability model** with per-platform adapters. On OpenCode
+v2 it delegates via `delegate` (`mode: "sync"` or async default) and supervises
+with `delegation_*`. `delegate` is the runtime delegation tool
+(permission action `subagent` still gates who may be launched). It asks decisions
+with `question` and tracks plans with `todowrite`. On Claude Code it uses
+`Agent`/`Task` and `TaskCreate`/`Update`. On PI.dev it uses host subagent tools.
+All hosts fall back to `@mention` routing when the native tool is unavailable.
 
 ## Config Format
 
@@ -119,7 +121,8 @@ agents/
 │   ├── handoff.md          # Standard handoff format (core subagents → @orchestrator)
 │   ├── handoff-qa.md       # Handoff format for qa-automation subagents (@qa-*)
 │   ├── context-gathering.md # Context gathering protocol
-│   └── orchestrator-contracts.md # Typed handoff/review contracts (auto-appended to orchestrators)
+│   ├── orchestrator-contracts.md      # Short pointer (auto-appended to orchestrators)
+│   └── orchestrator-contracts-full.md # Full handoff/review schema (read on demand / workflow export)
 ```
 
 Shared sections are appended to an agent's prompt at build time when referenced in the `sections:` frontmatter array (e.g. `sections: [handoff, context-gathering, tdd]`). A section named `foo` resolves to `sections/foo.md`; missing sections are skipped silently.

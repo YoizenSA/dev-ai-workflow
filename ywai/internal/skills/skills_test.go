@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
@@ -507,5 +508,186 @@ func TestPruneRetiredSkills_LeavesSymlinksAlone(t *testing.T) {
 func TestPruneRetiredSkills_MissingDirIsNoOp(t *testing.T) {
 	if removed := pruneRetiredSkills(filepath.Join(t.TempDir(), "absent"), map[string]bool{}); removed != nil {
 		t.Errorf("removed = %v, want nil", removed)
+	}
+}
+
+func TestWorkLedgerSkillLayout(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	dir := filepath.Join(filepath.Dir(thisFile), "..", "..", "skills", "work-ledger")
+	required := []string{
+		"SKILL.md",
+		extraSkillMarkerFile,
+		"modules/gate.md",
+		"modules/ledger.md",
+		"modules/seams.md",
+		"modules/ship.md",
+		"modules/resume.md",
+	}
+	for _, rel := range required {
+		path := filepath.Join(dir, rel)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("work-ledger missing %s: %v", rel, err)
+		}
+		if strings.TrimSpace(string(data)) == "" {
+			t.Fatalf("work-ledger %s is empty", rel)
+		}
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "name: work-ledger") {
+		t.Fatal("SKILL.md must declare name: work-ledger")
+	}
+	if !strings.Contains(text, "description:") {
+		t.Fatal("SKILL.md must have a description")
+	}
+}
+
+// maxSkillDescription caps the frontmatter description of a bundled skill.
+//
+// Every description is concatenated into the <available_skills> block that
+// OpenCode injects into every request of every agent, so the catalog is paid
+// on every turn whether or not a skill is ever loaded. Measured on a real
+// payload the block was 5486 tokens; the descriptions had drifted to full
+// paragraphs (diks alone spent 582 characters). The description only has to
+// make the model pick the skill — the SKILL.md body is where the content
+// lives, and it costs nothing until the skill is actually loaded.
+const maxSkillDescription = 125
+
+func TestBundledSkillDescriptionsStayShort(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	skillsDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("read skills dir: %v", err)
+	}
+
+	checked := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(skillsDir, e.Name(), "SKILL.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // not every directory ships a SKILL.md
+		}
+		desc, ok := frontmatterDescriptionForTest(string(data))
+		if !ok {
+			t.Errorf("%s: no description in frontmatter", e.Name())
+			continue
+		}
+		checked++
+		if len(desc) > maxSkillDescription {
+			t.Errorf("%s: description is %d chars, max %d\n  %s",
+				e.Name(), len(desc), maxSkillDescription, desc)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no bundled skills checked; the test is not looking where it thinks")
+	}
+}
+
+// frontmatterDescriptionForTest reads the description from YAML frontmatter,
+// covering the plain, quoted, and folded (">") forms the skills use.
+func frontmatterDescriptionForTest(s string) (string, bool) {
+	if !strings.HasPrefix(s, "---\n") {
+		return "", false
+	}
+	end := strings.Index(s[4:], "\n---")
+	if end < 0 {
+		return "", false
+	}
+	lines := strings.Split(s[4:4+end], "\n")
+	for i, l := range lines {
+		if !strings.HasPrefix(l, "description:") {
+			continue
+		}
+		val := strings.TrimSpace(strings.TrimPrefix(l, "description:"))
+		if val == ">" || val == "|" {
+			var folded []string
+			for _, next := range lines[i+1:] {
+				if next == "" || !unicode.IsSpace(rune(next[0])) {
+					break
+				}
+				folded = append(folded, strings.TrimSpace(next))
+			}
+			return strings.Join(folded, " "), true
+		}
+		return strings.Trim(val, `"'`), true
+	}
+	return "", false
+}
+
+// A one-level scan reported ~/.gemini clean while ten sdd-* skills sat in
+// ~/.gemini/antigravity-cli/skills, and missed the loose sdd-orchestrator.md /
+// sdd-*.config.toml gentle-ai drops in the config root. A cleanup that reports
+// success while assets remain is worse than none: nobody looks again.
+func TestRemoveSddAssetsReachesNestedAndLooseAssets(t *testing.T) {
+	cfg := t.TempDir()
+	write := func(rel string) {
+		p := filepath.Join(cfg, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	// Retired assets, in all three shapes seen on real hosts.
+	write("sdd-orchestrator.md")                         // loose in config root
+	write("sdd-cheap.config.toml")                       // loose in config root
+	write("skills/sdd-init/SKILL.md")                    // the already-covered shape
+	write("antigravity-cli/skills/sdd-apply/SKILL.md")   // nested agent
+	write("antigravity-cli/skills/_shared/sdd-phase.md") // nested _shared
+	write("antigravity-cli/commands/sdd-new.md")         // nested commands
+
+	// Must survive: a plugin marketplace owns its sdd-* skills, and ywai's own
+	// skills never match the prefix anyway.
+	write("plugins/marketplaces/engram/skills/sdd-flow/SKILL.md")
+	write("skills/angular/SKILL.md")
+
+	removed, err := RemoveSddAssets(filepath.Join(cfg, "skills"))
+	if err != nil {
+		t.Fatalf("RemoveSddAssets: %v", err)
+	}
+	if len(removed) != 6 {
+		t.Errorf("removed %d assets, want 6: %v", len(removed), removed)
+	}
+	for _, rel := range []string{
+		"sdd-orchestrator.md",
+		"sdd-cheap.config.toml",
+		"skills/sdd-init",
+		"antigravity-cli/skills/sdd-apply",
+		"antigravity-cli/skills/_shared/sdd-phase.md",
+		"antigravity-cli/commands/sdd-new.md",
+	} {
+		if _, err := os.Stat(filepath.Join(cfg, rel)); !os.IsNotExist(err) {
+			t.Errorf("%s survived (err=%v)", rel, err)
+		}
+	}
+	for _, rel := range []string{
+		"plugins/marketplaces/engram/skills/sdd-flow/SKILL.md",
+		"skills/angular/SKILL.md",
+	} {
+		if _, err := os.Stat(filepath.Join(cfg, rel)); err != nil {
+			t.Errorf("%s must not be touched: %v", rel, err)
+		}
+	}
+
+	// The count the Settings panel shows must agree with what removal does,
+	// or the UI says "Sin assets SDD" over a host that still has them.
+	if got := CountSddAssets(filepath.Join(cfg, "skills")); got != 0 {
+		t.Errorf("CountSddAssets after removal = %d, want 0", got)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
@@ -105,7 +106,7 @@ func openCodeV2JSONEntry(name string, profile AgentProfile) map[string]any {
 		"mode":        profile.Mode,
 		"description": profile.Description,
 		"system":      profile.Prompt,
-		"permissions": RulesToJSONShape(RulesFromPermissionMap(filepath.Base(name), profile.Permission)),
+		"permissions": RulesToJSONShape(ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)),
 	}
 }
 
@@ -327,11 +328,6 @@ func ompToolsString(perms map[string]string) string {
 	return strings.Join(names, ", ")
 }
 
-// InstallCursor writes agent .md files to ~/.cursor/agents/.
-func InstallCursor(agentsDir string, profiles map[string]AgentProfile) error {
-	return InstallClaude(agentsDir, profiles) // same format
-}
-
 // InstallVSCode writes agent profiles as .instructions.md files to VS Code Copilot prompts dir.
 // VS Code Copilot reads *.instructions.md files from the User/prompts/ directory.
 // Users activate them from Copilot Chat with @workspace or participant selection.
@@ -360,7 +356,7 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 		prompt := stripFrontmatter(profile.Prompt)
 
 		content := fmt.Sprintf("---\nname: %s\ndescription: %s\napplyTo: '**'\n---\n\n%s",
-			name, profile.Description, prompt)
+			name, yamlScalar(profile.Description), prompt)
 
 		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
@@ -496,8 +492,90 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 	// the file path, so a nested copy (e.g. core/orchestrator.md) registers as
 	// "core/orchestrator" and shadows the canonical flat "orchestrator" id.
 	removeLegacyGroupDirs(agentsDir)
+	RemoveAgentBackups(agentsDir)
+	PruneUnlistedAgents(agentsDir, profiles)
+
+	if err := WriteGroupSidecar(agentsDir, profiles); err != nil {
+		fmt.Printf("  Warning: failed to write group sidecar: %v\n", err)
+	}
 
 	return nil
+}
+
+// GroupSidecarFile holds agent -> group membership beside the flat agent files.
+// It replaces the `group:` frontmatter field, which opencode v2 rejects as an
+// unknown agent key (see BuildOpenCodeMarkdown). The leading dot keeps it out
+// of opencode's *.md agent discovery.
+const GroupSidecarFile = ".ywai-groups.json"
+
+// WriteGroupSidecar records the group of every installed profile. Agents with
+// no group are omitted, so an empty map removes the file instead of leaving a
+// stale one behind.
+func WriteGroupSidecar(agentsDir string, profiles map[string]AgentProfile) error {
+	groups := make(map[string]string, len(profiles))
+	for name, profile := range profiles {
+		if profile.Group != "" {
+			groups[filepath.Base(name)] = profile.Group
+		}
+	}
+	path := filepath.Join(agentsDir, GroupSidecarFile)
+	if len(groups) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	data, err := json.MarshalIndent(groups, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// ReadGroupSidecar returns the recorded group for one agent, or "" when the
+// sidecar is missing or does not list it.
+func ReadGroupSidecar(agentsDir, agentName string) string {
+	data, err := os.ReadFile(filepath.Join(agentsDir, GroupSidecarFile))
+	if err != nil {
+		return ""
+	}
+	var groups map[string]string
+	if err := json.Unmarshal(data, &groups); err != nil {
+		return ""
+	}
+	return groups[agentName]
+}
+
+// PruneUnlistedAgents deletes flat *.md files whose base name is not in
+// profiles. OpenCode v2 discovers every file in the agents dir, so leftovers
+// from old groups or other installers (gentle-orchestrator, goal-*) stay
+// live until swept. Returns how many files were removed.
+func PruneUnlistedAgents(agentsDir string, keep map[string]AgentProfile) int {
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return 0
+	}
+	want := make(map[string]bool, len(keep))
+	for k := range keep {
+		want[filepath.Base(k)] = true
+	}
+	removed := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		base := strings.TrimSuffix(e.Name(), ".md")
+		if want[base] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(agentsDir, e.Name())); err != nil {
+			fmt.Printf("  Warning: failed to prune leftover agent %s: %v\n", e.Name(), err)
+			continue
+		}
+		removed++
+		fmt.Printf("  Removed leftover agent %s\n", e.Name())
+	}
+	return removed
 }
 
 // removeLegacyGroupDirs deletes every subdirectory under the agents dir. The
@@ -524,6 +602,139 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
+// retiredConfigPaths are artifacts ywai used to write into a host's config
+// directory and has since dropped, relative to that directory. They are swept
+// on every install and update so a retired mechanism does not keep running
+// from an old release.
+//
+// `.atl/` and `skills/skill-registry` held the pre-v2 skill registry: a
+// generated index of SKILL.md paths for orchestrators to hand to sub-agents.
+// OpenCode v2 injects <available_skills> and loads skills by id, so the
+// registry survived only as a stale index pointing at files that no longer
+// exist — worse than no index, since an agent follows the dead path, fails,
+// and continues degraded.
+var retiredConfigPaths = []string{
+	".atl",
+	filepath.Join("skills", "skill-registry"),
+}
+
+// retiredSkillDirNames are host skill folders that rewrite .atl/ on every run.
+// OpenCode v2 injects skills natively; these directories must not come back.
+var retiredSkillDirNames = []string{"skill-registry"}
+
+func wellKnownSkillRoots(home string) []string {
+	if home == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".agents", "skills"),
+		filepath.Join(home, ".config", "agents", "skills"),
+		filepath.Join(home, ".config", "opencode", "skills"),
+		filepath.Join(home, ".kimi", "skills"),
+		filepath.Join(home, ".openclaw", "skills"),
+		filepath.Join(home, ".pi", "agent", "skills"),
+		filepath.Join(home, ".cursor", "skills"),
+		filepath.Join(home, ".codex", "skills"),
+		filepath.Join(home, ".gemini", "skills"),
+		filepath.Join(home, ".copilot", "skills"),
+		filepath.Join(home, ".codeium", "windsurf", "skills"),
+	}
+}
+
+func removeExisting(path string) bool {
+	if path == "" {
+		return false
+	}
+	if _, err := os.Lstat(path); err != nil {
+		return false
+	}
+	if err := os.RemoveAll(path); err != nil {
+		fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
+		return false
+	}
+	return true
+}
+
+func removeAtlDirs(root string) []string {
+	if root == "" {
+		return nil
+	}
+	var removed []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if name == ".git" || name == "node_modules" || name == "vendor" {
+			return filepath.SkipDir
+		}
+		if name == ".atl" {
+			if removeExisting(path) {
+				removed = append(removed, path)
+			}
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return removed
+}
+
+// SweepRetiredSkillRegistry deletes skill-registry installs under well-known
+// host skill roots and every `.atl` directory under repoRoot. Missing paths
+// are skipped. The sweep is idempotent.
+func SweepRetiredSkillRegistry(home, repoRoot string) []string {
+	var removed []string
+	for _, root := range wellKnownSkillRoots(home) {
+		for _, name := range retiredSkillDirNames {
+			p := filepath.Join(root, name)
+			if removeExisting(p) {
+				removed = append(removed, p)
+			}
+		}
+		if p := filepath.Join(root, ".atl"); removeExisting(p) {
+			removed = append(removed, p)
+		}
+	}
+	for _, dir := range []string{
+		filepath.Join(home, ".config", "opencode"),
+		filepath.Join(home, ".claude"),
+		filepath.Join(home, ".ywai"),
+	} {
+		p := filepath.Join(dir, ".atl")
+		if removeExisting(p) {
+			removed = append(removed, p)
+		}
+	}
+	removed = append(removed, removeAtlDirs(repoRoot)...)
+	return removed
+}
+
+// RemoveRetiredConfigArtifacts deletes retiredConfigPaths from configDir and
+// returns the relative paths it removed. Missing paths are not an error: the
+// sweep runs on every install and is a no-op once the host is clean.
+func RemoveRetiredConfigArtifacts(configDir string) []string {
+	if configDir == "" {
+		return nil
+	}
+	var removed []string
+	for _, rel := range retiredConfigPaths {
+		path := filepath.Join(configDir, rel)
+		if _, err := os.Lstat(path); err != nil {
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
+			continue
+		}
+		removed = append(removed, rel)
+	}
+	return removed
+}
+
 // retiredAgentBases are agents removed from ywai that may still be installed
 // on a user's hosts from a previous release. The install sweeps them so stale
 // files don't keep showing up as runnable agents after an upgrade.
@@ -539,6 +750,85 @@ func RemoveRetiredAgents(agentsDir string) int {
 		}
 	}
 	return removed
+}
+
+// agentBackupRootFn is the directory OpenCode/Claude/Cursor/PI/OMP never scan.
+// Hosts only read their own agents/ folders; ~/.ywai/agent-backups stays private.
+var agentBackupRootFn = func() string {
+	return filepath.Join(config.DataDir(), "agent-backups")
+}
+
+// SetAgentBackupRootForTest redirects the stash directory. Restores the previous
+// resolver when the returned function is called.
+func SetAgentBackupRootForTest(dir string) func() {
+	prev := agentBackupRootFn
+	agentBackupRootFn = func() string { return dir }
+	return func() { agentBackupRootFn = prev }
+}
+
+// WriteAgentBackup stores a pre-overwrite snapshot under ~/.ywai/agent-backups,
+// never as a sibling of the live agent file.
+func WriteAgentBackup(livePath string, content []byte) error {
+	dest, err := backupDestPath(filepath.Base(livePath) + ".bak")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dest, content, 0o644)
+}
+
+func backupDestPath(name string) (string, error) {
+	root := agentBackupRootFn()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(root, name)
+	if _, err := os.Stat(dest); err == nil {
+		dest = filepath.Join(root, fmt.Sprintf("%s.%d.bak", strings.TrimSuffix(name, ".bak"), time.Now().UnixNano()))
+	}
+	return dest, nil
+}
+
+// RemoveAgentBackups moves leftover *.bak files out of a host agents directory
+// into ~/.ywai/agent-backups so they are not enumerated as agents.
+func RemoveAgentBackups(agentsDir string) int {
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return 0
+	}
+	moved := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".bak") {
+			continue
+		}
+		src := filepath.Join(agentsDir, name)
+		dest, err := backupDestPath(name)
+		if err != nil {
+			fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
+			continue
+		}
+		if err := os.Rename(src, dest); err != nil {
+			// Cross-device: copy then remove.
+			data, readErr := os.ReadFile(src)
+			if readErr != nil {
+				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
+				continue
+			}
+			if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
+				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, writeErr)
+				continue
+			}
+			if rmErr := os.Remove(src); rmErr != nil {
+				fmt.Printf("  Warning: backup copied but source remains %s: %v\n", name, rmErr)
+				continue
+			}
+		}
+		moved++
+	}
+	return moved
 }
 
 // RemoveAgentsWithoutDescription deletes every flat .md in agentsDir whose
@@ -797,9 +1087,12 @@ func ConfiguredMCPServers() []string {
 		return nil
 	}
 	set := map[string]bool{}
-	// v1/current layout: servers directly under "mcp".
+	// v1 layout: servers directly under "mcp" (skip reserved v2 keys).
 	if raw, ok := root["mcp"].(map[string]any); ok {
 		for name := range raw {
+			if name == "servers" || name == "timeout" {
+				continue
+			}
 			if strings.TrimSpace(name) != "" {
 				set[name] = true
 			}
@@ -886,17 +1179,20 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	}
 
 	b.WriteString("---\n")
-	b.WriteString(fmt.Sprintf("description: %s\n", description))
+	b.WriteString(fmt.Sprintf("description: %s\n", yamlScalar(description)))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
-	if profile.Group != "" {
-		b.WriteString(fmt.Sprintf("group: %s\n", profile.Group))
-	}
+	// Group membership deliberately does NOT go here. opencode v2 accepts a
+	// fixed key set in agent frontmatter (model, variant, request, system,
+	// description, mode, hidden, color, steps, disabled, permissions). Any
+	// other key makes config/plugin/agent.ts take the legacy v1 decode path,
+	// whose schema knows `permission` (a map) and silently drops our v2
+	// `permissions` rule array. Group lives in GroupSidecarFile instead.
 
 	// Permissions as the v2 ordered rule array (see permissions_v2.go). Omitted
 	// native actions default to deny, so only the explicitly allowed surface is
 	// exposed; coarse buckets (memory, intercom, mcp) expand to the wildcard
 	// action names that actually gate the underlying tools.
-	rules := RulesFromPermissionMap(filepath.Base(name), profile.Permission)
+	rules := ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)
 	for _, line := range RenderPermissionRulesYAML(rules) {
 		b.WriteString(line + "\n")
 	}
@@ -1044,4 +1340,80 @@ func uniqueSortedStrings(s []string) []string {
 		}
 	}
 	return result
+}
+
+// legacyAgentFrontmatterKeys are keys ywai used to emit that opencode v2 does
+// not accept in agent frontmatter. Any of them makes config/plugin/agent.ts
+// classify the file as legacy v1 and decode it with a schema that knows
+// `permission` (a map) instead of the v2 `permissions` rule array — so the
+// agent silently loses its permissions.
+var legacyAgentFrontmatterKeys = []string{"group:"}
+
+// StripLegacyAgentKeys removes those keys from every flat agent file in
+// agentsDir. Several writers assemble these files by preserving existing
+// frontmatter lines, so a key written once survives every later rewrite; this
+// sweep runs last and is idempotent. Returns how many files it changed.
+func StripLegacyAgentKeys(agentsDir string) int {
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return 0
+	}
+	changed := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(agentsDir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		out, dirty := stripLegacyKeysFromFrontmatter(string(data))
+		if !dirty {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(out), 0o644); err == nil {
+			changed++
+		}
+	}
+	return changed
+}
+
+// stripLegacyKeysFromFrontmatter drops the offending top-level keys from the
+// YAML frontmatter only, leaving the prompt body untouched.
+func stripLegacyKeysFromFrontmatter(content string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content, false
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return content, false
+	}
+	var out []string
+	dirty := false
+	for i, line := range lines {
+		if i > 0 && i < end {
+			trimmed := strings.TrimSpace(line)
+			drop := false
+			for _, key := range legacyAgentFrontmatterKeys {
+				if strings.HasPrefix(trimmed, key) {
+					drop = true
+					break
+				}
+			}
+			if drop {
+				dirty = true
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n"), dirty
 }

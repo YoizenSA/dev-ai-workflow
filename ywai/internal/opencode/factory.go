@@ -9,6 +9,39 @@ import (
 
 const defaultProbeTimeout = 2 * time.Second
 
+// ApplyServerAuth adds OpenCode's documented HTTP Basic authentication when
+// the server password is provided to ywai's process environment.
+func ApplyServerAuth(req *http.Request) {
+	password := os.Getenv("OPENCODE_SERVER_PASSWORD")
+	if password == "" {
+		return
+	}
+	username := os.Getenv("OPENCODE_SERVER_USERNAME")
+	if username == "" {
+		username = "opencode"
+	}
+	req.SetBasicAuth(username, password)
+}
+
+type serverAuthTransport struct {
+	base http.RoundTripper
+}
+
+func (t serverAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	copy := req.Clone(req.Context())
+	copy.Header = req.Header.Clone()
+	ApplyServerAuth(copy)
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(copy)
+}
+
+func authenticatedHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: serverAuthTransport{}}
+}
+
 // DefaultClient tries the server first; falls back to local config.
 // Set OPENCODE_URL env var to override the default server URL.
 func DefaultClient(ctx context.Context) Client {
@@ -31,7 +64,8 @@ func ProbeServer(ctx context.Context, baseURL string) (bool, error) {
 		return false, err
 	}
 
-	client := &http.Client{Timeout: defaultProbeTimeout}
+	ApplyServerAuth(req)
+	client := authenticatedHTTPClient(defaultProbeTimeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, nil //nolint:nilerr // not reachable, not an error

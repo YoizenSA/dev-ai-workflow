@@ -1,6 +1,5 @@
 // @ts-nocheck
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { RGBA } from "@opentui/core"
 import { createMemo, createSignal, onCleanup, Index } from "solid-js"
@@ -9,6 +8,11 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 const id = "ywai-logo"
+
+type TuiTheme = {
+  textMuted: string
+  accent: string
+}
 
 // Canonical ywai wordmark — kept in sync with internal/tui/tui.go logoLines.
 const wordmark = [
@@ -81,7 +85,7 @@ const readVersionInfo = (): VersionInfo => {
 // Normalize a tag (GitHub prepends "v") for display.
 const tag = (v?: string) => (v ? (v.startsWith("v") ? v : `v${v}`) : "")
 
-const Logo = (props: { theme: TuiThemeCurrent }) => {
+const Logo = (props: { theme: TuiTheme }) => {
   const dim = useTerminalDimensions()
   const [clicks, setClicks] = createSignal(0)
   const [phase, setPhase] = createSignal(0)
@@ -142,17 +146,13 @@ const Logo = (props: { theme: TuiThemeCurrent }) => {
   )
 }
 
-const tui: TuiPlugin = async (api) => {
-  api.slots.register({
-    id,
-    order: 100,
-    slots: {
-      home_logo(ctx) {
-        return <Logo theme={ctx.theme.current} />
-      },
-    },
+// OpenCode2 beta uses the v2 TUI module contract: `{ id, setup }`.
+const setup = (ctx: { theme: TuiTheme; ui: { slot: (claim: unknown) => unknown } }) => {
+  ctx.ui.slot({
+    replace: "home.logo",
+    render: () => <Logo theme={ctx.theme} />,
   })
 }
 
-const plugin = { id, tui }
+const plugin = { id, setup }
 export default plugin

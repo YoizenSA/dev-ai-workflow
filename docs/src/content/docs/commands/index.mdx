@@ -13,18 +13,18 @@ ywai instala y actualiza **su propio** entorno: Engram, skills, perfiles, plugin
 
 | Comando | Qué hace | Cuándo usarlo |
 |---|---|---|
-| `ywai install` | Engram, skills, perfiles, plugins/Graft, SDD opcional | Primera vez |
+| `ywai install` | Engram, skills, perfiles, plugins/Graft | Primera vez |
 | `ywai update` | Binario + re-aplica todo lo que ywai gestiona | Después de una release |
 | `ywai upgrade` | Solo el binario de ywai | Si no querés re-aplicar perfiles |
 | `ywai doctor` | Diagnóstico de solo lectura | Si algo no funciona |
 | `ywai skills` | Lista skills extra | Ver qué hay instalado |
 | `ywai agents` | Lista agentes detectados | Verificar configuración |
-| `ywai skill-registry` | Refresca registro de skills | Después de modificar skills |
+
 | `ywai kanban` | Abre el tablero visual | Monitorear agentes |
 | `ywai serve` | Inicia servidor como servicio | Servidor always-on |
 | `ywai mcp list` | Lista MCP en opencode.json | Ver qué está on/off |
 | `ywai mcp enable/disable <id>` | Activa o desactiva un MCP instalado | Sin desinstalar |
-| `ywai profile list` | Lista profiles (balanced/fast/deep/inherit) | Ver el activo |
+| `ywai profile list` | Lista profiles de modelo (balanced/fast/deep/inherit) | Ver el activo |
 | `ywai profile use <name>` | Cambia profile y aplica modelos | `inherit` no pinea modelos |
 | `ywai groups` | Lista grupos de agentes | Ver core / qa / experiment |
 | `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar social-refactor, etc. |
@@ -34,24 +34,17 @@ ywai instala y actualiza **su propio** entorno: Engram, skills, perfiles, plugin
 
 ### `ywai install`
 
-Setup de ywai: Engram directo, skills extra, perfiles de agentes, plugins (incluye Graft), SDD opcional e init de proyecto.
+Setup de ywai: Engram, skills extra, perfiles de agentes, plugins (incluye Graft) e init de proyecto. En OpenCode deja **solo** los agentes del grupo activo (borra leftovers en `~/.config/opencode/agents/`). El host es `opencode2`.
 
 ```bash
 ywai install                    # Instalación completa
 ywai install --dry-run          # Ver qué cambiaría
 ywai install --agent opencode   # Solo para un agente
-ywai install --preset minimal   # Preset específico
 ```
 
-**Presets** (qué componentes ywai aplica; los skills extra se copian siempre):
+Engram se instala siempre. Los skills, perfiles de agente y plugins también.
 
-| Preset | Qué instala |
-|---|---|
-| `full-gentleman` | Todo (default) |
-| `ecosystem-only` | Ecosistema de perfiles/plugins, sin extras opcionales |
-| `minimal` | Lo esencial |
-
-**Flags útiles:** `--mcp` (Microsoft Learn MCP), `--ponytail` (plugin YAGNI), `--scope global|workspace`, `--sdd-mode single|multi`, `--group` / `--all-groups`.
+**Flags útiles:** `--mcp` (Microsoft Learn MCP), `--ponytail` (plugin YAGNI, activado por defecto; `--ponytail=false` para omitir), `--scope global|workspace`, `--group` / `--all-groups`.
 
 ### `ywai update`
 
@@ -106,8 +99,7 @@ ywai serve --status  # Ver estado
 |---|---|---|
 | `--agent, -a` | Agente específico | `ywai install --agent opencode` |
 | `--dry-run` | Vista previa | `ywai install --dry-run` |
-| `--cwd` | Directorio | `ywai skill-registry --cwd /mi/proyecto` |
-| `--preset` | Preset | `ywai install --preset minimal` |
+| `--cwd` | Directorio de trabajo | `ywai install --cwd /mi/proyecto` |
 | `--beta` | Canal prerelease (solo update) | `ywai update --beta` |
 
 <Aside type="tip">

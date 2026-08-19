@@ -50,13 +50,20 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
 | `build-full` | Full build WITH embedded skills/agents | Before pushing |
 | `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode |
-| `check` | Full pipeline: test → build-full → verify → install | **Before pushing to main** |
+| `lint` | Same Go lint as CI (`go vet` + golangci-lint) | Before commit, or when CI lint is red |
+| `hooks` | Install git hooks so lint fails locally | Once per clone |
+| `check` | Full pipeline: lint → test → build-full → verify → install | **Before pushing to main** |
 | `ui` | Build + install + start the control UI on port 5768 | To visually test the UI |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
 | `version` | Print the current dev version string | Debug |
 | `help` | Show all available subcommands | Reference |
 
 ### Typical workflows
+
+**Once per clone (lint before commit/push, same gate as CI):**
+```bash
+bash scripts/install-hooks.sh
+```
 
 **Before every commit:**
 ```bash
@@ -96,7 +103,6 @@ cd ywai && bash scripts/dev.sh ui
 | `ywai skills` | List available extra skills |
 | `ywai agents` | List detected AI agents |
 | `ywai doctor` | Run gentle-ai health check |
-| `ywai skill-registry` | Refresh project skill registry |
 
 ### Install flags
 
@@ -104,17 +110,8 @@ cd ywai && bash scripts/dev.sh ui
 |------|-------------|
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
-| `--preset` | Install preset: `full-gentleman` (default), `ecosystem-only`, `minimal`, `custom` |
-| `--scope` | Install scope: `global` (default) or `workspace` |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
-| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode/kilocode plugin array + Claude Code marketplace; default off |
-| `--global` | Install global skills only (skip AGENTS.md/REVIEW.md in project) |
-
-### Skill registry flags
-
-| Flag | Description |
-|------|-------------|
-| `--cwd` | Project directory (defaults to current) |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode/kilocode plugin array + Claude Code marketplace; default on (`--ponytail=false` to skip) |
 
 ---
 
@@ -224,6 +221,7 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 | `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
 | `git-commit` | Conventional commits |
 | `ywai` | Agents enable/disable MCP, switch profiles, enable groups |
+| `work-ledger` | Long-horizon task ledger (gate, seams, ship, resume) |
 
 ---
 

@@ -135,12 +135,29 @@ do_install() {
     ok "Installed ywai (version ${version}) at ${install_path}"
 }
 
+do_lint() {
+    info "Running Go lint (same gate as CI)..."
+    cmd "bash scripts/lint.sh"
+    bash scripts/lint.sh
+    ok "Lint passed"
+}
+
+do_hooks() {
+    info "Installing git hooks (lint before commit/push)..."
+    cmd "bash ../scripts/install-hooks.sh"
+    bash "$(cd "$YWAI_ROOT/.." && pwd)/scripts/install-hooks.sh"
+    ok "Git hooks installed"
+}
+
 do_check() {
     local version
     version="$(compute_version)"
     info "=== Full pipeline check (version ${version}) ==="
     echo ""
 
+    do_lint
+
+    echo ""
     do_test
 
     echo ""
@@ -222,7 +239,9 @@ Subcommands:
   build        Quick build WITHOUT embedded data (fast iteration)
   build-full   Full build WITH embedded data (prepare + -tags embedded)
   install      Full build + install to GOPATH
-  check        Full pipeline: test → build-full → verify → install
+  lint         Same Go lint as CI (go vet + golangci-lint)
+  hooks        Install git hooks so lint fails before commit/push
+  check        Full pipeline: lint → test → build-full → verify → install
   ui           Build + install + start the control server UI on port 5768
   mcp-test     Build + install + verify MCP daemon responds
   version      Print the version string that would be used
@@ -253,6 +272,12 @@ case "${1:-help}" in
         ;;
     check)
         do_check
+        ;;
+    lint)
+        do_lint
+        ;;
+    hooks)
+        do_hooks
         ;;
     ui)
         do_ui

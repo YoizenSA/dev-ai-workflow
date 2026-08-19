@@ -66,7 +66,11 @@ func parseFrontmatter(content string) (frontmatter string, body string) {
 	if end == -1 {
 		return "", content
 	}
-	fm := content[3 : end+3]
+	// Trim the delimiter newlines. Without this the slice carries a leading and
+	// trailing "" through Split/Join, and every writer that rebuilds the block
+	// (setScalarFrontmatterField) adds one blank line per call — frontmatter
+	// that grows a pair of blank lines on every model/field edit.
+	fm := strings.Trim(content[3:end+3], "\n")
 	body = strings.TrimSpace(content[end+6:])
 	return fm, body
 }
@@ -122,7 +126,16 @@ func detectAgentTeam(agentName string, agentData []byte) string {
 			}
 		}
 	}
-	// Fall back to frontmatter "group" field
+	// Then the sidecar ywai writes beside the flat agent files. Group used to
+	// live in the frontmatter, but opencode v2 treats an unknown agent key as a
+	// legacy v1 file and drops the v2 permission rules, so it moved out.
+	if dir, err := agentsDir(); err == nil {
+		if group := agents.ReadGroupSidecar(dir, agentName); group != "" {
+			return group
+		}
+	}
+	// Finally the legacy frontmatter field, for agents installed before the
+	// sidecar existed and not yet reinstalled.
 	return extractFrontmatterField(agentData, "group")
 }
 
@@ -292,6 +305,13 @@ func replacePermissionsBlock(content string, rules []agents.PermissionRule) stri
 			indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 			trimmed := strings.TrimSpace(line)
 			if !indented && trimmed != "" {
+				// `group:` is not a valid opencode v2 agent key; keeping it
+				// sends the file down the legacy v1 decode path, which drops
+				// the v2 permissions array. Group lives in the sidecar.
+				if strings.HasPrefix(trimmed, "group:") {
+					inDropped = false
+					continue
+				}
 				if trimmed == "permissions:" || trimmed == "permission:" ||
 					trimmed == "tools:" || strings.HasPrefix(trimmed, "permission:") ||
 					strings.HasPrefix(trimmed, "tools:") {

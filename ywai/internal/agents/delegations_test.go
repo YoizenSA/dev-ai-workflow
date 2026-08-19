@@ -450,6 +450,22 @@ func TestInjectTaskPermission_NoPermissionBlock(t *testing.T) {
 	}
 }
 
+func TestRenderRulesSection_UsesOpenCodeV2Delegate(t *testing.T) {
+	out := renderRulesSection(
+		[]DelegationRule{{Action: "Write", Inline: "Yes", Delegate: "No"}},
+		[]DelegationTrigger{{Name: "4-file rule", Description: "map first"}},
+	)
+	if !strings.Contains(out, "native `delegate`") {
+		t.Fatalf("rules must name OpenCode v2 delegate tool:\n%s", out)
+	}
+	if strings.Contains(out, "native `subagent`") || strings.Contains(out, "native `task`") {
+		t.Fatalf("rules must not name dead v1 tools:\n%s", out)
+	}
+	if !strings.Contains(out, "delegation_read") {
+		t.Fatalf("rules must mention delegation_* supervision:\n%s", out)
+	}
+}
+
 func TestRenderRulesSection_EscapesPipes(t *testing.T) {
 	out := renderRulesSection(
 		[]DelegationRule{{Action: "a | b", Inline: "Yes", Delegate: "No"}},

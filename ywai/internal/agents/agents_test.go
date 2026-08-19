@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 func TestFrontmatterDescription(t *testing.T) {
@@ -251,6 +253,23 @@ func TestOrchestratorRoleGetsContractsSection(t *testing.T) {
 	}
 	if !strings.Contains(p.Prompt, "Typed Contracts (orchestrator)") {
 		t.Fatalf("orchestrator prompt missing contracts section:\n%s", p.Prompt)
+	}
+}
+
+func TestShippedOrchestratorContractsArePointer(t *testing.T) {
+	src := config.AgentsSourceDir()
+	data, err := os.ReadFile(filepath.Join(src, "sections", "orchestrator-contracts.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) > 900 {
+		t.Fatalf("always-on contracts pointer too large: %d bytes", len(data))
+	}
+	if !strings.Contains(string(data), "orchestrator-contracts-full.md") {
+		t.Fatal("pointer must name the full contract file")
+	}
+	if strings.Contains(string(data), "Retry ladder") {
+		t.Fatal("full retry ladder must not live in the always-on pointer")
 	}
 }
 func TestLoadProfiles(t *testing.T) {
@@ -594,6 +613,32 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	}
 }
 
+func TestBuildOpenCodeMarkdown_SkillAllowlistFromSkills(t *testing.T) {
+	profile := AgentProfile{
+		Name:        "planning",
+		Description: "Planner",
+		Prompt:      "# Planner",
+		Mode:        "primary",
+		Permission:  map[string]string{"read": "allow", "skill": "allow"},
+		Skills:      []string{"work-ledger", "tdd"},
+	}
+
+	md := BuildOpenCodeMarkdown("planning", profile)
+
+	if !strings.Contains(md, v2Rule("skill", "*", "deny")) {
+		t.Fatalf("skills.txt allowlist must deny all other skills, got:\n%s", md)
+	}
+	if !strings.Contains(md, v2Rule("skill", "work-ledger", "allow")) {
+		t.Fatalf("must allow work-ledger, got:\n%s", md)
+	}
+	if !strings.Contains(md, v2Rule("skill", "tdd", "allow")) {
+		t.Fatalf("must allow tdd, got:\n%s", md)
+	}
+	if strings.Contains(md, v2Rule("skill", "*", "allow")) {
+		t.Fatalf("must not advertise every skill, got:\n%s", md)
+	}
+}
+
 func TestBuildOpenCodeMarkdown_LeavesUnlistedMCPsEnabled(t *testing.T) {
 	profile := AgentProfile{
 		Description: "Restricted agent",
@@ -827,6 +872,41 @@ func TestInstallOpenCodeMarkdown(t *testing.T) {
 	}
 }
 
+func TestInstallOpenCodeMarkdownPrunesUnlisted(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leftovers := []string{"gentle-orchestrator.md", "goal-backend.md", "social-refactor-orchestrator.md"}
+	for _, name := range leftovers {
+		if err := os.WriteFile(filepath.Join(agentsDir, name), []byte("# leftover\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	profiles := map[string]AgentProfile{
+		"core/orchestrator": {
+			Name:        "core/orchestrator",
+			Description: "Orchestrator",
+			Prompt:      "# Orchestrator\n",
+			Mode:        "primary",
+		},
+	}
+	if err := InstallOpenCodeMarkdown(agentsDir, profiles, true); err != nil {
+		t.Fatalf("InstallOpenCodeMarkdown() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(agentsDir, "orchestrator.md")); err != nil {
+		t.Fatal("kept profile must remain:", err)
+	}
+	for _, name := range leftovers {
+		if _, err := os.Stat(filepath.Join(agentsDir, name)); err == nil {
+			t.Fatalf("leftover %s must be pruned", name)
+		}
+	}
+}
+
 func TestInstallOpenCodeMarkdownSkipsExisting(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "agents")
@@ -932,10 +1012,15 @@ func TestInstallOpenCodeMarkdownFlattensGroupedNames(t *testing.T) {
 	if _, err := os.Stat(nested); !os.IsNotExist(err) {
 		t.Errorf("grouped profile must NOT be nested at %s", nested)
 	}
-	// Group membership is preserved via frontmatter, not the directory.
+	// Group membership lives in the sidecar, never in the frontmatter: an
+	// unknown key there makes opencode v2 decode the file as legacy v1 and
+	// drop the v2 permission rules.
 	data, _ := os.ReadFile(flat)
-	if !strings.Contains(string(data), "group: core") {
-		t.Error("flat agent should carry group in frontmatter")
+	if strings.Contains(string(data), "group:") {
+		t.Error("frontmatter must not carry group; opencode v2 rejects unknown agent keys")
+	}
+	if got := ReadGroupSidecar(agentsDir, "orchestrator"); got != "core" {
+		t.Errorf("group sidecar should record core, got %q", got)
 	}
 }
 
@@ -2000,6 +2085,65 @@ func TestRemoveRetiredAgents(t *testing.T) {
 	}
 }
 
+func TestRemoveAgentBackups(t *testing.T) {
+	dir := t.TempDir()
+	stash := t.TempDir()
+	prev := agentBackupRootFn
+	agentBackupRootFn = func() string { return stash }
+	t.Cleanup(func() { agentBackupRootFn = prev })
+
+	keep := filepath.Join(dir, "orchestrator.md")
+	if err := os.WriteFile(keep, []byte("---\ndescription: x\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"orchestrator.md.bak", "dev.bak", "foo.md.bak"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("stale-"+name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removed := RemoveAgentBackups(dir)
+	if removed != 3 {
+		t.Fatalf("moved %d, want 3", removed)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("live agent must stay")
+	}
+	for _, name := range []string{"orchestrator.md.bak", "dev.bak", "foo.md.bak"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			t.Fatalf("%s still in agents dir", name)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(stash, "orchestrator.md.bak"))
+	if err != nil {
+		t.Fatal("backup not in ywai stash:", err)
+	}
+	if string(got) != "stale-orchestrator.md.bak" {
+		t.Fatalf("backup content = %q", got)
+	}
+	if again := RemoveAgentBackups(dir); again != 0 {
+		t.Errorf("second sweep moved %d, want 0", again)
+	}
+}
+
+func TestWriteAgentBackupStaysOutOfAgentsDir(t *testing.T) {
+	agentsDir := t.TempDir()
+	stash := t.TempDir()
+	prev := agentBackupRootFn
+	agentBackupRootFn = func() string { return stash }
+	t.Cleanup(func() { agentBackupRootFn = prev })
+
+	live := filepath.Join(agentsDir, "dev.md")
+	if err := WriteAgentBackup(live, []byte("previous")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(live + ".bak"); err == nil {
+		t.Fatal("must not write sidecar next to the live agent")
+	}
+	if _, err := os.Stat(filepath.Join(stash, "dev.md.bak")); err != nil {
+		t.Fatal("expected backup under ywai stash:", err)
+	}
+}
+
 // Profiles are written before the install cleans retired MCP entries out of the
 // config, so expanding the "mcp" bucket straight from that config would grant a
 // dead server again on the very run meant to remove it.
@@ -2198,14 +2342,23 @@ func TestLoadProfilesByGroup_ExperimentGroup(t *testing.T) {
 	if !ok {
 		t.Fatalf("experiment/infra-docs not found in experiment group: %v", keys(profiles))
 	}
-	if p.Mode != "primary" {
-		t.Errorf("infra-docs mode = %q, want primary", p.Mode)
+	// v1 shipped with no frontmatter at all, so it had no description and no
+	// trigger — the model could never tell when to reach for it. Guard that.
+	if p.Description == "" {
+		t.Error("infra-docs must carry a description; without one it has no trigger")
+	}
+	if p.Mode != "all" {
+		t.Errorf("infra-docs mode = %q, want all", p.Mode)
 	}
 	if p.Permission["read"] != "allow" || p.Permission["edit"] != "allow" {
 		t.Errorf("infra-docs must read/write notes: read=%q edit=%q", p.Permission["read"], p.Permission["edit"])
 	}
-	if p.Permission["bash"] != "allow" || p.Permission["task"] != "allow" {
-		t.Errorf("infra-docs must support its git flow and delegated lookup: bash=%q task=%q", p.Permission["bash"], p.Permission["task"])
+	if p.Permission["bash"] != "allow" {
+		t.Errorf("infra-docs must support its git flow: bash=%q", p.Permission["bash"])
+	}
+	// It is the primary agent for its repo and does the work itself.
+	if p.Permission["task"] != "deny" || p.Permission["delegate"] != "deny" {
+		t.Errorf("infra-docs must not delegate: task=%q delegate=%q", p.Permission["task"], p.Permission["delegate"])
 	}
 }
 

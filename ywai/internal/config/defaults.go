@@ -10,13 +10,10 @@ import (
 
 // TUIDefaults represents the default values for the TUI installation.
 type TUIDefaults struct {
-	Preset     string   `json:"preset"`
-	Scope      string   `json:"scope"`
-	GlobalOnly bool     `json:"global_only"`
-	MCP        bool     `json:"mcp"`
-	Ponytail   bool     `json:"ponytail"`
-	Autostart  bool     `json:"autostart"`
-	Groups     []string `json:"groups"`
+	MCP       bool     `json:"mcp"`
+	Ponytail  bool     `json:"ponytail"`
+	Autostart bool     `json:"autostart"`
+	Groups    []string `json:"groups"`
 }
 
 // DefaultsPath returns the path to the defaults.jsonc file.
@@ -70,27 +67,15 @@ func parseDefaults(data []byte) (*TUIDefaults, error) {
 		return nil, fmt.Errorf("parse defaults: %w", err)
 	}
 
-	// Apply built-in defaults for empty fields
-	builtin := BuiltInDefaults()
-	if defaults.Preset == "" {
-		defaults.Preset = builtin.Preset
-	}
-	if defaults.Scope == "" {
-		defaults.Scope = builtin.Scope
-	}
-
 	return &defaults, nil
 }
 
 // BuiltInDefaults returns the hard-coded default values.
 func BuiltInDefaults() *TUIDefaults {
 	return &TUIDefaults{
-		Preset:     "full-gentleman",
-		Scope:      "global",
-		GlobalOnly: true,
-		MCP:        false,
-		Ponytail:   false,
-		Autostart:  true,
-		Groups:     []string{},
+		MCP:       false,
+		Ponytail:  true,
+		Autostart: true,
+		Groups:    []string{},
 	}
 }

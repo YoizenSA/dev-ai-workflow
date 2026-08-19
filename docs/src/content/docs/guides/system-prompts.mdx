@@ -93,10 +93,12 @@ Next: @dev | @qa | @reviewer | @devops | close
 
 <Steps>
 
-1. **Encontrar el perfil** en `~/.config/opencode/agents/`
-2. **Editar `AGENT.md`** para cambiar comportamiento
-3. **Editar `skills.txt`** para agregar/quitar skills
-4. **Reiniciar opencode**
+1. **Editar el source** (`ywai/agents/.../AGENT.md`) o el `.md` de proyecto (`.opencode/agents/`).
+2. **`skills.txt`** del source = allowlist de IDs (no pegues el body en el prompt).
+3. **`ywai update --agent opencode`** si cambiaste un perfil ywai.
+4. **Reiniciar** OpenCode (`opencode2`).
+
+No dejes un custom solo en `~/.config/opencode/agents/`: el install lo prunea.
 
 </Steps>
 

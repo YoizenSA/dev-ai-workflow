@@ -1,6 +1,6 @@
 ---
 name: devops
-description: Azure DevOps pipelines and Helm Umbrella charts. Trigger: CI/CD, Azure Pipelines, Helm, Kubernetes.
+description: "Azure Pipelines and Helm Umbrella charts. Trigger: CI/CD, Azure Pipelines, Helm, Kubernetes."
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 

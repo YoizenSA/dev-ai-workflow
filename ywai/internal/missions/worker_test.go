@@ -201,11 +201,49 @@ func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 	if !strings.Contains(content, feat.Description) {
 		t.Fatalf("feature.md should contain feature description")
 	}
+	if strings.Contains(content, "## Work ledger") {
+		t.Fatal("single-feature mission must not inject the work-ledger pointer")
+	}
 }
 
-// TestPrepareContextInjectsRoleSkills verifies that the role's configured
-// skills (RoleDefault.Skills) are injected into feature.md so the worker
-// actually sees them. The feature's Role must drive which skills appear.
+func TestPrepareContextInjectsWorkLedgerOnMultiFeature(t *testing.T) {
+	store, _ := newTestStore(t)
+	mission := testMission("multi-mission")
+	now := mission.CreatedAt
+	mission.Features = append(mission.Features, Feature{
+		ID:          "feat-2",
+		Description: "Feature 2",
+		Status:      FeaturePending,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+	_ = store.CreateMission(mission)
+
+	wm := NewWorkerManager(store, DefaultWorkerConfig())
+	feat := &mission.Features[0]
+
+	ctxDir, err := wm.PrepareContext(mission, feat, "")
+	if err != nil {
+		t.Fatalf("PrepareContext() returned error: %v", err)
+	}
+	defer os.RemoveAll(ctxDir)
+
+	data, err := os.ReadFile(filepath.Join(ctxDir, "feature.md"))
+	if err != nil {
+		t.Fatalf("read feature.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "## Work ledger") {
+		t.Fatal("multi-feature mission must inject the work-ledger pointer")
+	}
+	if !strings.Contains(content, "work-ledger") {
+		t.Fatal("pointer must name the work-ledger skill")
+	}
+}
+
+// TestPrepareContextInjectsRoleSkills verifies the worker brief names the
+// skill id and tells the model to load it via the skill tool. The body must
+// stay out of feature.md — OpenCode v2 loads skills on demand.
 func TestPrepareContextInjectsRoleSkills(t *testing.T) {
 	store, _ := newTestStore(t)
 	now := time.Now().Round(time.Second)
@@ -220,7 +258,8 @@ func TestPrepareContextInjectsRoleSkills(t *testing.T) {
 				ID:          "feat-qa",
 				Description: "QA feature",
 				Status:      FeaturePending,
-				Role:        "qa", // RoleQA → Skills: ["qa-worker"] per DefaultRoleDefaults
+				Role:        "qa",
+				SkillName:   "qa-worker",
 				CreatedAt:   now,
 				UpdatedAt:   now,
 			},
@@ -243,14 +282,14 @@ func TestPrepareContextInjectsRoleSkills(t *testing.T) {
 	}
 	content := string(data)
 
-	// The QA role's seeded skills include "qa-worker". feature.md must surface
-	// the skill content (its work procedure) so the worker knows how to work.
-	if !strings.Contains(content, "qa-worker") && !strings.Contains(strings.ToLower(content), "qa") {
-		t.Errorf("feature.md should inject the QA role's skill content; got:\n%s", content)
+	if !strings.Contains(content, "`qa-worker`") {
+		t.Errorf("feature.md should name the skill id; got:\n%s", content)
 	}
-	// The injected skill should bring its work procedure, not just the name.
-	if !strings.Contains(content, "Skill") && !strings.Contains(content, "skill") {
-		t.Errorf("feature.md should have a Skills section; got:\n%s", content)
+	if !strings.Contains(content, "skill") {
+		t.Errorf("feature.md should tell the worker to load via the skill tool; got:\n%s", content)
+	}
+	if strings.Contains(content, "## Work Procedure") || strings.Contains(content, "Generic implementation worker") {
+		t.Errorf("feature.md must not dump the skill body; got:\n%s", content)
 	}
 }
 
@@ -302,8 +341,11 @@ func TestPrepareContextInjectsSkillsFromMissionDir(t *testing.T) {
 		t.Fatalf("read feature.md: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "custom-worker") {
-		t.Errorf("feature.md should reference the custom-worker skill from missionDir; got:\n%s", content)
+	if !strings.Contains(content, "`custom-worker`") {
+		t.Errorf("feature.md should name the custom-worker skill id; got:\n%s", content)
+	}
+	if strings.Contains(content, "Do the custom thing.") {
+		t.Errorf("feature.md must not dump the mission skill body; got:\n%s", content)
 	}
 }
 

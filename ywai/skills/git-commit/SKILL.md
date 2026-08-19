@@ -1,6 +1,6 @@
 ---
 name: git-commit
-description: Conventional commit standards, branching, SemVer, and changelog conventions. Use when writing a commit or amending one, naming a branch, cutting a release or bumping a version, updating CHANGELOG.md, or when a commit hook rejects a message.
+description: "Conventional commits, branching, SemVer, changelog. Trigger: writing a commit, naming a branch, cutting a release."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

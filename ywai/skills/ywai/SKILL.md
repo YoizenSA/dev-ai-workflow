@@ -1,10 +1,6 @@
 ---
 name: ywai
-description: >
-  Run ywai to enable/disable MCP, switch orchestrator profiles, or
-  enable/disable agent groups. Trigger: enable MCP, disable MCP, ywai mcp,
-  switch profile, orchestrator profile, inherit profile, ywai profile,
-  enable group, disable group, ywai groups.
+description: "Run ywai: MCP on/off, model profiles, agent groups. Trigger: ywai mcp, ywai profile, ywai groups."
 ---
 
 # ywai
@@ -13,7 +9,7 @@ The human does not run these commands. You do.
 
 ## When
 
-The user wants an MCP on or off, a different orchestrator profile, or an agent group installed or removed.
+The user wants an MCP on or off, a different model profile, or an agent group installed or removed.
 
 ## Rules
 

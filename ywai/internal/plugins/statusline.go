@@ -18,66 +18,37 @@ func leftoverTuiConfigPath() string {
 	return filepath.Join(filepath.Dir(tuiConfigPath()), legacyTuiConfigName)
 }
 
-func InstallSubAgentStatusline() error {
-	path := tuiConfigPath()
-
-	// Ensure the config directory exists.
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("creating opencode config dir: %w", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("reading cli.json: %w", err)
+// RemoveSubAgentStatusline removes the retired, OpenCode v2-incompatible TUI
+// plugin from both current and legacy global TUI configuration files.
+func RemoveSubAgentStatusline() error {
+	for _, path := range []string{tuiConfigPath(), leftoverTuiConfigPath()} {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
 		}
-		legacy, lerr := os.ReadFile(leftoverTuiConfigPath())
-		if lerr == nil {
-			data = legacy
-		} else if os.IsNotExist(lerr) {
-			root := map[string]any{
-				"plugins": []any{subAgentStatuslinePlugin},
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", filepath.Base(path), err)
+		}
+		var root map[string]any
+		if err := json.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
+		}
+		plugins := v2Plugins(root)
+		filtered := make([]any, 0, len(plugins))
+		for _, plugin := range plugins {
+			if name, ok := plugin.(string); ok && name == subAgentStatuslinePlugin {
+				continue
 			}
-			updated, mErr := json.MarshalIndent(root, "", "  ")
-			if mErr != nil {
-				return fmt.Errorf("marshaling cli.json: %w", mErr)
-			}
-			if wErr := os.WriteFile(path, append(updated, '\n'), 0o644); wErr != nil {
-				return fmt.Errorf("writing cli.json: %w", wErr)
-			}
-			fmt.Printf("  Created cli.json with %s plugin\n", subAgentStatuslinePlugin)
-			return nil
-		} else {
-			return fmt.Errorf("reading leftover tui.json: %w", lerr)
+			filtered = append(filtered, plugin)
+		}
+		writePlugins(root, filtered)
+		updated, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshaling %s: %w", filepath.Base(path), err)
+		}
+		if err := os.WriteFile(path, append(updated, '\n'), 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", filepath.Base(path), err)
 		}
 	}
-
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("parsing cli.json: %w", err)
-	}
-
-	_, hadLegacy := root["plugin"]
-	plugins := v2Plugins(root)
-	already := containsPluginPath(plugins, subAgentStatuslinePlugin)
-	if !already {
-		plugins = append(plugins, subAgentStatuslinePlugin)
-	}
-	if already && !hadLegacy {
-		fmt.Printf("  %s plugin already installed in cli.json\n", subAgentStatuslinePlugin)
-		return nil
-	}
-	writePlugins(root, plugins)
-
-	updated, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling cli.json: %w", err)
-	}
-
-	if err := os.WriteFile(path, append(updated, '\n'), 0o644); err != nil {
-		return fmt.Errorf("writing cli.json: %w", err)
-	}
-
-	fmt.Printf("  Added %s plugin to cli.json\n", subAgentStatuslinePlugin)
 	return nil
 }

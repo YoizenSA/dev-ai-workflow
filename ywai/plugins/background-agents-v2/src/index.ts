@@ -80,6 +80,21 @@ const plugin = define({
 			draft.add(steerTool(manager))
 			draft.add(stopTool(manager))
 			draft.add(statusTool(manager))
+
+			// `subagent*` aliases. OpenCode v2 renamed its native delegation
+			// tool from `task` to `subagent`, so models trained on v2 reach
+			// for that name. Aliasing costs one object per tool and keeps a
+			// single DelegationManager, instead of a second engine that would
+			// race this one over the same child sessions.
+			for (const tool of [
+				delegateTool(manager),
+				peekTool(manager),
+				steerTool(manager),
+				stopTool(manager),
+				readTool(manager),
+			]) {
+				draft.add(aliasTool(tool))
+			}
 		})
 
 		return async () => {
@@ -326,3 +341,9 @@ function statusTool(manager: DelegationManager) {
 
 export default plugin
 export { DelegationManager }
+
+/** Maps a delegation tool onto its `subagent*` name, sharing the implementation. */
+function aliasTool<T extends { name: string }>(tool: T): T {
+	const alias = tool.name === "delegate" ? "subagent" : tool.name.replace(/^delegation_/, "subagent_")
+	return { ...tool, name: alias }
+}

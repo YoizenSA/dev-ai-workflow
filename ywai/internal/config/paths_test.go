@@ -57,6 +57,15 @@ func TestIsOurRepoByPath(t *testing.T) {
 	})
 }
 
+func TestOpenCodeConfigDirHonorsEnvironmentOverride(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "opencode")
+	t.Setenv("OPENCODE_CONFIG_DIR", override)
+
+	if got := OpenCodeConfigDir(); got != override {
+		t.Fatalf("OpenCodeConfigDir() = %q, want %q", got, override)
+	}
+}
+
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

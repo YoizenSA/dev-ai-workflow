@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
@@ -22,7 +24,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencodeprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
@@ -270,15 +271,41 @@ var stopCmd = &cobra.Command{
 // (chat proxy, missions) all point at the same instance.
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
+	explicitURL := url != ""
 	if url == "" {
 		url = "http://127.0.0.1:4096"
 	}
 
-	// Probe: is an opencode server already running at the URL?
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if ok, _ := opencode.ProbeServer(ctx, url); ok {
-		return // a real opencode server is already reachable
+	// Determine the starting port from the URL (default 4096).
+	startPort := 4096
+	if _, p, err := net.SplitHostPort(strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")); err == nil && p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			startPort = n
+		}
+	}
+
+	// An explicit URL is an operator choice. For the default port, however,
+	// reuse a healthy ywai-started server on a later port before spawning a new
+	// one; this prevents one orphan per `ywai serve` when 4096 is owned by a
+	// password-protected external OpenCode server.
+	if explicitURL {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if ok, _ := opencode.ProbeServer(ctx, url); ok {
+			return
+		}
+	} else {
+		for candidatePort := startPort; candidatePort < startPort+50; candidatePort++ {
+			candidateURL := fmt.Sprintf("http://127.0.0.1:%d", candidatePort)
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			ok, _ := opencode.ProbeServer(ctx, candidateURL)
+			cancel()
+			if ok {
+				os.Setenv("OPENCODE_URL", candidateURL)
+				fmt.Printf("opencode server ready on %s\n", candidateURL)
+				return
+			}
+		}
 	}
 
 	// Resolve OpenCode 2 (opencode2). No v1 `opencode` fallback.
@@ -290,14 +317,6 @@ func startOpencodeServe() {
 		return
 	}
 
-	// Determine the starting port from the URL (default 4096).
-	startPort := 4096
-	if _, p, err := net.SplitHostPort(strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")); err == nil && p != "" {
-		if n, err := strconv.Atoi(p); err == nil {
-			startPort = n
-		}
-	}
-
 	// Find a free port. If the default (startPort) is open, use it; otherwise
 	// walk up to 50 ports looking for one that binds. This handles the case
 	// where another server (Kilo Code, etc.) occupies the default opencode port.
@@ -307,12 +326,23 @@ func startOpencodeServe() {
 	}
 
 	chosenURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	password, err := newOpenCodeServerPassword()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not generate OpenCode server password: %v\n", err)
+		return
+	}
 	cmd := exec.Command(binPath, "serve", "--port", strconv.Itoa(port))
+	// OpenCode v2 protects every `serve` instance with Basic Auth. Generate a
+	// private credential for the ywai-managed child and retain it in this
+	// process so readiness checks and the chat proxy authenticate correctly.
+	cmd.Env = openCodeChildEnv(os.Environ(), password)
 	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve (%s): %v\n", binPath, err)
 		return
 	}
+	_ = os.Setenv("OPENCODE_SERVER_PASSWORD", password)
+	_ = os.Setenv("OPENCODE_SERVER_USERNAME", "opencode")
 	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
 	// OPENCODE_URL in this process) proxies to the instance we just started.
 	os.Setenv("OPENCODE_URL", chosenURL)
@@ -334,6 +364,30 @@ func startOpencodeServe() {
 	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s — chat may need a moment.\n", chosenURL)
 }
 
+// openCodeChildEnv removes inherited server credentials before starting the
+// ywai-managed local server. Appending an empty value is not sufficient:
+// exec environments permit duplicate keys and OpenCode can read the inherited
+// password first.
+func openCodeChildEnv(env []string, password string) []string {
+	filtered := make([]string, 0, len(env)+2)
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "OPENCODE_SERVER_PASSWORD=") ||
+			strings.HasPrefix(entry, "OPENCODE_SERVER_USERNAME=") {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return append(filtered, "OPENCODE_SERVER_PASSWORD="+password, "OPENCODE_SERVER_USERNAME=opencode")
+}
+
+func newOpenCodeServerPassword() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
 var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Set up the ywai environment: Engram, skills, profiles, plugins, optional SDD",
@@ -344,7 +398,6 @@ var installCmd = &cobra.Command{
 		tuiFlag, _ := cmd.Flags().GetBool("tui")
 		mcpFlag, _ := cmd.Flags().GetBool("mcp")
 		ponytailFlag, _ := cmd.Flags().GetBool("ponytail")
-		globalFlag, _ := cmd.Flags().GetBool("global")
 		autostartFlag, _ := cmd.Flags().GetBool("autostart")
 
 		agents := detectAgents(cmd)
@@ -354,15 +407,11 @@ var installCmd = &cobra.Command{
 
 		var installMCP bool
 		var installPonytail bool
-		var globalOnly bool
-		var preset, scope string
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
 		ranTUI := false
-		installSDD := false
-		sddMode := ""
 
-		if shouldRunInstallTUI(tuiFlag, agentFlag, dryRun, cmd.Flags().Changed("global")) {
+		if shouldRunInstallTUI(tuiFlag, agentFlag, dryRun) {
 			if !isInteractiveTerminal() {
 				fmt.Fprintln(os.Stderr, "Error: install requires --agent or --dry-run when running non-interactively.")
 				fmt.Fprintln(os.Stderr, "Run `ywai install --help` for flags, or run `ywai install` from an interactive terminal.")
@@ -386,44 +435,24 @@ var installCmd = &cobra.Command{
 			}
 			installMCP = result.MCP
 			installPonytail = result.Ponytail
-			globalOnly = result.GlobalOnly
 			overwriteAgents = result.OverwriteAgents
-			preset = result.Preset
-			scope = result.Scope
 			groupFilter = result.GroupFilter
 			autostartFlag = result.Autostart
-			installSDD = result.InstallSDD
-			sddMode = result.SDDMode
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag
 			installPonytail = ponytailFlag
-			globalOnly = globalFlag
-			preset = getStringFlag(cmd, "preset")
-			scope = getStringFlag(cmd, "scope")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
 				Groups:    groups,
 				AllGroups: allGroups,
 			}
-			// CLI: --sdd-mode single|multi enables optional SDD. Persona is never installed.
-			sddMode = strings.ToLower(strings.TrimSpace(getStringFlag(cmd, "sdd-mode")))
-			if sddMode == "single" || sddMode == "multi" {
-				installSDD = true
-			} else if sddMode != "" {
-				fmt.Fprintf(os.Stderr, "Error: --sdd-mode must be single or multi (got %q)\n", sddMode)
-				os.Exit(1)
-			}
 		}
 
 		installOpts := gentlai.InstallOptions{
-			AgentName:  agentFlag,
-			Preset:     preset,
-			Scope:      scope,
-			DryRun:     dryRun,
-			InstallSDD: installSDD,
-			SDDMode:    sddMode,
+			AgentName: agentFlag,
+			DryRun:    dryRun,
 		}
 
 		// Only prompt for overwrite when the TUI did not collect it.
@@ -434,7 +463,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installPonytail, globalOnly, groupFilter, overwriteAgents, autostartFlag)
+		result := executeInstall(installOpts, installMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -531,10 +560,8 @@ After update, restart OpenCode once so it reloads plugins.`,
 			Mode: applyUpdate,
 			Opts: gentlai.InstallOptions{
 				AgentName: agentFlag,
-				Preset:    "full-gentleman",
 				DryRun:    dryRun,
 			},
-			GlobalOnly:            true,
 			OverwriteAgents:       true,
 			SkipGentleAIBinary:    true,
 			RestartServeIfRunning: true,
@@ -623,19 +650,6 @@ func printGraftDoctor() {
 	}
 }
 
-var skillRegistryCmd = &cobra.Command{
-	Use:   "skill-registry",
-	Short: "Refresh the project skill registry",
-	Long:  "Scan project and global skills, build the registry used by SDD orchestrators.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cwd, _ := cmd.Flags().GetString("cwd")
-		if cwd == "" {
-			cwd, _ = os.Getwd()
-		}
-		return gentlai.SkillRegistryRefresh(cwd)
-	},
-}
-
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage ywai configuration",
@@ -649,10 +663,6 @@ type configField struct {
 }
 
 var configFields = map[string]configField{
-	"default_preset": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultPreset },
-		Set: func(c *config.UserConfig, v string) error { c.DefaultPreset = v; return nil },
-	},
 	"default_scope": {
 		Get: func(c *config.UserConfig) interface{} { return c.DefaultScope },
 		Set: func(c *config.UserConfig, v string) error { c.DefaultScope = v; return nil },
@@ -915,11 +925,8 @@ var statusCmd = &cobra.Command{
 
 		// User config
 		fmt.Println("\n=== User Configuration ===")
-		cfg, err := config.LoadConfig()
-		if err != nil {
+		if _, err := config.LoadConfig(); err != nil {
 			fmt.Printf("Error loading config: %v\n", err)
-		} else {
-			fmt.Printf("Default preset: %s\n", cfg.DefaultPreset)
 		}
 	},
 }
@@ -1244,45 +1251,6 @@ var mcpDisableCmd = &cobra.Command{
 	},
 }
 
-var runOpenCodeCmd = &cobra.Command{
-	Use:   "run <dev|qa|infra>",
-	Short: "Launch OpenCode in an isolated role profile",
-	Long: `Launch OpenCode with OPENCODE_CONFIG_DIR and XDG_DATA_HOME pointed at
-~/.ywai/opencode-profiles/<name>/. Seeded by ywai install.
-
-Example:
-  ywai run qa
-  ywai run dev -- --model opencode/gpt-5`,
-	Args: cobra.MinimumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		name, err := opencodeprofile.ParseName(args[0])
-		if err != nil {
-			return err
-		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		dirs, err := opencodeprofile.DirsFor(home, name)
-		if err != nil {
-			return err
-		}
-		if _, err := os.Stat(dirs.Config); err != nil {
-			return fmt.Errorf("profile %q is not installed; run ywai install first", name)
-		}
-		bin, err := exec.LookPath("opencode2")
-		if err != nil {
-			return fmt.Errorf("opencode2 not found in PATH")
-		}
-		oc := exec.Command(bin, args[1:]...)
-		oc.Env = append(os.Environ(), opencodeprofile.LaunchEnv(dirs, name)...)
-		oc.Stdin = os.Stdin
-		oc.Stdout = os.Stdout
-		oc.Stderr = os.Stderr
-		return oc.Run()
-	},
-}
-
 var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "List or switch orchestrator model profiles (balanced, fast, deep, inherit)",
@@ -1475,11 +1443,7 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
-	installCmd.Flags().Bool("ponytail", false, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace")
-	installCmd.Flags().Bool("global", true, "Install global config only; skip project init (default true; pass --global explicitly to skip the install TUI)")
-	installCmd.Flags().String("preset", "full-gentleman", "ywai component preset: full-gentleman, ecosystem-only, minimal")
-	installCmd.Flags().String("scope", "", "ywai install scope: global (default) or workspace")
-	installCmd.Flags().String("sdd-mode", "", "Optional SDD: single or multi (omit to skip SDD; persona is never installed)")
+	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
@@ -1493,9 +1457,6 @@ func init() {
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)
 	rootCmd.AddCommand(doctorCmd)
-
-	skillRegistryCmd.Flags().String("cwd", "", "Project directory (defaults to current)")
-	rootCmd.AddCommand(skillRegistryCmd)
 
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
@@ -1528,7 +1489,6 @@ func init() {
 	profileCmd.AddCommand(profileListCmd)
 	profileCmd.AddCommand(profileUseCmd)
 	rootCmd.AddCommand(profileCmd)
-	rootCmd.AddCommand(runOpenCodeCmd)
 }
 
 func isInteractiveTerminal() bool {
@@ -1537,11 +1497,10 @@ func isInteractiveTerminal() bool {
 
 // shouldRunInstallTUI decides whether `ywai install` opens the Bubbletea wizard.
 //
-// --global defaults to true (install scope). Its value must not suppress auto-TUI;
-// only an explicitly changed --global, a set --agent, or --dry-run means flag-driven
-// install. --tui always forces the wizard.
-func shouldRunInstallTUI(tuiFlag bool, agentFlag string, dryRun, globalChanged bool) bool {
-	flagDriven := agentFlag != "" || dryRun || globalChanged
+// A set --agent or --dry-run means a flag-driven install. --tui always forces
+// the wizard.
+func shouldRunInstallTUI(tuiFlag bool, agentFlag string, dryRun bool) bool {
+	flagDriven := agentFlag != "" || dryRun
 	return tuiFlag || !flagDriven
 }
 

@@ -450,7 +450,7 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated := updatePermissionsInFrontmatter(string(mdContent), body)
-		_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+		_ = agents.WriteAgentBackup(mdPath, mdContent)
 		if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -560,7 +560,7 @@ func (h *Handlers) PutAgentTaskPermissions(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "agent markdown has no permission block"})
 		return
 	}
-	_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+	_ = agents.WriteAgentBackup(mdPath, mdContent)
 	if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -707,7 +707,7 @@ func applyAgentModel(name, model string) bool {
 			continue
 		}
 		updated := setScalarFrontmatterField(string(mdContent), "model", model)
-		_ = os.WriteFile(mdPath+".bak", mdContent, 0644)
+		_ = agents.WriteAgentBackup(mdPath, mdContent)
 		if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
 			found = true
 		}
@@ -911,7 +911,7 @@ func applyOrchestrationPolicy(policy userconfig.OrchestrationPolicy) bool {
 		if updated == string(content) {
 			continue
 		}
-		_ = os.WriteFile(mdPath+".bak", content, 0644)
+		_ = agents.WriteAgentBackup(mdPath, content)
 		if os.WriteFile(mdPath, []byte(updated), 0644) == nil {
 			found = true
 		}
@@ -1430,40 +1430,6 @@ func lookupAgentTaskMap(configData []byte, name string) (map[string]string, bool
 	return nil, false
 }
 
-// lookupAgentPermissionKey returns the raw JSON value of agent.<name>.permission.<key>
-// from opencode.json config bytes, or nil if any level is missing.
-func lookupAgentPermissionKey(configData []byte, name, key string) json.RawMessage {
-	var config map[string]json.RawMessage
-	if json.Unmarshal(configData, &config) != nil {
-		return nil
-	}
-	agentRaw, ok := config["agent"]
-	if !ok {
-		return nil
-	}
-	var agents map[string]json.RawMessage
-	if json.Unmarshal(agentRaw, &agents) != nil {
-		return nil
-	}
-	agentData, ok := agents[name]
-	if !ok {
-		return nil
-	}
-	var agent map[string]json.RawMessage
-	if json.Unmarshal(agentData, &agent) != nil {
-		return nil
-	}
-	permRaw, ok := agent["permission"]
-	if !ok {
-		return nil
-	}
-	var perm map[string]json.RawMessage
-	if json.Unmarshal(permRaw, &perm) != nil {
-		return nil
-	}
-	return perm[key]
-}
-
 // --- Delegation Rules (structured JSON sidecar) ---
 //
 // The "Delegation Rules" table + "Mandatory Delegation Triggers" are stored as
@@ -1632,7 +1598,7 @@ func (h *Handlers) PutDelegationRules(w http.ResponseWriter, r *http.Request) {
 			rendered := renderRulesMarkdown(body.Rules, body.Triggers)
 			updated := replaceLocalMarkdownSection(string(mdContent), "Delegation Rules", "###", rendered, true)
 			if updated != string(mdContent) {
-				_ = os.WriteFile(mdPath+".bak", mdContent, 0o644)
+				_ = agents.WriteAgentBackup(mdPath, mdContent)
 				_ = os.WriteFile(mdPath, []byte(updated), 0o644)
 			}
 		}
@@ -1665,13 +1631,14 @@ func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) s
 			}
 			b.WriteString(fmt.Sprintf("| %s | %s | %s |\n", action, inline, delegate))
 		}
-		b.WriteString("\nUse OpenCode's native `task` tool for delegated work.\n")
+		b.WriteString("\n")
+		b.WriteString(agents.OpenCodeDelegateToolHint)
 	}
 
 	if len(triggers) > 0 {
 		b.WriteString("\n#### Mandatory Delegation Triggers\n\n")
 		b.WriteString("These gates are **non-skippable hard gates**, not recommendations.\n\n")
-		b.WriteString("Semantic guard: **delegate** means using OpenCode's native `task` tool to invoke a configured sub-agent. Running local scripts, Python, or Bash inline is execution, not delegation.\n\n")
+		b.WriteString(agents.OpenCodeDelegateSemanticGuard)
 		for i, t := range triggers {
 			n := strings.TrimSpace(t.Name)
 			if n == "" {

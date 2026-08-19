@@ -213,6 +213,31 @@ func RulesFromPermissionMap(baseName string, perms map[string]string) []Permissi
 	return rules
 }
 
+// ApplySkillAllowlist replaces a broad skill:* allow with deny-all plus
+// per-id allows. Empty ids leave rules unchanged. Last match wins, so
+// the specific allows must come after the deny.
+func ApplySkillAllowlist(rules []PermissionRule, ids []string) []PermissionRule {
+	if len(ids) == 0 {
+		return rules
+	}
+	out := make([]PermissionRule, 0, len(rules)+len(ids)+1)
+	for _, r := range rules {
+		if r.Action == "skill" {
+			continue
+		}
+		out = append(out, r)
+	}
+	out = append(out, PermissionRule{Action: "skill", Resource: "*", Effect: EffectDeny})
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		out = append(out, PermissionRule{Action: "skill", Resource: id, Effect: EffectAllow})
+	}
+	return out
+}
+
 // SubagentRulesFromTaskMap converts a v1 delegation task map (agent id →
 // effect) into ordered subagent rules: the "*" catch-all first, specific ids
 // after, so an explicit entry always overrides the catch-all.
@@ -301,13 +326,19 @@ func RenderPermissionRulesYAML(rules []PermissionRule) []string {
 	return lines
 }
 
-// yamlScalar quotes a YAML scalar only when it contains characters that would
-// break a bare key/value (globs like "*" or "* -u").
+// yamlScalar quotes a YAML scalar whenever a bare one would not survive a
+// strict parser: globs like "*" or "* -u", and any text carrying a structural
+// character. Descriptions go through here too — they end in "Trigger: ...", and
+// a plain scalar may not contain ": ". Emitting one bare broke opencode's v2
+// agent schema, which then fell back to the legacy v1 decode and turned the
+// whole file, frontmatter included, into the system prompt.
 func yamlScalar(s string) string {
 	if s == "" {
 		return `""`
 	}
-	if strings.ContainsAny(s, "*:#&!|>',[]{}%`@") || strings.HasPrefix(s, "?") || strings.HasPrefix(s, "!") {
+	if strings.ContainsAny(s, "*:#&!|>',[]{}%`@\"\\\n\r\t") ||
+		strings.HasPrefix(s, "?") || strings.HasPrefix(s, "!") ||
+		strings.TrimSpace(s) != s {
 		return fmt.Sprintf("%q", s)
 	}
 	return s
@@ -435,10 +466,8 @@ func LegacyPermissionBlockToRules(fm string) []PermissionRule {
 		if v == "" {
 			continue // nested header (e.g. "bash:") — children handled below
 		}
-		action := k
-		if a := V2ActionForInternalKey(k); a != "" {
-			action = a
-		} else {
+		action := V2ActionForInternalKey(k)
+		if action == "" {
 			continue
 		}
 		rules = append(rules, PermissionRule{Action: action, Resource: "*", Effect: v})

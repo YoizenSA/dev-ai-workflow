@@ -17,12 +17,19 @@ func TestTuiConfigPathIsCliJSON(t *testing.T) {
 	}
 }
 
-func TestInstallSubAgentStatuslineWritesCliJSON(t *testing.T) {
+func TestRemoveSubAgentStatuslineFromCliJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cli.json"), []byte(`{"plugins":["other","opencode-subagent-statusline"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	if err := InstallSubAgentStatusline(); err != nil {
-		t.Fatalf("InstallSubAgentStatusline() error = %v", err)
+	if err := RemoveSubAgentStatusline(); err != nil {
+		t.Fatalf("RemoveSubAgentStatusline() error = %v", err)
 	}
 
 	path := filepath.Join(home, ".config", "opencode", "cli.json")
@@ -41,30 +48,30 @@ func TestInstallSubAgentStatuslineWritesCliJSON(t *testing.T) {
 	if !ok {
 		t.Fatalf("cli.json plugins type = %T, want []any", root["plugins"])
 	}
-	if !containsString(arr, subAgentStatuslinePlugin) {
-		t.Fatalf("cli.json plugins %v missing %q", arr, subAgentStatuslinePlugin)
+	if containsString(arr, subAgentStatuslinePlugin) || !containsString(arr, "other") {
+		t.Fatalf("cli.json plugins = %v, want only preserved entries", arr)
 	}
 }
 
-func TestInstallSubAgentStatuslineMigratesPluginsFromTuiJSON(t *testing.T) {
+func TestRemoveSubAgentStatuslineFromLegacyTuiJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".config", "opencode")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	legacy := []byte(`{"plugins":["legacy-plugin"]}` + "\n")
+	legacy := []byte(`{"plugins":["legacy-plugin","opencode-subagent-statusline"]}` + "\n")
 	if err := os.WriteFile(filepath.Join(dir, "tui.json"), legacy, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := InstallSubAgentStatusline(); err != nil {
-		t.Fatalf("InstallSubAgentStatusline() error = %v", err)
+	if err := RemoveSubAgentStatusline(); err != nil {
+		t.Fatalf("RemoveSubAgentStatusline() error = %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "cli.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "tui.json"))
 	if err != nil {
-		t.Fatalf("read cli.json: %v", err)
+		t.Fatalf("read tui.json: %v", err)
 	}
 	var root map[string]any
 	if err := json.Unmarshal(data, &root); err != nil {
@@ -72,10 +79,10 @@ func TestInstallSubAgentStatuslineMigratesPluginsFromTuiJSON(t *testing.T) {
 	}
 	arr, _ := root["plugins"].([]any)
 	if !containsString(arr, "legacy-plugin") {
-		t.Errorf("migrated plugins %v missing leftover tui.json entry", arr)
+		t.Errorf("plugins %v missing preserved entry", arr)
 	}
-	if !containsString(arr, subAgentStatuslinePlugin) {
-		t.Errorf("migrated plugins %v missing statusline", arr)
+	if containsString(arr, subAgentStatuslinePlugin) {
+		t.Errorf("plugins %v still contain retired statusline", arr)
 	}
 }
 

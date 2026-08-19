@@ -176,8 +176,8 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	}
 	orchestratorID := wf.Name + "-orchestrator"
 
-	// The orchestrator may delegate to every subAgent node (via the native
-	// `subagent` tool), so its subagent-action whitelist is the set of ids.
+	// The orchestrator may launch every subAgent node via OpenCode v2 `delegate`.
+	// Permission action `subagent` still whitelists those agent ids.
 	orchTaskTargets := make([]string, 0, len(subAgentIDs))
 	for _, id := range subAgentIDs {
 		orchTaskTargets = append(orchTaskTargets, id)
@@ -189,9 +189,9 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	// 1. Orchestrator agent.
 	orchPath := filepath.Join(e.agentsDir, orchestratorID+".md")
 	orchBody := orchestratorBody(wf, subAgentIDs)
-	// Same typed contracts as core orchestrators (handoff fence + review ship gate).
-	// Single source: agents/sections/orchestrator-contracts.md — do not fork per workflow.
-	orchBody = agents.AppendSections(orchBody, []string{"orchestrator-contracts"}, config.AgentsSourceDir())
+	// Exported workflows are offline from ywai sections, so embed the full
+	// contract (not the always-on pointer used by live orchestrators).
+	orchBody = agents.AppendSections(orchBody, []string{"orchestrator-contracts-full"}, config.AgentsSourceDir())
 	files[orchPath] = e.renderOrchestratorMarkdown(wf, orchestratorID, orchTaskTargets, orchBody)
 	artifacts = append(artifacts, ExportArtifact{Path: orchPath, Kind: "agent", Name: orchestratorID})
 

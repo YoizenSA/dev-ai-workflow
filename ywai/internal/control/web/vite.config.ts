@@ -12,19 +12,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'es2015',
+    target: 'es2020',
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        format: 'iife',
-        // Content-hashed filenames for cache busting. index.html (served by the
-        // Go control server) references these by hash, so every rebuild
-        // invalidates the browser cache automatically — no hard refresh needed.
+        // ESM so Vite's preload helper can keep import.meta (IIFE empties it).
+        // The Go SPA server already serves hashed /assets/* as static files.
+        format: 'es',
         entryFileNames: 'assets/app-[hash].js',
         chunkFileNames: 'assets/app-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]'
-      }
-    }
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
   },
   server: {
     port: 3000,
