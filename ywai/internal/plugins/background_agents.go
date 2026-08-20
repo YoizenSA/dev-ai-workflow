@@ -25,6 +25,60 @@ var backgroundAgentsPermissions = map[string]string{
 // of being double-loaded by directory discovery.
 const ywaiPluginsSubdir = "ywai-plugins"
 
+// RemoveBackgroundAgents removes the legacy custom delegation plugin. OpenCode
+// v2 provides its own foreground/background `subagent` tool, so retaining the
+// shim shadows the native runtime and leaves sync calls waiting on obsolete
+// event semantics.
+func RemoveBackgroundAgents(configPath string) error {
+	root := map[string]any{}
+	if _, err := os.Stat(configPath); err == nil {
+		var readErr error
+		root, readErr = config.ReadJSONC(configPath)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", configPath, readErr)
+		}
+	} else if os.IsNotExist(err) {
+		return nil
+	} else {
+		return fmt.Errorf("stat %s: %w", configPath, err)
+	}
+
+	plugins := v2Plugins(root)
+	kept := make([]any, 0, len(plugins))
+	for _, plugin := range plugins {
+		path := ""
+		if value, ok := plugin.(string); ok {
+			path = value
+		} else if value, ok := plugin.(map[string]any); ok {
+			path, _ = value["package"].(string)
+		}
+		if filepath.Base(path) != config.BackgroundAgentsBundleName {
+			kept = append(kept, plugin)
+		}
+	}
+	writePlugins(root, kept)
+
+	rules, _ := root["permissions"].([]any)
+	keptRules := make([]any, 0, len(rules))
+	for _, raw := range rules {
+		if rule, ok := raw.(map[string]any); ok {
+			if action, _ := rule["action"].(string); action == "delegate" || action == "delegation_*" {
+				continue
+			}
+		}
+		keptRules = append(keptRules, raw)
+	}
+	root["permissions"] = keptRules
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("write %s: %w", configPath, err)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove legacy background-agents bundle: %w", err)
+	}
+	return nil
+}
+
 // InstallBackgroundAgents vendors the background-agents plugin bundle next to
 // the given opencode config and wires it into the config (plugin array +
 // delegation permissions). configPath is the path to opencode.json(c).
