@@ -8,7 +8,12 @@
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "on_ship",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
         "advisor": "opencode-admin/deepseek-v4-pro",
@@ -52,21 +57,6 @@
         },
         "memory": {
           "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-orchestrator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-validator-focused": {
-          "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
           "model": "opencode-admin/deepseek-v4-pro"
@@ -114,7 +104,12 @@
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "never",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
         "slow": "opencode-admin/deepseek-v4-flash",
@@ -151,21 +146,6 @@
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "memory": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator-focused": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
         "orchestrator": {
@@ -214,7 +194,12 @@
         "allow_solo_write": false,
         "max_hops_before_escalate": 2,
         "require_review": "always",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
         "slow": "opencode-admin/grok-4.5",
@@ -252,21 +237,6 @@
         },
         "memory": {
           "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-orchestrator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/minimax-m3"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-validator-focused": {
-          "model": "opencode-admin/glm-5.2"
         },
         "orchestrator": {
           "model": "opencode-admin/grok-4.5"
@@ -314,7 +284,12 @@
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "on_ship",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_thinking_level": "auto",
       "agents": {
@@ -328,11 +303,6 @@
         "feature-summary": {},
         "finder": {},
         "memory": {},
-        "migration-orchestrator": {},
-        "migration-planner": {},
-        "migration-scope": {},
-        "migration-validator": {},
-        "migration-validator-focused": {},
         "orchestrator": {},
         "planner-draft": {},
         "planner-scout": {},

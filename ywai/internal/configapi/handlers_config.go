@@ -905,7 +905,7 @@ func shippedProfileNames(profiles map[string]userconfig.OrchestratorModelProfile
 // is enough to make it configurable.
 //
 // Returns the merged profiles plus agentGroups: bare agent name → the folder it
-// lives under (e.g. "qa-automation", "social-refactor"), derived from the
+// lives under (e.g. "qa-automation", "planning"), derived from the
 // loader's slash-path key. The UI uses agentGroups to group agents by their real
 // agents/ folder instead of guessing from name prefixes.
 func withAllInstalledAgents(

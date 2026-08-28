@@ -2312,7 +2312,6 @@ func TestCoordinatorsCannotSearch(t *testing.T) {
 	for _, name := range []string{
 		"core/planning",
 		"qa-automation/qa-orchestrator",
-		"social-refactor/migration-orchestrator",
 	} {
 		p, ok := profiles[name]
 		if !ok {

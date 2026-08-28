@@ -38,7 +38,7 @@ type GroupFilter struct {
 }
 
 // LoadProfiles reads all agent directories from the given source dir.
-// It walks subdirectories recursively (e.g. core/, social-refactor/) and
+// It walks subdirectories recursively (e.g. core/, qa-automation/) and
 // loads any directory containing AGENT.md.
 func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 	profiles := map[string]AgentProfile{}

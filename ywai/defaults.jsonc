@@ -20,6 +20,6 @@
 
   // Agent groups to install (besides core, which is always included)
   // Add group names here to install them by default.
-  // Example: ["social-refactor", "experiment"]
+  // Example: ["qa-automation", "experiment"]
   "groups": []
 }

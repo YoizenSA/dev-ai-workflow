@@ -503,7 +503,7 @@ export interface OrchestratorProfile {
   display_name?: string;
   description?: string;
   is_seed?: boolean;
-  // Keyed by agent name (dev, qa, architect, qa-analyst, migration-planner, …).
+  // Keyed by agent name (dev, qa, architect, qa-analyst, qa-dev, …).
   agents?: Record<string, OrchestratorModelMapping>;
   /** Explicit omp modelRoles overrides for this profile (verbatim values). */
   omp_model_roles?: Record<string, string>;

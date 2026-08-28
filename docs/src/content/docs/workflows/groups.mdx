@@ -32,18 +32,6 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 
 **Para qué:** Desarrollo general.
 
-### Social Refactor
-
-| Agente | Rol |
-|---|---|
-| `migration-orchestrator` | Coordina migración |
-| `migration-planner` | Planifica |
-| `migration-scope` | Clasifica alcance |
-| `migration-validator` | Valida paridad |
-| `migration-validator-focused` | Valida una página |
-
-**Para qué:** Migraciones entre frameworks.
-
 ### QA Automation
 
 | Agente | Rol |
@@ -62,9 +50,6 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 Core:
   orchestrator → [dev, qa, architect, reviewer, devops, ask, finder, planning, memory]
 
-Social Refactor:
-  migration-orchestrator → [migration-planner, migration-scope, migration-validator, dev]
-
 QA Automation:
   qa-orchestrator → [qa-analyst, qa-dev, qa-reviewer, qa-ask]
   (exploración: @finder)
@@ -76,9 +61,8 @@ QA Automation:
 |---|---|
 | Feature nueva | Core |
 | Bug fix | Core |
-| Migrar framework | Social Refactor |
 | Testing completo | QA Automation |
 
 <Aside type="tip">
-Para instalar un grupo extra: `ywai groups enable social-refactor`. El orchestrator no instala grupos solo.
+Para instalar un grupo extra: `ywai groups enable qa-exploratory`. El orchestrator no instala grupos solo.
 </Aside>

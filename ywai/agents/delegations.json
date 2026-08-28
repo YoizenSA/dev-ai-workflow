@@ -59,21 +59,6 @@
     "qa-analyst": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
     "qa-dev": { "task": { "*": "deny", "qa-reviewer": "allow", "finder": "allow" }, "skip_rules": true },
     "qa-ask": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
-    "qa-reviewer": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
-
-    "migration-orchestrator": {
-      "task": {
-        "*": "deny",
-        "migration-planner": "allow",
-        "migration-scope": "allow",
-        "migration-validator": "allow",
-        "migration-validator-focused": "allow",
-        "finder": "allow"
-      }
-    },
-    "migration-planner": { "task": { "*": "deny", "migration-scope": "allow", "finder": "allow" }, "skip_rules": true },
-    "migration-validator": { "task": { "*": "deny", "migration-validator-focused": "allow" }, "skip_rules": true },
-    "migration-scope": { "task": { "*": "deny" }, "skip_rules": true },
-    "migration-validator-focused": { "task": { "*": "deny" }, "skip_rules": true }
+    "qa-reviewer": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true }
   }
 }

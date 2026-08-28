@@ -15,7 +15,7 @@ import (
 //
 // Agents may live either directly under dir (e.g. dir/gentle-orchestrator.md)
 // or inside a group subdirectory (e.g. dir/core/architect.md,
-// dir/social-refactor/migration-orchestrator.md). ListAgents already scans
+// dir/qa-automation/qa-analyst.md). ListAgents already scans
 // both layouts when listing; this helper mirrors that so the single-agent
 // handlers (GetAgent, PutAgent, DeleteAgent, permissions) resolve the same
 // file the list presented — otherwise selecting a nested agent returns 404.

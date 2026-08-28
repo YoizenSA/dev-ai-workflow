@@ -17,16 +17,6 @@
         "planning"
       ]
     },
-    "social-refactor": {
-      "description": "Social refactoring and collaboration agents",
-      "agents": [
-        "migration-orchestrator",
-        "migration-planner",
-        "migration-scope",
-        "migration-validator-focused",
-        "migration-validator"
-      ]
-    },
     "experiment": {
       "description": "Experimental and temporary agents",
       "agents": [

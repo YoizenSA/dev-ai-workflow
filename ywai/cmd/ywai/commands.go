@@ -1455,7 +1455,7 @@ func init() {
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
-	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
+	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 
 	rootCmd.AddCommand(installCmd)

@@ -6,7 +6,7 @@ import ModelCombobox from "../missions/ModelCombobox";
 
 // Preferred display order for the real agents/ folders. Unknown folders append
 // alphabetically so a new group still shows up without a code change.
-const GROUP_ORDER = ["core", "planning", "qa-automation", "qa-exploratory", "social-refactor"];
+const GROUP_ORDER = ["core", "planning", "qa-automation", "qa-exploratory"];
 
 // omp modelRoles the backend derivation does not cover. Listed here so they get
 // an empty row and can be set from the UI; the derived roles arrive from the API.
@@ -23,8 +23,6 @@ function groupLabel(slug: string): string {
 			return "QA Automation";
 		case "qa-exploratory":
 			return "QA Exploratory";
-		case "social-refactor":
-			return "Social Refactor";
 		default:
 			return slug
 				.split("-")

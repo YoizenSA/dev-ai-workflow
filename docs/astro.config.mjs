@@ -27,7 +27,6 @@ export default defineConfig({
             { label: 'Implementar Feature', slug: 'guides/feature' },
             { label: 'Arreglar Bug', slug: 'guides/bugfix' },
             { label: 'Code Review', slug: 'guides/review' },
-            { label: 'Migración', slug: 'guides/migration' },
             { label: 'Testing', slug: 'guides/testing' },
             { label: 'CI/CD', slug: 'guides/cicd' },
             { label: 'Refactoring', slug: 'guides/refactoring' },
@@ -58,11 +57,6 @@ export default defineConfig({
             {
               label: 'Social Refactor',
               items: [
-                { label: 'Migration Orchestrator', slug: 'agents/migration-orchestrator' },
-                { label: 'Migration Planner', slug: 'agents/migration-planner' },
-                { label: 'Migration Scope', slug: 'agents/migration-scope' },
-                { label: 'Migration Validator', slug: 'agents/migration-validator' },
-                { label: 'Validator Focused', slug: 'agents/migration-validator-focused' },
               ],
             },
             {
