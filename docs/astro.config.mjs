@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 
 export default defineConfig({
   site: 'https://YoizenSA.github.io',
@@ -9,6 +10,10 @@ export default defineConfig({
     root: { label: 'Español', lang: 'es' },
   },
   integrations: [
+    mermaid({
+      theme: 'neutral',
+      autoTheme: true,
+    }),
     starlight({
       title: 'ywai — Documentación',
       sidebar: [

@@ -1,15 +1,141 @@
 ---
 title: Orchestrator Agent
-description: Coordina múltiples agentes para tareas complejas
+description: "Coordina agentes: elige modo (solo/thin/full), ejecuta o delega, y asegura calidad según riesgo"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Orchestrator Agent
 
+El orchestrator es la persona principal de ywai. Recibe un **objetivo**, decide cómo ejecutarlo y coordina especialistas. No es "un agente más": es quien elige la topología de ejecución y aplica las barreras de calidad.
+
 ## Qué hace
 
-Coordina múltiples agentes para tareas complejas. Divide el trabajo, delega, y ensambla resultados.
+1. **Triaje** — Lee el pedido y elige `mode` (quién ejecuta) y `risk` (qué garantías).
+2. **Ejecuta** — En `solo` hace el trabajo él mismo; en `thin`/`full` delega a especialistas.
+3. **Coordina** — Divide el trabajo, resuelve dependencias, ensambla resultados.
+4. **Asegura** — Tests y review según riesgo, no según tamaño del cambio.
+
+```mermaid
+flowchart TD
+    A[Objetivo recibido] --> B{¿Triaje}
+    B -->|Q&A / pregunta| C[solo: responder con @ask]
+    B -->|1 archivo / mecánico| D[solo: editar y verificar]
+    B -->|"do X" claro, pocos archivos| E[thin: 1 delegación]
+    B -->|multi-fase / ship / UI| F[full: pipeline completo]
+    B -->|duda| E
+    C --> G[Verificar y reportar]
+    D --> G
+    E --> H{¿Riesgo}
+    F --> H
+    H -->|bajo| I[Tests opcionales]
+    H -->|medio| J[Tests en caminos cambiados + review]
+    H -->|alto| K[Tests + review obligatorios]
+    I --> L[Resultado]
+    J --> L
+    K --> L
+```
+
+## Los 4 knobs
+
+| Knob | Controla |
+|---|---|
+| **Mode** | Quién ejecuta: `solo` \| `thin` \| `full` |
+| **Risk** | Qué garantías: TDD, review, verificación extra |
+| **Capability** | Qué herramientas puede usar (permisos instalados) |
+| **Model profile** | Qué modelo (tiempo de instalación; no se rebalancea) |
+
+El risk (no el tamaño del modo) decide TDD y review. El modelo sale del perfil instalado.
+
+## Triaje → Modo
+
+| Señal | Modo |
+|---|---|
+| Una pregunta / explicar / comparar (sin código) | **solo** (responder) o un hop `@ask` si es Q&A puro |
+| Un archivo / fix mecánico; alcance claro | **solo** |
+| "Hacé X", pocos archivos, sin ship multi-fase | **thin** |
+| Entrega multi-fase, UI/diseño, "ship" / "orchestrate" | **full** |
+| No estás seguro | **thin** |
+
+```mermaid
+flowchart LR
+    U[Usuario] -->|solo / just fix / rápido| S1[solo]
+    U -->|ship / orchestrate / full pipeline| S2[full]
+    U -->|auth, perms, crypto, payments, migración, data deletion, API break| R[sube risk + review obligatorio]
+    S1 --> O[Anunciar: mode · risk · reason]
+    S2 --> O
+    R --> O
+    O --> X[Ejecutar]
+```
+
+**Cambios en el modo:** solo→thin→full cuando el alcance explota (decirlo). full→solo/thin solo con **override explícito** del usuario — nunca silencioso.
+
+**Anuncio:** una vez por tarea, corto: `mode: <solo|thin|full> · risk: <low|medium|high> · reason: <few words>`.
+
+## Modos
+
+### solo
+
+- Lee, edita y verifica él mismo. **Cero** delegaciones salvo escalar.
+- Prefiere `graft` → grep/glob → lecturas acotadas.
+- Commit local si el usuario quiere; **no push** salvo que lo pida.
+- Sin SCOUT/PLAN/REVIEW. Aplica gates de risk si no es low.
+
+### thin
+
+- Prefiere hacerlo él mismo; como mucho **una** delegación `sync` a `@dev`/`@qa`/`@finder`.
+- Requiere ` ```handoff ` en ese hop.
+
+### full
+
+- **No edita código de producto.** Delega todas las escrituras.
+- `todowrite` → SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` si UI → IMPLEMENT `@dev` → TEST `@qa` → REVIEW `@reviewer` si risk lo requiere → DEPLOY `@devops` si aplica.
+- TDD solo si risk/usuario lo pide.
+
+```mermaid
+flowchart TD
+    O[Orchestrator] --> M{Mode}
+    M -->|solo| A[Ejecuta todo: graft->grep->read, edita, verifica]
+    M -->|thin| B[Ejecuta directo + máx 1 delegación sync con ```handoff]
+    M -->|full| C[todowrite -> SCOUT -> PLAN -> DESIGN -> IMPLEMENT -> TEST -> REVIEW -> DEPLOY]
+    A --> D[Local commit OK si pidió; no push sin pedido]
+    B --> D
+    C --> D
+```
+
+## Según riesgo (independiente del modo)
+
+| Risk | Ejemplos | Garantías |
+|---|---|---|
+| **low** | typo, nit CSS, docs | tests/review opcionales |
+| **medium** | comportamiento, refactors | tests en caminos cambiados; review al ship |
+| **high** | auth, perms, migraciones, crypto, pagos, API pública | tests + review obligatorios |
+
+solo/thin + risk alto todavía necesita verify + review (o ack del usuario). full + risk low puede saltar teatro de designer/TDD.
+
+## Delegación
+
+```mermaid
+flowchart TD
+    D[Orquestador] -->|Necesito| E{¿Qué}
+    E -->|scout| F[@finder]
+    E -->|diseño| G[@architect / @designer]
+    E -->|implementar| H[@dev]
+    E -->|tests| I[@qa]
+    E -->|revisar| J[@reviewer]
+    E -->|deploy| K[@devops]
+    F --> L[handoff]
+    G --> L
+    H --> L
+    I --> L
+    J --> L
+    K --> L
+    L --> M[Verificación: tests reales ejecutados]
+```
+
+Cada delegación lleva: **Goal · Context · Acceptance · Files · Verification · Return format**. Los subagentes no pueden re-delegar. Para archivos disjuntos: 2–4 en paralelo. Dos reintentos y escalá.
+
+**Contratos tipados** (` ` ```handoff ` / ` ` ```review `) — si tras escribir/testear/revisar falta el fence, la entrega está incompleta y se re-delega una vez. `status=done` solo cuando se cumple la aceptación. Cualquier P0 o `verdict=block` frena el cierre. `verified` son comandos reales + resultados (o `not-requested`/`n/a`).
 
 ## Cuándo usarlo
 
@@ -18,36 +144,16 @@ Coordina múltiples agentes para tareas complejas. Divide el trabajo, delega, y 
 | Feature compleja | "Implementa sistema de pagos" |
 | Proyecto nuevo | "Crea la estructura base" |
 | Refactoring grande | "Refactoriza toda la capa de datos" |
-
-## Lo que hace
-
-1. **Investiga** — Usa `@finder`, `@ask`
-2. **Planifica** — Divide en subtareas
-3. **Delega** — Asigna al agente correcto
-4. **Coordina** — Maneja dependencias
-5. **Ensambla** — Integra resultados
-
-## Flujo
-
-```
-Tarea compleja → Orchestrator investiga → Planifica → Delega
-                    ↓
-         ┌─────────┬─────────┬─────────┐
-         │@architect│  @dev   │   @qa   │
-         │ diseña   │implementa│  testea │
-         └─────────┴─────────┴─────────┘
-                    ↓
-              @reviewer revisa → Resultado
-```
+| Entregar y shippear | "Implementá y subí el PR" |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Coordinar agentes | Escribir código (`@dev`) |
-| Planificar subtareas | Escribir tests (`@qa`) |
-| Manejar dependencias | Decisiones de diseño (`@architect`) |
+| Elegir modo y aplicar risk | Escribir código en modo full (`@dev`) |
+| Coordinar y ensamblar | Escribir tests en modo full (`@qa`) |
+| Revisar riesgo y gates | Decisiones de diseño (`@architect`) |
 
 <Aside type="tip">
-No necesitás invocar al orchestrator directamente. opencode lo usa automáticamente cuando la tarea es compleja.
+No necesitás invocar al orchestrator directamente. ywai lo usa automáticamente cuando la tarea es compleja; también es el agente primario cuando empezás una sesión con un objetivo.
 </Aside>
