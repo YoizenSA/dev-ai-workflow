@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { mergeRepos, parseRepoNames } from "./repoNames";
 import Modal from "../shared/Modal";
 import AdoSetupWizard from "./AdoSetupWizard";
 import { buildToml, buildTomlCommand, defaultToml, type TomlConfig } from "./tomlBuilder";
@@ -124,9 +125,8 @@ export default function AdoConfig() {
 	const addRepo = () => {
 		const raw = repoInput.trim();
 		if (!raw) return;
-		const names = raw.split(",").map((x) => x.trim()).filter(Boolean);
-		const valid = names.filter((n) => /^[a-zA-Z0-9._-]+$/.test(n));
-		if (valid.length !== names.length) {
+		const { valid, rejected } = parseRepoNames(raw);
+		if (rejected.length > 0) {
 			setMessage({ text: "Repo names may only contain letters, numbers, dots, hyphens, underscores", type: "error" });
 		}
 		setFormRepos([...new Set([...formRepos, ...valid])]);
@@ -156,7 +156,9 @@ export default function AdoConfig() {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					name,
-					profile: { org: globalOrg, project: formProject.trim(), patEnvVar: "AZURE_DEVOPS_PAT", repos: formRepos },
+					// A name typed but never committed with Enter is still the
+					// user's intent; without this the profile saves with no repos.
+					profile: { org: globalOrg, project: formProject.trim(), patEnvVar: "AZURE_DEVOPS_PAT", repos: mergeRepos(formRepos, repoInput) },
 				}),
 			});
 			const data = await res.json();
@@ -511,6 +513,7 @@ export default function AdoConfig() {
 							value={repoInput}
 							onChange={(e) => setRepoInput(e.target.value)}
 							onKeyDown={handleRepoKeyDown}
+							onBlur={addRepo}
 							placeholder="repo name + Enter (or comma-separated)"
 						/>
 					</div>
