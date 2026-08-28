@@ -219,3 +219,81 @@ func TestReadYAMLFileMissing(t *testing.T) {
 		t.Fatalf("want empty map, got %v", got)
 	}
 }
+
+// TestReplaceOwnedProvider_PrunesStaleModels pins the reason this exists:
+// DeepMerge alone only adds, so a model TokenBank stopped returning stayed in
+// the local config forever and kept being offered by the agent.
+func TestReplaceOwnedProvider_PrunesStaleModels(t *testing.T) {
+	existing := map[string]interface{}{
+		"model": "opencode-admin/kept",
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{
+				"models": map[string]interface{}{
+					"kept":    map[string]interface{}{"name": "Kept"},
+					"retired": map[string]interface{}{"name": "Retired upstream"},
+				},
+			},
+			"someone-else": map[string]interface{}{
+				"models": map[string]interface{}{"mine": map[string]interface{}{}},
+			},
+		},
+	}
+	fresh := map[string]interface{}{
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{
+				"models": map[string]interface{}{
+					"kept": map[string]interface{}{"name": "Kept"},
+				},
+			},
+		},
+	}
+
+	merged := DeepMerge(existing, fresh)
+	replaceOwnedProvider(merged, fresh, "provider", "opencode-admin")
+
+	provider := merged["provider"].(map[string]interface{})
+	admin := provider["opencode-admin"].(map[string]interface{})
+	models := admin["models"].(map[string]interface{})
+	if _, stale := models["retired"]; stale {
+		t.Errorf("a model absent from the API response must be removed, got %v", models)
+	}
+	if _, ok := models["kept"]; !ok {
+		t.Errorf("a model the API still returns must survive, got %v", models)
+	}
+	if _, ok := provider["someone-else"]; !ok {
+		t.Error("providers ywai does not own must be preserved")
+	}
+	if merged["model"] != "opencode-admin/kept" {
+		t.Errorf("unrelated top-level keys must survive, got %v", merged["model"])
+	}
+}
+
+// TestReplaceOwnedProvider_NoProviderInResponse guards the fail-safe: an API
+// response without the owned provider must not wipe the local one.
+func TestReplaceOwnedProvider_NoProviderInResponse(t *testing.T) {
+	merged := map[string]interface{}{
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{"models": map[string]interface{}{"a": map[string]interface{}{}}},
+		},
+	}
+	replaceOwnedProvider(merged, map[string]interface{}{}, "provider", "opencode-admin")
+
+	provider := merged["provider"].(map[string]interface{})
+	if _, ok := provider["opencode-admin"]; !ok {
+		t.Error("a response with no provider section must leave the local config alone")
+	}
+}
+
+// TestEntryVendors_OnlyManagedVendors pins which Copilot entries ywai may
+// prune: only those under a vendor the API response itself manages.
+func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
+	got := entryVendors([]interface{}{
+		map[string]interface{}{"vendor": "Token Bank", "name": "a"},
+		map[string]interface{}{"vendor": "Token Bank", "name": "b"},
+		map[string]interface{}{"name": "no-vendor"},
+		"not-a-map",
+	})
+	if len(got) != 1 || !got["Token Bank"] {
+		t.Errorf("entryVendors = %v, want just the Token Bank vendor", got)
+	}
+}

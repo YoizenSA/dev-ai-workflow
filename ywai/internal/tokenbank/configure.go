@@ -50,8 +50,10 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return err
 	}
 
-	// Deep merge
+	// Deep merge, then let the API response own its provider outright so models
+	// dropped upstream are removed instead of lingering.
 	merged := DeepMerge(existing, newConfig)
+	replaceOwnedProvider(merged, newConfig, "provider", "opencode-admin")
 
 	// Write
 	if err := WriteJSONFile(configPath, merged); err != nil {
@@ -61,6 +63,29 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 	fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
 	fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	return nil
+}
+
+// replaceOwnedProvider makes the API response authoritative for the one
+// provider ywai owns. DeepMerge only ever adds and overwrites keys, so a model
+// the API stopped returning would survive in the local config forever and keep
+// being offered by the agent long after TokenBank dropped it. Everything
+// outside providerKey — other providers, and the user's own settings — is left
+// exactly as the merge produced it.
+func replaceOwnedProvider(merged, fresh map[string]interface{}, sectionKey, providerKey string) {
+	freshSection, ok := fresh[sectionKey].(map[string]interface{})
+	if !ok {
+		return
+	}
+	freshProvider, ok := freshSection[providerKey].(map[string]interface{})
+	if !ok {
+		return
+	}
+	mergedSection, ok := merged[sectionKey].(map[string]interface{})
+	if !ok {
+		mergedSection = map[string]interface{}{}
+		merged[sectionKey] = mergedSection
+	}
+	mergedSection[providerKey] = freshProvider
 }
 
 // injectModelLimits inyecta limit.context y limit.output en cada modelo
@@ -184,8 +209,10 @@ func ConfigurePi(baseURL, apiKey string) error {
 		return err
 	}
 
-	// Deep merge (merges providers.tokenbank-proxy)
+	// Deep merge, then let the API response own providers.tokenbank-proxy
+	// outright so models dropped upstream are removed instead of lingering.
 	merged := DeepMerge(existing, newConfig)
+	replaceOwnedProvider(merged, newConfig, "providers", OmpProviderID)
 
 	// Write
 	if err := WriteJSONFile(configPath, merged); err != nil {
@@ -448,6 +475,7 @@ func ConfigureCopilot(baseURL, apiKey string) error {
 
 		// Find and replace existing Token Bank entry, or append
 		newEntriesMap := makeEntryMap(newEntries)
+		ownedVendors := entryVendors(newEntries)
 		merged := make([]interface{}, 0, len(existing)+len(newEntries))
 
 		// Track which new entries we've added
@@ -464,6 +492,13 @@ func ConfigureCopilot(baseURL, apiKey string) error {
 				if replacement, exists := newEntriesMap[key]; exists {
 					merged = append(merged, replacement)
 					added[key] = true
+					continue
+				}
+				// A model under a vendor the API manages that the API no longer
+				// returns was retired upstream: drop it instead of leaving a
+				// dead model in the picker. Entries under any other vendor are
+				// the user's own and are never touched.
+				if ownedVendors[vendor] {
 					continue
 				}
 			}
@@ -515,6 +550,22 @@ func injectThinkingFields(entries []interface{}) []interface{} {
 		}
 	}
 	return entries
+}
+
+// entryVendors returns the set of vendors the API response manages. Only
+// entries under these vendors are ywai's to prune.
+func entryVendors(entries []interface{}) map[string]bool {
+	out := make(map[string]bool)
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if vendor, _ := entryMap["vendor"].(string); vendor != "" {
+			out[vendor] = true
+		}
+	}
+	return out
 }
 
 // makeEntryMap converts a slice of entries to a map keyed by "vendor/name".
