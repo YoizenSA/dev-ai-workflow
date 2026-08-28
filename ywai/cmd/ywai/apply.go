@@ -42,6 +42,7 @@ type managedPlan struct {
 	SetDefaultAgent bool
 	ApplyOverrides  bool
 	RefreshVersion  bool
+	ExportWorkflows bool
 }
 
 // planManaged returns the fixed ywai-managed work for install/update.
@@ -56,6 +57,7 @@ func planManaged(mode applyMode) managedPlan {
 		SetDefaultAgent: true,
 		ApplyOverrides:  true,
 		RefreshVersion:  true,
+		ExportWorkflows: true,
 	}
 }
 
@@ -146,6 +148,9 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++ // Configuring TokenBank providers
 	}
 	if plan.ApplyOverrides {
+		n++
+	}
+	if plan.ExportWorkflows {
 		n++
 	}
 	if plan.WriteAgentsMd {
@@ -270,6 +275,26 @@ func applyManaged(o applyOpts) applyResult {
 			r.warnf("failed to apply overrides: %v", err)
 		} else {
 			fmt.Println("  ✓ overrides applied")
+		}
+	}
+
+	// ── workflows ─────────────────────────────────────────────────────────
+	// MUST run after the profile install: that step prunes every agent .md
+	// outside the installed profile set, which takes the workflow sub-agents
+	// with it. Re-exporting also rewrites commands whose frontmatter came from
+	// an older ywai.
+	if plan.ExportWorkflows {
+		steps.next("Re-exporting workflows")
+		n, err := exportInstalledWorkflows(o.Opts.DryRun)
+		switch {
+		case err != nil:
+			r.warnf("failed to export workflows: %v", err)
+		case n == 0:
+			fmt.Println("  No workflows to export")
+		case o.Opts.DryRun:
+			fmt.Printf("  Would re-export %d workflow(s)\n", n)
+		default:
+			fmt.Printf("  ✓ %d workflow(s) re-exported\n", n)
 		}
 	}
 
