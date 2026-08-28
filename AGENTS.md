@@ -209,19 +209,19 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 
 ## Available Skills
 
-| Skill | Technology |
+| Skill | Domain |
 |:---|:---|
-| `typescript` | TypeScript |
-| `react-19` | React 19 |
-| `tailwind-4` | Tailwind CSS 4 |
-| `biome` | Biome (linter/formatter) |
-| `angular/*` | Angular (core, forms, performance, architecture) |
-| `dotnet` | .NET / C# |
-| `devops` | Azure Pipelines, Helm charts, Kubernetes |
-| `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
-| `git-commit` | Conventional commits |
-| `ywai` | Agents enable/disable MCP, switch profiles, enable groups |
-| `work-ledger` | Long-horizon task ledger (gate, seams, ship, resume) |
+| `angular` / `tailwind-4` / `yz-ui` | Frontend: Angular, Tailwind 4, Yoizen design system |
+| `tdd` / `testing-expert` / `playwright-e2e-testing` / `condition-based-waiting` | Testing: TDD loop, test quality, E2E, anti-flaky |
+| `devops` / `docker` | Azure Pipelines, Helm, Kubernetes, Dockerfiles |
+| `git-commit` / `work-ledger` | Commits and long-horizon work |
+| `delegate-opencode2` | Delegate a bounded task to the local `opencode2` CLI, then verify it |
+| `ado` | Azure DevOps PRs and work items via the `ado` CLI |
+| `codebase-design` / `diagnosing-bugs` / `improve-codebase-architecture` | Module design, bug diagnosis, architecture review |
+| `adr-skill` / `diks` / `writing-great-skills` | ADRs, infra notes, skill authoring |
+| `ywai` / `learn-ywai` / `teach` / `i-have-adhd` | Operate and learn ywai; output shaping |
+
+Full list with triggers: `docs/src/content/docs/skills/reference.mdx`. Every skill dir needs a `.ywai-extra` marker or `ywai install` skips it and the cleanup pass deletes it.
 
 ---
 
