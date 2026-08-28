@@ -171,7 +171,7 @@ func RemoveAgentConfig(target string, entryID string) error {
 			return nil
 		}
 		delete(servers, entryID)
-		root[key] = nestOpenCodeMCP(section, servers)
+		root[key] = flattenOpenCodeMCP(section, servers)
 		return writeRootAtomic(path, root)
 	}
 	if _, exists := section[entryID]; !exists {
@@ -262,7 +262,7 @@ func putEntry(root map[string]any, target, entryID string, shape map[string]any)
 	if target == "opencode" {
 		servers := collectOpenCodeServers(section)
 		servers[entryID] = shape
-		root[key] = nestOpenCodeMCP(section, servers)
+		root[key] = flattenOpenCodeMCP(section, servers)
 		return nil
 	}
 	section[entryID] = shape
@@ -297,38 +297,43 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 	return out
 }
 
-func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	clean := map[string]any{}
+// flattenOpenCodeMCP writes the opencode v1 MCP layout: each server sits
+// directly under `mcp`, and every entry carries an explicit `enabled` bool.
+// v1 validates that key, so a v2 entry (nested under `servers`, using
+// `disabled`) is converted rather than passed through.
+func flattenOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	out := map[string]any{}
+	if mcp != nil {
+		for k, v := range mcp {
+			if k == "servers" {
+				continue
+			}
+			if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
+				continue
+			}
+			out[k] = v
+		}
+	}
 	for id, raw := range servers {
 		entry, ok := raw.(map[string]any)
 		if !ok {
-			clean[id] = raw
+			out[id] = raw
 			continue
 		}
-		next := make(map[string]any, len(entry))
+		next := make(map[string]any, len(entry)+1)
 		for k, v := range entry {
 			next[k] = v
 		}
-		if enabled, ok := next["enabled"].(bool); ok {
-			delete(next, "enabled")
-			if !enabled {
-				next["disabled"] = true
-			}
+		enabled := true
+		if disabled, ok := next["disabled"].(bool); ok {
+			enabled = !disabled
+			delete(next, "disabled")
 		}
-		clean[id] = next
-	}
-	out := map[string]any{"servers": clean}
-	if mcp == nil {
-		return out
-	}
-	for k, v := range mcp {
-		if k == "servers" {
-			continue
+		if e, ok := next["enabled"].(bool); ok {
+			enabled = e
 		}
-		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-			continue
-		}
-		out[k] = v
+		next["enabled"] = enabled
+		out[id] = next
 	}
 	return out
 }

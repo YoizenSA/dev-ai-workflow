@@ -112,6 +112,19 @@ func putFakeEngramOnPATH(t *testing.T) {
 }
 
 func entryShapeEqual(got, want map[string]any) bool {
+	// The opencode v1 writer adds `enabled` where BuildEntryShape does not
+	// carry one; drop it only in that case, so hosts whose shape legitimately
+	// includes `enabled` are still compared on it.
+	_, wantHasEnabled := want["enabled"]
+	if _, has := got["enabled"]; has && !wantHasEnabled {
+		trimmed := make(map[string]any, len(got)-1)
+		for k, v := range got {
+			if k != "enabled" {
+				trimmed[k] = v
+			}
+		}
+		got = trimmed
+	}
 	if len(got) != len(want) {
 		return false
 	}

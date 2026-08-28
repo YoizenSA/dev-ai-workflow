@@ -128,19 +128,40 @@ func opencodeFileServers(t *testing.T, cfg map[string]any) map[string]any {
 	if !ok {
 		t.Fatalf("cfg[mcp] = %v (%T), want map", cfg["mcp"], cfg["mcp"])
 	}
-	servers, ok := mcp["servers"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp.servers missing after write: %v", mcp)
+	if _, nested := mcp["servers"]; nested {
+		t.Fatalf("v2 mcp.servers nesting must not be written: %v", mcp)
 	}
+	servers := map[string]any{}
 	for k, v := range mcp {
-		if k == "servers" || k == "timeout" {
+		if k == "timeout" {
 			continue
 		}
-		if _, isObj := v.(map[string]any); isObj {
-			t.Fatalf("server id %q must not sit beside mcp.servers", k)
+		entry, isObj := v.(map[string]any)
+		if !isObj {
+			continue
 		}
+		if _, ok := entry["enabled"].(bool); !ok {
+			t.Fatalf("server %q missing the enabled key v1 validates: %v", k, entry)
+		}
+		servers[k] = v
+	}
+	if len(servers) == 0 {
+		t.Fatalf("no mcp servers after write: %v", mcp)
 	}
 	return servers
+}
+
+// withoutV1Enabled drops the `enabled` key the v1 writer adds to every server
+// entry, so a shape comparison stays about torn writes rather than that key.
+func withoutV1Enabled(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if k == "enabled" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func parseJSONFile(t *testing.T, path string) map[string]any {
@@ -847,8 +868,9 @@ func TestWriteAgentConfig_Atomic(t *testing.T) {
 	// fail. (JSON round-trip of []any vs []string is the same JSON,
 	// so this equality is well-defined.)
 	matched := false
+	ghBare := withoutV1Enabled(gh)
 	for _, s := range shapes {
-		if reflect.DeepEqual(gh, s) {
+		if reflect.DeepEqual(ghBare, s) {
 			matched = true
 			break
 		}
@@ -1121,7 +1143,7 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 		// JSON-roundtrip comparison to handle []string vs []any
 		// for the command field, exactly like the BuildEntryShape
 		// tests above.
-		gJSON, _ := json.Marshal(got)
+		gJSON, _ := json.Marshal(withoutV1Enabled(got))
 		wJSON, _ := json.Marshal(want)
 		if string(gJSON) != string(wJSON) {
 			t.Errorf("mcp[%q] JSON = %s, want %s (torn write?)",

@@ -131,26 +131,26 @@ func opencodeServers(t *testing.T, root map[string]any) map[string]any {
 		t.Fatal("missing mcp")
 	}
 	if _, flat := mcp["context7"]; flat {
-		if _, ok := mcp["servers"]; !ok {
+		if _, ok := mcp["servers"]; ok {
 			t.Fatal("flat mcp sibling servers must be lifted into mcp.servers on write")
 		}
 	}
-	servers, ok := mcp["servers"].(map[string]any)
+	servers, ok := mcp, mcp != nil // v1: servers sit directly under mcp
 	if !ok {
 		t.Fatalf("mcp.servers missing: %v", mcp)
 	}
 	for k, v := range mcp {
-		if k == "servers" || k == "timeout" {
+		if k == "timeout" {
 			continue
 		}
-		if _, isObj := v.(map[string]any); isObj {
-			t.Fatalf("server id %q must not be a sibling of servers", k)
+		if _, isObj := v.(map[string]any); isObj && k == "servers" {
+			t.Fatalf("v1 must not nest servers under mcp.servers: %v", v)
 		}
 	}
 	return servers
 }
 
-func TestInstallMicrosoftLearnMCP_OpenCodeV2Nest(t *testing.T) {
+func TestInstallMicrosoftLearnMCP_OpenCodeV1Flat(t *testing.T) {
 	path := writeAgentConfig(t, "opencode.json", map[string]any{
 		"mcp": map[string]any{
 			"timeout": 30,
@@ -169,11 +169,11 @@ func TestInstallMicrosoftLearnMCP_OpenCodeV2Nest(t *testing.T) {
 		t.Fatal("microsoft-learn missing under mcp.servers")
 	}
 	if _, ok := servers["context7"]; !ok {
-		t.Fatal("lifted context7 missing under mcp.servers")
+		t.Fatal("context7 missing under mcp")
 	}
 	entry := servers["microsoft-learn"].(map[string]any)
-	if _, has := entry["enabled"]; has {
-		t.Fatal("v2 must not write enabled")
+	if entry["enabled"] != true {
+		t.Fatalf("v1 must write enabled, got %v", entry)
 	}
 	mcp := root["mcp"].(map[string]any)
 	if mcp["timeout"] != float64(30) && mcp["timeout"] != 30 {
@@ -196,11 +196,13 @@ func TestInstallMicrosoftLearnMCP_StripsLegacyEnabled(t *testing.T) {
 	}
 	root := readConfigRoot(t, path)
 	entry := opencodeServers(t, root)["jam"].(map[string]any)
-	if _, has := entry["enabled"]; has {
-		t.Fatal("v2 must not persist enabled")
+	// v1 validates `enabled`, so a disabled server persists as enabled:false
+	// rather than the v2 `disabled: true`.
+	if entry["enabled"] != false {
+		t.Fatalf("disabled server must persist as enabled:false, got %v", entry)
 	}
-	if entry["disabled"] != true {
-		t.Fatalf("enabled:false must become disabled:true, got %v", entry)
+	if _, has := entry["disabled"]; has {
+		t.Fatalf("v1 must not persist the v2 disabled key, got %v", entry)
 	}
 }
 

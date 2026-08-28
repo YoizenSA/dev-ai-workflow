@@ -135,7 +135,7 @@ func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 	if key == "mcp" {
 		servers := collectOpenCodeServers(mcpMap)
 		servers["graft"] = shape
-		root[key] = nestOpenCodeMCP(mcpMap, servers)
+		root[key] = flattenOpenCodeMCP(mcpMap, servers)
 	} else {
 		mcpMap["graft"] = shape
 		root[key] = mcpMap

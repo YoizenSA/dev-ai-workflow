@@ -43,7 +43,7 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 		if len(removed) == 0 {
 			return nil, nil
 		}
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = flattenOpenCodeMCP(mcp, servers)
 	} else {
 		for _, id := range config.RetiredMCPServers {
 			if _, exists := mcp[id]; exists {
@@ -99,7 +99,7 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 				"url":  "https://learn.microsoft.com/api/mcp",
 			}
 		}
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = flattenOpenCodeMCP(mcp, servers)
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
@@ -129,7 +129,7 @@ func RemoveVisionMCP(configPath, agentName string) error {
 			return nil
 		}
 		delete(servers, "mcp-vision")
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = flattenOpenCodeMCP(mcp, servers)
 	} else {
 		if _, exists := mcp["mcp-vision"]; !exists {
 			return nil
@@ -171,38 +171,43 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 	return out
 }
 
-func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	clean := map[string]any{}
+// flattenOpenCodeMCP writes the opencode v1 MCP layout: each server sits
+// directly under `mcp`, and every entry carries an explicit `enabled` bool.
+// v1 validates that key, so a v2 entry (nested under `servers`, using
+// `disabled`) is converted rather than passed through.
+func flattenOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	out := map[string]any{}
+	if mcp != nil {
+		for k, v := range mcp {
+			if k == "servers" {
+				continue
+			}
+			if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
+				continue
+			}
+			out[k] = v
+		}
+	}
 	for id, raw := range servers {
 		entry, ok := raw.(map[string]any)
 		if !ok {
-			clean[id] = raw
+			out[id] = raw
 			continue
 		}
-		next := make(map[string]any, len(entry))
+		next := make(map[string]any, len(entry)+1)
 		for k, v := range entry {
 			next[k] = v
 		}
-		if enabled, ok := next["enabled"].(bool); ok {
-			delete(next, "enabled")
-			if !enabled {
-				next["disabled"] = true
-			}
+		enabled := true
+		if disabled, ok := next["disabled"].(bool); ok {
+			enabled = !disabled
+			delete(next, "disabled")
 		}
-		clean[id] = next
-	}
-	out := map[string]any{"servers": clean}
-	if mcp == nil {
-		return out
-	}
-	for k, v := range mcp {
-		if k == "servers" {
-			continue
+		if e, ok := next["enabled"].(bool); ok {
+			enabled = e
 		}
-		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-			continue
-		}
-		out[k] = v
+		next["enabled"] = enabled
+		out[id] = next
 	}
 	return out
 }
