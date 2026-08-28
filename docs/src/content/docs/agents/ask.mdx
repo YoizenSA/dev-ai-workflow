@@ -1,15 +1,32 @@
 ---
 title: Ask Agent
-description: Preguntas, análisis, explicaciones
+description: "Responde preguntas sobre el codebase con evidencia file:line; read-only"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Ask Agent
 
+El ask responde preguntas sobre este codebase desde evidencia. Cita `file:line`. Responde lo que se preguntó y se detiene; una nota adyacente está bien, no un refactor. Cuando varias opciones funcionan, dice cuál elegiría y por qué.
+
 ## Qué hace
 
-Responde preguntas, explica código, investiga tecnologías.
+1. **Investiga con evidencia** — Busca en el codebase y cita `file:line` para cada afirmación. No inventa respuestas.
+2. **Responde justo lo pedido** — Responde lo que se preguntó y se detiene. Una nota adyacente está bien, no un refactor.
+3. **Recomienda** — Cuando varias opciones funcionan, dice cuál elegiría y por qué.
+4. **Es read-only** — No modifica archivos, no escribe tests, no inventa arquitectura, no corre un pipeline de entrega.
+5. **Rutea** — Para trabajo de localización amplio prefiere `@finder`; para entrega multi-paso deriva a `@orchestrator`.
+
+```mermaid
+flowchart LR
+    A[Pregunta] --> B{¿Shape}
+    B -->|locate amplio| C[@finder]
+    B -->|entrega multi-paso| D[@orchestrator]
+    B -->|pregunta directa| E[Buscar evidencia en el codebase]
+    E --> F[Citar file:line]
+    F --> G[Responder lo pedido y detenerse]
+    G --> H[Si hay opciones: recomendar una]
+```
 
 ## Cuándo usarlo
 
@@ -17,25 +34,28 @@ Responde preguntas, explica código, investiga tecnologías.
 |---|---|
 | Pregunta técnica | `@ask ¿Cómo funciona JWT refresh token rotation?` |
 | Explicar código | `@ask Explica el middleware de auth` |
+| "Qué es / cómo / por qué" | `@ask ¿Qué es el adapter de payments?` |
+| Investigar con evidencia | `@ask ¿Dónde se valida el email, con file:line?` |
 | Comparar opciones | `@ask ¿Zustand o Jotai para estado?` |
-| Investigar API | `@ask ¿Cómo uso Stripe checkout sessions?` |
 
-## Cuándo delegar vs manejar directo
+## Cuándo delegar vs responder directo
 
 | Maneja directo | Delega |
 |---|---|
 | Pregunta con una respuesta | Requiere código → `@dev` |
-| Comparación | Decisión de diseño → `@architect` |
-| Explicar código existente | Trabajo multi-agente → orchestrator |
+| Comparación / recomendación | Decisión de diseño → `@architect` |
+| Explicar código existente | Trabajo multi-agente → `@orchestrator` |
+| Búsqueda amplia de ubicación | `@finder` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Responder preguntas | Implementar código (`@dev`) |
-| Explicar código | Escribir tests (`@qa`) |
-| Investigar tecnologías | Decisiones de diseño (`@architect`) |
+| Responder preguntas con `file:line` | Modificar archivos (`@dev`) |
+| Explicar código y conceptos | Escribir tests (`@qa`) |
+| Investigar y recomendar | Inventar arquitectura (`@architect`) |
+| | Correr un pipeline de entrega |
 
 <Aside type="tip">
-`@ask` es tu punto de partida cuando no sabés por dónde empezar.
+`@ask` es tu punto de partida cuando no sabés por dónde empezar: da respuestas con evidencia y, si la tarea necesita escribir código, te rutea al agente correcto.
 </Aside>

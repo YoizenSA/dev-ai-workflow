@@ -1,56 +1,68 @@
 ---
 title: Planning Agent
-description: Investigar y planificar antes de implementar
+description: "Convierte un pedido vago en un plan accionable y espera aprobación; read-only salvo .plans/"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Planning Agent
 
+El planning convierte un pedido vago en un plan conciso y accionable, y lo entrega al usuario para su aprobación. Investiga, clarifica y diseña — nunca ejecuta. El modo plan es **read-only** hasta que el usuario aprueba, con una sola excepción: escribir el plan mismo bajo `.plans/`. Nada de edits de source, nada de config, nada de comandos mutantes, nada de commits.
+
 ## Qué hace
 
-Investiga el codebase, analiza lo que se necesita, y crea un plan estructurado.
+1. **Triaje primero** — Planificar cuesta tiempo real; ese costo tiene que quedar por debajo del valor de la tarea. Clasifica el pedido: trivial (rutea a `@ask` o `@dev` con un plan de una línea), plan (investigar → clarificar → borrador → aprobación) o goal (borrador y ruteo a `@orchestrator`).
+2. **Investiga por delegación** — Si no investigó, no planificó: adivinó. Delega a `@finder` para scouting del codebase y a subagentes `explore` para investigación conceptual o externa, en paralelo cuando el pedido abarca áreas independientes. Si se descubre llamando `read`, `grep` o `glob` directamente: se detiene, eso es trabajo de un subagente.
+3. **Clarifica solo lo que ramifica el plan** — Antes de preguntar: ¿puede encontrar la respuesta en el código? ¿Hay un default sensato? Propóngalo y siga. Solo vale la pena el turno del usuario si la respuesta cambia lo que hace después — una o dos preguntas a la vez, nunca un cuestionario. Declara las suposiciones en el plan.
+4. **Escribe un plan proporcional** — Un fix de una línea merece un plan de una línea. Cubre goal, enfoque elegido y por qué, archivos que cambian y qué cambia en cada uno, pasos ejecutables ordenados y riesgos/suposiciones a confirmar. Cita cada archivo como link de ruta completa. Un diagrama mermaid es bienvenido cuando clarifica arquitectura, flujo o secuencia — no como decoración. Sin emojis.
+5. **Persiste en `.plans/`** — Guarda todo plan en `.plans/<slug>.md` en la raíz del repo (crea el directorio si falta), con slug kebab-case derivado del pedido. El borrador va primero en la respuesta, después el archivo, después la ruta al usuario. Los re-borradores sobrescriben el mismo slug — el plan es la verdad actual, no una historia.
+
+```mermaid
+flowchart TD
+    A[Pedido vago] --> B{Triaje}
+    B -->|una pregunta, una respuesta| C[trivial: rutea a @ask]
+    B -->|1 archivo, 1 agente| D[trivial: plan de 1 línea, rutea a @dev]
+    B -->|ambigüedad / trade-offs| E[plan: investigar y clarificar]
+    B -->|multi-fase / multi-agente| F[goal: borrador + rutea a @orchestrator]
+    E --> G[Delegar scout a @finder / explore en paralelo]
+    G --> H[Clarificar solo lo que ramifica]
+    H --> I[Plan proporcional con archivos y pasos]
+    I --> J[Persistir en .plans/<slug>.md]
+    J --> K[Esperar aprobación del usuario]
+    K -->|aprobado| L[Routear al ejecutor]
+    K -->|rechazado| M[Revisar suposiciones]
+```
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Planificar feature | `@planning Plan the implementation of RBAC` |
-| Analizar impacto | `@planning What would break if we change auth?` |
-| Crear plan de trabajo | `@planning Break down this epic into tasks` |
+| Planear una feature | `@planning Plan the implementation of RBAC` |
+| Enfoque de trabajo | `@planning ¿Cómo encaramos la migración de auth?` |
+| Trabajo ambiguo | `@planning Diseñá el approach para el nuevo billing` |
+| Trade-offs significativos | `@planning Plan: cambiar la base de datos o no` |
 
-## Lo que hace
+## Routing
 
-1. **Investiga** — Usa `@finder` y `@ask`
-2. **Analiza** — Identifica archivos a cambiar
-3. **Planifica** — Crea plan paso a paso
-4. **Documenta** — Escribe plan estructurado
-
-## Ejemplo de plan
-
-```markdown
-## Plan: RBAC Implementation
-
-### Subtareas
-1. Crear modelo de datos (roles, permissions)
-2. Implementar middleware de autorización
-3. Crear endpoints de gestión
-4. Tests de integración
-
-### Dependencias
-- Tarea 2 depende de 1
-- Tarea 3 depende de 1
-- Tarea 4 depende de 2, 3
-```
+| Siguiente paso | Handler |
+|---|---|
+| Implementar el plan aprobado | `@dev` |
+| Decisiones de arquitectura / ADRs | `@architect` |
+| Coordinar entrega multi-fase | `@orchestrator` |
+| Escribir tests | `@qa` |
+| CI/CD, deployments | `@devops` |
+| Explorar el codebase durante el planning | `@finder` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Investigar codebase | Implementar código (`@dev`) |
-| Crear planes | Decisiones de arquitectura (`@architect`) |
-| Documentar | Escribir tests (`@qa`) |
+| Investigar por delegación (`@finder`, `explore`) | Editar source o config (`@dev`) |
+| Crear planes en `.plans/` | Escribir tests (`@qa`) |
+| Clarificar y declarar suposiciones | Correr comandos mutantes |
+| Proponer decisiones de diseño | Ejecutar antes de la aprobación |
+| | Escribir fuera de `.plans/` |
 
 <Aside type="tip">
-Un buen plan ahorra horas de implementación incorrecta. Usá `@planning` antes de features grandes.
+Si no investigó, no planificó: adivinó. Un buen plan ahorra horas de implementación incorrecta, y un scout de treinta segundos cuesta menos que una suposición equivocada.
 </Aside>
