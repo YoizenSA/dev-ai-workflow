@@ -30,7 +30,7 @@ const ywaiPluginsSubdir = "ywai-plugins"
 // shim shadows the native runtime and leaves sync calls waiting on obsolete
 // event semantics.
 func RemoveBackgroundAgents(configPath string) error {
-	root := map[string]any{}
+	var root map[string]any
 	if _, err := os.Stat(configPath); err == nil {
 		var readErr error
 		root, readErr = config.ReadJSONC(configPath)
@@ -113,7 +113,7 @@ func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 // top-level v2 "permissions" array, preserving existing rules. A leftover v1
 // "permission" map is deleted entirely. It is safe to call repeatedly.
 func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
-	root := map[string]any{}
+	var root map[string]any
 	if _, err := os.Stat(configPath); err == nil {
 		var readErr error
 		root, readErr = config.ReadJSONC(configPath)
