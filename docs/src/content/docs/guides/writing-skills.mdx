@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Qué es un skill
 
-Un skill es un archivo `SKILL.md` que le dice a un agente cómo usar una tecnología específica. Se carga automáticamente cuando el agente lo necesita.
+Un skill es un `SKILL.md`. OpenCode 2 lo anuncia por id + descripción y carga el body solo cuando el modelo llama `skill`.
 
 ## Estructura de un SKILL.md
 
@@ -203,23 +203,14 @@ export function UserCard({ user, className }: UserCardProps) {
 
 1. **Crear la carpeta** del skill
    ```bash
-   mkdir -p mi-proyecto/.agents/skills/mi-skill
+   mkdir -p mi-proyecto/.opencode/skills/mi-skill
    ```
 
-2. **Escribir el SKILL.md**
-   ```bash
-   # Seguir la estructura de arriba
-   ```
+2. **Escribir el SKILL.md** (frontmatter `name` + `description`; el description es lo que ve el modelo).
 
-3. **Registrar el skill**
-   ```bash
-   ywai skill-registry --cwd /mi/proyecto
-   ```
+3. **Allowlist** — agregá el id al `skills.txt` del agente ywai que deba cargarlo. Sin eso, un agente instalado con allowlist no lo ve.
 
-4. **Verificar** que se cargó
-   ```bash
-   ywai skills | grep mi-skill
-   ```
+4. **Reiniciar** OpenCode (`opencode2`).
 
 ## Trucos para buenos skills
 

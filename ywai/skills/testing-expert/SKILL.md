@@ -1,6 +1,6 @@
 ---
 name: testing-expert
-description: Inspect test quality — assertion strength, coverage gaps, and tests that pass while the feature is broken. Use when reviewing a test suite, judging whether coverage is real, or when another skill needs the test-quality vocabulary.
+description: "Inspect test quality: assertion strength, coverage gaps, tests that pass while the feature is broken."
 ---
 
 # Testing Expert

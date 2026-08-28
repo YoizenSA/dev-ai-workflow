@@ -49,6 +49,7 @@ GEMINI.md
 
 .ga/
 .gga/
+.atl/
 
 # Package manager locks (optional - uncomment if needed)
 # package-lock.json
@@ -62,7 +63,6 @@ GEMINI.md
 # Local development
 *.local
 # Local Pi runtime state
-.atl/
 .playwright-mcp/
 ywai/ywai
 ywai/docs/loop-architecture-gap-analysis.md

@@ -33,7 +33,7 @@ Unsure between question and work → ask the user once.
 5. `@qa-reviewer` quality gate  
 6. Close with plain-language summary  
 
-Do not investigate the tree yourself. Tools: `task`/`delegate`, `todowrite`, `question`, `skill`.
+Do not investigate the tree yourself. Tools: `delegate`, `todowrite`, `question`, `skill`.
 
 Every brief: **Goal · Context · Acceptance (user-verifiable) · Constraints · Return format** (`handoff`).
 

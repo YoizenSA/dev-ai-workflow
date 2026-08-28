@@ -12,21 +12,19 @@ import (
 	"strings"
 )
 
-// resolveOpencodeBin finds the opencode executable, trying Windows extensions
-// so the CLI works when opencode is installed as opencode.cmd / opencode.exe
-// (npm/bun shims) and not just a bare "opencode" on PATH.
+// resolveOpencodeBin finds the OpenCode 2 executable (opencode2).
+// No fallback to v1 `opencode`.
 func resolveOpencodeBin() string {
-	candidates := []string{"opencode"}
+	candidates := []string{"opencode2"}
 	if runtime.GOOS == "windows" {
-		// Prefer a real .exe (direct exec); fall back to npm/bun shims.
-		candidates = []string{"opencode.exe", "opencode.cmd", "opencode.bat", "opencode.ps1", "opencode"}
+		candidates = []string{"opencode2.exe", "opencode2.cmd", "opencode2.bat", "opencode2.ps1", "opencode2"}
 	}
 	for _, name := range candidates {
 		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}
 	}
-	return "opencode"
+	return "opencode2"
 }
 
 // opencodeEnv returns the environment for opencode child processes with

@@ -440,6 +440,52 @@ func skillsSourceDir() string {
 // gentle-ai writes SDD assets (commands, skills, and agent definitions).
 var sddAssetSubdirs = []string{"skills", "commands", "agents"}
 
+// sddForeignDirs are directories another tool owns. A plugin marketplace ships
+// its own sdd-* skills; deleting those would break the plugin, so the scan
+// never descends into them.
+var sddForeignDirs = map[string]bool{
+	"plugins":      true,
+	"marketplaces": true,
+	".tmp":         true,
+	"node_modules": true,
+}
+
+// sddScanRoots returns the directories to scan for sdd-* entries: the config
+// dir itself (gentle-ai drops loose files like sdd-orchestrator.md and
+// sdd-cheap.config.toml there), its skills/commands/agents subdirectories, and
+// the same three one level deeper — a host may nest a whole agent under the
+// config dir (~/.gemini/antigravity-cli/skills), and a one-level scan misses
+// every asset inside it while still reporting the host clean.
+func sddScanRoots(configDir string) []string {
+	roots := []string{configDir}
+	for _, sub := range sddAssetSubdirs {
+		roots = append(roots, filepath.Join(configDir, sub))
+	}
+	entries, err := os.ReadDir(configDir)
+	if err != nil {
+		return roots
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || sddForeignDirs[name] || sddAssetSubdirsHas(name) {
+			continue
+		}
+		for _, sub := range sddAssetSubdirs {
+			roots = append(roots, filepath.Join(configDir, name, sub))
+		}
+	}
+	return roots
+}
+
+func sddAssetSubdirsHas(name string) bool {
+	for _, sub := range sddAssetSubdirs {
+		if sub == name {
+			return true
+		}
+	}
+	return false
+}
+
 // sddPrefix is the filename prefix of all SDD-managed assets.
 const sddPrefix = "sdd-"
 
@@ -456,14 +502,17 @@ func RemoveSddAssets(agentSkillsDir string) ([]string, error) {
 	configDir := filepath.Clean(filepath.Dir(agentSkillsDir))
 	var removed []string
 
-	for _, sub := range sddAssetSubdirs {
-		subDir := filepath.Join(configDir, sub)
+	for _, subDir := range sddScanRoots(configDir) {
 		entries, err := os.ReadDir(subDir)
 		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {
 			return removed, fmt.Errorf("failed to read %s: %w", subDir, err)
+		}
+		rel, relErr := filepath.Rel(configDir, subDir)
+		if relErr != nil {
+			rel = filepath.Base(subDir)
 		}
 
 		for _, entry := range entries {
@@ -478,11 +527,11 @@ func RemoveSddAssets(agentSkillsDir string) ([]string, error) {
 			if err := removeExistingSkillPath(path); err != nil {
 				return removed, fmt.Errorf("failed to remove %s: %w", path, err)
 			}
-			removed = append(removed, filepath.Join(sub, name))
+			removed = append(removed, filepath.Join(rel, name))
 		}
 
 		// skills/_shared also holds sdd-*.md files written by gentle-ai.
-		if sub == "skills" {
+		if filepath.Base(subDir) == "skills" {
 			sharedDir := filepath.Join(subDir, "_shared")
 			sharedEntries, err := os.ReadDir(sharedDir)
 			if os.IsNotExist(err) {
@@ -500,7 +549,7 @@ func RemoveSddAssets(agentSkillsDir string) ([]string, error) {
 				if err := removeExistingSkillPath(path); err != nil {
 					return removed, fmt.Errorf("failed to remove %s: %w", path, err)
 				}
-				removed = append(removed, filepath.Join(sub, "_shared", name))
+				removed = append(removed, filepath.Join(rel, "_shared", name))
 			}
 		}
 	}
@@ -515,8 +564,7 @@ func CountSddAssets(agentSkillsDir string) int {
 	configDir := filepath.Clean(filepath.Dir(agentSkillsDir))
 	count := 0
 
-	for _, sub := range sddAssetSubdirs {
-		subDir := filepath.Join(configDir, sub)
+	for _, subDir := range sddScanRoots(configDir) {
 		entries, err := os.ReadDir(subDir)
 		if err != nil {
 			continue
@@ -526,7 +574,7 @@ func CountSddAssets(agentSkillsDir string) int {
 				count++
 			}
 		}
-		if sub == "skills" {
+		if filepath.Base(subDir) == "skills" {
 			sharedEntries, err := os.ReadDir(filepath.Join(subDir, "_shared"))
 			if err != nil {
 				continue

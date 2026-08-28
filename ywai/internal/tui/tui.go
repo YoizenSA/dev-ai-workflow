@@ -103,8 +103,7 @@ var logoLines = []string{
 type step int
 
 const (
-	stepWelcome     step = iota
-	stepInstallMode      // Quick vs Custom
+	stepInstallMode step = iota // Quick vs Custom
 	stepAgent
 	stepOptions
 	stepMCP
@@ -113,36 +112,9 @@ const (
 )
 
 // optionsRowCount is the number of navigable rows on the Options step
-// (Preset, Scope, Global only, Overwrite agents, Autostart, SDD).
-// SDD is optional (off by default). gentle-ai persona is never offered —
-// ywai always owns agent tone via its curated AGENTS.md.
-const optionsRowCount = 6
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Choices
-// ──────────────────────────────────────────────────────────────────────────────
-
-var (
-	presetChoices = []string{"full-gentleman", "ecosystem-only", "minimal"}
-	// Presets only select gentle-ai components. ywai extra skills always install.
-	presetDescs = map[string]string{
-		"full-gentleman": "gentle-ai: engram + skills + context7 + permissions",
-		"ecosystem-only": "gentle-ai: same core components as full (engram + skills + context7 + permissions)",
-		"minimal":        "gentle-ai: skills component only (no engram via this preset)",
-	}
-	scopeChoices = []string{"global", "workspace"}
-	scopeDescs   = map[string]string{
-		"global":    "Skills shared across all your projects (~/.local)",
-		"workspace": "Skills only in this project (current directory)",
-	}
-	// Optional SDD (index 0 = off). Persona is never installed.
-	sddChoices = []string{"off", "single", "multi"}
-	sddDescs   = map[string]string{
-		"off":    "Do not install SDD (ywai skills still install)",
-		"single": "SDD orchestrator in single-agent mode",
-		"multi":  "SDD orchestrator in multi-agent mode",
-	}
-)
+// (Overwrite agents, Autostart). gentle-ai persona is never
+// offered — ywai always owns agent tone via its curated AGENTS.md.
+const optionsRowCount = 2
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types
@@ -159,15 +131,9 @@ type TUIResult struct {
 	Agent           string
 	MCP             bool
 	Ponytail        bool
-	GlobalOnly      bool
 	OverwriteAgents bool
-	Preset          string
-	Scope           string
 	Autostart       bool
-	// Optional SDD (false = skip). Persona is never installed.
-	InstallSDD  bool
-	SDDMode     string // single|multi when InstallSDD
-	GroupFilter agents.GroupFilter
+	GroupFilter     agents.GroupFilter
 }
 
 // InstallStep tracks a single installation phase.
@@ -196,11 +162,7 @@ type Model struct {
 
 	// Options step
 	optionsCursor int
-	presetIdx     int
-	scopeIdx      int
-	globalOnly    bool
 	autostart     bool
-	sddIdx        int // 0=off, 1=single, 2=multi
 
 	// Optional plugins step (Microsoft Learn MCP + ponytail)
 	optionalPluginCursor     int
@@ -257,18 +219,10 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		defaults = config.BuiltInDefaults()
 	}
 
-	// Find indices for default values
-	presetIdx := findIndex(presetChoices, defaults.Preset)
-	scopeIdx := findIndex(scopeChoices, defaults.Scope)
-
 	return Model{
-		step:                     stepWelcome,
+		step:                     stepInstallMode,
 		agents:                   agentOpts,
-		presetIdx:                presetIdx,
-		scopeIdx:                 scopeIdx,
-		globalOnly:               defaults.GlobalOnly,
 		autostart:                defaults.Autostart,
-		sddIdx:                   0, // SDD off by default
 		installMicrosoftLearnMCP: defaults.MCP,
 		installPonytail:          defaults.Ponytail,
 		overwriteAgents:          true,
@@ -282,16 +236,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 			{Name: "Install plugins", Status: "pending"},
 		},
 	}
-}
-
-// findIndex returns the index of value in choices, or 0 if not found.
-func findIndex(choices []string, value string) int {
-	for i, c := range choices {
-		if c == value {
-			return i
-		}
-	}
-	return 0
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -408,11 +352,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case stepWelcome:
+	case stepInstallMode:
 		m.quitting = true
 		return m, tea.Quit
-	case stepInstallMode:
-		m.step = stepWelcome
 	case stepAgent:
 		m.step = stepInstallMode
 	case stepOptions:
@@ -433,8 +375,6 @@ func (m *Model) handleEsc() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case stepWelcome:
-		m.step = stepInstallMode
 	case stepInstallMode:
 		if m.installModeCursor == 0 {
 			// Quick install - go directly to agent selection, then install with defaults
@@ -593,17 +533,9 @@ func (m *Model) optionalPluginCount() int {
 func (m *Model) cycleOption(dir int) {
 	switch m.optionsCursor {
 	case 0:
-		m.presetIdx = (m.presetIdx + dir + len(presetChoices)) % len(presetChoices)
-	case 1:
-		m.scopeIdx = (m.scopeIdx + dir + len(scopeChoices)) % len(scopeChoices)
-	case 2:
-		m.globalOnly = !m.globalOnly
-	case 3:
 		m.overwriteAgents = !m.overwriteAgents
-	case 4:
+	case 1:
 		m.autostart = !m.autostart
-	case 5:
-		m.sddIdx = (m.sddIdx + dir + len(sddChoices)) % len(sddChoices)
 	}
 }
 
@@ -660,8 +592,6 @@ func (m *Model) View() string {
 	b.WriteString("\n")
 
 	switch m.step {
-	case stepWelcome:
-		b.WriteString(m.viewWelcome())
 	case stepInstallMode:
 		b.WriteString(m.viewInstallMode())
 	case stepAgent:
@@ -744,8 +674,8 @@ func (m *Model) viewHelpOverlay() string {
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (m *Model) renderBreadcrumbs() string {
-	labels := []string{"Welcome", "Mode", "Agent", "Options", "Plugins", "Confirm", "Install"}
-	steps := []step{stepWelcome, stepInstallMode, stepAgent, stepOptions, stepMCP, stepConfirm, stepProgress}
+	labels := []string{"Mode", "Agent", "Options", "Plugins", "Confirm", "Install"}
+	steps := []step{stepInstallMode, stepAgent, stepOptions, stepMCP, stepConfirm, stepProgress}
 
 	// Filter out steps based on mode
 	var filteredLabels []string
@@ -778,7 +708,7 @@ func (m *Model) renderBreadcrumbs() string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Welcome view
+// Banner (logo + detected agents), rendered inline on the first step
 // ──────────────────────────────────────────────────────────────────────────────
 
 func renderLogo() string {
@@ -796,7 +726,7 @@ func renderLogo() string {
 	return strings.Join(out, "\n")
 }
 
-func (m *Model) viewWelcome() string {
+func (m *Model) viewBanner() string {
 	var b strings.Builder
 
 	// Logo - centered
@@ -827,10 +757,6 @@ func (m *Model) viewWelcome() string {
 		b.WriteString("\n\n")
 	}
 
-	// Key hints - centered
-	hints := dimStyle.Render("Enter to start  •  ? help  •  q to quit")
-	b.WriteString(centerLine(hints, m.width))
-
 	return b.String()
 }
 
@@ -840,6 +766,7 @@ func (m *Model) viewWelcome() string {
 
 func (m *Model) viewInstallMode() string {
 	var b strings.Builder
+	b.WriteString(m.viewBanner())
 	b.WriteString(titleStyle.Render("Installation mode"))
 	b.WriteString("\n\n")
 
@@ -867,21 +794,6 @@ func (m *Model) viewInstallMode() string {
 		desc := descStyle.Render("  " + mode.desc)
 
 		b.WriteString(fmt.Sprintf("  %s %s%s\n", cursor, name, desc))
-	}
-
-	// Quick install preview: show the defaults that will be applied so the user
-	// isn't installing blind.
-	if m.installModeCursor == 0 {
-		b.WriteString("\n")
-		b.WriteString(subtitleStyle.Render("  Defaults that will be applied:"))
-		b.WriteString("\n")
-		defaults := [][2]string{
-			{"Preset", presetChoices[m.presetIdx]},
-			{"Scope", scopeChoices[m.scopeIdx]},
-		}
-		for _, d := range defaults {
-			b.WriteString(fmt.Sprintf("    %s %s\n", dimStyle.Render(d[0]+":"), monoStyle.Render(d[1])))
-		}
 	}
 
 	return b.String()
@@ -953,11 +865,6 @@ func (m *Model) viewOptions() string {
 		value string
 	}
 
-	globalLabel := "no"
-	if m.globalOnly {
-		globalLabel = "yes"
-	}
-
 	overwriteLabel := "no"
 	if m.overwriteAgents {
 		overwriteLabel = "yes"
@@ -969,12 +876,8 @@ func (m *Model) viewOptions() string {
 	}
 
 	rows := []optionRow{
-		{"Preset", presetChoices[m.presetIdx]},
-		{"Scope", scopeChoices[m.scopeIdx]},
-		{"Global only", globalLabel},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
-		{"SDD", sddChoices[m.sddIdx]},
 	}
 
 	maxLabel := 0
@@ -1021,29 +924,17 @@ func (m *Model) viewOptions() string {
 	if !m.showGroupOptions {
 		switch m.optionsCursor {
 		case 0:
-			b.WriteString(helpStyle.Render("    " + presetDescs[presetChoices[m.presetIdx]]))
-		case 1:
-			b.WriteString(helpStyle.Render("    " + scopeDescs[scopeChoices[m.scopeIdx]]))
-		case 2:
-			if m.globalOnly {
-				b.WriteString(helpStyle.Render("    Global skills only (no AGENTS.md/REVIEW.md in the repo)"))
-			} else {
-				b.WriteString(helpStyle.Render("    Global skills + AGENTS.md/REVIEW.md in the repo"))
-			}
-		case 3:
 			if m.overwriteAgents {
 				b.WriteString(helpStyle.Render("    Overwrite existing agent profiles with fresh copies"))
 			} else {
 				b.WriteString(helpStyle.Render("    Keep existing agent profiles untouched"))
 			}
-		case 4:
+		case 1:
 			if m.autostart {
 				b.WriteString(helpStyle.Render("    Start the control server on boot (auto-updates first, then serves)"))
 			} else {
 				b.WriteString(helpStyle.Render("    Don't configure the control server to start on boot"))
 			}
-		case 5:
-			b.WriteString(helpStyle.Render("    " + sddDescs[sddChoices[m.sddIdx]]))
 		}
 	}
 
@@ -1176,11 +1067,6 @@ func (m *Model) viewConfirm() string {
 		agentLabel = "all detected agents"
 	}
 
-	globalLabel := "no"
-	if m.globalOnly {
-		globalLabel = "yes"
-	}
-
 	overwriteLabel := "no"
 	if m.overwriteAgents {
 		overwriteLabel = "yes"
@@ -1193,12 +1079,8 @@ func (m *Model) viewConfirm() string {
 
 	rows := [][2]string{
 		{"Agent", agentLabel},
-		{"Preset", presetChoices[m.presetIdx]},
-		{"Scope", scopeChoices[m.scopeIdx]},
-		{"Global only", globalLabel},
 		{"Overwrite agents", overwriteLabel},
 		{"Autostart", autostartLabel},
-		{"SDD", sddChoices[m.sddIdx]},
 		{"Skills", "all extra skills (always)"},
 	}
 
@@ -1350,34 +1232,20 @@ func (m *Model) InstallMicrosoftLearnMCP() bool {
 	return m.installMicrosoftLearnMCP
 }
 
-// GlobalOnly returns whether global-only mode is enabled.
-func (m *Model) GlobalOnly() bool {
-	return m.globalOnly
-}
-
 // Result returns the TUIResult with all configuration choices.
 // Returns empty Agent if the user did not explicitly confirm.
 func (m *Model) Result() TUIResult {
 	if !m.confirmed {
 		return TUIResult{}
 	}
-	sddChoice := sddChoices[m.sddIdx]
-	r := TUIResult{
+	return TUIResult{
 		Agent:           m.selectedAgent,
 		MCP:             m.installMicrosoftLearnMCP,
 		Ponytail:        m.installPonytail,
-		GlobalOnly:      m.globalOnly,
 		OverwriteAgents: m.overwriteAgents,
-		Preset:          presetChoices[m.presetIdx],
-		Scope:           scopeChoices[m.scopeIdx],
 		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),
 	}
-	if sddChoice != "off" {
-		r.InstallSDD = true
-		r.SDDMode = sddChoice
-	}
-	return r
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

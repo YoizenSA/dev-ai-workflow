@@ -176,7 +176,7 @@ func (wm *WorkerManager) resolveSkillsForFeature(mission *Mission, feature *Feat
 // binaries installed via nvm/asdf/etc. (not in the raw process PATH) are found
 // via the login-shell `which` fallback and well-known dirs.
 func DetectOpencode() (string, error) {
-	if path := agent.FindBinary("opencode"); path != "" {
+	if path := agent.FindBinary("opencode2"); path != "" {
 		return path, nil
 	}
 	return "", ErrOpencodeNotFound
@@ -198,7 +198,7 @@ func maybeRemoveContext(dir string, isTemp bool) {
 //   - feature.md: Feature description and expected behaviors
 //   - mission.md: Mission overview and context (from mission directory if exists)
 //   - AGENTS.md: Worker constraints and handoff format specification (from mission directory if exists)
-//   - SKILL.md: The specific skill for this worker type (from mission directory if exists)
+//   - skill ids in feature.md (bodies stay in OpenCode's skill tool)
 //   - services.yaml: Services manifest (from mission directory if exists)
 //
 // When worktreePath is non-empty, context files are written to <worktreePath>/.ywai/
@@ -253,19 +253,20 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature, work
 	featureBld.WriteString("\n## Required handoff format\n")
 	featureBld.WriteString("Return a JSON WorkerHandoff with:\n")
 	featureBld.WriteString("- salientSummary, whatWasImplemented, whatWasLeftUndone, discoveredIssues[], verification.commandsRun[]\n")
+	if len(mission.Features) > 1 {
+		featureBld.WriteString("\n## Work ledger\n")
+		featureBld.WriteString("This mission has multiple features. Follow the work-ledger skill: open a ledger, checkpoint only with a named verifier, and ship before handing off.\n")
+		featureBld.WriteString("Short: `ywai ledger note --goal ... --next ...` then `ywai ledger note --check ... --by ...`.\n")
+	}
 
-	// Inject role-configured skills so the worker sees HOW to work, not just
-	// WHAT to build. This connects RoleDefault.Skills (previously dead data)
-	// to the worker brief. Resolution order: per-mission → default → global.
+	// Name skill ids only. OpenCode v2 advertises descriptions and loads
+	// the body when the model calls the skill tool — do not paste bodies.
 	injectedSkills := wm.resolveSkillsForFeature(mission, feature)
 	if len(injectedSkills) > 0 {
-		featureBld.WriteString("\n## Skills (follow these procedures)\n")
+		featureBld.WriteString("\n## Skills\n")
+		featureBld.WriteString("Load these via the skill tool when relevant:\n")
 		for _, sk := range injectedSkills {
-			featureBld.WriteString(fmt.Sprintf("\n### Skill: %s\n\n", sk.Name))
-			featureBld.WriteString(sk.Body)
-			if !strings.HasSuffix(sk.Body, "\n") {
-				featureBld.WriteString("\n")
-			}
+			featureBld.WriteString(fmt.Sprintf("- `%s`\n", sk.Name))
 		}
 	}
 
@@ -397,102 +398,6 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature, work
 		if err := os.WriteFile(filepath.Join(contextDir, "AGENTS.md"), []byte(agentsMD.String()), 0644); err != nil {
 			maybeRemoveContext(contextDir, isTempDir)
 			return "", fmt.Errorf("write AGENTS.md: %w", err)
-		}
-	}
-
-	// Load SKILL.md for this worker type if it exists
-	skillLoader := NewSkillLoader(missionDir)
-	if skill, err := skillLoader.LoadSkill(feature.SkillName); err == nil {
-		// Write the skill content to SKILL.md in temp dir
-		skillPath := filepath.Join(contextDir, "SKILL.md")
-		skillContent := fmt.Sprintf(`---
-name: %s
-description: %s
----
-
-# %s
-
-## Required Skills and Tools
-`, skill.Name, skill.Description, skill.Name)
-
-		if len(skill.RequiredSkills) > 0 {
-			skillContent += "**Skills:**\n"
-			for _, s := range skill.RequiredSkills {
-				skillContent += fmt.Sprintf("- %s\n", s)
-			}
-		}
-
-		if len(skill.RequiredTools) > 0 {
-			skillContent += "\n**Tools:**\n"
-			for _, t := range skill.RequiredTools {
-				skillContent += fmt.Sprintf("- %s\n", t)
-			}
-		}
-
-		skillContent += fmt.Sprintf(`
-## Work Procedure
-
-%s
-
-## Example Handoff
-
-%s
-
-## When to Return to Orchestrator
-
-%s
-`, skill.WorkProcedure, skill.ExampleHandoff, skill.ReturnConditions)
-
-		if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
-			maybeRemoveContext(contextDir, isTempDir)
-			return "", fmt.Errorf("write SKILL.md: %w", err)
-		}
-	} else {
-		// Use default skill if custom skill not found
-		if defaultSkill, err := GetDefaultSkill(feature.SkillName); err == nil {
-			skillPath := filepath.Join(contextDir, "SKILL.md")
-			skillContent := fmt.Sprintf(`---
-name: %s
-description: %s
----
-
-# %s
-
-## Required Skills and Tools
-`, defaultSkill.Name, defaultSkill.Description, defaultSkill.Name)
-
-			if len(defaultSkill.RequiredSkills) > 0 {
-				skillContent += "**Skills:**\n"
-				for _, s := range defaultSkill.RequiredSkills {
-					skillContent += fmt.Sprintf("- %s\n", s)
-				}
-			}
-
-			if len(defaultSkill.RequiredTools) > 0 {
-				skillContent += "\n**Tools:**\n"
-				for _, t := range defaultSkill.RequiredTools {
-					skillContent += fmt.Sprintf("- %s\n", t)
-				}
-			}
-
-			skillContent += fmt.Sprintf(`
-## Work Procedure
-
-%s
-
-## Example Handoff
-
-%s
-
-## When to Return to Orchestrator
-
-%s
-`, defaultSkill.WorkProcedure, defaultSkill.ExampleHandoff, defaultSkill.ReturnConditions)
-
-			if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
-				maybeRemoveContext(contextDir, isTempDir)
-				return "", fmt.Errorf("write default SKILL.md: %w", err)
-			}
 		}
 	}
 

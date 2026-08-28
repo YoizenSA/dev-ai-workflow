@@ -80,6 +80,7 @@ func setTestHomeDir(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 }
 
 // shapeHasKey reports whether the shape map has the given top-level key.
@@ -121,6 +122,27 @@ func sortedKeys(m map[string]any) []string {
 
 // parseJSONFile reads a file and decodes it as JSON (not JSONC — we use
 // plain JSON in the test fixtures). Returns the decoded value.
+func opencodeFileServers(t *testing.T, cfg map[string]any) map[string]any {
+	t.Helper()
+	mcp, ok := cfg["mcp"].(map[string]any)
+	if !ok {
+		t.Fatalf("cfg[mcp] = %v (%T), want map", cfg["mcp"], cfg["mcp"])
+	}
+	servers, ok := mcp["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp.servers missing after write: %v", mcp)
+	}
+	for k, v := range mcp {
+		if k == "servers" || k == "timeout" {
+			continue
+		}
+		if _, isObj := v.(map[string]any); isObj {
+			t.Fatalf("server id %q must not sit beside mcp.servers", k)
+		}
+	}
+	return servers
+}
+
 func parseJSONFile(t *testing.T, path string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -179,6 +201,7 @@ func TestEntryTargetPath_Opencode_Default(t *testing.T) {
 func TestEntryTargetPath_Opencode_WithXDG(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 	// HOME should NOT affect the result when XDG is set. We still
 	// point HOME somewhere predictable so a buggy implementation
 	// that ignores XDG and falls back to HOME cannot accidentally
@@ -313,19 +336,18 @@ func TestBuildEntryShape_Opencode_Local(t *testing.T) {
 		t.Errorf("opencode github shape type = %v (%T), want \"local\" string",
 			got["type"], got["type"])
 	}
-	// enabled must be true.
-	if v, ok := got["enabled"].(bool); !ok || !v {
-		t.Errorf("opencode github shape enabled = %v (%T), want true",
-			got["enabled"], got["enabled"])
+	// v2: no "enabled" flag (absent = enabled).
+	if v, has := got["enabled"]; has {
+		t.Errorf("opencode github shape enabled = %v, want absent (v2)", v)
 	}
 	// command must be a slice with exactly the 3 argv tokens the
 	// catalog pins. We compare via JSON round-trip so the test is
-	// robust to []string vs. []any.
+	// robust to []string vs. []any. Credentials use the v2
+	// "environment" key (renamed from "env").
 	want := map[string]any{
-		"type":    "local",
-		"command": []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		"env":     map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
-		"enabled": true,
+		"type":        "local",
+		"command":     []string{"npx", "-y", "@modelcontextprotocol/server-github"},
+		"environment": map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
 	}
 	shapeJSONEqual(t, got, want)
 }
@@ -352,16 +374,37 @@ func TestBuildEntryShape_Opencode_Remote(t *testing.T) {
 		t.Errorf("opencode context7 shape url = %v (%T), want \"https://mcp.context7.com/mcp\"",
 			got["url"], got["url"])
 	}
-	// enabled must be true.
-	if v, ok := got["enabled"].(bool); !ok || !v {
-		t.Errorf("opencode context7 shape enabled = %v (%T), want true",
-			got["enabled"], got["enabled"])
+	// v2: no "enabled" flag (absent = enabled).
+	if v, has := got["enabled"]; has {
+		t.Errorf("opencode context7 shape enabled = %v, want absent (v2)", v)
 	}
 	// command MUST NOT appear in a remote shape — the runtime keys
 	// off its absence to pick the HTTP transport.
 	if shapeHasKey(got, "command") {
 		t.Errorf("opencode context7 shape has command = %v, want absent (remote has no subprocess)",
 			got["command"])
+	}
+}
+
+func TestBuildEntryShape_Opencode_CodemodDisabledByDefault(t *testing.T) {
+	codemod, ok := CatalogByID("codemod")
+	if !ok {
+		t.Fatal("CatalogByID(codemod) ok=false")
+	}
+	if !codemod.DefaultDisabled {
+		t.Fatal("codemod must be DefaultDisabled")
+	}
+	if codemod.Popular {
+		t.Fatal("codemod must not be Popular (not a default install pick)")
+	}
+
+	got := BuildEntryShape("opencode", codemod, nil)
+	if v, has := got["enabled"]; has {
+		t.Fatalf("opencode v2 ignores enabled; must not emit it, got %v", v)
+	}
+	disabled, ok := got["disabled"].(bool)
+	if !ok || !disabled {
+		t.Fatalf("opencode codemod disabled = %v (%T), want true", got["disabled"], got["disabled"])
 	}
 }
 
@@ -537,16 +580,12 @@ func TestWriteAgentConfig_Opencode_PreservesSiblings(t *testing.T) {
 	// testing the *file* state here, and ReadAgentConfig strips
 	// the top-level wrapper).
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
-	if !ok {
-		t.Fatalf("opencode cfg[mcp] = %v (%T), want map[string]any",
-			cfg["mcp"], cfg["mcp"])
+	servers := opencodeFileServers(t, cfg)
+	if _, has := servers["existing"]; !has {
+		t.Errorf("mcp.servers lost pre-existing 'existing' entry; servers = %v", servers)
 	}
-	if _, has := mcp["existing"]; !has {
-		t.Errorf("mcp section lost pre-existing 'existing' entry; mcp = %v", mcp)
-	}
-	if _, has := mcp["github"]; !has {
-		t.Errorf("mcp section missing newly-written 'github' entry; mcp = %v", mcp)
+	if _, has := servers["github"]; !has {
+		t.Errorf("mcp.servers missing newly-written 'github' entry; servers = %v", servers)
 	}
 	if other, _ := cfg["otherKey"].(string); other != "value" {
 		t.Errorf("top-level otherKey = %q, want \"value\" (must be preserved)", other)
@@ -576,8 +615,8 @@ func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
-	mcp := cfg["mcp"].(map[string]any)
-	gh := mcp["github"].(map[string]any)
+	servers := opencodeFileServers(t, cfg)
+	gh := servers["github"].(map[string]any)
 	cmd, _ := gh["command"].([]any)
 	if len(cmd) == 0 {
 		t.Fatalf("github command = %v, want non-empty after overwrite", cmd)
@@ -593,9 +632,9 @@ func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 	// Critical: only ONE github entry, not two. With a map this is
 	// impossible to have literally twice, but the test pins the
 	// invariant that the mcp section size for this case is 1.
-	if len(mcp) != 1 {
-		t.Errorf("mcp section has %d entries, want 1 (overwrite must not duplicate): keys = %v",
-			len(mcp), sortedKeys(mcp))
+	if len(servers) != 1 {
+		t.Errorf("mcp.servers has %d entries, want 1 (overwrite must not duplicate): keys = %v",
+			len(servers), sortedKeys(servers))
 	}
 }
 
@@ -629,12 +668,9 @@ func TestWriteAgentConfig_Opencode_CreatesFile(t *testing.T) {
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp section missing or wrong type: %v (%T)", cfg["mcp"], cfg["mcp"])
-	}
-	if _, has := mcp["github"]; !has {
-		t.Errorf("mcp section missing 'github' entry; mcp = %v", mcp)
+	servers := opencodeFileServers(t, cfg)
+	if _, has := servers["github"]; !has {
+		t.Errorf("mcp.servers missing 'github' entry; servers = %v", servers)
 	}
 }
 
@@ -801,14 +837,10 @@ func TestWriteAgentConfig_Atomic(t *testing.T) {
 	// a non-atomic implementation would produce a half-written
 	// file that fails to parse here.
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
+	servers := opencodeFileServers(t, cfg)
+	gh, ok := servers["github"].(map[string]any)
 	if !ok {
-		t.Fatalf("cfg[mcp] = %v (%T), want map[string]any (atomicity violated?)",
-			cfg["mcp"], cfg["mcp"])
-	}
-	gh, ok := mcp["github"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp[github] = %v (%T), want map[string]any", mcp["github"], mcp["github"])
+		t.Fatalf("mcp.servers[github] = %v (%T), want map[string]any", servers["github"], servers["github"])
 	}
 	// The final github entry must match one of the shapes we wrote.
 	// If the file is a torn merge of two shapes, this equality will
@@ -828,9 +860,9 @@ func TestWriteAgentConfig_Atomic(t *testing.T) {
 	// And the mcp section must have exactly one entry — the
 	// concurrent writers all used the same entryID, so a final
 	// count > 1 would be a bug.
-	if len(mcp) != 1 {
-		t.Errorf("mcp section has %d entries, want 1 (overwrite semantics): keys = %v",
-			len(mcp), sortedKeys(mcp))
+	if len(servers) != 1 {
+		t.Errorf("mcp.servers has %d entries, want 1 (overwrite semantics): keys = %v",
+			len(servers), sortedKeys(servers))
 	}
 }
 
@@ -932,18 +964,15 @@ func TestRemoveAgentConfig_Opencode(t *testing.T) {
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp = %v (%T), want map[string]any", cfg["mcp"], cfg["mcp"])
+	servers := opencodeFileServers(t, cfg)
+	if len(servers) != 1 {
+		t.Errorf("mcp.servers has %d entries, want 1: keys = %v", len(servers), sortedKeys(servers))
 	}
-	if len(mcp) != 1 {
-		t.Errorf("mcp has %d entries, want 1: keys = %v", len(mcp), sortedKeys(mcp))
+	if _, has := servers["github"]; has {
+		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
 	}
-	if _, has := mcp["github"]; has {
-		t.Errorf("mcp still has 'github' after remove; mcp = %v", mcp)
-	}
-	if _, has := mcp["git"]; !has {
-		t.Errorf("mcp lost 'git' during remove; mcp = %v", mcp)
+	if _, has := servers["git"]; !has {
+		t.Errorf("mcp.servers lost 'git' during remove; servers = %v", servers)
 	}
 }
 
@@ -969,7 +998,11 @@ func TestRemoveAgentConfig_NonExistent(t *testing.T) {
 	cfg := parseJSONFile(t, cfgPath)
 	mcp := cfg["mcp"].(map[string]any)
 	if _, has := mcp["github"]; !has {
-		t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
+		if servers, ok := mcp["servers"].(map[string]any); !ok {
+			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
+		} else if _, has := servers["github"]; !has {
+			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
+		}
 	}
 }
 
@@ -994,18 +1027,13 @@ func TestRemoveAgentConfig_PreservesSiblings(t *testing.T) {
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp = %v (%T), want map[string]any", cfg["mcp"], cfg["mcp"])
+	servers := opencodeFileServers(t, cfg)
+	if _, has := servers["github"]; has {
+		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
 	}
-	// github removed
-	if _, has := mcp["github"]; has {
-		t.Errorf("mcp still has 'github' after remove; mcp = %v", mcp)
-	}
-	// siblings intact
 	for _, want := range []string{"git", "context7"} {
-		if _, has := mcp[want]; !has {
-			t.Errorf("mcp lost sibling %q during remove; mcp = %v", want, mcp)
+		if _, has := servers[want]; !has {
+			t.Errorf("mcp.servers lost sibling %q during remove; servers = %v", want, servers)
 		}
 	}
 	// top-level keys intact
@@ -1071,27 +1099,23 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 
 	// Final file must be valid JSON (no torn writes).
 	cfg := parseJSONFile(t, cfgPath)
-	mcp, ok := cfg["mcp"].(map[string]any)
-	if !ok {
-		t.Fatalf("mcp = %v (%T), want map[string]any (concurrent write clobber?)",
-			cfg["mcp"], cfg["mcp"])
-	}
+	servers := opencodeFileServers(t, cfg)
 
 	// All 5 new entries must be present, AND the seeded "existing"
 	// entry must NOT have been dropped.
 	wantKeys := append([]string{"existing"}, entries...)
 	sort.Strings(wantKeys)
-	gotKeys := sortedKeys(mcp)
+	gotKeys := sortedKeys(servers)
 	if !reflect.DeepEqual(gotKeys, wantKeys) {
-		t.Errorf("mcp keys = %v, want %v (entries lost during concurrent merge)",
+		t.Errorf("mcp.servers keys = %v, want %v (entries lost during concurrent merge)",
 			gotKeys, wantKeys)
 	}
 
 	// Each new entry must match the shape we wrote for it.
 	for id, want := range shapes {
-		got, ok := mcp[id].(map[string]any)
+		got, ok := servers[id].(map[string]any)
 		if !ok {
-			t.Errorf("mcp[%q] = %v (%T), want map[string]any", id, mcp[id], mcp[id])
+			t.Errorf("mcp.servers[%q] = %v (%T), want map[string]any", id, servers[id], servers[id])
 			continue
 		}
 		// JSON-roundtrip comparison to handle []string vs []any

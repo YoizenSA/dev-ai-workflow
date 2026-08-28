@@ -11,19 +11,18 @@ export interface ToolOption {
 }
 
 export const TOOL_OPTIONS: ToolOption[] = [
-	// Core tools
+	// Core tools (values use ywai's internal vocabulary; the exporter maps
+	// them onto opencode v2 actions — bash→shell, task→subagent, write→edit).
 	{ value: 'read', label: 'Read', group: 'core' },
 	{ value: 'edit', label: 'Edit', group: 'core' },
 	{ value: 'write', label: 'Write', group: 'core' },
-	{ value: 'bash', label: 'Bash', group: 'core' },
+	{ value: 'bash', label: 'Bash (shell)', group: 'core' },
 	{ value: 'glob', label: 'Glob', group: 'core' },
 	{ value: 'grep', label: 'Grep', group: 'core' },
-	{ value: 'lsp', label: 'LSP', group: 'core' },
-	{ value: 'ast_grep', label: 'AST Grep', group: 'core' },
 	{ value: 'websearch', label: 'Web Search', group: 'core' },
 	{ value: 'webfetch', label: 'Web Fetch', group: 'core' },
 	// Meta / workflow tools
-	{ value: 'task', label: 'Task (delegate)', group: 'meta' },
+	{ value: 'task', label: 'Task (subagent delegate)', group: 'meta' },
 	{ value: 'question', label: 'Question (ask user)', group: 'meta' },
 	{ value: 'skill', label: 'Skill', group: 'meta' },
 	{ value: 'delegate', label: 'Delegate (async)', group: 'meta' },

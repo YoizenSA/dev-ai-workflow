@@ -231,12 +231,12 @@ func buildToolsResponse() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// Built-in opencode tools
+	// Built-in opencode v2 permission actions (v1 names like bash/task/
+	// write/lsp no longer exist as enforcement points).
 	builtIn := []string{
-		"read", "edit", "write", "bash", "glob", "grep", "lsp",
-		"ast_grep", "websearch", "code_search", "webfetch",
-		"task", "delegate", "question", "skill",
-		"memory", "intercom", "mcp",
+		"read", "edit", "glob", "grep", "websearch", "webfetch",
+		"question", "skill", "subagent", "shell", "external_directory",
+		"delegate", "memory", "intercom", "mcp",
 	}
 
 	// Collect all known tool names in a set
@@ -265,6 +265,17 @@ func buildToolsResponse() (map[string]interface{}, error) {
 					}
 				}
 			}
+			// v2 rule array: collect the actions used.
+			var rules []map[string]string
+			if rulesRaw, ok := agent["permissions"]; ok {
+				if err := json.Unmarshal(rulesRaw, &rules); err == nil {
+					for _, r := range rules {
+						if a := agentprofiles.NormalizePermissionKey(r["action"]); ValidPermissionKeys[a] {
+							toolSet[a] = true
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -273,7 +284,7 @@ func buildToolsResponse() (map[string]interface{}, error) {
 	mcpTools := map[string]MCPToolGroup{}
 	var mcpServers map[string]json.RawMessage
 	if mcpRaw, ok := config["mcp"]; ok {
-		_ = json.Unmarshal(mcpRaw, &mcpServers)
+		mcpServers = openCodeServersFromRaw(mcpRaw)
 		for name, serverRaw := range mcpServers {
 			var server map[string]interface{}
 			if err := json.Unmarshal(serverRaw, &server); err != nil {
@@ -321,11 +332,14 @@ func buildToolsResponse() (map[string]interface{}, error) {
 
 				if len(command) > 0 {
 					env := map[string]string{}
-					if envRaw, ok := server["env"].(map[string]interface{}); ok {
-						for k, v := range envRaw {
-							if s, ok := v.(string); ok {
-								env[k] = s
-							}
+					envRaw, _ := server["env"].(map[string]interface{})
+					if envRaw == nil {
+						// v2 renamed env → environment.
+						envRaw, _ = server["environment"].(map[string]interface{})
+					}
+					for k, v := range envRaw {
+						if s, ok := v.(string); ok {
+							env[k] = s
 						}
 					}
 					tools, _ = discoverStdioMCPTools(command, env)
@@ -343,7 +357,7 @@ func buildToolsResponse() (map[string]interface{}, error) {
 	pluginTools := discoverAllPluginTools()
 
 	// Also discover plugins referenced from the opencode "plugin" array: ywai
-	// seeds local bundles (e.g. background-agents.js) there, which the npm
+	// seeds local bundles (e.g. background-agents-v2.js) there, which the npm
 	// packages scan above never sees.
 	if pluginRaw, ok := config["plugin"]; ok {
 		var entries []string
@@ -399,7 +413,7 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var config struct {
-		MCP map[string]json.RawMessage `json:"mcp"`
+		MCP json.RawMessage `json:"mcp"`
 	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -412,7 +426,7 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 		Enabled bool            `json:"enabled"`
 	}
 	var mcps []mcpInfo
-	for name, cfg := range config.MCP {
+	for name, cfg := range openCodeServersFromRaw(config.MCP) {
 		// Check if disabled or enabled flag is false
 		var serverCfg map[string]interface{}
 		enabled := true
@@ -464,42 +478,39 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get MCP section
-	var mcpSection map[string]json.RawMessage
-	if mcpRaw, ok := config["mcp"]; ok {
-		if err := json.Unmarshal(mcpRaw, &mcpSection); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-	} else {
-		mcpSection = make(map[string]json.RawMessage)
+	mcpRaw, hasMCP := config["mcp"]
+	servers, mcpLevel := splitOpenCodeMCP(mcpRaw)
+	if !hasMCP {
+		servers = map[string]json.RawMessage{}
+		mcpLevel = map[string]json.RawMessage{}
 	}
 
-	// Toggle: add/remove "disabled" field, toggle "enabled" field
-	if serverRaw, ok := mcpSection[name]; ok {
+	// v2 toggle: enabled servers carry no flag (absent = enabled),
+	// disabled ones carry "disabled": true. The legacy "enabled" bool is
+	// removed either way.
+	if serverRaw, ok := servers[name]; ok {
 		var serverCfg map[string]interface{}
 		if err := json.Unmarshal(serverRaw, &serverCfg); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
 
+		delete(serverCfg, "enabled")
 		if body.Enabled {
 			delete(serverCfg, "disabled")
-			serverCfg["enabled"] = true
 		} else {
 			serverCfg["disabled"] = true
-			serverCfg["enabled"] = false
 		}
 
 		updated, _ := json.Marshal(serverCfg)
-		mcpSection[name] = updated
+		servers[name] = updated
 	} else {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
 		return
 	}
 
-	// Write back
-	mcpJSON, _ := json.Marshal(mcpSection)
+	// Write back as mcp.servers
+	mcpJSON, _ := json.Marshal(joinOpenCodeMCP(mcpLevel, servers))
 	config["mcp"] = mcpJSON
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
@@ -546,20 +557,15 @@ func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mcpSection map[string]json.RawMessage
-	if err := json.Unmarshal(mcpRaw, &mcpSection); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	if _, ok := mcpSection[name]; !ok {
+	servers, mcpLevel := splitOpenCodeMCP(mcpRaw)
+	if _, ok := servers[name]; !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
 		return
 	}
 
-	delete(mcpSection, name)
+	delete(servers, name)
 
-	mcpJSON, _ := json.Marshal(mcpSection)
+	mcpJSON, _ := json.Marshal(joinOpenCodeMCP(mcpLevel, servers))
 	config["mcp"] = mcpJSON
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
@@ -569,6 +575,62 @@ func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func openCodeServersFromRaw(mcpRaw json.RawMessage) map[string]json.RawMessage {
+	servers, _ := splitOpenCodeMCP(mcpRaw)
+	return servers
+}
+
+func splitOpenCodeMCP(mcpRaw json.RawMessage) (servers map[string]json.RawMessage, level map[string]json.RawMessage) {
+	servers = map[string]json.RawMessage{}
+	level = map[string]json.RawMessage{}
+	if len(mcpRaw) == 0 {
+		return servers, level
+	}
+	var section map[string]json.RawMessage
+	if err := json.Unmarshal(mcpRaw, &section); err != nil {
+		return servers, level
+	}
+	if inner, ok := section["servers"]; ok {
+		_ = json.Unmarshal(inner, &servers)
+		if servers == nil {
+			servers = map[string]json.RawMessage{}
+		}
+		for k, v := range section {
+			if k == "servers" {
+				continue
+			}
+			level[k] = v
+		}
+		return servers, level
+	}
+	for k, v := range section {
+		if k == "timeout" {
+			level[k] = v
+			continue
+		}
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(v, &obj) == nil {
+			servers[k] = v
+			continue
+		}
+		level[k] = v
+	}
+	return servers, level
+}
+
+func joinOpenCodeMCP(level map[string]json.RawMessage, servers map[string]json.RawMessage) map[string]json.RawMessage {
+	out := map[string]json.RawMessage{}
+	for k, v := range level {
+		if k == "servers" {
+			continue
+		}
+		out[k] = v
+	}
+	raw, _ := json.Marshal(servers)
+	out["servers"] = raw
+	return out
 }
 
 // GET /api/config/providers - list all providers

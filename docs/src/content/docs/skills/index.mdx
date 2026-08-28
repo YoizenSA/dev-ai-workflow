@@ -9,17 +9,18 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Qué son
 
-Guías especializadas que le dicen a tus agentes cómo usar tecnologías específicas. Se cargan automáticamente.
+Guías especializadas (`SKILL.md`). OpenCode 2 **anuncia** id + descripción; el body entra cuando el modelo llama la tool `skill`. `skills.txt` del agente es la allowlist.
 
 ## Cómo funcionan
 
 ```
 Tú: "@dev Crea un componente React con Tailwind"
      ↓
-Agente detecta .tsx → Carga react-19
-Agente detecta Tailwind → Carga tailwind-4
+OpenCode lista skills permitidos (id + descripción)
      ↓
-Resultado: código que sigue los patrones correctos
+El modelo llama skill("react-19") / skill("tailwind-4")
+     ↓
+Resultado: código que sigue esos patrones
 ```
 
 ## Skills incluidos
@@ -72,9 +73,9 @@ ywai skills
 
 ## Crear un skill personalizado
 
-1. Crear carpeta en tu proyecto
-2. Escribir `SKILL.md` con instrucciones
-3. Registrar con `ywai skill-registry`
+1. Crear `mi-proyecto/.opencode/skills/mi-skill/SKILL.md`
+2. Agregar `mi-skill` al `skills.txt` del agente que deba usarlo
+3. Reiniciar OpenCode (`opencode2`)
 
 ## Skills por agente
 
@@ -87,5 +88,5 @@ ywai skills
 | `devops` | devops, docker |
 
 <Aside type="tip">
-No necesitás configurar skills. Se cargan automáticamente según el contexto.
+El modelo carga un skill **por id**. Si no está en el `skills.txt` del agente, no se anuncia.
 </Aside>

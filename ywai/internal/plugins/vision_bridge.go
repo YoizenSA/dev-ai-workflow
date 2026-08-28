@@ -9,7 +9,7 @@ import (
 )
 
 // InstallVisionBridge vendors the vision-bridge opencode plugin and registers it
-// in the config's "plugin" array. The plugin auto-analyzes attached images via
+// in the config's "plugins" array. The plugin auto-analyzes attached images via
 // TokenBank vision models when the active chat model does not support image input.
 func InstallVisionBridge(configPath string) error {
 	bundle, err := config.VisionBridgeBundlePath()
@@ -33,7 +33,7 @@ func installVisionBridgeWithBundle(configPath, bundleSrc string) error {
 	return patchOpenCodePluginPath(configPath, destJS)
 }
 
-// patchOpenCodePluginPath appends pluginJSPath to the config "plugin" array
+// patchOpenCodePluginPath appends pluginJSPath to the config "plugins" array
 // idempotently (shared by vision-bridge and reusable for other local plugins).
 func patchOpenCodePluginPath(configPath, pluginJSPath string) error {
 	root := map[string]any{}
@@ -49,11 +49,11 @@ func patchOpenCodePluginPath(configPath, pluginJSPath string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins, _ := root["plugin"].([]any)
+	plugins := v2Plugins(root)
 	if !containsPluginPath(plugins, pluginJSPath) {
 		plugins = append(plugins, pluginJSPath)
 	}
-	root["plugin"] = plugins
+	writePlugins(root, plugins)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)

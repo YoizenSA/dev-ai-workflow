@@ -37,6 +37,30 @@ func newProxyMux(url string) *http.ServeMux {
 	return mux
 }
 
+func TestChatProxy_AuthenticatesUpstream(t *testing.T) {
+	t.Setenv("OPENCODE_SERVER_PASSWORD", "test-password")
+	t.Setenv("OPENCODE_SERVER_USERNAME", "test-user")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "test-user" || password != "test-password" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/providers", nil)
+	body, status, err := NewChatProxy(upstream.URL).upstream(req, http.MethodGet, "/config/providers", nil)
+	if err != nil {
+		t.Fatalf("upstream() error: %v", err)
+	}
+	if status != http.StatusOK || string(body) != `{"ok":true}` {
+		t.Fatalf("upstream() = status %d body %q, want authenticated 200", status, body)
+	}
+}
+
 func TestChatProxyEndToEnd(t *testing.T) {
 	url := liveOpenCodeURL(t)
 	srv := httptest.NewServer(newProxyMux(url))

@@ -88,22 +88,44 @@ describe("readTopLevelFields", () => {
 })
 
 describe("plugin activation", () => {
-  test("registers no hooks when disabled", async () => {
-    // Without this, every session pays event-hook overhead for a feature that
-    // cannot produce anything. The config path is pinned at a file that does
-    // not exist: reading the developer's real config would make this pass or
-    // fail depending on whether they happen to have the advisor turned on.
+  test("registers tools but no event subscribe when disabled", async () => {
     const dir = await tmpdir()
-    const hooks = await AdvisorPlugin({ client: {}, directory: "/tmp" } as never, {
-      configPath: path.join(dir, "absent.yaml"),
+    let subscribed = false
+    const tools: string[] = []
+    await AdvisorPlugin.setup({
+      directory: "/tmp",
+      options: { configPath: path.join(dir, "absent.yaml") },
+      event: {
+        subscribe: async () => {
+          subscribed = true
+        },
+      },
+      tool: {
+        transform: async (fn: (draft: { add: (spec: { name: string }) => void }) => void) => {
+          fn({ add: (spec: { name: string }) => tools.push(spec.name) })
+        },
+      },
+      session: { hook: async () => {} },
     })
-    expect(hooks.event).toBeUndefined()
+    expect(subscribed).toBe(false)
+    expect(tools).toEqual(["advisor_status", "advisor_set_model", "advisor_toggle"])
   })
 
-  test("registers the event hook when a model is configured", async () => {
+  test("subscribes to events when a model is configured", async () => {
     const cfg = await writeConfig("advisor_enabled: true\nadvisor_model: test/model\n")
-    const hooks = await AdvisorPlugin({ client: {}, directory: "/tmp" } as never, { configPath: cfg })
-    expect(typeof hooks.event).toBe("function")
+    let subscribed = false
+    await AdvisorPlugin.setup({
+      directory: "/tmp",
+      options: { configPath: cfg },
+      event: {
+        subscribe: async () => {
+          subscribed = true
+        },
+      },
+      tool: { transform: async () => {} },
+      session: { hook: async () => {} },
+    })
+    expect(subscribed).toBe(true)
   })
 })
 

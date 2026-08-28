@@ -128,8 +128,7 @@ func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 	}
 	role := extractRole(prompt)
 	sections := extractSections(prompt)
-	// Every orchestrator/planning lead shares typed handoff + review ship rules.
-	// Keep the contract in agents/sections/orchestrator-contracts.md (single source).
+	// Always-on pointer only. Full schema lives in orchestrator-contracts-full.md.
 	if role == "orchestrator" || role == "planning" {
 		sections = ensureSection(sections, "orchestrator-contracts")
 	}

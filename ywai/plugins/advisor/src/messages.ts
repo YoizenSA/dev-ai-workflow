@@ -4,7 +4,6 @@
  * itself may be exported from `index.ts`.
  */
 
-import type { PluginInput } from "@opencode-ai/plugin"
 import type { TrackedMessage } from "./delta"
 import { hasFailedTool, hasMutatingTool, renderText, renderTools } from "./render"
 
@@ -22,10 +21,17 @@ export function toTracked(entry: any): TrackedMessage {
   }
 }
 
-export async function fetchMessages(client: PluginInput["client"], sessionID: string): Promise<TrackedMessage[]> {
+export async function fetchMessages(session: any, sessionID: string): Promise<TrackedMessage[]> {
   try {
-    const res = await (client as any).session.messages({ path: { id: sessionID } })
-    const raw = res?.data ?? res ?? []
+    let raw: unknown
+    if (typeof session?.context === "function") {
+      raw = await session.context({ sessionID })
+    } else if (typeof session?.messages === "function") {
+      const res = await session.messages({ sessionID, path: { id: sessionID } })
+      raw = res?.data ?? res
+    } else {
+      raw = []
+    }
     return (Array.isArray(raw) ? raw : []).map(toTracked)
   } catch {
     return []

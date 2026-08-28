@@ -30,6 +30,56 @@ func TestAvailableNames_ContainsAllKnownAgents(t *testing.T) {
 	}
 }
 
+func TestKnownAgents_OpenCodeBinaryIsOpenCode2(t *testing.T) {
+	for _, ka := range KnownAgents {
+		if ka.Name != "opencode" {
+			continue
+		}
+		if ka.Binary != "opencode2" {
+			t.Fatalf("opencode Binary = %q, want opencode2 (OpenCode v2; no v1 fallback)", ka.Binary)
+		}
+		return
+	}
+	t.Fatal("opencode not found in KnownAgents")
+}
+
+func TestDetect_PrefersOpenCode2Binary(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+
+	binDir := t.TempDir()
+	v1 := filepath.Join(binDir, "opencode")
+	v2 := filepath.Join(binDir, "opencode2")
+	if runtime.GOOS == "windows" {
+		v1 += ".exe"
+		v2 += ".exe"
+	}
+	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(v2, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	found := Detect()
+	var oc *Agent
+	for i := range found {
+		if found[i].Name == "opencode" {
+			oc = &found[i]
+			break
+		}
+	}
+	if oc == nil {
+		t.Fatal("expected opencode agent when opencode2 is on PATH")
+	}
+	if oc.BinaryName != v2 {
+		t.Fatalf("opencode BinaryName = %q, want %q (must prefer opencode2, not v1 opencode)", oc.BinaryName, v2)
+	}
+}
+
 func TestAvailableNames_NoDuplicates(t *testing.T) {
 	names := AvailableNames()
 	seen := map[string]bool{}
@@ -186,6 +236,7 @@ func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
 
 	// Without any file, should fall back to .json
 	paths := SettingsPaths()

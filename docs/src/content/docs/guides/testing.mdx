@@ -29,7 +29,7 @@ Necesito: estrategia de testing, tests unitarios, de integración, y e2e.
 
 El orchestrator:
 1. Delega a `@qa-analyst` para diseñar la estrategia
-2. Delega a `@qa-finder` para buscar código relacionado
+2. Delega a `@finder` para buscar código relacionado
 3. Delega a `@qa-dev` para escribir los tests
 4. Delega a `@qa-reviewer` para revisar la calidad
 5. Te reporta: "25 tests escritos, 92% cobertura, 0 tests frágiles"
@@ -51,7 +51,7 @@ Tú: "Testea completamente el flujo de checkout.
 
 Orchestrator:
   → @qa-analyst: estrategia → unit para lógica, integration para API, e2e para UI
-  → @qa-finder: encuentra 15 archivos relacionados con checkout
+  → @finder: encuentra 15 archivos relacionados con checkout
   → @qa-dev: escribe 25 tests cubriendo todos los flujos
   → @qa-reviewer: encuentra 3 tests frágiles, sugiere fixes
   → Reporta: "25 tests, 92% cobertura, 0 tests frágiles."

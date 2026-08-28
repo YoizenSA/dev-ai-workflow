@@ -22,15 +22,20 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
 
-	// Get agent section
-	agentsRaw, ok := root["agent"]
-	if !ok {
-		return nil // No agents to migrate
+	// Prefer the v2 `agents` key; also drain leftover v1 `agent`.
+	agents := map[string]any{}
+	if raw, ok := root["agents"].(map[string]any); ok {
+		for name, entry := range raw {
+			agents[name] = entry
+		}
 	}
-
-	agents, ok := agentsRaw.(map[string]any)
-	if !ok {
-		return nil // Invalid format, skip
+	if raw, ok := root["agent"].(map[string]any); ok {
+		for name, entry := range raw {
+			if _, exists := agents[name]; exists {
+				continue
+			}
+			agents[name] = entry
+		}
 	}
 
 	if len(agents) == 0 {
@@ -77,10 +82,11 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 
 		// Update config file
 		if len(agents) == 0 {
-			// Remove agent section entirely if empty
 			delete(root, "agent")
+			delete(root, "agents")
 		} else {
-			root["agent"] = agents
+			root["agents"] = agents
+			delete(root, "agent")
 		}
 
 		if err := config.WriteJSONC(configPath, root); err != nil {
@@ -91,10 +97,16 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 	return nil
 }
 
-// mapToAgentProfile converts a map from JSON to AgentProfile.
+// mapToAgentProfile converts a map from JSON to AgentProfile. Handles both
+// the v1 entry shape (prompt + permission/tools maps) and the v2 shape
+// (system + permissions rule array).
 func mapToAgentProfile(name string, m map[string]any) AgentProfile {
 	prompt := ""
 	if p, ok := m["prompt"].(string); ok {
+		prompt = p
+	}
+	// v2 renamed prompt → system.
+	if p, ok := m["system"].(string); ok && prompt == "" {
 		prompt = p
 	}
 
@@ -108,9 +120,30 @@ func mapToAgentProfile(name string, m map[string]any) AgentProfile {
 		mode = md
 	}
 
-	// Prefer permission over deprecated tools
 	permission := map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"}
-	if perm, ok := m["permission"].(map[string]any); ok {
+	if rules, ok := m["permissions"].([]any); ok {
+		// v2 rule array → internal map (subagent rules are the delegation
+		// graph, re-injected separately, so skip them here).
+		for _, raw := range rules {
+			r, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			action, _ := r["action"].(string)
+			resource, _ := r["resource"].(string)
+			effect, _ := r["effect"].(string)
+			if action == "subagent" || resource != "*" || effect == "" {
+				continue
+			}
+			key := NormalizePermissionKey(action)
+			if key == "edit" {
+				permission["edit"] = effect
+				permission["write"] = effect
+			} else {
+				permission[key] = effect
+			}
+		}
+	} else if perm, ok := m["permission"].(map[string]any); ok {
 		for k, v := range perm {
 			if val, ok := v.(string); ok {
 				permission[k] = val

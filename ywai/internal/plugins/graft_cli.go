@@ -129,11 +129,17 @@ func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 	mcpMap, _ := root[key].(map[string]any)
 	if mcpMap == nil {
 		mcpMap = map[string]any{}
-		root[key] = mcpMap
 	}
 	entry := mcp.CatalogEntry{Type: "local", Command: command}
-	mcpMap["graft"] = mcp.BuildEntryShape(mcpShapeTarget(agentName), entry, nil)
-	root[key] = mcpMap
+	shape := mcp.BuildEntryShape(mcpShapeTarget(agentName), entry, nil)
+	if key == "mcp" {
+		servers := collectOpenCodeServers(mcpMap)
+		servers["graft"] = shape
+		root[key] = nestOpenCodeMCP(mcpMap, servers)
+	} else {
+		mcpMap["graft"] = shape
+		root[key] = mcpMap
+	}
 	return config.WriteJSONC(configPath, root)
 }
 

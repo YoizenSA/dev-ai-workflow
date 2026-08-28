@@ -1,6 +1,6 @@
 ---
 name: condition-based-waiting
-description: Anti-flaky test patterns using condition-based waiting instead of fixed timeouts. Trigger: flaky tests, waitForTimeout, race conditions, test stability, async waiting.
+description: "Anti-flaky test patterns: wait on conditions, not timeouts. Trigger: flaky tests, waitForTimeout, race conditions."
 ---
 
 # Condition-Based Waiting

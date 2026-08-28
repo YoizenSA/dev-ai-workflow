@@ -50,7 +50,6 @@ ywai skills                   # List extra skills
 | `ywai status` | Show ywai installation status |
 | `ywai config` | Manage ywai configuration |
 | `ywai doctor` | Run gentle-ai health check |
-| `ywai skill-registry` | Refresh the project skill registry |
 | `ywai serve` | Start the Control UI server (port 5768) |
 | `ywai ui` | Open Control UI in the default browser |
 | `ywai daemon` | **Deprecated** — use `ywai serve` instead |
@@ -63,7 +62,7 @@ ywai skills                   # List extra skills
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
-| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace; default off |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace; default on (`--ponytail=false` to skip) |
 | `--autostart` | Configure control server to start automatically on system boot |
 
 ### Configuration
@@ -72,19 +71,17 @@ ywai stores configuration in `~/.ywai/config.yaml`. Use the `config` command to 
 
 ```bash
 ywai config get                    # Show all configuration
-ywai config get default_preset    # Get specific value
-ywai config set default_preset minimal  # Set a value
+ywai config get default_scope     # Get specific value
+ywai config set default_scope workspace  # Set a value
 ywai config reset                 # Reset to defaults
 ```
 
 Available configuration options:
-- `default_preset`: Installation preset (full-gentleman, ecosystem-only, minimal, custom)
-- `default_sdd_mode`: SDD orchestrator mode (single, multi)
 - `default_persona`: Agent persona (gentleman, neutral, custom)
 - `default_scope`: Install scope (global, workspace)
 - `default_tui`: Use TUI by default (true/false)
 - `default_mcp`: Install MCP by default for opencode (true/false)
-- `default_ponytail`: Install ponytail plugin by default for opencode/kilocode (true/false)
+- `default_ponytail`: Install ponytail plugin by default for opencode (true/false)
 - `colored_output`: Use colored output (true/false)
 - `log_level`: Logging level (debug, info, warn, error)
 - `server.port`: Default port for the control server (number, default `5768`)
@@ -186,9 +183,15 @@ planning ──► active ──► paused ──► active
 
 ---
 
-## 15 Supported Agents
+## Supported Agents
 
-opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi
+**Detected** (16) — ywai finds these and copies its extra skills into them:
+
+opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi, omp
+
+**Agent profiles installed** (5) — these get the full ywai agent set:
+
+opencode, claude-code, vscode-copilot, pi, omp
 
 ---
 

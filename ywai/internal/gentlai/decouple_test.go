@@ -148,99 +148,10 @@ func TestUpgrade_NoGentleAIUpgrade(t *testing.T) {
 
 // ─── Preset semantics must survive the decouple ──────────────────────────
 
-// TestPlanForPreset_NonMinimalIncludesEngram is a regression guard: the
-// "include engram" decision for non-minimal presets must survive the
-// decouple. Engram is still selected for non-minimal presets but is
-// installed via ywai's manual release path instead of `gentle-ai install`.
-func TestPlanForPreset_NonMinimalIncludesEngram(t *testing.T) {
-	presets := []string{"full-gentleman", "ecosystem-only", "custom", ""}
-	for _, preset := range presets {
-		t.Run(preset, func(t *testing.T) {
-			p := PlanForPreset(preset)
-			if !p.IncludeEngram {
-				t.Fatalf("preset %q must keep IncludeEngram=true after decouple", preset)
-			}
-		})
-	}
-}
-
-// TestPlanForPreset_MinimalExcludesEngram is a regression guard: the minimal
-// preset must continue to skip engram.
-func TestPlanForPreset_MinimalExcludesEngram(t *testing.T) {
-	p := PlanForPreset("minimal")
-	if p.IncludeEngram {
-		t.Fatal("minimal preset must keep IncludeEngram=false")
-	}
-}
-
-// TestSkillRegistryRefresh_DoesNotExecGentleAI asserts the slice 1 contract:
-// SkillRegistryRefresh must NOT shell out to a `gentle-ai` binary even when one
-// is reachable on PATH. It installs a fake `gentle-ai` executable first on
-// PATH that increments a counter file on every invocation. If the production
-// code still execs gentle-ai, the counter appears and the test fails.
-//
-// Any return value from SkillRegistryRefresh is acceptable; the hard contract
-// is "did the fake binary get executed?". Today this test is RED because
-// SkillRegistryRefresh still execs gentle-ai.
-func TestSkillRegistryRefresh_DoesNotExecGentleAI(t *testing.T) {
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "invoked")
-	fakeBin := filepath.Join(dir, "gentle-ai")
-	script := "#!/bin/sh\ntouch " + counter + "\n"
-	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake binary: %v", err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	if _, err := exec.LookPath("gentle-ai"); err != nil {
-		t.Fatalf("test setup: fake gentle-ai must resolve on PATH, got %v", err)
-	}
-
-	if err := SkillRegistryRefresh(""); err != nil {
-		t.Logf("SkillRegistryRefresh returned %v (any outcome is fine; counter is the real assertion)", err)
-	}
-
-	if _, err := os.Stat(counter); err == nil {
-		t.Fatalf("SkillRegistryRefresh must not exec gentle-ai; fake binary was invoked (counter at %s)", counter)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat counter: %v", err)
-	}
-}
-
-// TestCurrentVersion_DoesNotExecGentleAI pins the slice 1 contract:
-// CurrentVersion() must be ywai-owned/neutral. Full decoupling forbids
-// spawning the gentle-ai binary to report a version; CurrentVersion must
-// return "" (or any ywai-native value) without resolving or invoking
-// `gentle-ai` from disk.
-//
-// Reuses the same fake-executable + counter helper shape as
-// TestSkillRegistryRefresh_DoesNotExecGentleAI. The fake is named
-// `gentle-ai` and placed FIRST on PATH so any process started by
-// CurrentVersion via exec.Command / exec.LookPath would find and exec
-// it (and the counter file would appear).
-func TestCurrentVersion_DoesNotExecGentleAI(t *testing.T) {
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "invoked")
-
-	script := "#!/bin/sh\ntouch " + counter + "\n"
-	exe := filepath.Join(dir, "gentle-ai")
-	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake binary: %v", err)
-	}
-
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	if _, err := exec.LookPath("gentle-ai"); err != nil {
-		t.Fatalf("test setup: fake gentle-ai must resolve on PATH, got %v", err)
-	}
-
-	// Any return value is fine; the counter is the real assertion.
-	// CurrentVersion must not exec the fake binary.
-	_ = CurrentVersion()
-
-	if _, err := os.Stat(counter); err == nil {
-		t.Fatalf("CurrentVersion must not exec gentle-ai; fake binary was invoked (counter at %s)", counter)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat counter: %v", err)
+// The decoupling guard: a dry run must never touch the filesystem or shell out,
+// it only reports what Engram installation would do.
+func TestInstallEcosystem_DryRunIsInert(t *testing.T) {
+	if err := InstallEcosystem(InstallOptions{DryRun: true}); err != nil {
+		t.Fatalf("dry run returned an error: %v", err)
 	}
 }

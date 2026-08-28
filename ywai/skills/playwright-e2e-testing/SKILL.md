@@ -1,6 +1,6 @@
 ---
 name: playwright-e2e-testing
-description: Playwright end-to-end testing — locators, waiting, page objects, auth and network control, parallel runs, and debugging. Use when writing or fixing E2E/browser tests, when a test is flaky, or when another skill or agent needs Playwright conventions.
+description: "Playwright E2E: locators, waiting, page objects, auth, network. Trigger: writing or fixing browser tests."
 ---
 
 # Playwright E2E Testing

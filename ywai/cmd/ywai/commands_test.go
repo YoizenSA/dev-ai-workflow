@@ -196,6 +196,30 @@ func TestParsePIDs_Empty(t *testing.T) {
 	}
 }
 
+func TestOpenCodeChildEnvClearsServerAuthentication(t *testing.T) {
+	env := openCodeChildEnv([]string{
+		"PATH=/bin",
+		"OPENCODE_SERVER_PASSWORD=secret",
+		"OPENCODE_SERVER_USERNAME=custom-user",
+	}, "managed-password")
+
+	for _, entry := range env {
+		if entry == "OPENCODE_SERVER_PASSWORD=secret" || entry == "OPENCODE_SERVER_USERNAME=custom-user" {
+			t.Fatalf("child environment retained server credentials: %q", entry)
+		}
+	}
+	want := map[string]bool{
+		"OPENCODE_SERVER_PASSWORD=managed-password": true,
+		"OPENCODE_SERVER_USERNAME=opencode":         true,
+	}
+	for _, entry := range env {
+		delete(want, entry)
+	}
+	if len(want) != 0 {
+		t.Fatalf("child environment missing cleared auth variables: %v", want)
+	}
+}
+
 // TestReadStopPIDFile_HandlesMultiplePIDs guards stop against a PID file that
 // ever contains more than one PID (e.g. written by a buggy background launch).
 // readStopPIDFile must return the first valid PID rather than Atoi-failing on

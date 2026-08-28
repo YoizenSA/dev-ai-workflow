@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Same full Go lint gate as GitHub CI. Break here, not on the PR.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec bash "$ROOT/ywai/scripts/lint.sh"

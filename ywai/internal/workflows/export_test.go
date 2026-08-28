@@ -44,6 +44,17 @@ func exportFixture() *Workflow {
 	}
 }
 
+func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
+	wf := exportFixture()
+	body := orchestratorBody(wf, map[string]string{"news": "daily-task-news-briefing"})
+	if !strings.Contains(body, "`delegate`") {
+		t.Fatalf("orchestrator body must tell the model to use OpenCode v2 delegate:\n%s", body)
+	}
+	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
+		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
+	}
+}
+
 func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
@@ -76,8 +87,8 @@ func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 }
 
 // TestOrchestratorHasTaskPermission verifies the generated orchestrator agent
-// markdown includes a nested permission.task block with deny-all and an allow
-// entry for each subAgent node.
+// markdown includes v2 subagent rules with deny-all and an allow entry for
+// each subAgent node.
 func TestOrchestratorHasTaskPermission(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
@@ -94,18 +105,19 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 		t.Fatalf("orchestrator markdown not found at %s", orchPath)
 	}
 
-	if !strings.Contains(orch, "permission:") {
-		t.Errorf("orchestrator missing permission block:\n%s", orch)
+	if !strings.Contains(orch, "permissions:") {
+		t.Errorf("orchestrator missing permissions block:\n%s", orch)
 	}
-	if !strings.Contains(orch, "\n  task:") {
-		t.Errorf("orchestrator missing nested permission.task block:\n%s", orch)
+	if !strings.Contains(orch, "action: subagent") {
+		t.Errorf("orchestrator missing subagent rules:\n%s", orch)
 	}
-	if !strings.Contains(orch, `"*": deny`) {
-		t.Errorf("orchestrator permission.task missing deny-all:\n%s", orch)
+	if !strings.Contains(orch, `resource: "*"`) {
+		t.Errorf("orchestrator subagent rules missing deny-all:\n%s", orch)
 	}
-	if !strings.Contains(orch, "daily-task-news-briefing: allow") {
-		t.Errorf("orchestrator permission.task missing subagent allow entry:\n%s", orch)
+	if !strings.Contains(orch, "resource: daily-task-news-briefing") {
+		t.Errorf("orchestrator subagent rules missing allow entry:\n%s", orch)
 	}
+	assertOpenCodeV2Frontmatter(t, orch)
 }
 
 func TestApplyWritesFilesToDisk(t *testing.T) {
@@ -137,8 +149,8 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(content), "agent: daily-task-orchestrator") {
 		t.Errorf("command should reference orchestrator agent:\n%s", content)
 	}
-	if !strings.Contains(string(content), "subtask: true") {
-		t.Errorf("command should have subtask: true:\n%s", content)
+	if strings.Contains(string(content), "subtask") {
+		t.Errorf("subtask is a v2 no-op and must not be emitted:\n%s", content)
 	}
 	if !strings.Contains(string(content), "$ARGUMENTS") {
 		t.Errorf("command should pass $ARGUMENTS:\n%s", content)
@@ -159,9 +171,10 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(orch), "Execution steps") {
 		t.Errorf("orchestrator should have execution steps:\n%s", orch)
 	}
-	if !strings.Contains(string(orch), "task") {
-		t.Errorf("orchestrator should mention the task tool:\n%s", orch)
+	if !strings.Contains(string(orch), "action: subagent") {
+		t.Errorf("orchestrator should whitelist children via subagent rules:\n%s", orch)
 	}
+	assertOpenCodeV2Frontmatter(t, string(orch))
 
 	// The sub-agent must exist and reference its task.
 	subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
@@ -175,6 +188,7 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(sub), "Find today's top tech news.") {
 		t.Errorf("sub-agent should carry its task prompt:\n%s", sub)
 	}
+	assertOpenCodeV2Frontmatter(t, string(sub))
 }
 
 func TestSubAgentSlugUniqueAndSafe(t *testing.T) {
@@ -429,6 +443,31 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 			t.Errorf("empty sections must default to [handoff], got %v", got)
 		}
 	})
+}
+
+// assertOpenCodeV2Frontmatter fails if generated agent markdown still carries
+// a v1 permission map (permission:/task:/bash: keys) instead of the v2
+// permissions rule array (action: subagent|shell|edit).
+func assertOpenCodeV2Frontmatter(t *testing.T, md string) {
+	t.Helper()
+	end := strings.Index(md[3:], "\n---")
+	if !strings.HasPrefix(md, "---\n") || end < 0 {
+		t.Fatalf("missing YAML frontmatter:\n%s", md)
+	}
+	fm := md[:end+3]
+	if strings.Contains(fm, "\npermission:") || strings.HasPrefix(fm, "permission:") {
+		t.Errorf("v1 permission: map must not appear in generated frontmatter:\n%s", fm)
+	}
+	for _, banned := range []string{"\n  task:", "\n  bash:", "\n  \"task\":", "\n  \"bash\":"} {
+		if strings.Contains(fm, banned) {
+			t.Errorf("v1 key %q must not appear in generated frontmatter:\n%s", strings.TrimSpace(banned), fm)
+		}
+	}
+	for _, want := range []string{"permissions:", "action: subagent", "action: shell", "action: edit"} {
+		if !strings.Contains(fm, want) {
+			t.Errorf("generated frontmatter missing %q:\n%s", want, fm)
+		}
+	}
 }
 
 func keys(m map[string]string) []string {

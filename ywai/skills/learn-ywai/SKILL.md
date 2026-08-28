@@ -1,8 +1,6 @@
 ---
 name: learn-ywai
-description: >
-  Teach ywai from the official Astro docs. Trigger: /learn-ywai, learn ywai,
-  enseñame ywai, how does ywai work, ywai tour, ywai getting started.
+description: "Teach ywai from the official docs. Trigger: /learn-ywai, learn ywai, ensename ywai, how does ywai work."
 ---
 
 ## When to Use

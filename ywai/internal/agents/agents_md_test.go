@@ -26,7 +26,12 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 		"### After compaction",
 		"## Sub-Agents",
 		"### One launch per task",
-		"skill_resolution",
+		"### Skills: match by trigger, load by id",
+		// Artifact writing style. It rides in ### Language on purpose: a style
+		// rule applies while writing anything, so a skill would never load in
+		// time, and a section of its own would break the two-concern scope.
+		"ASD-STE100",
+		"<available_skills>",
 		"### Context protocol",
 		"mem_save",
 		"mem_session_summary",

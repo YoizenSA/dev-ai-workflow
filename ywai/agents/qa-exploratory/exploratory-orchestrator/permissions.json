@@ -16,5 +16,6 @@
   "skill": "allow",
   "memory": "allow",
   "intercom": "allow",
-  "mcp": "allow"
+  "mcp": "allow",
+  "todowrite": "allow"
 }

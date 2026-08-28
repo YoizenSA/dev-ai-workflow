@@ -29,11 +29,11 @@ func TestRemoveRetiredMCPs(t *testing.T) {
 			t.Fatalf("RemoveRetiredMCPs() error = %v", err)
 		}
 		root := readConfigRoot(t, path)
-		mcp, _ := root["mcp"].(map[string]any)
-		if _, ok := mcp["ywai-kanban"]; ok {
-			t.Fatalf("ywai-kanban still present: %v", mcp["ywai-kanban"])
+		servers := opencodeServers(t, root)
+		if _, ok := servers["ywai-kanban"]; ok {
+			t.Fatalf("ywai-kanban still present: %v", servers["ywai-kanban"])
 		}
-		if _, ok := mcp["context7"]; !ok {
+		if _, ok := servers["context7"]; !ok {
 			t.Fatal("context7 was removed; only ywai-kanban should be deleted")
 		}
 	})
@@ -86,11 +86,11 @@ func TestRemoveVisionMCP(t *testing.T) {
 			t.Fatalf("RemoveVisionMCP() error = %v", err)
 		}
 		root := readConfigRoot(t, path)
-		mcp, _ := root["mcp"].(map[string]any)
-		if _, ok := mcp["mcp-vision"]; ok {
-			t.Fatalf("mcp-vision still present: %v", mcp["mcp-vision"])
+		servers := opencodeServers(t, root)
+		if _, ok := servers["mcp-vision"]; ok {
+			t.Fatalf("mcp-vision still present: %v", servers["mcp-vision"])
 		}
-		if _, ok := mcp["ywai-kanban"]; !ok {
+		if _, ok := servers["ywai-kanban"]; !ok {
 			t.Fatal("ywai-kanban was removed; only mcp-vision should be deleted")
 		}
 	})
@@ -124,6 +124,86 @@ func TestRemoveVisionMCP(t *testing.T) {
 // writeAgentConfig writes a JSON config file inside a fresh temp dir and
 // returns its absolute path. The file is created with the content from data
 // (a map[string]any shaped as the agent would write it).
+func opencodeServers(t *testing.T, root map[string]any) map[string]any {
+	t.Helper()
+	mcp, _ := root["mcp"].(map[string]any)
+	if mcp == nil {
+		t.Fatal("missing mcp")
+	}
+	if _, flat := mcp["context7"]; flat {
+		if _, ok := mcp["servers"]; !ok {
+			t.Fatal("flat mcp sibling servers must be lifted into mcp.servers on write")
+		}
+	}
+	servers, ok := mcp["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp.servers missing: %v", mcp)
+	}
+	for k, v := range mcp {
+		if k == "servers" || k == "timeout" {
+			continue
+		}
+		if _, isObj := v.(map[string]any); isObj {
+			t.Fatalf("server id %q must not be a sibling of servers", k)
+		}
+	}
+	return servers
+}
+
+func TestInstallMicrosoftLearnMCP_OpenCodeV2Nest(t *testing.T) {
+	path := writeAgentConfig(t, "opencode.json", map[string]any{
+		"mcp": map[string]any{
+			"timeout": 30,
+			"context7": map[string]any{
+				"type": "remote",
+				"url":  "https://mcp.context7.com/mcp",
+			},
+		},
+	})
+	if err := InstallMicrosoftLearnMCP(path, "opencode"); err != nil {
+		t.Fatalf("InstallMicrosoftLearnMCP: %v", err)
+	}
+	root := readConfigRoot(t, path)
+	servers := opencodeServers(t, root)
+	if _, ok := servers["microsoft-learn"]; !ok {
+		t.Fatal("microsoft-learn missing under mcp.servers")
+	}
+	if _, ok := servers["context7"]; !ok {
+		t.Fatal("lifted context7 missing under mcp.servers")
+	}
+	entry := servers["microsoft-learn"].(map[string]any)
+	if _, has := entry["enabled"]; has {
+		t.Fatal("v2 must not write enabled")
+	}
+	mcp := root["mcp"].(map[string]any)
+	if mcp["timeout"] != float64(30) && mcp["timeout"] != 30 {
+		t.Fatalf("timeout must stay mcp-level, got %v", mcp["timeout"])
+	}
+}
+
+func TestInstallMicrosoftLearnMCP_StripsLegacyEnabled(t *testing.T) {
+	path := writeAgentConfig(t, "opencode.json", map[string]any{
+		"mcp": map[string]any{
+			"jam": map[string]any{
+				"type":    "remote",
+				"url":     "https://mcp.jam.dev/mcp",
+				"enabled": false,
+			},
+		},
+	})
+	if err := InstallMicrosoftLearnMCP(path, "opencode"); err != nil {
+		t.Fatalf("InstallMicrosoftLearnMCP: %v", err)
+	}
+	root := readConfigRoot(t, path)
+	entry := opencodeServers(t, root)["jam"].(map[string]any)
+	if _, has := entry["enabled"]; has {
+		t.Fatal("v2 must not persist enabled")
+	}
+	if entry["disabled"] != true {
+		t.Fatalf("enabled:false must become disabled:true, got %v", entry)
+	}
+}
+
 func writeAgentConfig(t *testing.T, filename string, data map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -163,17 +243,17 @@ func TestRemoveRetiredMCPs_RemovesAllAndReports(t *testing.T) {
 	}
 
 	root := readConfigRoot(t, path)
-	mcp, _ := root["mcp"].(map[string]any)
-	if _, still := mcp["ywai-fastfs"]; still {
+	servers := opencodeServers(t, root)
+	if _, still := servers["ywai-fastfs"]; still {
 		t.Error("ywai-fastfs survived — the removed feature stays advertised")
 	}
-	if _, still := mcp["ywai-kanban"]; still {
+	if _, still := servers["ywai-kanban"]; still {
 		t.Error("ywai-kanban survived")
 	}
-	if _, still := mcp["codegraph"]; still {
+	if _, still := servers["codegraph"]; still {
 		t.Error("codegraph survived — replaced by graft, must be swept")
 	}
-	if _, ok := mcp["graft"]; !ok {
+	if _, ok := servers["graft"]; !ok {
 		t.Error("a live MCP server must not be collateral damage")
 	}
 	if root["model"] != "provider/model" {

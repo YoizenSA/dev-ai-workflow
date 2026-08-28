@@ -35,13 +35,11 @@ On a compaction message, `mem_session_summary` with the compacted content **firs
 
 Keep a session-scoped list of the `(phase, task-fingerprint)` pairs you have launched, where the fingerprint is the phase plus the key artifacts named in the instruction. Never launch a pair twice. Duplicate launches race on the same files and produce "File X has been modified since it was last read" — the failure looks like a tooling bug and is not.
 
-### Skills: pass paths, not summaries
+### Skills: match by trigger, load by id
 
-Resolve the skill registry **once** per session — `mem_search(query: "skill-registry", project: "{project}")` then `mem_get_observation`, falling back to `.atl/skill-registry.md` — and cache name, trigger, scope, and exact path. If no registry exists, say so and proceed without project standards.
+OpenCode injects `<available_skills>` into every prompt and exposes the `skill` tool, which loads a skill by its id. Match the task against those descriptions and call `skill` directly — there is no registry to resolve and no path to pass.
 
-For each launch, match skills by both the code context (the paths the sub-agent will touch) and the task context (review, testing, PR creation), then pass the matching `SKILL.md` **paths** under `## Skills to load before work`. Paths, never generated summaries: the sub-agent reads the file, so the author's intent survives, and the delegation can re-read the registry if your cache was lost to compaction.
-
-Check `skill_resolution` on every returned result. Anything other than `paths-injected` — `fallback-registry`, `fallback-path`, `none` — means the cache was dropped: re-read the registry before the next delegation instead of continuing degraded.
+When delegating, name the skill ids the sub-agent should load in its brief. It receives its own `<available_skills>` and loads them the same way.
 
 ### Context protocol
 
@@ -52,3 +50,5 @@ The sub-agent holds the detail, so it saves before returning: tell it to `mem_sa
 ### Language
 
 The active persona governs conversation with the user, never the artifacts. Generated code, comments, docs, tests, and commit messages default to English unless the user or the existing project clearly requires otherwise. Forward this when delegating, so persona voice does not leak into the work.
+
+Write that English to ASD-STE100 (Simplified Technical English): use one word for one meaning, keep the active voice, and use simple tenses. Give each sentence one topic. Keep a procedure sentence to 20 words and a descriptive sentence to 25. Keep the articles. Do not stack nouns and do not chain gerunds. These rules apply to the artifacts, never to conversation with the user.

@@ -24,7 +24,7 @@ var KnownAgents = []struct {
 }{
 	{
 		Name:   "opencode",
-		Binary: "opencode",
+		Binary: "opencode2", // OpenCode 2 CLI; v1 `opencode` is not used.
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".config", "opencode", "skills")
 		},
@@ -314,7 +314,7 @@ func SettingsPaths() map[string]string {
 	}
 
 	return map[string]string{
-		"opencode":    config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode"),
+		"opencode":    config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode"),
 		"claude-code": pathIfExists(filepath.Join(home, ".claude", "settings.json")),
 		"kilocode":    config.FindJSONCPath(filepath.Join(home, ".config", "kilo"), "opencode"),
 		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
@@ -345,11 +345,13 @@ func AvailableNames() []string {
 // ProfileInstallHosts are agents for which ywai actually installs agent
 // profiles (see install switch in cmd/ywai/root.go). Detection may find more
 // binaries on PATH; install UI and default install target only these.
+//
+// cursor and kilocode were dropped: nobody here runs them, and carrying an
+// install path costs a branch in every host switch. Uninstall still knows how
+// to clean them so an older install can be removed.
 var ProfileInstallHosts = []string{
 	"opencode",
-	"kilocode",
 	"claude-code",
-	"cursor",
 	"vscode-copilot",
 	"pi",
 	"omp",

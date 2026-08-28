@@ -1,10 +1,6 @@
 ---
 name: tdd
-description: >
-  Test-driven development loop — drive features through tests one vertical slice
-  at a time (red → green → refactor). Use when the user asks for test-first
-  development, mentions TDD or red-green-refactor, wants to build a feature
-  through tests, or the orchestrator runs the TDD flow.
+description: "TDD loop, one vertical slice at a time (red, green, refactor). Trigger: test-first development, TDD."
 ---
 
 # Test-Driven Development

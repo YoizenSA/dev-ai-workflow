@@ -9,12 +9,12 @@ import (
 )
 
 // TestSlashCommandOptionsEmittedInCommand verifies the advanced slash-command
-// frontmatter fields are emitted when SlashCommandOptions is set, and omitted
-// when it is not (default output unchanged).
+// frontmatter fields are emitted for the Claude Code target when
+// SlashCommandOptions is set, while the opencode target (v2 schema:
+// description/agent/model only) skips the Claude-specific keys.
 func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(cmdDir, agentsDir)
 
 	wf := exportFixture()
 	wf.SlashCommandOptions = &SlashCommandOptions{
@@ -31,7 +31,8 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		},
 	}
 
-	_, files, err := e.Plan(wf)
+	claude := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+	_, files, err := claude.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
@@ -49,7 +50,22 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		"command: echo done",
 	} {
 		if !strings.Contains(cmd, want) {
-			t.Errorf("command missing %q:\n%s", want, cmd)
+			t.Errorf("claude command missing %q:\n%s", want, cmd)
+		}
+	}
+
+	oc := NewExporterWithDirs(cmdDir, agentsDir)
+	_, files, err = oc.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	ocCmd := files[filepath.Join(cmdDir, "daily-task.md")]
+	if !strings.Contains(ocCmd, "model: sonnet") {
+		t.Errorf("opencode command must keep the model field:\n%s", ocCmd)
+	}
+	for _, banned := range []string{"allowed-tools:", "argument-hint:", "hooks:", "disable-model-invocation", "context:"} {
+		if strings.Contains(ocCmd, banned) {
+			t.Errorf("opencode command must not carry the Claude-only field %q:\n%s", banned, ocCmd)
 		}
 	}
 }
@@ -461,15 +477,20 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 	}
 	orch := files[orchPath]
 	for _, want := range []string{
-		`"*": deny`,
-		"task:",
-		"deploy-dev: allow",
-		"deploy-qa: allow",
+		`resource: "*"`,
+		"action: subagent",
+		"resource: deploy-dev",
+		"resource: deploy-qa",
 		"Typed Contracts (orchestrator)",
 	} {
 		if !strings.Contains(orch, want) {
 			t.Errorf("orchestrator missing %q:\n%s", want, orch)
 		}
+	}
+	// The contracts block comes from a single source; appending it twice would
+	// silently double the orchestrator prompt.
+	if n := strings.Count(orch, "## Typed Contracts (orchestrator)"); n != 1 {
+		t.Errorf("contracts section appears %d times, want 1", n)
 	}
 	// Ship gate may be YAML or JSON form inside the contracts section.
 	if !strings.Contains(orch, "ship | ship-with-nits | block") &&
@@ -512,10 +533,10 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 		t.Fatal("dev agent file not found")
 	}
 	dev := files[devPath]
-	if !strings.Contains(dev, "w-qa: allow") {
+	if !strings.Contains(dev, "resource: w-qa") {
 		t.Errorf("dev should delegate to qa:\n%s", dev)
 	}
-	if strings.Contains(dev, "w-rev: allow") {
+	if strings.Contains(dev, "resource: w-rev") {
 		t.Errorf("dev should NOT delegate to rev (no edge):\n%s", dev)
 	}
 }

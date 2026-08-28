@@ -51,7 +51,7 @@ var uninstallCmd = &cobra.Command{
 Removes, for every detected agent (or just --agent):
 
   - vendored plugins (vision-bridge, background-agents) and their entries
-    in the agent config's "plugin" array
+    in the agent config's "plugins" array
   - ywai agent profiles installed into the agent's agents directory
   - ywai skills (only links into ywai's skills dir, or copies carrying
     ywai's marker file — never a skill you wrote)
@@ -136,7 +136,7 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 	for _, a := range agents {
 		configPath := settingsPaths[a.Name]
 
-		// Vendored plugin bundles + their entries in the "plugin" array.
+		// Vendored plugin bundles + their entries in the "plugins" array.
 		if configPath != "" {
 			pluginsDir := filepath.Join(filepath.Dir(configPath), "ywai-plugins")
 			if entries, err := os.ReadDir(pluginsDir); err == nil {
@@ -181,7 +181,7 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 
 			// Agents installed as JSON keys rather than files. Only opencode and
 			// kilocode take this path (see the install switch in root.go); every
-			// other agent's config may legitimately hold an "agent" object we
+			// other agent's config may legitimately hold an "agents" object we
 			// never wrote, and a name collision there must not delete it.
 			if installsAgentsAsJSONKeys(name) {
 				if keys := ywaiAgentKeysIn(cfg); len(keys) > 0 {
@@ -290,7 +290,7 @@ func ywaiProfileNames() map[string]bool {
 }
 
 // ywaiAgentKeysIn lists ywai-installed agent keys inside a JSON config's
-// "agent" object (the kilocode install path).
+// "agents" object (the kilocode install path), plus leftover v1 "agent".
 func ywaiAgentKeysIn(configPath string) []string {
 	return ywaiAgentKeysWith(configPath, ywaiProfileNames())
 }
@@ -301,14 +301,15 @@ func ywaiAgentKeysWith(configPath string, owned map[string]bool) []string {
 	if err != nil {
 		return nil
 	}
-	agents, _ := root["agent"].(map[string]any)
-	if len(agents) == 0 {
-		return nil
-	}
+	seen := map[string]bool{}
 	var out []string
-	for name := range agents {
-		if owned[filepath.Base(name)] {
-			out = append(out, name)
+	for _, key := range []string{"agents", "agent"} {
+		agents, _ := root[key].(map[string]any)
+		for name := range agents {
+			if owned[filepath.Base(name)] && !seen[name] {
+				seen[name] = true
+				out = append(out, name)
+			}
 		}
 	}
 	sort.Strings(out)
@@ -327,19 +328,26 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
-	agents, _ := root["agent"].(map[string]any)
-	if len(agents) == 0 {
-		return nil
-	}
-	for name := range agents {
-		if owned[filepath.Base(name)] {
-			delete(agents, name)
+	merged := map[string]any{}
+	for _, key := range []string{"agents", "agent"} {
+		if agents, ok := root[key].(map[string]any); ok {
+			for name, val := range agents {
+				if _, exists := merged[name]; !exists {
+					merged[name] = val
+				}
+			}
 		}
 	}
-	if len(agents) == 0 {
-		delete(root, "agent")
+	delete(root, "agent")
+	for name := range merged {
+		if owned[filepath.Base(name)] {
+			delete(merged, name)
+		}
+	}
+	if len(merged) == 0 {
+		delete(root, "agents")
 	} else {
-		root["agent"] = agents
+		root["agents"] = merged
 	}
 	return config.WriteJSONC(configPath, root)
 }
@@ -414,16 +422,36 @@ func ywaiSkillsIn(skillsDir string) []string {
 // Keep in sync with internal/skills.extraSkillMarkerFile.
 const ywaiSkillMarker = ".ywai-extra"
 
-// countYwaiConfigRefs reports how many "plugin" entries in the agent config
-// point into the ywai plugins directory.
+func ywaiPluginLists(root map[string]any) []any {
+	var out []any
+	seen := map[string]bool{}
+	for _, key := range []string{"plugins", "plugin"} {
+		list, _ := root[key].([]any)
+		for _, v := range list {
+			s, ok := v.(string)
+			if !ok {
+				out = append(out, v)
+				continue
+			}
+			if seen[s] {
+				continue
+			}
+			seen[s] = true
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// countYwaiConfigRefs reports how many plugin entries in the agent config
+// point into the ywai plugins directory (v2 "plugins" plus leftover "plugin").
 func countYwaiConfigRefs(configPath string) int {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return 0
 	}
-	list, _ := root["plugin"].([]any)
 	n := 0
-	for _, v := range list {
+	for _, v := range ywaiPluginLists(root) {
 		if s, ok := v.(string); ok && strings.Contains(s, "ywai-plugins") {
 			n++
 		}
@@ -431,14 +459,15 @@ func countYwaiConfigRefs(configPath string) int {
 	return n
 }
 
-// stripYwaiConfigRefs drops ywai plugin entries from the config's "plugin"
-// array, leaving every other entry and every unrelated key untouched.
+// stripYwaiConfigRefs drops ywai plugin entries from "plugins", drains leftover
+// "plugin", and never writes the v1 key back.
 func stripYwaiConfigRefs(configPath string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
-	list, _ := root["plugin"].([]any)
+	list := ywaiPluginLists(root)
+	delete(root, "plugin")
 	kept := make([]any, 0, len(list))
 	for _, v := range list {
 		if s, ok := v.(string); ok && strings.Contains(s, "ywai-plugins") {
@@ -447,9 +476,9 @@ func stripYwaiConfigRefs(configPath string) error {
 		kept = append(kept, v)
 	}
 	if len(kept) == 0 {
-		delete(root, "plugin")
+		delete(root, "plugins")
 	} else {
-		root["plugin"] = kept
+		root["plugins"] = kept
 	}
 	return config.WriteJSONC(configPath, root)
 }

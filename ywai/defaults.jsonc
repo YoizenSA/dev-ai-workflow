@@ -6,12 +6,6 @@
   // Preset: full-gentleman | ecosystem-only | minimal
   "preset": "full-gentleman",
 
-  // Scope: global | workspace
-  "scope": "global",
-
-  // Install only global skills (skip AGENTS.md/REVIEW.md in project)
-  "global_only": true,
-
   // SDD orchestrator mode: single | multi
   "sdd_mode": "multi",
 
@@ -22,7 +16,7 @@
   "mcp": false,
 
   // Install ponytail plugin (opencode/kilocode): YAGNI / minimal-code mode
-  "ponytail": false,
+  "ponytail": true,
 
   // Agent groups to install (besides core, which is always included)
   // Add group names here to install them by default.

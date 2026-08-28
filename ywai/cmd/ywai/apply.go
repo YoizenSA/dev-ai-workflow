@@ -32,8 +32,7 @@ const (
 	applyUpdate
 )
 
-// managedPlan is the ywai-side work. Install presets only select gentle-ai
-// components (see gentlai.PlanForPreset); they never gate ywai skills/profiles.
+// managedPlan is the ywai-side work: everything ywai owns and always applies.
 type managedPlan struct {
 	CopyExtraSkills bool
 	InstallProfiles bool
@@ -46,12 +45,10 @@ type managedPlan struct {
 }
 
 // planManaged returns the fixed ywai-managed work for install/update.
-// Preset is intentionally ignored here — it only affects gentle-ai components.
-func planManaged(mode applyMode, preset string) managedPlan {
+func planManaged(mode applyMode) managedPlan {
 	_ = mode
-	_ = preset
 	return managedPlan{
-		CopyExtraSkills: true, // always: ywai extra skills are not part of gentle presets
+		CopyExtraSkills: true,
 		InstallProfiles: true,
 		WriteAgentsMd:   true,
 		InstallPlugins:  true,
@@ -62,13 +59,6 @@ func planManaged(mode applyMode, preset string) managedPlan {
 	}
 }
 
-func normalizePreset(preset string) string {
-	if preset == "" {
-		return "full-gentleman"
-	}
-	return preset
-}
-
 // applyOpts drives the shared install/update pipeline.
 type applyOpts struct {
 	Mode applyMode
@@ -76,7 +66,6 @@ type applyOpts struct {
 	Opts            gentlai.InstallOptions
 	InstallMCP      bool
 	InstallPonytail bool
-	GlobalOnly      bool
 	GroupFilter     agentprofiles.GroupFilter
 	OverwriteAgents bool
 	Autostart       bool
@@ -162,9 +151,6 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 	if plan.WriteAgentsMd {
 		n++
 	}
-	if o.Opts.HasOptionalComponents() {
-		n++ // optional SDD after AGENTS.md
-	}
 	if plan.InstallPlugins {
 		n++
 	}
@@ -192,13 +178,10 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 // applyManaged is the shared body for `ywai install` and `ywai update`.
 func applyManaged(o applyOpts) applyResult {
 	var r applyResult
-	plan := planManaged(o.Mode, o.Opts.Preset)
+	plan := planManaged(o.Mode)
 	// Update always re-applies managed state with overwrite so new profiles land.
 	if o.Mode == applyUpdate {
 		o.OverwriteAgents = true
-		if o.Opts.Preset == "" {
-			o.Opts.Preset = "full-gentleman"
-		}
 	}
 
 	agents, err := resolveApplyAgents(o.Opts.AgentName)
@@ -206,15 +189,6 @@ func applyManaged(o applyOpts) applyResult {
 		r.Fatal = err
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return r
-	}
-
-	if o.GlobalOnly {
-		neutralDir := filepath.Join(config.DataDir(), "global-workspace")
-		if err := os.MkdirAll(neutralDir, 0o755); err != nil {
-			r.warnf("failed to create global-workspace dir: %v", err)
-		} else {
-			o.Opts.WorkDir = neutralDir
-		}
 	}
 
 	// Update already printed its own banner + [pre] steps; just open the
@@ -227,11 +201,6 @@ func applyManaged(o applyOpts) applyResult {
 	if o.Opts.DryRun {
 		fmt.Println("\n[DRY RUN] No changes will be made.")
 	}
-	if o.GlobalOnly {
-		fmt.Println("  Global-only: will not write into the current project.")
-	}
-	fmt.Printf("  Preset: %s\n", normalizePreset(o.Opts.Preset))
-
 	steps := stepCounter{total: countApplySteps(plan, o)}
 
 	// ── reseed ────────────────────────────────────────────────────────────
@@ -252,7 +221,7 @@ func applyManaged(o applyOpts) applyResult {
 	steps.next("Installing Engram")
 	installEcosystem(agents, o.Opts.DryRun, o.Opts)
 
-	// ── extra skills (always; presets only change gentle-ai components) ───
+	// ── extra skills (always) ─────────────────────────────────────────────
 	if plan.CopyExtraSkills {
 		steps.next("Copying ywai extra skills")
 		copySkillsForAgents(agents, o.Opts.DryRun)
@@ -321,12 +290,6 @@ func applyManaged(o applyOpts) applyResult {
 		}
 	}
 
-	// ── optional gentle-ai SDD (after AGENTS.md; never persona) ────────────
-	if o.Opts.HasOptionalComponents() {
-		steps.next("Installing optional SDD")
-		installOptionalGentle(agents, o.Opts, &r)
-	}
-
 	// ── plugins + CLIs ────────────────────────────────────────────────────
 	if plan.InstallPlugins {
 		steps.next("Installing plugins + MCP + companion CLIs")
@@ -375,6 +338,31 @@ func applyManaged(o applyOpts) applyResult {
 	if o.RestartServeIfRunning {
 		steps.next("Restarting control server (if running)")
 		restartControlServerIfRunning(&r, o.Opts.DryRun)
+	}
+
+	// ── strip agent frontmatter keys opencode v2 rejects ──────────────────
+	// Runs after every writer: several of them rebuild these files by keeping
+	// existing frontmatter lines, so a stale key survives until swept.
+	if o.Mode == applyInstall && !o.Opts.DryRun {
+		// OpenCodeAgentsDir may point at a host-managed location (e.g. Orca's
+		// shared hooks dir). opencode itself always reads ~/.config/opencode/
+		// agents, and other tooling syncs into it, so sweep both.
+		seen := map[string]bool{}
+		dirs := []string{config.OpenCodeAgentsDir()}
+		if home, err := os.UserHomeDir(); err == nil {
+			dirs = append(dirs, filepath.Join(home, ".config", "opencode", "agents"))
+		}
+		cleaned := 0
+		for _, dir := range dirs {
+			if dir == "" || seen[dir] {
+				continue
+			}
+			seen[dir] = true
+			cleaned += agentprofiles.StripLegacyAgentKeys(dir)
+		}
+		if cleaned > 0 {
+			fmt.Printf("  Cleaned legacy frontmatter keys in %d agent files\n", cleaned)
+		}
 	}
 
 	// ── control server start (install: ensure it is running) ──────────────

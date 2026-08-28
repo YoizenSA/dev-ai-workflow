@@ -82,15 +82,15 @@ func TestYwaiSkillsIn_IgnoresLinksOutsideYwai(t *testing.T) {
 	}
 }
 
-func TestStripYwaiConfigRefs_KeepsForeignPlugins(t *testing.T) {
+func TestUninstallStripYwaiConfigRefs_KeepsForeignPlugins(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
 		"model": "provider/model",
-		"plugin": []any{
+		"plugins": []any{
 			"/home/u/.config/opencode/ywai-plugins/vision-bridge.js",
 			"/home/u/.config/opencode/plugins/their-own.js",
-			"/home/u/.config/opencode/ywai-plugins/background-agents.js",
+			"/home/u/.config/opencode/ywai-plugins/background-agents-v2.js",
 		},
 	})
 
@@ -102,35 +102,80 @@ func TestStripYwaiConfigRefs_KeepsForeignPlugins(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	plugins, _ := root["plugin"].([]any)
+	plugins, _ := root["plugins"].([]any)
 	if len(plugins) != 1 || plugins[0] != "/home/u/.config/opencode/plugins/their-own.js" {
 		t.Fatalf("foreign plugin must survive, got %v", plugins)
+	}
+	if _, ok := root["plugin"]; ok {
+		t.Error("must not write v1 plugin key")
 	}
 	if root["model"] != "provider/model" {
 		t.Errorf("unrelated keys must be preserved, got %v", root["model"])
 	}
 }
 
-func TestStripYwaiConfigRefs_DropsEmptyArray(t *testing.T) {
+func TestUninstallStripYwaiConfigRefs_DropsEmptyArray(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
-		"plugin": []any{"/x/ywai-plugins/vision-bridge.js"},
+		"plugins": []any{"/x/ywai-plugins/vision-bridge.js"},
 	})
 
 	if err := stripYwaiConfigRefs(cfg); err != nil {
 		t.Fatalf("stripYwaiConfigRefs: %v", err)
 	}
-	if _, ok := readJSONFile(t, cfg)["plugin"]; ok {
-		t.Error("an emptied plugin array should be removed, not left as []")
+	root := readJSONFile(t, cfg)
+	if _, ok := root["plugins"]; ok {
+		t.Error("an emptied plugins array should be removed, not left as []")
+	}
+	if _, ok := root["plugin"]; ok {
+		t.Error("must not write v1 plugin key")
 	}
 }
 
-func TestStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
+func TestUninstallStripYwaiConfigRefs_DrainsLegacyPluginKey(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
-		"agent": map[string]any{
+		"plugins": []any{
+			"/home/u/.config/opencode/plugins/their-own.js",
+		},
+		"plugin": []any{
+			"/home/u/.config/opencode/ywai-plugins/vision-bridge.js",
+			"/home/u/.config/opencode/plugins/legacy-keep.js",
+		},
+	})
+
+	if n := countYwaiConfigRefs(cfg); n != 1 {
+		t.Fatalf("countYwaiConfigRefs = %d, want 1 (legacy ywai entry)", n)
+	}
+	if err := stripYwaiConfigRefs(cfg); err != nil {
+		t.Fatalf("stripYwaiConfigRefs: %v", err)
+	}
+
+	root := readJSONFile(t, cfg)
+	if _, ok := root["plugin"]; ok {
+		t.Error("leftover v1 plugin key must be deleted")
+	}
+	plugins, _ := root["plugins"].([]any)
+	if len(plugins) != 2 {
+		t.Fatalf("v2 plugins must keep foreign + drained leftover, got %v", plugins)
+	}
+	got := map[string]bool{}
+	for _, v := range plugins {
+		s, _ := v.(string)
+		got[s] = true
+	}
+	if !got["/home/u/.config/opencode/plugins/their-own.js"] || !got["/home/u/.config/opencode/plugins/legacy-keep.js"] {
+		t.Fatalf("expected both foreign plugin paths, got %v", plugins)
+	}
+}
+
+func TestUninstallStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "opencode.json")
+	writeJSONFile(t, cfg, map[string]any{
+		"agents": map[string]any{
 			"dev":          map[string]any{"mode": "subagent"},
 			"orchestrator": map[string]any{"mode": "primary"},
 			"my-agent":     map[string]any{"mode": "primary"},
@@ -147,15 +192,56 @@ func TestStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	agents, _ := root["agent"].(map[string]any)
+	agents, _ := root["agents"].(map[string]any)
 	if len(agents) != 1 {
 		t.Fatalf("expected only the user's agent to remain, got %v", agents)
 	}
 	if _, ok := agents["my-agent"]; !ok {
 		t.Error("the user's agent must survive")
 	}
+	if _, ok := root["agent"]; ok {
+		t.Error("must not write v1 agent key")
+	}
 	if root["model"] != "keep-me" {
 		t.Error("unrelated keys must be preserved")
+	}
+}
+
+func TestUninstallStripYwaiAgentKeys_DrainsLegacyAgentKey(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "opencode.json")
+	writeJSONFile(t, cfg, map[string]any{
+		"agents": map[string]any{
+			"dev":      map[string]any{"mode": "subagent"},
+			"my-agent": map[string]any{"mode": "primary"},
+		},
+		"agent": map[string]any{
+			"orchestrator": map[string]any{"mode": "primary"},
+			"legacy-keep":  map[string]any{"mode": "primary"},
+		},
+	})
+	owned := map[string]bool{"dev": true, "orchestrator": true}
+
+	if keys := ywaiAgentKeysWith(cfg, owned); len(keys) != 2 {
+		t.Fatalf("ywaiAgentKeysWith = %v, want 2 owned keys across v1+v2", keys)
+	}
+	if err := stripYwaiAgentKeysWith(cfg, owned); err != nil {
+		t.Fatalf("stripYwaiAgentKeysWith: %v", err)
+	}
+
+	root := readJSONFile(t, cfg)
+	if _, ok := root["agent"]; ok {
+		t.Error("leftover v1 agent key must be deleted")
+	}
+	agents, _ := root["agents"].(map[string]any)
+	if len(agents) != 2 {
+		t.Fatalf("expected user agents from both keys, got %v", agents)
+	}
+	if _, ok := agents["my-agent"]; !ok {
+		t.Error("v2 user agent must survive")
+	}
+	if _, ok := agents["legacy-keep"]; !ok {
+		t.Error("drained leftover user agent must survive under agents")
 	}
 }
 

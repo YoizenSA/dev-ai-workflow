@@ -1,6 +1,6 @@
 ---
 name: tailwind-4
-description: Tailwind CSS 4 patterns. Trigger: styling, CSS utilities, responsive design.
+description: "Tailwind CSS 4 patterns. Trigger: styling, CSS utilities, responsive design."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

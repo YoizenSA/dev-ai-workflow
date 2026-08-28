@@ -1,6 +1,6 @@
 ---
 name: ado
-description: "Trigger: Azure DevOps PRs, work items, profiles; review/vote/comment a PR; list/create/update work items. Drive Azure DevOps via the `ado` CLI instead of plugin tools."
+description: "Azure DevOps PRs and work items via the `ado` CLI. Trigger: PR review/vote/comment, list/create/update work items."
 license: Apache-2.0
 allowed-tools: [Bash, Read]
 ---

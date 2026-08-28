@@ -51,6 +51,28 @@ func TestSetMcpEnabledTogglesInstalledServer(t *testing.T) {
 	if !list[0].Enabled {
 		t.Fatal("expected enabled after SetMcpEnabled(true)")
 	}
+
+	path := filepath.Join(home, ".config", "opencode", "opencode.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	mcp := root["mcp"].(map[string]any)
+	servers, ok := mcp["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("write must nest under mcp.servers, got %v", mcp)
+	}
+	if _, has := mcp["graft"]; has {
+		t.Fatal("graft must not remain a sibling of servers")
+	}
+	entry := servers["graft"].(map[string]any)
+	if _, has := entry["enabled"]; has {
+		t.Fatal("v2 must not write enabled")
+	}
 }
 
 func TestSetMcpEnabledUnknownServer(t *testing.T) {

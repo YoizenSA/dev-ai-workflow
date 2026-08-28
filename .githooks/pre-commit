@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Fail the commit if staged ywai Go files would fail CI lint.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec bash "$ROOT/ywai/scripts/lint.sh" --staged

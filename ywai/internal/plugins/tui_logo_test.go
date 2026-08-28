@@ -19,9 +19,9 @@ func writeBundle(t *testing.T, contents string) string {
 	return src
 }
 
-// tuiConfigPathFor returns the tui.json path that sits next to configPath.
+// tuiConfigPathFor returns the cli.json path that sits next to configPath.
 func tuiConfigPathFor(configPath string) string {
-	return filepath.Join(filepath.Dir(configPath), "tui.json")
+	return filepath.Join(filepath.Dir(configPath), "cli.json")
 }
 
 func TestInstallTuiLogoWithBundle(t *testing.T) {
@@ -43,7 +43,7 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		}
 	})
 
-	t.Run("registers_logo_path_and_mouse_in_tui_json", func(t *testing.T) {
+	t.Run("registers_logo_path_and_mouse_in_cli_json", func(t *testing.T) {
 		bundle := writeBundle(t, "// logo")
 		configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
 
@@ -55,15 +55,18 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		root := readConfigRoot(t, tuiPath)
 
 		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
-		arr, ok := root["plugin"].([]any)
+		if _, ok := root["plugin"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugin\" key: %v", root["plugin"])
+		}
+		arr, ok := root["plugins"].([]any)
 		if !ok {
-			t.Fatalf("tui.json has no []any \"plugin\" array; got %T", root["plugin"])
+			t.Fatalf("cli.json has no []any \"plugins\" array; got %T", root["plugins"])
 		}
 		if !containsString(arr, dest) {
-			t.Errorf("tui.json plugin array %v does not contain logo path %q", arr, dest)
+			t.Errorf("cli.json plugin array %v does not contain logo path %q", arr, dest)
 		}
 		if root["mouse"] != true {
-			t.Errorf("tui.json mouse = %v, want true (needed for click easter eggs)", root["mouse"])
+			t.Errorf("cli.json mouse = %v, want true (needed for click easter eggs)", root["mouse"])
 		}
 	})
 
@@ -75,10 +78,13 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 			t.Fatalf("installTuiLogoWithBundle() error = %v", err)
 		}
 
-		// TUI plugins live in tui.json; opencode.json must be left untouched.
+		// TUI plugins live in cli.json; opencode.json must be left untouched.
 		root := readConfigRoot(t, configPath)
 		if _, ok := root["plugin"]; ok {
-			t.Errorf("opencode.json gained a \"plugin\" array; logo must only patch tui.json")
+			t.Errorf("opencode.json gained a \"plugin\" array; logo must only patch cli.json")
+		}
+		if _, ok := root["plugins"]; ok {
+			t.Errorf("opencode.json gained a \"plugins\" array; logo must only patch cli.json")
 		}
 		if root["model"] != "x" {
 			t.Errorf("opencode.json model = %v, want preserved \"x\"", root["model"])
@@ -90,16 +96,16 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
 		tuiPath := tuiConfigPathFor(configPath)
 
-		// Seed tui.json with a string entry, an array-form entry, and mouse off.
+		// Seed cli.json with a string entry, an array-form entry, and mouse off.
 		existing := map[string]any{
 			"mouse": false,
-			"plugin": []any{
+			"plugins": []any{
 				"some-plugin@1.0.0",
 				[]any{"@scope/parametrized", map[string]any{"opt": "v"}},
 			},
 		}
 		if err := config.WriteJSONC(tuiPath, existing); err != nil {
-			t.Fatalf("seed tui.json: %v", err)
+			t.Fatalf("seed cli.json: %v", err)
 		}
 
 		if err := installTuiLogoWithBundle(configPath, bundle); err != nil {
@@ -107,7 +113,10 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		}
 
 		root := readConfigRoot(t, tuiPath)
-		arr := root["plugin"].([]any)
+		if _, ok := root["plugin"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugin\" key")
+		}
+		arr := root["plugins"].([]any)
 		if !containsString(arr, "some-plugin@1.0.0") {
 			t.Errorf("plugin array %v dropped pre-existing string entry", arr)
 		}
@@ -123,7 +132,7 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		}
 		// Explicit user opt-out of mouse must be respected.
 		if root["mouse"] != false {
-			t.Errorf("tui.json mouse = %v, want false (user opt-out preserved)", root["mouse"])
+			t.Errorf("cli.json mouse = %v, want false (user opt-out preserved)", root["mouse"])
 		}
 	})
 
@@ -140,7 +149,10 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 
 		root := readConfigRoot(t, tuiConfigPathFor(configPath))
 		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
-		arr := root["plugin"].([]any)
+		if _, ok := root["plugin"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugin\" key")
+		}
+		arr := root["plugins"].([]any)
 		count := 0
 		for _, v := range arr {
 			if s, ok := v.(string); ok && s == dest {

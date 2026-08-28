@@ -63,12 +63,24 @@ func TestApplyDelegations_CreatesAgentAndTaskMap(t *testing.T) {
 	}
 
 	root, _ := loadJSON(t, configPath)
-	agents := root["agent"].(map[string]any)
+	if _, ok := root["agent"]; ok {
+		t.Fatalf("v1 agent key must not be written: %+v", root["agent"])
+	}
+	agents := root["agents"].(map[string]any)
 	orch := agents["orchestrator"].(map[string]any)
-	perm := orch["permission"].(map[string]any)
-	task := perm["task"].(map[string]any)
-	if task["dev"] != "allow" || task["*"] != "deny" {
-		t.Errorf("task map = %+v, want dev=allow *=deny", task)
+	rules := orch["permissions"].([]any)
+	// v2: the delegation graph is an ordered subagent rule array — the "*"
+	// catch-all first, specific ids after (last match wins).
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 subagent rules, got %+v", rules)
+	}
+	star := rules[0].(map[string]any)
+	if star["action"] != "subagent" || star["resource"] != "*" || star["effect"] != "deny" {
+		t.Errorf("catch-all rule = %+v, want subagent/* /deny", star)
+	}
+	dev := rules[1].(map[string]any)
+	if dev["resource"] != "dev" || dev["effect"] != "allow" {
+		t.Errorf("dev rule = %+v, want dev/allow", dev)
 	}
 }
 
@@ -99,21 +111,42 @@ func TestApplyDelegations_PreservesExistingScalars(t *testing.T) {
 	}
 
 	root, _ := loadJSON(t, configPath)
-	orch := root["agent"].(map[string]any)["orchestrator"].(map[string]any)
-	perm := orch["permission"].(map[string]any)
-
-	// Scalar permissions preserved.
-	if perm["read"] != "allow" || perm["edit"] != "deny" {
-		t.Errorf("scalar perms clobbered: %+v", perm)
+	if _, ok := root["agent"]; ok {
+		t.Fatalf("v1 agent key must not remain after write: %+v", root["agent"])
+	}
+	orch := root["agents"].(map[string]any)["orchestrator"].(map[string]any)
+	if _, ok := orch["permission"]; ok {
+		t.Errorf("v1 permission map must not remain in generated JSON: %+v", orch["permission"])
 	}
 	// Model preserved.
 	if orch["model"] != "opencode-go/glm-5.1" {
 		t.Errorf("model lost: %+v", orch["model"])
 	}
-	// Task map added.
-	task := perm["task"].(map[string]any)
-	if task["dev"] != "allow" {
-		t.Errorf("task map not written: %+v", task)
+	// v2 rules: existing tool posture plus subagent whitelist.
+	rules := orch["permissions"].([]any)
+	got := map[string]string{}
+	foundDev := false
+	for _, raw := range rules {
+		r, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if r["action"] == "subagent" && r["resource"] == "dev" && r["effect"] == "allow" {
+			foundDev = true
+		}
+		if res, _ := r["resource"].(string); res == "*" {
+			if a, _ := r["action"].(string); a != "" {
+				if e, _ := r["effect"].(string); e != "" {
+					got[a] = e
+				}
+			}
+		}
+	}
+	if !foundDev {
+		t.Errorf("subagent rules not written: %+v", rules)
+	}
+	if got["read"] != "allow" || got["edit"] != "deny" {
+		t.Errorf("converted v2 tool rules lost scalars: %+v", got)
 	}
 }
 
@@ -198,7 +231,10 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 
 	// qa-reviewer must NOT be created in opencode.json.
 	root, _ := loadJSON(t, configPath)
-	if agents, ok := root["agent"].(map[string]any); ok {
+	if _, ok := root["agent"]; ok {
+		t.Fatalf("v1 agent key must not be written: %+v", root["agent"])
+	}
+	if agents, ok := root["agents"].(map[string]any); ok {
 		if _, exists := agents["qa-reviewer"]; exists {
 			t.Errorf("uninstalled agent qa-reviewer was written to opencode.json: %+v", agents["qa-reviewer"])
 		}
@@ -216,10 +252,15 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 		t.Errorf("sidecar missing installed agent qa: %s", sidecar)
 	}
 
-	// The installed agent's markdown task map must still be applied.
+	// The installed agent's markdown delegation rules must still be applied
+	// (legacy v1 permission/task block replaced by the v2 rule array).
 	qaMD, _ := os.ReadFile(filepath.Join(agentsDir, "qa.md"))
-	if !strings.Contains(string(qaMD), "reviewer: allow") {
+	if !strings.Contains(string(qaMD), "action: subagent") ||
+		!strings.Contains(string(qaMD), "resource: reviewer") {
 		t.Errorf("installed agent qa did not get its delegation: %s", qaMD)
+	}
+	if strings.Contains(string(qaMD), "permission:") {
+		t.Errorf("legacy permission block must be swept: %s", qaMD)
 	}
 }
 
@@ -315,17 +356,24 @@ func TestApplyDelegations_WritesTaskMapIntoMarkdownFrontmatter(t *testing.T) {
 
 	out, _ := os.ReadFile(filepath.Join(agentsDir, "orchestrator.md"))
 	got := string(out)
-	// The scalar task bucket must become a nested allow/deny map.
-	if strings.Contains(got, "  task: allow\n") {
-		t.Errorf("scalar task bucket was not replaced:\n%s", got)
+	// The legacy permission map is replaced by the v2 rule array: the scalar
+	// task bucket becomes ordered subagent rules.
+	if strings.Contains(got, "  task: allow\n") || strings.Contains(got, "permission:") {
+		t.Errorf("legacy permission block was not replaced:\n%s", got)
 	}
-	for _, want := range []string{"  task:\n", "    \"*\": deny", "    dev: allow", "    qa: allow"} {
+	for _, want := range []string{
+		"permissions:",
+		"action: subagent",
+		`resource: "*"`,
+		"resource: dev",
+		"resource: qa",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("frontmatter missing %q in:\n%s", want, got)
 		}
 	}
 	// Other permission keys must be preserved.
-	if !strings.Contains(got, "  read: allow") {
+	if !strings.Contains(got, v2Rule("read", "*", "allow")) {
 		t.Errorf("existing permission key lost:\n%s", got)
 	}
 }
@@ -336,8 +384,11 @@ func TestInjectTaskPermission_InsertsWhenMissing(t *testing.T) {
 	if !ok {
 		t.Fatal("expected injection to succeed")
 	}
-	if !strings.Contains(out, "  task:\n") || !strings.Contains(out, "    finder: allow") {
-		t.Errorf("task block not inserted:\n%s", out)
+	if !strings.Contains(out, "permissions:") || !strings.Contains(out, "resource: finder") {
+		t.Errorf("subagent rules not inserted:\n%s", out)
+	}
+	if !strings.Contains(out, v2Rule("read", "*", "allow")) {
+		t.Errorf("sibling rule lost during legacy conversion:\n%s", out)
 	}
 }
 
@@ -396,6 +447,22 @@ func TestInjectTaskPermission_NoPermissionBlock(t *testing.T) {
 	md := "---\nmode: primary\n---\n\nbody."
 	if _, ok := injectTaskPermission(md, map[string]string{"*": "deny"}); ok {
 		t.Error("expected no-op when there is no permission block")
+	}
+}
+
+func TestRenderRulesSection_UsesOpenCodeV2Delegate(t *testing.T) {
+	out := renderRulesSection(
+		[]DelegationRule{{Action: "Write", Inline: "Yes", Delegate: "No"}},
+		[]DelegationTrigger{{Name: "4-file rule", Description: "map first"}},
+	)
+	if !strings.Contains(out, "native `delegate`") {
+		t.Fatalf("rules must name OpenCode v2 delegate tool:\n%s", out)
+	}
+	if strings.Contains(out, "native `subagent`") || strings.Contains(out, "native `task`") {
+		t.Fatalf("rules must not name dead v1 tools:\n%s", out)
+	}
+	if !strings.Contains(out, "delegation_read") {
+		t.Fatalf("rules must mention delegation_* supervision:\n%s", out)
 	}
 }
 

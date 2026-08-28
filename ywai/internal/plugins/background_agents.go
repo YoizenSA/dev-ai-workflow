@@ -25,6 +25,60 @@ var backgroundAgentsPermissions = map[string]string{
 // of being double-loaded by directory discovery.
 const ywaiPluginsSubdir = "ywai-plugins"
 
+// RemoveBackgroundAgents removes the legacy custom delegation plugin. OpenCode
+// v2 provides its own foreground/background `subagent` tool, so retaining the
+// shim shadows the native runtime and leaves sync calls waiting on obsolete
+// event semantics.
+func RemoveBackgroundAgents(configPath string) error {
+	var root map[string]any
+	if _, err := os.Stat(configPath); err == nil {
+		var readErr error
+		root, readErr = config.ReadJSONC(configPath)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", configPath, readErr)
+		}
+	} else if os.IsNotExist(err) {
+		return nil
+	} else {
+		return fmt.Errorf("stat %s: %w", configPath, err)
+	}
+
+	plugins := v2Plugins(root)
+	kept := make([]any, 0, len(plugins))
+	for _, plugin := range plugins {
+		path := ""
+		if value, ok := plugin.(string); ok {
+			path = value
+		} else if value, ok := plugin.(map[string]any); ok {
+			path, _ = value["package"].(string)
+		}
+		if filepath.Base(path) != config.BackgroundAgentsBundleName {
+			kept = append(kept, plugin)
+		}
+	}
+	writePlugins(root, kept)
+
+	rules, _ := root["permissions"].([]any)
+	keptRules := make([]any, 0, len(rules))
+	for _, raw := range rules {
+		if rule, ok := raw.(map[string]any); ok {
+			if action, _ := rule["action"].(string); action == "delegate" || action == "delegation_*" {
+				continue
+			}
+		}
+		keptRules = append(keptRules, raw)
+	}
+	root["permissions"] = keptRules
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("write %s: %w", configPath, err)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove legacy background-agents bundle: %w", err)
+	}
+	return nil
+}
+
 // InstallBackgroundAgents vendors the background-agents plugin bundle next to
 // the given opencode config and wires it into the config (plugin array +
 // delegation permissions). configPath is the path to opencode.json(c).
@@ -54,12 +108,12 @@ func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 	return patchOpenCodeBackgroundAgents(configPath, destJS)
 }
 
-// patchOpenCodeBackgroundAgents adds pluginJSPath to the config's "plugin"
-// array (idempotently) and merges the delegation permissions into the
-// "permission" block, preserving any existing entries. It is safe to call
-// repeatedly.
+// patchOpenCodeBackgroundAgents adds pluginJSPath to the config's v2 "plugins"
+// array (idempotently) and merges the delegation allow rules into the
+// top-level v2 "permissions" array, preserving existing rules. A leftover v1
+// "permission" map is deleted entirely. It is safe to call repeatedly.
 func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
-	root := map[string]any{}
+	var root map[string]any
 	if _, err := os.Stat(configPath); err == nil {
 		var readErr error
 		root, readErr = config.ReadJSONC(configPath)
@@ -73,22 +127,36 @@ func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	// plugin array — append the bundle path if not already present.
-	plugins, _ := root["plugin"].([]any)
+	plugins := v2Plugins(root)
 	if !containsPluginPath(plugins, pluginJSPath) {
 		plugins = append(plugins, pluginJSPath)
 	}
-	root["plugin"] = plugins
+	writePlugins(root, plugins)
 
-	// permission block — merge our keys without clobbering existing ones.
-	perms, ok := root["permission"].(map[string]any)
-	if !ok {
-		perms = map[string]any{}
+	// Top-level v2 permissions array — append one allow rule per action when
+	// the config does not already carry a rule for it.
+	rules, _ := root["permissions"].([]any)
+	covered := map[string]bool{}
+	for _, raw := range rules {
+		if r, ok := raw.(map[string]any); ok {
+			if action, ok := r["action"].(string); ok {
+				covered[action] = true
+			}
+		}
 	}
-	for key, val := range backgroundAgentsPermissions {
-		perms[key] = val
+	for action := range backgroundAgentsPermissions {
+		if covered[action] {
+			continue
+		}
+		rules = append(rules, map[string]any{
+			"action":   action,
+			"resource": "*",
+			"effect":   "allow",
+		})
 	}
-	root["permission"] = perms
+	root["permissions"] = rules
+
+	delete(root, "permission")
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
@@ -102,8 +170,48 @@ func containsPluginPath(plugins []any, path string) bool {
 		if s, ok := p.(string); ok && s == path {
 			return true
 		}
+		if m, ok := p.(map[string]any); ok {
+			if pkg, _ := m["package"].(string); pkg == path {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+// v2Plugins returns the OpenCode v2 "plugins" array. If only a legacy "plugin"
+// key exists, those entries are migrated. The legacy key is always deleted.
+func v2Plugins(root map[string]any) []any {
+	var out []any
+	if raw, ok := root["plugins"]; ok {
+		out = pluginsToSlice(raw)
+	} else if raw, ok := root["plugin"]; ok {
+		out = pluginsToSlice(raw)
+	}
+	delete(root, "plugin")
+	if out == nil {
+		return []any{}
+	}
+	return out
+}
+
+func pluginsToSlice(raw any) []any {
+	switch v := raw.(type) {
+	case []any:
+		return append([]any{}, v...)
+	case string:
+		if v == "" {
+			return []any{}
+		}
+		return []any{v}
+	default:
+		return []any{}
+	}
+}
+
+func writePlugins(root map[string]any, plugins []any) {
+	delete(root, "plugin")
+	root["plugins"] = plugins
 }
 
 // copyFile copies src to dst, truncating dst if it exists.

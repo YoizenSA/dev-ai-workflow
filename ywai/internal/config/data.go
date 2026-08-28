@@ -23,7 +23,7 @@ var (
 
 // BackgroundAgentsBundleName is the filename of the bundled opencode
 // background-agents plugin, both in the embedded FS and once seeded to disk.
-const BackgroundAgentsBundleName = "background-agents.js"
+const BackgroundAgentsBundleName = "background-agents-v2.js"
 
 // VisionBridgeBundleName is the filename of the vision-bridge opencode plugin
 // that auto-routes images through TokenBank vision for text-only models.
@@ -411,13 +411,13 @@ func SeedPluginsFromEmbedded() error {
 }
 
 // BackgroundAgentsBundlePath resolves the path to the bundled background-agents
-// plugin JS. It prefers the source checkout (ywai/plugins/background-agents/
+// plugin JS. It prefers the source checkout (ywai/plugins/background-agents-v2/
 // dist/), falls back to the seeded copy under DataPluginsDir, and seeds from the
 // embedded FS on demand. Returns an error when no bundle exists (e.g. a source
 // build where `bun` was unavailable at prepare-embedded time).
 func BackgroundAgentsBundlePath() (string, error) {
-	// 1. Source checkout: ywai/plugins/background-agents/dist/background-agents.js
-	srcBundle := filepath.Join(PluginsSourceDir(), "background-agents", "dist", BackgroundAgentsBundleName)
+	// 1. Source checkout: ywai/plugins/background-agents-v2/dist/background-agents-v2.js
+	srcBundle := filepath.Join(PluginsSourceDir(), "background-agents-v2", "dist", BackgroundAgentsBundleName)
 	if _, err := os.Stat(srcBundle); err == nil {
 		return srcBundle, nil
 	}

@@ -85,6 +85,29 @@ func TestProbeServer_Connected(t *testing.T) {
 	}
 }
 
+func TestProbeServer_UsesConfiguredServerPassword(t *testing.T) {
+	t.Setenv("OPENCODE_SERVER_PASSWORD", "test-password")
+	t.Setenv("OPENCODE_SERVER_USERNAME", "test-user")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "test-user" || password != "test-password" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	ok, err := ProbeServer(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("ProbeServer() failed: %v", err)
+	}
+	if !ok {
+		t.Fatal("Expected authenticated probe to succeed")
+	}
+}
+
 func TestProbeServer_Disconnected(t *testing.T) {
 	ctx := context.Background()
 	ok, err := ProbeServer(ctx, "http://127.0.0.1:1")

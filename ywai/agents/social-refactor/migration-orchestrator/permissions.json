@@ -12,5 +12,7 @@
   "edit": "deny",
   "write": "deny",
   "bash": "verify",
-  "code_search": "deny"
+  "code_search": "deny",
+  "delegate": "allow",
+  "todowrite": "allow"
 }

@@ -66,7 +66,11 @@ func parseFrontmatter(content string) (frontmatter string, body string) {
 	if end == -1 {
 		return "", content
 	}
-	fm := content[3 : end+3]
+	// Trim the delimiter newlines. Without this the slice carries a leading and
+	// trailing "" through Split/Join, and every writer that rebuilds the block
+	// (setScalarFrontmatterField) adds one blank line per call — frontmatter
+	// that grows a pair of blank lines on every model/field edit.
+	fm := strings.Trim(content[3:end+3], "\n")
 	body = strings.TrimSpace(content[end+6:])
 	return fm, body
 }
@@ -122,7 +126,16 @@ func detectAgentTeam(agentName string, agentData []byte) string {
 			}
 		}
 	}
-	// Fall back to frontmatter "group" field
+	// Then the sidecar ywai writes beside the flat agent files. Group used to
+	// live in the frontmatter, but opencode v2 treats an unknown agent key as a
+	// legacy v1 file and drops the v2 permission rules, so it moved out.
+	if dir, err := agentsDir(); err == nil {
+		if group := agents.ReadGroupSidecar(dir, agentName); group != "" {
+			return group
+		}
+	}
+	// Finally the legacy frontmatter field, for agents installed before the
+	// sidecar existed and not yet reinstalled.
 	return extractFrontmatterField(agentData, "group")
 }
 
@@ -167,10 +180,15 @@ func findYwaiAgentsDir() string {
 }
 
 // extractPermissionsFromFrontmatter parses permissions from YAML frontmatter.
-// Supports both formats:
-//   - New: permission:\n  read: allow\n  edit: deny\n ...
-//   - Old: tools:\n  read: true\n  edit: false\n ...
+// Supports the v2 rule array and, as a legacy fallback for files installed by
+// older ywai releases, the v1 nested maps:
+//   - v2:  permissions:\n  - action: read\n    resource: "*"\n    effect: allow
+//   - v1:  permission:\n  read: allow\n  edit: deny
+//   - v0:  tools:\n  read: true\n  edit: false
 func extractPermissionsFromFrontmatter(fm string) map[string]string {
+	if rules, ok := agents.ParsePermissionRulesYAML(fm); ok {
+		return agents.InternalMapFromRules(rules)
+	}
 	perms := map[string]string{}
 	lines := strings.Split(fm, "\n")
 
@@ -220,7 +238,13 @@ func extractPermissionsFromFrontmatter(fm string) map[string]string {
 				perms[key] = "deny"
 			}
 		} else {
-			// New format: permission: read: allow
+			// v1 format: permission: read: allow (bash renders as a nested
+			// block whose children cannot be split back out — take the first
+			// line's shape: a bare "bash:" means at least conditional shell).
+			if key == "bash" && val == "" {
+				perms[key] = "verify"
+				continue
+			}
 			perms[key] = val
 		}
 	}
@@ -238,76 +262,80 @@ func extractModeFromFrontmatter(fm string) string {
 	return ""
 }
 
-// updatePermissionsInFrontmatter replaces the permission: block in frontmatter
-// with the given permissions map. If no permission: block exists, it adds one.
-// Returns the updated full markdown content.
+// updatePermissionsInFrontmatter replaces the permissions block (v2 rule
+// array, or legacy permission:/tools: maps) with a fresh v2 array rendered
+// from the given internal permission map. The subagent (delegation) rules are
+// preserved: the map carried by this endpoint is tool permissions only. If no
+// block exists, one is added. Returns the updated full markdown content.
 func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
-	// Expand ywai's coarse buckets (ado, memory, intercom, mcp) into the
-	// opencode-native wildcard patterns opencode actually enforces. Without this
-	// the frontmatter would carry bare bucket names that opencode ignores,
-	// silently dropping the toggle — see agents.ExpandPermissionBuckets.
-	perms = agents.ExpandPermissionBuckets(perms)
+	fm, _ := parseFrontmatter(content)
 
+	// Preserve the delegation graph: swap tool rules, keep subagent rules.
+	var subagentRules []agents.PermissionRule
+	if fm != "" {
+		if existing, ok := agents.ParsePermissionRulesYAML(fm); ok {
+			for _, r := range existing {
+				if r.Action == "subagent" {
+					subagentRules = append(subagentRules, r)
+				}
+			}
+		}
+	}
+	rules := append(agents.RulesFromPermissionMap("", perms), subagentRules...)
+	return replacePermissionsBlock(content, rules)
+}
+
+// replacePermissionsBlock swaps the frontmatter permissions block (v2 rule
+// array, dropping any legacy permission:/tools: maps) for a freshly rendered
+// one, leaving every other frontmatter key untouched. Content without
+// frontmatter gets a minimal frontmatter with the block added.
+func replacePermissionsBlock(content string, rules []agents.PermissionRule) string {
 	fm, body := parseFrontmatter(content)
-	if fm == "" {
-		// No frontmatter at all — wrap content with new frontmatter
-		var b strings.Builder
-		b.WriteString("---\npermission:\n")
-		for _, k := range sortedKeys(perms) {
-			b.WriteString(fmt.Sprintf("  %s: %s\n", yamlPermKey(k), perms[k]))
-		}
-		b.WriteString("---\n\n")
-		b.WriteString(body)
-		return b.String()
-	}
 
-	lines := strings.Split(fm, "\n")
-	var result []string
-	skipping := false
-	inserted := false
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Detect start of permission: or tools: block
-		if !skipping && (trimmed == "permission:" || trimmed == "tools:" ||
-			strings.HasPrefix(trimmed, "permission:") || strings.HasPrefix(trimmed, "tools:")) {
-			skipping = true
-			// Insert new permission: block here
-			result = append(result, "permission:")
-			for _, k := range sortedKeys(perms) {
-				result = append(result, fmt.Sprintf("  %s: %s", yamlPermKey(k), perms[k]))
-			}
-			inserted = true
-			continue
-		}
-
-		if skipping {
-			// Skip child lines (indented)
-			if strings.TrimSpace(line) == "" {
+	var b strings.Builder
+	b.WriteString("---\n")
+	if fm != "" {
+		// Rebuild the frontmatter keeping every key except the permission-
+		// bearing blocks (v2 permissions: array + v1 permission:/tools: maps).
+		// Block children are indented lines that follow their header until the
+		// next top-level key; other indented lines (e.g. description block
+		// scalars) belong to kept keys and must survive.
+		inDropped := false
+		for _, line := range strings.Split(strings.TrimPrefix(fm, "\n"), "\n") {
+			indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+			trimmed := strings.TrimSpace(line)
+			if !indented && trimmed != "" {
+				// `group:` is not a valid opencode v2 agent key; keeping it
+				// sends the file down the legacy v1 decode path, which drops
+				// the v2 permissions array. Group lives in the sidecar.
+				if strings.HasPrefix(trimmed, "group:") {
+					inDropped = false
+					continue
+				}
+				if trimmed == "permissions:" || trimmed == "permission:" ||
+					trimmed == "tools:" || strings.HasPrefix(trimmed, "permission:") ||
+					strings.HasPrefix(trimmed, "tools:") {
+					inDropped = true
+					continue
+				}
+				inDropped = false
+				b.WriteString(line + "\n")
 				continue
 			}
-			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			if inDropped {
 				continue
 			}
-			// Not indented anymore — stop skipping
-			skipping = false
+			b.WriteString(line + "\n")
 		}
-
-		result = append(result, line)
-
-		// If we reached the end of frontmatter without finding a block, insert before end
-		if !inserted && i == len(lines)-1 {
-			result = append(result, "permission:")
-			for _, k := range sortedKeys(perms) {
-				result = append(result, fmt.Sprintf("  %s: %s", yamlPermKey(k), perms[k]))
-			}
-			inserted = true
-		}
+	} else {
+		b.WriteString("description: agent\n")
 	}
-
-	newFM := strings.Join(result, "\n")
-	return "---\n" + newFM + "\n---\n\n" + body
+	for _, line := range agents.RenderPermissionRulesYAML(rules) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("---\n\n")
+	b.WriteString(body)
+	return b.String()
 }
 
 // getScalarFrontmatterField returns the value of a top-level scalar key in the
@@ -366,36 +394,6 @@ func setScalarFrontmatterField(content, key, value string) string {
 
 	newFM := strings.Join(result, "\n")
 	return "---\n" + newFM + "\n---\n\n" + body
-}
-
-// yamlPermKey quotes a permission key when it contains characters that are not
-// safe as a bare YAML key (e.g. the glob/hyphen chars in expanded patterns like
-// ado_* or ywai-kanban_*). Plain identifiers (read, edit, …) are emitted bare.
-// This matches the quoting buildOpenCodeMarkdown applies to expanded patterns.
-func yamlPermKey(k string) string {
-	for _, r := range k {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '_' {
-			continue
-		}
-		return fmt.Sprintf("%q", k)
-	}
-	return k
-}
-
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[j] < keys[i] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
-	return keys
 }
 
 // sortedPermissionKeys returns ValidPermissionKeys as a sorted slice for error messages.

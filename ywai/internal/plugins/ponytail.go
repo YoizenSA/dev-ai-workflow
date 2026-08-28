@@ -11,8 +11,8 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// PonytailNPMPackage is the official OpenCode plugin package for ponytail.
-// OpenCode resolves npm package names listed in the config "plugin" array.
+// PonytailNPMPackage is retained to remove legacy OpenCode plugin entries.
+// Ponytail's published OpenCode plugin is not compatible with OpenCode v2.
 const PonytailNPMPackage = "@dietrichgebert/ponytail"
 
 // PonytailClaudeMarketplaceSource is the GitHub owner/repo shorthand passed to
@@ -28,8 +28,9 @@ var claudeCLI = "claude"
 
 // InstallPonytail installs the official ponytail plugin for the given agent.
 //
-//   - opencode / kilocode: appends PonytailNPMPackage to the config "plugin" array
-//     (OpenCode resolves the npm package at load time; no global npm install).
+//   - opencode / kilocode: removes the legacy Ponytail npm plugin entry. Ponytail
+//     is not installed in OpenCode v2 plugin mode because its published plugin
+//     contract is incompatible with the v2 loader.
 //   - claude-code: runs non-interactive Claude CLI marketplace add + plugin install
 //     (`claude plugin marketplace add DietrichGebert/ponytail` then
 //     `claude plugin install ponytail@ponytail`). Both commands are idempotent.
@@ -39,7 +40,7 @@ var claudeCLI = "claude"
 func InstallPonytail(agentName, configPath string) error {
 	switch agentName {
 	case "opencode", "kilocode":
-		return patchOpenCodePluginName(configPath, PonytailNPMPackage)
+		return removeOpenCodePluginName(configPath, PonytailNPMPackage)
 	case "claude-code":
 		return installPonytailClaude()
 	default:
@@ -99,9 +100,9 @@ func formatCmdOutput(out string) string {
 	return "\n" + out
 }
 
-// patchOpenCodePluginName appends pluginName to the config's "plugin" array
-// if it is not already present. Creates the config file when missing.
-func patchOpenCodePluginName(configPath, pluginName string) error {
+// removeOpenCodePluginName removes pluginName from the config's "plugins"
+// array while preserving all other plugin entries. It is idempotent.
+func removeOpenCodePluginName(configPath, pluginName string) error {
 	root := map[string]any{}
 	if _, err := os.Stat(configPath); err == nil {
 		var readErr error
@@ -115,11 +116,15 @@ func patchOpenCodePluginName(configPath, pluginName string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins, _ := root["plugin"].([]any)
-	if !containsPluginPath(plugins, pluginName) {
-		plugins = append(plugins, pluginName)
+	plugins := v2Plugins(root)
+	filtered := make([]any, 0, len(plugins))
+	for _, plugin := range plugins {
+		if name, ok := plugin.(string); ok && name == pluginName {
+			continue
+		}
+		filtered = append(filtered, plugin)
 	}
-	root["plugin"] = plugins
+	writePlugins(root, filtered)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)

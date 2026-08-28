@@ -2,18 +2,16 @@ package main
 
 import "testing"
 
-func TestPlanManaged_YwaiSkillsAlwaysRegardlessOfPreset(t *testing.T) {
+func TestPlanManaged_AlwaysDoesTheYwaiManagedWork(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range []string{"full-gentleman", "ecosystem-only", "minimal", ""} {
-		for _, mode := range []applyMode{applyInstall, applyUpdate} {
-			p := planManaged(mode, preset)
-			if !p.CopyExtraSkills {
-				t.Fatalf("mode=%v preset=%q must always copy ywai skills: %+v", mode, preset, p)
-			}
-			if !p.InstallProfiles || !p.WriteAgentsMd || !p.InstallPlugins {
-				t.Fatalf("mode=%v preset=%q must keep ywai managed work: %+v", mode, preset, p)
-			}
+	for _, mode := range []applyMode{applyInstall, applyUpdate} {
+		p := planManaged(mode)
+		if !p.CopyExtraSkills {
+			t.Fatalf("mode=%v must always copy ywai skills: %+v", mode, p)
+		}
+		if !p.InstallProfiles || !p.WriteAgentsMd || !p.InstallPlugins {
+			t.Fatalf("mode=%v must keep ywai managed work: %+v", mode, p)
 		}
 	}
 }
@@ -21,7 +19,7 @@ func TestPlanManaged_YwaiSkillsAlwaysRegardlessOfPreset(t *testing.T) {
 func TestCountApplySteps_Stable(t *testing.T) {
 	t.Parallel()
 
-	plan := planManaged(applyInstall, "full-gentleman")
+	plan := planManaged(applyInstall)
 	o := applyOpts{Autostart: true}
 	n := countApplySteps(plan, o)
 	if n < 10 {

@@ -1,28 +1,18 @@
 ---
-title: QA Finder
-description: Busca código relacionado con testing
+title: Finder
+description: Explorá el codebase con @finder
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-# QA Finder
+# Finder
 
-## Qué hace
+Un scout para el repo: localizar código, tests, y cómo se hace algo acá.
 
-Busca código relacionado con testing — encuentra archivos, patrones, y código sin cobertura.
-
-## Cuándo usarlo
+Usá **`@finder`**. Guía: [Finder](/dev-ai-workflow/agents/finder).
 
 | Tarea | Ejemplo |
 |---|---|
-| Buscar tests | `@qa-finder Find all tests related to auth` |
-| Código sin cobertura | `@qa-finder What code has no tests?` |
-| Patrones | `@qa-finder How do we write tests here?` |
-
-## Límites
-
-| ✅ Puede | ❌ No puede |
-|---|---|
-| Buscar archivos | Escribir tests (`@qa-dev`) |
-| Identificar gaps | Revisar tests (`@qa-reviewer`) |
-| Explorar patrones | Diseñar estrategia (`@qa-analyst`) |
+| Buscar tests | `@finder Find all tests related to auth` |
+| Código sin cobertura | `@finder What code has no tests?` |
+| Patrones | `@finder How do we write tests here?` |

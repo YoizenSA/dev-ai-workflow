@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 // ChatProxy proxies chat requests to a local OpenCode server, translating
@@ -57,6 +59,7 @@ func (cp *ChatProxy) handleChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	opencode.ApplyServerAuth(req)
 
 	client := &http.Client{Timeout: 0} // no timeout for SSE
 	resp, err := client.Do(req)
@@ -486,6 +489,7 @@ func (cp *ChatProxy) upstreamTimeout(r *http.Request, method, path string, body 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	opencode.ApplyServerAuth(req)
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -873,7 +877,12 @@ func detectOpenCodeURL() string {
 	for _, port := range ports {
 		url := fmt.Sprintf("http://localhost:%s", port)
 		client := &http.Client{Timeout: 1 * time.Second}
-		resp, err := client.Get(url + "/app")
+		req, err := http.NewRequest(http.MethodGet, url+"/app", nil)
+		if err != nil {
+			continue
+		}
+		opencode.ApplyServerAuth(req)
+		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {

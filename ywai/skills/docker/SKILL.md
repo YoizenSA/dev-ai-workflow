@@ -1,6 +1,6 @@
 ---
 name: docker
-description: Author and harden Dockerfiles for NestJS/Node, .NET, and Angular/nginx services on AKS. Use when creating a Dockerfile, reviewing/auditing/hardening one, shrinking image size or attack surface, or fixing container findings — root user, leaked secret, writable code, vuln scan. Reaches the .dockerignore, compose, and the entrypoints/configs baked into the image.
+description: "Author and harden Dockerfiles for Node/.NET/Angular on AKS. Trigger: create/audit a Dockerfile, container findings."
 ---
 
 # Docker

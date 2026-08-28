@@ -19,32 +19,48 @@ func containsString(slice []any, want string) bool {
 	return false
 }
 
-// pluginArray returns the root "plugin" array as []any (fatal if absent/wrong type).
+// pluginArray returns the root v2 "plugins" array as []any (fatal if absent/wrong type).
 func pluginArray(t *testing.T, path string) []any {
 	t.Helper()
 	root := readConfigRoot(t, path)
-	arr, ok := root["plugin"].([]any)
+	if _, ok := root["plugin"]; ok {
+		t.Fatalf("config still has legacy \"plugin\" key: %v", root["plugin"])
+	}
+	arr, ok := root["plugins"].([]any)
 	if !ok {
-		t.Fatalf("config has no []any \"plugin\" array; got %T", root["plugin"])
+		t.Fatalf("config has no []any \"plugins\" array; got %T", root["plugins"])
 	}
 	return arr
 }
 
-// permissionMap returns the root "permission" map (fatal if absent/wrong type).
-func permissionMap(t *testing.T, path string) map[string]any {
+// permissionRules returns the root v2 "permissions" rule array as action →
+// effect (fatal if absent/wrong type).
+func permissionRules(t *testing.T, path string) map[string]string {
 	t.Helper()
 	root := readConfigRoot(t, path)
-	perm, ok := root["permission"].(map[string]any)
+	arr, ok := root["permissions"].([]any)
 	if !ok {
-		t.Fatalf("config has no map \"permission\" block; got %T", root["permission"])
+		t.Fatalf("config has no []any \"permissions\" array; got %T", root["permissions"])
 	}
-	return perm
+	out := map[string]string{}
+	for _, raw := range arr {
+		r, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		action, _ := r["action"].(string)
+		effect, _ := r["effect"].(string)
+		if action != "" {
+			out[action] = effect
+		}
+	}
+	return out
 }
 
 func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
-	const jsPath = "/home/u/.config/opencode/ywai-plugins/background-agents.js"
+	const jsPath = "/home/u/.config/opencode/ywai-plugins/background-agents-v2.js"
 
-	// Case A — empty config: creates plugin array + permission block.
+	// Case A — empty config: creates plugin array + permissions rules.
 	t.Run("creates_plugin_and_permissions_when_missing", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{})
 
@@ -55,19 +71,22 @@ func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
 		if arr := pluginArray(t, path); !containsString(arr, jsPath) {
 			t.Errorf("plugin array %v does not contain %q", arr, jsPath)
 		}
-		perm := permissionMap(t, path)
-		if perm["delegate"] != "allow" {
-			t.Errorf("permission[delegate] = %v, want allow", perm["delegate"])
+		rules := permissionRules(t, path)
+		if rules["delegate"] != "allow" {
+			t.Errorf("permissions[delegate] = %v, want allow", rules["delegate"])
 		}
-		if perm["delegation_*"] != "allow" {
-			t.Errorf("permission[delegation_*] = %v, want allow", perm["delegation_*"])
+		if rules["delegation_*"] != "allow" {
+			t.Errorf("permissions[delegation_*] = %v, want allow", rules["delegation_*"])
 		}
 	})
 
-	// Case B — preserves existing plugins and permissions.
+	// Case B — preserves existing plugins and v2 rules; deletes leftover v1 permission.
 	t.Run("preserves_existing_entries", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{
 			"plugin": []any{"some-other-plugin"},
+			"permissions": []any{map[string]any{
+				"action": "shell", "resource": "*", "effect": "ask",
+			}},
 			"permission": map[string]any{
 				"bash": "ask",
 			},
@@ -84,12 +103,16 @@ func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
 		if !containsString(arr, jsPath) {
 			t.Errorf("plugin array %v does not contain %q", arr, jsPath)
 		}
-		perm := permissionMap(t, path)
-		if perm["bash"] != "ask" {
-			t.Errorf("permission[bash] = %v, want ask (clobbered)", perm["bash"])
+		rules := permissionRules(t, path)
+		if rules["shell"] != "ask" {
+			t.Errorf("permissions[shell] = %v, want ask (clobbered)", rules["shell"])
 		}
-		if perm["delegate"] != "allow" {
-			t.Errorf("permission[delegate] = %v, want allow", perm["delegate"])
+		if rules["delegate"] != "allow" {
+			t.Errorf("permissions[delegate] = %v, want allow", rules["delegate"])
+		}
+		root := readConfigRoot(t, path)
+		if _, ok := root["permission"]; ok {
+			t.Errorf("legacy v1 \"permission\" key must be deleted, got %v", root["permission"])
 		}
 	})
 
@@ -134,7 +157,7 @@ func TestInstallBackgroundAgentsWithBundle(t *testing.T) {
 		t.Fatalf("installBackgroundAgentsWithBundle() error = %v", err)
 	}
 
-	destJS := filepath.Join(dir, "ywai-plugins", "background-agents.js")
+	destJS := filepath.Join(dir, "ywai-plugins", "background-agents-v2.js")
 	got, err := os.ReadFile(destJS)
 	if err != nil {
 		t.Fatalf("expected bundle copied to %s: %v", destJS, err)
@@ -174,7 +197,7 @@ func TestInstallBackgroundAgents_Integration(t *testing.T) {
 		t.Fatalf("InstallBackgroundAgents() error = %v", err)
 	}
 
-	destJS := filepath.Join(dir, "ywai-plugins", "background-agents.js")
+	destJS := filepath.Join(dir, "ywai-plugins", config.BackgroundAgentsBundleName)
 	info, err := os.Stat(destJS)
 	if err != nil {
 		t.Fatalf("expected bundle at %s: %v", destJS, err)
@@ -187,7 +210,7 @@ func TestInstallBackgroundAgents_Integration(t *testing.T) {
 	if arr := pluginArray(t, configPath); !containsString(arr, destJS) {
 		t.Errorf("plugin array %v does not reference %q", arr, destJS)
 	}
-	if perm := permissionMap(t, configPath); perm["delegate"] != "allow" {
-		t.Errorf("permission[delegate] = %v, want allow", perm["delegate"])
+	if rules := permissionRules(t, configPath); rules["delegate"] != "allow" {
+		t.Errorf("permissions[delegate] = %v, want allow", rules["delegate"])
 	}
 }

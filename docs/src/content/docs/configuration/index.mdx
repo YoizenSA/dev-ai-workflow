@@ -9,40 +9,50 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 ## Estructura
 
+OpenCode 2 lee esto (binario `opencode2`):
+
 ```
 ~/.config/opencode/
-├── agents/          # Perfiles de agentes
-├── skills/          # Skills instalados
-└── commands/        # Commands slash
+├── opencode.json     # agents JSON, MCP (mcp.servers), default_agent
+├── cli.json          # tema, keybinds (antes tui.json)
+├── agents/           # Un .md plano por agente (lo instala ywai)
+├── skills/           # Skills extra
+└── commands/         # Slash commands
 ```
 
-## Perfiles de agentes
+`ywai install` / `ywai update` **borra** de `agents/` cualquier `.md` que no pertenezca al grupo activo (core + qa-automation por defecto). Los custom van en el **proyecto**, no ahí.
 
-Cada agente tiene 3 archivos:
+## Perfiles de agentes (source)
+
+En el repo / cache de ywai cada perfil tiene:
 
 | Archivo | Qué contiene |
 |---|---|
-| `AGENT.md` | System prompt (comportamiento) |
-| `tools.json` | Permisos de herramientas |
-| `skills.txt` | Skills vinculados |
+| `AGENT.md` | System prompt |
+| `permissions.json` | Permisos (mapa interno; ywai lo exporta a reglas v2) |
+| `skills.txt` | Allowlist de skills que ese agente puede cargar |
 
-## Personalizar un agente
+Instalado queda un solo archivo: `~/.config/opencode/agents/<nombre>.md` (frontmatter YAML + body).
+
+## Personalizar
 
 <Steps>
 
-1. Encontrar el perfil en `~/.config/opencode/agents/`
-2. Editar `AGENT.md` para cambiar comportamiento
-3. Editar `tools.json` para cambiar permisos
-4. Editar `skills.txt` para agregar/quitar skills
-5. Reiniciar opencode
+1. Editá el source (`ywai/agents/...` o el cache) o un agente de **proyecto**.
+2. `AGENT.md` = comportamiento.
+3. `permissions.json` = permisos. En el `.md` instalado se ven como `permissions:` (action / resource / effect).
+4. `skills.txt` = IDs permitidos. OpenCode 2 anuncia solo esos; el body se carga con la tool `skill`.
+5. `ywai update --agent opencode` y reiniciá OpenCode.
 
 </Steps>
+
+<Aside type="caution">
+No dejes agentes custom solo en `~/.config/opencode/agents/`. El próximo install los prunea. Usá `.opencode/agents/<nombre>.md` en el repo.
+</Aside>
 
 ## Configuración del proyecto
 
 ### AGENTS.md
-
-Creá un `AGENTS.md` en la raíz de tu proyecto para dar contexto:
 
 ```markdown
 # AGENTS.md
@@ -51,26 +61,24 @@ Creá un `AGENTS.md` en la raíz de tu proyecto para dar contexto:
 - TypeScript estricto
 - Commits convencionales
 - Tests con Vitest
-
-## Estructura
-- src/components/ — Componentes React
-- src/services/ — Lógica de negocio
 ```
 
-### Skills personalizados
+OpenCode 2 descubre `AGENTS.md` hacia arriba desde el directorio de trabajo.
+
+### Skills del proyecto
 
 ```
-mi-proyecto/.agents/skills/mi-skill/SKILL.md
+mi-proyecto/.opencode/skills/mi-skill/SKILL.md
 ```
 
-Registrar: `ywai skill-registry --cwd /mi/proyecto`
+o `.agents/skills/mi-skill/SKILL.md`. Reiniciá OpenCode. Para que un agente ywai pueda cargarlo, agregá el id a su `skills.txt`.
+
+### MCP
+
+En `opencode.json`, servers bajo `mcp.servers`. Para dejar uno apagado usá `"disabled": true` (`enabled` lo ignora v2).
 
 ## Verificar
 
 ```bash
 ywai doctor
 ```
-
-<Aside type="tip">
-Si usás opencode, la configuración se instala automáticamente en `~/.config/opencode/`.
-</Aside>

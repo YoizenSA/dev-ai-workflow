@@ -227,15 +227,6 @@ test_install_flags() {
     create_fake_agent "opencode" "opencode" "$temp_dir"
     export PATH="$temp_dir:$PATH"
     
-    # Test --global flag
-    local output
-    output=$(/tmp/ywai-test install --agent opencode --global --dry-run 2>&1)
-    if echo "$output" | grep -qi "global"; then
-        log_pass "--global flag recognized"
-    else
-        log_warn "--global flag not explicitly mentioned in output"
-    fi
-    
     # Test --preset flag
     output=$(/tmp/ywai-test install --agent opencode --preset minimal --dry-run 2>&1)
     if [ $? -eq 0 ]; then
@@ -384,18 +375,17 @@ test_update_command() {
     fi
 }
 
-# Test 13: Test skill-registry command
+# Test 13: skill-registry is retired (OpenCode v2 injects skills; .atl must not exist)
 test_skill_registry_command() {
-    log_test "Test skill-registry command"
-    
-    # Test skill-registry with --help
+    log_test "Test skill-registry command is retired"
+
     local output
-    output=$(/tmp/ywai-test skill-registry --help 2>&1)
-    
-    if echo "$output" | grep -q "skill-registry"; then
-        log_pass "ywai skill-registry command exists"
+    output=$(/tmp/ywai-test skill-registry --help 2>&1) || true
+
+    if echo "$output" | grep -qiE 'unknown command'; then
+        log_pass "ywai skill-registry is retired"
     else
-        log_fail "ywai skill-registry command not found"
+        log_fail "ywai skill-registry still exists"
     fi
 }
 

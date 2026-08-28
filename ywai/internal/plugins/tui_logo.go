@@ -12,13 +12,13 @@ import (
 // vendors the logo plugin source.
 const tuiPluginsSubdir = "tui-plugins"
 
-// tuiConfigName is opencode's TUI config file. TUI plugins are NOT
-// auto-discovered from a directory — they must be listed by absolute path in
-// the "plugin" array of this file, which lives next to opencode.json.
-const tuiConfigName = "tui.json"
+// tuiConfigName is OpenCode 2's client config (was tui.json in v1).
+// TUI plugins must be listed by absolute path in the "plugins" array.
+const tuiConfigName = "cli.json"
+const legacyTuiConfigName = "tui.json"
 
 // InstallTuiLogo vendors the ywai TUI logo plugin next to the given opencode
-// config and registers it in tui.json (plugin array + mouse capture, required
+// config and registers it in cli.json (plugins array + mouse capture, required
 // by the click easter eggs). configPath is the path to opencode.json(c).
 func InstallTuiLogo(configPath string) error {
 	bundle, err := config.TuiLogoBundlePath()
@@ -29,7 +29,7 @@ func InstallTuiLogo(configPath string) error {
 }
 
 // installTuiLogoWithBundle copies the logo source at bundleSrc into the
-// tui-plugins dir alongside configPath and patches tui.json to reference it.
+// tui-plugins dir alongside configPath and patches cli.json to reference it.
 // Split out from InstallTuiLogo so the copy + patch glue is unit testable
 // without resolving the real embedded/source bundle.
 func installTuiLogoWithBundle(configPath, bundleSrc string) error {
@@ -47,17 +47,26 @@ func installTuiLogoWithBundle(configPath, bundleSrc string) error {
 	return patchTuiLogo(tuiConfig, destTSX)
 }
 
-// patchTuiLogo registers pluginPath in tui.json's "plugin" array (idempotently)
+// patchTuiLogo registers pluginPath in cli.json's "plugins" array (idempotently)
 // and enables mouse capture so the logo click easter eggs work. It preserves
 // any existing plugin entries — including the array-form entries opencode uses
 // for parameterized plugins. Safe to call repeatedly.
 func patchTuiLogo(tuiConfigPath, pluginPath string) error {
 	root := map[string]any{}
-	if _, err := os.Stat(tuiConfigPath); err == nil {
+	src := tuiConfigPath
+	if _, err := os.Stat(tuiConfigPath); err != nil {
+		legacy := filepath.Join(filepath.Dir(tuiConfigPath), legacyTuiConfigName)
+		if _, lerr := os.Stat(legacy); lerr == nil {
+			src = legacy
+		} else {
+			src = ""
+		}
+	}
+	if src != "" {
 		var readErr error
-		root, readErr = config.ReadJSONC(tuiConfigPath)
+		root, readErr = config.ReadJSONC(src)
 		if readErr != nil {
-			return fmt.Errorf("read %s: %w", tuiConfigPath, readErr)
+			return fmt.Errorf("read %s: %w", src, readErr)
 		}
 	}
 
@@ -65,12 +74,11 @@ func patchTuiLogo(tuiConfigPath, pluginPath string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	// plugin array — append the logo path if not already present.
-	plugins, _ := root["plugin"].([]any)
+	plugins := v2Plugins(root)
 	if !containsPluginPath(plugins, pluginPath) {
 		plugins = append(plugins, pluginPath)
 	}
-	root["plugin"] = plugins
+	writePlugins(root, plugins)
 
 	// Mouse capture is required for the click easter eggs; enable it only when
 	// the user has not explicitly opted out (no existing key).
