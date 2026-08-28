@@ -3,12 +3,34 @@
 Drafting templates for work item bodies. For the commands that create them, see
 `workflows.md` → "Create a work item".
 
+## Default create contract (apply unless the user says otherwise)
+
+- **Type:** always `User Story`. No guessing from intent — if the user wants a
+  Bug/Task/Feature they say so explicitly.
+- **Assignee:** resolve at runtime — never hardcode a name. Run `ado wi list`
+  (it lists items assigned to the authenticated user, `@Me` in the WIQL) and
+  read the `@<name>` column; pass that name as `--assigned "<name>"`.
+- **Area Path:** ask the user first: is this **Infra** or **DESA**?
+  - Infra → `--area "Infra\\Infra Kanban"`
+  - DESA (default) → `--area "ySocial\\Kanban"`
+  Never pass `--field System.AreaPath=...` — the `--area` shortcut is the
+  supported path and validates against the process. If the work belongs to
+  another project, confirm the area value before creating.
+- **State:** do not pass `--state` unless the user asked; let the process default apply.
+- **Parent:** only when the user names one (or `ado wi create-child`).
+
 ## Field formats (read this first)
 
 - **`description`** and everything inside it (repro steps, acceptance criteria,
-  DoD): write **HTML** — `<p>`, `<ul>`, `<ol>`, `<li>`, `<strong>`, `<em>`.
-  Azure DevOps stores rich-text fields as HTML; Markdown for work item fields is
-  an opt-in migration per organization, so HTML is the safe default.
+  DoD): write valid **Azure DevOps rich-text HTML** — NOT Markdown.
+  - Allowed tags only: `<p>`, `<br/>`, `<strong>`/`<b>`, `<em>`/`<i>`, `<ul>`,
+    `<ol>`, `<li>`, `<h1>`–`<h3>`, `<a href>`. No `<script>`, no CSS, no Markdown.
+  - One paragraph per block: `<p>...</p>`. Lists: `<ul>`/`<ol>` with `<li>`.
+    Emphasis: `<strong>`. Line break: `<br/>`.
+  - Forbidden in `--description`: `**bold**`, `# heading`, `- item`, backticks,
+    pipe tables. ADO stores rich-text fields as HTML and does not render Markdown
+    (it is an opt-in migration per org, so HTML is the safe default).
+  - Escape literal `<`, `>`, `&` as entities when they are content, not tags.
 - **Comments** (`ado wi comment`, `ado wi update --comment`): write **Markdown**.
   The comments API renders it.
 - The `ado` CLI passes values through verbatim — it converts nothing.
@@ -16,6 +38,8 @@ Drafting templates for work item bodies. For the commands that create them, see
   inside `--description`. Only pass flags that `commands.md` lists.
 
 ## Choosing a type
+
+Default is **User Story**. Only deviate when the user explicitly says so.
 
 Map the request to an intent, then resolve the real type name with `ado wi types` —
 type names differ per process (Agile has `User Story`, Scrum has `Product Backlog
@@ -126,9 +150,11 @@ Break a Feature down into children with `ado wi create-child --parent <id>`.
 
 | Field | Rule |
 | --- | --- |
-| `--title` | Required. Max 256 characters. |
-| `--description` | HTML. |
+| `--title` | Required. Max 256 characters. Plain text, no HTML. |
+| `--description` | Azure DevOps HTML only (see "Field formats"); goes inside `--description`. |
+| `--type` | Default `User Story` (see "Default create contract"). |
+| `--assigned` | Resolved at runtime from `ado wi list` (`@<name>` column) — never hardcoded; use "user named someone else" only when told. |
+| `--area` | Asked first (Infra vs DESA). Infra → `Infra\\Infra Kanban`; DESA → `ySocial\\Kanban`. Never `--field System.AreaPath`. |
 | `--priority` | 1 (highest) to 4 (lowest). |
 | `--tags` | Semicolon-separated (`a;b`). Only tags the user asked for. |
-| `--assigned` | Only when the user named a person. |
 | `--state` | Only when the user asked for a specific state; otherwise let the process default apply. |

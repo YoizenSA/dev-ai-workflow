@@ -16,6 +16,7 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - Run every operation through the `ado` CLI (`ado <group> <sub>`). One command per action.
 - Inspect before mutating: read PR/WI state before `vote`, `comment`, `update`, `create`, `chain`.
 - Never invent IDs, repos, or branch names — discover them with a read command first.
+- Work item creation defaults (unless the user says otherwise): always `--type "User Story"`; assignee resolved at runtime from `ado wi list` (the `@<name>` column is the current user) — never hardcode a name; area path is asked first: `Infra` → `--area "Infra\\Infra Kanban"`, otherwise (`DESA`) → `--area "ySocial\\Kanban"` — never `--field System.AreaPath`; `--description` is Azure DevOps HTML, not Markdown (see `references/templates.md`).
 - `[repo]` is optional; omit it to auto-discover a PR by ID. `--profile <name>` overrides the active profile.
 
 ## Decision Gates

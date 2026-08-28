@@ -24,10 +24,13 @@ Guidelines:
 
 1. Check the project rules first: read `[work_item.create]` in `.adoconfig.toml` (enabled? allowed types? required fields?).
 2. Unsure about valid types: `ado wi types` — names differ per process (`User Story` vs `Product Backlog Item` vs `Requirement`).
-3. Draft the body with `templates.md` — `--description` is HTML, comments are Markdown.
-4. Create: `ado wi create --title "<t>" --type <Type> [--description "<d>"] [--priority <n>] [--parent <id>]`.
-5. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
-6. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+3. Draft the body with `templates.md` — `--description` is Azure DevOps HTML, comments are Markdown.
+4. Resolve the assignee: `ado wi list` → read the `@<name>` column (that is the authenticated user). Never hardcode a name.
+5. Ask the user which area: **Infra** or **DESA** (when the request does not make it obvious). Infra → `--area "Infra\Infra Kanban"`; DESA → `--area "ySocial\Kanban"`. Never `--field System.AreaPath`.
+6. Create (defaults from the create contract unless the user says otherwise):
+   `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" [--description "<d>"] [--priority <n>] [--parent <id>]`
+7. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
+8. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
 
 Confirm with the user before creating when the request is ambiguous, the item is
 high-impact (Feature/Epic), or no type was specified.
