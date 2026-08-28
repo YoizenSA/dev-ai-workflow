@@ -26,11 +26,14 @@ Guidelines:
 2. Unsure about valid types: `ado wi types` — names differ per process (`User Story` vs `Product Backlog Item` vs `Requirement`).
 3. Draft the body with `templates.md` — `--description` is Azure DevOps HTML, comments are Markdown.
 4. Resolve the assignee: `ado wi list` → read the `@<name>` column (that is the authenticated user). Never hardcode a name.
-5. Ask the user which area: **Infra** or **DESA** (when the request does not make it obvious). Infra → `--area "Infra\Infra Kanban"`; DESA → `--area "ySocial\Kanban"`. Never `--field System.AreaPath`.
-6. Create (defaults from the create contract unless the user says otherwise):
-   `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" [--description "<d>"] [--priority <n>] [--parent <id>]`
-7. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
-8. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+5. Ask and lock the kanban: **Social Kanban** or **Infra Kanban**? (Always ask.)
+   - Social Kanban → `--profile ysocial` + `--area "ySocial\Kanban"`
+   - Infra Kanban → `--area "Infra\Infra Kanban"`
+6. Ask **Producto** (`ySocial` | `yFlow` | `yWhatsApp` | `yMobile` | `interno` | `yIA`) and **Sponsors** (`Dev Area` | `Implementacion` | `Producto` | `Soporte`). Both fields are required by the project template — pass `--field "Custom.USProducto=<v>"` and `--field "Custom.Sponsors=<v>"`.
+7. Create (defaults from the create contract unless the user says otherwise):
+   `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" --field "Custom.USProducto=<producto>" --field "Custom.Sponsors=<sponsor>" [--description "<d>"] [--priority <n>] [--parent <id>]`
+8. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
+9. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
 
 Confirm with the user before creating when the request is ambiguous, the item is
 high-impact (Feature/Epic), or no type was specified.

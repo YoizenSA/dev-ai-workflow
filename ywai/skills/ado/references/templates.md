@@ -5,17 +5,28 @@ Drafting templates for work item bodies. For the commands that create them, see
 
 ## Default create contract (apply unless the user says otherwise)
 
+**First question, always: ¿Social Kanban o Infra Kanban?** Then collect the rest.
+
 - **Type:** always `User Story`. No guessing from intent — if the user wants a
   Bug/Task/Feature they say so explicitly.
 - **Assignee:** resolve at runtime — never hardcode a name. Run `ado wi list`
   (it lists items assigned to the authenticated user, `@Me` in the WIQL) and
   read the `@<name>` column; pass that name as `--assigned "<name>"`.
-- **Area Path:** ask the user first: is this **Infra** or **DESA**?
-  - Infra → `--area "Infra\\Infra Kanban"`
-  - DESA (default) → `--area "ySocial\\Kanban"`
-  Never pass `--field System.AreaPath=...` — the `--area` shortcut is the
-  supported path and validates against the process. If the work belongs to
-  another project, confirm the area value before creating.
+- **Kanban type (always ask):**
+  - **Social Kanban** → `--profile ysocial` + `--area "ySocial\\Kanban"`
+  - **Infra Kanban** → `--area "Infra\\Infra Kanban"` (use the project/profile
+    that owns that area; if the active profile rejects it, ask the user which
+    profile to switch to)
+- **Producto (always ask):** `--field "Custom.USProducto=<v>"` — values:
+  `ySocial`, `yFlow`, `yWhatsApp`, `yMobile`, `interno`, `yIA`.
+  Infra work is usually `interno`.
+- **Sponsors (always ask):** `--field "Custom.Sponsors=<v>"` — values:
+  `Dev Area`, `Implementacion`, `Producto`, `Soporte`.
+- **Template rules (verified):** ADO rejects the create (`TF401320`) when
+  `Custom.USProducto` or `Custom.Sponsors` are missing — always pass both on
+  every `User Story` create.
+- **Area:** never `--field System.AreaPath` — always the `--area` shortcut
+  (validates against the process). No `--area` means project root.
 - **State:** do not pass `--state` unless the user asked; let the process default apply.
 - **Parent:** only when the user names one (or `ado wi create-child`).
 
@@ -154,7 +165,9 @@ Break a Feature down into children with `ado wi create-child --parent <id>`.
 | `--description` | Azure DevOps HTML only (see "Field formats"); goes inside `--description`. |
 | `--type` | Default `User Story` (see "Default create contract"). |
 | `--assigned` | Resolved at runtime from `ado wi list` (`@<name>` column) — never hardcoded; use "user named someone else" only when told. |
-| `--area` | Asked first (Infra vs DESA). Infra → `Infra\\Infra Kanban`; DESA → `ySocial\\Kanban`. Never `--field System.AreaPath`. |
+| `--area` | Social Kanban → `--profile ysocial` + `--area "ySocial\\Kanban"`; Infra Kanban → `--area "Infra\\Infra Kanban"`. Never `--field System.AreaPath`. |
+| `Custom.USProducto` | Required (`--field "Custom.USProducto=<v>"`): `ySocial`, `yFlow`, `yWhatsApp`, `yMobile`, `interno`, `yIA`. |
+| `Custom.Sponsors` | Required (`--field "Custom.Sponsors=<v>"`): `Dev Area`, `Implementacion`, `Producto`, `Soporte`. |
 | `--priority` | 1 (highest) to 4 (lowest). |
 | `--tags` | Semicolon-separated (`a;b`). Only tags the user asked for. |
 | `--state` | Only when the user asked for a specific state; otherwise let the process default apply. |
