@@ -454,6 +454,38 @@ func TestInstall_Remote_HappyPath(t *testing.T) {
 	}
 }
 
+// ─── Test 3b: TestInstall_Remote_ClientAuthSkipsProbe ─────────────────────
+
+// TestInstall_Remote_ClientAuthSkipsProbe pins the client-driven-auth
+// path: a remote entry with ClientAuth=true must skip the probe (the
+// endpoint answers 401 until the agent client signs in) and still write
+// the config. The URL points at a closed port — if Install tried to
+// probe it, the connect would be refused and Install would fail with
+// ErrProbeUnreachable. Success proves the probe was skipped.
+func TestInstall_Remote_ClientAuthSkipsProbe(t *testing.T) {
+	entry := CatalogEntry{
+		ID:         "meta-devtools",
+		Name:       "Meta Developer Tools",
+		Type:       "remote",
+		URL:        "http://127.0.0.1:1/mcp", // closed port: probe would fail
+		ClientAuth: true,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tools, err := Install(ctx, entry, InstallOptions{
+		Target:  "opencode",
+		EntryID: "meta-devtools",
+	})
+	if err != nil {
+		t.Fatalf("Install(client-auth remote) unexpected error: %v", err)
+	}
+	if len(tools) != 0 {
+		t.Errorf("Install(client-auth remote) tools = %v, want empty (no probe)", tools)
+	}
+}
+
 // ─── Test 4: TestInstall_PrereqMissing ────────────────────────────────────
 
 // TestInstall_PrereqMissing pins the prereq-check failure path. When the

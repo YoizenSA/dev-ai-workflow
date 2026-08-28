@@ -19,7 +19,7 @@ import (
 //
 // Canonical IDs (keep in sync with catalog.go). `*` = required secret env.
 //
-//   context7, microsoft-learn, jam (remote)
+//   context7, microsoft-learn, jam, meta-devtools (remote)
 //   chrome-devtools, playwright, git, github*, postgres*, mysql*, docker
 //   engram, graft, filesystem
 //   brave-search*, puppeteer, codemod
@@ -68,7 +68,7 @@ var _ = CatalogEntry{}
 // TestCatalog_Len pins the size of the catalog. If a future addition
 // sneaks in without updating this test, it fails.
 func TestCatalog_Len(t *testing.T) {
-	const want = 16
+	const want = 17
 	got := len(Catalog())
 	if got != want {
 		t.Errorf("len(Catalog()) = %d, want %d", got, want)
@@ -82,6 +82,7 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"context7",
 		"microsoft-learn",
 		"jam",
+		"meta-devtools",
 		"chrome-devtools",
 		"playwright",
 		"git",
@@ -365,13 +366,39 @@ func TestCatalogByID_NoRequiredEnv_Context7(t *testing.T) {
 	}
 }
 
+// TestCatalogByID_Remote_MetaDevtools pins the Meta Developer Tools
+// entry: a remote server whose authentication is client-driven. The
+// entry must not declare ywai-managed OAuth (AuthType="") — ywai
+// cannot run Meta's sign-in flow — and must flag ClientAuth so Install
+// skips the probe (the endpoint answers 401 until the client signs in).
+func TestCatalogByID_Remote_MetaDevtools(t *testing.T) {
+	entry, ok := CatalogByID("meta-devtools")
+	if !ok {
+		t.Fatal("CatalogByID(meta-devtools) ok=false, want true")
+	}
+	if entry.Type != "remote" {
+		t.Errorf("meta-devtools.Type = %q, want \"remote\"", entry.Type)
+	}
+	if entry.URL != "https://mcp.facebook.com/devtools" {
+		t.Errorf("meta-devtools.URL = %q, want \"https://mcp.facebook.com/devtools\"",
+			entry.URL)
+	}
+	if !entry.ClientAuth {
+		t.Errorf("meta-devtools.ClientAuth = false, want true (client drives OAuth)")
+	}
+	if entry.AuthType != "" {
+		t.Errorf("meta-devtools.AuthType = %q, want \"\" (not ywai-managed OAuth)",
+			entry.AuthType)
+	}
+}
+
 // TestCatalogByID_SkipInstall_Remote pins that every remote entry
 // has an empty InstallCmd. The install UI must skip these — there is
 // nothing to install; the server is reached over HTTP. If any remote
 // entry accidentally gets an InstallCmd, the UI will show a
 // misleading "install" button.
 func TestCatalogByID_SkipInstall_Remote(t *testing.T) {
-	remotes := []string{"context7", "microsoft-learn", "jam"}
+	remotes := []string{"context7", "microsoft-learn", "jam", "meta-devtools"}
 	for _, id := range remotes {
 		entry, ok := CatalogByID(id)
 		if !ok {

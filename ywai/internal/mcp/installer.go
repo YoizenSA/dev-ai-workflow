@@ -186,26 +186,34 @@ func Install(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]st
 
 	// 3. Probe step.
 	progress(StepProbing, 70, "verifying MCP responds")
-	probeEnvSlice, _, _ := MergeEnv(os.Environ(), opts.Credentials, secretsFromEntry(entry))
-	probeEnvMap := envSliceToMap(probeEnvSlice)
 	var tools []string
-	var probeErr error
-	switch entry.Type {
-	case "remote":
-		tools, probeErr = DiscoverHTTP(ctx, entry.URL)
-	case "local":
-		tools, probeErr = DiscoverStdio(ctx, entry.Command, probeEnvMap)
-	default:
-		return nil, fmt.Errorf("install: unknown entry type %q", entry.Type)
-	}
-	if probeErr != nil {
-		if errors.Is(probeErr, context.DeadlineExceeded) || errors.Is(probeErr, context.Canceled) {
-			return nil, fmt.Errorf("probe timed out: %w", ErrProbeTimeout)
+	if entry.ClientAuth {
+		// The client signs in at first use; ywai has no token, so the
+		// endpoint answers 401 and a probe can never succeed. Skip it —
+		// the static Tools list is the fallback for display.
+		progress(StepProbing, 75, "skipping probe: authentication is handled by the client")
+	} else {
+		probeEnvSlice, _, _ := MergeEnv(os.Environ(), opts.Credentials, secretsFromEntry(entry))
+		probeEnvMap := envSliceToMap(probeEnvSlice)
+
+		var probeErr error
+		switch entry.Type {
+		case "remote":
+			tools, probeErr = DiscoverHTTP(ctx, entry.URL)
+		case "local":
+			tools, probeErr = DiscoverStdio(ctx, entry.Command, probeEnvMap)
+		default:
+			return nil, fmt.Errorf("install: unknown entry type %q", entry.Type)
 		}
-		return nil, fmt.Errorf("probe failed: %w", ErrProbeUnreachable)
-	}
-	if len(tools) == 0 {
-		return nil, fmt.Errorf("probe returned no tools: %w", ErrProbeNoTools)
+		if probeErr != nil {
+			if errors.Is(probeErr, context.DeadlineExceeded) || errors.Is(probeErr, context.Canceled) {
+				return nil, fmt.Errorf("probe timed out: %w", ErrProbeTimeout)
+			}
+			return nil, fmt.Errorf("probe failed: %w", ErrProbeUnreachable)
+		}
+		if len(tools) == 0 {
+			return nil, fmt.Errorf("probe returned no tools: %w", ErrProbeNoTools)
+		}
 	}
 
 	// 4. Configure step.

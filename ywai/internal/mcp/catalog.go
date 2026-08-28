@@ -44,6 +44,15 @@ type CatalogEntry struct {
 	Scopes           []string
 	AuthorizationURL string
 	TokenURL         string
+
+	// ClientAuth marks a remote entry whose authentication is run by the
+	// agent client itself (standard MCP OAuth sign-in flow in the client),
+	// not by ywai. ywai cannot obtain a token for these servers (no
+	// client_id / no local PKCE flow), so Install skips both its OAuth
+	// step and the probe (the endpoint answers 401 until the client signs
+	// in). The tools list is the static fallback; the client discovers the
+	// real tool set at runtime.
+	ClientAuth bool
 }
 
 // catalog is the package-private backing slice. Callers must not mutate it.
@@ -71,6 +80,15 @@ var catalog = []CatalogEntry{
 		Type: "remote", URL: "https://mcp.jam.dev/mcp",
 		Tools: []string{"get_bug", "list_bugs", "create_bug", "search_bugs"},
 		Docs:  "https://jam.dev",
+	},
+	{
+		ID: "meta-devtools", Name: "Meta Developer Tools",
+		Description: "Manage Meta apps, webhooks, compliance, app status, and search developer docs",
+		Category:    "devtools", Icon: "🟦",
+		Type: "remote", URL: "https://mcp.facebook.com/devtools",
+		ClientAuth: true,
+		Tools:      []string{"devtools_discovery", "devtools_app_list", "devtools_app", "devtools_webhook_manage", "devtools_webhook_test", "devtools_api_changelog"},
+		Docs:       "https://developers.facebook.com/documentation/mcp/devtools-mcp",
 	},
 	{
 		ID: "chrome-devtools", Name: "Chrome DevTools",

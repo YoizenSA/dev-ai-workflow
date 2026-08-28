@@ -572,14 +572,24 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 	var entryType string
 	var command []string
 	var url string
+	clientAuth := false
 
 	if ce, ok := mcp.CatalogByID(id); ok {
 		entryType = ce.Type
 		command = ce.Command
 		url = ce.URL
+		clientAuth = ce.ClientAuth
 	}
 
 	item := mcpHealthItem{ID: id}
+
+	if clientAuth {
+		// The agent client signs in at first use; ywai has no token, so
+		// a HEAD probe would answer 401 and read as "unhealthy" even when
+		// the server is fine. Report unknown: ywai cannot verify it.
+		item.Status = "unknown"
+		return item
+	}
 
 	switch entryType {
 	case "local":
