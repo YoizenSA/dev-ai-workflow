@@ -74,7 +74,7 @@ func patchTuiLogo(tuiConfigPath, pluginPath string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins := v2Plugins(root)
+	plugins := openCodePlugins(root)
 	if !containsPluginPath(plugins, pluginPath) {
 		plugins = append(plugins, pluginPath)
 	}

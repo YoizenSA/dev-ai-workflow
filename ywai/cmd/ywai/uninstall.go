@@ -338,16 +338,16 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 			}
 		}
 	}
-	delete(root, "agent")
+	delete(root, "agents")
 	for name := range merged {
 		if owned[filepath.Base(name)] {
 			delete(merged, name)
 		}
 	}
 	if len(merged) == 0 {
-		delete(root, "agents")
+		delete(root, "agent")
 	} else {
-		root["agents"] = merged
+		root["agent"] = merged
 	}
 	return config.WriteJSONC(configPath, root)
 }
@@ -425,7 +425,7 @@ const ywaiSkillMarker = ".ywai-extra"
 func ywaiPluginLists(root map[string]any) []any {
 	var out []any
 	seen := map[string]bool{}
-	for _, key := range []string{"plugins", "plugin"} {
+	for _, key := range []string{"plugin", "plugins"} {
 		list, _ := root[key].([]any)
 		for _, v := range list {
 			s, ok := v.(string)
@@ -444,7 +444,7 @@ func ywaiPluginLists(root map[string]any) []any {
 }
 
 // countYwaiConfigRefs reports how many plugin entries in the agent config
-// point into the ywai plugins directory (v2 "plugins" plus leftover "plugin").
+// point into the ywai plugins directory (v1 "plugin" plus leftover v2 "plugins").
 func countYwaiConfigRefs(configPath string) int {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
@@ -459,15 +459,15 @@ func countYwaiConfigRefs(configPath string) int {
 	return n
 }
 
-// stripYwaiConfigRefs drops ywai plugin entries from "plugins", drains leftover
-// "plugin", and never writes the v1 key back.
+// stripYwaiConfigRefs drops ywai plugin entries from "plugin", drains a
+// leftover v2 "plugins" array, and never writes the v2 key back.
 func stripYwaiConfigRefs(configPath string) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
 	list := ywaiPluginLists(root)
-	delete(root, "plugin")
+	delete(root, "plugins")
 	kept := make([]any, 0, len(list))
 	for _, v := range list {
 		if s, ok := v.(string); ok && strings.Contains(s, "ywai-plugins") {
@@ -476,9 +476,9 @@ func stripYwaiConfigRefs(configPath string) error {
 		kept = append(kept, v)
 	}
 	if len(kept) == 0 {
-		delete(root, "plugins")
+		delete(root, "plugin")
 	} else {
-		root["plugins"] = kept
+		root["plugin"] = kept
 	}
 	return config.WriteJSONC(configPath, root)
 }

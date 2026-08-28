@@ -10,21 +10,16 @@ import (
 )
 
 // opencodeOrchestratorMD is the shape InstallOpenCodeMarkdown writes for the
-// orchestrator: a v2 permissions rule array with edit/shell allowed, plus a
-// body.
+// orchestrator: a nested permission map with edit/bash allowed, plus a body.
 const opencodeOrchestratorMD = `---
 description: Technical lead
 mode: all
-permissions:
-  - action: shell
-    resource: "*"
-    effect: allow
-  - action: edit
-    resource: "*"
-    effect: allow
-  - action: read
-    resource: "*"
-    effect: allow
+permission:
+  read: allow
+  edit: allow
+  write: allow
+  bash:
+    "*": allow
 ---
 
 # Orchestrator
@@ -66,15 +61,12 @@ func TestApplyOrchestrationPolicy_DeepDeniesSoloWriteAndInjectsSection(t *testin
 	}
 	content := string(got)
 
-	for _, want := range []string{
-		"action: edit\n    resource: \"*\"\n    effect: deny",
-		"action: shell\n    resource: \"*\"\n    effect: deny",
-	} {
+	for _, want := range []string{"  edit: deny", "  write: deny", "  bash: deny"} {
 		if !strings.Contains(content, want) {
-			t.Errorf("expected %q in permission rules, got:\n%s", want, content)
+			t.Errorf("expected %q in permission block, got:\n%s", want, content)
 		}
 	}
-	if !strings.Contains(content, "action: read\n    resource: \"*\"\n    effect: allow") {
+	if !strings.Contains(content, "  read: allow") {
 		t.Error("read must stay allow when solo-write is denied")
 	}
 	if !strings.Contains(content, "**default_mode**: full") || !strings.Contains(content, "**allow_solo_write**: false") {
@@ -97,16 +89,16 @@ func TestApplyOrchestrationPolicy_DeepDeniesSoloWriteAndInjectsSection(t *testin
 		t.Fatal(err)
 	}
 	content2 := string(got2)
-	for _, want := range []string{
-		"action: edit\n    resource: \"*\"\n    effect: allow",
-		"action: shell\n    resource: \"*\"\n    effect: allow",
-	} {
+	for _, want := range []string{"  edit: allow", "  write: allow"} {
 		if !strings.Contains(content2, want) {
 			t.Errorf("expected %q restored after solo-write profile, got:\n%s", want, content2)
 		}
 	}
-	if strings.Contains(content2, "action: shell\n    resource: \"*\"\n    effect: deny") {
-		t.Error("the shell deny must not survive a solo-write profile")
+	if !strings.Contains(content2, "  bash:\n") || !strings.Contains(content2, `"*": allow`) {
+		t.Errorf("bash must be restored to the nested allow block, got:\n%s", content2)
+	}
+	if strings.Contains(content2, "  bash: deny") {
+		t.Error("bash: deny must not survive a solo-write profile")
 	}
 	if !strings.Contains(content2, "**default_mode**: solo") {
 		t.Errorf("expected solo policy section, got:\n%s", content2)

@@ -25,10 +25,9 @@ var backgroundAgentsPermissions = map[string]string{
 // of being double-loaded by directory discovery.
 const ywaiPluginsSubdir = "ywai-plugins"
 
-// RemoveBackgroundAgents removes the legacy custom delegation plugin. OpenCode
-// v2 provides its own foreground/background `subagent` tool, so retaining the
-// shim shadows the native runtime and leaves sync calls waiting on obsolete
-// event semantics.
+// RemoveBackgroundAgents unwires the delegation plugin from a config. OpenCode
+// v1 has no native delegation tool, so this is only used to clean up, never as
+// part of a normal install: InstallBackgroundAgents is what wires it in.
 func RemoveBackgroundAgents(configPath string) error {
 	var root map[string]any
 	if _, err := os.Stat(configPath); err == nil {
@@ -43,7 +42,7 @@ func RemoveBackgroundAgents(configPath string) error {
 		return fmt.Errorf("stat %s: %w", configPath, err)
 	}
 
-	plugins := v2Plugins(root)
+	plugins := openCodePlugins(root)
 	kept := make([]any, 0, len(plugins))
 	for _, plugin := range plugins {
 		path := ""
@@ -58,17 +57,16 @@ func RemoveBackgroundAgents(configPath string) error {
 	}
 	writePlugins(root, kept)
 
-	rules, _ := root["permissions"].([]any)
-	keptRules := make([]any, 0, len(rules))
-	for _, raw := range rules {
-		if rule, ok := raw.(map[string]any); ok {
-			if action, _ := rule["action"].(string); action == "delegate" || action == "delegation_*" {
-				continue
-			}
+	if perms, ok := root["permission"].(map[string]any); ok {
+		for action := range backgroundAgentsPermissions {
+			delete(perms, action)
 		}
-		keptRules = append(keptRules, raw)
+		if len(perms) == 0 {
+			delete(root, "permission")
+		} else {
+			root["permission"] = perms
+		}
 	}
-	root["permissions"] = keptRules
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
@@ -127,36 +125,27 @@ func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins := v2Plugins(root)
+	plugins := openCodePlugins(root)
 	if !containsPluginPath(plugins, pluginJSPath) {
 		plugins = append(plugins, pluginJSPath)
 	}
 	writePlugins(root, plugins)
 
-	// Top-level v2 permissions array — append one allow rule per action when
-	// the config does not already carry a rule for it.
-	rules, _ := root["permissions"].([]any)
-	covered := map[string]bool{}
-	for _, raw := range rules {
-		if r, ok := raw.(map[string]any); ok {
-			if action, ok := r["action"].(string); ok {
-				covered[action] = true
-			}
-		}
+	// Top-level v1 permission map: add one entry per delegation action, without
+	// clobbering a value the user already set.
+	perms, _ := root["permission"].(map[string]any)
+	if perms == nil {
+		perms = map[string]any{}
 	}
-	for action := range backgroundAgentsPermissions {
-		if covered[action] {
+	for action, effect := range backgroundAgentsPermissions {
+		if _, covered := perms[action]; covered {
 			continue
 		}
-		rules = append(rules, map[string]any{
-			"action":   action,
-			"resource": "*",
-			"effect":   "allow",
-		})
+		perms[action] = effect
 	}
-	root["permissions"] = rules
+	root["permission"] = perms
 
-	delete(root, "permission")
+	delete(root, "permissions")
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
@@ -179,16 +168,17 @@ func containsPluginPath(plugins []any, path string) bool {
 	return false
 }
 
-// v2Plugins returns the OpenCode v2 "plugins" array. If only a legacy "plugin"
-// key exists, those entries are migrated. The legacy key is always deleted.
-func v2Plugins(root map[string]any) []any {
+// openCodePlugins returns the OpenCode v1 "plugin" array. If only a v2
+// "plugins" key exists, those entries are migrated. The v2 key is always
+// deleted so the file never carries both.
+func openCodePlugins(root map[string]any) []any {
 	var out []any
-	if raw, ok := root["plugins"]; ok {
+	if raw, ok := root["plugin"]; ok {
 		out = pluginsToSlice(raw)
-	} else if raw, ok := root["plugin"]; ok {
+	} else if raw, ok := root["plugins"]; ok {
 		out = pluginsToSlice(raw)
 	}
-	delete(root, "plugin")
+	delete(root, "plugins")
 	if out == nil {
 		return []any{}
 	}
@@ -210,8 +200,8 @@ func pluginsToSlice(raw any) []any {
 }
 
 func writePlugins(root map[string]any, plugins []any) {
-	delete(root, "plugin")
-	root["plugins"] = plugins
+	delete(root, "plugins")
+	root["plugin"] = plugins
 }
 
 // copyFile copies src to dst, truncating dst if it exists.

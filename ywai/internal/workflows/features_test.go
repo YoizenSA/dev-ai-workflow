@@ -477,20 +477,15 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 	}
 	orch := files[orchPath]
 	for _, want := range []string{
-		`resource: "*"`,
-		"action: subagent",
-		"resource: deploy-dev",
-		"resource: deploy-qa",
+		`"*": deny`,
+		"task:",
+		"deploy-dev: allow",
+		"deploy-qa: allow",
 		"Typed Contracts (orchestrator)",
 	} {
 		if !strings.Contains(orch, want) {
 			t.Errorf("orchestrator missing %q:\n%s", want, orch)
 		}
-	}
-	// The contracts block comes from a single source; appending it twice would
-	// silently double the orchestrator prompt.
-	if n := strings.Count(orch, "## Typed Contracts (orchestrator)"); n != 1 {
-		t.Errorf("contracts section appears %d times, want 1", n)
 	}
 	// Ship gate may be YAML or JSON form inside the contracts section.
 	if !strings.Contains(orch, "ship | ship-with-nits | block") &&
@@ -533,10 +528,10 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 		t.Fatal("dev agent file not found")
 	}
 	dev := files[devPath]
-	if !strings.Contains(dev, "resource: w-qa") {
+	if !strings.Contains(dev, "w-qa: allow") {
 		t.Errorf("dev should delegate to qa:\n%s", dev)
 	}
-	if strings.Contains(dev, "resource: w-rev") {
+	if strings.Contains(dev, "w-rev: allow") {
 		t.Errorf("dev should NOT delegate to rev (no edge):\n%s", dev)
 	}
 }

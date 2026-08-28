@@ -30,7 +30,7 @@ func RemoveBrokenLegacyOpenCodePlugins(configPath string) error {
 	}
 	blocked := []string{"@dietrichgebert/ponytail", "background-agents.js", "advisor.js"}
 	filtered := make([]any, 0)
-	for _, raw := range v2Plugins(root) {
+	for _, raw := range openCodePlugins(root) {
 		s, ok := raw.(string)
 		if ok && anyContains(s, blocked) {
 			continue

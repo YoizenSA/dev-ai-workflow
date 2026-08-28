@@ -262,34 +262,31 @@ func extractModeFromFrontmatter(fm string) string {
 	return ""
 }
 
-// updatePermissionsInFrontmatter replaces the permissions block (v2 rule
-// array, or legacy permission:/tools: maps) with a fresh v2 array rendered
-// from the given internal permission map. The subagent (delegation) rules are
-// preserved: the map carried by this endpoint is tool permissions only. If no
-// block exists, one is added. Returns the updated full markdown content.
+// updatePermissionsInFrontmatter replaces the permission block with a fresh v1
+// `permission:` map rendered from the given internal permission map. The
+// delegation (task) block is preserved: the map carried by this endpoint is
+// tool permissions only. If no block exists, one is added. Returns the updated
+// full markdown content.
 func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
-	fm, _ := parseFrontmatter(content)
-
-	// Preserve the delegation graph: swap tool rules, keep subagent rules.
-	var subagentRules []agents.PermissionRule
-	if fm != "" {
-		if existing, ok := agents.ParsePermissionRulesYAML(fm); ok {
-			for _, r := range existing {
-				if r.Action == "subagent" {
-					subagentRules = append(subagentRules, r)
-				}
-			}
+	// Preserve the delegation graph: swap tool permissions, keep the task map.
+	merged := map[string]string{}
+	for k, v := range perms {
+		merged[k] = v
+	}
+	updated := replacePermissionsBlock(content, merged)
+	if task, ok := agents.ReadTaskPermission(content); ok && len(task) > 0 {
+		if injected, ok := agents.InjectTaskPermission(updated, task); ok {
+			return injected
 		}
 	}
-	rules := append(agents.RulesFromPermissionMap("", perms), subagentRules...)
-	return replacePermissionsBlock(content, rules)
+	return updated
 }
 
-// replacePermissionsBlock swaps the frontmatter permissions block (v2 rule
-// array, dropping any legacy permission:/tools: maps) for a freshly rendered
-// one, leaving every other frontmatter key untouched. Content without
+// replacePermissionsBlock swaps the frontmatter permission block (dropping any
+// leftover v2 permissions: array and legacy tools: map) for a freshly rendered
+// v1 map, leaving every other frontmatter key untouched. Content without
 // frontmatter gets a minimal frontmatter with the block added.
-func replacePermissionsBlock(content string, rules []agents.PermissionRule) string {
+func replacePermissionsBlock(content string, perms map[string]string) string {
 	fm, body := parseFrontmatter(content)
 
 	var b strings.Builder
@@ -305,9 +302,8 @@ func replacePermissionsBlock(content string, rules []agents.PermissionRule) stri
 			indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 			trimmed := strings.TrimSpace(line)
 			if !indented && trimmed != "" {
-				// `group:` is not a valid opencode v2 agent key; keeping it
-				// sends the file down the legacy v1 decode path, which drops
-				// the v2 permissions array. Group lives in the sidecar.
+				// Group membership lives in the sidecar, not the frontmatter,
+				// so the same file stays readable by both opencode majors.
 				if strings.HasPrefix(trimmed, "group:") {
 					inDropped = false
 					continue
@@ -330,9 +326,7 @@ func replacePermissionsBlock(content string, rules []agents.PermissionRule) stri
 	} else {
 		b.WriteString("description: agent\n")
 	}
-	for _, line := range agents.RenderPermissionRulesYAML(rules) {
-		b.WriteString(line + "\n")
-	}
+	b.WriteString(agents.RenderPermissionMapYAML("", agents.AgentProfile{Permission: perms}))
 	b.WriteString("---\n\n")
 	b.WriteString(body)
 	return b.String()

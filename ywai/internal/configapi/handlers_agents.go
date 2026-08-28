@@ -936,42 +936,18 @@ func upsertPolicySection(content, section string) string {
 }
 
 // applySoloWritePermissions flips the orchestrator's write surface on the
-// installed markdown: the v2 rules' broad edit/shell entries (and the pi/omp/
-// claude tools: list). The flip is symmetric — a deny→allow cycle restores
-// edit and shell to the allow posture with the guardrail denials intact.
-// Verify allowlist patterns are dropped on deny (they would keep granting
-// shell under a broad deny) and are not reconstructed on re-allow.
+// installed markdown: opencode permission: block scalars (edit/write) + the
+// bash block, and the pi/omp/claude tools: list. The flip is symmetric — a
+// deny→allow cycle restores edit/write and bash to the baseline posture.
 func applySoloWritePermissions(content string, allow bool) string {
-	fm, _ := parseFrontmatter(content)
-	if fm == "" {
-		return content
-	}
-	rules, hasRules := agents.ParsePermissionRulesYAML(fm)
-	if !hasRules {
-		// pi/omp/claude-style file: no v2 rules block, sync the tools list.
-		return syncToolsList(content, allow)
-	}
-	effect := "deny"
+	val := "deny"
 	if allow {
-		effect = "allow"
+		val = "allow"
 	}
-	var out []agents.PermissionRule
-	broadEdit, broadShell := false, false
-	for _, r := range rules {
-		switch {
-		case r.Action == "edit" && r.Resource == "*" && !broadEdit:
-			r.Effect = effect
-			broadEdit = true
-		case r.Action == "shell" && r.Resource == "*" && !broadShell:
-			r.Effect = effect
-			broadShell = true
-		case r.Action == "shell" && !allow && r.Effect == "allow":
-			// Verify-posture allowlist: dead weight under a broad deny.
-			continue
-		}
-		out = append(out, r)
-	}
-	return replacePermissionsBlock(content, out)
+	content = replacePermissionScalar(content, "edit", val)
+	content = replacePermissionScalar(content, "write", val)
+	content = replaceBashBlock(content, val)
+	return syncToolsList(content, allow)
 }
 
 // syncToolsList makes a pi/omp/claude-style "tools:" frontmatter list match the
@@ -1656,4 +1632,86 @@ func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) s
 // confusion — it delegates to the frontmatter.go implementation).
 func replaceLocalMarkdownSection(content, headerText, headingPrefix, newContent string, includeSubsections bool) string {
 	return replaceMarkdownSection(content, headerText, headingPrefix, newContent, includeSubsections)
+}
+
+// replaceBashBlock swaps the frontmatter bash entry to the given permission
+// value using the same rendering as install (agents.BashPermissionBlockLines),
+// so guardrail denials (false-green, no-commit) are preserved on re-allow.
+func replaceBashBlock(content, val string) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		return content
+	}
+	lines := strings.Split(fm, "\n")
+	replaced := false
+	inPerm := false
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "permission:" {
+			inPerm = true
+			continue
+		}
+		if !inPerm {
+			continue
+		}
+		if lines[i] != trimmed { // indented → inside the permission block
+			if strings.HasPrefix(trimmed, "bash:") {
+				block := agents.BashPermissionBlockLines(val, "orchestrator")
+				head := append([]string(nil), lines[:i]...)
+				head = append(head, block...)
+				// Skip the old bash children (4-space indented patterns). Lines
+				// at 2-space indent are permission-block siblings (edit, write,
+				// read) and must survive.
+				j := i + 1
+				for j < len(lines) && strings.HasPrefix(lines[j], "    ") {
+					j++
+				}
+				lines = append(head, lines[j:]...)
+				replaced = true
+				break
+			}
+			continue
+		}
+		inPerm = false
+	}
+	if !replaced {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
+}
+
+// replacePermissionScalar sets a 2-space-indented scalar inside the frontmatter
+// permission: block (e.g. "  edit: deny"). No-op when the key is absent, so
+// user tweaks outside the two flipped keys survive.
+func replacePermissionScalar(content, key, value string) string {
+	fm, body := parseFrontmatter(content)
+	if fm == "" {
+		return content
+	}
+	lines := strings.Split(fm, "\n")
+	replaced := false
+	inPerm := false
+	prefix := "  " + key + ":"
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "permission:" {
+			inPerm = true
+			continue
+		}
+		if !inPerm {
+			continue
+		}
+		if line != trimmed { // indented → inside the block
+			if strings.HasPrefix(line, prefix) {
+				lines[i] = fmt.Sprintf("  %s: %s", key, value)
+				replaced = true
+			}
+			continue
+		}
+		inPerm = false // unindented → block ended
+	}
+	if !replaced {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
 }

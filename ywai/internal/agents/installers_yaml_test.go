@@ -27,7 +27,7 @@ func frontmatterOf(t *testing.T, md string) string {
 // every ywai agent leaked its own frontmatter into the system prompt. The
 // descriptions carry a "Trigger: ..." clause, and a plain YAML scalar may not
 // contain ": " — the block failed to parse, opencode fell back to the legacy v1
-// decode, and the raw file became the prompt with description and permissions
+// decode, and the raw file became the prompt with description and permission
 // dropped. Only `advisor` survived, because it is the one description with no
 // colon in it. Assert the parse, not the substring: a Contains check passed
 // happily while the file was unparseable.
@@ -52,13 +52,9 @@ func TestBuildOpenCodeMarkdown_FrontmatterIsValidYAML(t *testing.T) {
 		md := BuildOpenCodeMarkdown("probe", profile)
 
 		var fm struct {
-			Description string `yaml:"description"`
-			Mode        string `yaml:"mode"`
-			Permissions []struct {
-				Action   string `yaml:"action"`
-				Resource string `yaml:"resource"`
-				Effect   string `yaml:"effect"`
-			} `yaml:"permissions"`
+			Description string         `yaml:"description"`
+			Mode        string         `yaml:"mode"`
+			Permission  map[string]any `yaml:"permission"`
 		}
 		if err := yaml.Unmarshal([]byte(frontmatterOf(t, md)), &fm); err != nil {
 			t.Fatalf("frontmatter does not parse for %q: %v\n%s", desc, err, md)
@@ -69,8 +65,8 @@ func TestBuildOpenCodeMarkdown_FrontmatterIsValidYAML(t *testing.T) {
 		if fm.Mode != "all" {
 			t.Errorf("mode lost for %q: got %q", desc, fm.Mode)
 		}
-		if len(fm.Permissions) == 0 {
-			t.Errorf("permission rules lost for %q:\n%s", desc, md)
+		if len(fm.Permission) == 0 {
+			t.Errorf("permission map lost for %q:\n%s", desc, md)
 		}
 	}
 }

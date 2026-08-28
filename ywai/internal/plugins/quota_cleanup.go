@@ -22,7 +22,7 @@ func RemoveQuota(configPath string) error {
 		return nil
 	}
 
-	plugins := v2Plugins(root)
+	plugins := openCodePlugins(root)
 	quotaPlugin := "@slkiser/opencode-quota"
 	filteredPlugins := []any{}
 	for _, p := range plugins {

@@ -162,20 +162,21 @@ func TestUpdatePermissionsInFrontmatter_ExistingPermission(t *testing.T) {
 		t.Error("body was lost")
 	}
 
-	// Verify new permissions are present (v2 rule array form)
-	if !strings.Contains(updated, "permissions:") {
-		t.Error("v2 permissions block missing")
-	}
-	if !strings.Contains(updated, "action: edit") || !strings.Contains(updated, "effect: allow") {
+	// Verify new permissions are present
+	if !strings.Contains(updated, "  edit: allow") {
 		t.Error("edit permission not updated")
 	}
-	if !strings.Contains(updated, "action: shell") || !strings.Contains(updated, "effect: ask") {
-		t.Error("bash (shell) permission not added")
+	// bash renders through the same guardrail block the installer uses, so a
+	// permissive value arrives as a nested map with the false-green denials
+	// attached rather than a bare scalar. One renderer, no drift.
+	if !strings.Contains(updated, "  bash:\n") || !strings.Contains(updated, `    "*": ask`) {
+		t.Errorf("bash permission not added as a guardrailed block:\n%s", updated)
 	}
 
-	// Verify the legacy permission block is replaced, not duplicated.
-	if strings.Contains(updated, "permission:") {
-		t.Errorf("legacy permission: block should be gone:\n%s", updated)
+	// Verify old permission block is replaced (not duplicated)
+	count := strings.Count(updated, "permission:")
+	if count != 1 {
+		t.Errorf("expected 1 permission: block, got %d", count)
 	}
 }
 
@@ -184,14 +185,14 @@ func TestUpdatePermissionsInFrontmatter_OldToolsFormat(t *testing.T) {
 	newPerms := map[string]string{"read": "allow", "edit": "allow"}
 	updated := updatePermissionsInFrontmatter(content, newPerms)
 
-	// Should replace tools: with the v2 permissions rule array
+	// Should replace tools: with permission:
 	if strings.Contains(updated, "tools:") {
 		t.Error("old tools: block should be replaced")
 	}
-	if !strings.Contains(updated, "permissions:") {
-		t.Error("permissions: block should exist")
+	if !strings.Contains(updated, "permission:") {
+		t.Error("permission: block should exist")
 	}
-	if !strings.Contains(updated, "action: edit") || !strings.Contains(updated, "effect: allow") {
+	if !strings.Contains(updated, "  edit: allow") {
 		t.Error("edit should be allow")
 	}
 }
@@ -204,8 +205,8 @@ func TestUpdatePermissionsInFrontmatter_NoFrontmatter(t *testing.T) {
 	if !strings.HasPrefix(updated, "---") {
 		t.Error("should add frontmatter")
 	}
-	if !strings.Contains(updated, "permissions:") || !strings.Contains(updated, "action: read") {
-		t.Error("permission rules should be present")
+	if !strings.Contains(updated, "  read: allow") {
+		t.Error("permission should be present")
 	}
 	if !strings.Contains(updated, "# Agent Body") {
 		t.Error("body should be preserved")
@@ -374,7 +375,7 @@ Prompt body
 	if err != nil {
 		t.Fatalf("read agent md: %v", err)
 	}
-	if !strings.Contains(string(mdData), "action: edit") || !strings.Contains(string(mdData), "effect: deny") {
+	if !strings.Contains(string(mdData), "edit: deny") {
 		t.Errorf("AGENT.md frontmatter not updated: %s", string(mdData))
 	}
 	if !strings.Contains(string(mdData), "Prompt body") {

@@ -55,12 +55,12 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		root := readConfigRoot(t, tuiPath)
 
 		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
-		if _, ok := root["plugin"]; ok {
-			t.Fatalf("cli.json still has legacy \"plugin\" key: %v", root["plugin"])
+		if _, ok := root["plugins"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugins\" key: %v", root["plugins"])
 		}
-		arr, ok := root["plugins"].([]any)
+		arr, ok := root["plugin"].([]any)
 		if !ok {
-			t.Fatalf("cli.json has no []any \"plugins\" array; got %T", root["plugins"])
+			t.Fatalf("cli.json has no []any \"plugin\" array; got %T", root["plugin"])
 		}
 		if !containsString(arr, dest) {
 			t.Errorf("cli.json plugin array %v does not contain logo path %q", arr, dest)
@@ -80,11 +80,11 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 
 		// TUI plugins live in cli.json; opencode.json must be left untouched.
 		root := readConfigRoot(t, configPath)
-		if _, ok := root["plugin"]; ok {
-			t.Errorf("opencode.json gained a \"plugin\" array; logo must only patch cli.json")
-		}
 		if _, ok := root["plugins"]; ok {
 			t.Errorf("opencode.json gained a \"plugins\" array; logo must only patch cli.json")
+		}
+		if _, ok := root["plugin"]; ok {
+			t.Errorf("opencode.json gained a \"plugin\" array; logo must only patch cli.json")
 		}
 		if root["model"] != "x" {
 			t.Errorf("opencode.json model = %v, want preserved \"x\"", root["model"])
@@ -113,10 +113,10 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		}
 
 		root := readConfigRoot(t, tuiPath)
-		if _, ok := root["plugin"]; ok {
-			t.Fatalf("cli.json still has legacy \"plugin\" key")
+		if _, ok := root["plugins"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugins\" key")
 		}
-		arr := root["plugins"].([]any)
+		arr := root["plugin"].([]any)
 		if !containsString(arr, "some-plugin@1.0.0") {
 			t.Errorf("plugin array %v dropped pre-existing string entry", arr)
 		}
@@ -149,10 +149,10 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 
 		root := readConfigRoot(t, tuiConfigPathFor(configPath))
 		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
-		if _, ok := root["plugin"]; ok {
-			t.Fatalf("cli.json still has legacy \"plugin\" key")
+		if _, ok := root["plugins"]; ok {
+			t.Fatalf("cli.json still has legacy \"plugins\" key")
 		}
-		arr := root["plugins"].([]any)
+		arr := root["plugin"].([]any)
 		count := 0
 		for _, v := range arr {
 			if s, ok := v.(string); ok && s == dest {

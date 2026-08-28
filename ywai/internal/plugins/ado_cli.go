@@ -215,7 +215,7 @@ func adoPluginConfigFilePath() string {
 // Reports whether the root was modified.
 func removeFromPluginArray(root map[string]any, packages []string) bool {
 	_, hadLegacy := root["plugin"]
-	raw := v2Plugins(root)
+	raw := openCodePlugins(root)
 	if len(raw) == 0 && !hadLegacy {
 		return hadLegacy
 	}

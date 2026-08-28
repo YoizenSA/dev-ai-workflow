@@ -620,11 +620,11 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: failed to remove mcp-vision MCP: %v\n", a.Name, err)
 		}
 
-		// OpenCode v2 owns foreground/background delegation through its native
-		// subagent tool. Remove the retired shim so it cannot shadow that tool.
+		// OpenCode v1 has no native delegation tool, so the background-agents
+		// plugin is what provides `delegate` and the delegation_* family.
 		if supportsOpenCodePlugins {
-			if err := plugins.RemoveBackgroundAgents(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove legacy background-agents plugin: %v\n", a.Name, err)
+			if err := plugins.InstallBackgroundAgents(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
 			}
 
 			// vision-bridge: auto-route attached images through TokenBank vision

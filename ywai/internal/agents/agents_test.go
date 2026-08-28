@@ -2,7 +2,6 @@ package agents
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -350,18 +349,10 @@ func TestInstallOpenCode(t *testing.T) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := root["agent"]; ok {
-		t.Fatal("legacy agent key must be removed after install")
-	}
-	agents := root["agents"].(map[string]any)
+	agents := root["agent"].(map[string]any)
 
-	dev, ok := agents["dev"].(map[string]any)
-	if !ok {
-		t.Fatal("expected dev agent injected")
-	}
-	assertOpenCodeV2AgentJSON(t, dev)
-	if dev["system"] != "# Dev" {
-		t.Errorf("dev.system = %v", dev["system"])
+	if _, ok := agents["dev"]; !ok {
+		t.Error("expected dev agent injected")
 	}
 	existing := agents["existing"].(map[string]any)
 	if existing["description"] != "keep me" {
@@ -395,18 +386,11 @@ func TestInstallOpenCodeCreatesMissingFile(t *testing.T) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := root["agent"]; ok {
-		t.Fatal("legacy agent key must not be written")
-	}
-	agents := root["agents"].(map[string]any)
+	agents := root["agent"].(map[string]any)
 	ask := agents["ask"].(map[string]any)
 	if ask["description"] != "Research agent" {
 		t.Errorf("description = %v", ask["description"])
 	}
-	if ask["system"] != "# Ask\n\nClean body." {
-		t.Errorf("system = %v", ask["system"])
-	}
-	assertOpenCodeV2AgentJSON(t, ask)
 }
 
 func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
@@ -439,61 +423,18 @@ func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := root["agent"]; ok {
-		t.Fatal("legacy agent key must be removed after install")
-	}
-	agents := root["agents"].(map[string]any)
+	agents := root["agent"].(map[string]any)
 	ask := agents["ask"].(map[string]any)
-	assertOpenCodeV2AgentJSON(t, ask)
 
-	system := ask["system"].(string)
-	if strings.HasPrefix(system, "---") {
-		t.Errorf("migrated system should not start with frontmatter, got: %s", system)
+	prompt := ask["prompt"].(string)
+	if strings.HasPrefix(prompt, "---") {
+		t.Errorf("migrated prompt should not start with frontmatter, got: %s", prompt)
 	}
-	if !strings.Contains(system, "Clean body") {
-		t.Errorf("migrated system should contain new body, got: %s", system)
+	if !strings.Contains(prompt, "Clean body") {
+		t.Errorf("migrated prompt should contain new body, got: %s", prompt)
 	}
 	if ask["description"] != "Research agent" {
 		t.Errorf("description should be updated, got: %v", ask["description"])
-	}
-}
-
-func assertOpenCodeV2AgentJSON(t *testing.T, entry map[string]any) {
-	t.Helper()
-	if _, ok := entry["prompt"]; ok {
-		t.Error("v2 agent must not have prompt")
-	}
-	if _, ok := entry["permission"]; ok {
-		t.Error("v2 agent must not have permission map")
-	}
-	if _, ok := entry["tools"]; ok {
-		t.Error("v2 agent must not have tools")
-	}
-	if _, ok := entry["disable"]; ok {
-		t.Error("v2 agent must not have disable")
-	}
-	if _, ok := entry["system"]; !ok {
-		t.Error("v2 agent must have system")
-	}
-	raw, ok := entry["permissions"]
-	if !ok {
-		t.Fatal("v2 agent must have permissions array")
-	}
-	rules, ok := raw.([]any)
-	if !ok {
-		t.Fatalf("permissions must be an array, got %T", raw)
-	}
-	if len(rules) == 0 {
-		t.Fatal("permissions array must not be empty")
-	}
-	rule, ok := rules[0].(map[string]any)
-	if !ok {
-		t.Fatalf("permission rule must be object, got %T", rules[0])
-	}
-	for _, key := range []string{"action", "resource", "effect"} {
-		if _, ok := rule[key]; !ok {
-			t.Errorf("permission rule missing %s", key)
-		}
 	}
 }
 
@@ -570,15 +511,6 @@ func TestLoadProfilesStripsFrontmatter(t *testing.T) {
 	}
 }
 
-// v2Rule renders the expected frontmatter rule block for assertions. A bare
-// "*" resource is quoted the way RenderPermissionRulesYAML emits it.
-func v2Rule(action, resource, effect string) string {
-	if resource == "*" {
-		resource = `"*"`
-	}
-	return fmt.Sprintf("- action: %s\n    resource: %s\n    effect: %s", action, resource, effect)
-}
-
 func TestBuildOpenCodeMarkdown(t *testing.T) {
 	profile := AgentProfile{
 		Name:        "dev",
@@ -602,18 +534,22 @@ func TestBuildOpenCodeMarkdown(t *testing.T) {
 	if strings.Contains(markdown, "temperature:") {
 		t.Error("markdown should not set temperature; leave model default")
 	}
-	if !strings.Contains(markdown, "permissions:") {
-		t.Error("markdown should contain the v2 permissions section")
+	if !strings.Contains(markdown, "permission:") {
+		t.Error("markdown should contain permission section")
 	}
-	if !strings.Contains(markdown, v2Rule("read", "*", "allow")) {
-		t.Error("markdown should contain the read allow rule")
+	if !strings.Contains(markdown, "read: allow") {
+		t.Error("markdown should contain read permission")
 	}
 	if !strings.Contains(markdown, "# Dev Agent") {
 		t.Error("markdown should contain prompt body")
 	}
 }
 
-func TestBuildOpenCodeMarkdown_SkillAllowlistFromSkills(t *testing.T) {
+// opencode v1 gates skills with a single `skill` key: there is no per-skill
+// resource to allow or deny, so a skills.txt allowlist cannot be enforced from
+// the frontmatter the way the v2 rule array does. The list still drives which
+// skills get installed; this asserts the global gate survives.
+func TestBuildOpenCodeMarkdown_SkillGateIsGlobal(t *testing.T) {
 	profile := AgentProfile{
 		Name:        "planning",
 		Description: "Planner",
@@ -625,17 +561,11 @@ func TestBuildOpenCodeMarkdown_SkillAllowlistFromSkills(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("planning", profile)
 
-	if !strings.Contains(md, v2Rule("skill", "*", "deny")) {
-		t.Fatalf("skills.txt allowlist must deny all other skills, got:\n%s", md)
+	if !strings.Contains(md, "skill: allow") {
+		t.Fatalf("skill gate lost, got:\n%s", md)
 	}
-	if !strings.Contains(md, v2Rule("skill", "work-ledger", "allow")) {
-		t.Fatalf("must allow work-ledger, got:\n%s", md)
-	}
-	if !strings.Contains(md, v2Rule("skill", "tdd", "allow")) {
-		t.Fatalf("must allow tdd, got:\n%s", md)
-	}
-	if strings.Contains(md, v2Rule("skill", "*", "allow")) {
-		t.Fatalf("must not advertise every skill, got:\n%s", md)
+	if strings.Contains(md, "work-ledger") {
+		t.Fatalf("v1 has no per-skill resource; it must not be emitted, got:\n%s", md)
 	}
 }
 
@@ -652,17 +582,14 @@ func TestBuildOpenCodeMarkdown_LeavesUnlistedMCPsEnabled(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("restricted", profile)
 
-	if strings.Contains(md, "action: \"*\"") {
-		t.Fatalf("unlisted MCP tools must remain enabled (no blanket action rule), got:\n%s", md)
+	if strings.Contains(md, `"*": deny`) {
+		t.Fatalf("unlisted MCP tools must remain enabled by default, got:\n%s", md)
 	}
-	if !strings.Contains(md, v2Rule("edit", "*", "deny")) {
+	if !strings.Contains(md, "edit: deny") {
 		t.Fatalf("explicit native-tool restrictions must be preserved, got:\n%s", md)
 	}
-	if strings.Contains(md, "todowrite") {
-		t.Fatalf("todowrite has no v2 action and must not be emitted, got:\n%s", md)
-	}
-	if !strings.Contains(md, v2Rule("websearch", "*", "deny")) {
-		t.Fatalf("unlisted native actions must stay denied, got:\n%s", md)
+	if !strings.Contains(md, "todowrite: deny") {
+		t.Fatalf("unlisted native tools must stay denied, got:\n%s", md)
 	}
 }
 
@@ -706,24 +633,24 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
-	if strings.Contains(md, "action: \"*\"") {
-		t.Error(`must not emit a blanket action rule because it hides externally configured MCPs`)
+	if strings.Contains(md, `"*": deny`) {
+		t.Error(`must not emit "*: deny" because it hides externally configured MCPs`)
 	}
 	// Explicit native-tool restrictions remain effective without the catch-all.
-	if !strings.Contains(md, v2Rule("edit", "*", "deny")) {
+	if !strings.Contains(md, "edit: deny") {
 		t.Error("explicit native deny should be rendered")
 	}
 	// Bare ywai buckets must NOT leak into opencode output (they are no-ops there).
-	for _, bare := range []string{"action: memory", "action: mcp"} {
+	for _, bare := range []string{"\n  memory: ", "\n  mcp: "} {
 		if strings.Contains(md, bare) {
 			t.Errorf("bare bucket %q should have been expanded, not emitted verbatim", strings.TrimSpace(bare))
 		}
 	}
 	// Allow bucket expansions should be present.
 	allowExpansions := map[string]string{
-		v2Rule(`"engram_*"`, "*", "allow"):   "memory",
-		v2Rule(`"graft_*"`, "*", "allow"):    "mcp",
-		v2Rule(`"context7_*"`, "*", "allow"): "mcp",
+		`"engram_*": allow`:   "memory",
+		`"graft_*": allow`:    "mcp",
+		`"context7_*": allow`: "mcp",
 	}
 	for pattern, bucket := range allowExpansions {
 		if !strings.Contains(md, pattern) {
@@ -731,7 +658,7 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 		}
 	}
 	// Deny bucket expansions must remain explicit when there is no catch-all.
-	if !strings.Contains(md, v2Rule(`"intercom_*"`, "*", "deny")) {
+	if !strings.Contains(md, `"intercom_*": deny`) {
 		t.Error("denied bucket should expand explicitly")
 	}
 }
@@ -817,14 +744,14 @@ func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
 		Mode:        "all",
 		Permission:  map[string]string{"read": "allow", "write": "deny", "delegate": "allow"},
 	})
-	if strings.Contains(allow, "action: \"*\"") {
-		t.Fatalf("must not use a blanket action rule, got:\n%s", allow)
+	if strings.Contains(allow, `"*": deny`) {
+		t.Fatalf("must not use a catch-all deny, got:\n%s", allow)
 	}
-	if !strings.Contains(allow, v2Rule("delegate", "*", "allow")) {
-		t.Errorf("allowed delegate should emit a delegate allow rule, got:\n%s", allow)
+	if !strings.Contains(allow, `"delegate": allow`) {
+		t.Errorf("allowed delegate should emit '\"delegate\": allow', got:\n%s", allow)
 	}
-	if !strings.Contains(allow, v2Rule(`"delegation_*"`, "*", "allow")) {
-		t.Errorf("allowed delegate should expand to a delegation_* allow rule, got:\n%s", allow)
+	if !strings.Contains(allow, `"delegation_*": allow`) {
+		t.Errorf("allowed delegate should expand to 'delegation_*: allow', got:\n%s", allow)
 	}
 
 	deny := BuildOpenCodeMarkdown("reviewer", AgentProfile{
@@ -833,7 +760,7 @@ func TestBuildOpenCodeMarkdown_DelegateBucket(t *testing.T) {
 		Mode:        "subagent",
 		Permission:  map[string]string{"read": "allow", "delegate": "deny"},
 	})
-	if !strings.Contains(deny, v2Rule("delegate", "*", "deny")) {
+	if !strings.Contains(deny, `"delegate": deny`) {
 		t.Errorf("denied delegate should be rendered explicitly, got:\n%s", deny)
 	}
 }
@@ -2179,14 +2106,13 @@ func TestBashRendersAsAllowlistWithFalseGreenDenied(t *testing.T) {
 		Permission: map[string]string{"bash": "allow", "read": "allow"},
 	})
 
-	if !strings.Contains(md, v2Rule("shell", "*", "allow")) {
-		t.Fatal("the general shell allow must survive — the agent still has to run its tests")
+	if !strings.Contains(md, "  bash:\n") {
+		t.Fatal("bash must render as a nested map so specific commands can be denied inside a general allow")
 	}
-	for _, denied := range []string{
-		v2Rule("shell", `"* -u"`, "deny"),
-		v2Rule("shell", `"*--update-snapshot*"`, "deny"),
-		v2Rule("shell", `"*tsc*--noEmitOnError*"`, "deny"),
-	} {
+	if !strings.Contains(md, `"*": allow`) {
+		t.Error("the general allow must survive — the agent still has to run its tests")
+	}
+	for _, denied := range []string{`"* -u": deny`, `"*--update-snapshot*": deny`, `"*tsc*--noEmitOnError*": deny`} {
 		if !strings.Contains(md, denied) {
 			t.Errorf("missing denial %s", denied)
 		}
@@ -2200,8 +2126,8 @@ func TestBashDenyStaysFlat(t *testing.T) {
 		Description: "o", Prompt: "# O", Mode: "all",
 		Permission: map[string]string{"bash": "deny"},
 	})
-	if !strings.Contains(md, v2Rule("shell", "*", "deny")) {
-		t.Error("a blanket shell deny should render as a single deny rule")
+	if !strings.Contains(md, "  bash: deny\n") {
+		t.Error("a blanket bash deny should stay a single line")
 	}
 	if strings.Contains(md, "update-snapshot") {
 		t.Error("command denials under a blanket deny are noise")
@@ -2217,24 +2143,36 @@ func TestBashVerifyRendersAllowlist(t *testing.T) {
 		Permission: map[string]string{"bash": "verify", "read": "allow"},
 	})
 
-	if !strings.Contains(md, v2Rule("shell", "*", "deny")) {
-		t.Fatal("verify mode must deny shell by default")
+	if !strings.Contains(md, "  bash:\n") {
+		t.Fatal("verify bash must be a nested map")
 	}
-	if strings.Contains(md, v2Rule("shell", "*", "allow")) {
-		t.Error("verify mode must not grant a blanket shell allow")
+	if !strings.Contains(md, `"*": deny`) {
+		t.Error("verify mode must deny by default")
+	}
+	if strings.Contains(md, `"*": allow`) {
+		t.Error("verify mode must not grant blanket bash allow")
 	}
 	for _, allowed := range []string{
-		`"git diff*"`, `"git status*"`, `"git log*"`, `"git show*"`,
-		`"go test*"`, `"npm test*"`, `"npm run lint*"`, `"npm run build*"`,
-		`"dotnet test*"`, `"pytest*"`, `"python -m pytest*"`,
-		`"ruff check*"`, `"mypy*"`,
+		`"git diff*": allow`,
+		`"git status*": allow`,
+		`"git log*": allow`,
+		`"git show*": allow`,
+		`"go test*": allow`,
+		`"npm test*": allow`,
+		`"npm run lint*": allow`,
+		`"npm run build*": allow`,
+		`"dotnet test*": allow`,
+		`"pytest*": allow`,
+		`"python -m pytest*": allow`,
+		`"ruff check*": allow`,
+		`"mypy*": allow`,
 	} {
-		if !strings.Contains(md, v2Rule("shell", allowed, "allow")) {
+		if !strings.Contains(md, allowed) {
 			t.Errorf("missing verify allow %s", allowed)
 		}
 	}
 	// Snapshot rewrites must stay blocked even when npm test is allowed.
-	if !strings.Contains(md, v2Rule("shell", `"*--update-snapshot*"`, "deny")) {
+	if !strings.Contains(md, `"*--update-snapshot*": deny`) {
 		t.Error("false-green denials must still apply under verify")
 	}
 }
@@ -2247,8 +2185,11 @@ func TestNoCommitAgentsDenyGitCommitPush(t *testing.T) {
 			Description: name, Prompt: "# x", Mode: "all",
 			Permission: map[string]string{"bash": "allow", "edit": "allow"},
 		})
-		for _, denied := range []string{`"git commit*"`, `"git push*"`} {
-			if !strings.Contains(md, v2Rule("shell", denied, "deny")) {
+		for _, denied := range []string{
+			`"git commit*": deny`,
+			`"git push*": deny`,
+		} {
+			if !strings.Contains(md, denied) {
 				t.Errorf("%s missing denial %s", name, denied)
 			}
 		}
@@ -2259,7 +2200,7 @@ func TestNoCommitAgentsDenyGitCommitPush(t *testing.T) {
 		Description: "devops", Prompt: "# x", Mode: "all",
 		Permission: map[string]string{"bash": "allow"},
 	})
-	if strings.Contains(md, v2Rule("shell", `"git commit*"`, "deny")) {
+	if strings.Contains(md, `"git commit*": deny`) {
 		t.Error("devops must not get the no-commit pack")
 	}
 }
@@ -2293,8 +2234,8 @@ func TestCoreOrchestratorIsSoloCapable(t *testing.T) {
 		}
 	}
 	md := BuildOpenCodeMarkdown("core/orchestrator", p)
-	if !strings.Contains(md, v2Rule("shell", "*", "allow")) {
-		t.Error("installed orchestrator markdown must render the shell allow for solo mode")
+	if !strings.Contains(md, `"*": allow`) {
+		t.Error("installed orchestrator markdown must render bash allow for solo mode")
 	}
 	if !strings.Contains(p.Prompt, "solo") || !strings.Contains(p.Prompt, "thin") || !strings.Contains(p.Prompt, "full") {
 		t.Error("orchestrator prompt must document solo|thin|full modes")
@@ -2379,10 +2320,10 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 
 	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
-	if strings.Contains(md, v2Rule(`"graft_*"`, "*", "allow")) {
+	if strings.Contains(md, `"graft_*": allow`) {
 		t.Errorf("explicit deny must not be re-granted by the mcp bucket:\n%s", md)
 	}
-	if !strings.Contains(md, v2Rule(`"graft_*"`, "*", "deny")) {
+	if !strings.Contains(md, `"graft_*": deny`) {
 		t.Errorf("explicit deny must survive:\n%s", md)
 	}
 	if strings.Count(md, `"graft_*"`) != 1 {
@@ -2390,7 +2331,7 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 			strings.Count(md, `"graft_*"`), md)
 	}
 	// The rest of the bucket is untouched by the override.
-	if !strings.Contains(md, v2Rule(`"context7_*"`, "*", "allow")) {
+	if !strings.Contains(md, `"context7_*": allow`) {
 		t.Errorf("unoverridden bucket members must still expand:\n%s", md)
 	}
 }

@@ -33,7 +33,7 @@ func RemoveSubAgentStatusline() error {
 		if err := json.Unmarshal(data, &root); err != nil {
 			return fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
 		}
-		plugins := v2Plugins(root)
+		plugins := openCodePlugins(root)
 		filtered := make([]any, 0, len(plugins))
 		for _, plugin := range plugins {
 			if name, ok := plugin.(string); ok && name == subAgentStatuslinePlugin {

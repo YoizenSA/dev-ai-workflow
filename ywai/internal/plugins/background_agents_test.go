@@ -23,12 +23,12 @@ func containsString(slice []any, want string) bool {
 func pluginArray(t *testing.T, path string) []any {
 	t.Helper()
 	root := readConfigRoot(t, path)
-	if _, ok := root["plugin"]; ok {
-		t.Fatalf("config still has legacy \"plugin\" key: %v", root["plugin"])
+	if _, ok := root["plugins"]; ok {
+		t.Fatalf("config still has legacy \"plugins\" key: %v", root["plugins"])
 	}
-	arr, ok := root["plugins"].([]any)
+	arr, ok := root["plugin"].([]any)
 	if !ok {
-		t.Fatalf("config has no []any \"plugins\" array; got %T", root["plugins"])
+		t.Fatalf("config has no []any \"plugin\" array; got %T", root["plugin"])
 	}
 	return arr
 }
@@ -38,19 +38,13 @@ func pluginArray(t *testing.T, path string) []any {
 func permissionRules(t *testing.T, path string) map[string]string {
 	t.Helper()
 	root := readConfigRoot(t, path)
-	arr, ok := root["permissions"].([]any)
+	perms, ok := root["permission"].(map[string]any)
 	if !ok {
-		t.Fatalf("config has no []any \"permissions\" array; got %T", root["permissions"])
+		t.Fatalf("config has no map \"permission\"; got %T", root["permission"])
 	}
 	out := map[string]string{}
-	for _, raw := range arr {
-		r, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		action, _ := r["action"].(string)
-		effect, _ := r["effect"].(string)
-		if action != "" {
+	for action, raw := range perms {
+		if effect, ok := raw.(string); ok {
 			out[action] = effect
 		}
 	}
@@ -80,7 +74,7 @@ func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
 		}
 	})
 
-	// Case B — preserves existing plugins and v2 rules; deletes leftover v1 permission.
+	// Case B — preserves existing plugins and v1 permission entries; deletes a leftover v2 permissions array.
 	t.Run("preserves_existing_entries", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{
 			"plugin": []any{"some-other-plugin"},
@@ -104,15 +98,15 @@ func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
 			t.Errorf("plugin array %v does not contain %q", arr, jsPath)
 		}
 		rules := permissionRules(t, path)
-		if rules["shell"] != "ask" {
-			t.Errorf("permissions[shell] = %v, want ask (clobbered)", rules["shell"])
+		if rules["bash"] != "ask" {
+			t.Errorf("permission[bash] = %v, want ask (clobbered)", rules["bash"])
 		}
 		if rules["delegate"] != "allow" {
-			t.Errorf("permissions[delegate] = %v, want allow", rules["delegate"])
+			t.Errorf("permission[delegate] = %v, want allow", rules["delegate"])
 		}
 		root := readConfigRoot(t, path)
-		if _, ok := root["permission"]; ok {
-			t.Errorf("legacy v1 \"permission\" key must be deleted, got %v", root["permission"])
+		if _, ok := root["permissions"]; ok {
+			t.Errorf("v2 \"permissions\" array must be deleted, got %v", root["permissions"])
 		}
 	})
 

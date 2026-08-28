@@ -116,7 +116,7 @@ func removeOpenCodePluginName(configPath, pluginName string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins := v2Plugins(root)
+	plugins := openCodePlugins(root)
 	filtered := make([]any, 0, len(plugins))
 	for _, plugin := range plugins {
 		if name, ok := plugin.(string); ok && name == pluginName {

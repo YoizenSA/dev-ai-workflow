@@ -177,7 +177,7 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	orchestratorID := wf.Name + "-orchestrator"
 
 	// The orchestrator may launch every subAgent node via OpenCode v2 `delegate`.
-	// Permission action `subagent` still whitelists those agent ids.
+	// The nested permission.task map still whitelists those agent ids.
 	orchTaskTargets := make([]string, 0, len(subAgentIDs))
 	for _, id := range subAgentIDs {
 		orchTaskTargets = append(orchTaskTargets, id)
@@ -300,7 +300,7 @@ func sanitizeSlug(s string) string {
 
 // renderOrchestratorMarkdown builds the orchestrator agent frontmatter + body.
 // The orchestrator's tools come from the START node's `tools` field (CSV). When
-// empty, coordinator defaults are used (read/glob/grep/subagent/skill/question/
+// empty, coordinator defaults are used (read/glob/grep/task/skill/question/
 // delegate). Subagent action rules restrict delegation to this workflow's
 // sub-agents only (one allow per subAgent node), matching the preconfigured
 // orchestrator's model.
@@ -476,17 +476,17 @@ func subAgentSectionList(csv string) []string {
 
 // defaultOrchestratorTools is applied when the START node has no tools set.
 // Coordinator-only: read + ask + skill + context (mcp bucket). No edit/write/
-// shell — the orchestrator never touches code directly. (delegate/delegation_*
+// bash — the orchestrator never touches code directly. (delegate/delegation_*
 // are added by BuildOpenCodeMarkdown's AlwaysAllowed path when needed.)
-const defaultOrchestratorTools = "read,glob,grep,subagent,skill,question,mcp"
+const defaultOrchestratorTools = "read,glob,grep,task,skill,question,mcp"
 
 // defaultSubAgentTools is applied when a subAgent node has no tools set.
-// Full implementer: read + write + edit + shell + skill + context (mcp bucket).
-const defaultSubAgentTools = "read,edit,write,shell,glob,grep,skill,subagent,mcp"
+// Full implementer: read + write + edit + bash + skill + context (mcp bucket).
+const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
 
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
-// Each entry may carry a ":deny" suffix to block a tool (e.g. "shell:deny").
+// Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
 // Coarse buckets (mcp, memory, delegate, graft, context7) are
 // expanded to opencode-native wildcards via ExpandPermissionBuckets so they
 // actually gate the underlying tools.
@@ -510,7 +510,9 @@ func toolsToPermissions(csv, defaults string) map[string]string {
 		if entry == "" {
 			continue
 		}
-		perm[entry] = val
+		// A workflow saved while ywai emitted v2 names carries shell/subagent.
+		// Normalize so an old graph keeps gating the same tools.
+		perm[agents.NormalizePermissionKey(entry)] = val
 	}
 	return agents.ExpandPermissionBuckets(perm)
 }
@@ -528,7 +530,7 @@ func csvFromPermissions(perm map[string]string) string {
 	return strings.Join(allowed, ",")
 }
 
-// delegationMapFromOutgoing builds the subagent-action whitelist for a node.
+// delegationMapFromOutgoing builds the permission.task whitelist for a node.
 // Delegation targets come from TWO sources:
 //  1. Outgoing edges to other subAgent nodes in the graph (the visible flow).
 //  2. The node's `delegateTo` field — explicit agent ids (comma-separated) this

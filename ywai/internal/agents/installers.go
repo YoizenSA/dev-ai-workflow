@@ -31,10 +31,10 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	_, hadLegacyAgent := root["agent"]
+	_, hadV2Agents := root["agents"]
 	agents := openCodeJSONAgents(root)
-	root["agents"] = agents
-	delete(root, "agent")
+	root["agent"] = agents
+	delete(root, "agents")
 
 	installed := 0
 	for name, profile := range profiles {
@@ -48,16 +48,16 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 			if !strings.HasPrefix(existingPrompt, "---") {
 				continue
 			}
-			agents[name] = openCodeV2JSONEntry(name, profile)
+			agents[name] = openCodeJSONEntry(name, profile)
 			installed++
 			continue
 		}
 
-		agents[name] = openCodeV2JSONEntry(name, profile)
+		agents[name] = openCodeJSONEntry(name, profile)
 		installed++
 	}
 
-	if installed == 0 && !hadLegacyAgent {
+	if installed == 0 && !hadV2Agents {
 		return nil
 	}
 
@@ -69,20 +69,15 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 	return nil
 }
 
-// openCodeJSONAgents returns the v2 agents map, folding leftover v1 `agent`
-// entries into v2 shape and never leaving both keys in the file.
+// openCodeJSONAgents returns the v1 agent map, folding leftover v2 `agents`
+// entries back into v1 shape and never leaving both keys in the file.
 func openCodeJSONAgents(root map[string]any) map[string]any {
 	agents := map[string]any{}
-	if raw, ok := root["agents"].(map[string]any); ok {
-		for name, entry := range raw {
-			if m, ok := entry.(map[string]any); ok {
-				agents[name] = normalizeOpenCodeJSONAgent(name, m)
-			} else {
-				agents[name] = entry
-			}
+	fold := func(key string) {
+		raw, ok := root[key].(map[string]any)
+		if !ok {
+			return
 		}
-	}
-	if raw, ok := root["agent"].(map[string]any); ok {
 		for name, entry := range raw {
 			if _, exists := agents[name]; exists {
 				continue
@@ -94,19 +89,27 @@ func openCodeJSONAgents(root map[string]any) map[string]any {
 			}
 		}
 	}
+	// v1 `agent` is canonical here, so it is read first and a leftover v2
+	// `agents` entry only fills in names v1 does not already define.
+	fold("agent")
+	fold("agents")
 	return agents
 }
 
 func normalizeOpenCodeJSONAgent(name string, m map[string]any) map[string]any {
-	return openCodeV2JSONEntry(name, mapToAgentProfile(name, m))
+	return openCodeJSONEntry(name, mapToAgentProfile(name, m))
 }
 
-func openCodeV2JSONEntry(name string, profile AgentProfile) map[string]any {
+// openCodeJSONEntry builds the v1 agent entry: a `prompt` string and a flat
+// `permission` map. Buckets are expanded here for the same reason the markdown
+// builder expands them — opencode ignores bare bucket names.
+func openCodeJSONEntry(name string, profile AgentProfile) map[string]any {
+	_ = name
 	return map[string]any{
 		"mode":        profile.Mode,
 		"description": profile.Description,
-		"system":      profile.Prompt,
-		"permissions": RulesToJSONShape(ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)),
+		"prompt":      profile.Prompt,
+		"permission":  ExpandPermissionBuckets(profile.Permission),
 	}
 }
 
@@ -870,6 +873,15 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 	return removed
 }
 
+// openCodeNativePermissionKeys are the tools opencode v1 gates by name. Every
+// one is emitted explicitly (defaulting to deny) so a profile's silence is not
+// read as permission.
+var openCodeNativePermissionKeys = []string{
+	"read", "edit", "write", "bash", "glob", "grep", "list", "lsp",
+	"ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite",
+	"delegate", "question", "skill", "external_directory", "doom_loop",
+}
+
 // ywaiBucketPatterns maps ywai's coarse permission buckets to the opencode-native
 // wildcard patterns that actually gate the underlying MCP tools. opencode matches
 // permission keys as globs against real tool names, so the bare bucket names
@@ -1161,6 +1173,67 @@ func mcpBucketPatterns() []string {
 	return patterns
 }
 
+// RenderPermissionMapYAML renders an agent's permission map as the nested
+// opencode v1 `permission:` frontmatter block. Exported so the config API
+// rewrites permissions through the same code that installs them — two
+// renderers drift, and a drifted one silently changes what an agent may do.
+func RenderPermissionMapYAML(name string, profile AgentProfile) string {
+	var out strings.Builder
+	out.WriteString("permission:\n")
+	emitPermission := func(key, val string) {
+		// bash renders as a nested allow/deny map when the agent may run
+		// commands at all, so specific commands can be denied inside a general
+		// allow. permissions.json is a flat string map and cannot express that.
+		if key == "bash" {
+			for _, line := range BashPermissionBlockLines(val, filepath.Base(name)) {
+				out.WriteString(line + "\n")
+			}
+			return
+		}
+		if patterns, ok := ywaiBucketPatterns[key]; ok {
+			for _, p := range patterns {
+				// A profile naming the exact pattern is overriding its bucket on
+				// purpose. Emitting the bucket value too would write the key twice
+				// and the last one wins, silently handing the tool back.
+				if _, explicit := profile.Permission[p]; explicit && p != key {
+					continue
+				}
+				out.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
+			}
+			return
+		}
+		if key == "*" || strings.ContainsAny(key, "*:#&!|>',[]{}%`@") {
+			out.WriteString(fmt.Sprintf("  %q: %s\n", key, val))
+		} else {
+			out.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
+		}
+	}
+
+	// Explicit restrictions only: no catch-all "*: deny". opencode enables
+	// unlisted tools by default, which keeps MCP servers added outside ywai
+	// available without a release for each new server.
+	written := map[string]bool{}
+	for _, key := range openCodeNativePermissionKeys {
+		val := profile.Permission[key]
+		if val == "" {
+			val = "deny"
+		}
+		emitPermission(key, val)
+		written[key] = true
+	}
+	var remaining []string
+	for k := range profile.Permission {
+		if !written[k] {
+			remaining = append(remaining, k)
+		}
+	}
+	sort.Strings(remaining)
+	for _, key := range remaining {
+		emitPermission(key, profile.Permission[key])
+	}
+	return out.String()
+}
+
 // BuildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
 // Exported so the workflows exporter can reuse the single source of truth for
 // permission rendering and bucket expansion (the workflow's sub-agent nodes
@@ -1181,21 +1254,15 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString("---\n")
 	b.WriteString(fmt.Sprintf("description: %s\n", yamlScalar(description)))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
-	// Group membership deliberately does NOT go here. opencode v2 accepts a
-	// fixed key set in agent frontmatter (model, variant, request, system,
-	// description, mode, hidden, color, steps, disabled, permissions). Any
-	// other key makes config/plugin/agent.ts take the legacy v1 decode path,
-	// whose schema knows `permission` (a map) and silently drops our v2
-	// `permissions` rule array. Group lives in GroupSidecarFile instead.
+	// Group membership stays out of the frontmatter and lives in
+	// GroupSidecarFile. opencode v1 would accept a `group:` key, but an unknown
+	// key is what makes v2 fall back to the legacy decode path, so keeping the
+	// sidecar leaves the same file readable by both.
 
-	// Permissions as the v2 ordered rule array (see permissions_v2.go). Omitted
-	// native actions default to deny, so only the explicitly allowed surface is
-	// exposed; coarse buckets (memory, intercom, mcp) expand to the wildcard
-	// action names that actually gate the underlying tools.
-	rules := ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)
-	for _, line := range RenderPermissionRulesYAML(rules) {
-		b.WriteString(line + "\n")
-	}
+	// Permission as a nested YAML map: opencode v1's schema. ywai's coarse
+	// buckets (ado, memory, intercom, mcp) expand to opencode-native wildcard
+	// patterns so the deny/allow is enforced rather than silently dropped.
+	b.WriteString(RenderPermissionMapYAML(name, profile))
 	b.WriteString("---\n\n")
 
 	// Prompt body (strip frontmatter if present)

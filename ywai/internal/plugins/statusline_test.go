@@ -41,12 +41,12 @@ func TestRemoveSubAgentStatuslineFromCliJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatalf("parse cli.json: %v", err)
 	}
-	if _, ok := root["plugin"]; ok {
-		t.Fatalf("cli.json still has legacy \"plugin\" key")
+	if _, ok := root["plugins"]; ok {
+		t.Fatalf("cli.json still has legacy \"plugins\" key")
 	}
-	arr, ok := root["plugins"].([]any)
+	arr, ok := root["plugin"].([]any)
 	if !ok {
-		t.Fatalf("cli.json plugins type = %T, want []any", root["plugins"])
+		t.Fatalf("cli.json plugins type = %T, want []any", root["plugin"])
 	}
 	if containsString(arr, subAgentStatuslinePlugin) || !containsString(arr, "other") {
 		t.Fatalf("cli.json plugins = %v, want only preserved entries", arr)
@@ -77,7 +77,7 @@ func TestRemoveSubAgentStatuslineFromLegacyTuiJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatalf("parse cli.json: %v", err)
 	}
-	arr, _ := root["plugins"].([]any)
+	arr, _ := root["plugin"].([]any)
 	if !containsString(arr, "legacy-plugin") {
 		t.Errorf("plugins %v missing preserved entry", arr)
 	}
@@ -100,7 +100,7 @@ func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 
 	cliPath := filepath.Join(filepath.Dir(configPath), "cli.json")
 	root := readConfigRoot(t, cliPath)
-	arr, _ := root["plugins"].([]any)
+	arr, _ := root["plugin"].([]any)
 	if !containsString(arr, "from-tui") {
 		t.Errorf("cli.json plugins %v missing leftover tui.json entry", arr)
 	}

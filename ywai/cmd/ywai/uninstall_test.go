@@ -102,12 +102,12 @@ func TestUninstallStripYwaiConfigRefs_KeepsForeignPlugins(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	plugins, _ := root["plugins"].([]any)
+	plugins, _ := root["plugin"].([]any)
 	if len(plugins) != 1 || plugins[0] != "/home/u/.config/opencode/plugins/their-own.js" {
 		t.Fatalf("foreign plugin must survive, got %v", plugins)
 	}
-	if _, ok := root["plugin"]; ok {
-		t.Error("must not write v1 plugin key")
+	if _, ok := root["plugins"]; ok {
+		t.Error("must not write the v2 plugins key")
 	}
 	if root["model"] != "provider/model" {
 		t.Errorf("unrelated keys must be preserved, got %v", root["model"])
@@ -125,15 +125,15 @@ func TestUninstallStripYwaiConfigRefs_DropsEmptyArray(t *testing.T) {
 		t.Fatalf("stripYwaiConfigRefs: %v", err)
 	}
 	root := readJSONFile(t, cfg)
-	if _, ok := root["plugins"]; ok {
+	if _, ok := root["plugin"]; ok {
 		t.Error("an emptied plugins array should be removed, not left as []")
 	}
-	if _, ok := root["plugin"]; ok {
-		t.Error("must not write v1 plugin key")
+	if _, ok := root["plugins"]; ok {
+		t.Error("must not write the v2 plugins key")
 	}
 }
 
-func TestUninstallStripYwaiConfigRefs_DrainsLegacyPluginKey(t *testing.T) {
+func TestUninstallStripYwaiConfigRefs_DrainsV2PluginsKey(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
@@ -154,10 +154,10 @@ func TestUninstallStripYwaiConfigRefs_DrainsLegacyPluginKey(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	if _, ok := root["plugin"]; ok {
-		t.Error("leftover v1 plugin key must be deleted")
+	if _, ok := root["plugins"]; ok {
+		t.Error("leftover v2 plugins key must be deleted")
 	}
-	plugins, _ := root["plugins"].([]any)
+	plugins, _ := root["plugin"].([]any)
 	if len(plugins) != 2 {
 		t.Fatalf("v2 plugins must keep foreign + drained leftover, got %v", plugins)
 	}
@@ -192,22 +192,22 @@ func TestUninstallStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	agents, _ := root["agents"].(map[string]any)
+	agents, _ := root["agent"].(map[string]any)
 	if len(agents) != 1 {
 		t.Fatalf("expected only the user's agent to remain, got %v", agents)
 	}
 	if _, ok := agents["my-agent"]; !ok {
 		t.Error("the user's agent must survive")
 	}
-	if _, ok := root["agent"]; ok {
-		t.Error("must not write v1 agent key")
+	if _, ok := root["agents"]; ok {
+		t.Error("must not write the v2 agents key")
 	}
 	if root["model"] != "keep-me" {
 		t.Error("unrelated keys must be preserved")
 	}
 }
 
-func TestUninstallStripYwaiAgentKeys_DrainsLegacyAgentKey(t *testing.T) {
+func TestUninstallStripYwaiAgentKeys_DrainsV2AgentsKey(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
@@ -230,10 +230,10 @@ func TestUninstallStripYwaiAgentKeys_DrainsLegacyAgentKey(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	if _, ok := root["agent"]; ok {
-		t.Error("leftover v1 agent key must be deleted")
+	if _, ok := root["agents"]; ok {
+		t.Error("leftover v2 agents key must be deleted")
 	}
-	agents, _ := root["agents"].(map[string]any)
+	agents, _ := root["agent"].(map[string]any)
 	if len(agents) != 2 {
 		t.Fatalf("expected user agents from both keys, got %v", agents)
 	}

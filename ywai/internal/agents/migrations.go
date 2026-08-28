@@ -85,8 +85,8 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 			delete(root, "agent")
 			delete(root, "agents")
 		} else {
-			root["agents"] = agents
-			delete(root, "agent")
+			root["agent"] = agents
+			delete(root, "agents")
 		}
 
 		if err := config.WriteJSONC(configPath, root); err != nil {
