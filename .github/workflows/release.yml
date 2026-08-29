@@ -133,6 +133,7 @@ jobs:
           args: release --clean
           workdir: ywai
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YWAI_WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
 
       # Cryptographic provenance tying every published archive to this repo,
@@ -143,5 +144,3 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: ywai/dist/*.tar.gz,ywai/dist/*.zip,ywai/dist/checksums.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
