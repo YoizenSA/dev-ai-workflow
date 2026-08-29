@@ -406,6 +406,7 @@ var installCmd = &cobra.Command{
 		}
 
 		var installMCP bool
+		var installMetaMCP bool
 		var installPonytail bool
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
@@ -434,6 +435,7 @@ var installCmd = &cobra.Command{
 				agentFlag = result.Agent
 			}
 			installMCP = result.MCP
+			installMetaMCP = result.MetaMCP
 			installPonytail = result.Ponytail
 			overwriteAgents = result.OverwriteAgents
 			groupFilter = result.GroupFilter
@@ -441,6 +443,7 @@ var installCmd = &cobra.Command{
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag
+			installMetaMCP = getBoolFlag(cmd, "meta-mcp")
 			installPonytail = ponytailFlag
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
@@ -463,7 +466,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag)
+		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -1453,6 +1456,7 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
+	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")

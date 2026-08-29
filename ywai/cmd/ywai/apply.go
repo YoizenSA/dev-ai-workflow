@@ -67,6 +67,7 @@ type applyOpts struct {
 
 	Opts            gentlai.InstallOptions
 	InstallMCP      bool
+	InstallMetaMCP  bool
 	InstallPonytail bool
 	GroupFilter     agentprofiles.GroupFilter
 	OverwriteAgents bool
@@ -318,7 +319,7 @@ func applyManaged(o applyOpts) applyResult {
 	// ── plugins + CLIs ────────────────────────────────────────────────────
 	if plan.InstallPlugins {
 		steps.next("Installing plugins + MCP + companion CLIs")
-		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallPonytail)
+		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallMetaMCP, o.InstallPonytail)
 	}
 
 	// ── cleanup ───────────────────────────────────────────────────────────

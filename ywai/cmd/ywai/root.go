@@ -239,11 +239,12 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
+func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
 	return applyManaged(applyOpts{
 		Mode:            applyInstall,
 		Opts:            opts,
 		InstallMCP:      installMCP,
+		InstallMetaMCP:  installMetaMCP,
 		InstallPonytail: installPonytail,
 		GroupFilter:     groupFilter,
 		OverwriteAgents: overwriteAgents,
@@ -572,7 +573,7 @@ func reseedData() {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installPonytail bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 	var done []string
 
@@ -659,6 +660,14 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		if installMCP {
 			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
+			}
+		}
+
+		// Meta Developer Tools MCP. Remote server whose OAuth sign-in happens
+		// in the agent client, so ywai only writes the entry.
+		if installMetaMCP {
+			if err := plugins.InstallMetaDevToolsMCP(configPath, a.Name); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install Meta Developer Tools MCP: %v\n", a.Name, err)
 			}
 		}
 

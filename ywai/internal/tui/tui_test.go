@@ -440,9 +440,11 @@ func TestPonytailToggle(t *testing.T) {
 	if m.optionalPluginCursor != 0 {
 		t.Fatalf("optionalPluginCursor=%d, want 0", m.optionalPluginCursor)
 	}
+	// Rows: 0 Microsoft Learn MCP, 1 Meta Developer Tools MCP, 2 Ponytail.
+	sendKey(&m, "down")
 	sendKey(&m, "down") // focus Ponytail
-	if m.optionalPluginCursor != 1 {
-		t.Fatalf("optionalPluginCursor=%d, want 1", m.optionalPluginCursor)
+	if m.optionalPluginCursor != 2 {
+		t.Fatalf("optionalPluginCursor=%d, want 2", m.optionalPluginCursor)
 	}
 	sendKey(&m, " ") // toggle ponytail off
 	if m.installPonytail {
@@ -450,6 +452,9 @@ func TestPonytailToggle(t *testing.T) {
 	}
 	if m.installMicrosoftLearnMCP {
 		t.Fatal("MCP should remain false when toggling Ponytail")
+	}
+	if m.installMetaDevToolsMCP {
+		t.Fatal("Meta MCP should remain false when toggling Ponytail")
 	}
 	sendKey(&m, " ") // toggle back on
 	if !m.installPonytail {
@@ -485,5 +490,37 @@ func TestViewInstallMode_Renders(t *testing.T) {
 	}
 	if !strings.Contains(view, "Custom Install") {
 		t.Error("viewInstallMode should show 'Custom Install'")
+	}
+}
+
+// The Optional plugins rows and toggleCurrentMCP's switch are two lists that
+// have to stay in the same order; a mismatch silently toggles the wrong
+// plugin. This pins Meta Developer Tools to row 1.
+func TestMetaDevToolsMCPToggle(t *testing.T) {
+	m := NewModel(singleAgent("opencode"))
+	goToCustomInstall(&m)
+	sendKey(&m, "enter") // agent -> options
+	sendKey(&m, "enter") // options -> optional plugins
+	if m.step != stepMCP {
+		t.Fatalf("expected stepMCP, got %d", m.step)
+	}
+	if m.optionalPluginCount() != 3 {
+		t.Fatalf("optionalPluginCount()=%d, want 3", m.optionalPluginCount())
+	}
+
+	sendKey(&m, "down") // focus Meta Developer Tools MCP
+	if m.optionalPluginCursor != 1 {
+		t.Fatalf("optionalPluginCursor=%d, want 1", m.optionalPluginCursor)
+	}
+	before := m.installMetaDevToolsMCP
+	sendKey(&m, " ")
+	if m.installMetaDevToolsMCP == before {
+		t.Fatal("space did not toggle Meta Developer Tools MCP")
+	}
+	if m.installMicrosoftLearnMCP {
+		t.Fatal("Microsoft Learn MCP must not change when toggling Meta")
+	}
+	if !m.installPonytail {
+		t.Fatal("Ponytail must not change when toggling Meta")
 	}
 }

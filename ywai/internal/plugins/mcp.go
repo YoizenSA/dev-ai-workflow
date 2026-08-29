@@ -63,6 +63,62 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 	return removed, nil
 }
 
+// installRemoteMCPEntry adds a remote MCP server to an opencode-shaped config
+// (servers directly under `mcp`, each with an explicit enabled flag — the v1
+// layout). Existing entries are left alone so a user's own settings survive.
+func installRemoteMCPEntry(configPath, agentName, id, url string) error {
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+	key := mcpConfigKey(agentName)
+	mcp, _ := root[key].(map[string]any)
+	if mcp == nil {
+		mcp = map[string]any{}
+	}
+	servers := collectOpenCodeServers(mcp)
+	if _, exists := servers[id]; !exists {
+		servers[id] = map[string]any{"type": "remote", "url": url}
+	}
+	root[key] = flattenOpenCodeMCP(mcp, servers)
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
+	}
+	return nil
+}
+
+// metaDevToolsMCPURL is Meta's remote MCP endpoint. Authentication is the
+// client's OAuth sign-in, not something ywai can do — the endpoint answers 401
+// until the user signs in from their agent, which is expected.
+const metaDevToolsMCPURL = "https://mcp.facebook.com/devtools"
+
+// InstallMetaDevToolsMCP adds Meta Developer Tools (manage Meta apps, webhooks,
+// compliance, app status, developer docs) to the agent's config.
+func InstallMetaDevToolsMCP(configPath, agentName string) error {
+	if mcpConfigKey(agentName) == "mcpServers" {
+		// Claude Code / pi: remote servers use type http + url.
+		root, err := config.ReadJSONC(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", configPath, err)
+		}
+		key := mcpConfigKey(agentName)
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+		}
+		if _, exists := mcp["meta-devtools"]; !exists {
+			mcp["meta-devtools"] = map[string]any{"type": "http", "url": metaDevToolsMCPURL}
+		}
+		root[key] = mcp
+		if err := config.WriteJSONC(configPath, root); err != nil {
+			return fmt.Errorf("failed to write %s: %w", configPath, err)
+		}
+		return nil
+	}
+	return installRemoteMCPEntry(configPath, agentName, "meta-devtools", metaDevToolsMCPURL)
+}
+
 // InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's config file.
 func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	root, err := config.ReadJSONC(configPath)

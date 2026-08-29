@@ -130,6 +130,7 @@ type agentOption struct {
 type TUIResult struct {
 	Agent           string
 	MCP             bool
+	MetaMCP         bool
 	Ponytail        bool
 	OverwriteAgents bool
 	Autostart       bool
@@ -167,6 +168,7 @@ type Model struct {
 	// Optional plugins step (Microsoft Learn MCP + ponytail)
 	optionalPluginCursor     int
 	installMicrosoftLearnMCP bool
+	installMetaDevToolsMCP   bool
 	installPonytail          bool
 
 	// Overwrite existing profiles
@@ -224,6 +226,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		agents:                   agentOpts,
 		autostart:                defaults.Autostart,
 		installMicrosoftLearnMCP: defaults.MCP,
+		installMetaDevToolsMCP:   defaults.MetaMCP,
 		installPonytail:          defaults.Ponytail,
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
@@ -513,11 +516,13 @@ func (m *Model) toggleCurrentMCP() {
 	if !m.shouldShowMCPStep() {
 		return
 	}
-	// Row 0 = Microsoft Learn MCP, row 1 = Ponytail.
+	// Rows must stay in the same order as renderMCPStep's list.
 	switch m.optionalPluginCursor {
 	case 0:
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
 	case 1:
+		m.installMetaDevToolsMCP = !m.installMetaDevToolsMCP
+	case 2:
 		m.installPonytail = !m.installPonytail
 	}
 }
@@ -525,7 +530,7 @@ func (m *Model) toggleCurrentMCP() {
 // optionalPluginCount is the number of toggles on the Optional plugins step.
 func (m *Model) optionalPluginCount() int {
 	if m.shouldShowMCPStep() {
-		return 2 // Microsoft Learn MCP + Ponytail
+		return 3 // Microsoft Learn MCP + Meta Developer Tools + Ponytail
 	}
 	return 0
 }
@@ -1009,6 +1014,11 @@ func (m *Model) viewMCP() string {
 			checked: m.installMicrosoftLearnMCP,
 		},
 		{
+			name:    "Meta Developer Tools MCP",
+			desc:    "Meta apps, webhooks, compliance and developer docs (sign in from your agent)",
+			checked: m.installMetaDevToolsMCP,
+		},
+		{
 			name:    "Ponytail",
 			desc:    "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)",
 			checked: m.installPonytail,
@@ -1104,6 +1114,11 @@ func (m *Model) viewConfirm() string {
 			mcpLabel = "yes"
 		}
 		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
+		metaLabel := "no"
+		if m.installMetaDevToolsMCP {
+			metaLabel = "yes"
+		}
+		rows = append(rows, [2]string{"Meta Developer Tools MCP", metaLabel})
 		ponytailLabel := "no"
 		if m.installPonytail {
 			ponytailLabel = "yes"
@@ -1227,6 +1242,12 @@ func (m *Model) SelectedAgent() string {
 	return m.selectedAgent
 }
 
+// InstallMetaDevToolsMCP returns whether the Meta Developer Tools MCP should
+// be installed.
+func (m *Model) InstallMetaDevToolsMCP() bool {
+	return m.installMetaDevToolsMCP
+}
+
 // InstallMicrosoftLearnMCP returns whether MCP should be installed.
 func (m *Model) InstallMicrosoftLearnMCP() bool {
 	return m.installMicrosoftLearnMCP
@@ -1241,6 +1262,7 @@ func (m *Model) Result() TUIResult {
 	return TUIResult{
 		Agent:           m.selectedAgent,
 		MCP:             m.installMicrosoftLearnMCP,
+		MetaMCP:         m.installMetaDevToolsMCP,
 		Ponytail:        m.installPonytail,
 		OverwriteAgents: m.overwriteAgents,
 		Autostart:       m.autostart,
