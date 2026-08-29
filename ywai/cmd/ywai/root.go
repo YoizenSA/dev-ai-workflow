@@ -576,14 +576,16 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	agentSettingsPaths := agent.SettingsPaths()
 	var done []string
 
-	// The third-party statusline plugin does not support OpenCode v2. Remove
-	// legacy entries during installs so it cannot be reloaded accidentally.
+	// sub-agent-statusline shows delegation activity in the sidebar and footer.
+	// It works on opencode v1 — it was only dropped for v2 — and the install
+	// used to strip it from tui.json on every run, which quietly undid the
+	// entry Engram's own installer had just written.
 	if !dryRun {
-		if err := plugins.RemoveSubAgentStatusline(); err != nil {
-			fmt.Printf("  Warning: failed to remove retired sub-agent-statusline plugin: %v\n", err)
+		if err := plugins.InstallSubAgentStatusline(); err != nil {
+			fmt.Printf("  Warning: failed to install sub-agent-statusline plugin: %v\n", err)
 		}
 	} else {
-		fmt.Println("  Would remove retired sub-agent-statusline TUI plugin")
+		fmt.Println("  Would install sub-agent-statusline TUI plugin")
 	}
 
 	for _, a := range agents {

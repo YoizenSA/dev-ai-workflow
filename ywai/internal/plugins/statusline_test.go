@@ -17,75 +17,6 @@ func TestTuiConfigPathIsCliJSON(t *testing.T) {
 	}
 }
 
-func TestRemoveSubAgentStatuslineFromCliJSON(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	dir := filepath.Join(home, ".config", "opencode")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "cli.json"), []byte(`{"plugins":["other","opencode-subagent-statusline"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := RemoveSubAgentStatusline(); err != nil {
-		t.Fatalf("RemoveSubAgentStatusline() error = %v", err)
-	}
-
-	path := filepath.Join(home, ".config", "opencode", "cli.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read cli.json: %v", err)
-	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		t.Fatalf("parse cli.json: %v", err)
-	}
-	if _, ok := root["plugins"]; ok {
-		t.Fatalf("cli.json still has legacy \"plugins\" key")
-	}
-	arr, ok := root["plugin"].([]any)
-	if !ok {
-		t.Fatalf("cli.json plugins type = %T, want []any", root["plugin"])
-	}
-	if containsString(arr, subAgentStatuslinePlugin) || !containsString(arr, "other") {
-		t.Fatalf("cli.json plugins = %v, want only preserved entries", arr)
-	}
-}
-
-func TestRemoveSubAgentStatuslineFromLegacyTuiJSON(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	dir := filepath.Join(home, ".config", "opencode")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	legacy := []byte(`{"plugins":["legacy-plugin","opencode-subagent-statusline"]}` + "\n")
-	if err := os.WriteFile(filepath.Join(dir, "tui.json"), legacy, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := RemoveSubAgentStatusline(); err != nil {
-		t.Fatalf("RemoveSubAgentStatusline() error = %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, "tui.json"))
-	if err != nil {
-		t.Fatalf("read tui.json: %v", err)
-	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		t.Fatalf("parse cli.json: %v", err)
-	}
-	arr, _ := root["plugin"].([]any)
-	if !containsString(arr, "legacy-plugin") {
-		t.Errorf("plugins %v missing preserved entry", arr)
-	}
-	if containsString(arr, subAgentStatuslinePlugin) {
-		t.Errorf("plugins %v still contain retired statusline", arr)
-	}
-}
-
 func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 	bundle := writeBundle(t, "// logo")
 	configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
@@ -107,4 +38,73 @@ func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 	if root["mouse"] != false {
 		t.Errorf("cli.json mouse = %v, want false from leftover tui.json", root["mouse"])
 	}
+}
+
+// sub-agent-statusline works on opencode v1 and shows delegation activity in
+// the sidebar and footer. The install used to strip it on every run — a v2-era
+// decision — which quietly undid the entry Engram's installer had just written,
+// so the plugin was never there after an install.
+func TestInstallSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "cli.json")
+	if err := os.WriteFile(path, []byte(`{"plugin":["other"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InstallSubAgentStatusline(); err != nil {
+		t.Fatalf("InstallSubAgentStatusline() error = %v", err)
+	}
+
+	arr := pluginArrayIn(t, path)
+	if !containsString(arr, subAgentStatuslinePlugin) {
+		t.Errorf("plugin missing after install: %v", arr)
+	}
+	if !containsString(arr, "other") {
+		t.Errorf("pre-existing plugin dropped: %v", arr)
+	}
+}
+
+// Running install twice must not list the plugin twice.
+func TestInstallSubAgentStatuslineIsIdempotent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	for i := 0; i < 2; i++ {
+		if err := InstallSubAgentStatusline(); err != nil {
+			t.Fatalf("InstallSubAgentStatusline() run %d: %v", i+1, err)
+		}
+	}
+
+	arr := pluginArrayIn(t, filepath.Join(home, ".config", "opencode", "cli.json"))
+	count := 0
+	for _, v := range arr {
+		if s, ok := v.(string); ok && s == subAgentStatuslinePlugin {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("plugin listed %d times, want 1: %v", count, arr)
+	}
+}
+
+func pluginArrayIn(t *testing.T, path string) []any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", filepath.Base(path), err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse %s: %v", filepath.Base(path), err)
+	}
+	arr, ok := root["plugin"].([]any)
+	if !ok {
+		t.Fatalf("%s has no []any \"plugin\": %v", filepath.Base(path), root)
+	}
+	return arr
 }
