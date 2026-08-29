@@ -61,7 +61,7 @@ export default function ModelCombobox({ id, label, value, models, onChange, reco
 	}, []);
 
 	return (
-		<div className="field model-combobox">
+		<div className={`field model-combobox${isOpen ? " model-combobox-open" : ""}`}>
 			<label className="field-label" htmlFor={id}>
 				{label}
 			</label>

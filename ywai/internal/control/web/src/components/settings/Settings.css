@@ -977,6 +977,15 @@
 	position: relative;
 	z-index: 20;
 }
+
+/* Every combobox card sharing z-index 20 made DOM order the tiebreaker, so a
+   later card painted over an open dropdown: Quick set's list was unusable
+   because OMP modelRoles sits below it. Lift only the card whose dropdown is
+   actually open, so it clears its siblings without permanently outranking
+   them. */
+.settings-section:has(.model-combobox-open) {
+	z-index: 60;
+}
 .profiles-omp-thinking {
 	display: flex;
 	align-items: center;
