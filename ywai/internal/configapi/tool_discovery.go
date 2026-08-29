@@ -121,13 +121,13 @@ func discoverPluginTools(pluginDir string) []string {
 
 // knownBundleTools maps a seeded plugin bundle filename to the tools it
 // exposes. ywai ships its own plugins as minified bundles (e.g.
-// background-agents-v2.js); regex-scanning a minified file yields false
+// background-agents.js); regex-scanning a minified file yields false
 // positives, so we declare their stable tool sets explicitly. These bundles
 // are seeded next to the opencode config and referenced from its "plugins"
 // array, so discoverAllPluginTools (which only scans the npm packages dir)
 // never sees them.
 var knownBundleTools = map[string][]string{
-	"background-agents-v2.js": {
+	"background-agents.js": {
 		"delegate",
 		"delegation_read",
 		"delegation_list",

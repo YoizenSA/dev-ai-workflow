@@ -357,7 +357,7 @@ func buildToolsResponse() (map[string]interface{}, error) {
 	pluginTools := discoverAllPluginTools()
 
 	// Also discover plugins referenced from the opencode "plugin" array: ywai
-	// seeds local bundles (e.g. background-agents-v2.js) there, which the npm
+	// seeds local bundles (e.g. background-agents.js) there, which the npm
 	// packages scan above never sees.
 	if pluginRaw, ok := config["plugin"]; ok {
 		var entries []string

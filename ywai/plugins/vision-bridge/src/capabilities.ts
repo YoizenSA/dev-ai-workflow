@@ -31,9 +31,7 @@ export type CatalogModel = {
   // Current shape (Provider.Model): capabilities.attachment + capabilities.input.image
   capabilities?: {
     attachment?: boolean
-    tools?: boolean
-    input?: { image?: boolean; audio?: boolean; video?: boolean; pdf?: boolean } | string[]
-    output?: string[]
+    input?: { image?: boolean; audio?: boolean; video?: boolean; pdf?: boolean }
   }
   // Legacy/config shape: flat attachment + modalities.input as a string array
   attachment?: boolean
@@ -47,18 +45,9 @@ export type CatalogProvider = { id: string; models?: Record<string, CatalogModel
  * Returns undefined when the entry carries no capability info at all, so the
  * caller falls through to the next source instead of assuming "no vision".
  */
-export function isImagePart(p: AnyPart): boolean {
-  const mime = String(p.mime ?? p.mediaType ?? "")
-  if (!mime.startsWith("image/")) return false
-  return p.type === "file" || p.type === "media"
-}
-
 export function catalogEntrySupportsImage(model: CatalogModel): boolean | undefined {
   const caps = model.capabilities
   if (caps) {
-    if (Array.isArray(caps.input)) {
-      return caps.input.includes("image")
-    }
     if (caps.input?.image === true) return true
     if (caps.attachment === true) return true
     // capabilities present but no image input → genuinely text-only
@@ -158,12 +147,6 @@ export function formatModel(m: ModelRef): string {
  * similar) into the same message, and forwarding those as "the user's message"
  * would misdirect the vision model.
  */
-export function messageParts(message: { parts?: AnyPart[]; content?: AnyPart[] }): AnyPart[] {
-  if (Array.isArray(message.content)) return message.content
-  if (Array.isArray(message.parts)) return message.parts
-  return []
-}
-
 export function collectUserText(parts: AnyPart[]): string {
   return parts
     .filter((p) => p.type === "text" && !p.synthetic && typeof p.text === "string")

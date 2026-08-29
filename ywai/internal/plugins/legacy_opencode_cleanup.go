@@ -8,14 +8,16 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// RemoveBrokenLegacyOpenCodePlugins deletes known v1 plugin leftovers that
-// OpenCode2 auto-discovers but cannot load.
+// RemoveBrokenLegacyOpenCodePlugins deletes plugin leftovers opencode
+// auto-discovers but cannot load. It must never list a bundle ywai still
+// installs: background-agents.js and advisor.js are the v1 builds this branch
+// ships, so removing them here would delete the plugin the installer just
+// wrote and leave the agents with no delegation tools.
 func RemoveBrokenLegacyOpenCodePlugins(configPath string) error {
 	dir := filepath.Dir(configPath)
 	for _, rel := range []string{
 		"plugins/codemod-periodic-update.js", "plugins/engram.ts", "plugins/herdr-agent-state.js",
 		"plugins/model-variants.ts", "plugins/review-result-artifacts.ts", "plugins/skill-registry.ts",
-		"ywai-plugins/background-agents.js", "ywai-plugins/advisor.js",
 	} {
 		if err := os.Remove(filepath.Join(dir, rel)); err != nil && !os.IsNotExist(err) {
 			return err
@@ -28,7 +30,7 @@ func RemoveBrokenLegacyOpenCodePlugins(configPath string) error {
 	if err != nil {
 		return err
 	}
-	blocked := []string{"@dietrichgebert/ponytail", "background-agents.js", "advisor.js"}
+	blocked := []string{"@dietrichgebert/ponytail"}
 	filtered := make([]any, 0)
 	for _, raw := range openCodePlugins(root) {
 		s, ok := raw.(string)

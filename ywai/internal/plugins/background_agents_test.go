@@ -52,7 +52,7 @@ func permissionRules(t *testing.T, path string) map[string]string {
 }
 
 func TestPatchOpenCodeBackgroundAgents(t *testing.T) {
-	const jsPath = "/home/u/.config/opencode/ywai-plugins/background-agents-v2.js"
+	const jsPath = "/home/u/.config/opencode/ywai-plugins/background-agents.js"
 
 	// Case A — empty config: creates plugin array + permissions rules.
 	t.Run("creates_plugin_and_permissions_when_missing", func(t *testing.T) {
@@ -151,7 +151,7 @@ func TestInstallBackgroundAgentsWithBundle(t *testing.T) {
 		t.Fatalf("installBackgroundAgentsWithBundle() error = %v", err)
 	}
 
-	destJS := filepath.Join(dir, "ywai-plugins", "background-agents-v2.js")
+	destJS := filepath.Join(dir, "ywai-plugins", "background-agents.js")
 	got, err := os.ReadFile(destJS)
 	if err != nil {
 		t.Fatalf("expected bundle copied to %s: %v", destJS, err)

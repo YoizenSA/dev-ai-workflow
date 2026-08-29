@@ -4,7 +4,10 @@ import * as os from "node:os"
 import * as path from "node:path"
 import AdvisorPlugin from "../src/index"
 
-// End-to-end over a stubbed OpenCode v2 context: event in, synthetic note out.
+// End-to-end over a stubbed OpenCode client: event in, note out. The units are
+// covered elsewhere; what these pin is the wiring between them — including the
+// two ways this feature fails badly in the wild: reviewing its own advice, and
+// talking too much.
 
 type Msg = { info: { id: string; role: string }; parts: { type: string; text: string }[] }
 
@@ -13,72 +16,48 @@ const msg = (id: string, role: string, text: string): Msg => ({
   parts: [{ type: "text", text }],
 })
 
-class FakeCtx {
+class FakeClient {
   history: Msg[] = []
+  /** Replies the advisor model will give, in order. */
   replies: string[] = []
-  delivered: { text: string; synthetic: boolean }[] = []
+  /** Notes delivered into the primary session. */
+  delivered: { text: string; noReply: boolean }[] = []
   toasts: { variant: string; message: string }[] = []
   createdSessions: string[] = []
   deletedSessions: string[] = []
   advisorPrompts: string[] = []
-  tools: { name: string; input?: unknown; execute: Function }[] = []
-  eventHandler?: (event: { type: string; data?: Record<string, unknown> }) => Promise<void> | void
-  contextHook?: (session: { sessionID: string; system: unknown[] }) => void
   #seq = 0
-  directory: string
-  options: { configPath: string }
-
-  constructor(directory: string, configPath: string) {
-    this.directory = directory
-    this.options = { configPath }
-  }
 
   session = {
-    context: async ({ sessionID: _id }: { sessionID: string }) => this.history,
+    messages: async () => ({ data: this.history }),
     create: async () => {
       const id = `advisor-${++this.#seq}`
       this.createdSessions.push(id)
-      return { id }
+      return { data: { id } }
     },
-    remove: async ({ sessionID }: { sessionID: string }) => {
-      this.deletedSessions.push(sessionID)
-    },
-    prompt: async ({ sessionID, text }: { sessionID: string; text?: string }) => {
-      if (sessionID.startsWith("advisor-")) {
-        this.advisorPrompts.push(text ?? "")
-        const reply = this.replies.shift() ?? "SEVERITY: silent"
-        return { text: reply, parts: [{ type: "text", text: reply }] }
-      }
+    delete: async ({ path: p }: any) => {
+      this.deletedSessions.push(p.id)
       return {}
     },
-    synthetic: async ({ sessionID: _id, text }: { sessionID: string; text: string }) => {
-      this.delivered.push({ text, synthetic: true })
+    prompt: async ({ path: p, body }: any) => {
+      const text = body?.parts?.[0]?.text ?? ""
+      if (p.id.startsWith("advisor-")) {
+        this.advisorPrompts.push(text)
+        const reply = this.replies.shift() ?? "SEVERITY: silent"
+        return { data: { parts: [{ type: "text", text: reply }] } }
+      }
+      this.delivered.push({ text, noReply: body?.noReply === true })
+      // A delivered note becomes part of the primary transcript, exactly as it
+      // would in OpenCode — this is what lets the recursion test be real.
       this.history.push(msg(`advisory-${this.delivered.length}`, "user", text))
-    },
-    hook: async (name: string, fn: (session: { sessionID: string; system: unknown[] }) => void) => {
-      if (name === "context") this.contextHook = fn
-    },
-  }
-
-  event = {
-    subscribe: async (fn: (event: { type: string; data?: Record<string, unknown> }) => Promise<void> | void) => {
-      this.eventHandler = fn
-    },
-  }
-
-  tool = {
-    transform: async (fn: (draft: { add: (name: string, spec: any) => void }) => void) => {
-      fn({
-        add: (name: string, spec: any) => {
-          this.tools.push({ name, input: spec.input, execute: spec.execute })
-        },
-      })
+      return {}
     },
   }
 
   tui = {
     showToast: async ({ body }: any) => {
       this.toasts.push({ variant: body.variant, message: body.message })
+      return {}
     },
   }
 }
@@ -92,160 +71,163 @@ beforeEach(async () => {
   await fs.writeFile(configPath, "advisor_enabled: true\nadvisor_model: test/advisor-model\n")
 })
 
-async function boot(ctx: FakeCtx) {
-  expect(AdvisorPlugin.id).toBe("advisor")
-  await AdvisorPlugin.setup(ctx)
+/** Boots the plugin against the test config. */
+async function boot(client: FakeClient, directory = "/tmp/project") {
+  return await AdvisorPlugin({ client, directory } as never, { configPath })
 }
 
-const idle = (sessionID: string) => ({ type: "session.idle", data: { sessionID } })
+const idle = (sessionID: string) => ({ event: { type: "session.idle", properties: { sessionID } } }) as never
 
 describe("the review loop", () => {
   test("first idle only seeds the cursor — no review of pre-existing history", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    ctx.history = [msg("1", "user", "old"), msg("2", "assistant", "old reply")]
-    ctx.replies = ["SEVERITY: blocker\nNOTE: should never be asked"]
+    const client = new FakeClient()
+    client.history = [msg("1", "user", "old"), msg("2", "assistant", "old reply")]
+    client.replies = ["SEVERITY: blocker\nNOTE: should never be asked"]
 
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.advisorPrompts).toHaveLength(0)
-    expect(ctx.delivered).toHaveLength(0)
+    expect(client.advisorPrompts).toHaveLength(0)
+    expect(client.delivered).toHaveLength(0)
   })
 
   test("a concern reaches the transcript and the toast", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1")) // seed
 
-    ctx.history.push(msg("3", "assistant", "deleted the migration and moved on"))
-    ctx.replies = ["SEVERITY: concern\nNOTE: The migration runs before the column exists."]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "deleted the migration and moved on"))
+    client.replies = ["SEVERITY: concern\nNOTE: The migration runs before the column exists."]
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.delivered).toHaveLength(1)
-    expect(ctx.delivered[0]!.synthetic).toBe(true)
-    expect(ctx.delivered[0]!.text).toContain('severity="concern"')
-    expect(ctx.delivered[0]!.text).toContain("column exists")
-    expect(ctx.toasts[0]!.variant).toBe("warning")
+    expect(client.delivered).toHaveLength(1)
+    expect(client.delivered[0]!.noReply).toBe(true)
+    expect(client.delivered[0]!.text).toContain('severity="concern"')
+    expect(client.delivered[0]!.text).toContain("column exists")
+    expect(client.toasts[0]!.variant).toBe("warning")
   })
 
   test("silence delivers nothing", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "renamed a variable"))
-    ctx.replies = ["SEVERITY: silent"]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "renamed a variable"))
+    client.replies = ["SEVERITY: silent"]
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.delivered).toHaveLength(0)
-    expect(ctx.toasts).toHaveLength(0)
+    expect(client.delivered).toHaveLength(0)
+    expect(client.toasts).toHaveLength(0)
   })
 
   test("the advisor never reviews its own note", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    // The failure this prevents: the note lands in the transcript, the next
+    // idle feeds it back, and the advisor comments on its own advice forever.
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "shipped it"))
-    ctx.replies = ["SEVERITY: concern\nNOTE: Verification is thinner than the risk."]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "shipped it"))
+    client.replies = ["SEVERITY: concern\nNOTE: Verification is thinner than the risk."]
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("4", "assistant", "another step"))
-    ctx.replies = ["SEVERITY: silent"]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("4", "assistant", "another step"))
+    client.replies = ["SEVERITY: silent"]
+    await hooks.event!(idle("s1"))
 
-    const secondPrompt = ctx.advisorPrompts[1] ?? ""
+    const secondPrompt = client.advisorPrompts[1] ?? ""
     expect(secondPrompt).toContain("another step")
     expect(secondPrompt).not.toContain("Verification is thinner")
   })
 
   test("repeated advice lands once", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
     for (let i = 0; i < 3; i++) {
-      ctx.history.push(msg(`w${i}`, "assistant", `work step ${i}`))
-      ctx.replies = ["SEVERITY: blocker\nNOTE: The retry loop has no backoff."]
-      await ctx.eventHandler!(idle("s1"))
+      client.history.push(msg(`w${i}`, "assistant", `work step ${i}`))
+      client.replies = ["SEVERITY: blocker\nNOTE: The retry loop has no backoff."]
+      await hooks.event!(idle("s1"))
     }
 
-    expect(ctx.delivered).toHaveLength(1)
+    expect(client.delivered).toHaveLength(1)
   })
 
   test("content-free notes never reach the transcript", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
     for (const noise of ["SEVERITY: blocker\nNOTE: Stop.", "SEVERITY: blocker\nNOTE: Done", "SEVERITY: concern\nNOTE: LGTM"]) {
-      ctx.history.push(msg(`n${ctx.delivered.length}${noise.length}`, "assistant", "more work"))
-      ctx.replies = [noise]
-      await ctx.eventHandler!(idle("s1"))
+      client.history.push(msg(`n${client.delivered.length}${noise.length}`, "assistant", "more work"))
+      client.replies = [noise]
+      await hooks.event!(idle("s1"))
     }
 
-    expect(ctx.delivered).toHaveLength(0)
+    expect(client.delivered).toHaveLength(0)
   })
 
   test("an idle with nothing new does not call the advisor model", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    await ctx.eventHandler!(idle("s1"))
-    await ctx.eventHandler!(idle("s1"))
+    await hooks.event!(idle("s1"))
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.advisorPrompts).toHaveLength(0)
+    expect(client.advisorPrompts).toHaveLength(0)
   })
 
   test("the advisor's own child session is cleaned up", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "work"))
-    ctx.replies = ["SEVERITY: nit\nNOTE: A map would be simpler here."]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "work"))
+    client.replies = ["SEVERITY: nit\nNOTE: A map would be simpler here."]
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.createdSessions).toHaveLength(1)
-    expect(ctx.deletedSessions).toEqual(ctx.createdSessions)
+    expect(client.createdSessions).toHaveLength(1)
+    expect(client.deletedSessions).toEqual(client.createdSessions)
   })
 
   test("events from the advisor's own session are ignored", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("advisor-1"))
-    expect(ctx.advisorPrompts).toHaveLength(0)
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("advisor-1"))
+    // Seeding an advisor session would make it a reviewed session of its own.
+    expect(client.advisorPrompts).toHaveLength(0)
   })
 })
 
 describe("failure containment", () => {
   test("an advisor model error never breaks the watched session", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    ctx.session.create = async () => {
+    const client = new FakeClient()
+    client.session.create = async () => {
       throw new Error("provider is down")
     }
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
-    ctx.history.push(msg("3", "assistant", "work"))
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
+    client.history.push(msg("3", "assistant", "work"))
 
-    await expect(ctx.eventHandler!(idle("s1"))).resolves.toBeUndefined()
-    expect(ctx.delivered).toHaveLength(0)
+    await expect(hooks.event!(idle("s1"))).resolves.toBeUndefined()
+    expect(client.delivered).toHaveLength(0)
   })
 
   test("a missing TUI still delivers the transcript block", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    ctx.tui.showToast = async () => {
+    const client = new FakeClient()
+    client.tui.showToast = async () => {
       throw new Error("headless")
     }
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "work"))
-    ctx.replies = ["SEVERITY: concern\nNOTE: The lock is held across the await."]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "work"))
+    client.replies = ["SEVERITY: concern\nNOTE: The lock is held across the await."]
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.delivered).toHaveLength(1)
+    expect(client.delivered).toHaveLength(1)
   })
 })
 
@@ -254,56 +236,58 @@ describe("watchdog", () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "advisor-wd-"))
     await fs.writeFile(path.join(dir, "WATCHDOG.md"), "Watch writes that bypass the durable queue.")
 
-    const ctx = new FakeCtx(dir, configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    const client = new FakeClient()
+    const hooks = await boot(client, dir)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "wrote directly to the table"))
-    ctx.replies = ["SEVERITY: silent"]
-    await ctx.eventHandler!(idle("s1"))
+    client.history.push(msg("3", "assistant", "wrote directly to the table"))
+    client.replies = ["SEVERITY: silent"]
+    await hooks.event!(idle("s1"))
 
-    expect(ctx.advisorPrompts[0]).toContain("durable queue")
+    expect(client.advisorPrompts[0]).toContain("durable queue")
   })
 })
 
 describe("system prompt isolation", () => {
   test("the advisor's own session gets only the advisor prompt", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    await ctx.eventHandler!(idle("s1"))
+    // `system` on session.prompt appends rather than replaces, so without this
+    // the review inherits the user's whole AGENTS.md persona, SDD rules and MCP
+    // instructions — thousands of tokens per review, aimed at a different job.
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    await hooks.event!(idle("s1"))
 
-    ctx.history.push(msg("3", "assistant", "work"))
-    ctx.replies = ["SEVERITY: silent"]
+    client.history.push(msg("3", "assistant", "work"))
+    client.replies = ["SEVERITY: silent"]
 
-    let captured: unknown[] | undefined
-    const original = ctx.session.prompt
-    ctx.session.prompt = async (opts: any) => {
-      if (String(opts.sessionID).startsWith("advisor-")) {
-        const system = [
-          { type: "text", text: "You are a Senior Architect. Use CAPS." },
-          { type: "text", text: "Strict TDD Mode: enabled" },
-        ]
-        ctx.contextHook?.({ sessionID: opts.sessionID, system })
+    let captured: string[] | undefined
+    const original = client.session.prompt
+    client.session.prompt = async (opts: any) => {
+      if (opts.path.id.startsWith("advisor-")) {
+        const system = ["You are a Senior Architect. Use CAPS.", "Strict TDD Mode: enabled"]
+        await (hooks as any)["experimental.chat.system.transform"](
+          { sessionID: opts.path.id },
+          { system },
+        )
         captured = system
       }
       return original(opts)
     }
 
-    await ctx.eventHandler!(idle("s1"))
+    await hooks.event!(idle("s1"))
 
     expect(captured).toBeDefined()
     expect(captured).toHaveLength(1)
-    const text = JSON.stringify(captured)
-    expect(text).toContain("peer reviewer")
-    expect(text).not.toContain("Senior Architect")
+    expect(captured![0]).toContain("peer reviewer")
+    expect(captured!.join(" ")).not.toContain("Senior Architect")
   })
 
   test("other sessions are left exactly as OpenCode built them", async () => {
-    const ctx = new FakeCtx("/tmp/project", configPath)
-    await boot(ctx)
-    const system = [{ type: "text", text: "the user's real system prompt" }, { type: "text", text: "and its second block" }]
-    ctx.contextHook?.({ sessionID: "s1", system })
+    const client = new FakeClient()
+    const hooks = await boot(client)
+    const system = ["the user's real system prompt", "and its second block"]
+    await (hooks as any)["experimental.chat.system.transform"]({ sessionID: "s1" }, { system })
     expect(system).toHaveLength(2)
-    expect((system[0] as { text: string }).text).toBe("the user's real system prompt")
+    expect(system[0]).toBe("the user's real system prompt")
   })
 })

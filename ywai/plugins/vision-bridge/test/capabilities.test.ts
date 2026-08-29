@@ -5,20 +5,23 @@ import {
   collectUserText,
   catalogEntrySupportsImage,
   extractText,
-  isImagePart,
   modelSupportsImage,
   resolveImageSupport,
   resolveVisionModel,
 } from "../src/capabilities"
 
 describe("plugin entry surface", () => {
+  // OpenCode's loader calls EVERY exported function as a plugin factory. When
+  // the helpers were exported from the entry, it invoked resolveVisionModel
+  // with the plugin input, `preference.trim()` threw, and registration aborted
+  // silently — images went straight to text-only models. Keep the entry to a
+  // single default export.
   test("exports only the default plugin", () => {
     expect(Object.keys(entry)).toEqual(["default"])
   })
 
-  test("the default export is a v2 { id, setup } plugin", () => {
-    expect(entry.default.id).toBe("vision-bridge")
-    expect(typeof entry.default.setup).toBe("function")
+  test("the default export is the plugin factory", () => {
+    expect(typeof entry.default).toBe("function")
   })
 })
 
@@ -67,38 +70,6 @@ describe("catalogEntrySupportsImage — legacy flat shape", () => {
     expect(catalogEntrySupportsImage({ attachment: false, modalities: { input: ["text"] } })).toBe(
       false,
     )
-  })
-})
-
-describe("catalogEntrySupportsImage — OpenCode v2 capabilities.input array", () => {
-  test("image in capabilities.input strings", () => {
-    expect(
-      catalogEntrySupportsImage({
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-      } as never),
-    ).toBe(true)
-  })
-
-  test("text-only v2 input list", () => {
-    expect(
-      catalogEntrySupportsImage({
-        capabilities: { tools: true, input: ["text"], output: ["text"] },
-      } as never),
-    ).toBe(false)
-  })
-})
-
-describe("isImagePart", () => {
-  test("v1 file part", () => {
-    expect(isImagePart({ type: "file", mime: "image/png", url: "file:///x" })).toBe(true)
-  })
-
-  test("v2 media part", () => {
-    expect(isImagePart({ type: "media", mediaType: "image/jpeg", data: "abc" })).toBe(true)
-  })
-
-  test("non-image file", () => {
-    expect(isImagePart({ type: "file", mime: "application/pdf" })).toBe(false)
   })
 })
 

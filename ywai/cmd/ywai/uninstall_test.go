@@ -90,7 +90,7 @@ func TestUninstallStripYwaiConfigRefs_KeepsForeignPlugins(t *testing.T) {
 		"plugins": []any{
 			"/home/u/.config/opencode/ywai-plugins/vision-bridge.js",
 			"/home/u/.config/opencode/plugins/their-own.js",
-			"/home/u/.config/opencode/ywai-plugins/background-agents-v2.js",
+			"/home/u/.config/opencode/ywai-plugins/background-agents.js",
 		},
 	})
 
