@@ -110,8 +110,9 @@ func (s *Server) buildRoutes() {
 	s.mux.HandleFunc("/api/", s.configAPIHandler)
 
 	// ─── Missions API ────────────────────────────────────────────
-	s.mux.HandleFunc("/missions/api/", s.missionsHandler)
-	s.mux.HandleFunc("/missions/ws", s.missionsHandler)
+	for _, pattern := range missionsProxyPaths {
+		s.mux.HandleFunc(pattern, s.missionsHandler)
+	}
 
 	// ─── MCP Store API ──────────────────────────────────────────
 	s.registerMcpStoreRoutes()
@@ -163,6 +164,18 @@ func (s *Server) buildRoutes() {
 // configAPIHandler forwards requests to the config API HTTP handler.
 func (s *Server) configAPIHandler(w http.ResponseWriter, r *http.Request) {
 	s.configAPI.HTTPHandler().ServeHTTP(w, r)
+}
+
+// missionsProxyPaths are the control-server patterns forwarded to the missions
+// mux. Every path that mux serves needs an entry here: anything missing falls
+// through to the SPA catch-all, which answers 200 with index.html. For an API
+// call that looks like a puzzling parse error, and for a websocket it fails the
+// handshake with "Unexpected response code: 200" — how /missions/engram/ws
+// stayed broken while /missions/ws worked.
+var missionsProxyPaths = []string{
+	"/missions/api/",
+	"/missions/ws",
+	"/missions/engram/ws",
 }
 
 // missionsHandler strips the /missions prefix and forwards to missions handler.
