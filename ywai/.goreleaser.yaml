@@ -19,6 +19,19 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}}
     ignore: []
+    hooks:
+      # Authenticode-sign the Windows binaries in place. Defender's ML
+      # classifier flags unsigned Go binaries (Trojan:Win32/Bearfoos.A!ml) and
+      # Smart App Control blocks them for "malicious binary reputation": every
+      # release ships a new hash with no reputation, and a signature is what
+      # carries reputation across releases.
+      #
+      # A post-build hook rather than binary_signs because the signature
+      # replaces the binary instead of sitting beside it — binary_signs always
+      # wants a separate signature artifact to publish. The script is a no-op
+      # without YWAI_WINDOWS_CERT, so a release with no secrets still ships.
+      post:
+        - bash scripts/sign-windows.sh "{{ .Path }}"
 
 archives:
   - formats: [tar.gz]

@@ -13,6 +13,9 @@ defaults:
 
 permissions:
   contents: write
+  # Build provenance: id-token signs the attestation, attestations publishes it.
+  id-token: write
+  attestations: write
 
 # Never cancel a release mid-publish.
 concurrency:
@@ -101,6 +104,27 @@ jobs:
       - name: Prepare embedded data
         run: bash scripts/prepare-embedded.sh
 
+      # osslsigncode signs the Windows binaries. Installed unconditionally so a
+      # release does not start, build for ten minutes and only then discover
+      # the signer is missing.
+      - name: Install Authenticode signer
+        run: sudo apt-get update && sudo apt-get install -y osslsigncode
+
+      # The certificate is optional: with no secret set, YWAI_WINDOWS_CERT stays
+      # empty, scripts/sign-windows.sh no-ops and the release publishes unsigned
+      # exactly as before. The emptiness check lives in the script rather than a
+      # step-level `if`, because a step's own `env:` is not yet in scope there.
+      - name: Decode Windows signing certificate
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+        run: |
+          if [ -z "$WINDOWS_CERT_BASE64" ]; then
+            echo "No signing certificate configured; Windows binaries ship unsigned."
+            exit 0
+          fi
+          echo "$WINDOWS_CERT_BASE64" | base64 -d > "$RUNNER_TEMP/windows-cert.p12"
+          echo "YWAI_WINDOWS_CERT=$RUNNER_TEMP/windows-cert.p12" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -108,5 +132,16 @@ jobs:
           version: "~> v2"
           args: release --clean
           workdir: ywai
+        env:
+          YWAI_WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+
+      # Cryptographic provenance tying every published archive to this repo,
+      # commit and workflow run. Free, needs no certificate, and gives anyone
+      # a way to verify a download came from this pipeline:
+      #   gh attestation verify <file> --repo YoizenSA/dev-ai-workflow
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ywai/dist/*.tar.gz,ywai/dist/*.zip,ywai/dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
