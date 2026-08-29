@@ -426,8 +426,17 @@ func restartControlServerIfRunning(r *applyResult, dryRun bool) {
 	}
 	fmt.Printf("  Stopping server on port %d...\n", port)
 	if err := killPort(port); err != nil {
-		r.warnf("could not kill server on port %d: %v", port, err)
-		return
+		// The kill can fail for reasons the update cannot fix — on Windows
+		// taskkill exits 1 when the process belongs to another session or is
+		// elevated. Say what that costs: the old server keeps the port, so it
+		// serves the previous build's UI and API until someone restarts it.
+		// Reporting only the taskkill error made that invisible.
+		if serverutil.GetRunningPort() == port {
+			r.warnf("could not stop the control server on port %d (%v); it keeps running the previous version "+
+				"and will serve the old UI until you stop it yourself and run `ywai serve`", port, err)
+			return
+		}
+		fmt.Printf("  Server on port %d exited despite: %v\n", port, err)
 	}
 	fmt.Println("  Server stopped.")
 	exe, err := selfupdate.ResolvedExecutable()

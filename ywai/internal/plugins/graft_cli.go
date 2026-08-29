@@ -96,6 +96,7 @@ func WireGraftMCP() error {
 	// "mcpServers"). omp points at models.yml and the IDE agents use their
 	// own file formats, so they are skipped.
 	wired := false
+	var failures []string
 	for name, configPath := range agent.SettingsPaths() {
 		switch name {
 		case "opencode", "kilocode", "claude-code", "pi":
@@ -105,13 +106,30 @@ func WireGraftMCP() error {
 		if configPath == "" {
 			continue
 		}
+		// SettingsPaths resolves kilocode with FindJSONCPath, which returns a
+		// candidate path whether or not the file exists. Wiring an agent that
+		// was never installed only produced a puzzling "cannot find the path"
+		// warning, so skip what is not on disk.
+		if _, err := os.Stat(configPath); err != nil {
+			continue
+		}
 		if err := writeGraftMCPEntry(configPath, name, entry.Command); err != nil {
-			return fmt.Errorf("failed to wire graft MCP for %s: %w", name, err)
+			// One unwritable config must not cost the others their MCP entry.
+			// Returning here left the rest unwired, and since Go randomizes map
+			// order, which agents got graft varied between runs.
+			failures = append(failures, fmt.Sprintf("%s: %v", name, err))
+			continue
 		}
 		wired = true
 	}
 	if !wired {
+		if len(failures) > 0 {
+			return fmt.Errorf("failed to wire graft MCP: %s", strings.Join(failures, "; "))
+		}
 		return fmt.Errorf("no agent configs found to wire graft MCP into")
+	}
+	if len(failures) > 0 {
+		fmt.Printf("  Warning: graft MCP not wired for %s\n", strings.Join(failures, "; "))
 	}
 	return nil
 }
