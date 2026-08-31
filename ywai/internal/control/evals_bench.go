@@ -26,7 +26,12 @@ type benchStore struct {
 const benchHistoryLimit = 50
 
 func newBenchStore() *benchStore {
-	dir := config.DataDir()
+	return newBenchStoreAt(config.DataDir())
+}
+
+// newBenchStoreAt builds a store rooted at dir (tests use a temp dir so real
+// runs on the machine never leak into assertions).
+func newBenchStoreAt(dir string) *benchStore {
 	_ = os.MkdirAll(dir, 0755)
 	s := &benchStore{path: filepath.Join(dir, "eval-runs.json")}
 	if data, err := os.ReadFile(s.path); err == nil {
@@ -194,6 +199,11 @@ func truncateResponse(s string) string {
 
 func opencodeURLForBench() string {
 	if u := strings.TrimSpace(os.Getenv("OPENCODE_URL")); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	// Same discovery as the chat proxy: probe with credentials so a server that
+	// requires auth (opencode2) is found, not just an unauthenticated v1.
+	if u := detectOpenCodeURL(); u != "" {
 		return u
 	}
 	return "http://localhost:4096"

@@ -357,8 +357,65 @@ WHERE 1=1`)
 		b.WriteString(strconv.FormatInt(cutoff, 10))
 	}
 	b.WriteString(" AND (s.time_archived IS NULL OR s.time_archived = 0);\n")
+	// --- Second half of the union: OpenCode v2 (opencode2) sessions live in
+	// session_v2 with the same column semantics but text JSON in model/agent.
+	b.WriteString("CREATE TEMP TABLE sa_sess_v2 AS\n")
+	b.WriteString(`SELECT
+  s.id AS session_id,
+  s.project_id AS project_id,
+  s.parent_id AS parent_id,
+  s.time_created AS time_created,
+  COALESCE(NULLIF(s.agent, ''), '(default)') AS agent,
+  COALESCE(json_extract(s.model, '$.id'), s.model, '') AS model,
+  COALESCE(s.cost, 0) AS cost,
+  COALESCE(tokens_input, 0) AS tokens_input,
+  COALESCE(tokens_output, 0) AS tokens_output,
+  COALESCE(tokens_reasoning, 0) AS tokens_reasoning,
+  COALESCE(tokens_cache_read, 0) AS tokens_cache_read,
+  COALESCE(tokens_cache_write, 0) AS tokens_cache_write
+FROM session_v2 s
+JOIN project p ON p.id = s.project_id
+WHERE 1=1`)
+	if q.ProjectID != "" {
+		b.WriteString(" AND p.id = ")
+		b.WriteString(sqlQuote(q.ProjectID))
+	}
+	if w := strings.TrimSpace(q.Worktree); w != "" {
+		b.WriteString(" AND LOWER(p.worktree) LIKE ")
+		b.WriteString(sqlQuote("%" + strings.ToLower(w) + "%"))
+	}
+	if q.Days > 0 {
+		cutoff := time.Now().AddDate(0, 0, -q.Days).UnixMilli()
+		b.WriteString(" AND s.time_created >= ")
+		b.WriteString(strconv.FormatInt(cutoff, 10))
+	}
+	b.WriteString(" AND (s.time_archived IS NULL OR s.time_archived = 0);\n")
+	b.WriteString("INSERT INTO sa_sess SELECT * FROM sa_sess_v2;\n")
 	b.WriteString("CREATE INDEX sa_sess_id ON sa_sess(session_id);\n")
 	b.WriteString("CREATE INDEX sa_sess_project ON sa_sess(project_id);\n")
+
+	// Unified tool-parts: v1 `part` rows (tool in data$.tool) plus v2
+	// session_message rows (tool in content[].name via json_each expansion).
+	b.WriteString(`CREATE TEMP TABLE sa_parts AS
+SELECT pt.session_id AS session_id,
+       json_extract(pt.data, '$.tool') AS name,
+       json_extract(pt.data, '$.state.input.name') AS skill_name,
+       json_extract(pt.data, '$.state.input.filePath') AS file_path,
+       pt.data AS data
+FROM part pt
+WHERE json_extract(pt.data, '$.type') = 'tool'
+  AND COALESCE(json_extract(pt.data, '$.tool'), '') != '';
+INSERT INTO sa_parts
+SELECT sm.session_id AS session_id,
+       je.value->>'name' AS name,
+       json_extract(je.value, '$.state.input.name') AS skill_name,
+       json_extract(je.value, '$.state.input.filePath') AS file_path,
+       je.value AS data
+FROM session_message sm, json_each(sm.data, '$.content') je
+WHERE je.value->>'type' = 'tool'
+  AND COALESCE(je.value->>'name', '') != '';
+CREATE INDEX sa_parts_session ON sa_parts(session_id);
+`)
 
 	// 0 projects
 	b.WriteString(`SELECT p.id AS id,
@@ -376,13 +433,11 @@ ORDER BY sessions DESC;
 
 	// 1 skills
 	fmt.Fprintf(&b, `SELECT
-  COALESCE(json_extract(pt.data, '$.state.input.name'), '') AS name,
+  COALESCE(skill_name, '') AS name,
   COUNT(*) AS cnt,
-  COUNT(DISTINCT pt.session_id) AS sessions
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%%"tool":"skill"%%'
-  AND json_extract(pt.data, '$.tool') = 'skill'
+  COUNT(DISTINCT session_id) AS sessions
+FROM sa_parts
+WHERE name = 'skill'
 GROUP BY name
 HAVING name != ''
 ORDER BY cnt DESC
@@ -390,31 +445,26 @@ LIMIT %d;
 `, q.SkillsLimit)
 
 	// 2 with-skill
-	b.WriteString(`SELECT COUNT(DISTINCT pt.session_id) AS n
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%"tool":"skill"%'
-  AND json_extract(pt.data, '$.tool') = 'skill';
+	b.WriteString(`SELECT COUNT(DISTINCT session_id) AS n
+FROM sa_parts
+WHERE name = 'skill';
 `)
 
 	// 3 skill by project
 	b.WriteString(`SELECT ss.project_id AS id, COUNT(*) AS cnt
-FROM part pt
+FROM sa_parts pt
 JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%"tool":"skill"%'
-  AND json_extract(pt.data, '$.tool') = 'skill'
+WHERE pt.name = 'skill'
 GROUP BY ss.project_id;
 `)
 
 	// 4 tools
 	fmt.Fprintf(&b, `SELECT
-  COALESCE(json_extract(pt.data, '$.tool'), '') AS name,
+  COALESCE(name, '') AS name,
   COUNT(*) AS cnt,
-  COUNT(DISTINCT pt.session_id) AS sessions
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE json_extract(pt.data, '$.type') = 'tool'
-  AND COALESCE(json_extract(pt.data, '$.tool'), '') != ''
+  COUNT(DISTINCT session_id) AS sessions
+FROM sa_parts
+WHERE name != ''
 GROUP BY name
 ORDER BY cnt DESC
 LIMIT %d;
@@ -422,9 +472,9 @@ LIMIT %d;
 
 	// 5 tool by project
 	b.WriteString(`SELECT ss.project_id AS id, COUNT(*) AS cnt
-FROM part pt
+FROM sa_parts pt
 JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE json_extract(pt.data, '$.type') = 'tool'
+WHERE pt.name != ''
 GROUP BY ss.project_id;
 `)
 
@@ -469,11 +519,9 @@ ORDER BY day ASC;
   END AS name,
   COUNT(*) AS cnt
 FROM (
-  SELECT COALESCE(json_extract(pt.data, '$.tool'), '') AS tool
-  FROM part pt
-  JOIN sa_sess ss ON ss.session_id = pt.session_id
-  WHERE json_extract(pt.data, '$.type') = 'tool'
-    AND COALESCE(json_extract(pt.data, '$.tool'), '') != ''
+  SELECT COALESCE(name, '') AS tool
+  FROM sa_parts
+  WHERE COALESCE(name, '') != ''
 )
 GROUP BY name
 ORDER BY cnt DESC;
@@ -501,14 +549,13 @@ FROM sa_sess;
   COALESCE(SUM(updates), 0) AS updates
 FROM (
   SELECT
-    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_save' THEN 1 ELSE 0 END) AS saves,
-    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_search' THEN 1 ELSE 0 END) AS searches,
-    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_update' THEN 1 ELSE 0 END) AS updates,
-    SUM(CASE WHEN json_extract(pt.data, '$.tool') = 'engram_mem_session_summary' THEN 1 ELSE 0 END) AS summaries
-  FROM part pt
-  JOIN sa_sess ss ON ss.session_id = pt.session_id
-  WHERE pt.data LIKE '%"tool":"engram_%'
-  GROUP BY pt.session_id
+    SUM(CASE WHEN name = 'engram_mem_save' THEN 1 ELSE 0 END) AS saves,
+    SUM(CASE WHEN name = 'engram_mem_search' THEN 1 ELSE 0 END) AS searches,
+    SUM(CASE WHEN name = 'engram_mem_update' THEN 1 ELSE 0 END) AS updates,
+    SUM(CASE WHEN name = 'engram_mem_session_summary' THEN 1 ELSE 0 END) AS summaries
+  FROM sa_parts
+  WHERE name LIKE 'engram_%'
+  GROUP BY session_id
 );
 `)
 

@@ -343,6 +343,9 @@ func startOpencodeServe() {
 	}
 	_ = os.Setenv("OPENCODE_SERVER_PASSWORD", password)
 	_ = os.Setenv("OPENCODE_SERVER_USERNAME", "opencode")
+	// Persist so detached processes (chat proxy, evals runner, mission workers)
+	// can reach the child server even when they did not inherit the env.
+	_ = opencode.SaveServerAuth("opencode", password)
 	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
 	// OPENCODE_URL in this process) proxies to the instance we just started.
 	os.Setenv("OPENCODE_URL", chosenURL)

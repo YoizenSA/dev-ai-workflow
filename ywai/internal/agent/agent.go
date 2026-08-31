@@ -182,6 +182,9 @@ func FindBinary(name string) string {
 	home := homeDir()
 	wellKnownDirs := []string{
 		filepath.Join(home, "."+name, "bin"),
+		// The opencode2 install lands in ~/.opencode/bin (no "2" in the dir
+		// name), so probing "opencode2" must also look there.
+		filepath.Join(home, ".opencode", "bin"),
 		filepath.Join(home, ".local", "bin"),
 	}
 	for _, dir := range wellKnownDirs {

@@ -33,7 +33,13 @@ export default function ConsolidationModal({ open, onClose, initialScope }: Prop
 
 	const consolidation = useMemoriesStore((s) => s.consolidation)
 	const startConsolidation = useMemoriesStore((s) => s.startConsolidation)
-	const projects = useMemoriesStore((s) => s.stats?.projects ?? [])
+	// Select the raw stats object (stable ref) and derive the array outside the
+	// selector: `s.stats?.projects ?? []` returns a NEW [] every snapshot while
+	// stats is null, which React 19's useSyncExternalStore rejects as an
+	// uncached getSnapshot result → "Maximum update depth exceeded" (#185) that
+	// crashes the whole /memories page.
+	const stats = useMemoriesStore((s) => s.stats)
+	const projects = stats?.projects ?? []
 
 	const loadOptions = useCallback(async () => {
 		setLoading(true)
