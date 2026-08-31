@@ -413,6 +413,18 @@ func TestRenderRulesSection_UsesOpenCodeV2Delegate(t *testing.T) {
 	if !strings.Contains(out, "delegation_read") {
 		t.Fatalf("rules must mention delegation_* supervision:\n%s", out)
 	}
+	if strings.Contains(out, `mode: "sync"`) || strings.Contains(out, `mode="sync"`) {
+		t.Fatalf("rules must not invent a delegate mode argument:\n%s", out)
+	}
+}
+
+func TestOpenCodeDelegateToolHint_HasNoModeArg(t *testing.T) {
+	if strings.Contains(OpenCodeDelegateToolHint, `mode: "sync"`) || strings.Contains(OpenCodeDelegateToolHint, `mode="sync"`) {
+		t.Fatalf("hint must not invent a delegate mode argument:\n%s", OpenCodeDelegateToolHint)
+	}
+	if !strings.Contains(OpenCodeDelegateToolHint, "delegation_read") {
+		t.Fatalf("hint must mention delegation_read:\n%s", OpenCodeDelegateToolHint)
+	}
 }
 
 func TestRenderRulesSection_EscapesPipes(t *testing.T) {

@@ -53,6 +53,12 @@ func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
 		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
 	}
+	if strings.Contains(body, `mode: "sync"`) || strings.Contains(body, `mode="sync"`) {
+		t.Fatalf("orchestrator body must not invent a delegate mode argument:\n%s", body)
+	}
+	if !strings.Contains(body, "delegation_read") {
+		t.Fatalf("orchestrator body must tell the model to read the result after notification:\n%s", body)
+	}
 }
 
 func TestPlanGeneratesExpectedArtifacts(t *testing.T) {

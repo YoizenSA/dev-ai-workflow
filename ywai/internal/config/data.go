@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -176,8 +177,10 @@ func SeedAgentsFrom(repoRoot string) error {
 
 // SeedWorkflowsFrom copies the bundled seed workflows (ywai/workflows/*.json)
 // into the user's data dir. Existing workflows are not fully replaced (layout
-// and custom nodes survive), but agentRef links from the seed are re-applied so
-// install/update re-attaches real agents like core/orchestrator on goal's start.
+// and custom nodes survive), but agentRef, prompt, and tools from the seed are
+// re-applied on matching node ids so install/update refreshes retired tool
+// names (codegraph → graft) and task prompts. A final pass rewrites leftover
+// CodeGraph / dropped-v2 tokens in every installed workflow JSON.
 func SeedWorkflowsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err
@@ -207,7 +210,7 @@ func SeedWorkflowsFrom(repoRoot string) error {
 			return fmt.Errorf("failed to write %s: %w", dstPath, err)
 		}
 	}
-	return nil
+	return migrateInstalledWorkflows(dstDir)
 }
 
 // seed workflow JSON shapes (only the fields we repair).
@@ -224,6 +227,8 @@ type seedNode struct {
 type seedNodeData struct {
 	AgentRef        string `json:"agentRef,omitempty"`
 	AgentDefinition string `json:"agentDefinition,omitempty"`
+	Prompt          string `json:"prompt,omitempty"`
+	Tools           string `json:"tools,omitempty"`
 }
 
 // reconcileSeedWorkflowAgentLinks re-applies agentRef links from a seed workflow
@@ -305,6 +310,20 @@ func reconcileSeedWorkflowAgentLinks(dstPath string, seedJSON []byte) error {
 			delete(data, "agentDefinition")
 			changed = true
 		}
+		if p := strings.TrimSpace(sn.Data.Prompt); p != "" {
+			got, _ := data["prompt"].(string)
+			if got != p {
+				data["prompt"] = p
+				changed = true
+			}
+		}
+		if tools := strings.TrimSpace(sn.Data.Tools); tools != "" {
+			got, _ := data["tools"].(string)
+			if got != tools {
+				data["tools"] = tools
+				changed = true
+			}
+		}
 		nodes[i] = nm
 	}
 	if !changed {
@@ -317,6 +336,132 @@ func reconcileSeedWorkflowAgentLinks(dstPath string, seedJSON []byte) error {
 	}
 	out = append(out, '\n')
 	return os.WriteFile(dstPath, out, 0o644)
+}
+
+var retiredCodegraph = regexp.MustCompile(`(?i)codegraph(_[A-Za-z0-9*]+)?`)
+
+func migrateInstalledWorkflows(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out, changed, err := migrateRetiredWorkflowVocab(raw)
+		if err != nil {
+			return fmt.Errorf("migrate %s: %w", entry.Name(), err)
+		}
+		if !changed {
+			continue
+		}
+		if err := os.WriteFile(path, out, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+// migrateRetiredWorkflowVocab rewrites leftover CodeGraph / dropped-v2 tool
+// names in a workflow JSON so installed copies keep working after the Graft
+// migration. Layout and custom nodes stay; only tools/prompt strings change.
+func migrateRetiredWorkflowVocab(raw []byte) ([]byte, bool, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, false, err
+	}
+	changed := false
+	nodes, _ := doc["nodes"].([]any)
+	for i, rawNode := range nodes {
+		nm, ok := rawNode.(map[string]any)
+		if !ok {
+			continue
+		}
+		data, _ := nm["data"].(map[string]any)
+		if data == nil {
+			continue
+		}
+		if s, ok := data["tools"].(string); ok {
+			if next, ok := rewriteRetiredToolsCSV(s); ok {
+				data["tools"] = next
+				changed = true
+			}
+		}
+		for _, key := range []string{"prompt", "agentDefinition", "agentDescription", "description"} {
+			s, ok := data[key].(string)
+			if !ok {
+				continue
+			}
+			if next, ok := rewriteRetiredProse(s); ok {
+				data[key] = next
+				changed = true
+			}
+		}
+		nodes[i] = nm
+	}
+	if !changed {
+		return raw, false, nil
+	}
+	doc["nodes"] = nodes
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, false, err
+	}
+	out = append(out, '\n')
+	return out, true, nil
+}
+
+func rewriteRetiredToolsCSV(csv string) (string, bool) {
+	var out []string
+	seen := map[string]bool{}
+	for _, tok := range strings.Split(csv, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		lower := strings.ToLower(tok)
+		switch {
+		case lower == "lsp" || lower == "ast_grep" || lower == "code_search":
+			continue
+		case lower == "codegraph" || strings.HasPrefix(lower, "codegraph_"):
+			tok = "graft_*"
+		}
+		if seen[tok] {
+			continue
+		}
+		seen[tok] = true
+		out = append(out, tok)
+	}
+	next := strings.Join(out, ", ")
+	return next, next != csv
+}
+
+func rewriteRetiredProse(s string) (string, bool) {
+	next := retiredCodegraph.ReplaceAllStringFunc(s, func(m string) string {
+		lower := strings.ToLower(m)
+		switch lower {
+		case "codegraph_explore", "codegraph_search":
+			return "graft_find_code"
+		case "codegraph_context":
+			return "graft_file_api"
+		case "codegraph_trace":
+			return "graft_trace_calls"
+		}
+		if strings.Contains(lower, "_") {
+			return "graft_*"
+		}
+		return "graft"
+	})
+	return next, next != s
 }
 
 func SeedAgentsFromEmbedded() error {

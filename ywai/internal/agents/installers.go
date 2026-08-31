@@ -898,6 +898,7 @@ var openCodeNativePermissionKeys = []string{
 var ywaiBucketPatterns = map[string][]string{
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
+	"graft":    {"graft_*"},
 	"mcp":      {"graft_*", "context7_*"},
 	// "delegate" launches an async sub-agent (background-agents plugin); the
 	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,

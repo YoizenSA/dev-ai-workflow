@@ -74,7 +74,7 @@
         "name": "finder",
         "description": "Codebase exploration. Locates files, symbols and patterns the feature touches.",
         "agentRef": "core/finder",
-        "prompt": "Explore the codebase using graft and context7. Report a concise map: affected files, patterns, constraints, risks.",
+        "prompt": "Explore the codebase. When `graft` / `code_search` are available, use them for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep, then ranged reads. Use context7 only for library/API docs. Report a concise map: affected files as `path:lines`, patterns, constraints, risks.",
         "tools": "read, grep, glob, graft_*, context7_*, engram_*",
         "model": "inherit",
         "mode": "subagent",

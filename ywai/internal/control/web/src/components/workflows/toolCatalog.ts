@@ -22,20 +22,20 @@ export const TOOL_OPTIONS: ToolOption[] = [
 	{ value: 'websearch', label: 'Web Search', group: 'core' },
 	{ value: 'webfetch', label: 'Web Fetch', group: 'core' },
 	// Meta / workflow tools
-	{ value: 'task', label: 'Task (subagent delegate)', group: 'meta' },
+	{ value: 'delegate', label: 'Delegate (async sub-agent)', group: 'meta' },
 	{ value: 'question', label: 'Question (ask user)', group: 'meta' },
 	{ value: 'skill', label: 'Skill', group: 'meta' },
-	{ value: 'delegate', label: 'Delegate (async)', group: 'meta' },
 	// MCP buckets (expand to wildcards at export)
 	{ value: 'mcp', label: 'MCP (every configured server)', group: 'mcp' },
+	{ value: 'graft', label: 'Graft (repo graph)', group: 'mcp' },
 	{ value: 'memory', label: 'Memory (engram)', group: 'mcp' },
 ]
 
 // Tools a coordinator (orchestrator) gets by default. Read-only + delegation.
-export const DEFAULT_ORCHESTRATOR_TOOLS = ['read', 'glob', 'grep', 'task', 'question', 'skill', 'mcp']
+export const DEFAULT_ORCHESTRATOR_TOOLS = ['read', 'glob', 'grep', 'delegate', 'question', 'skill', 'mcp']
 
 // Tools a developer/implementer gets by default. Full dev access.
-export const DEFAULT_DEV_TOOLS = ['read', 'edit', 'write', 'bash', 'glob', 'grep', 'task', 'skill', 'mcp']
+export const DEFAULT_DEV_TOOLS = ['read', 'edit', 'write', 'bash', 'glob', 'grep', 'graft', 'skill', 'mcp']
 
 // Known external agents that sub-agents commonly delegate to (from
 // delegations.json). These are agents that exist in the opencode ecosystem

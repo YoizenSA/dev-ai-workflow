@@ -478,11 +478,11 @@ func subAgentSectionList(csv string) []string {
 // Coordinator-only: read + ask + skill + context (mcp bucket). No edit/write/
 // bash — the orchestrator never touches code directly. (delegate/delegation_*
 // are added by BuildOpenCodeMarkdown's AlwaysAllowed path when needed.)
-const defaultOrchestratorTools = "read,glob,grep,task,skill,question,mcp"
+const defaultOrchestratorTools = "read,glob,grep,task,delegate,skill,question,mcp"
 
 // defaultSubAgentTools is applied when a subAgent node has no tools set.
-// Full implementer: read + write + edit + bash + skill + context (mcp bucket).
-const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,mcp"
+// Full implementer: read + write + edit + bash + skill + graft + context (mcp bucket).
+const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,graft_*,mcp"
 
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.

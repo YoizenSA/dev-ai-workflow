@@ -18,7 +18,7 @@ const DelegationsFile = "delegations.json"
 // OpenCode v2 model-facing delegation tools (Code Mode / opencode2).
 // Permission action remains `subagent`; the callable tool is `delegate`.
 const (
-	OpenCodeDelegateToolHint      = "Delegate with OpenCode v2 `delegate`. Use `mode: \"sync\"` when the next step needs the result, `mode: \"async\"` (default) for independent work. Supervise with `delegation_peek` / `delegation_steer` / `delegation_stop` / `delegation_read`.\n"
+	OpenCodeDelegateToolHint      = "Delegate with OpenCode v2 `delegate` (`prompt`, `agent`, optional `timeout_minutes`, optional `model`). It returns an ID immediately — there is no `mode` argument. When the next step needs the result, wait for `<task-notification>` then `delegation_read`. Supervise running work with `delegation_peek` / `delegation_steer` / `delegation_stop`.\n"
 	OpenCodeDelegateSemanticGuard = "Semantic guard: **delegate** means the native `delegate` tool launching a configured sub-agent. Permission action `subagent` gates who may be launched. Delegation is that tool call; scripts, Python, and Bash are execution.\n\n"
 )
 

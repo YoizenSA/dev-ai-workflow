@@ -77,7 +77,7 @@ flowchart LR
 ### solo
 
 - Lee, edita y verifica él mismo. **Cero** delegaciones salvo escalar.
-- Prefiere `graft` → grep/glob → lecturas acotadas.
+- Prefiere grep + AST grep; `graft` / `code_search` cuando estén para queries de relación. Lecturas acotadas.
 - Commit local si el usuario quiere; **no push** salvo que lo pida.
 - Sin SCOUT/PLAN/REVIEW. Aplica gates de risk si no es low.
 
@@ -95,7 +95,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     O[Orchestrator] --> M{Mode}
-    M -->|solo| A[Ejecuta todo: graft->grep->read, edita, verifica]
+    M -->|solo| A[Ejecuta todo: grep+AST; graft/code_search si hay; edita, verifica]
     M -->|thin| B[Ejecuta directo + máx 1 delegación sync con ```handoff]
     M -->|full| C[todowrite -> SCOUT -> PLAN -> DESIGN -> IMPLEMENT -> TEST -> REVIEW -> DEPLOY]
     A --> D[Local commit OK si pidió; no push sin pedido]

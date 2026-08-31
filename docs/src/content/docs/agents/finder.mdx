@@ -12,7 +12,7 @@ El finder ubica y resume código. Es **read-only** — nunca edita, escribe ni c
 ## Qué hace
 
 1. **Busca en lote** — Agrupa greps y reads independientes en un solo turno. Una herramienta por turno es el modo de fallo.
-2. **Graft primero** — Usa `graft_find_code` antes que grep; a menudo alcanza.
+2. **Semántico, si está** — Cuando hay `graft` / `code_search`, úsalos para relaciones (call graphs, dependents, usos de tipo). Si no, grep + AST grep.
 3. **Recorta antes de leer** — Usa outline/slices antes de leer archivos completos. Dump completo solo cuando necesita casi todo el archivo.
 4. **Se detiene** — Para cuando la pregunta está respondida.
 5. **Produce scout reports** — Para `@orchestrator`: scope + complejidad (low | medium | high), archivos afectados como `path:lines` con su rol, patrones a seguir, riesgos/bloqueos y enfoque recomendado.
@@ -23,7 +23,7 @@ flowchart TD
     A[Brief acotado] --> B{¿Brief de QA}
     B -->|no| C[Scout: scope, archivos, riesgos]
     B -->|sí| D[QA scout: gaps, mocks, selectors]
-    C --> E[Graft primero, grep después]
+    C --> E[graft/code_search si hay; si no grep + AST]
     D --> E
     E --> F[Batch de greps y reads]
     F --> G{¿Respuesta}

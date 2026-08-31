@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -114,6 +115,75 @@ func TestReconcileSeedWorkflowAgentLinks_NoopWhenAlreadyLinked(t *testing.T) {
 	after, _ := os.ReadFile(dst)
 	if string(before) != string(after) {
 		t.Fatalf("file rewritten without changes")
+	}
+}
+
+func TestReconcileSeedWorkflowAgentLinks_ReappliesPromptAndTools(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "goal.json")
+	user := map[string]any{
+		"nodes": []any{
+			map[string]any{
+				"id":   "finder",
+				"type": "subAgent",
+				"data": map[string]any{
+					"name":     "finder",
+					"agentRef": "core/finder",
+					"prompt":   "Explore the codebase using codegraph and context7.",
+					"tools":    "read, grep, glob, codegraph_*, context7_*",
+				},
+			},
+		},
+	}
+	writeJSON(t, dst, user)
+	seed := []byte(`{"nodes":[{"id":"finder","type":"subAgent","data":{"agentRef":"core/finder","prompt":"Explore with Graft first.","tools":"read, grep, glob, graft_*, context7_*"}}]}`)
+	if err := reconcileSeedWorkflowAgentLinks(dst, seed); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	data := got["nodes"].([]any)[0].(map[string]any)["data"].(map[string]any)
+	if data["prompt"] != "Explore with Graft first." {
+		t.Fatalf("prompt=%v, want seed prompt", data["prompt"])
+	}
+	if data["tools"] != "read, grep, glob, graft_*, context7_*" {
+		t.Fatalf("tools=%v, want seed tools", data["tools"])
+	}
+}
+
+func TestMigrateRetiredWorkflowVocab_RewritesCodegraph(t *testing.T) {
+	in := []byte(`{
+  "nodes": [{
+    "id": "dev",
+    "type": "subAgent",
+    "data": {
+      "prompt": "Explore using codegraph_explore then codegraph.",
+      "tools": "read, codegraph_*, lsp, ast_grep, code_search"
+    }
+  }]
+}`)
+	out, changed, err := migrateRetiredWorkflowVocab(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected a rewrite")
+	}
+	s := string(out)
+	if strings.Contains(strings.ToLower(s), "codegraph") {
+		t.Fatalf("codegraph survived:\n%s", s)
+	}
+	if strings.Contains(s, `"lsp"`) || strings.Contains(s, "ast_grep") || strings.Contains(s, "code_search") {
+		t.Fatalf("dropped v2 tools survived:\n%s", s)
+	}
+	if !strings.Contains(s, "graft_*") {
+		t.Fatalf("graft_* missing:\n%s", s)
 	}
 }
 

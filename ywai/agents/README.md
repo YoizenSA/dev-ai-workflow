@@ -98,8 +98,8 @@ graph TD
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
 The orchestrator uses a **capability model** with per-platform adapters. On OpenCode
-v2 it delegates via `delegate` (`mode: "sync"` or async default) and supervises
-with `delegation_*`. `delegate` is the runtime delegation tool
+v2 it delegates via `delegate` (returns an ID immediately) and supervises
+with `delegation_*`. There is no `mode` argument; wait for `<task-notification>` then `delegation_read` when the next step needs the result. `delegate` is the runtime delegation tool
 (permission action `subagent` still gates who may be launched). It asks decisions
 with `question` and tracks plans with `todowrite`. On Claude Code it uses
 `Agent`/`Task` and `TaskCreate`/`Update`. On PI.dev it uses host subagent tools.

@@ -38,7 +38,9 @@ import (
 type workflowFile struct {
 	Nodes []struct {
 		Data struct {
-			Tools string `json:"tools"`
+			Tools           string `json:"tools"`
+			Prompt          string `json:"prompt"`
+			AgentDefinition string `json:"agentDefinition"`
 		} `json:"data"`
 	} `json:"nodes"`
 
@@ -77,6 +79,13 @@ func TestWorkflows_NoCodegraphInNodeTools(t *testing.T) {
 		for i, n := range wf.Nodes {
 			if csvHasCodegraph(n.Data.Tools) {
 				t.Errorf("%s node[%d].data.tools = %q contains codegraph — slice 2 must replace with graft_*",
+					path, i, n.Data.Tools)
+			}
+			if textHasCodegraph(n.Data.Prompt) || textHasCodegraph(n.Data.AgentDefinition) {
+				t.Errorf("%s node[%d] prompt/agentDefinition still mentions codegraph", path, i)
+			}
+			if csvHasRetiredV2Tools(n.Data.Tools) {
+				t.Errorf("%s node[%d].data.tools = %q still lists dropped v2 tools (lsp/ast_grep/code_search)",
 					path, i, n.Data.Tools)
 			}
 		}
@@ -118,6 +127,20 @@ func TestWorkflows_NoCodegraphInTopLevelToolFields(t *testing.T) {
 // references codegraph via the wildcard, a bare token, or a
 // codegraph_* form. Bare "codegraph" is allowed only if it is a
 // complete token, not a substring of another identifier.
+func csvHasRetiredV2Tools(csv string) bool {
+	for _, tok := range strings.Split(csv, ",") {
+		switch strings.TrimSpace(tok) {
+		case "lsp", "ast_grep", "code_search":
+			return true
+		}
+	}
+	return false
+}
+
+func textHasCodegraph(s string) bool {
+	return strings.Contains(strings.ToLower(s), "codegraph")
+}
+
 func csvHasCodegraph(csv string) bool {
 	for _, tok := range strings.Split(csv, ",") {
 		tok = strings.TrimSpace(tok)

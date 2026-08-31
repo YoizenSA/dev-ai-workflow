@@ -532,7 +532,7 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 					<label className="field-label" htmlFor="wf-mode">Visibility</label>
 					<YdSelect
 						options={[
-							{ value: 'subagent', label: 'subagent (only via task)' },
+							{ value: 'subagent', label: 'subagent (only via delegate)' },
 							{ value: 'all', label: 'all (selectable)' },
 							{ value: 'primary', label: 'primary (default)' },
 						]}
