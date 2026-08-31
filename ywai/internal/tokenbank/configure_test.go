@@ -138,7 +138,7 @@ func TestInjectModelLimits_DropsModelsAbsentFromGET(t *testing.T) {
 
 	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 	if _, stale := models["retired"]; stale {
-		t.Fatalf("a model absent from GET /api/setup/models must be removed, got %v", models)
+		t.Fatalf("a model absent from GET /v1/models must be removed, got %v", models)
 	}
 	kept, ok := models["kept"].(map[string]interface{})
 	if !ok {
@@ -166,6 +166,29 @@ func TestInjectModelLimits_EmptyCatalogDoesNotWipe(t *testing.T) {
 	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 	if _, ok := models["kept"]; !ok {
 		t.Fatalf("an empty GET catalog must not wipe local models, got %v", models)
+	}
+}
+
+func TestPrunePiModels_DropsModelsAbsentFromGET(t *testing.T) {
+	config := map[string]interface{}{
+		"providers": map[string]interface{}{
+			OmpProviderID: map[string]interface{}{
+				"models": []interface{}{
+					map[string]interface{}{"id": "kept", "name": "Kept"},
+					map[string]interface{}{"id": "ghost", "name": "Not in /v1/models"},
+				},
+			},
+		},
+	}
+
+	prunePiModels(config, []ModelInfo{{ID: "kept"}})
+
+	models := config["providers"].(map[string]interface{})[OmpProviderID].(map[string]interface{})["models"].([]interface{})
+	if len(models) != 1 {
+		t.Fatalf("pi models = %v, want only kept", models)
+	}
+	if models[0].(map[string]interface{})["id"] != "kept" {
+		t.Fatalf("kept id missing, got %v", models)
 	}
 }
 
@@ -351,7 +374,7 @@ func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
 // TestConfigureOpenCode_DropsModelsAbsentFromGET is the user-facing contract:
 // `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
 // an OPENCODE_CONFIG_DIR isolate) and the models there must match GET
-// /api/setup/models, even when GET /api/setup/config still lists extras.
+// /v1/models, even when GET /api/setup/config still lists extras.
 func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -383,12 +406,11 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/setup/models":
+		case "/v1/models":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"ok":     true,
-				"origin": "http://tokenbank.test",
-				"models": []map[string]interface{}{
-					{"id": "kept", "name": "Kept", "maxInputTokens": 1000},
+				"object": "list",
+				"data": []map[string]interface{}{
+					{"id": "kept", "name": "Kept", "limit": map[string]int{"context": 1000}},
 				},
 			})
 		case "/api/setup/config":

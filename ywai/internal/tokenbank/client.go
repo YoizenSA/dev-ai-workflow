@@ -33,12 +33,33 @@ type ModelInfo struct {
 	Modalities     *ModelModalities `json:"modalities,omitempty"`
 }
 
-// ModelsResponse is the response from GET /api/setup/models.
+// ModelsResponse is the catalog used by tokenbank configure. Source of truth
+// is GET /v1/models (the models this API key can actually call), not the
+// full GET /api/setup/models list.
 type ModelsResponse struct {
 	OK           bool        `json:"ok"`
 	Origin       string      `json:"origin"`
 	Models       []ModelInfo `json:"models"`
 	DefaultModel string      `json:"defaultModel"`
+}
+
+type v1ModelLimit struct {
+	Context int `json:"context"`
+	Output  int `json:"output"`
+}
+
+type v1Model struct {
+	ID         string           `json:"id"`
+	Name       string           `json:"name"`
+	ToolCall   bool             `json:"tool_call"`
+	Attachment bool             `json:"attachment"`
+	Modalities *ModelModalities `json:"modalities"`
+	Limit      *v1ModelLimit    `json:"limit"`
+}
+
+type v1ModelsResponse struct {
+	Object string    `json:"object"`
+	Data   []v1Model `json:"data"`
 }
 
 // ConfigResponse is the response from GET /api/setup/config.
@@ -101,9 +122,10 @@ func ResolveVisionModelID(preferred string, visionModels []ModelInfo) string {
 	return ""
 }
 
-// FetchModels fetches available models from the TokenBank API.
+// FetchModels fetches the models this API key can call from GET /v1/models.
 func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
-	url := strings.TrimRight(baseURL, "/") + "/api/setup/models"
+	origin := strings.TrimRight(baseURL, "/")
+	url := origin + "/v1/models"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -125,14 +147,48 @@ func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
 		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result ModelsResponse
-	if err := json.Unmarshal(body, &result); err != nil {
+	var raw v1ModelsResponse
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("parsing response: %w", err)
 	}
-	if !result.OK {
-		return nil, fmt.Errorf("API error: %s", string(body))
+
+	models := make([]ModelInfo, 0, len(raw.Data))
+	for _, m := range raw.Data {
+		if m.ID == "" {
+			continue
+		}
+		info := ModelInfo{
+			ID:          m.ID,
+			Name:        m.Name,
+			ToolCalling: m.ToolCall,
+			Vision:      m.Attachment,
+			Modalities:  m.Modalities,
+		}
+		if m.Limit != nil {
+			info.MaxInputTokens = m.Limit.Context
+			info.MaxOutputToken = m.Limit.Output
+		}
+		models = append(models, info)
 	}
-	return &result, nil
+
+	return &ModelsResponse{
+		OK:           true,
+		Origin:       origin,
+		Models:       models,
+		DefaultModel: defaultV1Model(models),
+	}, nil
+}
+
+func defaultV1Model(models []ModelInfo) string {
+	for _, m := range models {
+		if m.ID == "deepseek-v4-flash" {
+			return m.ID
+		}
+	}
+	if len(models) > 0 {
+		return models[0].ID
+	}
+	return ""
 }
 
 // FetchConfig fetches the provider config for a given target agent.

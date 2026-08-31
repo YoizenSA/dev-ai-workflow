@@ -52,7 +52,7 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing opencode config: %w", err)
 	}
 
-	// Fetch models and inject context limits. GET /api/setup/models is the
+	// Fetch models and inject context limits. GET /v1/models is the
 	// catalog: models the GET does not return are dropped from the provider.
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
 		injectModelLimits(newConfig, modelsResp.Models)
@@ -124,7 +124,7 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 		return
 	}
 
-	// GET /api/setup/models is the catalog. An empty fetch is a fail-safe:
+	// GET /v1/models is the catalog. An empty fetch is a fail-safe:
 	// never wipe the local list because the API returned nothing.
 	if len(models) > 0 {
 		allowed := make(map[string]struct{}, len(models))
@@ -239,6 +239,10 @@ func ConfigurePi(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing pi config: %w", err)
 	}
 
+	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
+		prunePiModels(newConfig, modelsResp.Models)
+	}
+
 	// Read existing config
 	existing, err := ReadJSONFile(configPath)
 	if err != nil {
@@ -260,6 +264,36 @@ func ConfigurePi(baseURL, apiKey string) error {
 	return nil
 }
 
+func prunePiModels(config map[string]interface{}, catalog []ModelInfo) {
+	if len(catalog) == 0 {
+		return
+	}
+	allowed := make(map[string]struct{}, len(catalog))
+	for _, m := range catalog {
+		if m.ID != "" {
+			allowed[m.ID] = struct{}{}
+		}
+	}
+	providers, _ := config["providers"].(map[string]interface{})
+	proxy, _ := providers[OmpProviderID].(map[string]interface{})
+	if proxy == nil {
+		return
+	}
+	raw, _ := proxy["models"].([]interface{})
+	kept := make([]interface{}, 0, len(catalog))
+	for _, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := m["id"].(string)
+		if _, ok := allowed[id]; ok {
+			kept = append(kept, item)
+		}
+	}
+	proxy["models"] = kept
+}
+
 // ---------------------------------------------------------------------------
 // OMP (oh-my-pi)
 // ---------------------------------------------------------------------------
@@ -276,7 +310,7 @@ func OmpConfigPath() string {
 // ConfigureOmp merges the TokenBank OpenAI-compatible proxy into OMP's models.yml.
 //
 // TokenBank does not need a dedicated "omp" setup target: we build a valid
-// openai-completions provider from GET /api/setup/models + credentials.
+// openai-completions provider from GET /v1/models + credentials.
 // Existing providers in models.yml are preserved; tokenbank-proxy is replaced.
 func ConfigureOmp(baseURL, apiKey string) error {
 	configPath := OmpConfigPath()
