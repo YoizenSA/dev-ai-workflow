@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,15 +15,31 @@ import (
 // OpenCode
 // ---------------------------------------------------------------------------
 
-// OpenCode config path.
+// OpenCodeConfigPath is the user-level opencode.json TokenBank configure
+// writes. Isolated hosts (Orca) set OPENCODE_CONFIG_DIR for their own
+// OpenCode process; that must not steal the user's catalog.
 func OpenCodeConfigPath() string {
-	return filepath.Join(config.OpenCodeConfigDir(), "opencode.json")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", "opencode.json")
+	}
+	return filepath.Join(home, ".config", "opencode", "opencode.json")
+}
+
+func openCodeConfigPaths() []string {
+	primary := OpenCodeConfigPath()
+	paths := []string{primary}
+	if dir := strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_DIR")); dir != "" {
+		extra := filepath.Join(dir, "opencode.json")
+		if extra != primary {
+			paths = append(paths, extra)
+		}
+	}
+	return paths
 }
 
 // ConfigureOpenCode merges the tokenbank provider into opencode.json.
 func ConfigureOpenCode(baseURL, apiKey string) error {
-	configPath := OpenCodeConfigPath()
-
 	// Fetch config from API
 	resp, err := FetchConfig(baseURL, apiKey, "opencode")
 	if err != nil {
@@ -37,31 +52,36 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing opencode config: %w", err)
 	}
 
-	// Fetch models and inject context limits
+	// Fetch models and inject context limits. GET /api/setup/models is the
+	// catalog: models the GET does not return are dropped from the provider.
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
 		injectModelLimits(newConfig, modelsResp.Models)
 	} else {
 		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
 	}
 
-	// Read existing config
-	existing, err := ReadJSONFile(configPath)
-	if err != nil {
-		return err
+	var lastPath string
+	for _, configPath := range openCodeConfigPaths() {
+		existing, err := ReadJSONFile(configPath)
+		if err != nil {
+			return err
+		}
+
+		// Deep merge, then let the (GET-pruned) API provider own the slot so
+		// models dropped upstream are removed instead of lingering.
+		merged := DeepMerge(existing, newConfig)
+		replaceOwnedProvider(merged, newConfig, "provider", "opencode-admin")
+
+		if err := WriteJSONFile(configPath, merged); err != nil {
+			return err
+		}
+		lastPath = configPath
+		fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
 	}
 
-	// Deep merge, then let the API response own its provider outright so models
-	// dropped upstream are removed instead of lingering.
-	merged := DeepMerge(existing, newConfig)
-	replaceOwnedProvider(merged, newConfig, "provider", "opencode-admin")
-
-	// Write
-	if err := WriteJSONFile(configPath, merged); err != nil {
-		return err
+	if lastPath != "" {
+		fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	}
-
-	fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
-	fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	return nil
 }
 
@@ -102,6 +122,22 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 	modelsSection, _ := admin["models"].(map[string]interface{})
 	if modelsSection == nil {
 		return
+	}
+
+	// GET /api/setup/models is the catalog. An empty fetch is a fail-safe:
+	// never wipe the local list because the API returned nothing.
+	if len(models) > 0 {
+		allowed := make(map[string]struct{}, len(models))
+		for _, m := range models {
+			if m.ID != "" {
+				allowed[m.ID] = struct{}{}
+			}
+		}
+		for id := range modelsSection {
+			if _, ok := allowed[id]; !ok {
+				delete(modelsSection, id)
+			}
+		}
 	}
 
 	for _, m := range models {

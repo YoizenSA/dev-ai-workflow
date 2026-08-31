@@ -1,6 +1,9 @@
 package tokenbank
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -116,6 +119,53 @@ func TestInjectModelLimits_RespectsVision(t *testing.T) {
 	mimo := models["mimo-v2.5"].(map[string]interface{})
 	if mimo["attachment"] != true {
 		t.Fatalf("mimo attachment = %v, want true", mimo["attachment"])
+	}
+}
+
+func TestInjectModelLimits_DropsModelsAbsentFromGET(t *testing.T) {
+	config := map[string]interface{}{
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{
+				"models": map[string]interface{}{
+					"kept":    map[string]interface{}{"name": "Kept"},
+					"retired": map[string]interface{}{"name": "Retired upstream"},
+				},
+			},
+		},
+	}
+
+	injectModelLimits(config, []ModelInfo{{ID: "kept", Name: "Kept", MaxInputTokens: 1000}})
+
+	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
+	if _, stale := models["retired"]; stale {
+		t.Fatalf("a model absent from GET /api/setup/models must be removed, got %v", models)
+	}
+	kept, ok := models["kept"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("a model the GET still returns must survive, got %v", models)
+	}
+	limit, _ := kept["limit"].(map[string]interface{})
+	if limit["context"] != 1000 {
+		t.Fatalf("kept model should still receive injected limits, got %v", kept)
+	}
+}
+
+func TestInjectModelLimits_EmptyCatalogDoesNotWipe(t *testing.T) {
+	config := map[string]interface{}{
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{
+				"models": map[string]interface{}{
+					"kept": map[string]interface{}{"name": "Kept"},
+				},
+			},
+		},
+	}
+
+	injectModelLimits(config, nil)
+
+	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
+	if _, ok := models["kept"]; !ok {
+		t.Fatalf("an empty GET catalog must not wipe local models, got %v", models)
 	}
 }
 
@@ -295,5 +345,91 @@ func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
 	})
 	if len(got) != 1 || !got["Token Bank"] {
 		t.Errorf("entryVendors = %v, want just the Token Bank vendor", got)
+	}
+}
+
+// TestConfigureOpenCode_DropsModelsAbsentFromGET is the user-facing contract:
+// `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
+// an OPENCODE_CONFIG_DIR isolate) and the models there must match GET
+// /api/setup/models, even when GET /api/setup/config still lists extras.
+func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", filepath.Join(t.TempDir(), "orca-isolate"))
+
+	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := map[string]interface{}{
+		"model": "opencode-admin/kept",
+		"provider": map[string]interface{}{
+			"opencode-admin": map[string]interface{}{
+				"models": map[string]interface{}{
+					"kept":    map[string]interface{}{"name": "Kept"},
+					"retired": map[string]interface{}{"name": "Stale local"},
+				},
+			},
+		},
+	}
+	raw, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userPath, append(raw, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/setup/models":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     true,
+				"origin": "http://tokenbank.test",
+				"models": []map[string]interface{}{
+					{"id": "kept", "name": "Kept", "maxInputTokens": 1000},
+				},
+			})
+		case "/api/setup/config":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     true,
+				"origin": "http://tokenbank.test",
+				"config": map[string]interface{}{
+					"provider": map[string]interface{}{
+						"opencode-admin": map[string]interface{}{
+							"npm":  "@ai-sdk/openai-compatible",
+							"name": "Token Bank Proxy",
+							"models": map[string]interface{}{
+								"kept":  map[string]interface{}{"name": "Kept"},
+								"ghost": map[string]interface{}{"name": "In config GET, not models GET"},
+							},
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	if err := ConfigureOpenCode(srv.URL, "pk-test"); err != nil {
+		t.Fatalf("ConfigureOpenCode: %v", err)
+	}
+
+	got, err := ReadJSONFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := got["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
+	if _, stale := models["retired"]; stale {
+		t.Errorf("stale local model must be removed from %s, got %v", userPath, models)
+	}
+	if _, ghost := models["ghost"]; ghost {
+		t.Errorf("a model from /config but not GET /models must be removed, got %v", models)
+	}
+	if _, ok := models["kept"]; !ok {
+		t.Errorf("GET /models catalog entry must survive, got %v", models)
 	}
 }
