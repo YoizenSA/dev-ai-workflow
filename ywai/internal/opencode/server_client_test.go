@@ -125,15 +125,15 @@ func TestServerClient_ListModels_V1(t *testing.T) {
 
 func TestServerClient_ListModels_V2(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/provider" {
+		if r.URL.Path != "/api/model" {
 			http.NotFound(w, r)
 			return
 		}
 		resp := map[string]interface{}{
 			"location": map[string]string{},
 			"data": []map[string]interface{}{
-				{"id": "openai/gpt-4", "providerID": "openai", "name": "GPT-4", "api": "chat"},
-				{"id": "anthropic/claude-3", "providerID": "anthropic", "name": "Claude 3", "api": "chat"},
+				{"id": "gpt-4", "modelID": "gpt-4", "providerID": "openai", "name": "GPT-4"},
+				{"id": "claude-3", "modelID": "claude-3", "providerID": "anthropic", "name": "Claude 3"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -151,6 +151,60 @@ func TestServerClient_ListModels_V2(t *testing.T) {
 
 	if len(models) != 2 {
 		t.Fatalf("Expected 2 models, got %d", len(models))
+	}
+	want := map[string]string{
+		"openai/gpt-4":       "openai",
+		"anthropic/claude-3": "anthropic",
+	}
+	for _, m := range models {
+		if want[m.ID] != m.Provider {
+			t.Errorf("model %+v is not a provider/model id", m)
+		}
+	}
+}
+
+func TestServerClient_ListModels_DoesNotTreatProvidersAsModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/provider":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": []map[string]interface{}{
+					{"id": "opencode-admin", "name": "Token Bank Proxy"},
+					{"id": "openai", "name": "OpenAI"},
+				},
+			})
+		case "/provider":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"all": []map[string]interface{}{
+					{
+						"id":   "opencode-admin",
+						"name": "Token Bank Proxy",
+						"models": map[string]interface{}{
+							"deepseek-v4-flash": map[string]interface{}{"name": "DeepSeek V4 Flash"},
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewServerClient(srv.URL)
+	c.useCLI = false
+	models, err := c.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels() failed: %v", err)
+	}
+	for _, m := range models {
+		if m.ID == "opencode-admin" || m.Name == "Token Bank Proxy" && m.ID == "opencode-admin" {
+			t.Fatalf("listed a provider as a model: %+v", m)
+		}
+	}
+	if len(models) != 1 || models[0].ID != "opencode-admin/deepseek-v4-flash" {
+		t.Fatalf("want the v1 nested model, got %+v", models)
 	}
 }
 

@@ -152,6 +152,35 @@ func TestModelCacheDiskSeedSkipsCLI(t *testing.T) {
 	}
 }
 
+func TestModelCacheIgnoresProviderCatalogOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "models.json")
+	env := modelDiskEnvelope{
+		FetchedAt: time.Now(),
+		Models: []opencode.ModelInfo{
+			{ID: "opencode-admin", Name: "Token Bank Proxy"},
+			{ID: "openai", Name: "OpenAI"},
+		},
+	}
+	data, _ := json.Marshal(env)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &countingModelsClient{}
+	cache := &modelCache{path: path}
+	models, err := cache.get(context.Background(), client.ListModels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "p/m" {
+		t.Fatalf("provider-id cache must be ignored in favor of a live catalog, got %+v", models)
+	}
+	if client.calls.Load() == 0 {
+		t.Fatal("expected a live fetch after rejecting the provider catalog")
+	}
+}
+
 func TestModelCacheStaleDiskStillServesAndRefreshes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "models.json")

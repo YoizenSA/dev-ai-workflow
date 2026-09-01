@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -62,17 +63,18 @@ type providerResponse struct {
 	Connected []string          `json:"connected"`
 }
 
-// rawProviderV2 is the shape from GET /api/provider.
-type rawProviderV2 struct {
+// rawModelV2 is one entry from GET /api/model (OpenCode v2). Provider
+// listings live at GET /api/provider and must not be treated as models.
+type rawModelV2 struct {
 	ID         string `json:"id"`
+	ModelID    string `json:"modelID"`
 	ProviderID string `json:"providerID"`
 	Name       string `json:"name"`
-	API        string `json:"api"`
 }
 
-type providerV2Response struct {
+type modelV2Response struct {
 	Location json.RawMessage `json:"location"`
-	Data     []rawProviderV2 `json:"data"`
+	Data     []rawModelV2    `json:"data"`
 }
 
 // ─── Client interface implementation ───────────────────────────────────────
@@ -131,17 +133,17 @@ func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 				return models, nil
 			}
 		} else {
-			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to HTTP /api/provider (free models may be missing)", err)
+			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to HTTP /api/model", err)
 		}
 	}
 
 	models, err := c.listModelsV2(ctx)
-	if err == nil {
+	if err == nil && len(models) > 0 {
 		return models, nil
 	}
 
 	models, err = c.listModelsV1(ctx)
-	if err == nil {
+	if err == nil && len(models) > 0 {
 		return models, nil
 	}
 
@@ -149,7 +151,7 @@ func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 }
 
 func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
-	url := c.baseURL + "/api/provider"
+	url := c.baseURL + "/api/model"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -165,27 +167,44 @@ func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var env providerV2Response
+	var env modelV2Response
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		return nil, err
 	}
 
 	seen := make(map[string]bool)
 	models := make([]ModelInfo, 0, len(env.Data))
-	for _, p := range env.Data {
-		id := p.ID
-		if id == "" {
-			id = p.ProviderID
+	for _, m := range env.Data {
+		if m.ProviderID == "" {
+			continue
 		}
-		if id == "" || seen[id] {
+		bare := m.ID
+		if bare == "" {
+			bare = m.ModelID
+		}
+		if bare == "" {
+			continue
+		}
+		id := bare
+		if !strings.Contains(bare, "/") {
+			id = m.ProviderID + "/" + bare
+		}
+		if seen[id] {
 			continue
 		}
 		seen[id] = true
+		name := m.Name
+		if name == "" {
+			name = bare
+		}
 		models = append(models, ModelInfo{
 			ID:       id,
-			Provider: p.ProviderID,
-			Name:     p.Name,
+			Provider: m.ProviderID,
+			Name:     name,
 		})
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models in /api/model")
 	}
 	return models, nil
 }

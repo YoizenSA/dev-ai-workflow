@@ -122,7 +122,7 @@ func (c *modelCache) finishCold(models []opencode.ModelInfo, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.refreshing = false
-	if err == nil && len(models) > 0 {
+	if err == nil && len(models) > 0 && !opencode.IsProviderCatalog(models) {
 		c.models = models
 		c.fetchedAt = time.Now()
 		c.persistLocked()
@@ -151,7 +151,7 @@ func (c *modelCache) refresh(
 	c.refreshing = false
 	// Keep the previous cache on failure or empty result rather than wiping a
 	// good list because one refresh hiccupped.
-	if err != nil || len(models) == 0 {
+	if err != nil || len(models) == 0 || opencode.IsProviderCatalog(models) {
 		return
 	}
 	c.models = models
@@ -171,6 +171,9 @@ func (c *modelCache) loadDiskLocked() {
 	}
 	var env modelDiskEnvelope
 	if json.Unmarshal(data, &env) != nil || len(env.Models) == 0 {
+		return
+	}
+	if opencode.IsProviderCatalog(env.Models) {
 		return
 	}
 	if env.FetchedAt.IsZero() {
