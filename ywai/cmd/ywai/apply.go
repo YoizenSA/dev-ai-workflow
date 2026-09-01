@@ -369,7 +369,7 @@ func applyManaged(o applyOpts) applyResult {
 	// ── strip agent frontmatter keys opencode v2 rejects ──────────────────
 	// Runs after every writer: several of them rebuild these files by keeping
 	// existing frontmatter lines, so a stale key survives until swept.
-	if o.Mode == applyInstall && !o.Opts.DryRun {
+	if !o.Opts.DryRun && (o.Mode == applyInstall || o.Mode == applyUpdate) {
 		// OpenCodeAgentsDir may point at a host-managed location (e.g. Orca's
 		// shared hooks dir). opencode itself always reads ~/.config/opencode/
 		// agents, and other tooling syncs into it, so sweep both.
@@ -388,6 +388,26 @@ func applyManaged(o applyOpts) applyResult {
 		}
 		if cleaned > 0 {
 			fmt.Printf("  Cleaned legacy frontmatter keys in %d agent files\n", cleaned)
+		}
+
+		jsonPaths := []string{filepath.Join(config.OpenCodeConfigDir(), "opencode.json")}
+		if home, err := os.UserHomeDir(); err == nil {
+			jsonPaths = append(jsonPaths, filepath.Join(home, ".config", "opencode", "opencode.json"))
+		}
+		seenJSON := map[string]bool{}
+		rewritten := 0
+		for _, p := range jsonPaths {
+			if p == "" || seenJSON[p] {
+				continue
+			}
+			seenJSON[p] = true
+			n, err := agentprofiles.RewriteOpenCodeJSONV1Permissions(p)
+			if err == nil {
+				rewritten += n
+			}
+		}
+		if rewritten > 0 {
+			fmt.Printf("  Converted v2 permissions arrays to v1 maps in %d OpenCode agents\n", rewritten)
 		}
 	}
 

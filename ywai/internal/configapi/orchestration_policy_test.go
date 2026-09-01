@@ -1,6 +1,7 @@
 package configapi
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -330,22 +331,67 @@ func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(data)
-	if strings.Contains(got, `"permission"`) {
-		t.Errorf("must not write v1 permission map to opencode.json, got:\n%s", got)
+	if strings.Contains(got, `"permissions"`) {
+		t.Fatalf("OpenCode v1 rejects agent.*.permissions arrays, got:\n%s", got)
 	}
-	if !strings.Contains(got, `"permissions"`) {
-		t.Fatalf("expected v2 permissions array in opencode.json, got:\n%s", got)
+	if !strings.Contains(got, `"permission"`) {
+		t.Fatalf("expected v1 permission map in opencode.json, got:\n%s", got)
 	}
-	for _, want := range []string{
-		`"action": "edit"`,
-		`"action": "shell"`,
-		`"action": "read"`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %s in v2 rules, got:\n%s", want, got)
+	var cfg struct {
+		Agent map[string]struct {
+			Permission map[string]json.RawMessage `json:"permission"`
+		} `json:"agent"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	perm := cfg.Agent["orchestrator"].Permission
+	for _, key := range []string{"edit", "bash"} {
+		var effect string
+		if json.Unmarshal(perm[key], &effect) != nil || effect != "deny" {
+			t.Errorf("permission[%s] = %s, want deny after deep activation", key, perm[key])
 		}
 	}
-	if !strings.Contains(got, `"effect": "deny"`) {
-		t.Errorf("expected edit/shell deny after deep activation, got:\n%s", got)
+}
+
+func TestApplyOrchestrationPolicy_ConvertsV2ArrayToV1Map(t *testing.T) {
+	home := t.TempDir()
+	setTestHomeDir(t, home)
+	configDir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ocJSON := `{
+  "agent": {
+    "orchestrator": {
+      "model": "opencode-admin/kept",
+      "permissions": [
+        {"action": "read", "resource": "*", "effect": "allow"},
+        {"action": "edit", "resource": "*", "effect": "allow"},
+        {"action": "shell", "resource": "*", "effect": "allow"},
+        {"action": "subagent", "resource": "*", "effect": "deny"},
+        {"action": "subagent", "resource": "finder", "effect": "allow"}
+      ]
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "opencode.json"), []byte(ocJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	true_ := true
+	solo := userconfig.OrchestrationPolicy{DefaultMode: "full", AllowSoloWrite: &true_}
+	if !applyOrchestrationPolicy(solo) {
+		t.Fatal("expected conversion of leftover v2 permissions")
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if strings.Contains(got, `"permissions"`) {
+		t.Fatalf("v2 permissions array must be gone, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"finder"`) {
+		t.Fatalf("task.finder allow must survive conversion, got:\n%s", got)
 	}
 }

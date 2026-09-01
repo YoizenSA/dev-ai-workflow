@@ -26,7 +26,9 @@ package agents
 // single translation layer to the v2 rule format that opencode enforces.
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -310,6 +312,94 @@ func InternalMapFromRules(rules []PermissionRule) map[string]string {
 		}
 	}
 	return out
+}
+
+// V1PermissionFromRules is the opencode.json v1 `permission` map. OpenCode v1
+// rejects a v2 `permissions` array on agent entries. Scoped non-task rules
+// (shell patterns) have no v1 representation and are dropped.
+func V1PermissionFromRules(rules []PermissionRule) map[string]any {
+	out := map[string]any{}
+	for k, v := range InternalMapFromRules(rules) {
+		out[k] = v
+	}
+	task := map[string]string{}
+	for _, r := range rules {
+		if r.Action != "subagent" || r.Effect == "" {
+			continue
+		}
+		res := r.Resource
+		if res == "" {
+			res = "*"
+		}
+		task[res] = r.Effect
+	}
+	if len(task) > 0 {
+		out["task"] = task
+	}
+	return out
+}
+
+// RewriteOpenCodeJSONV1Permissions converts leftover v2 `permissions` arrays
+// on agent.<name> into v1 `permission` maps. OpenCode v1 rejects the array
+// (`agent.orchestrator.permissions`). Returns how many agents were rewritten.
+func RewriteOpenCodeJSONV1Permissions(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return 0, err
+	}
+	agentRaw, ok := root["agent"]
+	if !ok {
+		return 0, nil
+	}
+	var agentsMap map[string]json.RawMessage
+	if err := json.Unmarshal(agentRaw, &agentsMap); err != nil {
+		return 0, err
+	}
+	changed := 0
+	for name, raw := range agentsMap {
+		var cfg map[string]json.RawMessage
+		if json.Unmarshal(raw, &cfg) != nil {
+			continue
+		}
+		rulesRaw, ok := cfg["permissions"]
+		if !ok {
+			continue
+		}
+		var rules []PermissionRule
+		if json.Unmarshal(rulesRaw, &rules) != nil {
+			continue
+		}
+		perm, err := json.Marshal(V1PermissionFromRules(rules))
+		if err != nil {
+			continue
+		}
+		cfg["permission"] = perm
+		delete(cfg, "permissions")
+		rewritten, err := json.Marshal(cfg)
+		if err != nil {
+			continue
+		}
+		agentsMap[name] = rewritten
+		changed++
+	}
+	if changed == 0 {
+		return 0, nil
+	}
+	agentsJSON, err := json.Marshal(agentsMap)
+	if err != nil {
+		return changed, err
+	}
+	root["agent"] = agentsJSON
+	pretty, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return changed, err
+	}
+	pretty = append(pretty, '\n')
+	return changed, os.WriteFile(path, pretty, 0o644)
 }
 
 // RenderPermissionRulesYAML renders rules as the frontmatter block under

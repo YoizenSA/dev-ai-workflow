@@ -1028,8 +1028,8 @@ func syncToolsList(content string, allow bool) string {
 
 // applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/shell flip into the
 // opencode.json agent.orchestrator entry when it exists (markdown-only installs
-// have no such entry). Always writes a v2 `permissions` rule array. A leftover
-// v1 `permission` map is converted at this boundary and not written back.
+// have no such entry). Always writes a v1 `permission` map. OpenCode v1
+// rejects a leftover v2 `permissions` array (`agent.*.permissions`).
 func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	path, err := opencodeConfigPath()
 	if err != nil {
@@ -1118,9 +1118,9 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 		}
 		out = append(out, r)
 	}
-	updated, _ := json.Marshal(out)
-	agentCfg["permissions"] = updated
-	delete(agentCfg, "permission")
+	updated, _ := json.Marshal(agents.V1PermissionFromRules(out))
+	agentCfg["permission"] = updated
+	delete(agentCfg, "permissions")
 
 	agentJSON, _ := json.Marshal(agentCfg)
 	agentsMap["orchestrator"] = agentJSON
