@@ -93,6 +93,12 @@ Ledger compacto para trabajo de horizonte largo: gate, seams, ship, resume.
 
 Delegar una tarea acotada al CLI local `opencode2` y después verificar lo que vuelve. La delegación no transfiere la verificación.
 
+### bulk-read
+
+**Trigger:** leer archivo grande, bulk read, resumir archivos
+
+Delegar la lectura de archivos grandes al worker barato `opencode2` y leer solo el resumen. El contenido del archivo nunca entra a tu contexto.
+
 ### ado
 
 **Trigger:** review/vote/comment de PRs, listar/crear/actualizar work items

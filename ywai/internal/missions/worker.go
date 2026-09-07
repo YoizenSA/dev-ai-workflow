@@ -174,9 +174,11 @@ func (wm *WorkerManager) resolveSkillsForFeature(mission *Mission, feature *Feat
 
 // DetectOpencode resolves the opencode binary path. It uses agent.FindBinary so
 // binaries installed via nvm/asdf/etc. (not in the raw process PATH) are found
-// via the login-shell `which` fallback and well-known dirs.
+// via the login-shell `which` fallback and well-known dirs. OpenCode 2
+// (opencode2) wins; machines with only the legacy binary fall back to
+// `opencode` (v1).
 func DetectOpencode() (string, error) {
-	if path := agent.FindBinary("opencode2"); path != "" {
+	if path, _ := agent.FindOpenCode(); path != "" {
 		return path, nil
 	}
 	return "", ErrOpencodeNotFound

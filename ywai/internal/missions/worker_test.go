@@ -74,13 +74,17 @@ func testHandoff() *WorkerHandoff {
 
 // ─── DetectOpencode Tests ──────────────────────────────────────────────────
 
-// VAL-ENG-WORK-002: OpenCode 2 binary detection (opencode2 only)
+// VAL-ENG-WORK-002: OpenCode 2 binary detection (opencode2 preferred)
 func TestDetectOpencodeLooksForOpencode2(t *testing.T) {
 	dir := t.TempDir()
+	home := t.TempDir()
 	bin := filepath.Join(dir, "opencode2")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// HOME override keeps real well-known dirs (~/.opencode/bin) out of the
+	// resolution so the test exercises PATH injection only.
+	t.Setenv("HOME", home)
 	t.Setenv("PATH", dir)
 
 	path, err := DetectOpencode()
@@ -92,20 +96,24 @@ func TestDetectOpencodeLooksForOpencode2(t *testing.T) {
 	}
 }
 
-func TestDetectOpencodeIgnoresV1Opencode(t *testing.T) {
+func TestDetectOpencodeFallsBackToV1Opencode(t *testing.T) {
 	dir := t.TempDir()
+	home := t.TempDir()
 	v1 := filepath.Join(dir, "opencode")
 	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// HOME override keeps the real ~/.opencode/bin away from the resolution;
+	// without it a locally installed opencode2 would win on any machine.
+	t.Setenv("HOME", home)
 	t.Setenv("PATH", dir)
 
 	path, err := DetectOpencode()
-	if err == nil {
-		t.Fatalf("DetectOpencode must not use v1 opencode, got %q", path)
+	if err != nil {
+		t.Fatalf("DetectOpencode must fall back to v1 opencode: %v", err)
 	}
-	if path != "" {
-		t.Fatalf("expected empty path, got %q", path)
+	if filepath.Base(path) != "opencode" {
+		t.Fatalf("expected v1 opencode fallback, got %q", path)
 	}
 }
 
@@ -121,7 +129,12 @@ func TestDetectOpencodeFound(t *testing.T) {
 
 // VAL-ENG-ERR-001: Missing opencode binary returns descriptive error
 func TestDetectOpencodeMissing(t *testing.T) {
-	// Temporarily remove opencode from PATH
+	// Neutralize both PATH and HOME: FindBinary also probes well-known dirs
+	// under the home directory and falls back to a login-shell `which`, so a
+	// PATH-only override still resolves a locally installed opencode2. This
+	// test also assumes no opencode binary lives in a system PATH dir that a
+	// login shell would rebuild.
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PATH", "/dev/null")
 
 	path, err := DetectOpencode()

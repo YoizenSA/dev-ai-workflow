@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-func TestDefaultOrchestratorModelProfiles_SeedsThreeProfiles(t *testing.T) {
+func TestDefaultOrchestratorModelProfiles_SeedsCoreProfiles(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 
-	if len(profiles) != 4 {
-		t.Fatalf("expected 4 seeded orchestrator profiles, got %d", len(profiles))
+	if len(profiles) != 5 {
+		t.Fatalf("expected 5 seeded orchestrator profiles, got %d", len(profiles))
 	}
 
-	for _, name := range []string{"balanced", "fast", "deep"} {
+	for _, name := range []string{"balanced", "fast", "deep", "standard"} {
 		profile, ok := profiles[name]
 		if !ok {
 			t.Fatalf("expected seeded profile %q to exist; profiles=%v", name, profiles)
@@ -52,12 +52,12 @@ func TestInheritProfileHasNoPinnedModels(t *testing.T) {
 	}
 }
 
-func TestDefaultOrchestratorModelProfiles_FastUsesFlashEverywhere(t *testing.T) {
+func TestDefaultOrchestratorModelProfiles_FastUsesFlashVisionEverywhere(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 
 	got := profiles["fast"].Agents["dev"]
-	if got.Model != "opencode-admin/deepseek-v4-flash" {
-		t.Fatalf("expected fast dev model opencode-admin/deepseek-v4-flash, got %q", got.Model)
+	if got.Model != "opencode-admin/deepseek-v4-flash-vision-exp" {
+		t.Fatalf("expected fast dev model opencode-admin/deepseek-v4-flash-vision-exp, got %q", got.Model)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestResyncOrchestratorModelProfiles_FallsBackDeterministicallyWhenActivePro
 func TestGetOrchestratorAgentModel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
-	if got := cfg.GetOrchestratorAgentModel("dev"); got != "opencode-admin/deepseek-v4-flash" {
+	if got := cfg.GetOrchestratorAgentModel("dev"); got != "opencode-admin/deepseek-v4-flash-vision-exp" {
 		t.Fatalf("expected fast dev model, got %q", got)
 	}
 	if got := cfg.GetOrchestratorAgentModel("nonexistent-agent"); got != "" {

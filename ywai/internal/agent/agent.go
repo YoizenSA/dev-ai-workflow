@@ -203,6 +203,20 @@ func FindBinary(name string) string {
 	return ""
 }
 
+// FindOpenCode resolves the OpenCode CLI binary, preferring OpenCode 2
+// (opencode2) and falling back to OpenCode v1 (opencode) when v2 is not
+// installed. Returns the resolved path and the binary name it resolved to,
+// or "" when neither binary is found.
+func FindOpenCode() (string, string) {
+	if p := FindBinary("opencode2"); p != "" {
+		return p, "opencode2"
+	}
+	if p := FindBinary("opencode"); p != "" {
+		return p, "opencode"
+	}
+	return "", ""
+}
+
 func whichViaShell(name string) string {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {

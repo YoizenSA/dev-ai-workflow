@@ -327,3 +327,59 @@ func TestFindByName_ReturnsErrorForUnknownAgent(t *testing.T) {
 		t.Fatal("expected error for unknown agent")
 	}
 }
+
+// ─── FindOpenCode ──────────────────────────────────────────────────────────
+
+func TestFindOpenCode_PrefersV2(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	for _, name := range []string{"opencode2", "opencode"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// HOME override keeps real well-known dirs (~/.opencode/bin) out of the
+	// resolution so the test exercises PATH injection only.
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", dir)
+
+	path, bin := FindOpenCode()
+	if bin != "opencode2" {
+		t.Fatalf("FindOpenCode bin = %q, want opencode2 (v2 wins when both exist)", bin)
+	}
+	if filepath.Base(path) != "opencode2" {
+		t.Fatalf("FindOpenCode path = %q, want an opencode2 binary", path)
+	}
+}
+
+func TestFindOpenCode_FallsBackToV1(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "opencode"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// HOME override keeps the real ~/.opencode/bin away from the resolution;
+	// without it a locally installed opencode2 would win on any machine.
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", dir)
+
+	path, bin := FindOpenCode()
+	if bin != "opencode" {
+		t.Fatalf("FindOpenCode bin = %q, want opencode (v1 fallback)", bin)
+	}
+	if filepath.Base(path) != "opencode" {
+		t.Fatalf("FindOpenCode path = %q, want a v1 opencode binary", path)
+	}
+}
+
+func TestFindOpenCode_Missing(t *testing.T) {
+	// Same hermeticity assumptions as missions TestDetectOpencodeMissing:
+	// neutralize PATH and HOME; assume no opencode binary in system dirs.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", "/dev/null")
+
+	path, bin := FindOpenCode()
+	if path != "" || bin != "" {
+		t.Fatalf("FindOpenCode() = (%q, %q), want empty when neither binary exists", path, bin)
+	}
+}

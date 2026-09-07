@@ -308,10 +308,11 @@ func startOpencodeServe() {
 		}
 	}
 
-	// Resolve OpenCode 2 (opencode2). No v1 `opencode` fallback.
-	binPath := agent.FindBinary("opencode2")
+	// Resolve OpenCode 2 (opencode2) first; fall back to OpenCode v1
+	// (opencode) on machines that only carry the legacy binary.
+	binPath, binName := agent.FindOpenCode()
 	if binPath == "" {
-		fmt.Fprintln(os.Stderr, "Warning: opencode2 binary not found (looked in PATH, "+
+		fmt.Fprintln(os.Stderr, "Warning: neither opencode2 nor opencode binary found (looked in PATH, "+
 			"~/.opencode2/bin, ~/.local/bin, and login-shell which). "+
 			"Install OpenCode 2 or set OPENCODE_URL to point at a running server.")
 		return
@@ -332,13 +333,14 @@ func startOpencodeServe() {
 		return
 	}
 	cmd := exec.Command(binPath, "serve", "--port", strconv.Itoa(port))
-	// OpenCode v2 protects every `serve` instance with Basic Auth. Generate a
-	// private credential for the ywai-managed child and retain it in this
-	// process so readiness checks and the chat proxy authenticate correctly.
+	// OpenCode v2 protects every `serve` instance with Basic Auth; a v1 child
+	// ignores the header, which is harmless. Generate a private credential for
+	// the ywai-managed child and retain it in this process so readiness checks
+	// and the chat proxy authenticate correctly.
 	cmd.Env = openCodeChildEnv(os.Environ(), password)
 	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve (%s): %v\n", binPath, err)
+		fmt.Fprintf(os.Stderr, "Warning: could not start %s serve (%s): %v\n", binName, binPath, err)
 		return
 	}
 	_ = os.Setenv("OPENCODE_SERVER_PASSWORD", password)
@@ -349,7 +351,7 @@ func startOpencodeServe() {
 	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
 	// OPENCODE_URL in this process) proxies to the instance we just started.
 	os.Setenv("OPENCODE_URL", chosenURL)
-	fmt.Printf("opencode server starting on %s (PID %d)\n", chosenURL, cmd.Process.Pid)
+	fmt.Printf("opencode server starting on %s (PID %d, via %s)\n", chosenURL, cmd.Process.Pid, binName)
 
 	// Wait briefly for opencode to bind its port, so the control server's chat
 	// route registration (which runs right after) sees it. Poll /status up to
