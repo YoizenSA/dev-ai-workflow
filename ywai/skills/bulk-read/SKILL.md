@@ -1,6 +1,6 @@
 ---
 name: bulk-read
-description: "Delegate large-file reading to a cheap opencode2 worker and read only its summary. Keeps big file contents out of this session's context. Trigger: bulk read, leer archivo grande, archivo muy largo, resumir archivos."
+description: "Delegate large-file reads to a cheap opencode2 worker and read only the summary. Trigger: bulk read, leer archivo grande."
 ---
 
 # Bulk read with opencode2
