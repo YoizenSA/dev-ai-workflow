@@ -7,14 +7,44 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 # Configuración
 
+## Versiones de OpenCode (v1 y v2)
+
+`ywai` soporta tanto **OpenCode 1** (`opencode`) como **OpenCode 2** (`opencode2`), gestionando automáticamente las diferencias de formato y comportamiento:
+
+| Característica | OpenCode v1 (`opencode`) | OpenCode 2 (`opencode2`) |
+|---|---|---|
+| **Binario** | `opencode` | `opencode2` |
+| **MCPs** | Plano en `mcp.<id>` con `"enabled": true\|false` | Anidado en `mcp.servers.<id>` con `"disabled": true` |
+| **Array de plugins** | `"plugin": [...]` | `"plugins": [...]` |
+| **TUI / CLI config** | `~/.config/opencode/tui.json` (`"plugin"`) | `~/.config/opencode/cli.json` (`"plugins"`) |
+| **Permisos de agentes** | Mapa YAML `permission:` | Lista ordenada de reglas `permissions:` |
+| **Delegación** | `background-agents` plugin (`delegate` tool) | Soporte nativo de `subagent` |
+
+### Cambiar de versión
+
+Podés elegir qué versión conduce `ywai` de tres formas:
+
+1. **Desde Settings UI**: En la pestaña **General**, selector *OpenCode version* (`Autodetect`, `v2 — opencode2`, `v1 — opencode`).
+2. **Desde CLI**:
+   ```bash
+   ywai config set opencode_version v2   # o v1
+   ywai config get opencode_version
+   ```
+3. **Variable de entorno temporal** (para CI o corridas puntuales):
+   ```bash
+   YWAI_OPENCODE=v1 ywai install
+   ```
+
+Por defecto, si no se especifica ninguna versión, `ywai` autodetecta prefiriendo OpenCode 2 (`opencode2`) si está en `$PATH`, o OpenCode v1 como fallback.
+
 ## Estructura
 
-OpenCode 2 lee esto (binario `opencode2`):
+Ambas versiones comparten el directorio global `~/.config/opencode/`:
 
 ```
 ~/.config/opencode/
-├── opencode.json     # agents JSON, MCP (mcp.servers), default_agent
-├── cli.json          # tema, keybinds (antes tui.json)
+├── opencode.json     # agents JSON, MCP (mcp o mcp.servers según versión), default_agent
+├── cli.json          # v2: tema, keybinds, plugins CLI (en v1: tui.json)
 ├── agents/           # Un .md plano por agente (lo instala ywai)
 ├── skills/           # Skills extra
 └── commands/         # Slash commands
