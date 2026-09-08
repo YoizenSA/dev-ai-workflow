@@ -12,9 +12,11 @@
  *   id - metadata - types - logger - agent-capability - delegation-manager - tools - rules - context
  */
 
+import * as fsSync from "node:fs"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
+import * as url from "node:url"
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Event } from "@opencode-ai/sdk"
 import { parseAgentMode, parseAgentWriteCapability } from "./agent-capability"
@@ -28,6 +30,8 @@ import { DELEGATION_RULES } from "./rules"
 import { deserializeDelegation, serializeDelegation } from "./state"
 import {
 	createDelegate,
+	createSubagent,
+	createSubagentStatus,
 	createDelegationList,
 	createDelegationPeek,
 	createDelegationRead,
@@ -43,6 +47,61 @@ import { STRICT_READONLY } from "./types"
 interface SystemTransformInput {
 	agent?: string
 	sessionID?: string
+}
+
+/**
+ * Which OpenCode this plugin is running under, read from the marker ywai writes
+ * beside the vendored bundle. v1 and v2 expose no capability that cleanly
+ * separates them, so the installer — which already knows — records it instead
+ * of the plugin guessing.
+ *
+ * Anything unreadable means v1. That is the conservative default: on v1 the
+ * native delegation tool is `task`, so registering `subagent` there would add a
+ * second name for `delegate` that shadows nothing and only costs context.
+ */
+function readOpenCodeFlavor(): "v1" | "v2" {
+	try {
+		const here = path.dirname(url.fileURLToPath(import.meta.url))
+		const raw = fsSync.readFileSync(path.join(here, "ywai-opencode-flavor.json"), "utf8")
+		return JSON.parse(raw)?.opencodeVersion === "v2" ? "v2" : "v1"
+	} catch {
+		return "v1"
+	}
+}
+
+/**
+ * v1 keeps the delegation_* surface it has always had: `task` is its native
+ * delegation tool, so nothing here shadows a built-in and renaming would break
+ * every prompt that names these tools.
+ */
+function v1Tools(manager: DelegationManager) {
+	return {
+		delegate: createDelegate(manager),
+		delegation_read: createDelegationRead(manager),
+		delegation_list: createDelegationList(manager),
+		delegation_peek: createDelegationPeek(manager),
+		delegation_steer: createDelegationSteer(manager),
+		delegation_stop: createDelegationStop(manager),
+		delegation_status: createDelegationStatus(manager),
+	}
+}
+
+/**
+ * v2 gets a deliberately smaller surface: five tools instead of eight.
+ *
+ * Every registered tool costs schema tokens in every turn, so the duplicates go.
+ * `delegate` is dropped because `subagent` starts the same work under the name
+ * v2 models already reach for, and list/status/peek collapse into one
+ * `subagent_status` that zooms by whether an id is given.
+ */
+function v2Tools(manager: DelegationManager) {
+	return {
+		subagent: createSubagent(manager),
+		subagent_status: createSubagentStatus(manager),
+		subagent_read: createDelegationRead(manager),
+		subagent_steer: createDelegationSteer(manager),
+		subagent_stop: createDelegationStop(manager),
+	}
 }
 
 const BackgroundAgentsPlugin: Plugin = async (ctx) => {
@@ -64,6 +123,7 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	const serverUrl = (ctx as { serverUrl?: URL }).serverUrl
 	const nativeSteer = serverUrl ? createNativeSteer(serverUrl, log) : undefined
 
+	const openCodeFlavor = readOpenCodeFlavor()
 	const manager = new DelegationManager(client as OpencodeClient, baseDir, log, { nativeSteer })
 
 	await manager.debugLog("BackgroundAgentsPlugin initialized with delegation system")
@@ -73,15 +133,7 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	void manager.restoreActiveDelegations()
 
 	return {
-		tool: {
-			delegate: createDelegate(manager),
-			delegation_read: createDelegationRead(manager),
-			delegation_list: createDelegationList(manager),
-			delegation_peek: createDelegationPeek(manager),
-			delegation_steer: createDelegationSteer(manager),
-			delegation_stop: createDelegationStop(manager),
-			delegation_status: createDelegationStatus(manager),
-		},
+		tool: openCodeFlavor === "v2" ? v2Tools(manager) : v1Tools(manager),
 
 		// Prevent read-only agents from using native task tool (symmetric to delegate enforcement)
 		"tool.execute.before": async (

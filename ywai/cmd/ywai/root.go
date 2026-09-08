@@ -561,10 +561,20 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		// background-agents is an opencode plugin (delegate/delegation_* async
 		// tools); it only applies to opencode-format configs (opencode/kilocode).
-		// The OpenCode plugins below are v1-only: background-agents spawns child
-		// sessions through a parentID the v2 plugin API no longer passes, so on
-		// opencode2 the bundle installs and then silently does nothing.
-		supportsOpenCodePlugins := (a.Name == "opencode" && !agent.OpenCodeIsV2()) || a.Name == "kilocode"
+		// Two gates, because the plugins do not share a compatibility story.
+		//
+		// background-agents runs on both. v2's plugin host drops parentID when
+		// it builds session.create, so what the plugin spawns is a root session
+		// rather than a child: nesting and the depth chain degrade, delegation
+		// itself does not. It also carries the `subagent` override, which only
+		// matters on v2 — that is where the built-in it replaces exists.
+		//
+		// vision-bridge and advisor are built against the v1 plugin surface and
+		// are not confirmed on v2, so they stay off there rather than being
+		// installed on a guess.
+		isOpenCode := a.Name == "opencode" || a.Name == "kilocode"
+		supportsDelegationPlugin := isOpenCode
+		supportsV1OnlyPlugins := (a.Name == "opencode" && !agent.OpenCodeIsV2()) || a.Name == "kilocode"
 
 		if dryRun {
 			done = append(done, a.Name)
@@ -586,11 +596,13 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		// OpenCode v1 has no native delegation tool, so the background-agents
 		// plugin is what provides `delegate` and the delegation_* family.
-		if supportsOpenCodePlugins {
+		if supportsDelegationPlugin {
 			if err := plugins.InstallBackgroundAgents(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
 			}
+		}
 
+		if supportsV1OnlyPlugins {
 			// vision-bridge: auto-route attached images through TokenBank vision
 			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
 			if err := plugins.InstallVisionBridge(configPath); err != nil {
@@ -610,10 +622,32 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				}
 			}
 
-			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
-			// from tui-plugins/, so no config patching is needed.
+		} else if a.Name == "opencode" {
+			// v2: strip the v1-only bundles an earlier v1 install left behind.
+			// They are inert under the "plugin" key v2 ignores, but the next
+			// write moves the array to "plugins" and v2 would then try to load
+			// a v1 plugin.
+			if removed, err := plugins.RemoveV1OnlyPlugins(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to remove v1-only plugins: %v\n", a.Name, err)
+			} else if removed > 0 {
+				fmt.Printf("  [%s] Removed %d v1-only plugin(s) (not supported on opencode2)\n", a.Name, removed)
+			}
+		}
+
+		// ywai TUI logo (home_logo slot, click easter eggs). Unlike the
+		// opencode.json plugins above this one is not v1-only: it targets the
+		// TUI client config, which both flavors read — v1 as tui.json, v2 as
+		// cli.json — so it installs regardless of the active flavor.
+		if a.Name == "opencode" || a.Name == "kilocode" {
 			if err := plugins.InstallTuiLogo(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
+			}
+
+			// ywai statusline: the v2 stand-in for opencode-subagent-statusline,
+			// whose peer range stops at OpenCode 2. It is a no-op on v1, where
+			// the published package is installed above instead.
+			if err := plugins.InstallTuiStatusline(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install ywai TUI statusline: %v\n", a.Name, err)
 			}
 		}
 

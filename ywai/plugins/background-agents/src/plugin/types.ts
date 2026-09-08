@@ -155,6 +155,31 @@ const KEEP_CHILD_SESSIONS = process.env.BACKGROUND_AGENTS_KEEP_CHILD_SESSIONS !=
 interface ModelRef {
 	providerID: string
 	modelID: string
+	/** Model variant, which is how OpenCode expresses reasoning effort. */
+	variant?: string
+}
+
+/**
+ * Effort spellings a supervisor may reach for, mapped to the variant names
+ * OpenCode actually knows. An unrecognised value passes through untouched: the
+ * variant space is the provider's, not ours, so rejecting here would block
+ * variants we have never heard of.
+ */
+const EFFORT_ALIASES: Record<string, string> = {
+	max: "high",
+	minimal: "low",
+	min: "low",
+}
+
+/** Translate a supervisor-facing effort into a model variant. */
+function effortToVariant(effort: string): string {
+	const e = effort.trim().toLowerCase()
+	return EFFORT_ALIASES[e] ?? e
+}
+
+/** Render a model reference the way OpenCode reads it: provider/model#variant. */
+function formatModelRef(ref: ModelRef): string {
+	return `${ref.providerID}/${ref.modelID}${ref.variant ? `#${ref.variant}` : ""}`
 }
 
 /**
@@ -164,9 +189,16 @@ interface ModelRef {
  */
 function parseModelString(value: string): ModelRef | undefined {
 	const [providerID, ...modelSegments] = value.trim().split("/")
-	const modelID = modelSegments.join("/")
-	if (!providerID || !modelID) return undefined
-	return { providerID, modelID }
+	const joined = modelSegments.join("/")
+	if (!providerID || !joined) return undefined
+	// A caller may inline the variant ("provider/model#high"); keep it rather
+	// than folding it into the model id, where it would not resolve.
+	const hash = joined.indexOf("#")
+	if (hash === -1) return { providerID, modelID: joined }
+	const modelID = joined.slice(0, hash)
+	const variant = joined.slice(hash + 1)
+	if (!modelID) return undefined
+	return variant ? { providerID, modelID, variant } : { providerID, modelID }
 }
 
 interface DelegateInput {
@@ -254,6 +286,8 @@ export type {
 }
 export {
 	DEFAULT_MAX_RUN_TIME_MS,
+	effortToVariant,
+	formatModelRef,
 	READ_WAIT_UNLIMITED_MS,
 	isUnlimitedRunTime,
 	TERMINAL_WAIT_GRACE_MS,

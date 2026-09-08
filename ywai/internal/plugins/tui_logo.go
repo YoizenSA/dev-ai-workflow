@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -52,6 +53,15 @@ func installTuiLogoWithBundle(configPath, bundleSrc string) error {
 // any existing plugin entries — including the array-form entries opencode uses
 // for parameterized plugins. Safe to call repeatedly.
 func patchTuiLogo(tuiConfigPath, pluginPath string) error {
+	// Mouse capture is what makes the logo's click easter eggs reachable; other
+	// TUI plugins register through patchTuiPlugin without it.
+	return patchTuiPlugin(tuiConfigPath, pluginPath, true)
+}
+
+// patchTuiPlugin registers pluginPath in the TUI client config's plugin array
+// (idempotently), preserving existing entries including the array-form ones
+// opencode uses for parameterized plugins. Safe to call repeatedly.
+func patchTuiPlugin(tuiConfigPath, pluginPath string, enableMouse bool) error {
 	root := map[string]any{}
 	src := tuiConfigPath
 	if _, err := os.Stat(tuiConfigPath); err != nil {
@@ -75,15 +85,29 @@ func patchTuiLogo(tuiConfigPath, pluginPath string) error {
 	}
 
 	plugins := openCodePlugins(root)
+	if agent.OpenCodeIsV2() {
+		// The write below moves this array to the "plugins" key v2 reads, so a
+		// v1-only entry that was inert until now would start being loaded.
+		kept := plugins[:0]
+		for _, raw := range plugins {
+			if s, ok := raw.(string); ok && s == subAgentStatuslinePlugin {
+				continue
+			}
+			kept = append(kept, raw)
+		}
+		plugins = kept
+	}
 	if !containsPluginPath(plugins, pluginPath) {
 		plugins = append(plugins, pluginPath)
 	}
 	writePlugins(root, plugins)
 
-	// Mouse capture is required for the click easter eggs; enable it only when
-	// the user has not explicitly opted out (no existing key).
-	if _, ok := root["mouse"]; !ok {
-		root["mouse"] = true
+	// Enable mouse capture only for plugins that need it, and only when the
+	// user has not explicitly opted out (no existing key).
+	if enableMouse {
+		if _, ok := root["mouse"]; !ok {
+			root["mouse"] = true
+		}
 	}
 
 	if err := config.WriteJSONC(tuiConfigPath, root); err != nil {

@@ -81,6 +81,25 @@ func RemoveBackgroundAgents(configPath string) error {
 // InstallBackgroundAgents vendors the background-agents plugin bundle next to
 // the given opencode config and wires it into the config (plugin array +
 // delegation permissions). configPath is the path to opencode.json(c).
+// FlavorMarkerName is the file ywai writes beside the vendored bundle so the
+// plugin knows which OpenCode it is running under. The plugin cannot work this
+// out on its own: v1 and v2 expose no capability that cleanly separates them,
+// and guessing would either add a dead tool on v1 or skip the override on v2.
+const FlavorMarkerName = "ywai-opencode-flavor.json"
+
+// writeFlavorMarker records the active flavor next to the vendored bundles.
+// Absent or unreadable means v1, which is the conservative default: the
+// subagent override is skipped rather than registering a tool that shadows
+// nothing.
+func writeFlavorMarker(destDir string) error {
+	flavor := "v1"
+	if agent.OpenCodeIsV2() {
+		flavor = "v2"
+	}
+	body := []byte(`{"opencodeVersion":"` + flavor + `"}` + "\n")
+	return os.WriteFile(filepath.Join(destDir, FlavorMarkerName), body, 0o644)
+}
+
 func InstallBackgroundAgents(configPath string) error {
 	bundle, err := config.BackgroundAgentsBundlePath()
 	if err != nil {
@@ -102,6 +121,10 @@ func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 	destJS := filepath.Join(destDir, config.BackgroundAgentsBundleName)
 	if err := copyFile(bundleSrc, destJS); err != nil {
 		return fmt.Errorf("copy plugin bundle: %w", err)
+	}
+
+	if err := writeFlavorMarker(destDir); err != nil {
+		return fmt.Errorf("write flavor marker: %w", err)
 	}
 
 	return patchOpenCodeBackgroundAgents(configPath, destJS)

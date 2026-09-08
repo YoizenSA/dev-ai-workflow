@@ -38,6 +38,10 @@ const AdvisorBundleName = "advisor.js"
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
 
+// TuiStatuslineBundleName is the v2 replacement for the published
+// opencode-subagent-statusline, whose peer range excludes OpenCode 2.
+const TuiStatuslineBundleName = "ywai-statusline.tsx"
+
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
@@ -672,6 +676,29 @@ func TuiLogoBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("ywai TUI logo plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// TuiStatuslineBundlePath resolves the ywai TUI statusline source the same way
+// TuiLogoBundlePath resolves the logo: source checkout, then seeded data dir,
+// then the embedded FS.
+func TuiStatuslineBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", TuiStatuslineBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), "tui", TuiStatuslineBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("ywai TUI statusline plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

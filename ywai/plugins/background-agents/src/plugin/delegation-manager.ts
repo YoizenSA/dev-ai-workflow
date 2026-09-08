@@ -25,6 +25,7 @@ import {
 	STRICT_READONLY,
 	TERMINAL_WAIT_GRACE_MS,
 	WATCHDOG_INTERVAL_MS,
+	formatModelRef,
 } from "./types"
 import type {
 	AssistantSessionMessageItem,
@@ -1391,7 +1392,9 @@ class DelegationManager {
 			agent: input.agent,
 			artifactPath,
 			maxRunTimeMs: input.maxRunTimeMs,
-			model: input.model ? `${input.model.providerID}/${input.model.modelID}` : undefined,
+			// formatModelRef keeps the #variant: dropping it here would record a
+			// model that never ran and hide the effort the supervisor chose.
+			model: input.model ? formatModelRef(input.model) : undefined,
 		})
 
 		await this.debugLog(`Registered delegation ${delegation.id} before execution`)
