@@ -5,15 +5,31 @@ steps come before mutating steps. See `commands.md` for full flag reference.
 
 ## Code review a PR
 
-1. `ado pr context <prId>` — one call: metadata, commits, changed files, threads.
-2. For files that need a closer look: `ado pr file --path <file> <prId>` (use `--start`/`--end` for large files).
-3. Leave findings as anchored comments: `ado pr comment <prId> --comment "<finding>" --file <path> --line <n>`.
-4. Vote once at the end: `ado pr vote <prId> <approve|suggestions|wait|reject> [--comment "<summary>"]`.
+1. `ado pr context <prId>` — one call: metadata, linked work items, commits, changed files, threads.
+2. `ado pr diff <prId> --hunks` — the actual unified diff. Review the hunks, not the file list.
+3. Resolve the ticket and read it: `ado wi get <id>`. If `pr context` lists no linked work
+   item, look for an ID in the branch name, title or description (`AB#1234`, `#1234`,
+   `bugfix/1234_...`, a `_workitems/edit/<id>` link); if none is found, ask the user and
+   stop. Without the ticket you cannot check the PR against its intended scope.
+   `ado wi attachments <id>` when the ticket references screenshots.
+4. For files that need a closer look: `ado pr file --path <file> <prId>` (use `--start`/`--end` for large files).
+5. Read `ado pr threads <prId>` before writing, so you don't repeat existing feedback.
+6. Print the review and ask for confirmation before posting anything. Dry run is the default.
+7. Post findings as anchored comments: `ado pr comment <prId> --comment "<finding>" --file <path> --line <n>`.
+8. Vote once at the end: `ado pr vote <prId> <approve|suggestions|wait|reject> [--comment "<summary>"]`.
+
+Review output contract:
+- One finding = one line: **what — where (`file:line`) — why**. No summary of the PR, no greetings.
+- Split blocking defects from non-blocking suggestions; only real defects block.
+- Report only what this diff introduces or worsens. Pre-existing problems are at most one suggestion.
+- Budget: 12 findings max. Over budget, keep the most severe and close with `(+N minor findings omitted)`.
+- Close with the QA angle: what a tester should exercise, one line each. Post it to the
+  ticket with `ado wi comment <wiId> --comment "<qa block>"` when the user asks.
 
 Guidelines:
 - Comment BEFORE voting — a vote with unexplained rejection is useless to the author.
 - `suggestions` = approved with non-blocking notes; `wait` = author must respond; `reject` = blocking defect.
-- If threads already exist, read them (`ado pr threads <prId>`) so you don't repeat resolved feedback.
+- PR comments are Markdown; only `--description` on work items is HTML.
 
 ## Answer / follow up on PR threads
 
