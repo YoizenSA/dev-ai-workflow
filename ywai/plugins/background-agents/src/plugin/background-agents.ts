@@ -40,6 +40,7 @@ import {
 	createDelegationStop,
 } from "./tools"
 import { STRICT_READONLY } from "./types"
+import { setupV2 } from "./v2"
 
 /**
  * Expected input for experimental.chat.system.transform hook.
@@ -269,7 +270,24 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	}
 }
 
-const BackgroundAgentsPluginWithInternals = Object.assign(BackgroundAgentsPlugin, {
+/**
+ * Dual export per the v2 plugins guide ("Support V1"):
+ *
+ * - v2 reads `id` and `setup()` and ignores `server()`. A function-shaped
+ *   default (the old export) is rejected at load with "Plugin must export a
+ *   default definition with an id and an effect or setup function".
+ * - v1 calls `server()` and uses the returned hooks. The object form needs
+ *   OpenCode v1 >= 1.18.29; older v1 releases only accept function exports.
+ */
+const BackgroundAgentsDualExport = {
+	id: "ywai-background-agents",
+	setup: setupV2,
+	async server(ctx: Parameters<typeof BackgroundAgentsPlugin>[0]) {
+		return BackgroundAgentsPlugin(ctx)
+	},
+}
+
+export default Object.assign(BackgroundAgentsDualExport, {
 	testInternals: {
 		DelegationManager,
 		formatDelegationContext,
@@ -277,5 +295,3 @@ const BackgroundAgentsPluginWithInternals = Object.assign(BackgroundAgentsPlugin
 		deserializeDelegation,
 	},
 } as const)
-
-export default BackgroundAgentsPluginWithInternals

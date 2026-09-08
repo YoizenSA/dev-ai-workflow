@@ -1026,6 +1026,19 @@ class DelegationManager {
 		output.parts = parts
 	}
 
+	/**
+	 * Take (and clear) this session's pending notifications as a single text
+	 * block. The v1 path appends a synthetic part through
+	 * injectPendingNotificationsIntoChatMessage; the v2 prompt hook can only
+	 * rewrite the admitted prompt text, so it needs the plain string.
+	 */
+	drainPendingNotificationText(sessionID: string): string | undefined {
+		const pending = this.pendingNotifications.get(sessionID)
+		if (!pending || pending.length === 0) return undefined
+		this.pendingNotifications.delete(sessionID)
+		return pending.join("\n\n")
+	}
+
 	private markRetrieved(id: string, readerSessionID: string): DelegationRecord | undefined {
 		const record = this.updateDelegation(id, (delegation, now) => {
 			delegation.retrieval.retrievedAt = now
