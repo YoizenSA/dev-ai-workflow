@@ -1,9 +1,11 @@
 package plugins
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -112,7 +114,17 @@ func InstallBackgroundAgents(configPath string) error {
 // ywai-plugins dir alongside configPath and patches the config to reference it.
 // Split out from InstallBackgroundAgents so the copy + patch glue is unit
 // testable without resolving the real embedded/source bundle.
+// autoDiscoveredPluginsSubdir is the directory OpenCode scans for plugins on
+// its own. v2 rejects an absolute path to a .js file in the config array —
+// "configured plugin path must be a directory" — so on v2 the bundle has to be
+// discovered from here instead of being pointed at.
+const autoDiscoveredPluginsSubdir = "plugins"
+
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
+	if agent.OpenCodeIsV2() {
+		return installBackgroundAgentsV2(configPath, bundleSrc)
+	}
+
 	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
@@ -128,6 +140,56 @@ func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 	}
 
 	return patchOpenCodeBackgroundAgents(configPath, destJS)
+}
+
+// installBackgroundAgentsV2 vendors the bundle into the directory OpenCode
+// scans by itself and leaves the config array alone.
+//
+// v2 accepts only directories as explicit plugin paths, so the v1 arrangement —
+// a .js under ywai-plugins/ referenced by absolute path — is dropped with a
+// warning and the plugin never loads. Auto-discovery takes plain .js files, so
+// the bundle simply lives where OpenCode already looks. Any stale explicit
+// entry is removed, otherwise the warning keeps firing on every start.
+func installBackgroundAgentsV2(configPath, bundleSrc string) error {
+	destDir := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
+	}
+
+	destJS := filepath.Join(destDir, config.BackgroundAgentsBundleName)
+	if err := copyFile(bundleSrc, destJS); err != nil {
+		return fmt.Errorf("copy plugin bundle: %w", err)
+	}
+
+	// The plugin reads the marker from its own directory.
+	if err := writeFlavorMarker(destDir); err != nil {
+		return fmt.Errorf("write flavor marker: %w", err)
+	}
+
+	// Drop the v1-shaped entry and the copy it pointed at, so the bundle is
+	// discovered once rather than also being pointed at and rejected.
+	root, err := config.ReadJSONC(configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", configPath, err)
+	}
+	kept := make([]any, 0)
+	for _, raw := range openCodePlugins(root) {
+		if s, ok := raw.(string); ok && strings.Contains(s, config.BackgroundAgentsBundleName) {
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	writePlugins(root, kept)
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("write %s: %w", configPath, err)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // patchOpenCodeBackgroundAgents adds pluginJSPath to the config's v2 "plugins"
