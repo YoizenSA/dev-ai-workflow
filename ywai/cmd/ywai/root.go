@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -420,50 +418,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			}
 			agentprofiles.RemoveRetiredAgents(agentsDir)
 			agentprofiles.RemoveAgentBackups(agentsDir)
-
-			// Auto-install PI.dev plugins required for orchestrator
-			if piBin, err := exec.LookPath("pi"); err == nil {
-				piPlugins := []string{
-					"@spences10/pi-team-mode",
-					"@spences10/pi-mcp",
-					"@spences10/pi-skills",
-					"@spences10/pi-skill-importer",
-					"@spences10/pi-child-env",
-					"@spences10/pi-lsp",
-					"@spences10/pi-redact",
-					"@spences10/pi-nopeek",
-				}
-
-				for _, plugin := range piPlugins {
-					fmt.Printf("  [%s] Installing %s...\n", a.Name, plugin)
-
-					if dryRun {
-						fmt.Printf("  [%s] Would install %s\n", a.Name, plugin)
-						continue
-					}
-
-					// ponytail: 2m timeout + closed stdin so a hung/interactive
-					// pi install can't block the whole update forever.
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-					cmd := exec.CommandContext(ctx, piBin, "install", "npm:"+plugin, "--no-approve")
-					cmd.Stdin = nil
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-
-					if err := cmd.Run(); err != nil {
-						if ctx.Err() == context.DeadlineExceeded {
-							fmt.Printf("  [%s] Warning: %s install timed out after 2m — skipping\n", a.Name, plugin)
-						} else {
-							fmt.Printf("  [%s] Warning: %s install failed: %v\n", a.Name, plugin, err)
-						}
-					} else {
-						fmt.Printf("  [%s] %s installed\n", a.Name, plugin)
-					}
-					cancel()
-				}
-			} else {
-				fmt.Printf("  [%s] Note: pi binary not found — install PI.dev first: npm install -g @pi-apps/pi\n", a.Name)
-			}
 		}
 	}
 }
