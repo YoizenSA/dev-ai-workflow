@@ -117,7 +117,7 @@ func (r *applyResult) printFooter(mode applyMode) {
 	fmt.Println()
 	if mode == applyUpdate {
 		fmt.Println("Next step (once):")
-		fmt.Println("  Restart OpenCode so it reloads plugins (vision-bridge, etc.).")
+		fmt.Println("  Reopen any OpenCode session listed above so it reloads plugins and agents.")
 		fmt.Println("  Optional: open ywai Settings → Vision bridge to pick the vision model.")
 		return
 	}
@@ -177,6 +177,9 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 	}
 	if o.Mode == applyInstall {
 		n++ // ensure control server running
+	}
+	if o.Mode == applyInstall || o.Mode == applyUpdate {
+		n++ // restart OpenCode
 	}
 	return n
 }
@@ -364,6 +367,15 @@ func applyManaged(o applyOpts) applyResult {
 	if o.RestartServeIfRunning {
 		steps.next("Restarting control server (if running)")
 		restartControlServerIfRunning(&r, o.Opts.DryRun)
+	}
+
+	// ── OpenCode restart ──────────────────────────────────────────────────
+	// Plugins, MCP servers and agent frontmatter are read once at startup, so
+	// everything written above is inert in an already-running OpenCode. Servers
+	// are stopped here; interactive sessions are only reported.
+	if o.Mode == applyInstall || o.Mode == applyUpdate {
+		steps.next("Restarting OpenCode so it reloads plugins and agents")
+		restartOpenCodeServers(&r, o.Opts.DryRun)
 	}
 
 	// ── strip agent frontmatter keys opencode v2 rejects ──────────────────
