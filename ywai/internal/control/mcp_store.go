@@ -705,12 +705,12 @@ func readMcpConfig() (map[string]interface{}, error) {
 		return map[string]interface{}{}, nil
 	}
 
-	return collectOpenCodeServers(mcpSection), nil
+	return mcp.CollectOpenCodeServers(mcpSection), nil
 }
 
 // writeMcpConfig writes the mcp section back to opencode.json,
 // preserving all other config keys.
-func writeMcpConfig(mcp map[string]interface{}) error {
+func writeMcpConfig(servers map[string]interface{}) error {
 	mcpConfigMu.Lock()
 	defer mcpConfigMu.Unlock()
 
@@ -730,7 +730,7 @@ func writeMcpConfig(mcp map[string]interface{}) error {
 	}
 
 	existing, _ := full["mcp"].(map[string]interface{})
-	full["mcp"] = flattenOpenCodeMCP(existing, mcp)
+	full["mcp"] = mcp.WriteOpenCodeMCP(existing, servers)
 
 	out, err := json.MarshalIndent(full, "", "  ")
 	if err != nil {
@@ -742,74 +742,6 @@ func writeMcpConfig(mcp map[string]interface{}) error {
 	}
 
 	return nil
-}
-
-func openCodeReservedMCPKey(k string) bool {
-	return k == "servers" || k == "timeout"
-}
-
-func collectOpenCodeServers(mcp map[string]interface{}) map[string]interface{} {
-	out := map[string]interface{}{}
-	if mcp == nil {
-		return out
-	}
-	if nested, ok := mcp["servers"].(map[string]interface{}); ok {
-		for k, v := range nested {
-			out[k] = v
-		}
-	}
-	for k, v := range mcp {
-		if openCodeReservedMCPKey(k) {
-			continue
-		}
-		if _, ok := v.(map[string]interface{}); ok {
-			if _, exists := out[k]; !exists {
-				out[k] = v
-			}
-		}
-	}
-	return out
-}
-
-// flattenOpenCodeMCP writes the opencode v1 MCP layout: each server sits
-// directly under `mcp`, and every entry carries an explicit `enabled` bool.
-// v1 validates that key, so a v2 entry (nested under `servers`, using
-// `disabled`) is converted rather than passed through.
-func flattenOpenCodeMCP(mcp map[string]interface{}, servers map[string]interface{}) map[string]interface{} {
-	out := map[string]interface{}{}
-	if mcp != nil {
-		for k, v := range mcp {
-			if k == "servers" {
-				continue
-			}
-			if _, isObj := v.(map[string]interface{}); isObj && !openCodeReservedMCPKey(k) {
-				continue
-			}
-			out[k] = v
-		}
-	}
-	for id, raw := range servers {
-		entry, ok := raw.(map[string]interface{})
-		if !ok {
-			out[id] = raw
-			continue
-		}
-		next := make(map[string]interface{}, len(entry)+1)
-		for k, v := range entry {
-			next[k] = v
-		}
-		enabled := true
-		if disabled, ok := next["disabled"].(bool); ok {
-			enabled = !disabled
-			delete(next, "disabled")
-		}
-		if e, ok := next["enabled"].(bool); ok {
-			enabled = e
-		}
-		next["enabled"] = enabled
-		out[id] = next
-	}
-	return out
 }
 
 // projectMcpConfigFilePath returns the path to the project-local MCP config file.

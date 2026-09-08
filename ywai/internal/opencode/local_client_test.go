@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 func TestLocalClient_Status_NotFound(t *testing.T) {
@@ -289,6 +291,11 @@ func TestResolveOpencodeBin_PrefersOpenCode2(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
+	// This test is about autodetection, so it must not inherit the package's
+	// v1 pin (see opencode_flavor_testmain_test.go) or the preference it
+	// asserts would never be exercised.
+	t.Setenv(agent.OpenCodeOverrideEnv, "")
+	t.Setenv("HOME", t.TempDir())
 
 	got := resolveOpencodeBin()
 	if got != v2 {

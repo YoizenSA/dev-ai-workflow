@@ -63,6 +63,7 @@ func TestDetect_PrefersOpenCode2Binary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir)
+	t.Setenv(OpenCodeOverrideEnv, "")
 
 	found := Detect()
 	var oc *Agent
@@ -342,6 +343,7 @@ func TestFindOpenCode_PrefersV2(t *testing.T) {
 	// resolution so the test exercises PATH injection only.
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", dir)
+	t.Setenv(OpenCodeOverrideEnv, "")
 
 	path, bin := FindOpenCode()
 	if bin != "opencode2" {
@@ -362,6 +364,7 @@ func TestFindOpenCode_FallsBackToV1(t *testing.T) {
 	// without it a locally installed opencode2 would win on any machine.
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", dir)
+	t.Setenv(OpenCodeOverrideEnv, "")
 
 	path, bin := FindOpenCode()
 	if bin != "opencode" {

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 const defaultTimeout = 3 * time.Second
@@ -77,11 +79,23 @@ type modelV2Response struct {
 	Data     []rawModelV2    `json:"data"`
 }
 
+// apiPath prefixes a route with /api when the active OpenCode is v2. v2 serves
+// its web UI from the bare paths, so GET /agent there returns the SPA's HTML
+// shell with a 200 — the JSON decode fails on a response that looks healthy.
+// The real routes moved under /api and are Basic-auth gated, which the client's
+// serverAuthTransport already supplies.
+func (c *ServerClient) apiPath(route string) string {
+	if agent.OpenCodeIsV2() {
+		return "/api" + route
+	}
+	return route
+}
+
 // ─── Client interface implementation ───────────────────────────────────────
 
 // ListAgents fetches agents from the opencode server.
 func (c *ServerClient) ListAgents(ctx context.Context) ([]AgentInfo, error) {
-	url := c.baseURL + "/agent"
+	url := c.baseURL + c.apiPath("/agent")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("opencode server: create request: %w", err)
@@ -210,7 +224,7 @@ func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
 }
 
 func (c *ServerClient) listModelsV1(ctx context.Context) ([]ModelInfo, error) {
-	url := c.baseURL + "/provider"
+	url := c.baseURL + c.apiPath("/provider")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -303,7 +317,7 @@ func (c *ServerClient) Status(ctx context.Context) (ClientStatus, error) {
 
 // getConnectedProviders fetches the list of connected providers from /provider endpoint.
 func (c *ServerClient) getConnectedProviders(ctx context.Context) []string {
-	url := c.baseURL + "/provider"
+	url := c.baseURL + c.apiPath("/provider")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil

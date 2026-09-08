@@ -200,6 +200,7 @@ export default function Settings() {
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [visionModel, setVisionModel] = useState("");
+	const [opencodeVersion, setOpencodeVersion] = useState("");
 	// Optional OpenAI-compatible vision provider override. Empty = use TokenBank.
 	const [agentList, setAgentList] = useState<string[]>([]);
 
@@ -254,6 +255,7 @@ function GeneralTab() {
 				("current" in (visionRes ?? {}) ? visionRes?.current : undefined) ||
 				"";
 			setVisionModel(preferred ?? "");
+			setOpencodeVersion(userCfg?.opencode_version ?? "");
 			setAgentList((agents ?? []).map((a) => a.name));
 			const vModels = (visionRes?.models ?? []).map((m) => ({
 				id: m.id,
@@ -334,6 +336,10 @@ function GeneralTab() {
 				vision_model: visionModel || "",
 				// Clear override so Settings is the single source of truth
 				vision_model_override: "",
+				opencode_version: (opencodeVersion || undefined) as
+					| "v1"
+					| "v2"
+					| undefined,
 				// Optional OpenAI-compatible provider override (empty = TokenBank)
 			});
 
@@ -518,6 +524,25 @@ function GeneralTab() {
 				>
 					Use catalog default
 				</button>
+			</div>
+
+			<div className="field span-2">
+				<label htmlFor="cfg-opencode-version">OpenCode version</label>
+				<select
+					id="cfg-opencode-version"
+					value={opencodeVersion}
+					onChange={(e) => setOpencodeVersion(e.target.value)}
+				>
+					<option value="">Autodetect (prefers v2)</option>
+					<option value="v2">v2 — opencode2</option>
+					<option value="v1">v1 — opencode</option>
+				</select>
+				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
+					Both versions read ~/.config/opencode, so exactly one can be the
+					active host — this picks which. The background-agents and advisor
+					plugins are wired only on v1: the v2 plugin API no longer passes the
+					parentID they need to spawn child sessions.
+				</span>
 			</div>
 
 			{message && (

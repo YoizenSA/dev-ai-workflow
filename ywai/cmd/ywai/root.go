@@ -535,12 +535,16 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	// It works on opencode v1 — it was only dropped for v2 — and the install
 	// used to strip it from tui.json on every run, which quietly undid the
 	// entry Engram's own installer had just written.
-	if !dryRun {
+	switch {
+	case agent.OpenCodeIsV2():
+		// Dropped for v2: registering it there wires a plugin the client never
+		// loads, so the entry is noise in cli.json rather than a statusline.
+	case dryRun:
+		fmt.Println("  Would install sub-agent-statusline TUI plugin")
+	default:
 		if err := plugins.InstallSubAgentStatusline(); err != nil {
 			fmt.Printf("  Warning: failed to install sub-agent-statusline plugin: %v\n", err)
 		}
-	} else {
-		fmt.Println("  Would install sub-agent-statusline TUI plugin")
 	}
 
 	for _, a := range agents {
@@ -557,7 +561,10 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		// background-agents is an opencode plugin (delegate/delegation_* async
 		// tools); it only applies to opencode-format configs (opencode/kilocode).
-		supportsOpenCodePlugins := a.Name == "opencode" || a.Name == "kilocode"
+		// The OpenCode plugins below are v1-only: background-agents spawns child
+		// sessions through a parentID the v2 plugin API no longer passes, so on
+		// opencode2 the bundle installs and then silently does nothing.
+		supportsOpenCodePlugins := (a.Name == "opencode" && !agent.OpenCodeIsV2()) || a.Name == "kilocode"
 
 		if dryRun {
 			done = append(done, a.Name)

@@ -23,8 +23,10 @@ var KnownAgents = []struct {
 	SkillsPath func() string
 }{
 	{
-		Name:   "opencode",
-		Binary: "opencode2", // OpenCode 2 CLI; v1 `opencode` is not used.
+		Name: "opencode",
+		// Placeholder: Detect resolves this entry through FindOpenCode so the
+		// active flavor (v2, or v1 when that is what is installed) wins.
+		Binary: "opencode2",
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".config", "opencode", "skills")
 		},
@@ -203,11 +205,44 @@ func FindBinary(name string) string {
 	return ""
 }
 
+// OpenCodeOverrideEnv forces which OpenCode CLI ywai drives. Accepted values
+// are "v1"/"opencode" and "v2"/"opencode2"; anything else means autodetect.
+const OpenCodeOverrideEnv = "YWAI_OPENCODE"
+
+// The persisted equivalent is opencode_version in config.yaml:
+//
+//	ywai config set opencode_version v2
+
+// openCodeOverride returns the pinned OpenCode binary name, or "" to autodetect.
+// The environment wins over the stored setting so a one-off run can override a
+// persisted choice without editing config.yaml.
+func openCodeOverride() string {
+	if v := config.NormalizeOpencodeVersion(os.Getenv(OpenCodeOverrideEnv)); v != "" {
+		return v
+	}
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg == nil {
+		return ""
+	}
+	return config.NormalizeOpencodeVersion(cfg.OpencodeVersion)
+}
+
 // FindOpenCode resolves the OpenCode CLI binary, preferring OpenCode 2
 // (opencode2) and falling back to OpenCode v1 (opencode) when v2 is not
-// installed. Returns the resolved path and the binary name it resolved to,
-// or "" when neither binary is found.
+// installed. OpenCodeOverrideEnv pins one of them instead. Returns the resolved
+// path and the binary name it resolved to, or "" when neither is found.
+//
+// v1 and v2 share ~/.config/opencode, so only one of them is ever the active
+// host: everything that needs to know which one must come through here.
 func FindOpenCode() (string, string) {
+	if forced := openCodeOverride(); forced != "" {
+		// A pin selects which binary to look for; it cannot conjure one that is
+		// not installed, so report not-found rather than a name with no path.
+		if p := FindBinary(forced); p != "" {
+			return p, forced
+		}
+		return "", ""
+	}
 	if p := FindBinary("opencode2"); p != "" {
 		return p, "opencode2"
 	}
@@ -216,6 +251,27 @@ func FindOpenCode() (string, string) {
 	}
 	return "", ""
 }
+
+// OpenCodeBinaryName is the binary name of the active OpenCode host. It falls
+// back to opencode2 when neither binary is installed, so callers that only need
+// a name (config writers, install summaries) never get "".
+func OpenCodeBinaryName() string {
+	// An explicit pin is the intent even when that binary is not installed yet:
+	// config writers must target the flavor the user chose, not the one that
+	// happens to be on PATH.
+	if forced := openCodeOverride(); forced != "" {
+		return forced
+	}
+	if _, name := FindOpenCode(); name != "" {
+		return name
+	}
+	return "opencode2"
+}
+
+// OpenCodeIsV2 reports whether the active OpenCode host is OpenCode 2. Callers
+// use it to skip v1-only wiring, such as the background-agents plugin, whose
+// child sessions need a parentID the v2 plugin API no longer passes.
+func OpenCodeIsV2() bool { return OpenCodeBinaryName() == "opencode2" }
 
 func whichViaShell(name string) string {
 	var cmd *exec.Cmd
@@ -257,6 +313,9 @@ func Detect() []Agent {
 		}
 
 		path := FindBinary(ka.Binary)
+		if ka.Name == "opencode" {
+			path, _ = FindOpenCode()
+		}
 		if path == "" {
 			// Fallback: detect by config dir even if binary not in PATH
 			if detectByConfigDir(ka.Name, ka.SkillsPath()) {

@@ -10,21 +10,26 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
-// resolveOpencodeBin finds the OpenCode 2 executable (opencode2).
-// No fallback to v1 `opencode`.
+// resolveOpencodeBin finds the active OpenCode executable. Which flavor that is
+// belongs to agent.FindOpenCode, the one resolver for it; this used to pin
+// opencode2 with no fallback while agent.FindOpenCode fell back to v1, so a
+// v1-only machine got a working install and a serve client pointing at nothing.
 func resolveOpencodeBin() string {
-	candidates := []string{"opencode2"}
+	base := agent.OpenCodeBinaryName()
+	candidates := []string{base}
 	if runtime.GOOS == "windows" {
-		candidates = []string{"opencode2.exe", "opencode2.cmd", "opencode2.bat", "opencode2.ps1", "opencode2"}
+		candidates = []string{base + ".exe", base + ".cmd", base + ".bat", base + ".ps1", base}
 	}
 	for _, name := range candidates {
 		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}
 	}
-	return "opencode2"
+	return base
 }
 
 // opencodeEnv returns the environment for opencode child processes with

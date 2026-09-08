@@ -717,6 +717,26 @@ var configFields = map[string]configField{
 		Get: func(c *config.UserConfig) interface{} { return c.LogLevel },
 		Set: func(c *config.UserConfig, v string) error { c.LogLevel = v; return nil },
 	},
+	"opencode_version": {
+		Get: func(c *config.UserConfig) interface{} { return c.OpencodeVersion },
+		Set: func(c *config.UserConfig, v string) error {
+			// Empty clears the pin and goes back to autodetect.
+			if strings.TrimSpace(v) == "" {
+				c.OpencodeVersion = ""
+				return nil
+			}
+			bin := config.NormalizeOpencodeVersion(v)
+			if bin == "" {
+				return fmt.Errorf("opencode_version must be v1 or v2, got %q", v)
+			}
+			if bin == "opencode2" {
+				c.OpencodeVersion = "v2"
+			} else {
+				c.OpencodeVersion = "v1"
+			}
+			return nil
+		},
+	},
 	"agents": {
 		Get: func(c *config.UserConfig) interface{} { return c.Agents },
 		Set: func(c *config.UserConfig, v string) error {

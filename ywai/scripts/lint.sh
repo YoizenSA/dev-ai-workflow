@@ -78,9 +78,17 @@ if [[ "${1:-}" == "--staged" ]]; then
         exit 1
     fi
 
+    dirs=()
+    for f in "${rels[@]}"; do
+        d="$(dirname "$f")"
+        if [[ ! " ${dirs[*]:-} " =~ " ${d} " ]]; then
+            dirs+=("$d")
+        fi
+    done
+
     bin="$(find_golangci)" || die_missing
-    echo "lint (staged): ${rels[*]}"
-    "$bin" run --timeout="$TIMEOUT" "${rels[@]}"
+    echo "lint (staged): ${dirs[*]}"
+    "$bin" run --timeout="$TIMEOUT" "${dirs[@]}"
     echo "lint: ok"
     exit 0
 fi

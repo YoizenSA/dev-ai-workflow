@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -178,6 +179,10 @@ func openCodePlugins(root map[string]any) []any {
 	} else if raw, ok := root["plugins"]; ok {
 		out = pluginsToSlice(raw)
 	}
+	// Both spellings are cleared here; writePlugins puts back the one the
+	// active flavor reads. Leaving the other behind would strand a second,
+	// stale plugin list in the file.
+	delete(root, "plugin")
 	delete(root, "plugins")
 	if out == nil {
 		return []any{}
@@ -199,9 +204,18 @@ func pluginsToSlice(raw any) []any {
 	}
 }
 
+// writePlugins stores the plugin list under the key the active OpenCode reads:
+// v1 uses "plugin", v2 renamed it to "plugins". Only one is written, so the
+// other never lingers as a stale second list. Every opencode.json and cli.json
+// plugin edit funnels through here — see openCodePlugins for the read side,
+// which accepts either spelling so a flavor switch keeps existing entries.
 func writePlugins(root map[string]any, plugins []any) {
-	delete(root, "plugins")
-	root["plugin"] = plugins
+	key, stale := "plugin", "plugins"
+	if agent.OpenCodeIsV2() {
+		key, stale = "plugins", "plugin"
+	}
+	delete(root, stale)
+	root[key] = plugins
 }
 
 // copyFile copies src to dst, truncating dst if it exists.

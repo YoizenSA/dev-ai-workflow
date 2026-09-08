@@ -112,6 +112,24 @@ type UserConfig struct {
 	// both a wrong review and an unexpected bill. Empty keeps the advisor off
 	// regardless of AdvisorEnabled.
 	AdvisorModel string `yaml:"advisor_model,omitempty" json:"advisor_model,omitempty"`
+
+	// OpencodeVersion pins which OpenCode CLI ywai drives: "v1" (opencode) or
+	// "v2" (opencode2). Empty autodetects, preferring v2 when it is installed.
+	// The two share ~/.config/opencode, so exactly one can be the active host;
+	// this is the switch between them, not a way to run both.
+	OpencodeVersion string `yaml:"opencode_version,omitempty" json:"opencode_version,omitempty"`
+}
+
+// NormalizeOpencodeVersion maps the accepted spellings of an OpenCode flavor to
+// a binary name, or "" when the value is empty or unrecognised (autodetect).
+func NormalizeOpencodeVersion(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "v1", "1", "opencode":
+		return "opencode"
+	case "v2", "2", "opencode2":
+		return "opencode2"
+	}
+	return ""
 }
 
 // ServerConfig contains configuration for the control server

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -166,12 +167,12 @@ func RemoveAgentConfig(target string, entryID string) error {
 		return nil
 	}
 	if target == "opencode" {
-		servers := collectOpenCodeServers(section)
+		servers := CollectOpenCodeServers(section)
 		if _, exists := servers[entryID]; !exists {
 			return nil
 		}
 		delete(servers, entryID)
-		root[key] = flattenOpenCodeMCP(section, servers)
+		root[key] = WriteOpenCodeMCP(section, servers)
 		return writeRootAtomic(path, root)
 	}
 	if _, exists := section[entryID]; !exists {
@@ -220,7 +221,7 @@ func ReadAgentConfig(target string) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	if target == "opencode" {
-		return collectOpenCodeServers(section), nil
+		return CollectOpenCodeServers(section), nil
 	}
 	return section, nil
 }
@@ -260,9 +261,9 @@ func putEntry(root map[string]any, target, entryID string, shape map[string]any)
 		section = map[string]any{}
 	}
 	if target == "opencode" {
-		servers := collectOpenCodeServers(section)
+		servers := CollectOpenCodeServers(section)
 		servers[entryID] = shape
-		root[key] = flattenOpenCodeMCP(section, servers)
+		root[key] = WriteOpenCodeMCP(section, servers)
 		return nil
 	}
 	section[entryID] = shape
@@ -274,7 +275,11 @@ func openCodeReservedMCPKey(k string) bool {
 	return k == "servers" || k == "timeout"
 }
 
-func collectOpenCodeServers(mcp map[string]any) map[string]any {
+// CollectOpenCodeServers reads every MCP server out of an opencode "mcp"
+// section, accepting both the v1 flat layout and the v2 mcp.servers nesting.
+// Exported as the single implementation: plugins and control kept private
+// copies that drifted apart, which is how the v1 layout regression got in.
+func CollectOpenCodeServers(mcp map[string]any) map[string]any {
 	out := map[string]any{}
 	if mcp == nil {
 		return out
@@ -301,6 +306,61 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 // directly under `mcp`, and every entry carries an explicit `enabled` bool.
 // v1 validates that key, so a v2 entry (nested under `servers`, using
 // `disabled`) is converted rather than passed through.
+// writeOpenCodeMCP stores servers in the shape the active OpenCode actually
+// reads. v2 nests them under mcp.servers and treats an absent flag as enabled,
+// turning one off with "disabled"; v1 keeps them flat at the root of mcp with
+// an "enabled" bool. The shapes are not interchangeable: v2 ignores "enabled",
+// so writing the v1 shape into v2 leaves a disabled server running.
+func WriteOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	if agent.OpenCodeIsV2() {
+		return nestOpenCodeMCP(mcp, servers)
+	}
+	return flattenOpenCodeMCP(mcp, servers)
+}
+
+// nestOpenCodeMCP writes the v2 shape: every server under mcp.servers, keyed by
+// id, with "enabled" translated to its v2 spelling.
+func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range mcp {
+		if k == "servers" {
+			continue
+		}
+		// A flat server entry belongs under servers now, not beside it.
+		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
+			continue
+		}
+		out[k] = v
+	}
+	nested := make(map[string]any, len(servers))
+	for id, raw := range servers {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			nested[id] = raw
+			continue
+		}
+		next := make(map[string]any, len(entry))
+		for k, v := range entry {
+			next[k] = v
+		}
+		// v1 wrote "enabled"; v2 only understands "disabled".
+		if e, ok := next["enabled"].(bool); ok {
+			delete(next, "enabled")
+			if !e {
+				next["disabled"] = true
+			} else {
+				delete(next, "disabled")
+			}
+		}
+		if d, ok := next["disabled"].(bool); ok && !d {
+			delete(next, "disabled")
+		}
+		nested[id] = next
+	}
+	out["servers"] = nested
+	return out
+}
+
 func flattenOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
 	out := map[string]any{}
 	if mcp != nil {

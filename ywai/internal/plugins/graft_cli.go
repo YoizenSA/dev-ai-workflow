@@ -151,9 +151,9 @@ func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 	entry := mcp.CatalogEntry{Type: "local", Command: command}
 	shape := mcp.BuildEntryShape(mcpShapeTarget(agentName), entry, nil)
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcpMap)
+		servers := mcp.CollectOpenCodeServers(mcpMap)
 		servers["graft"] = shape
-		root[key] = flattenOpenCodeMCP(mcpMap, servers)
+		root[key] = mcp.WriteOpenCodeMCP(mcpMap, servers)
 	} else {
 		mcpMap["graft"] = shape
 		root[key] = mcpMap

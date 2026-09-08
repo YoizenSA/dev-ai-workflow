@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // ID is a stable runtime identifier used in APIs and CLI flags.
@@ -106,7 +108,7 @@ func ModelsPath(id ID) string {
 func BinaryName(id ID) string {
 	switch id {
 	case OpenCode:
-		return "opencode2"
+		return agent.OpenCodeBinaryName()
 	case Pi:
 		return "pi"
 	case OMP:

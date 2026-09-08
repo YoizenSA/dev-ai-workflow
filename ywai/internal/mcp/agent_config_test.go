@@ -68,6 +68,8 @@ import (
 	"sort"
 	"sync"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -81,6 +83,10 @@ func setTestHomeDir(t *testing.T, home string) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	// These tests assert the v1 layout, which opencode v1 rejects any other way
+	// (see adb9a18). Pin the flavor so a developer running opencode2 does not
+	// silently retarget them at the v2 nesting; v2 has its own tests.
+	t.Setenv(agent.OpenCodeOverrideEnv, "v1")
 }
 
 // shapeHasKey reports whether the shape map has the given top-level key.

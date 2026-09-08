@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -1260,10 +1261,20 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	// key is what makes v2 fall back to the legacy decode path, so keeping the
 	// sidecar leaves the same file readable by both.
 
-	// Permission as a nested YAML map: opencode v1's schema. ywai's coarse
-	// buckets (ado, memory, intercom, mcp) expand to opencode-native wildcard
-	// patterns so the deny/allow is enforced rather than silently dropped.
-	b.WriteString(RenderPermissionMapYAML(name, profile))
+	// ywai's coarse buckets (ado, memory, intercom, mcp) expand to
+	// opencode-native wildcard patterns either way, so the deny/allow is
+	// enforced rather than silently dropped. The schema differs per flavor:
+	// v1 reads a nested "permission:" map, v2 an ordered "permissions:" list
+	// where the last matching rule wins. v2 rejects the v1 map as an unknown
+	// key and falls back to the legacy decode, which drops the permissions
+	// entirely and pastes the frontmatter into the system prompt.
+	if agent.OpenCodeIsV2() {
+		for _, line := range RenderPermissionRulesYAML(RulesFromPermissionMap(name, profile.Permission)) {
+			b.WriteString(line + "\n")
+		}
+	} else {
+		b.WriteString(RenderPermissionMapYAML(name, profile))
+	}
 	b.WriteString("---\n\n")
 
 	// Prompt body (strip frontmatter if present)

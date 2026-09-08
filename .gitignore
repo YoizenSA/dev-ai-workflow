@@ -70,3 +70,4 @@ ywai/docs/loop-architecture-gap-analysis.md
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 graft/
+.commandcode/

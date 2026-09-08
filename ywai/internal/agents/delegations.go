@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // DelegationsFile is the default name of the delegations source-of-truth file,
@@ -372,7 +374,72 @@ func ReadTaskPermission(content string) (map[string]string, bool) {
 // scalar/nested task entry or inserts one as the first permission child.
 // Returns (content, false) when there is no frontmatter permission block to
 // patch.
+// injectTaskPermission writes the delegation task map into an agent's
+// frontmatter using the schema the active OpenCode reads. v1 nests it under
+// "permission:" as a task map; v2 carries ordered "permissions:" rules with a
+// subagent action. Applying the v1 shape to a v2 file finds no "permission:"
+// key and silently changes nothing, leaving delegation ungated.
 func injectTaskPermission(content string, task map[string]string) (string, bool) {
+	if agent.OpenCodeIsV2() {
+		return injectSubagentRules(content, task)
+	}
+	return injectTaskPermissionV1(content, task)
+}
+
+// injectSubagentRules rewrites the "permissions:" list, replacing its subagent
+// rules with the ones the delegation graph allows and leaving every other rule
+// in place and in order — order is semantics here, since last match wins.
+func injectSubagentRules(content string, task map[string]string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content, false
+	}
+	fmEnd := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			fmEnd = i
+			break
+		}
+	}
+	if fmEnd < 0 {
+		return content, false
+	}
+	permIdx := -1
+	for i := 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "permissions:" {
+			permIdx = i
+			break
+		}
+	}
+	if permIdx < 0 {
+		return content, false
+	}
+	// The block runs to the next frontmatter key at the same indent or less.
+	permIndent := leadingSpaces(lines[permIdx])
+	blockEnd := fmEnd
+	for i := permIdx + 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if leadingSpaces(lines[i]) <= permIndent {
+			blockEnd = i
+			break
+		}
+	}
+
+	rules, ok := ParsePermissionRulesYAML(strings.Join(lines[permIdx:blockEnd], "\n"))
+	if !ok {
+		return content, false
+	}
+
+	var out []string
+	out = append(out, lines[:permIdx]...)
+	out = append(out, RenderPermissionRulesYAML(ReplaceSubagentRules(rules, task))...)
+	out = append(out, lines[blockEnd:]...)
+	return strings.Join(out, "\n"), true
+}
+
+func injectTaskPermissionV1(content string, task map[string]string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
 		return content, false

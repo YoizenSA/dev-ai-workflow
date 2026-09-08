@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	mcppkg "github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
 // mcpConfigKey returns the top-level key for MCP servers based on agent format.
@@ -33,7 +34,7 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 
 	var removed []string
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcp)
+		servers := mcppkg.CollectOpenCodeServers(mcp)
 		for _, id := range config.RetiredMCPServers {
 			if _, exists := servers[id]; exists {
 				delete(servers, id)
@@ -43,7 +44,7 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 		if len(removed) == 0 {
 			return nil, nil
 		}
-		root[key] = flattenOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	} else {
 		for _, id := range config.RetiredMCPServers {
 			if _, exists := mcp[id]; exists {
@@ -76,11 +77,11 @@ func installRemoteMCPEntry(configPath, agentName, id, url string) error {
 	if mcp == nil {
 		mcp = map[string]any{}
 	}
-	servers := collectOpenCodeServers(mcp)
+	servers := mcppkg.CollectOpenCodeServers(mcp)
 	if _, exists := servers[id]; !exists {
 		servers[id] = map[string]any{"type": "remote", "url": url}
 	}
-	root[key] = flattenOpenCodeMCP(mcp, servers)
+	root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
@@ -148,14 +149,14 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 		if mcp == nil {
 			mcp = map[string]any{}
 		}
-		servers := collectOpenCodeServers(mcp)
+		servers := mcppkg.CollectOpenCodeServers(mcp)
 		if _, exists := servers["microsoft-learn"]; !exists {
 			servers["microsoft-learn"] = map[string]any{
 				"type": "remote",
 				"url":  "https://learn.microsoft.com/api/mcp",
 			}
 		}
-		root[key] = flattenOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
@@ -180,12 +181,12 @@ func RemoveVisionMCP(configPath, agentName string) error {
 		return nil
 	}
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcp)
+		servers := mcppkg.CollectOpenCodeServers(mcp)
 		if _, exists := servers["mcp-vision"]; !exists {
 			return nil
 		}
 		delete(servers, "mcp-vision")
-		root[key] = flattenOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	} else {
 		if _, exists := mcp["mcp-vision"]; !exists {
 			return nil
@@ -198,72 +199,4 @@ func RemoveVisionMCP(configPath, agentName string) error {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
 	return nil
-}
-
-func openCodeReservedMCPKey(k string) bool {
-	return k == "servers" || k == "timeout"
-}
-
-func collectOpenCodeServers(mcp map[string]any) map[string]any {
-	out := map[string]any{}
-	if mcp == nil {
-		return out
-	}
-	if nested, ok := mcp["servers"].(map[string]any); ok {
-		for k, v := range nested {
-			out[k] = v
-		}
-	}
-	for k, v := range mcp {
-		if openCodeReservedMCPKey(k) {
-			continue
-		}
-		if _, ok := v.(map[string]any); ok {
-			if _, exists := out[k]; !exists {
-				out[k] = v
-			}
-		}
-	}
-	return out
-}
-
-// flattenOpenCodeMCP writes the opencode v1 MCP layout: each server sits
-// directly under `mcp`, and every entry carries an explicit `enabled` bool.
-// v1 validates that key, so a v2 entry (nested under `servers`, using
-// `disabled`) is converted rather than passed through.
-func flattenOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	out := map[string]any{}
-	if mcp != nil {
-		for k, v := range mcp {
-			if k == "servers" {
-				continue
-			}
-			if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-				continue
-			}
-			out[k] = v
-		}
-	}
-	for id, raw := range servers {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			out[id] = raw
-			continue
-		}
-		next := make(map[string]any, len(entry)+1)
-		for k, v := range entry {
-			next[k] = v
-		}
-		enabled := true
-		if disabled, ok := next["disabled"].(bool); ok {
-			enabled = !disabled
-			delete(next, "disabled")
-		}
-		if e, ok := next["enabled"].(bool); ok {
-			enabled = e
-		}
-		next["enabled"] = enabled
-		out[id] = next
-	}
-	return out
 }
