@@ -525,6 +525,16 @@ func reseedData() {
 			fmt.Println("  Agent profiles re-seeded from embedded.")
 		}
 	}
+
+	// Reseed plugin bundles. The resolvers in config/data.go only seed when the
+	// bundle is missing, so an upgrade used to keep serving the copy the first
+	// install wrote — e.g. the v1 background-agents bundle survived the v2 port
+	// and opencode v2 refused to load it.
+	if err := config.SeedPluginsFromEmbedded(); err != nil {
+		// Not fatal — a source checkout resolves bundles from plugins/*/dist.
+	} else {
+		fmt.Println("  Plugin bundles re-seeded from embedded.")
+	}
 }
 
 func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool) {
