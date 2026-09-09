@@ -216,6 +216,14 @@ func summarizeAgents(dryRun bool, what string, names []string) {
 func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	var done []string
 	for _, a := range agents {
+		if skip, reason := skipSkillCopy(a, agents); skip {
+			if !dryRun {
+				if removed := skills.PruneYwaiSkills(a.SkillsDir); len(removed) > 0 {
+					fmt.Printf("  [%s] removed %d duplicate skill(s): %s\n", a.Name, len(removed), reason)
+				}
+			}
+			continue
+		}
 		if dryRun {
 			done = append(done, a.Name)
 			continue
@@ -227,6 +235,27 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 		done = append(done, a.Name)
 	}
 	summarizeAgents(dryRun, "ywai extra skills", done)
+}
+
+// skipSkillCopy reports whether a host already sees the skills through another
+// host's directory, so copying them again only duplicates the catalog it loads.
+//
+// opencode reads ~/.agents/skills, ~/.claude/skills and its own dir (verified
+// in the 1.18.29 binary), so with Claude Code installed its copy adds a second
+// entry for every skill and nothing else.
+//
+// ponytail: one rule for the one overlap that exists today; generalize into a
+// table if another host starts reading a sibling's directory.
+func skipSkillCopy(a agent.Agent, all []agent.Agent) (bool, string) {
+	if a.Name != "opencode" {
+		return false, ""
+	}
+	for _, other := range all {
+		if other.Name == "claude-code" {
+			return true, "opencode reads ~/.claude/skills"
+		}
+	}
+	return false, ""
 }
 
 func runTUI(agents []agent.Agent) (tui.TUIResult, error) {

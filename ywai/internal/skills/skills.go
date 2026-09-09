@@ -588,3 +588,11 @@ func CountSddAssets(agentSkillsDir string) int {
 	}
 	return count
 }
+
+// PruneYwaiSkills removes every ywai-installed skill from agentSkillsDir and
+// returns their names. Used when a host stops being a copy target — opencode
+// reads ~/.claude/skills directly, so its own copy is dead weight once Claude
+// Code is installed. Foreign skills have no marker and are left alone.
+func PruneYwaiSkills(agentSkillsDir string) []string {
+	return pruneRetiredSkills(agentSkillsDir, nil)
+}
