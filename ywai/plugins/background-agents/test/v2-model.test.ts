@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createV1ShapedClient } from "../src/plugin/v2"
 
 function fakeCtx() {
-	const calls: Record<string, any[]> = { prompt: [], switchModel: [], wait: [] }
+	const calls: Record<string, any[]> = { prompt: [], switchModel: [], switchAgent: [], wait: [] }
 	const ctx = {
 		location: { directory: "/tmp" },
 		session: {
@@ -11,6 +11,9 @@ function fakeCtx() {
 			},
 			async switchModel(input: any) {
 				calls.switchModel.push(input)
+			},
+			async switchAgent(input: any) {
+				calls.switchAgent.push(input)
 			},
 			async wait(input: any) {
 				calls.wait.push(input)
@@ -76,5 +79,48 @@ describe("v2 model override", () => {
 		} as any)
 
 		expect(calls.switchModel).toHaveLength(0)
+	})
+})
+
+describe("v2 agent override", () => {
+	// SessionPromptInput has no agent field either: passing it to prompt() left
+	// every delegation on v2's default agent ("build") whatever was requested.
+	test("routes the agent through switchAgent, not prompt", async () => {
+		const { ctx, calls } = fakeCtx()
+		const client = createV1ShapedClient(ctx)
+
+		await client.session.prompt({
+			path: { id: "ses_a" },
+			body: { agent: "dev", parts: [{ type: "text", text: "go" }] },
+		} as any)
+
+		expect(calls.switchAgent).toEqual([{ sessionID: "ses_a", agent: "dev" }])
+		expect(calls.prompt[0].agent).toBeUndefined()
+		expect(calls.prompt[0].agentID).toBeUndefined()
+	})
+
+	test("steered follow-ups keep the agent too", async () => {
+		const { ctx, calls } = fakeCtx()
+		const client = createV1ShapedClient(ctx)
+
+		await client.session.promptAsync({
+			path: { id: "ses_b" },
+			body: { agent: "reviewer", parts: [{ type: "text", text: "steer" }] },
+		} as any)
+
+		expect(calls.switchAgent).toEqual([{ sessionID: "ses_b", agent: "reviewer" }])
+		expect(calls.prompt[0].agent).toBeUndefined()
+	})
+
+	test("no agent means no switch", async () => {
+		const { ctx, calls } = fakeCtx()
+		const client = createV1ShapedClient(ctx)
+
+		await client.session.prompt({
+			path: { id: "ses_c" },
+			body: { parts: [{ type: "text", text: "hi" }] },
+		} as any)
+
+		expect(calls.switchAgent).toHaveLength(0)
 	})
 })

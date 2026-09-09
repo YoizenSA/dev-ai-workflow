@@ -98,9 +98,11 @@ export function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
 				.filter((part) => part.type === "text")
 				.map((part) => part.text ?? "")
 				.join("\n")
+			if (input.body?.agent) {
+				await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
+			}
 			await ctx.session.prompt({
 				sessionID: input.path.id,
-				agent: input.body?.agent,
 				text,
 				delivery: "steer",
 			})
@@ -150,15 +152,17 @@ export function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
 						...(input.body.model.variant ? { variant: input.body.model.variant } : {}),
 					}
 				: undefined
+			// Same story as the model: SessionPromptInput carries no agent field
+			// either, so passing it to prompt() left every delegation on v2's
+			// default agent ("build") no matter which agent was requested.
+			if (input.body?.agent) {
+				await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
+			}
 			if (model) {
 				await ctx.session.switchModel({ sessionID: input.path.id, model })
 			}
 			await ctx.session.prompt({
 				sessionID: input.path.id,
-				// v2 spellings vary by route: agent on switchAgent, agentID on
-				// some prompt inputs. Passing both is harmless.
-				agent: input.body?.agent,
-				agentID: input.body?.agent,
 				text,
 				delivery: "steer",
 			})
