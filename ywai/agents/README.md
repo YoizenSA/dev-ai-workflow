@@ -175,7 +175,6 @@ Skills to link when this agent is active (one per line):
 ```
 typescript
 react-19
-tailwind-4
 ```
 
 ## Usage with ywai

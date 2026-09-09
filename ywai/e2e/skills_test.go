@@ -11,7 +11,7 @@ func TestSkillsList(t *testing.T) {
 
 	expected := []string{
 		"angular", "devops", "docker", "git-commit",
-		"tailwind-4", "yz-ui",
+		"yz-ui",
 	}
 	for _, skill := range expected {
 		if !strings.Contains(out, skill) {

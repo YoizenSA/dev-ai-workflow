@@ -201,7 +201,6 @@ opencode, claude-code, vscode-copilot, pi, omp
 |:---|:---|
 | `typescript` | TypeScript strict patterns |
 | `react-19` | React 19 + React Compiler |
-| `tailwind-4` | Tailwind CSS 4 |
 | `biome` | Biome linter/formatter |
 | `angular/*` | Angular (core, forms, performance, architecture) |
 | `dotnet` | .NET 9 / ASP.NET Core |

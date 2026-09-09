@@ -215,7 +215,7 @@ func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 		t.Fatalf("feature.md should contain feature description")
 	}
 	if strings.Contains(content, "## Work ledger") {
-		t.Fatal("single-feature mission must not inject the work-ledger pointer")
+		t.Fatal("single-feature mission must not inject the ledger pointer")
 	}
 }
 
@@ -247,10 +247,10 @@ func TestPrepareContextInjectsWorkLedgerOnMultiFeature(t *testing.T) {
 	}
 	content := string(data)
 	if !strings.Contains(content, "## Work ledger") {
-		t.Fatal("multi-feature mission must inject the work-ledger pointer")
+		t.Fatal("multi-feature mission must inject the ledger pointer")
 	}
-	if !strings.Contains(content, "work-ledger") {
-		t.Fatal("pointer must name the work-ledger skill")
+	if !strings.Contains(content, "ywai ledger note") {
+		t.Fatal("pointer must name the ledger command")
 	}
 }
 

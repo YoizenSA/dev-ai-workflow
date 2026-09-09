@@ -179,7 +179,7 @@ func TestCopyToBundlesLearnYwaiDocs(t *testing.T) {
 	config.ResetConfig()
 
 	repoSkillsDir := filepath.Join(repo, "skills")
-	writeSkill(t, repoSkillsDir, "learn-ywai", true)
+	writeSkill(t, repoSkillsDir, "ywai", true)
 
 	page := filepath.Join(repo, "docs", "src", "content", "docs", "getting-started", "index.mdx")
 	if err := os.MkdirAll(filepath.Dir(page), 0o755); err != nil {
@@ -197,7 +197,7 @@ func TestCopyToBundlesLearnYwaiDocs(t *testing.T) {
 		t.Fatalf("CopyTo: %v", err)
 	}
 
-	got := filepath.Join(agentSkillsDir, "learn-ywai", "references", "docs", "getting-started", "index.mdx")
+	got := filepath.Join(agentSkillsDir, "ywai", "references", "docs", "getting-started", "index.mdx")
 	data, err := os.ReadFile(got)
 	if err != nil {
 		t.Fatalf("bundled doc missing: %v", err)
@@ -508,44 +508,6 @@ func TestPruneRetiredSkills_LeavesSymlinksAlone(t *testing.T) {
 func TestPruneRetiredSkills_MissingDirIsNoOp(t *testing.T) {
 	if removed := pruneRetiredSkills(filepath.Join(t.TempDir(), "absent"), map[string]bool{}); removed != nil {
 		t.Errorf("removed = %v, want nil", removed)
-	}
-}
-
-func TestWorkLedgerSkillLayout(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	dir := filepath.Join(filepath.Dir(thisFile), "..", "..", "skills", "work-ledger")
-	required := []string{
-		"SKILL.md",
-		extraSkillMarkerFile,
-		"modules/gate.md",
-		"modules/ledger.md",
-		"modules/seams.md",
-		"modules/ship.md",
-		"modules/resume.md",
-	}
-	for _, rel := range required {
-		path := filepath.Join(dir, rel)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("work-ledger missing %s: %v", rel, err)
-		}
-		if strings.TrimSpace(string(data)) == "" {
-			t.Fatalf("work-ledger %s is empty", rel)
-		}
-	}
-	body, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(body)
-	if !strings.Contains(text, "name: work-ledger") {
-		t.Fatal("SKILL.md must declare name: work-ledger")
-	}
-	if !strings.Contains(text, "description:") {
-		t.Fatal("SKILL.md must have a description")
 	}
 }
 

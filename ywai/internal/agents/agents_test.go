@@ -556,7 +556,7 @@ func TestBuildOpenCodeMarkdown_SkillGateIsGlobal(t *testing.T) {
 		Prompt:      "# Planner",
 		Mode:        "primary",
 		Permission:  map[string]string{"read": "allow", "skill": "allow"},
-		Skills:      []string{"work-ledger", "tdd"},
+		Skills:      []string{"grilling", "tdd"},
 	}
 
 	md := BuildOpenCodeMarkdown("planning", profile)
@@ -564,7 +564,7 @@ func TestBuildOpenCodeMarkdown_SkillGateIsGlobal(t *testing.T) {
 	if !strings.Contains(md, "skill: allow") {
 		t.Fatalf("skill gate lost, got:\n%s", md)
 	}
-	if strings.Contains(md, "work-ledger") {
+	if strings.Contains(md, "grilling") {
 		t.Fatalf("v1 has no per-skill resource; it must not be emitted, got:\n%s", md)
 	}
 }

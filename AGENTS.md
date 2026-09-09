@@ -166,7 +166,6 @@ ywai/
 │   ├── git-commit/
 │   ├── playwright/
 │   ├── react-19/
-│   ├── tailwind-4/
 │   ├── typescript/
 │   └── yz-ui/
 ├── go.mod
@@ -211,10 +210,10 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 
 | Skill | Domain |
 |:---|:---|
-| `angular` / `tailwind-4` / `yz-ui` | Frontend: Angular, Tailwind 4, Yoizen design system |
+| `angular` / `yz-ui` | Frontend: Angular, Yoizen design system |
 | `tdd` / `testing-expert` / `playwright-e2e-testing` / `condition-based-waiting` | Testing: TDD loop, test quality, E2E, anti-flaky |
 | `devops` / `docker` | Azure Pipelines, Helm, Kubernetes, Dockerfiles |
-| `git-commit` / `work-ledger` | Commits and long-horizon work |
+| `git-commit` | Commits and branching |
 | `delegate-opencode2` | Delegate a bounded task to the local `opencode2` CLI, then verify it |
 | `ado` | Azure DevOps PRs and work items via the `ado` CLI |
 | `codebase-design` / `diagnosing-bugs` / `improve-codebase-architecture` | Module design, bug diagnosis, architecture review |

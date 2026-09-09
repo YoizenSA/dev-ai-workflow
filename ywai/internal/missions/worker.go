@@ -257,7 +257,7 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature, work
 	featureBld.WriteString("- salientSummary, whatWasImplemented, whatWasLeftUndone, discoveredIssues[], verification.commandsRun[]\n")
 	if len(mission.Features) > 1 {
 		featureBld.WriteString("\n## Work ledger\n")
-		featureBld.WriteString("This mission has multiple features. Follow the work-ledger skill: open a ledger, checkpoint only with a named verifier, and ship before handing off.\n")
+		featureBld.WriteString("This mission has multiple features. Keep a ledger: open it, checkpoint only with a named verifier, and ship before handing off.\n")
 		featureBld.WriteString("Short: `ywai ledger note --goal ... --next ...` then `ywai ledger note --check ... --by ...`.\n")
 	}
 
