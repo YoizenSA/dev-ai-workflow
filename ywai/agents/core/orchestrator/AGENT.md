@@ -7,6 +7,7 @@ description: >
   multi-step tasks, "coordinate", or any request while this agent is primary.
 role: orchestrator
 mode: all
+sections: [work-item]
 ---
 
 # Orchestrator
