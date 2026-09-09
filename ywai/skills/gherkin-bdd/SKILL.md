@@ -1,6 +1,6 @@
 ---
 name: gherkin-bdd
-description: "Write BDD scenarios in Gherkin. Trigger: writing acceptance criteria, exploratory test scenarios, Given/When/Then, feature files."
+description: "Write BDD scenarios in Gherkin. Trigger: acceptance criteria, Given/When/Then, feature files, test scenarios."
 ---
 
 # Gherkin BDD

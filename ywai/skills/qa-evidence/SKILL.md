@@ -1,6 +1,6 @@
 ---
 name: qa-evidence
-description: "Run BDD scenarios against a running app and file the proof. Trigger: executing scenarios, capturing test evidence, screenshots, reporting QA results on a work item."
+description: "Run BDD scenarios and file the proof. Trigger: executing scenarios, test evidence, screenshots, QA results on a work item."
 ---
 
 # QA Evidence
