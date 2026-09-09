@@ -17,7 +17,7 @@ import (
 var errSkillChanged = errors.New("skill source differs")
 
 const extraSkillMarkerFile = ".ywai-extra"
-const learnYwaiSkillName = "learn-ywai"
+const ywaiSkillName = "ywai"
 
 func CopyTo(agentSkillsDir string) error {
 	return copyFiltered(agentSkillsDir, nil)
@@ -75,7 +75,7 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 			continue
 		}
 
-		if name == learnYwaiSkillName {
+		if name == ywaiSkillName {
 			if err := bundleLearnYwaiDocs(dst); err != nil {
 				fmt.Printf("  Warning: failed to bundle learn-ywai docs: %v\n", err)
 			}

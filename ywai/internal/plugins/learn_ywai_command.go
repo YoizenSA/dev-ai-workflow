@@ -44,8 +44,8 @@ func installCommandMarkdown(src, destDir, name string) error {
 
 func learnYwaiCommandPath() (string, error) {
 	candidates := []string{
-		filepath.Join(config.SkillsSourceDir(), "learn-ywai", "commands", LearnYwaiCommandName),
-		filepath.Join(config.DataSkillsDir(), "learn-ywai", "commands", LearnYwaiCommandName),
+		filepath.Join(config.SkillsSourceDir(), "ywai", "commands", LearnYwaiCommandName),
+		filepath.Join(config.DataSkillsDir(), "ywai", "commands", LearnYwaiCommandName),
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
