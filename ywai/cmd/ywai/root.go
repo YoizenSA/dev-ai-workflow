@@ -325,6 +325,14 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		fmt.Printf("  Removed %d retired skill-registry/.atl artifact(s)\n", len(removed))
 	}
 
+	// Deleting the .atl directories is only half the sweep: the hook that
+	// regenerated them ran on every prompt, so they came back on the next one.
+	for host, settings := range agent.SettingsPaths() {
+		if removed := agentprofiles.RemoveRetiredHooks(settings); removed > 0 {
+			fmt.Printf("  [%s] Removed %d retired skill-registry hook(s)\n", host, removed)
+		}
+	}
+
 	for _, a := range agents {
 		// Sweep the SDD assets `gentle-ai sync` used to write into every host.
 		// ywai stopped shipping SDD, but dropping it from the install only stops

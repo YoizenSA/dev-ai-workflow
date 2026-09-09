@@ -1496,3 +1496,84 @@ func stripLegacyKeysFromFrontmatter(content string) (string, bool) {
 	}
 	return strings.Join(out, "\n"), dirty
 }
+
+// retiredHookCommandMarker matches the UserPromptSubmit hook that regenerated
+// the skill registry on every prompt. Sweeping the .atl directories is not
+// enough while the hook that writes them still runs.
+const retiredHookCommandMarker = "skill-registry refresh"
+
+// RemoveRetiredHooks strips hook groups whose command runs the retired skill
+// registry from a Claude Code settings.json. Returns how many it removed, so
+// an unchanged file is never rewritten.
+func RemoveRetiredHooks(settingsPath string) int {
+	if settingsPath == "" {
+		return 0
+	}
+	root, err := config.ReadJSONC(settingsPath)
+	if err != nil {
+		return 0
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	removed := 0
+	for event, raw := range hooks {
+		groups, ok := raw.([]any)
+		if !ok {
+			continue
+		}
+		kept := make([]any, 0, len(groups))
+		for _, g := range groups {
+			if hookGroupRuns(g, retiredHookCommandMarker) {
+				removed++
+				continue
+			}
+			kept = append(kept, g)
+		}
+		if len(kept) == len(groups) {
+			continue
+		}
+		// An event left with no groups is noise; drop the key entirely.
+		if len(kept) == 0 {
+			delete(hooks, event)
+			continue
+		}
+		hooks[event] = kept
+	}
+
+	if removed == 0 {
+		return 0
+	}
+	if len(hooks) == 0 {
+		delete(root, "hooks")
+	}
+	if err := config.WriteJSONC(settingsPath, root); err != nil {
+		fmt.Printf("  Warning: failed to rewrite %s: %v\n", settingsPath, err)
+		return 0
+	}
+	return removed
+}
+
+// hookGroupRuns reports whether any command in a hook group contains marker.
+func hookGroupRuns(group any, marker string) bool {
+	g, ok := group.(map[string]any)
+	if !ok {
+		return false
+	}
+	entries, ok := g["hooks"].([]any)
+	if !ok {
+		return false
+	}
+	for _, e := range entries {
+		entry, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cmd, ok := entry["command"].(string); ok && strings.Contains(cmd, marker) {
+			return true
+		}
+	}
+	return false
+}
