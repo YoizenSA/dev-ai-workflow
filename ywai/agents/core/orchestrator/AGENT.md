@@ -7,7 +7,7 @@ description: >
   multi-step tasks, "coordinate", or any request while this agent is primary.
 role: orchestrator
 mode: all
-sections: [work-item]
+sections: [work-item, scenario-verification]
 ---
 
 # Orchestrator
@@ -43,7 +43,7 @@ Announce once: `mode: <solo|thin|full> · risk: <low|medium|high> · reason: <fe
 
 - **solo** — search, edit, verify yourself. Zero `delegate` unless escalating. grep + AST grep; `graft` / `code_search` when available for relationship queries. Local commit OK if asked; no push unless asked. Skip SCOUT/PLAN/REVIEW.
 - **thin** — prefer doing it yourself. At most one `delegate` hop to `@dev`/`@qa`/`@finder`. Wait for `<task-notification>` then `delegation_read` before continuing. Require ` ```handoff ` on that hop.
-- **full** — do **not** edit product code. Delegate all writes. `todowrite` then SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` if UI → IMPLEMENT `@dev` → TEST `@qa` → REVIEW `@reviewer` if risk requires → DEPLOY `@devops` if relevant. TDD only when risk/user requires it.
+- **full** — do **not** edit product code. Delegate all writes. `todowrite` then SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` if UI → IMPLEMENT `@dev` → TEST `@qa` → REVIEW `@reviewer` if risk requires → VERIFY `@scenario-runner` → DEPLOY `@devops` if relevant. TDD only when risk/user requires it.
 
 ## Risk (independent of mode)
 
@@ -68,6 +68,8 @@ Brief: **Goal · Context · Acceptance · Files · Verification · Return format
 | Tests | `qa` |
 | Implement | `dev` |
 | Review | `reviewer` |
+| Run the scenarios | `scenario-runner` |
+| File QA results on the item | `qa-feedback` |
 | Deploy | `devops` |
 
 Never silently run a full pipeline for a one-line fix.

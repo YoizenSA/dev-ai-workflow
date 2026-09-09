@@ -1,7 +1,7 @@
 {
   "id": "ship",
   "name": "ship",
-  "description": "Goal delivery: plan -> design -> implement -> QA exploratory (summary, Gherkin ticket, QA review, fix) -> review.",
+  "description": "Goal delivery: plan -> design -> implement -> QA exploratory (Gherkin ticket) -> review -> scenario verification with evidence.",
   "version": "1.0.0",
   "nodes": [
     {
@@ -248,7 +248,32 @@
         "y": 244
       },
       "data": {
-        "condition": "review clean and scenarios green"
+        "condition": "review clean and its fixes applied"
+      }
+    },
+    {
+      "id": "verifyflow",
+      "type": "subAgentFlow",
+      "name": "scenario-verification",
+      "position": {
+        "x": 2400,
+        "y": 420
+      },
+      "data": {
+        "label": "Scenario verification (sub-workflow)",
+        "flowId": "scenario-verification"
+      }
+    },
+    {
+      "id": "verified",
+      "type": "ifElse",
+      "name": "scenarios-green",
+      "position": {
+        "x": 2680,
+        "y": 420
+      },
+      "data": {
+        "condition": "every scenario green with evidence on disk"
       }
     },
     {
@@ -256,7 +281,7 @@
       "type": "end",
       "name": "end",
       "position": {
-        "x": 2400,
+        "x": 2960,
         "y": 520
       },
       "data": {
@@ -319,7 +344,7 @@
     },
     {
       "from": "gate",
-      "to": "end",
+      "to": "verifyflow",
       "fromPort": "true"
     },
     {
@@ -352,6 +377,30 @@
     {
       "from": "qaflow",
       "to": "rev"
+    },
+    {
+      "from": "verifyflow",
+      "to": "verified"
+    },
+    {
+      "from": "verified",
+      "to": "end",
+      "fromPort": "true"
+    },
+    {
+      "from": "verified",
+      "to": "fe",
+      "fromPort": "false"
+    },
+    {
+      "from": "verified",
+      "to": "be",
+      "fromPort": "false"
+    },
+    {
+      "from": "verified",
+      "to": "infra",
+      "fromPort": "false"
     }
   ],
   "createdAt": "2026-06-29T17:00:00Z",
