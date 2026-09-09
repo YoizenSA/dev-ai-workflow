@@ -101,8 +101,11 @@ function Statusline(props: { theme: TuiTheme }) {
 
 // OpenCode2 beta uses the v2 TUI module contract: `{ id, setup }`.
 const setup = (ctx: { theme: TuiTheme; ui: { slot: (claim: unknown) => unknown } }) => {
+  // `after`, not `replace`: replacing the slot suppresses the host's own
+  // status content, so with no delegation running (the common case, where this
+  // renders null) the footer would just lose its status instead of keeping it.
   ctx.ui.slot({
-    replace: "prompt.footer.status",
+    after: "prompt.footer.status",
     render: () => <Statusline theme={ctx.theme} />,
   })
 }

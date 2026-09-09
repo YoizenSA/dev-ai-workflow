@@ -147,9 +147,17 @@ const Logo = (props: { theme: TuiTheme }) => {
 }
 
 // OpenCode2 beta uses the v2 TUI module contract: `{ id, setup }`.
+//
+// The claim targets `home.footer`, which is a slot the host actually
+// publishes. The previous target, `home.logo`, is not in the slot tree of any
+// shipped build — the host publishes home.footer, prompt.footer[.file
+// |.location|.status], session.composer.top, session.panel and
+// sidebar.{content,context,footer[.location],mcp} — and a claim on a path the
+// host does not publish is discarded, so the logo never rendered and said
+// nothing about why.
 const setup = (ctx: { theme: TuiTheme; ui: { slot: (claim: unknown) => unknown } }) => {
   ctx.ui.slot({
-    replace: "home.logo",
+    prepend: "home.footer",
     render: () => <Logo theme={ctx.theme} />,
   })
 }
