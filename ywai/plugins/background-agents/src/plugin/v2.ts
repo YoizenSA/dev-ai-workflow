@@ -82,7 +82,7 @@ function toArray(value: any): any[] {
  * - session.promptAsync: delivered as a "steer" prompt, which is the v2
  *   spelling of "inject this into a running session".
  */
-function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
+export function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
 	const session = {
 		async status(): Promise<{ data: undefined }> {
 			return { data: undefined }
@@ -131,7 +131,7 @@ function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
 			path: { id: string }
 			body?: {
 				agent?: string
-				model?: { providerID: string; modelID: string }
+				model?: { providerID: string; modelID: string; variant?: string }
 				parts?: Array<{ type: string; text?: string }>
 			}
 		}): Promise<{ data: { parts: never[] } }> {
@@ -139,16 +139,26 @@ function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
 				.filter((part) => part.type === "text")
 				.map((part) => part.text ?? "")
 				.join("\n")
+			// v2's SessionPromptInput carries no model field: the override lives
+			// on session.switchModel. Passing it to prompt() was silently
+			// dropped, so every delegation ran on the agent's configured model.
+			// The variant rides along — it is how `effort` reaches the model.
 			const model = input.body?.model
-				? { providerID: input.body.model.providerID, id: input.body.model.modelID }
+				? {
+						providerID: input.body.model.providerID,
+						id: input.body.model.modelID,
+						...(input.body.model.variant ? { variant: input.body.model.variant } : {}),
+					}
 				: undefined
+			if (model) {
+				await ctx.session.switchModel({ sessionID: input.path.id, model })
+			}
 			await ctx.session.prompt({
 				sessionID: input.path.id,
 				// v2 spellings vary by route: agent on switchAgent, agentID on
 				// some prompt inputs. Passing both is harmless.
 				agent: input.body?.agent,
 				agentID: input.body?.agent,
-				model,
 				text,
 				delivery: "steer",
 			})

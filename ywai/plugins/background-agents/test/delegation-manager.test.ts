@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import { DelegationManager } from "../src/plugin/delegation-manager"
+import { DelegationManager, errorText } from "../src/plugin/delegation-manager"
 import type { Logger } from "../src/plugin/logger"
 import type { OpencodeClient } from "../src/plugin/primitives/types"
 import { serializeDelegation } from "../src/plugin/state"
@@ -877,5 +877,21 @@ describe("crash recovery", () => {
 		const running = manager.getRunningDelegations("ses_root")
 		expect(running.map((d) => d.id)).toContain("busy-task")
 		expect(state.promptAsyncCalls.length).toBe(0)
+	})
+})
+
+describe("transcript digest error rendering", () => {
+	// A tool part's error is a string on v1 but an object on v2. Reading it as
+	// a string crashed subagent_status with "state.error.slice is not a
+	// function", taking the whole status report down with it.
+	test("renders an object error instead of crashing", () => {
+		expect(errorText({ message: "ProviderModelNotFoundError" })).toBe(
+			"ProviderModelNotFoundError",
+		)
+		expect(errorText("plain string")).toBe("plain string")
+		expect(errorText({ name: "Boom" })).toBe('{"name":"Boom"}')
+		expect(errorText(undefined)).toBe("unknown error")
+		// Whatever it is, the caller can slice it.
+		expect(typeof errorText({ a: 1 }).slice(0, 3)).toBe("string")
 	})
 })

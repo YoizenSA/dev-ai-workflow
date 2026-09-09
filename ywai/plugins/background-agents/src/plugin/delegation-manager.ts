@@ -40,6 +40,25 @@ import type {
 	SessionMessageItem,
 } from "./types"
 
+/**
+ * A tool part's error is a string on v1 but an object on v2, so reading it as
+ * a string crashed the transcript digest (`state.error.slice is not a
+ * function`) and took subagent_status down with it.
+ */
+export function errorText(error: unknown): string {
+	if (typeof error === "string") return error
+	if (error && typeof error === "object") {
+		const message = (error as { message?: unknown }).message
+		if (typeof message === "string") return message
+		try {
+			return JSON.stringify(error)
+		} catch {
+			// Circular or otherwise unserializable: the status report still renders.
+		}
+	}
+	return String(error ?? "unknown error")
+}
+
 class DelegationManager {
 	private delegations: Map<string, DelegationRecord> = new Map()
 	private delegationsBySession: Map<string, string> = new Map()
@@ -595,7 +614,7 @@ class DelegationManager {
 						(state.status === "running" || state.status === "completed") && state.title
 							? `: ${state.title}`
 							: ""
-					const error = state.status === "error" ? ` — ${state.error.slice(0, 160)}` : ""
+					const error = state.status === "error" ? ` — ${errorText(state.error).slice(0, 160)}` : ""
 					lines.push(`[tool] ${part.tool} (${state.status})${title}${error}`)
 				}
 			}
