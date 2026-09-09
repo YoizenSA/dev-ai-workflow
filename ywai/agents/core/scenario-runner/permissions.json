@@ -1,0 +1,22 @@
+{
+  "read": "allow",
+  "edit": "deny",
+  "write": "allow",
+  "bash": "allow",
+  "glob": "allow",
+  "grep": "allow",
+  "lsp": "deny",
+  "ast_grep": "deny",
+  "websearch": "deny",
+  "webfetch": "allow",
+  "code_search": "deny",
+  "task": "deny",
+  "delegate": "deny",
+  "question": "allow",
+  "skill": "allow",
+  "opencode-in-chrome_*": "allow",
+  "grafana_*": "allow",
+  "graft_*": "allow",
+  "memory": "allow",
+  "intercom": "allow"
+}

@@ -1,0 +1,92 @@
+{
+  "id": "scenario-verification",
+  "name": "scenario-verification",
+  "description": "Scenario verification: run the BDD scenarios against the running app with evidence, then file the results on the work item.",
+  "version": "1.0.0",
+  "slashCommandOptions": {
+    "argumentHint": "<parent-work-item-id>"
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "position": {
+        "x": 60,
+        "y": 300
+      },
+      "data": {
+        "label": "Reviewed change",
+        "description": "Runs the BDD scenarios against the running app and files the results on the work item.",
+        "model": "inherit",
+        "agentRef": "qa-exploratory/verification-orchestrator"
+      }
+    },
+    {
+      "id": "runner",
+      "type": "subAgent",
+      "name": "scenario-runner",
+      "position": {
+        "x": 340,
+        "y": 300
+      },
+      "data": {
+        "name": "scenario-runner",
+        "description": "Runs the BDD scenarios against the running app and files the evidence.",
+        "agentRef": "core/scenario-runner",
+        "prompt": "Run the Gherkin scenarios for this change against the running application. Establish the environment first — local means Docker logs, a shared one means the Grafana MCP. Drive the browser through `opencode-in-chrome` only for scenarios whose `Then` is something the user sees; assert the rest against the API directly. File the evidence under `.evidence/<run-id>/`: a screenshot at the assertion, the failing request, and the log excerpt scoped to the run window. Report PASS / FAIL / BLOCKED per scenario with its evidence path.\n\nSkills available (use the `skill` tool): qa-evidence, gherkin-bdd, opencode-in-chrome, condition-based-waiting, diagnosing-bugs.",
+        "tools": "read, write, bash, glob, grep, question, skill, opencode-in-chrome_*, grafana_*, graft_*",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
+      }
+    },
+    {
+      "id": "feedback",
+      "type": "subAgent",
+      "name": "qa-feedback",
+      "position": {
+        "x": 640,
+        "y": 300
+      },
+      "data": {
+        "name": "qa-feedback",
+        "description": "Files the run on the work item: summary comment plus one Bug per failing scenario.",
+        "agentRef": "qa-exploratory/qa-feedback",
+        "prompt": "Put the run on the board. Comment the run summary on the parent work item, and create one Bug child per failing scenario carrying the scenario as written, expected versus actual, the evidence paths and the log excerpt. Blocked scenarios are reported as blocked on the parent, never filed as Bugs.\n\nSkills available (use the `skill` tool): qa-evidence, ado, gherkin-bdd.",
+        "tools": "read, write, bash, glob, grep, question, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
+      }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": "end",
+      "position": {
+        "x": 940,
+        "y": 300
+      },
+      "data": {
+        "label": "Verified"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "start",
+      "to": "runner"
+    },
+    {
+      "from": "runner",
+      "to": "feedback"
+    },
+    {
+      "from": "feedback",
+      "to": "end"
+    }
+  ],
+  "createdAt": "2026-09-09T00:00:00Z",
+  "updatedAt": "2026-09-09T00:00:00Z"
+}
