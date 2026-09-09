@@ -34,6 +34,13 @@ func exportInstalledWorkflows(dryRun bool) (int, error) {
 	}
 
 	exporter := workflows.NewExporter()
+	// Sweep the slash commands of workflows that were renamed in a later
+	// release. Their agents go with PruneUnlistedAgents; the commands do not.
+	for old := range config.RenamedWorkflows {
+		if err := exporter.RemoveCommand(old); err != nil {
+			fmt.Printf("  Warning: failed to remove retired command /%s: %v\n", old, err)
+		}
+	}
 	exported := 0
 	for _, summary := range list {
 		wf, err := store.Load(summary.Name)

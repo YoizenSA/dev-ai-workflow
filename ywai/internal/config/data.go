@@ -118,6 +118,9 @@ func SeedWorkflowsFromEmbedded() error {
 		return fmt.Errorf("no embedded workflows data available")
 	}
 	dstDir := DataWorkflowsDir()
+	if err := migrateRenamedWorkflows(dstDir); err != nil {
+		return err
+	}
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
 			return nil
@@ -191,6 +194,9 @@ func SeedWorkflowsFrom(repoRoot string) error {
 	}
 	srcDir := WorkflowsSourceDir()
 	dstDir := DataWorkflowsDir()
+	if err := migrateRenamedWorkflows(dstDir); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return err
@@ -771,4 +777,53 @@ func copyDirRecursive(src, dst string) error {
 
 		return os.WriteFile(dstPath, data, 0o644)
 	})
+}
+
+// RenamedWorkflows maps a retired seed workflow's file name to its replacement.
+//
+// Seeding copies seed files by base name and never deletes, so a rename would
+// otherwise leave the retired workflow live forever: the user ends up with both
+// files, both slash commands, and two sets of exported sub-agents.
+var RenamedWorkflows = map[string]string{"goal": "ship"}
+
+// migrateRenamedWorkflows moves retired workflow files in the data dir to their
+// replacement name, patching the id/name inside so file, id and name stay in
+// lockstep the way the store expects. A user copy carrying custom nodes or
+// layout survives the move; the seed pass then reconciles it. When the
+// replacement already exists the retired file is simply dropped.
+func migrateRenamedWorkflows(dstDir string) error {
+	for old, replacement := range RenamedWorkflows {
+		oldPath := filepath.Join(dstDir, old+".json")
+		if _, err := os.Stat(oldPath); err != nil {
+			continue
+		}
+		newPath := filepath.Join(dstDir, replacement+".json")
+		if _, err := os.Stat(newPath); err == nil {
+			if err := os.Remove(oldPath); err != nil {
+				return fmt.Errorf("remove retired workflow %s: %w", old, err)
+			}
+			continue
+		}
+		data, err := os.ReadFile(oldPath)
+		if err != nil {
+			return fmt.Errorf("read retired workflow %s: %w", old, err)
+		}
+		var wf map[string]any
+		if err := json.Unmarshal(data, &wf); err != nil {
+			return fmt.Errorf("parse retired workflow %s: %w", old, err)
+		}
+		wf["id"] = replacement
+		wf["name"] = replacement
+		out, err := json.MarshalIndent(wf, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode renamed workflow %s: %w", replacement, err)
+		}
+		if err := os.WriteFile(newPath, append(out, '\n'), 0o644); err != nil {
+			return fmt.Errorf("write renamed workflow %s: %w", replacement, err)
+		}
+		if err := os.Remove(oldPath); err != nil {
+			return fmt.Errorf("remove retired workflow %s: %w", old, err)
+		}
+	}
+	return nil
 }

@@ -767,3 +767,14 @@ func yamlQuote(s string) string {
 	}
 	return s
 }
+
+// RemoveCommand deletes the slash command file of a retired workflow name.
+// Exported agents are swept by PruneUnlistedAgents on every install, but
+// commands are not: a renamed workflow would leave its old /<name> behind,
+// pointing at an orchestrator agent that no longer exists.
+func (e *Exporter) RemoveCommand(name string) error {
+	if err := os.Remove(filepath.Join(e.commandsDir, name+".md")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
