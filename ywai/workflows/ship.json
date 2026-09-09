@@ -1,6 +1,6 @@
 {
-  "id": "goal",
-  "name": "goal",
+  "id": "ship",
+  "name": "ship",
   "description": "Goal delivery: plan -> design -> implement -> QA exploratory (summary, Gherkin ticket, QA review, fix) -> review.",
   "version": "1.0.0",
   "nodes": [
@@ -59,6 +59,19 @@
         "description": "Technical lead orchestrating the feature delivery cycle.",
         "agentRef": "core/orchestrator",
         "model": "inherit"
+      }
+    },
+    {
+      "id": "wi-context",
+      "type": "prompt",
+      "name": "work-item-context",
+      "position": {
+        "x": 60,
+        "y": 700
+      },
+      "data": {
+        "label": "Work item context",
+        "prompt": "Resolve the work item before anything else. `$ARGUMENTS` leads with the Azure DevOps id of the user story being delivered (`/goal 12345 add rate limiting`). Load the `ado` skill, read that work item, and ground the goal in it rather than in the free-text request alone.\n\nThen carry `Work item: #<id>` on the **Context** line of every delegation brief. The QA sub-flow needs it: `test-author` creates the Gherkin child work item with `ado wi create-child --parent <id>`, and without the id it has no parent to attach to.\n\nIf `$ARGUMENTS` carries no work item id, ask the user for it once. If there is none, say so explicitly and continue — the QA step will then report the scenarios without creating a linked work item."
       }
     },
     {
@@ -267,6 +280,10 @@
   "connections": [
     {
       "from": "start",
+      "to": "wi-context"
+    },
+    {
+      "from": "wi-context",
       "to": "finder"
     },
     {
@@ -338,5 +355,8 @@
     }
   ],
   "createdAt": "2026-06-29T17:00:00Z",
-  "updatedAt": "2026-07-25T00:00:00Z"
+  "updatedAt": "2026-09-09T00:00:00Z",
+  "slashCommandOptions": {
+    "argumentHint": "<work-item-id> <feature request>"
+  }
 }

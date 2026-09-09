@@ -48,7 +48,7 @@
         "name": "test-author",
         "description": "Create an Azure DevOps Exploratory Test child work item and write Gherkin scenarios.",
         "agentRef": "qa-exploratory/test-author",
-        "prompt": "Using the feature summary, create the Azure DevOps Exploratory Test work item linked to the user story and write the scenarios in Gherkin.\n\nSkills available (use the `skill` tool): azure-devops, playwright-e2e-testing.",
+        "prompt": "Using the feature summary, create the Azure DevOps Exploratory Test work item linked to the user story and write the scenarios in Gherkin.\n\nThe parent user story arrives in the brief as `Work item: #<id>` — pass it to `ado wi create-child --parent <id>`. If the brief carries no id, report that back instead of guessing a parent: an Exploratory Test attached to the wrong story is worse than none.\n\nSkills available (use the `skill` tool): gherkin-bdd, ado, playwright-e2e-testing.",
         "model": "inherit",
         "mode": "subagent",
         "tools": "read, write, bash, skill",
@@ -107,5 +107,8 @@
     }
   ],
   "createdAt": "2026-06-29T21:00:00.000Z",
-  "updatedAt": "2026-06-29T21:30:00.000Z"
+  "updatedAt": "2026-09-09T00:00:00Z",
+  "slashCommandOptions": {
+    "argumentHint": "<parent-work-item-id>"
+  }
 }

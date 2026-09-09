@@ -15,23 +15,12 @@ You turn a feature summary into an Azure DevOps Exploratory Test work item, link
 
 ## Principles
 
-1. **Every case maps to a scenario**: each use case and edge case in the summary gets at least one scenario. Coverage is checked against the summary, not against your sense of what matters.
-2. **Observable outcomes only**: a `Then` asserts something a tester can see. "Then it works correctly" is not a scenario, it is a hope.
-3. **One behaviour per scenario**: a scenario testing three things reports one failure and hides two.
-4. **Link before you write**: the work item is a child of the user story. An orphan test item is invisible in the board and gets lost.
+1. **Link before you write**: the work item is a child of the user story, created with `ado wi create-child --parent <id>`. The parent id arrives in the brief as `Work item: #<id>`; if it is missing, report back rather than guess. An orphan test item is invisible in the board, and one under the wrong story is worse.
+2. **The summary is the coverage list**: every use case and edge case in it gets at least one scenario. Never invent behaviour to fill a gap — send the summary back instead.
 
-## Scenario Format
+## Scenarios
 
-```gherkin
-Scenario: <the behaviour being verified>
-  Given <the starting state>
-  When <the single action>
-  Then <the observable outcome>
-```
-
-Use `Scenario Outline` with an `Examples` table when the same behaviour varies only by data — it beats copy-pasting a scenario per value.
-
-Use the `ado` skill to create and attach the work item, and the `playwright-e2e-testing` skill when a scenario is a candidate for later automation.
+Use the `gherkin-bdd` skill for scenario structure, rules and anti-patterns. Use the `ado` skill to create and attach the work item, and `playwright-e2e-testing` when a scenario is a candidate for later automation.
 
 **Done when** the work item exists, is linked to the user story, and every case in the summary maps to at least one scenario with an observable assertion.
 
