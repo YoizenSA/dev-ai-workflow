@@ -255,12 +255,6 @@ func (wm *WorkerManager) PrepareContext(mission *Mission, feature *Feature, work
 	featureBld.WriteString("\n## Required handoff format\n")
 	featureBld.WriteString("Return a JSON WorkerHandoff with:\n")
 	featureBld.WriteString("- salientSummary, whatWasImplemented, whatWasLeftUndone, discoveredIssues[], verification.commandsRun[]\n")
-	if len(mission.Features) > 1 {
-		featureBld.WriteString("\n## Work ledger\n")
-		featureBld.WriteString("This mission has multiple features. Keep a ledger: open it, checkpoint only with a named verifier, and ship before handing off.\n")
-		featureBld.WriteString("Short: `ywai ledger note --goal ... --next ...` then `ywai ledger note --check ... --by ...`.\n")
-	}
-
 	// Name skill ids only. OpenCode v2 advertises descriptions and loads
 	// the body when the model calls the skill tool — do not paste bodies.
 	injectedSkills := wm.resolveSkillsForFeature(mission, feature)

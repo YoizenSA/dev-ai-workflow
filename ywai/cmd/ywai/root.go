@@ -115,7 +115,7 @@ func skipDataSeeding(cmd *cobra.Command) bool {
 	// Direct leaves / parents we always skip.
 	skip := map[string]bool{
 		"eval": true, "completion": true, "help": true,
-		"version": true, "stop": true, "ui": true, "ledger": true,
+		"version": true, "stop": true, "ui": true,
 	}
 	for _, n := range names {
 		if skip[n] {

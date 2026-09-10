@@ -214,44 +214,6 @@ func TestPrepareContextContainsFeatureInfo(t *testing.T) {
 	if !strings.Contains(content, feat.Description) {
 		t.Fatalf("feature.md should contain feature description")
 	}
-	if strings.Contains(content, "## Work ledger") {
-		t.Fatal("single-feature mission must not inject the ledger pointer")
-	}
-}
-
-func TestPrepareContextInjectsWorkLedgerOnMultiFeature(t *testing.T) {
-	store, _ := newTestStore(t)
-	mission := testMission("multi-mission")
-	now := mission.CreatedAt
-	mission.Features = append(mission.Features, Feature{
-		ID:          "feat-2",
-		Description: "Feature 2",
-		Status:      FeaturePending,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	})
-	_ = store.CreateMission(mission)
-
-	wm := NewWorkerManager(store, DefaultWorkerConfig())
-	feat := &mission.Features[0]
-
-	ctxDir, err := wm.PrepareContext(mission, feat, "")
-	if err != nil {
-		t.Fatalf("PrepareContext() returned error: %v", err)
-	}
-	defer os.RemoveAll(ctxDir)
-
-	data, err := os.ReadFile(filepath.Join(ctxDir, "feature.md"))
-	if err != nil {
-		t.Fatalf("read feature.md: %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "## Work ledger") {
-		t.Fatal("multi-feature mission must inject the ledger pointer")
-	}
-	if !strings.Contains(content, "ywai ledger note") {
-		t.Fatal("pointer must name the ledger command")
-	}
 }
 
 // TestPrepareContextInjectsRoleSkills verifies the worker brief names the
