@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -54,14 +55,18 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 
 	// Fetch models and inject context limits. GET /v1/models is the
 	// catalog: models the GET does not return are dropped from the provider.
-	sectionKey := "provider"
-	if agent.OpenCodeIsV2() {
-		sectionKey = "providers"
-	}
+	// TokenBank only serves the v1 `provider` payload, so prune it in that
+	// shape and translate afterwards.
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
-		injectModelLimits(newConfig, modelsResp.Models, sectionKey)
+		injectModelLimits(newConfig, modelsResp.Models, "provider")
 	} else {
 		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
+	}
+	v2 := agent.OpenCodeIsV2()
+	sectionKey := "provider"
+	if v2 {
+		sectionKey = "providers"
+		toV2Providers(newConfig)
 	}
 
 	var lastPath string
@@ -76,6 +81,15 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		// key follows the active flavor: v2 reads `providers`, v1 `provider`.
 		merged := DeepMerge(existing, newConfig)
 		replaceOwnedProvider(merged, newConfig, sectionKey, "opencode-admin")
+		if v2 {
+			// Drop the v1 copy older runs wrote; other v1 providers are the user's.
+			if v1, ok := merged["provider"].(map[string]interface{}); ok {
+				delete(v1, "opencode-admin")
+				if len(v1) == 0 {
+					delete(merged, "provider")
+				}
+			}
+		}
 
 		if err := WriteJSONFile(configPath, merged); err != nil {
 			return err
@@ -111,6 +125,74 @@ func replaceOwnedProvider(merged, fresh map[string]interface{}, sectionKey, prov
 		merged[sectionKey] = mergedSection
 	}
 	mergedSection[providerKey] = freshProvider
+}
+
+// toV2Providers moves the v1 `provider` section into v2 `providers`. v2
+// ignores npm (the session fails with "Unsupported package"), reads settings
+// instead of options, and drops a model whose variants are a map.
+// ponytail: v1 model flags (tool_call, modalities, ...) stay; v2 tolerates
+// them. capabilities carries the part v2 actually reads.
+func toV2Providers(config map[string]interface{}) {
+	v1, _ := config["provider"].(map[string]interface{})
+	delete(config, "provider")
+	if len(v1) == 0 {
+		return
+	}
+	v2, _ := config["providers"].(map[string]interface{})
+	if v2 == nil {
+		v2 = map[string]interface{}{}
+		config["providers"] = v2
+	}
+	for id, raw := range v1 {
+		p, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if npm, _ := p["npm"].(string); strings.HasPrefix(npm, "@ai-sdk/") {
+			p["package"] = "@opencode/ai/providers/" + strings.TrimPrefix(npm, "@ai-sdk/")
+			delete(p, "npm")
+		}
+		if opts, ok := p["options"]; ok {
+			p["settings"] = opts
+			delete(p, "options")
+		}
+		models, _ := p["models"].(map[string]interface{})
+		for _, rawModel := range models {
+			if m, ok := rawModel.(map[string]interface{}); ok {
+				toV2Model(m)
+			}
+		}
+		v2[id] = p
+	}
+}
+
+func toV2Model(m map[string]interface{}) {
+	if variants, ok := m["variants"].(map[string]interface{}); ok {
+		ids := make([]string, 0, len(variants))
+		for id := range variants {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		list := make([]interface{}, 0, len(ids))
+		for _, id := range ids {
+			list = append(list, map[string]interface{}{"id": id, "settings": variants[id]})
+		}
+		m["variants"] = list
+	}
+	caps := map[string]interface{}{}
+	if tools, ok := m["tool_call"].(bool); ok {
+		caps["tools"] = tools
+	}
+	if mods, ok := m["modalities"].(map[string]interface{}); ok {
+		for _, k := range []string{"input", "output"} {
+			if v, ok := mods[k]; ok && v != nil {
+				caps[k] = v
+			}
+		}
+	}
+	if len(caps) > 0 {
+		m["capabilities"] = caps
+	}
 }
 
 // injectModelLimits inyecta limit.context y limit.output en cada modelo

@@ -479,14 +479,21 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	}
 }
 
-// TestConfigureOpenCode_WritesV2Providers pins the v2 shape: the TokenBank
-// provider lands under the top-level `providers` map (v2 reads that key, not
-// the v1 `provider` map), with no leftover `provider` key.
+// TestConfigureOpenCode_WritesV2Providers pins the v2 shape. TokenBank only
+// serves the v1 `provider` payload (npm/options/variants map); v2 ignores npm
+// and fails with "Unsupported package", and drops models whose variants are a
+// map or whose fields are null. So ywai must translate it into `providers`.
 func TestConfigureOpenCode_WritesV2Providers(t *testing.T) {
 	pinOCFlavor(t, "opencode2")
 	home := isolateOpenCodeConfig(t)
 	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A v1 copy left by an older ywai run must go; other v2 providers stay.
+	seed := `{"provider":{"opencode-admin":{"npm":"@ai-sdk/openai-compatible","models":{"stale":{}}}},` +
+		`"providers":{"someone-else":{"package":"@opencode/ai/providers/openai","models":{}}}}`
+	if err := os.WriteFile(userPath, []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -498,19 +505,26 @@ func TestConfigureOpenCode_WritesV2Providers(t *testing.T) {
 				"object": "list",
 				"data": []map[string]interface{}{
 					{"id": "kept", "name": "Kept", "limit": map[string]int{"context": 1000}},
+					{"id": "bare", "name": "Bare"},
 				},
 			})
 		case "/api/setup/config":
+			// The real TokenBank payload: v1 `provider` shape.
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"ok":     true,
 				"origin": "http://tokenbank.test",
 				"config": map[string]interface{}{
-					"providers": map[string]interface{}{
+					"provider": map[string]interface{}{
 						"opencode-admin": map[string]interface{}{
-							"npm":  "@ai-sdk/openai-compatible",
-							"name": "Token Bank Proxy",
+							"npm":     "@ai-sdk/openai-compatible",
+							"name":    "Token Bank Proxy",
+							"options": map[string]interface{}{"baseURL": "http://tokenbank.test/v1", "apiKey": "pk-test"},
 							"models": map[string]interface{}{
-								"kept":  map[string]interface{}{"name": "Kept"},
+								"kept": map[string]interface{}{
+									"name":     "Kept",
+									"variants": map[string]interface{}{"high": map[string]interface{}{"reasoningEffort": "high"}},
+								},
+								"bare":  map[string]interface{}{"name": "Bare"},
 								"ghost": map[string]interface{}{"name": "In config GET, not models GET"},
 							},
 						},
@@ -542,18 +556,56 @@ func TestConfigureOpenCode_WritesV2Providers(t *testing.T) {
 	if !ok {
 		t.Fatalf("v2 config must hold a providers map, got:\n%s", raw)
 	}
+	if _, ok := providers["someone-else"]; !ok {
+		t.Errorf("providers ywai does not own must be preserved, got:\n%s", raw)
+	}
 	admin, ok := providers["opencode-admin"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("opencode-admin provider missing under providers, got:\n%s", raw)
 	}
+	if admin["package"] != "@opencode/ai/providers/openai-compatible" {
+		t.Errorf("v2 provider must select its SDK via package, got:\n%s", raw)
+	}
+	for _, v1 := range []string{"npm", "options"} {
+		if _, ok := admin[v1]; ok {
+			t.Errorf("v2 provider must not keep v1 %q, got:\n%s", v1, raw)
+		}
+	}
+	settings, _ := admin["settings"].(map[string]interface{})
+	if settings["baseURL"] != "http://tokenbank.test/v1" || settings["apiKey"] != "pk-test" {
+		t.Errorf("v1 options must move to settings, got:\n%s", raw)
+	}
+
 	models := admin["models"].(map[string]interface{})
 	if _, ghost := models["ghost"]; ghost {
 		t.Errorf("a model from /config but not GET /models must be removed, got %v", models)
 	}
-	if _, ok := models["kept"]; !ok {
-		t.Errorf("GET /models catalog entry must survive, got %v", models)
+	kept, ok := models["kept"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("GET /models catalog entry must survive, got %v", models)
 	}
-	if limit := models["kept"].(map[string]interface{})["limit"].(map[string]interface{}); limit["context"] != float64(1000) { // read back from disk: JSON numbers are float64
-		t.Errorf("kept model must receive injected limits, got %v", models["kept"])
+	if limit, _ := kept["limit"].(map[string]interface{}); limit["context"] != float64(1000) { // read back from disk: JSON numbers are float64
+		t.Errorf("kept model must receive injected limits, got %v", kept)
+	}
+	caps, _ := kept["capabilities"].(map[string]interface{})
+	if caps["tools"] != true {
+		t.Errorf("v2 model must declare capabilities.tools, got %v", kept)
+	}
+	if in, _ := caps["input"].([]interface{}); len(in) != 1 || in[0] != "text" {
+		t.Errorf("v2 capabilities.input must follow the model modalities, got %v", kept)
+	}
+	variants, _ := kept["variants"].([]interface{})
+	if len(variants) != 1 {
+		t.Fatalf("v2 variants must be an array, got %v", kept["variants"])
+	}
+	high, _ := variants[0].(map[string]interface{})
+	if hs, _ := high["settings"].(map[string]interface{}); high["id"] != "high" || hs["reasoningEffort"] != "high" {
+		t.Errorf("v2 variant must be {id, settings}, got %v", high)
+	}
+	bare, _ := models["bare"].(map[string]interface{})
+	for k, v := range bare {
+		if v == nil {
+			t.Errorf("v2 model fields must never be null (v2 drops the model), %q is null in %v", k, bare)
+		}
 	}
 }
