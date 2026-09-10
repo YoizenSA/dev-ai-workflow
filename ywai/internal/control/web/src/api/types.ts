@@ -618,6 +618,9 @@ export interface WorkflowNodeData {
 	// group container size (visual only)
 	width?: number;
 	height?: number;
+	/** Group collapsed on the canvas: children are hidden and edges crossing the
+	 * boundary are re-pointed at the group box. Visual only. */
+	collapsed?: boolean;
 
 	// mcp
 	server?: string;

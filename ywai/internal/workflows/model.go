@@ -79,6 +79,9 @@ type NodeData struct {
 	// group container size (visual only)
 	Width  float64 `json:"width,omitempty"`
 	Height float64 `json:"height,omitempty"`
+	// Collapsed hides a group's children on the editor canvas. Visual only —
+	// nothing in the exported body or the execution steps reads it.
+	Collapsed bool `json:"collapsed,omitempty"`
 
 	// start / end
 	// (label only)
