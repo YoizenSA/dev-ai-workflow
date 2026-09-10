@@ -73,8 +73,11 @@ describe('useHealth', () => {
 
 		const { result } = renderHook(() => useHealth());
 
+		// `error` starts as null, and toBeDefined() passes for null — waiting on
+		// that returned on the first render, before the rejection was handled,
+		// which is why `loading` was still true here. Wait for the real state.
 		await waitFor(() => {
-			expect(result.current.error).toBeDefined();
+			expect(result.current.error).toBeInstanceOf(Error);
 		});
 		expect(result.current.data).toBeNull();
 		expect(result.current.loading).toBe(false);
