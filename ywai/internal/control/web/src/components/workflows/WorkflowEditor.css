@@ -221,6 +221,11 @@
 	color: var(--text-muted);
 }
 
+.wf-node-icon,
+.wf-node-type {
+	flex: none;
+}
+
 .wf-node-type {
 	font-size: 10px;
 	font-weight: 700;
@@ -230,6 +235,13 @@
 
 .wf-badge {
 	margin-left: auto;
+	/* Long section lists (handoff, context-gathering, ...) used to wrap inside
+	   the meta row, growing the header and pushing the node body down/out of
+	   the card. Shrink and ellipsize instead; the full text is in the title. */
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-size: 9px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
@@ -347,6 +359,19 @@
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--text-muted);
+	/* It is a <button> (collapse toggle) — strip the UA chrome. */
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.wf-group-title:hover {
+	color: var(--text);
+}
+
+/* Collapsed: the box shrinks to its title chip and reads as a solid node. */
+.wf-group.is-collapsed {
+	border-style: solid;
+	background: var(--surface);
 }
 
 /* type accents */

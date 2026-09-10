@@ -43,9 +43,10 @@ import {
 	MessageSquare,
 	Square,
 	Pencil,
+	CornerUpLeft,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
-import type { WorkflowConnection, WorkflowNodeType } from '../../api/types'
+import type { WorkflowConnection, WorkflowNode, WorkflowNodeType } from '../../api/types'
 import Modal from '../shared/Modal'
 import YdSelect from '../shared/YdSelect'
 import MermaidDiagram from '../shared/MermaidDiagram'
@@ -88,6 +89,41 @@ const PALETTE_TYPES: WorkflowNodeType[] = [
 	'group',
 ]
 
+// ─── collapsed groups ──────────────────────────────────────────────────────
+// A collapsed group hides its children on the canvas. The edges that crossed
+// its boundary are re-pointed at the group box so the wiring stays readable
+// instead of vanishing; edges wholly inside it are dropped. Purely visual —
+// the stored workflow keeps every node and every connection untouched.
+
+// Prefix marking a synthetic, re-pointed edge. These stand for one or more real
+// connections, so clicking one must not disconnect anything.
+const COLLAPSED_EDGE_PREFIX = 'grp:'
+
+// hostOfHiddenNode maps each hidden child id to the collapsed group standing in
+// for it. Empty when nothing is collapsed, which is the common case.
+function hostOfHiddenNode(nodes: WorkflowNode[]): Map<string, string> {
+	const collapsed = new Set(
+		nodes.filter((n) => n.type === 'group' && n.data.collapsed).map((n) => n.id),
+	)
+	const host = new Map<string, string>()
+	if (!collapsed.size) return host
+	for (const n of nodes) {
+		if (n.parentId && collapsed.has(n.parentId)) host.set(n.id, n.parentId)
+	}
+	return host
+}
+
+// toCanvasNodes converts store nodes into xyflow nodes, hiding the children of
+// collapsed groups.
+function toCanvasNodes(nodes: WorkflowNode[], selectedNodeId: string | null): Node[] {
+	const hidden = hostOfHiddenNode(nodes)
+	return nodes.map((n) => ({
+		...toFlowNode(n),
+		selected: n.id === selectedNodeId,
+		hidden: hidden.has(n.id),
+	})) as Node[]
+}
+
 export default function WorkflowEditor() {
 	return (
 		<ReactFlowProvider>
@@ -105,6 +141,8 @@ function WorkflowEditorInner() {
 	const current = useWorkflowStore((s) => s.current)
 	const loading = useWorkflowStore((s) => s.loading)
 	const dirty = useWorkflowStore((s) => s.dirty)
+	// Workflow we jumped here from via a sub-flow node (null when not nested).
+	const [parentName, setParentName] = useState<string | null>(null)
 	const error = useWorkflowStore((s) => s.error)
 	const validation = useWorkflowStore((s) => s.validation)
 	const exportPlan = useWorkflowStore((s) => s.exportPlan)
@@ -226,9 +264,15 @@ function WorkflowEditorInner() {
 		window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
 	}, [selectedName, selectedNodeId])
 
+	// Loading another workflow drops the in-memory edits of the current one
+	// (load() resets `dirty`), so every switch — dropdown or sub-flow jump —
+	// confirms first. `parent` records where a sub-flow jump came from so the
+	// user has a way back.
 	const onSelect = useCallback(
-		(name: string) => {
+		(name: string, parent?: string) => {
 			if (!name) return
+			if (useWorkflowStore.getState().dirty && !window.confirm('Unsaved changes will be lost. Continue?')) return
+			setParentName(parent ?? null)
 			setSelectedName(name)
 			load(name)
 		},
@@ -307,7 +351,7 @@ function WorkflowEditorInner() {
 			setFlowNodes([])
 			return
 		}
-		setFlowNodes(current.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+		setFlowNodes(toCanvasNodes(current.nodes, selectedNodeId))
 		// Only resync on structural changes, not on selection/position ticks.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [nodeSignature])
@@ -339,17 +383,31 @@ function WorkflowEditorInner() {
 		// an in-flight unnormalized state.
 		const seen = new Set<string>()
 		const edges: Edge[] = []
+		// Children of a collapsed group are hidden, so their edges are re-pointed
+		// at the group box. Several connections can then collapse onto the same
+		// pair (gate → fe/be/infra becomes one gate → IMPLEMENTATION arrow), which
+		// the `seen` dedupe below absorbs.
+		const host = hostOfHiddenNode(current.nodes)
 		for (const c of current.connections) {
-			const id = disconnectEdgeId(c as WorkflowConnection)
+			const source = host.get(c.from) ?? c.from
+			const target = host.get(c.to) ?? c.to
+			// Wholly inside one collapsed group: nothing left to draw it between.
+			if (source === target) continue
+			const rerouted = source !== c.from || target !== c.to
+			const id = rerouted
+				? `${COLLAPSED_EDGE_PREFIX}${source}->${target}`
+				: disconnectEdgeId(c as WorkflowConnection)
 			if (seen.has(id)) continue
 			seen.add(id)
-			const touches = c.from === selectedNodeId || c.to === selectedNodeId
+			const touches = source === selectedNodeId || target === selectedNodeId
 			edges.push({
 				id,
-				source: c.from,
-				target: c.to,
-				sourceHandle: c.fromPort || undefined,
-				targetHandle: c.toPort || undefined,
+				source,
+				target,
+				// A group box has only its default pair of handles, so a re-pointed
+				// edge must not ask for the original node's named port.
+				sourceHandle: rerouted ? undefined : c.fromPort || undefined,
+				targetHandle: rerouted ? undefined : c.toPort || undefined,
 				animated: animatedEdges,
 				// Dashed curved connectors.
 				style: { strokeDasharray: '6 4', strokeWidth: 1.5, opacity: dim && !touches ? 0.12 : 1 },
@@ -414,7 +472,7 @@ function WorkflowEditorInner() {
 	const handleAutoLayout = useCallback(() => {
 		autoLayout()
 		const laid = useWorkflowStore.getState().current
-		if (laid) setFlowNodes(laid.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+		if (laid) setFlowNodes(toCanvasNodes(laid.nodes, selectedNodeId))
 		requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1, duration: 300 }))
 	}, [autoLayout, fitView, selectedNodeId])
 
@@ -423,7 +481,7 @@ function WorkflowEditorInner() {
 	// explicitly so position-only undo steps also repaint.
 	const resyncCanvas = useCallback(() => {
 		const wf = useWorkflowStore.getState().current
-		if (wf) setFlowNodes(wf.nodes.map((n) => ({ ...toFlowNode(n), selected: n.id === selectedNodeId })))
+		if (wf) setFlowNodes(toCanvasNodes(wf.nodes, selectedNodeId))
 	}, [selectedNodeId])
 
 	// On drag end, (re-)assign the node to whatever group it was dropped into —
@@ -527,6 +585,17 @@ function WorkflowEditorInner() {
 							ariaLabel="Select workflow"
 						/>
 					</div>
+
+				{parentName && (
+					<button
+						className="btn btn-icon"
+						aria-label={`Back to ${parentName}`}
+						data-tip={`Back to ${parentName}`}
+						onClick={() => onSelect(parentName)}
+					>
+						<CornerUpLeft size={16} />
+					</button>
+				)}
 
 				<span className="wf-tb-sep" />
 
@@ -875,13 +944,17 @@ function WorkflowEditorInner() {
 							onNodesChange={onNodesChange}
 							onNodeDragStop={handleNodeDragStop}
 							onConnect={onConnect}
-							onEdgeClick={(_, edge) => disconnect(edge.id)}
+							onEdgeClick={(_, edge) => {
+								// Synthetic edges stand in for several real connections.
+								if (edge.id.startsWith(COLLAPSED_EDGE_PREFIX)) return
+								disconnect(edge.id)
+							}}
 							onNodeClick={(_, n) => selectNode(n.id)}
 							onNodeDoubleClick={(_, n) => {
 								// Double-clicking a sub-workflow node opens that workflow; any other
 								// node opens the Monaco focus editor.
 								const d = n.data as { __type?: string; flowId?: string }
-								if (d.__type === 'subAgentFlow' && d.flowId) onSelect(d.flowId)
+								if (d.__type === 'subAgentFlow' && d.flowId) onSelect(d.flowId, current?.name)
 								else setFocusNode(n.id)
 							}}
 							onPaneClick={() => selectNode(null)}

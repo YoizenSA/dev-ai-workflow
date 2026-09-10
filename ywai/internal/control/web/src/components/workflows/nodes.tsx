@@ -11,8 +11,11 @@ import {
 	Plug,
 	Box,
 	FileText,
+	ChevronDown,
+	ChevronRight,
 } from 'lucide-react'
 import type { WorkflowNode, WorkflowNodeData, WorkflowNodeType } from '../../api/types'
+import { useWorkflowStore } from '../../stores/workflowStore'
 
 // Public node-data shape carried by xyflow nodes (same as WorkflowNode['data']).
 export interface WorkflowNodePayload extends Record<string, unknown> {
@@ -40,6 +43,7 @@ export interface WorkflowNodePayload extends Record<string, unknown> {
 	sections?: string
 	width?: number
 	height?: number
+	collapsed?: boolean
 	options?: { id?: string; label?: string }[]
 	branches?: { id?: string; label?: string; value?: string }[]
 }
@@ -168,7 +172,7 @@ function outPorts(d: WorkflowNodePayload): { id?: string; label: string }[] {
 // PORT_ROW_H must match the .wf-port row height in CSS so handles align to labels.
 const PORT_ROW_H = 22
 
-function WorkflowNodeView({ data, selected }: NodeProps) {
+function WorkflowNodeView({ id, data, selected }: NodeProps) {
 	const d = data as WorkflowNodePayload
 	const meta = NODE_META[d.__type]
 	const Icon = meta.icon
@@ -176,11 +180,27 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 	// Group: a visual container box (sized via data.width/height) drawn behind
 	// the other nodes. Not a React Flow parent — membership is purely visual.
 	if (d.__type === 'group') {
+		// Collapsed: children are hidden by the editor and edges that crossed the
+		// boundary are re-pointed here, so the box needs its own pair of handles.
+		const collapsed = d.collapsed === true
 		return (
-			<div className={`wf-group ${selected ? 'is-selected' : ''}`} style={{ width: '100%', height: '100%' }}>
-				<div className="wf-group-title">
-					<Box size={12} /> {title(d)}
-				</div>
+			<div
+				className={`wf-group ${selected ? 'is-selected' : ''} ${collapsed ? 'is-collapsed' : ''}`}
+				style={{ width: '100%', height: '100%' }}
+			>
+				{collapsed && <Handle type="target" position={Position.Left} />}
+				<button
+					type="button"
+					className="wf-group-title"
+					title={collapsed ? 'Expand group' : 'Collapse group'}
+					onClick={(e) => {
+						e.stopPropagation()
+						useWorkflowStore.getState().updateNode(id, { collapsed: !collapsed })
+					}}
+				>
+					{collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />} {title(d)}
+				</button>
+				{collapsed && <Handle type="source" position={Position.Right} />}
 			</div>
 		)
 	}
@@ -198,11 +218,16 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
 				</span>
 				<span className="wf-node-type">{meta.type}</span>
 				{d.agentType && <span className="wf-badge">{d.agentType === 'claudeCode' ? 'CLAUDE CODE' : d.agentType}</span>}
-				{d.__type === 'subAgent' && (
-	<span className="wf-badge wf-badge-handoff">
-		📋 {d.sections?.trim() ? d.sections.split(',').map(s => s.trim()).filter(Boolean).join(', ') : 'handoff'}
-	</span>
-)}
+				{d.__type === 'subAgent' && (() => {
+					const secs = d.sections?.trim()
+						? d.sections.split(',').map((s) => s.trim()).filter(Boolean).join(', ')
+						: 'handoff'
+					return (
+						<span className="wf-badge wf-badge-handoff" title={secs}>
+							📋 {secs}
+						</span>
+					)
+				})()}
 			</div>
 			<div className="wf-node-title">{title(d)}</div>
 			{sub && <div className="wf-node-sub">{sub}</div>}
@@ -249,17 +274,28 @@ export const nodeTypes = { workflow: WorkflowNodeRenderer }
 
 // toFlowNode converts a domain WorkflowNode into the xyflow node shape the
 // canvas renders. The __type discriminator lets the renderer switch on style.
+// Height of a collapsed group: just enough for its title chip.
+export const COLLAPSED_GROUP_HEIGHT = 40
+
 export function toFlowNode(n: WorkflowNode) {
 	const isGroup = n.type === 'group'
 	return {
 		id: n.id,
 		type: 'workflow',
 		position: n.position,
-		// Groups sit behind everything else so they read as containers.
-		zIndex: isGroup ? 0 : 1,
+		// Groups sit behind everything else so they read as containers — except a
+		// collapsed one, which is the only thing left to click and wire.
+		zIndex: isGroup ? (n.data.collapsed ? 1 : 0) : 1,
 		// React Flow needs explicit parent dimensions so `extent: 'parent'`
 		// constrains children correctly (without them children clamp to 0,0).
-		...(isGroup ? { style: { width: n.data.width ?? 360, height: n.data.height ?? 240 } } : {}),
+		...(isGroup
+			? {
+					style: {
+						width: n.data.width ?? 360,
+						height: n.data.collapsed ? COLLAPSED_GROUP_HEIGHT : (n.data.height ?? 240),
+					},
+				}
+			: {}),
 		// Real grouping: children are confined to and move with their parent group.
 		...(n.parentId ? { parentId: n.parentId, extent: 'parent' as const } : {}),
 		data: { ...n.data, __type: n.type, name: n.name } as WorkflowNodePayload,
