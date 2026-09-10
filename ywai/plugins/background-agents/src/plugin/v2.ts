@@ -32,6 +32,7 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { formatDelegationContext } from "./context"
 import { DelegationManager } from "./delegation-manager"
+import { mapV2EventToV1 } from "./event-adapter"
 import { createLogger } from "./logger"
 import { getProjectId } from "./primitives/get-project-id"
 import type { OpencodeClient } from "./primitives/types"
@@ -411,31 +412,28 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 		}
 	})
 
-	// Event loop: same handlers as the v1 event hook, tolerant of either the
-	// v1 envelope (properties) or a v2 envelope (data).
+	// Event loop: same handlers as the v1 event hook. mapV2EventToV1 turns
+	// v2 event shapes into the v1 shapes the manager reads; the raw v2 event
+	// always passes through first, so v2-native shapes still reach the
+	// handlers that understand them.
 	const controller = new AbortController()
 	void (async () => {
 		try {
 			for await (const raw of ctx.event.subscribe({ signal: controller.signal })) {
-				const evt: any = raw ?? {}
-				const type: string = evt.type ?? ""
-				const props: any = evt.properties ?? evt.data ?? {}
-				if (type === "session.status") {
-					const statusType = props.status?.type
-					if (statusType === "idle" && props.sessionID) {
+				for (const evt of mapV2EventToV1(raw ?? {})) {
+					const type: string = evt.type ?? ""
+					const props: any = evt.properties ?? evt.data ?? {}
+					if (type === "session.idle" && props.sessionID) {
 						await manager.handleSessionIdle(props.sessionID)
 					}
-				}
-				if (type === "session.idle" && props.sessionID) {
-					await manager.handleSessionIdle(props.sessionID)
-				}
-				if (type === "message.updated") {
-					const sessionID = props.info?.sessionID ?? props.sessionID
-					if (sessionID) manager.handleMessageEvent(sessionID)
-				}
-				if (type === "message.part.updated") {
-					const part = props.part
-					if (part) manager.handlePartEvent(part)
+					if (type === "message.updated") {
+						const sessionID = props.info?.sessionID ?? props.sessionID
+						if (sessionID) manager.handleMessageEvent(sessionID)
+					}
+					if (type === "message.part.updated") {
+						const part = props.part
+						if (part) manager.handlePartEvent(part)
+					}
 				}
 			}
 		} catch {
