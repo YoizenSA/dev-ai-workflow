@@ -36,6 +36,11 @@ type CatalogEntry struct {
 	Tools       []string
 	Docs        string
 
+	// URLRequired marks a remote entry whose endpoint is per-deployment: the
+	// catalog ships no URL and the install UI must collect one. Installing
+	// without it would write an entry that can never connect.
+	URLRequired bool
+
 	// DefaultDisabled: OpenCode v2 treats a missing enabled flag as on.
 	// Set this so install writes enabled:false instead of omitting it.
 	DefaultDisabled bool
@@ -105,6 +110,17 @@ var catalog = []CatalogEntry{
 		InstallCmd: "npx -y chrome-devtools-mcp@latest",
 		Tools:      []string{"navigate_page", "click", "fill_form", "wait_for", "take_snapshot", "take_screenshot", "evaluate_script", "list_console_messages", "list_network_requests"},
 		Docs:       "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+	},
+	{
+		ID: "grafana", Name: "Grafana",
+		Description: "Query Loki logs, Prometheus metrics and dashboards from your Grafana",
+		Category:    "observability", Icon: "📈", Popular: true,
+		// No URL: a Grafana MCP lives on your own network, so there is no
+		// default worth shipping and a real hostname has no business in a
+		// public repo. URLRequired makes the install UI ask for it.
+		Type: "remote", URLRequired: true,
+		Tools: []string{"query_loki_logs", "query_prometheus", "list_datasources", "search_dashboards", "get_panel_image"},
+		Docs:  "https://github.com/grafana/mcp-grafana",
 	},
 	{
 		ID: "playwright", Name: "Playwright",

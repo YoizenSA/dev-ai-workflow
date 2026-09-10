@@ -20,6 +20,7 @@ interface McpServer {
 	tools: string[];
 	url?: string;
 	docs?: string;
+	urlRequired?: boolean;
 	requiredEnv?: Array<{
 		name: string;
 		description: string;
@@ -38,6 +39,41 @@ type InstallState = {
 };
 
 type TargetAgent = 'opencode' | 'pi' | 'claude-code' | 'omp';
+
+function EndpointForm({
+	server,
+	value,
+	onChange,
+	error,
+}: {
+	server: McpServer;
+	value: string;
+	onChange: (value: string) => void;
+	error?: boolean;
+}) {
+	// Only for servers whose endpoint lives on the user's own network, so the
+	// catalog ships none and installing blank would write a dead entry.
+	if (!server.urlRequired) return null;
+	return (
+		<div className="mcp-store-creds-form">
+			<div className="mcp-store-creds-field">
+				<label htmlFor={`url-${server.id}`}>
+					Server URL<span className="required">*</span>
+				</label>
+				<input
+					id={`url-${server.id}`}
+					name="url"
+					type="url"
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					placeholder="https://grafana.internal.example/mcp"
+					aria-invalid={error ? 'true' : undefined}
+					onClick={(e) => e.stopPropagation()}
+				/>
+			</div>
+		</div>
+	);
+}
 
 function CredentialsForm({
 	server,
@@ -83,6 +119,8 @@ function McpCard({
 	onUninstall,
 	credentials,
 	onCredentialChange,
+	endpoint,
+	onEndpointChange,
 	installState,
 	health,
 }: {
@@ -93,6 +131,8 @@ function McpCard({
 	onUninstall: () => void;
 	credentials: Record<string, string>;
 	onCredentialChange: (name: string, value: string) => void;
+	endpoint: string;
+	onEndpointChange: (value: string) => void;
 	installState?: InstallState;
 	health?: { status: string; latency_ms?: number; error?: string };
 }) {
@@ -145,6 +185,15 @@ function McpCard({
 					<span>{server.statusMessage}</span>
 					{server.fixAction && <strong>{server.fixAction.replace(/_/g, ' ')}</strong>}
 				</div>
+			)}
+
+			{!isInstalled && (
+				<EndpointForm
+					server={server}
+					value={endpoint}
+					onChange={onEndpointChange}
+					error={installState?.errorCode === 'missing_url'}
+				/>
 			)}
 
 			{!isInstalled && (
@@ -229,6 +278,7 @@ export function McpStore() {
 	const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
 	const [healthData, setHealthData] = useState<Record<string, { status: string; latency_ms?: number; error?: string }>>({});
 	const [credentials, setCredentials] = useState<Record<string, Record<string, string>>>({});
+	const [endpoints, setEndpoints] = useState<Record<string, string>>({});
 	const [selectedTarget, setSelectedTarget] = useState<TargetAgent>('opencode');
 	const intervalsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
@@ -335,6 +385,7 @@ export function McpStore() {
 
 	const handleInstall = async (id: string) => {
 		const creds = credentials[id] || {};
+		const endpoint = (endpoints[id] || '').trim();
 
 		setInstallStates((prev) => ({ ...prev, [id]: { state: 'pending' } }));
 
@@ -346,6 +397,7 @@ export function McpStore() {
 					id,
 					target_agent: selectedTarget,
 					credentials: creds,
+					...(endpoint ? { url: endpoint } : {}),
 				}),
 			});
 
@@ -359,12 +411,18 @@ export function McpStore() {
 					pollStatus(id, body.install_id);
 				}
 			} else if (res.status === 422) {
+				// 422 covers both a missing credential and a missing endpoint;
+				// the code says which, so the right field gets flagged.
+				const body = (await res.json().catch(() => ({}))) as { code?: string };
+				const missingUrl = body.code === 'missing_url';
 				setInstallStates((prev) => ({
 					...prev,
 					[id]: {
 						state: 'failed',
-						errorCode: 'missing_credentials',
-						errorMessage: 'Missing required credentials',
+						errorCode: missingUrl ? 'missing_url' : 'missing_credentials',
+						errorMessage: missingUrl
+							? 'This server needs its URL'
+							: 'Missing required credentials',
 					},
 				}));
 			} else if (res.status === 409) {
@@ -480,6 +538,10 @@ export function McpStore() {
 			onInstall={() => handleInstall(server.id)}
 			onUninstall={() => handleUninstall(server.id)}
 			credentials={credentials[server.id] || {}}
+			endpoint={endpoints[server.id] || ''}
+			onEndpointChange={(value) =>
+				setEndpoints((prev) => ({ ...prev, [server.id]: value }))
+			}
 			onCredentialChange={(name, value) =>
 				setCredentials((prev) => ({
 					...prev,

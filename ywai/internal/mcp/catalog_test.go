@@ -20,7 +20,7 @@ import (
 // Canonical IDs (keep in sync with catalog.go). `*` = required secret env.
 //
 //   context7, microsoft-learn, jam, meta-devtools (remote)
-//   chrome-devtools, playwright, git, github*, postgres*, mysql*, docker
+//   chrome-devtools, grafana*, playwright, git, github*, postgres*, mysql*, docker
 //   engram, graft, filesystem
 //   brave-search*, puppeteer, codemod
 //
@@ -68,7 +68,7 @@ var _ = CatalogEntry{}
 // TestCatalog_Len pins the size of the catalog. If a future addition
 // sneaks in without updating this test, it fails.
 func TestCatalog_Len(t *testing.T) {
-	const want = 17
+	const want = 18
 	got := len(Catalog())
 	if got != want {
 		t.Errorf("len(Catalog()) = %d, want %d", got, want)
@@ -84,6 +84,7 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"jam",
 		"meta-devtools",
 		"chrome-devtools",
+		"grafana",
 		"playwright",
 		"git",
 		"github",
@@ -164,13 +165,20 @@ func TestCatalog_AllLocalHaveCommand(t *testing.T) {
 	}
 }
 
-// TestCatalog_AllRemoteHaveURL pins that every remote entry has a
-// non-empty URL. A remote entry without a URL has no endpoint to POST
-// the tools/list probe to — DiscoverHTTP would have nothing to hit.
+// TestCatalog_AllRemoteHaveURL pins that every remote entry has somewhere to
+// send the tools/list probe: either a URL in the catalog, or URLRequired so the
+// install UI collects one. An entry with neither can never connect, and the
+// failure would only show up after a user installed it.
 func TestCatalog_AllRemoteHaveURL(t *testing.T) {
 	for _, e := range Catalog() {
-		if e.Type == "remote" && e.URL == "" {
-			t.Errorf("entry %q: Type=remote but URL is empty", e.ID)
+		if e.Type != "remote" {
+			continue
+		}
+		if e.URL == "" && !e.URLRequired {
+			t.Errorf("entry %q: Type=remote with no URL and no URLRequired", e.ID)
+		}
+		if e.URL != "" && e.URLRequired {
+			t.Errorf("entry %q: URLRequired with a URL already set — pick one", e.ID)
 		}
 	}
 }
