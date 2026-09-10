@@ -579,6 +579,7 @@ After update, restart OpenCode once so it reloads plugins.`,
 		// the model list and restores the proxy wiring instead of leaving it
 		// clobbered. Soft failure — a down TokenBank must not fail the update.
 		reapplyTokenBank(dryRun)
+		mirrorOpenCodeToOrca(dryRun)
 
 		// Surface binary-phase soft failures into the summary when we only printed them.
 		result.printFooter(applyUpdate)
@@ -1442,6 +1443,7 @@ var tokenbankConfigureCmd = &cobra.Command{
 			}
 		}
 
+		mirrorOpenCodeToOrca(false)
 		fmt.Println("\nDone! Restart your agents to pick up the new configuration.")
 		return nil
 	},

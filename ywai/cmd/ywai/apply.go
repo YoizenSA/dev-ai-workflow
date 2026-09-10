@@ -442,9 +442,51 @@ func applyManaged(o applyOpts) applyResult {
 	if o.Mode == applyInstall {
 		steps.next("Starting control server (if not running)")
 		ensureControlServerRunning(&r, o.Opts.DryRun)
+		// Last, so Orca gets everything the steps above wrote. Update mirrors
+		// after its own final TokenBank pass instead.
+		mirrorOpenCodeToOrca(o.Opts.DryRun)
 	}
 
 	return r
+}
+
+// mirrorOpenCodeToOrca copies the user's opencode.json over Orca's shared
+// OpenCode config. Orca launches OpenCode with OPENCODE_CONFIG_DIR pointing
+// there, so ywai runs from any other terminal left Orca on stale providers
+// and agents. A full copy by design: Orca's config is meant to be the user's.
+// The replaced file is kept as .bak. No-op when Orca is not installed.
+func mirrorOpenCodeToOrca(dryRun bool) {
+	userDir := config.OpenCodeUserConfigDir()
+	orcaDir := filepath.Join(filepath.Dir(userDir), "orca", "opencode-hooks", "shared")
+	if info, err := os.Stat(orcaDir); err != nil || !info.IsDir() {
+		return
+	}
+	src := filepath.Join(userDir, "opencode.json")
+	dst := filepath.Join(orcaDir, "opencode.json")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		fmt.Printf("  Warning: Orca OpenCode config not synced: %v\n", err)
+		return
+	}
+	old, readErr := os.ReadFile(dst)
+	if readErr == nil && string(old) == string(data) {
+		return
+	}
+	if dryRun {
+		fmt.Printf("  Would sync %s → %s\n", src, dst)
+		return
+	}
+	if readErr == nil {
+		if err := os.WriteFile(dst+".bak", old, 0o644); err != nil {
+			fmt.Printf("  Warning: Orca OpenCode config not synced: %v\n", err)
+			return
+		}
+	}
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		fmt.Printf("  Warning: Orca OpenCode config not synced: %v\n", err)
+		return
+	}
+	fmt.Printf("  ✓ Orca OpenCode config synced: %s\n", dst)
 }
 
 // v1PermissionSweepPaths returns the opencode config JSON paths the v1-only
