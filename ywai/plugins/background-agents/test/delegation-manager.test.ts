@@ -947,3 +947,51 @@ describe("native delegation (v2 launch)", () => {
 		expect(manager.getPendingCount("ses_parent")).toBe(0)
 	})
 })
+
+describe("failed child detection (quota/provider down)", () => {
+	test("a child that idled with zero assistant output settles as error, not complete", async () => {
+		const { manager, state } = await setup()
+		state.messagesBySession.set("ses_dda1c2d3e4f5a6b7c8d9e0f1a2b3c4d5", [
+			{ info: { role: "user" }, parts: [{ type: "text", text: "Research the topic" }] },
+		])
+		const delegation = await manager.delegateNative(
+			delegateInput() as never,
+			async () => ({ content: "dispatched ses_dda1c2d3e4f5a6b7c8d9e0f1a2b3c4d5" }),
+		)
+		manager.handleSessionIdle(delegation.sessionID)
+		await waitFor(() => delegation.status === "error")
+		expect(delegation.error).toMatch(/no assistant response/)
+		expect(delegation.error).toMatch(/provider/i)
+	})
+
+	test("an errored assistant message surfaces the provider cause", async () => {
+		const { manager, state } = await setup()
+		state.messagesBySession.set("ses_caa1c2d3e4f5a6b7c8d9e0f1a2b3c4d5", [
+			{ info: { role: "user" }, parts: [{ type: "text", text: "Research the topic" }] },
+			{
+				info: {
+					role: "assistant",
+					error: { name: "ProviderAuthError", data: { message: "quota exceeded for anthropic" } },
+				},
+				parts: [],
+			},
+		])
+		const delegation = await manager.delegateNative(
+			delegateInput() as never,
+			async () => ({ content: "dispatched ses_caa1c2d3e4f5a6b7c8d9e0f1a2b3c4d5" }),
+		)
+		manager.handleSessionIdle(delegation.sessionID)
+		await waitFor(() => delegation.status === "error")
+		expect(delegation.error).toBe("ProviderAuthError: quota exceeded for anthropic")
+	})
+
+	test("a healthy child still settles as complete", async () => {
+		const { manager } = await setup()
+		const delegation = await manager.delegateNative(
+			delegateInput() as never,
+			async () => ({ content: "dispatched ses_0aa1c2d3e4f5a6b7c8d9e0f1a2b3c4d5" }),
+		)
+		manager.handleSessionIdle(delegation.sessionID)
+		await waitFor(() => delegation.status === "complete")
+	})
+})

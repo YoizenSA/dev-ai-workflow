@@ -432,9 +432,77 @@ class DelegationManager {
 		this.cancelScheduledComplete(id)
 		const timer = setTimeout(() => {
 			this.completeTimers.delete(id)
-			void this.finalizeDelegation(id, "complete")
+			void this.completeDelegation(id)
 		}, this.completeDebounceMs)
 		this.completeTimers.set(id, timer)
+	}
+
+	/**
+	 * Settle a delegation that signalled completion. An idle child is NOT
+	 * automatically a successful child: a turn that died on provider failure —
+	 * quota exhausted, provider or model down — also goes idle, and OpenCode
+	 * does not persist the errored assistant message. The legacy launch caught
+	 * this on the prompt result (extractTurnError); the native launch only sees
+	 * the idle event. Inspect the transcript for failure evidence before
+	 * stamping the outcome, so the parent is told WHY instead of reading a
+	 * "completed but produced no output" artifact — or waiting out the whole
+	 * watchdog for a child that died in the first turn.
+	 */
+	private async completeDelegation(id: string): Promise<void> {
+		const delegation = this.delegations.get(id)
+		if (!delegation || isTerminalStatus(delegation.status)) return
+		const failure = await this.detectChildFailure(delegation)
+		if (failure) {
+			await this.finalizeDelegation(id, "error", failure)
+			return
+		}
+		await this.finalizeDelegation(id, "complete")
+	}
+
+	/**
+	 * Scan the child transcript for turn-failure evidence. Shapes tolerated:
+	 * - assistant message `info.error` as `{name, data?: {message}}` (the shape
+	 *   the prompt result carries; hosts may not persist errored messages)
+	 * - zero assistant messages at all: a finished run always has one, so this
+	 *   is a launch/provider failure (quota exhausted, provider down, unknown
+	 *   model)
+	 * Returns undefined when the transcript looks healthy — or when it cannot
+	 * be read: our own lookup failure must never be reported as the child's.
+	 */
+	private async detectChildFailure(delegation: DelegationRecord): Promise<string | undefined> {
+		try {
+			const messages = await this.client.session.messages({
+				path: { id: delegation.sessionID },
+			})
+			const messageData = (messages.data ?? []) as SessionMessageItem[]
+
+			const assistantMessages = messageData.filter(
+				(m): m is AssistantSessionMessageItem => m.info.role === "assistant",
+			)
+			if (assistantMessages.length === 0) {
+				return (
+					"child produced no assistant response — the run likely failed on the provider side " +
+					"(quota exhausted, provider or model down, or unknown model). Check the provider before re-delegating."
+				)
+			}
+
+			const last = assistantMessages[assistantMessages.length - 1]
+			const info = last.info as { error?: { name?: string; data?: { message?: string } } }
+			if (info.error) {
+				const name = info.error.name ?? "TurnError"
+				const text = info.error.data?.message?.trim()
+				if (text) return `${name}: ${text}`
+				return name
+			}
+			return undefined
+		} catch (error) {
+			await this.debugLog(
+				`detectChildFailure: transcript read failed for ${delegation.id}: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			)
+			return undefined
+		}
 	}
 
 	/** Resolve a delegation that is visible from the calling session's root scope. */
@@ -1652,6 +1720,9 @@ class DelegationManager {
 		// parts, so deleting first is what turned every timeout into "produced no output":
 		// a run's partial work was already gone by the time we asked it for a result.
 		const captured = await this.getResult(delegation)
+		// A stalled child often stalled BECAUSE the provider is failing (quota, outage):
+		// surface that cause with the timeout instead of a bare deadline message.
+		const failure = await this.detectChildFailure(delegation)
 
 		// Deleting is the only hard kill the SDK offers, not cleanup — so it is reserved for
 		// a session that ignored the abort and would otherwise keep burning tokens behind a
@@ -1674,7 +1745,9 @@ class DelegationManager {
 		await this.finalizeDelegation(
 			delegation.id,
 			"timeout",
-			`Delegation timed out after ${Math.round(delegation.maxRunTimeMs / 1000)}s`,
+			failure
+				? `Delegation timed out after ${Math.round(delegation.maxRunTimeMs / 1000)}s; last child failure: ${failure}`
+				: `Delegation timed out after ${Math.round(delegation.maxRunTimeMs / 1000)}s`,
 			captured,
 		)
 	}
@@ -1722,7 +1795,7 @@ class DelegationManager {
 				await this.debugLog(
 					`getResult: No assistant messages found in ${JSON.stringify(messageData.map((m) => ({ role: m.info.role, keys: Object.keys(m) })))}`,
 				)
-				return `Delegation "${delegation.title || delegation.id}" completed but produced no assistant response.`
+				return `Delegation "${delegation.title || delegation.id}" produced no assistant response — the child run likely failed on the provider side (quota, provider or model down).`
 			}
 
 			const lastMessage = assistantMessages[assistantMessages.length - 1]
