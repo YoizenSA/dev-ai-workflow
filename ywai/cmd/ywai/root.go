@@ -698,6 +698,13 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
+		// Chrome DevTools MCP. Not behind a flag: the scenario-runner agent
+		// drives a browser to verify UI scenarios, so without this it installs
+		// and then cannot do the one thing it exists for.
+		if err := plugins.InstallChromeDevToolsMCP(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install Chrome DevTools MCP: %v\n", a.Name, err)
+		}
+
 		// Install Microsoft Learn MCP if requested
 		if installMCP {
 			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {

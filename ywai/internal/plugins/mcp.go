@@ -200,3 +200,58 @@ func RemoveVisionMCP(configPath, agentName string) error {
 	}
 	return nil
 }
+
+// ChromeDevToolsMCPCommand is the argv that launches Google's Chrome DevTools
+// MCP server. Published unscoped on npm; the scoped @anthropic-ai/ name ywai
+// used to write does not exist, so those entries never spawned.
+var ChromeDevToolsMCPCommand = []any{"npx", "-y", "chrome-devtools-mcp@latest"}
+
+// InstallChromeDevToolsMCP registers the Chrome DevTools MCP server in the
+// agent's config, leaving an existing entry untouched.
+//
+// It ships by default rather than behind a flag because the scenario-runner
+// agent needs a browser to run a UI scenario at all: without it the agent
+// installs fine and then cannot do the one thing it exists for.
+func InstallChromeDevToolsMCP(configPath, agentName string) error {
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+
+	key := mcpConfigKey(agentName)
+
+	if key == "mcpServers" {
+		// Claude Code / pi format: command + args, not a single argv.
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		if _, exists := mcp["chrome-devtools"]; !exists {
+			mcp["chrome-devtools"] = map[string]any{
+				"command": ChromeDevToolsMCPCommand[0],
+				"args":    ChromeDevToolsMCPCommand[1:],
+			}
+			root[key] = mcp
+		}
+	} else {
+		// OpenCode v2: mcp.servers.<id> with type "local" and a full argv.
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+		}
+		servers := mcppkg.CollectOpenCodeServers(mcp)
+		if _, exists := servers["chrome-devtools"]; !exists {
+			servers["chrome-devtools"] = map[string]any{
+				"type":    "local",
+				"command": append([]any(nil), ChromeDevToolsMCPCommand...),
+			}
+		}
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
+	}
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
+	}
+	return nil
+}

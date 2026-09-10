@@ -98,10 +98,13 @@ var catalog = []CatalogEntry{
 		ID: "chrome-devtools", Name: "Chrome DevTools",
 		Description: "Drive a real Chrome browser: navigate, click, screenshot, evaluate",
 		Category:    "testing", Icon: "🧪", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "@anthropic-ai/chrome-devtools-mcp"},
-		InstallCmd: "npx -y @anthropic-ai/chrome-devtools-mcp",
-		Tools:      []string{"navigate", "screenshot", "click", "evaluate"},
-		Docs:       "https://github.com/anthropics/chrome-devtools-mcp",
+		// Google's server, published unscoped. The scoped @anthropic-ai/ name
+		// this used to point at does not exist on npm, so every install of it
+		// produced a server that failed to spawn.
+		Type: "local", Command: []string{"npx", "-y", "chrome-devtools-mcp@latest"},
+		InstallCmd: "npx -y chrome-devtools-mcp@latest",
+		Tools:      []string{"navigate_page", "click", "fill_form", "wait_for", "take_snapshot", "take_screenshot", "evaluate_script", "list_console_messages", "list_network_requests"},
+		Docs:       "https://github.com/ChromeDevTools/chrome-devtools-mcp",
 	},
 	{
 		ID: "playwright", Name: "Playwright",
