@@ -101,9 +101,11 @@ func TestInstallSubagentStatusline_V2InstallsBothHalves(t *testing.T) {
 		t.Errorf("opencode mcp dropped: %v", root)
 	}
 
-	// TUI half lands in tui-plugins/ and is registered; mouse for row clicks.
-	tuiDest := filepath.Join(dir, tuiPluginsSubdir, config.SubagentStatuslineTuiBundleName)
-	if got, err := os.ReadFile(tuiDest); err != nil || string(got) != "tui bundle\n" {
+	// TUI half lands in plugins/<dir>/tui.tsx and the DIRECTORY is registered:
+	// the v2 loader resolves the TUI entry against a directory, so a loose file
+	// entry is silently discarded. Mouse capture is on for row clicks.
+	tuiDest := filepath.Join(dir, autoDiscoveredPluginsSubdir, SubagentStatuslineTuiPluginDir)
+	if got, err := os.ReadFile(filepath.Join(tuiDest, tuiEntryName)); err != nil || string(got) != "tui bundle\n" {
 		t.Errorf("tui bundle = %q, err = %v; want vendored copy", string(got), err)
 	}
 	tuiRoot := readConfigRoot(t, tuiPath)
@@ -215,7 +217,7 @@ func TestInstallSubagentStatusline_Idempotent(t *testing.T) {
 	configPath, serverSrc, tuiSrc := seedMonitorBundles(t, map[string]any{})
 	dir := filepath.Dir(configPath)
 	serverDest := filepath.Join(dir, autoDiscoveredPluginsSubdir, config.SubagentStatuslineServerBundleName)
-	tuiDest := filepath.Join(dir, tuiPluginsSubdir, config.SubagentStatuslineTuiBundleName)
+	tuiDest := filepath.Join(dir, autoDiscoveredPluginsSubdir, SubagentStatuslineTuiPluginDir, tuiEntryName)
 	tuiPath := filepath.Join(dir, tuiConfigName)
 
 	if err := installSubagentStatuslineWithBundles(configPath, serverSrc, tuiSrc); err != nil {
@@ -246,7 +248,7 @@ func TestInstallSubagentStatusline_Idempotent(t *testing.T) {
 	tuiEntries, _ := tuiRoot["plugins"].([]any)
 	count := 0
 	for _, e := range tuiEntries {
-		if s, ok := e.(string); ok && filepath.Base(s) == config.SubagentStatuslineTuiBundleName {
+		if s, ok := e.(string); ok && filepath.Base(s) == SubagentStatuslineTuiPluginDir {
 			count++
 		}
 	}

@@ -182,13 +182,13 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 					apply: func() error { return os.Remove(p) },
 				})
 			}
-			tuiBundle := filepath.Join(cfgDir, "tui-plugins", plugins.SubagentStatuslineTuiBundleName)
-			if _, err := os.Stat(tuiBundle); err == nil {
-				p := tuiBundle
+			tuiDir := filepath.Join(cfgDir, plugins.AutoDiscoveredPluginsSubdir, plugins.SubagentStatuslineTuiPluginDir)
+			if _, err := os.Stat(tuiDir); err == nil {
+				p := tuiDir
 				plan = append(plan, removal{
 					kind:  kindPlugin,
-					label: fmt.Sprintf("[%s] sub-agent statusline TUI bundle", a.Name),
-					apply: func() error { return os.Remove(p) },
+					label: fmt.Sprintf("[%s] sub-agent statusline TUI plugin", a.Name),
+					apply: func() error { return os.RemoveAll(p) },
 				})
 			}
 			// The TUI bundle's entry in the TUI client config. cli.json is v2's
@@ -530,7 +530,7 @@ func countStatuslineRefs(tuiConfigPath string) int {
 	}
 	n := 0
 	for _, v := range ywaiPluginLists(root) {
-		if s, ok := v.(string); ok && filepath.Base(s) == plugins.SubagentStatuslineTuiBundleName {
+		if s, ok := v.(string); ok && isSubagentStatuslineTuiEntry(s) {
 			n++
 		}
 	}
@@ -550,7 +550,7 @@ func stripStatuslineRefs(tuiConfigPath string) error {
 	list := ywaiPluginLists(root)
 	kept := make([]any, 0, len(list))
 	for _, v := range list {
-		if s, ok := v.(string); ok && filepath.Base(s) == plugins.SubagentStatuslineTuiBundleName {
+		if s, ok := v.(string); ok && isSubagentStatuslineTuiEntry(s) {
 			continue
 		}
 		kept = append(kept, v)
@@ -655,4 +655,13 @@ func retiredMCPsIn(configPath, agentName string) []string {
 		}
 	}
 	return found
+}
+
+// isSubagentStatuslineTuiEntry reports whether a TUI client config entry names
+// the vendored sub-agent statusline TUI half. v2 registers the plugin
+// directory the loader resolves the entry against; older installs registered
+// the loose bundle file, and uninstall must still recognize those.
+func isSubagentStatuslineTuiEntry(entry string) bool {
+	base := filepath.Base(entry)
+	return base == plugins.SubagentStatuslineTuiPluginDir || base == plugins.SubagentStatuslineTuiBundleName
 }

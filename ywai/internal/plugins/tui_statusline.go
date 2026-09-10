@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -32,20 +31,15 @@ func InstallTuiStatusline(configPath string) error {
 	return installTuiStatuslineWithBundle(configPath, bundle)
 }
 
-// installTuiStatuslineWithBundle copies the statusline source at bundleSrc into
-// the tui-plugins dir alongside configPath and registers it. Split out so the
+// installTuiStatuslineWithBundle vendors the statusline source at bundleSrc as
+// a plugin directory alongside configPath and registers it. Split out so the
 // copy + patch glue is unit testable without resolving the real bundle.
 func installTuiStatuslineWithBundle(configPath, bundleSrc string) error {
-	destDir := filepath.Join(filepath.Dir(configPath), tuiPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create tui-plugins dir %s: %w", destDir, err)
-	}
-
-	destTSX := filepath.Join(destDir, config.TuiStatuslineBundleName)
-	if err := copyFile(bundleSrc, destTSX); err != nil {
-		return fmt.Errorf("copy tui statusline: %w", err)
+	destDir, err := installTuiPluginDir(configPath, bundleSrc, TuiStatuslinePluginDir, config.TuiStatuslineBundleName)
+	if err != nil {
+		return fmt.Errorf("install tui statusline: %w", err)
 	}
 
 	tuiConfig := filepath.Join(filepath.Dir(configPath), tuiConfigName)
-	return patchTuiPlugin(tuiConfig, destTSX, false)
+	return patchTuiPlugin(tuiConfig, destDir, false)
 }

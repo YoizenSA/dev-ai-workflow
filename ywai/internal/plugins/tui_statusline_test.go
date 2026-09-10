@@ -32,9 +32,9 @@ func TestInstallTuiStatusline_V2VendorsAndRegisters(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
-	dest := filepath.Join(filepath.Dir(configPath), tuiPluginsSubdir, config.TuiStatuslineBundleName)
-	if _, err := os.Stat(dest); err != nil {
-		t.Errorf("bundle not vendored: %v", err)
+	dest := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir, TuiStatuslinePluginDir)
+	if _, err := os.Stat(filepath.Join(dest, tuiEntryName)); err != nil {
+		t.Errorf("tui entry not vendored: %v", err)
 	}
 
 	root, err := config.ReadJSONC(filepath.Join(filepath.Dir(configPath), tuiConfigName))

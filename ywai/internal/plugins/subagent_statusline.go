@@ -110,18 +110,16 @@ func installSubagentStatuslineWithBundles(configPath, serverBundleSrc, tuiBundle
 		return err
 	}
 
-	// TUI half: the host registers TUI plugins by absolute path in cli.json;
-	// mouse capture must be on so row clicks work.
-	tuiDest := filepath.Join(dir, tuiPluginsSubdir, config.SubagentStatuslineTuiBundleName)
-	if err := os.MkdirAll(filepath.Dir(tuiDest), 0o755); err != nil {
-		return fmt.Errorf("create tui-plugins dir %s: %w", filepath.Dir(tuiDest), err)
-	}
-	if err := copyFile(tuiBundleSrc, tuiDest); err != nil {
-		return fmt.Errorf("copy sub-agent statusline TUI bundle: %w", err)
+	// TUI half: the host registers TUI plugins by absolute directory path in
+	// cli.json and resolves the entry as <dir>/tui; mouse capture must be on
+	// so row clicks work.
+	tuiDir, err := installTuiPluginDir(configPath, tuiBundleSrc, SubagentStatuslineTuiPluginDir, config.SubagentStatuslineTuiBundleName)
+	if err != nil {
+		return fmt.Errorf("install sub-agent statusline TUI half: %w", err)
 	}
 
 	tuiConfig := filepath.Join(dir, tuiConfigName)
-	if err := patchTuiPlugin(tuiConfig, tuiDest, true); err != nil {
+	if err := patchTuiPlugin(tuiConfig, tuiDir, true); err != nil {
 		return err
 	}
 
@@ -244,7 +242,7 @@ func supersedeTuiStatusline(tuiConfigPath string) error {
 		plugins := openCodePlugins(root)
 		kept := plugins[:0]
 		for _, raw := range plugins {
-			if s, ok := raw.(string); ok && filepath.Base(s) == config.TuiStatuslineBundleName {
+			if s, ok := raw.(string); ok && isTuiStatuslineEntry(s) {
 				continue
 			}
 			kept = append(kept, raw)
@@ -257,9 +255,23 @@ func supersedeTuiStatusline(tuiConfigPath string) error {
 		}
 	}
 
+	staleDir := filepath.Join(filepath.Dir(tuiConfigPath), autoDiscoveredPluginsSubdir, TuiStatuslinePluginDir)
+	if err := os.RemoveAll(staleDir); err != nil {
+		return fmt.Errorf("remove %s: %w", staleDir, err)
+	}
+
 	stale := filepath.Join(filepath.Dir(tuiConfigPath), tuiPluginsSubdir, config.TuiStatuslineBundleName)
 	if err := os.Remove(stale); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove superseded statusline %s: %w", stale, err)
 	}
 	return nil
+}
+
+// isTuiStatuslineEntry reports whether a TUI plugin entry names the minimal
+// ywai-statusline stand-in, in either layout: the directory the v2 loader
+// resolves (plugins/ywai-statusline) or the loose file the legacy layout
+// registered (tui-plugins/ywai-statusline.tsx).
+func isTuiStatuslineEntry(entry string) bool {
+	base := filepath.Base(entry)
+	return base == config.TuiStatuslineBundleName || base == TuiStatuslinePluginDir
 }

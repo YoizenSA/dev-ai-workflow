@@ -25,7 +25,7 @@ func tuiConfigPathFor(configPath string) string {
 }
 
 func TestInstallTuiLogoWithBundle(t *testing.T) {
-	t.Run("copies_into_tui_plugins_dir_next_to_config", func(t *testing.T) {
+	t.Run("vendors_plugin_dir_with_tui_entry_next_to_config", func(t *testing.T) {
 		bundle := writeBundle(t, "// ywai logo source")
 		configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
 
@@ -33,7 +33,7 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 			t.Fatalf("installTuiLogoWithBundle() error = %v", err)
 		}
 
-		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
+		dest := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir, TuiLogoPluginDir, tuiEntryName)
 		got, err := os.ReadFile(dest)
 		if err != nil {
 			t.Fatalf("read installed logo: %v", err)
@@ -54,7 +54,7 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		tuiPath := tuiConfigPathFor(configPath)
 		root := readConfigRoot(t, tuiPath)
 
-		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
+		dest := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir, TuiLogoPluginDir)
 		if _, ok := root["plugins"]; ok {
 			t.Fatalf("cli.json still has legacy \"plugins\" key: %v", root["plugins"])
 		}
@@ -148,7 +148,7 @@ func TestInstallTuiLogoWithBundle(t *testing.T) {
 		}
 
 		root := readConfigRoot(t, tuiConfigPathFor(configPath))
-		dest := filepath.Join(filepath.Dir(configPath), "tui-plugins", config.TuiLogoBundleName)
+		dest := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir, TuiLogoPluginDir)
 		if _, ok := root["plugins"]; ok {
 			t.Fatalf("cli.json still has legacy \"plugins\" key")
 		}
