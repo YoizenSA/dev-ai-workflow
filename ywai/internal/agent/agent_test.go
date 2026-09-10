@@ -238,6 +238,7 @@ func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "") // CI runners export it; it outranks HOME
 
 	// Without any file, should fall back to .json
 	paths := SettingsPaths()
