@@ -376,16 +376,21 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 			}
 		}
 	}
+	// The surviving key follows the active flavor so a v2 host keeps reading
+	// `agents`; either way both spellings never coexist.
+	sectionKey := "agent"
+	if agent.OpenCodeIsV2() {
+		sectionKey = "agents"
+	}
+	delete(root, "agent")
 	delete(root, "agents")
 	for name := range merged {
 		if owned[filepath.Base(name)] {
 			delete(merged, name)
 		}
 	}
-	if len(merged) == 0 {
-		delete(root, "agent")
-	} else {
-		root["agent"] = merged
+	if len(merged) > 0 {
+		root[sectionKey] = merged
 	}
 	return config.WriteJSONC(configPath, root)
 }

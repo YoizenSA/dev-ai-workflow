@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -872,42 +871,42 @@ func isManagedDefaultAgent(name string) bool {
 	return managedDefaultAgents[strings.TrimSpace(name)]
 }
 
+// openCodeRootForWrite reads the active OpenCode config (JSONC-safe) and
+// returns the parsed root, its path, and whether the file already exists. A
+// missing file yields an empty root so the caller can create it.
+func openCodeRootForWrite() (map[string]any, string, bool, error) {
+	configDir := config.OpenCodeConfigDir()
+	path := config.FindJSONCPath(configDir, "opencode")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{}, path, false, nil
+		}
+		return nil, "", false, fmt.Errorf("reading opencode config: %w", err)
+	}
+	cfg, err := config.ReadJSONC(path)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("reading opencode config: %w", err)
+	}
+	return cfg, path, true, nil
+}
+
+// writeOpenCodeRoot writes the merged root back to the config path, creating
+// the directory when needed. JSONC comments are not preserved: the file is
+// rewritten as plain JSON.
+func writeOpenCodeRoot(path string, cfg map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating opencode config dir: %w", err)
+	}
+	if err := config.WriteJSONC(path, cfg); err != nil {
+		return fmt.Errorf("writing opencode config: %w", err)
+	}
+	return nil
+}
+
 func setDefaultAgent(agentName string, dryRun bool) error {
-	home, err := os.UserHomeDir()
+	cfg, path, existed, err := openCodeRootForWrite()
 	if err != nil {
 		return err
-	}
-	configDir := filepath.Join(home, ".config", "opencode")
-	path := config.FindJSONCPath(configDir, "opencode")
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("reading opencode config: %w", err)
-		}
-		// Config file does not exist — create it with default_agent.
-		if err := os.MkdirAll(configDir, 0o755); err != nil {
-			return fmt.Errorf("creating opencode config dir: %w", err)
-		}
-		cfg := map[string]any{"default_agent": agentName}
-		updated, mErr := json.MarshalIndent(cfg, "", "\t")
-		if mErr != nil {
-			return mErr
-		}
-		if dryRun {
-			fmt.Printf("  Would set default_agent to %q\n", agentName)
-			return nil
-		}
-		if wErr := os.WriteFile(path, append(updated, '\n'), 0o644); wErr != nil {
-			return fmt.Errorf("writing opencode config: %w", wErr)
-		}
-		fmt.Printf("  Created opencode config with default_agent=%q\n", agentName)
-		return nil
-	}
-
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parsing opencode.json: %w", err)
 	}
 
 	// Only claim the default when it is still one nobody deliberately picked:
@@ -927,19 +926,80 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 	}
 
 	cfg["default_agent"] = agentName
-	updated, err := json.MarshalIndent(cfg, "", "\t")
-	if err != nil {
-		return err
-	}
 
 	if dryRun {
 		fmt.Printf("  Would set default_agent to %q\n", agentName)
 		return nil
 	}
-
-	if err := os.WriteFile(path, updated, 0o644); err != nil {
-		return fmt.Errorf("writing opencode.json: %w", err)
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
 	}
-	fmt.Printf("  default_agent set to %q\n", agentName)
+	if existed {
+		fmt.Printf("  default_agent set to %q\n", agentName)
+	} else {
+		fmt.Printf("  Created opencode config with default_agent=%q\n", agentName)
+	}
 	return nil
+}
+
+// setDefaultModel writes the root `model` key (the default model for a new
+// session) when the key is absent or empty. A value the user already set is
+// left untouched: it is their choice, and overwriting it would change what
+// every new session runs.
+func setDefaultModel(model string, dryRun bool) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+
+	cfg, path, existed, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+
+	if cur, ok := cfg["model"]; ok {
+		s, isString := cur.(string)
+		if !isString || strings.TrimSpace(s) != "" {
+			fmt.Printf("  model already set — leaving it\n")
+			return nil
+		}
+	}
+
+	cfg["model"] = model
+
+	if dryRun {
+		fmt.Printf("  Would set model to %q\n", model)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	if existed {
+		fmt.Printf("  model set to %q\n", model)
+	} else {
+		fmt.Printf("  Created opencode config with model=%q\n", model)
+	}
+	return nil
+}
+
+// defaultRootModel returns the model ywai writes to the root `model` key: the
+// active orchestrator profile's `orchestrator` role model, with the shipped
+// `balanced` profile as fallback. A `#variant` suffix is stripped because the
+// root key carries a plain provider/model while a variant belongs on an agent.
+func defaultRootModel() string {
+	if cfg, err := config.LoadConfig(); err == nil {
+		if m := strings.TrimSpace(cfg.GetOrchestratorAgentModel("orchestrator")); m != "" {
+			return stripModelVariant(m)
+		}
+	}
+	seeded := config.DefaultOrchestratorModelProfiles()[config.DefaultOrchestratorModelProfileName]
+	return stripModelVariant(seeded.Agents["orchestrator"].Model)
+}
+
+func stripModelVariant(model string) string {
+	model = strings.TrimSpace(model)
+	if i := strings.IndexByte(model, '#'); i >= 0 {
+		return strings.TrimSpace(model[:i])
+	}
+	return model
 }

@@ -9,7 +9,29 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
+
+// pinOCFlavor forces the OpenCode flavor so these tests stay deterministic on
+// hosts with either binary installed.
+func pinOCFlavor(t *testing.T, flavor string) {
+	t.Helper()
+	t.Setenv(agent.OpenCodeOverrideEnv, flavor)
+	t.Setenv("XDG_CONFIG_HOME", "")
+}
+
+// isolateOpenCodeConfig points every path ConfigureOpenCode writes into temp
+// dirs and returns the fake HOME. Hosts may export OPENCODE_CONFIG_DIR at a real
+// shared config, which ConfigureOpenCode writes too, so tests must never inherit it.
+func isolateOpenCodeConfig(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("OPENCODE_CONFIG_DIR", filepath.Join(t.TempDir(), "orca-isolate"))
+	return home
+}
 
 func TestApplyVisionCapabilities_TextOnly(t *testing.T) {
 	entry := map[string]interface{}{}
@@ -107,7 +129,7 @@ func TestInjectModelLimits_RespectsVision(t *testing.T) {
 			MaxOutputToken: 200,
 			Modalities:     &ModelModalities{Input: []string{"text", "image"}, Output: []string{"text"}},
 		},
-	})
+	}, "provider")
 
 	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 
@@ -134,7 +156,7 @@ func TestInjectModelLimits_DropsModelsAbsentFromGET(t *testing.T) {
 		},
 	}
 
-	injectModelLimits(config, []ModelInfo{{ID: "kept", Name: "Kept", MaxInputTokens: 1000}})
+	injectModelLimits(config, []ModelInfo{{ID: "kept", Name: "Kept", MaxInputTokens: 1000}}, "provider")
 
 	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 	if _, stale := models["retired"]; stale {
@@ -161,7 +183,7 @@ func TestInjectModelLimits_EmptyCatalogDoesNotWipe(t *testing.T) {
 		},
 	}
 
-	injectModelLimits(config, nil)
+	injectModelLimits(config, nil, "provider")
 
 	models := config["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 	if _, ok := models["kept"]; !ok {
@@ -374,11 +396,12 @@ func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
 // TestConfigureOpenCode_DropsModelsAbsentFromGET is the user-facing contract:
 // `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
 // an OPENCODE_CONFIG_DIR isolate) and the models there must match GET
-// /v1/models, even when GET /api/setup/config still lists extras.
+// /v1/models, even when GET /api/setup/config still lists extras. The flavor
+// is pinned to v1 because the v2 shape is covered by
+// TestConfigureOpenCode_WritesV2Providers.
 func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("OPENCODE_CONFIG_DIR", filepath.Join(t.TempDir(), "orca-isolate"))
+	pinOCFlavor(t, "opencode")
+	home := isolateOpenCodeConfig(t)
 
 	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
@@ -453,5 +476,84 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	}
 	if _, ok := models["kept"]; !ok {
 		t.Errorf("GET /models catalog entry must survive, got %v", models)
+	}
+}
+
+// TestConfigureOpenCode_WritesV2Providers pins the v2 shape: the TokenBank
+// provider lands under the top-level `providers` map (v2 reads that key, not
+// the v1 `provider` map), with no leftover `provider` key.
+func TestConfigureOpenCode_WritesV2Providers(t *testing.T) {
+	pinOCFlavor(t, "opencode2")
+	home := isolateOpenCodeConfig(t)
+	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"object": "list",
+				"data": []map[string]interface{}{
+					{"id": "kept", "name": "Kept", "limit": map[string]int{"context": 1000}},
+				},
+			})
+		case "/api/setup/config":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     true,
+				"origin": "http://tokenbank.test",
+				"config": map[string]interface{}{
+					"providers": map[string]interface{}{
+						"opencode-admin": map[string]interface{}{
+							"npm":  "@ai-sdk/openai-compatible",
+							"name": "Token Bank Proxy",
+							"models": map[string]interface{}{
+								"kept":  map[string]interface{}{"name": "Kept"},
+								"ghost": map[string]interface{}{"name": "In config GET, not models GET"},
+							},
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	if err := ConfigureOpenCode(srv.URL, "pk-test"); err != nil {
+		t.Fatalf("ConfigureOpenCode: %v", err)
+	}
+
+	got, err := ReadJSONFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["provider"]; ok {
+		t.Fatalf("v2 config must not keep a v1 provider key, got:\n%s", raw)
+	}
+	providers, ok := got["providers"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("v2 config must hold a providers map, got:\n%s", raw)
+	}
+	admin, ok := providers["opencode-admin"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("opencode-admin provider missing under providers, got:\n%s", raw)
+	}
+	models := admin["models"].(map[string]interface{})
+	if _, ghost := models["ghost"]; ghost {
+		t.Errorf("a model from /config but not GET /models must be removed, got %v", models)
+	}
+	if _, ok := models["kept"]; !ok {
+		t.Errorf("GET /models catalog entry must survive, got %v", models)
+	}
+	if limit := models["kept"].(map[string]interface{})["limit"].(map[string]interface{}); limit["context"] != float64(1000) { // read back from disk: JSON numbers are float64
+		t.Errorf("kept model must receive injected limits, got %v", models["kept"])
 	}
 }

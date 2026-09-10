@@ -7,8 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
+
+// pinOpenCodeFlavor forces the OpenCode flavor for a test regardless of which
+// binary is installed on the host.
+func pinOpenCodeFlavor(t *testing.T, flavor string) {
+	t.Helper()
+	t.Setenv(agent.OpenCodeOverrideEnv, flavor)
+}
 
 // opencodeOrchestratorMD is the shape InstallOpenCodeMarkdown writes for the
 // orchestrator: a nested permission map with edit/bash allowed, plus a body.
@@ -294,8 +302,10 @@ defaultThinkingLevel: auto
 
 // TestApplyOrchestrationPolicy_FlipsOpenCodeJSON mirrors the edit/write/bash
 // flip into the legacy opencode.json agent entry so the two sources of truth
-// cannot disagree after a deep activation.
+// cannot disagree after a deep activation. It pins the v1 flavor: on v2 the
+// same policy is covered by TestApplyOrchestrationPolicy_KeepsV2PermissionsArray.
 func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
+	pinOpenCodeFlavor(t, "opencode")
 	home := t.TempDir()
 	setTestHomeDir(t, home)
 
@@ -355,6 +365,7 @@ func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
 }
 
 func TestApplyOrchestrationPolicy_ConvertsV2ArrayToV1Map(t *testing.T) {
+	pinOpenCodeFlavor(t, "opencode")
 	home := t.TempDir()
 	setTestHomeDir(t, home)
 	configDir := filepath.Join(home, ".config", "opencode")
@@ -393,5 +404,83 @@ func TestApplyOrchestrationPolicy_ConvertsV2ArrayToV1Map(t *testing.T) {
 	}
 	if !strings.Contains(got, `"finder"`) {
 		t.Fatalf("task.finder allow must survive conversion, got:\n%s", got)
+	}
+}
+
+// TestApplyOrchestrationPolicy_KeepsV2PermissionsArray pins the v2 branch of
+// applyOrchestrationPolicyToOpenCodeJSON: the ordered `permissions` rule array
+// is the native v2 shape, so a deep activation must flip effects inside the
+// array instead of downgrading it to the legacy v1 `permission` map. The v1
+// `agent` key must stay absent.
+func TestApplyOrchestrationPolicy_KeepsV2PermissionsArray(t *testing.T) {
+	pinOpenCodeFlavor(t, "opencode2")
+	home := t.TempDir()
+	setTestHomeDir(t, home)
+	configDir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ocJSON := `{
+  "agents": {
+    "orchestrator": {
+      "mode": "primary",
+      "system": "Lead.",
+      "permissions": [
+        {"action": "read", "resource": "*", "effect": "allow"},
+        {"action": "edit", "resource": "*", "effect": "allow"},
+        {"action": "shell", "resource": "*", "effect": "allow"},
+        {"action": "subagent", "resource": "finder", "effect": "allow"}
+      ]
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "opencode.json"), []byte(ocJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	false_ := false
+	deep := userconfig.OrchestrationPolicy{DefaultMode: "full", AllowSoloWrite: &false_}
+	if !applyOrchestrationPolicy(deep) {
+		t.Fatal("expected policy apply to flip the v2 permissions array")
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, `"permissions"`) {
+		t.Fatalf("v2 shape must keep the permissions array, got:\n%s", got)
+	}
+	if strings.Contains(got, `"permission":`) {
+		t.Fatalf("v2 shape must not keep the v1 permission map, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"agents"`) {
+		t.Fatalf("v2 shape must use the agents key, got:\n%s", got)
+	}
+	var cfg struct {
+		Agents map[string]struct {
+			Permissions []struct {
+				Action   string `json:"action"`
+				Effect   string `json:"effect"`
+				Resource string `json:"resource"`
+			} `json:"permissions"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	perms := cfg.Agents["orchestrator"].Permissions
+	effects := map[string]string{}
+	for _, r := range perms {
+		if r.Resource == "*" {
+			effects[r.Action] = r.Effect
+		}
+	}
+	for _, action := range []string{"edit", "shell"} {
+		if effects[action] != "deny" {
+			t.Errorf("permissions[%s] = %q, want deny after deep activation (rules=%+v)", action, effects[action], perms)
+		}
+	}
+	if effects["read"] != "allow" {
+		t.Errorf("permissions[read] = %q, want allow (rules=%+v)", effects["read"], perms)
 	}
 }

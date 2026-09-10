@@ -216,6 +216,88 @@ func TestLocalClient_ListModels_NoProviders(t *testing.T) {
 	}
 }
 
+// TestLocalClient_ListAgents_V2FromConfig verifies the v2 `agents` map is the
+// primary source of agent names.
+func TestLocalClient_ListAgents_V2FromConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	config := `{
+		"agents": {
+			"orchestrator": {"system": "lead"},
+			"dev": {"system": "coder"}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	ctx := context.Background()
+	agents, err := c.ListAgents(ctx)
+	if err != nil {
+		t.Fatalf("ListAgents() should not error: %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("Expected 2 agents from v2 config, got %d: %v", len(agents), agentIDs(agents))
+	}
+	got := make(map[string]bool)
+	for _, a := range agents {
+		got[a.ID] = true
+	}
+	for _, id := range []string{"orchestrator", "dev"} {
+		if !got[id] {
+			t.Errorf("expected v2 agent %q missing from %v", id, agentIDs(agents))
+		}
+	}
+}
+
+// TestLocalClient_ListModels_V2Providers verifies models are read from the v2
+// `providers` map, and that `providers` wins over a leftover v1 `provider`.
+func TestLocalClient_ListModels_V2Providers(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	config := `{
+		"model": "gpt-4",
+		"providers": {
+			"opencode-admin": {
+				"models": {
+					"deepseek-v4-pro": {},
+					"deepseek-v4-flash": {}
+				}
+			}
+		},
+		"provider": {
+			"legacy": {
+				"models": {
+					"old-model": {}
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewLocalClientWithPaths(configPath, dir)
+	ctx := context.Background()
+	models, err := c.ListModels(ctx)
+	if err != nil {
+		t.Fatalf("ListModels() should not error: %v", err)
+	}
+	modelSet := make(map[string]bool)
+	for _, m := range models {
+		modelSet[m.ID] = true
+	}
+	for _, id := range []string{"gpt-4", "opencode-admin/deepseek-v4-pro", "opencode-admin/deepseek-v4-flash"} {
+		if !modelSet[id] {
+			t.Errorf("expected v2 model %q missing from %v", id, modelIDs(models))
+		}
+	}
+	if modelSet["legacy/old-model"] {
+		t.Errorf("v1 provider models must not be listed when v2 providers exist, got %v", modelIDs(models))
+	}
+}
+
 // Helpers
 
 func agentIDs(agents []AgentInfo) []string {

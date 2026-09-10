@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -16,14 +19,11 @@ import (
 // ---------------------------------------------------------------------------
 
 // OpenCodeConfigPath is the user-level opencode.json TokenBank configure
-// writes. Isolated hosts (Orca) set OPENCODE_CONFIG_DIR for their own
-// OpenCode process; that must not steal the user's catalog.
+// writes. It honors XDG_CONFIG_HOME. Isolated hosts (Orca) set
+// OPENCODE_CONFIG_DIR for their own OpenCode process; that must not steal the
+// user's catalog, so this resolver ignores it.
 func OpenCodeConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".", "opencode.json")
-	}
-	return filepath.Join(home, ".config", "opencode", "opencode.json")
+	return filepath.Join(config.OpenCodeUserConfigDir(), "opencode.json")
 }
 
 func openCodeConfigPaths() []string {
@@ -54,8 +54,12 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 
 	// Fetch models and inject context limits. GET /v1/models is the
 	// catalog: models the GET does not return are dropped from the provider.
+	sectionKey := "provider"
+	if agent.OpenCodeIsV2() {
+		sectionKey = "providers"
+	}
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
-		injectModelLimits(newConfig, modelsResp.Models)
+		injectModelLimits(newConfig, modelsResp.Models, sectionKey)
 	} else {
 		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
 	}
@@ -68,9 +72,10 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		}
 
 		// Deep merge, then let the (GET-pruned) API provider own the slot so
-		// models dropped upstream are removed instead of lingering.
+		// models dropped upstream are removed instead of lingering. The section
+		// key follows the active flavor: v2 reads `providers`, v1 `provider`.
 		merged := DeepMerge(existing, newConfig)
-		replaceOwnedProvider(merged, newConfig, "provider", "opencode-admin")
+		replaceOwnedProvider(merged, newConfig, sectionKey, "opencode-admin")
 
 		if err := WriteJSONFile(configPath, merged); err != nil {
 			return err
@@ -110,8 +115,8 @@ func replaceOwnedProvider(merged, fresh map[string]interface{}, sectionKey, prov
 
 // injectModelLimits inyecta limit.context y limit.output en cada modelo
 // del provider opencode-admin dentro del config map.
-func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
-	provider, _ := config["provider"].(map[string]interface{})
+func injectModelLimits(config map[string]interface{}, models []ModelInfo, sectionKey string) {
+	provider, _ := config[sectionKey].(map[string]interface{})
 	if provider == nil {
 		return
 	}

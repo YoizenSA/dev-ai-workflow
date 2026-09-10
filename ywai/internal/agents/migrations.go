@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -80,10 +81,14 @@ func MigrateOpenCodeAgents(configPath, agentsDir string) error {
 	if migrated > 0 {
 		fmt.Printf("  Migrated %d agents from %s to markdown\n", migrated, filepath.Base(configPath))
 
-		// Update config file
+		// Update config file. The surviving key follows the active flavor so
+		// a v2 host keeps reading `agents`; either way only one key remains.
 		if len(agents) == 0 {
 			delete(root, "agent")
 			delete(root, "agents")
+		} else if agent.OpenCodeIsV2() {
+			root["agents"] = agents
+			delete(root, "agent")
 		} else {
 			root["agent"] = agents
 			delete(root, "agents")

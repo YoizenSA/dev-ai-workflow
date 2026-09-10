@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -435,6 +436,94 @@ func TestInstallOpenCodeMigratesFrontmatter(t *testing.T) {
 	}
 	if ask["description"] != "Research agent" {
 		t.Errorf("description should be updated, got: %v", ask["description"])
+	}
+}
+
+// TestInstallOpenCode_V2Shape pins the v2 branch of InstallOpenCode: profiles
+// land under the top-level `agents` map as `system` + a `permissions` rule
+// array, leftover v1 `agent` entries are folded in and the v1 key is removed,
+// and no `prompt`/`permission` v1 keys survive on the installed entries.
+func TestInstallOpenCode_V2Shape(t *testing.T) {
+	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	// A leftover v1 entry forces the fold v1 → v2 and the key swap.
+	initial := `{"agent": {"existing": {"mode": "primary", "description": "keep me", "prompt": "hello"}}}`
+	if err := os.WriteFile(configPath, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := map[string]AgentProfile{
+		"dev": {
+			Name:        "dev",
+			Description: "Developer agent",
+			Prompt:      "# Dev",
+			Permission:  map[string]string{"read": "allow", "edit": "allow"},
+		},
+	}
+
+	if err := InstallOpenCode(configPath, profiles); err != nil {
+		t.Fatalf("InstallOpenCode() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := root["agent"]; ok {
+		t.Fatalf("v2 install must remove the leftover v1 agent key, got:\n%s", data)
+	}
+	agentsMap, ok := root["agents"].(map[string]any)
+	if !ok {
+		t.Fatalf("v2 install must write the agents map, got:\n%s", data)
+	}
+
+	dev, ok := agentsMap["dev"].(map[string]any)
+	if !ok {
+		t.Fatalf("dev agent missing from v2 agents map, got:\n%s", data)
+	}
+	if dev["system"] != "# Dev" {
+		t.Errorf("v2 entry system = %v, want the profile prompt", dev["system"])
+	}
+	if _, ok := dev["prompt"]; ok {
+		t.Errorf("v2 entry must not keep a v1 prompt key: %v", dev)
+	}
+	if _, ok := dev["permission"]; ok {
+		t.Errorf("v2 entry must not keep a v1 permission map: %v", dev)
+	}
+	perms, ok := dev["permissions"].([]any)
+	if !ok || len(perms) == 0 {
+		t.Fatalf("v2 entry must carry a permissions rule array, got: %v", dev["permissions"])
+	}
+	for _, raw := range perms {
+		rule, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"action", "resource", "effect"} {
+			if _, ok := rule[key]; !ok {
+				t.Errorf("v2 rule missing %q: %v", key, rule)
+			}
+		}
+	}
+
+	// The folded v1 entry survives (it is not in the profiles) and becomes v2.
+	existing, ok := agentsMap["existing"].(map[string]any)
+	if !ok {
+		t.Fatalf("existing v1 entry must survive the fold, got:\n%s", data)
+	}
+	if existing["description"] != "keep me" {
+		t.Errorf("existing entry description lost: %v", existing["description"])
+	}
+	if existing["system"] != "hello" {
+		t.Errorf("existing v1 prompt must move to system, got %v", existing["system"])
+	}
+	if _, ok := existing["permissions"]; !ok {
+		t.Errorf("existing entry must gain a v2 permissions array: %v", existing)
 	}
 }
 

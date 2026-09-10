@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // resolveOpencodeBin finds the active OpenCode executable. Which flavor that is
@@ -91,13 +92,13 @@ type LocalClient struct {
 	useCLI bool
 }
 
-// NewLocalClient creates a LocalClient with auto-detected paths
-// based on $HOME/.config/opencode/.
+// NewLocalClient creates a LocalClient with auto-detected paths based on the
+// active OpenCode config directory (OPENCODE_CONFIG_DIR, XDG_CONFIG_HOME, or
+// ~/.config/opencode) and the JSONC-aware config file name.
 func NewLocalClient() *LocalClient {
-	home, _ := os.UserHomeDir()
 	return &LocalClient{
-		opencodeConfig: filepath.Join(home, ".config", "opencode", "opencode.json"),
-		agentsDir:      filepath.Join(home, ".config", "opencode", "agents"),
+		opencodeConfig: config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode"),
+		agentsDir:      config.OpenCodeAgentsDir(),
 		useCLI:         true,
 	}
 }
@@ -112,24 +113,32 @@ func NewLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
 }
 
 // ListAgents reads agent profiles from the opencode.json config. Agents are
-// defined under the top-level "agent" key as a map of name -> definition, not
-// as files in a directory (the agentsDir is a legacy fallback that is usually
-// empty in modern opencode setups).
+// defined under the top-level "agents" key (v2) or "agent" key (v1) as a map of
+// name -> definition, not as files in a directory (the agentsDir is a legacy
+// fallback that is usually empty in modern opencode setups).
 func (c *LocalClient) ListAgents(_ context.Context) ([]AgentInfo, error) {
-	// Primary source: the "agent" section of opencode.json.
+	// Primary source: the "agents"/"agent" section of opencode.json.
 	data, err := os.ReadFile(c.opencodeConfig)
 	if err == nil {
 		var config struct {
-			Agent map[string]interface{} `json:"agent"`
+			Agents map[string]interface{} `json:"agents"`
+			Agent  map[string]interface{} `json:"agent"`
 		}
-		if json.Unmarshal(data, &config) == nil && len(config.Agent) > 0 {
-			agents := make([]AgentInfo, 0, len(config.Agent))
-			for name := range config.Agent {
-				agents = append(agents, AgentInfo{ID: name, Name: name})
+		if json.Unmarshal(data, &config) == nil {
+			// v2 shape is canonical when present; fall back to v1 otherwise.
+			agentMap := config.Agents
+			if len(agentMap) == 0 {
+				agentMap = config.Agent
 			}
-			// Stable order so the dropdown doesn't reshuffle between calls.
-			sort.Slice(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
-			return agents, nil
+			if len(agentMap) > 0 {
+				agents := make([]AgentInfo, 0, len(agentMap))
+				for name := range agentMap {
+					agents = append(agents, AgentInfo{ID: name, Name: name})
+				}
+				// Stable order so the dropdown doesn't reshuffle between calls.
+				sort.Slice(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
+				return agents, nil
+			}
 		}
 	}
 
@@ -214,8 +223,9 @@ func (c *LocalClient) modelsFromConfig() []ModelInfo {
 	}
 
 	var config struct {
-		Model    string                 `json:"model"`
-		Provider map[string]interface{} `json:"provider"`
+		Model     string                 `json:"model"`
+		Providers map[string]interface{} `json:"providers"`
+		Provider  map[string]interface{} `json:"provider"`
 	}
 	_ = json.Unmarshal(data, &config)
 
@@ -228,8 +238,13 @@ func (c *LocalClient) modelsFromConfig() []ModelInfo {
 		modelSet[config.Model] = true
 	}
 
-	// Add models from each provider config.
-	for providerName, providerData := range config.Provider {
+	// Add models from each provider config. v2 calls the section `providers`;
+	// v1 `provider`. Both may coexist during a migration — v2 wins.
+	providerMap := config.Providers
+	if len(providerMap) == 0 {
+		providerMap = config.Provider
+	}
+	for providerName, providerData := range providerMap {
 		providerMap, ok := providerData.(map[string]interface{})
 		if !ok {
 			continue

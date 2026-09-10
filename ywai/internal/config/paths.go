@@ -57,10 +57,23 @@ func DataWorkflowsDir() string {
 
 // OpenCodeConfigDir returns the active OpenCode configuration directory. It
 // honors OPENCODE_CONFIG_DIR, which hosts such as Orca set when they launch
-// OpenCode with an isolated configuration; otherwise it uses ~/.config/opencode.
+// OpenCode with an isolated configuration. Otherwise it honors XDG_CONFIG_HOME
+// and falls back to ~/.config/opencode. It used to ignore XDG_CONFIG_HOME, so
+// ywai wrote to ~/.config/opencode while an XDG host read a different file.
 func OpenCodeConfigDir() string {
 	if dir := strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_DIR")); dir != "" {
 		return dir
+	}
+	return OpenCodeUserConfigDir()
+}
+
+// OpenCodeUserConfigDir returns the user-level OpenCode configuration
+// directory. It honors XDG_CONFIG_HOME and falls back to ~/.config/opencode.
+// It deliberately ignores OPENCODE_CONFIG_DIR: callers use it when they must
+// write the user's own config, not the isolated config of one host process.
+func OpenCodeUserConfigDir() string {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, "opencode")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

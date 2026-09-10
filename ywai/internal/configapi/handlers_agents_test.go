@@ -13,11 +13,16 @@ import (
 // setTestHomeDir redirects the user home directory for the duration of the
 // test. os.UserHomeDir() reads HOME on unix and USERPROFILE on Windows, so
 // both must be set for these tests to resolve config paths under the temp
-// dir on every CI runner.
+// dir on every CI runner. OPENCODE_CONFIG_DIR and XDG_CONFIG_HOME are cleared
+// because the OpenCode config resolvers honor them over HOME, and a real host
+// value would redirect writes outside the temp dir (and into the user's live
+// config).
 func setTestHomeDir(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 }
 
 // TestGetAgentGraph builds a fake ~/.config/opencode layout under a temp HOME

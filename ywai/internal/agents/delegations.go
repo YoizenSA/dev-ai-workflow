@@ -218,16 +218,27 @@ func applyTaskMaps(configPath string, doc *DelegationsDoc) error {
 		}
 	}
 
-	agentsRaw, ok := root["agent"]
-	if !ok {
-		agentsRaw = map[string]any{}
-		root["agent"] = agentsRaw
+	// The section key follows the flavor: v2 `agents`, v1 `agent`. This JSON
+	// copy is what the UI reads; the markdown sidecar is what opencode
+	// enforces. Merge both spellings first (the flavor's key wins per agent)
+	// so rewriting one key never drops the other's entries.
+	sectionKey, legacyKey := "agent", "agents"
+	if agent.OpenCodeIsV2() {
+		sectionKey, legacyKey = "agents", "agent"
 	}
-	agents, ok := agentsRaw.(map[string]any)
-	if !ok {
-		agents = map[string]any{}
-		root["agent"] = agents
+	agents := map[string]any{}
+	if raw, ok := root[legacyKey].(map[string]any); ok {
+		for name, entry := range raw {
+			agents[name] = entry
+		}
 	}
+	if raw, ok := root[sectionKey].(map[string]any); ok {
+		for name, entry := range raw {
+			agents[name] = entry
+		}
+	}
+	root[sectionKey] = agents
+	delete(root, legacyKey)
 
 	applied := 0
 	for name, ad := range doc.Agents {

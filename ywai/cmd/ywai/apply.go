@@ -40,6 +40,7 @@ type managedPlan struct {
 	InstallPlugins  bool
 	RemoveQuota     bool
 	SetDefaultAgent bool
+	SetDefaultModel bool
 	ApplyOverrides  bool
 	RefreshVersion  bool
 	ExportWorkflows bool
@@ -55,6 +56,7 @@ func planManaged(mode applyMode) managedPlan {
 		InstallPlugins:  true,
 		RemoveQuota:     true,
 		SetDefaultAgent: true,
+		SetDefaultModel: true,
 		ApplyOverrides:  true,
 		RefreshVersion:  true,
 		ExportWorkflows: true,
@@ -164,6 +166,9 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++
 	}
 	if plan.SetDefaultAgent {
+		n++
+	}
+	if plan.SetDefaultModel {
 		n++
 	}
 	if plan.RefreshVersion {
@@ -339,6 +344,16 @@ func applyManaged(o applyOpts) applyResult {
 		}
 	}
 
+	// ── default model ─────────────────────────────────────────────────────
+	// Root `model` is the default for a new session. It is written only when
+	// absent or empty; a model the user picked stays untouched.
+	if plan.SetDefaultModel {
+		steps.next("Setting default model")
+		if err := setDefaultModel(defaultRootModel(), o.Opts.DryRun); err != nil {
+			r.warnf("failed to set default model: %v", err)
+		}
+	}
+
 	// ── version file ──────────────────────────────────────────────────────
 	if plan.RefreshVersion {
 		steps.next("Refreshing version info")
@@ -402,10 +417,10 @@ func applyManaged(o applyOpts) applyResult {
 			fmt.Printf("  Cleaned legacy frontmatter keys in %d agent files\n", cleaned)
 		}
 
-		jsonPaths := []string{filepath.Join(config.OpenCodeConfigDir(), "opencode.json")}
-		if home, err := os.UserHomeDir(); err == nil {
-			jsonPaths = append(jsonPaths, filepath.Join(home, ".config", "opencode", "opencode.json"))
-		}
+		// The v2 permissions array → v1 permission map conversion is a v1-only
+		// repair. On v2 the array is the native shape, so running the sweep
+		// would downgrade every agent back to the v1 map.
+		jsonPaths := v1PermissionSweepPaths()
 		seenJSON := map[string]bool{}
 		rewritten := 0
 		for _, p := range jsonPaths {
@@ -432,6 +447,27 @@ func applyManaged(o applyOpts) applyResult {
 	return r
 }
 
+// v1PermissionSweepPaths returns the opencode config JSON paths the v1-only
+// permissions sweep rewrites. On a v2 host the ordered `permissions` array is
+// the native shape, so the sweep is a no-op (empty result) — running it would
+// downgrade every agent back to the v1 `permission` map. The paths are found
+// with FindJSONCPath so a .jsonc config is covered, and the canonical
+// ~/.config/opencode copy is swept alongside an OPENCODE_CONFIG_DIR isolate.
+func v1PermissionSweepPaths() []string {
+	if agent.OpenCodeIsV2() {
+		return nil
+	}
+	paths := []string{config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode")}
+	if home, err := os.UserHomeDir(); err == nil {
+		canonical := config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode")
+		if canonical != paths[0] {
+			paths = append(paths, canonical)
+		}
+	}
+	return paths
+}
+
+// resolveApplyAgents returns the agents to install for this run.
 func resolveApplyAgents(agentName string) ([]agent.Agent, error) {
 	if agentName != "" {
 		a, err := agent.FindByName(agentName)

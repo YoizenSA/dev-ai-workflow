@@ -15,7 +15,10 @@ import (
 )
 
 // InstallOpenCode injects agent profiles into opencode.json (or opencode.jsonc).
-// If the file does not exist, it is created with an empty agent section.
+// If the file does not exist, it is created. The entry shape follows the active
+// OpenCode flavor: v2 writes an `agents` map with `system` + a `permissions`
+// rule array; v1 writes an `agent` map with `prompt` + a `permission` map. The
+// two keys are never left together.
 func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error {
 	root := map[string]any{}
 
@@ -32,10 +35,9 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	_, hadV2Agents := root["agents"]
-	agents := openCodeJSONAgents(root)
-	root["agent"] = agents
-	delete(root, "agents")
+	targetKey, otherKey := openCodeAgentKeys()
+	_, hadOtherKey := root[otherKey]
+	agents := openCodeJSONAgents(root, targetKey, otherKey)
 
 	installed := 0
 	for name, profile := range profiles {
@@ -58,9 +60,14 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 		installed++
 	}
 
-	if installed == 0 && !hadV2Agents {
+	if installed == 0 && !hadOtherKey {
 		return nil
 	}
+
+	// Never leave both keys in the file: the target key is canonical, and the
+	// other key was folded in above.
+	root[targetKey] = agents
+	delete(root, otherKey)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
@@ -70,9 +77,20 @@ func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error 
 	return nil
 }
 
-// openCodeJSONAgents returns the v1 agent map, folding leftover v2 `agents`
-// entries back into v1 shape and never leaving both keys in the file.
-func openCodeJSONAgents(root map[string]any) map[string]any {
+// openCodeAgentKeys returns the canonical agent map key for the active flavor,
+// and the key whose entries must be folded in and removed.
+func openCodeAgentKeys() (target, other string) {
+	if agent.OpenCodeIsV2() {
+		return "agents", "agent"
+	}
+	return "agent", "agents"
+}
+
+// openCodeJSONAgents folds both agent map keys into one target-shaped map. The
+// target key is read first because it is canonical; an entry under the other
+// key only fills a name the target does not already define. A `model` override
+// survives the fold.
+func openCodeJSONAgents(root map[string]any, targetKey, otherKey string) map[string]any {
 	agents := map[string]any{}
 	fold := func(key string) {
 		raw, ok := root[key].(map[string]any)
@@ -83,17 +101,20 @@ func openCodeJSONAgents(root map[string]any) map[string]any {
 			if _, exists := agents[name]; exists {
 				continue
 			}
-			if m, ok := entry.(map[string]any); ok {
-				agents[name] = normalizeOpenCodeJSONAgent(name, m)
-			} else {
+			m, ok := entry.(map[string]any)
+			if !ok {
 				agents[name] = entry
+				continue
 			}
+			converted := normalizeOpenCodeJSONAgent(name, m)
+			if model, ok := m["model"]; ok {
+				converted["model"] = model
+			}
+			agents[name] = converted
 		}
 	}
-	// v1 `agent` is canonical here, so it is read first and a leftover v2
-	// `agents` entry only fills in names v1 does not already define.
-	fold("agent")
-	fold("agents")
+	fold(targetKey)
+	fold(otherKey)
 	return agents
 }
 
@@ -101,16 +122,35 @@ func normalizeOpenCodeJSONAgent(name string, m map[string]any) map[string]any {
 	return openCodeJSONEntry(name, mapToAgentProfile(name, m))
 }
 
-// openCodeJSONEntry builds the v1 agent entry: a `prompt` string and a flat
+// openCodeJSONEntry builds the agent entry for the active flavor.
+func openCodeJSONEntry(name string, profile AgentProfile) map[string]any {
+	if agent.OpenCodeIsV2() {
+		return openCodeJSONEntryV2(name, profile)
+	}
+	return openCodeJSONEntryV1(name, profile)
+}
+
+// openCodeJSONEntryV1 builds the v1 entry: a `prompt` string and a flat
 // `permission` map. Buckets are expanded here for the same reason the markdown
 // builder expands them — opencode ignores bare bucket names.
-func openCodeJSONEntry(name string, profile AgentProfile) map[string]any {
+func openCodeJSONEntryV1(name string, profile AgentProfile) map[string]any {
 	_ = name
 	return map[string]any{
 		"mode":        profile.Mode,
 		"description": profile.Description,
 		"prompt":      profile.Prompt,
 		"permission":  ExpandPermissionBuckets(profile.Permission),
+	}
+}
+
+// openCodeJSONEntryV2 builds the v2 entry: `system` is the prompt, and
+// `permissions` is the ordered rule array v2 enforces.
+func openCodeJSONEntryV2(name string, profile AgentProfile) map[string]any {
+	return map[string]any{
+		"mode":        profile.Mode,
+		"description": profile.Description,
+		"system":      profile.Prompt,
+		"permissions": RulesToJSONShape(RulesFromPermissionMap(name, profile.Permission)),
 	}
 }
 

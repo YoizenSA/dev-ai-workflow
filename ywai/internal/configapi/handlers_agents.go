@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
@@ -33,11 +34,8 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		data, readErr := os.ReadFile(configPath)
 		if readErr == nil {
-			var cfg struct {
-				Agent map[string]json.RawMessage `json:"agent"`
-			}
-			if json.Unmarshal(data, &cfg) == nil && cfg.Agent != nil {
-				for name, raw := range cfg.Agent {
+			if agentMap, ok := lookupAgentMap(data); ok {
+				for name, raw := range agentMap {
 					var a struct {
 						Mode string `json:"mode"`
 					}
@@ -92,11 +90,8 @@ func collectAgentNames() map[string]bool {
 
 	if configPath, err := opencodeConfigPath(); err == nil {
 		if data, err := os.ReadFile(configPath); err == nil {
-			var cfg struct {
-				Agent map[string]json.RawMessage `json:"agent"`
-			}
-			if json.Unmarshal(data, &cfg) == nil {
-				for name := range cfg.Agent {
+			if agentMap, ok := lookupAgentMap(data); ok {
+				for name := range agentMap {
 					names[name] = true
 				}
 			}
@@ -663,9 +658,15 @@ func applyAgentModel(name, model string) bool {
 		if data, err := os.ReadFile(path); err == nil {
 			var config map[string]json.RawMessage
 			if json.Unmarshal(data, &config) == nil {
-				var agents map[string]json.RawMessage
-				if agentRaw, ok := config["agent"]; ok && json.Unmarshal(agentRaw, &agents) == nil {
-					if existingRaw, exists := agents[name]; exists {
+				// The section key follows the flavor: v2 `agents`, v1 `agent`.
+				// Writing the canonical key and deleting the other keeps both
+				// out of the file at once.
+				//
+				// A missing or empty agent map is not a stop condition: the
+				// agent may live only as host markdown (MigrateOpenCodeAgents
+				// drains the JSON). Fall through so the markdown loop runs.
+				if agentMap, ok := lookupAgentMapFromRoot(config); ok {
+					if existingRaw, exists := agentMap[name]; exists {
 						var agentCfg map[string]json.RawMessage
 						if json.Unmarshal(existingRaw, &agentCfg) == nil {
 							if model == "" {
@@ -675,9 +676,15 @@ func applyAgentModel(name, model string) bool {
 								agentCfg["model"] = modelJSON
 							}
 							agentJSON, _ := json.Marshal(agentCfg)
-							agents[name] = agentJSON
-							agentsJSON, _ := json.Marshal(agents)
-							config["agent"] = agentsJSON
+							agentMap[name] = agentJSON
+							agentsJSON, _ := json.Marshal(agentMap)
+							key := agentSectionKey()
+							config[key] = agentsJSON
+							if key == "agents" {
+								delete(config, "agent")
+							} else {
+								delete(config, "agents")
+							}
 							pretty, _ := json.MarshalIndent(config, "", "  ")
 							_ = os.WriteFile(path+".bak", data, 0644)
 							if os.WriteFile(path, pretty, 0644) == nil {
@@ -1027,9 +1034,10 @@ func syncToolsList(content string, allow bool) string {
 }
 
 // applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/shell flip into the
-// opencode.json agent.orchestrator entry when it exists (markdown-only installs
-// have no such entry). Always writes a v1 `permission` map. OpenCode v1
-// rejects a leftover v2 `permissions` array (`agent.*.permissions`).
+// opencode.json orchestrator entry when it exists (markdown-only installs have
+// no such entry). The permission form follows the active flavor: v2 writes the
+// ordered `permissions` array under `agents.orchestrator`, v1 the flat
+// `permission` map under `agent.orchestrator`.
 func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	path, err := opencodeConfigPath()
 	if err != nil {
@@ -1043,11 +1051,12 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	if json.Unmarshal(data, &config) != nil {
 		return false
 	}
-	var agentsMap map[string]json.RawMessage
-	if raw, ok := config["agent"]; !ok || json.Unmarshal(raw, &agentsMap) != nil {
+	var agentMap map[string]json.RawMessage
+	agentMap, ok := lookupAgentMapFromRoot(config)
+	if !ok {
 		return false
 	}
-	orchestratorRaw, ok := agentsMap["orchestrator"]
+	orchestratorRaw, ok := agentMap["orchestrator"]
 	if !ok {
 		return false
 	}
@@ -1118,14 +1127,29 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 		}
 		out = append(out, r)
 	}
-	updated, _ := json.Marshal(agents.V1PermissionFromRules(out))
-	agentCfg["permission"] = updated
-	delete(agentCfg, "permissions")
+	// The permission form follows the flavor: v2 keeps the ordered `permissions`
+	// rule array it enforces, v1 the flat `permission` map it validates. The
+	// other form is deleted so it cannot fall back to a legacy decode.
+	if agent.OpenCodeIsV2() {
+		updated, _ := json.Marshal(agents.RulesToJSONShape(out))
+		agentCfg["permissions"] = updated
+		delete(agentCfg, "permission")
+	} else {
+		updated, _ := json.Marshal(agents.V1PermissionFromRules(out))
+		agentCfg["permission"] = updated
+		delete(agentCfg, "permissions")
+	}
 
 	agentJSON, _ := json.Marshal(agentCfg)
-	agentsMap["orchestrator"] = agentJSON
-	agentsJSON, _ := json.Marshal(agentsMap)
-	config["agent"] = agentsJSON
+	agentMap["orchestrator"] = agentJSON
+	agentsJSON, _ := json.Marshal(agentMap)
+	key := agentSectionKey()
+	config[key] = agentsJSON
+	if key == "agents" {
+		delete(config, "agent")
+	} else {
+		delete(config, "agents")
+	}
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 	_ = os.WriteFile(path+".bak", data, 0644)
 	return os.WriteFile(path, pretty, 0644) == nil
@@ -1313,22 +1337,65 @@ type agentGraphResp struct {
 	Edges []agentGraphEdge `json:"edges"`
 }
 
-// lookupAgentField returns the raw JSON value of agent.<name>.<key> from
-// opencode.json config bytes, or nil if any level is missing.
-func lookupAgentField(configData []byte, name, key string) json.RawMessage {
+// agentSectionKey returns the top-level key holding the agent map for the
+// active flavor: `agents` on v2, `agent` on v1.
+func agentSectionKey() string {
+	if agent.OpenCodeIsV2() {
+		return "agents"
+	}
+	return "agent"
+}
+
+// lookupAgentMap returns the agent name → raw entry map from config bytes.
+// The v2 `agents` key wins; the v1 `agent` key is the fallback. ok is false
+// when neither key holds a non-empty map.
+func lookupAgentMap(configData []byte) (map[string]json.RawMessage, bool) {
 	var config map[string]json.RawMessage
 	if json.Unmarshal(configData, &config) != nil {
-		return nil
+		return nil, false
 	}
-	agentRaw, ok := config["agent"]
+	return lookupAgentMapFromRoot(config)
+}
+
+// lookupAgentMapFromRoot is lookupAgentMap for an already-parsed root. The
+// returned map merges both spellings so an entry stored only under the legacy
+// key survives a write: the active flavor's key wins per agent, and the other
+// key fills the gaps. The caller writes the merged map under the flavor key
+// and deletes the other one, so the merged view never loses data.
+func lookupAgentMapFromRoot(config map[string]json.RawMessage) (map[string]json.RawMessage, bool) {
+	primary, legacy := "agents", "agent"
+	if !agent.OpenCodeIsV2() {
+		primary, legacy = "agent", "agents"
+	}
+	merged := map[string]json.RawMessage{}
+	for _, key := range []string{legacy, primary} {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+		var entries map[string]json.RawMessage
+		if json.Unmarshal(raw, &entries) != nil {
+			continue
+		}
+		for name, entry := range entries {
+			merged[name] = entry
+		}
+	}
+	if len(merged) == 0 {
+		return nil, false
+	}
+	return merged, true
+}
+
+// lookupAgentField returns the raw JSON value of agents.<name>.<key> (v2) or
+// agent.<name>.<key> (v1) from opencode.json config bytes, or nil if any level
+// is missing.
+func lookupAgentField(configData []byte, name, key string) json.RawMessage {
+	agentMap, ok := lookupAgentMap(configData)
 	if !ok {
 		return nil
 	}
-	var agents map[string]json.RawMessage
-	if json.Unmarshal(agentRaw, &agents) != nil {
-		return nil
-	}
-	agentData, ok := agents[name]
+	agentData, ok := agentMap[name]
 	if !ok {
 		return nil
 	}
@@ -1340,23 +1407,15 @@ func lookupAgentField(configData []byte, name, key string) json.RawMessage {
 }
 
 // lookupAgentTaskMap returns the delegation map for agent.<name> from
-// opencode.json: v2 subagent rules (agent.<name>.permissions) first, the
+// opencode.json: v2 subagent rules (agents.<name>.permissions) first, the
 // legacy v1 permission.task map/scalar as fallback. ok is false when neither
 // form is present.
 func lookupAgentTaskMap(configData []byte, name string) (map[string]string, bool) {
-	var config map[string]json.RawMessage
-	if json.Unmarshal(configData, &config) != nil {
-		return nil, false
-	}
-	agentRaw, ok := config["agent"]
+	agentMap, ok := lookupAgentMap(configData)
 	if !ok {
 		return nil, false
 	}
-	var agentsMap map[string]json.RawMessage
-	if json.Unmarshal(agentRaw, &agentsMap) != nil {
-		return nil, false
-	}
-	agentData, ok := agentsMap[name]
+	agentData, ok := agentMap[name]
 	if !ok {
 		return nil, false
 	}

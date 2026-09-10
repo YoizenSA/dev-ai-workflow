@@ -8,13 +8,13 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
@@ -119,11 +119,7 @@ func opencodeConfigPath() (string, error) {
 }
 
 func agentsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "opencode", "agents"), nil
+	return userconfig.OpenCodeAgentsDir(), nil
 }
 
 // GET /api/config/opencode
@@ -667,6 +663,45 @@ func joinOpenCodeMCP(level map[string]json.RawMessage, servers map[string]json.R
 	return out
 }
 
+// providerSectionKey returns the top-level provider key for the active flavor:
+// `providers` on v2, `provider` on v1.
+func providerSectionKey() string {
+	if agent.OpenCodeIsV2() {
+		return "providers"
+	}
+	return "provider"
+}
+
+// lookupProviderSection returns the provider name → raw entry map from an
+// already-parsed config root. The map merges both spellings so an entry stored
+// only under the legacy key survives a write: the active flavor's key wins per
+// provider, and the other key fills the gaps. Callers write the merged map
+// under the flavor key and delete the other one.
+func lookupProviderSection(config map[string]json.RawMessage) map[string]json.RawMessage {
+	primary, legacy := "providers", "provider"
+	if !agent.OpenCodeIsV2() {
+		primary, legacy = "provider", "providers"
+	}
+	merged := map[string]json.RawMessage{}
+	for _, key := range []string{legacy, primary} {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+		var section map[string]json.RawMessage
+		if json.Unmarshal(raw, &section) != nil {
+			continue
+		}
+		for name, entry := range section {
+			merged[name] = entry
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
 // GET /api/config/providers - list all providers
 func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
 	path, err := opencodeConfigPath()
@@ -686,13 +721,8 @@ func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get provider section
-	if providerRaw, ok := config["provider"]; ok {
-		var providers map[string]json.RawMessage
-		if err := json.Unmarshal(providerRaw, &providers); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+	// Get provider section (v2 `providers`, v1 `provider`).
+	if providers := lookupProviderSection(config); providers != nil {
 		writeJSON(w, http.StatusOK, providers)
 	} else {
 		writeJSON(w, http.StatusOK, map[string]json.RawMessage{})
@@ -732,22 +762,24 @@ func (h *Handlers) PutProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get provider section
-	var providerSection map[string]json.RawMessage
-	if providerRaw, ok := config["provider"]; ok {
-		if err := json.Unmarshal(providerRaw, &providerSection); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-	} else {
+	// Get provider section (v2 `providers`, v1 `provider`).
+	providerSection := lookupProviderSection(config)
+	if providerSection == nil {
 		providerSection = make(map[string]json.RawMessage)
 	}
 
 	providerSection[name] = provider
 
-	// Write back
+	// Write back under the active flavor key, deleting the other so the two
+	// never coexist.
 	providerJSON, _ := json.Marshal(providerSection)
-	config["provider"] = providerJSON
+	key := providerSectionKey()
+	config[key] = providerJSON
+	if key == "providers" {
+		delete(config, "provider")
+	} else {
+		delete(config, "providers")
+	}
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
 	// Backup
@@ -785,13 +817,10 @@ func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get provider section
-	var providerSection map[string]json.RawMessage
-	if providerRaw, ok := config["provider"]; ok {
-		if err := json.Unmarshal(providerRaw, &providerSection); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+	// Get provider section (v2 `providers`, v1 `provider`).
+	providerSection := lookupProviderSection(config)
+	if providerSection == nil {
+		providerSection = make(map[string]json.RawMessage)
 	}
 
 	if _, ok := providerSection[name]; ok {
@@ -801,9 +830,16 @@ func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write back
+	// Write back under the active flavor key, deleting the other so the two
+	// never coexist.
 	providerJSON, _ := json.Marshal(providerSection)
-	config["provider"] = providerJSON
+	key := providerSectionKey()
+	config[key] = providerJSON
+	if key == "providers" {
+		delete(config, "provider")
+	} else {
+		delete(config, "providers")
+	}
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
 	// Backup
