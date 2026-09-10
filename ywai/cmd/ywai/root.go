@@ -698,12 +698,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
 			}
 
-			// Sub-agent statusline. v2: the vendored full monitor replaces the
-			// minimal ywai-statusline stand-in and supersedes it (two footer
-			// statuslines would fight for the same slot). v1: the published
-			// package is installed above and this is a no-op.
-			if err := plugins.InstallSubagentStatusline(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install sub-agent statusline: %v\n", a.Name, err)
+			// Sub-agent statusline: retired, and swept from configs that still
+			// carry it. opencode2 shows subagents natively — a Subagents panel
+			// in the sidebar and a count in the footer — off the same parent
+			// edge the delegation plugin writes, so the vendored one only
+			// duplicated the host in its own slots.
+			if removed, err := plugins.RemoveSubagentStatusline(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to remove sub-agent statusline: %v\n", a.Name, err)
+			} else if removed {
+				fmt.Printf("  [%s] Removed the vendored sub-agent statusline (opencode2 shows subagents natively)\n", a.Name)
 			}
 		}
 

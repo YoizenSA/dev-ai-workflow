@@ -10,9 +10,6 @@ VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
 AD_BUNDLE="$AD_DIR/dist/advisor.js"
-SA_DIR="$REPO_ROOT/plugins/subagent-statusline"
-SA_SERVER_BUNDLE="$SA_DIR/dist/subagent-statusline-server.js"
-SA_TUI_BUNDLE="$SA_DIR/dist/subagent-statusline-tui.js"
 
 # Rebuild the React UI so the embedded binary always carries the current
 # frontend. Without this, `ywai install` / `dev.sh install` would ship a stale
@@ -51,9 +48,6 @@ if command -v bun >/dev/null 2>&1; then
     bun build "$AD_DIR/src/index.ts" \
         --outfile "$AD_BUNDLE" --target node \
         --external zod --external @opencode-ai/plugin
-    echo "Building sub-agent statusline plugin (bun bundle)…"
-    bun install --cwd "$SA_DIR"
-    (cd "$SA_DIR" && bun run build)
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then
@@ -65,18 +59,6 @@ elif [ -f "$BA_BUNDLE" ]; then
         echo "using existing advisor bundle as-is"
     else
         echo "WARNING: advisor bundle missing (optional when bun unavailable)"
-    fi
-    # The sub-agent statusline is required, not optional. Its source dist/ is
-    # gitignored, so a bun-less checkout has no prebuilt bundle to fall back
-    # to, and the v2 TUI would install without a statusline. Reuse prebuilt
-    # bundles when present; otherwise fail like background-agents.
-    if [ -f "$SA_SERVER_BUNDLE" ] && [ -f "$SA_TUI_BUNDLE" ]; then
-        echo "using existing sub-agent statusline bundles as-is"
-    else
-        echo "ERROR: bun not found and no prebuilt sub-agent statusline bundles." >&2
-        echo "       The sub-agent statusline is required; refusing to ship a release without it." >&2
-        echo "       Install bun (https://bun.sh) and rerun this script." >&2
-        exit 1
     fi
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
@@ -117,18 +99,6 @@ if [ -f "$AD_DIR/command/advisor.md" ]; then
 fi
 if [ -f "$VB_BUNDLE" ]; then
     cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"
-fi
-
-# Sub-agent statusline (v2 port). The server bundle is a flat .js in plugins/
-# (auto-discovery). The TUI bundle is built as .js but ships renamed to .tsx,
-# matching the plain-source TUI plugins under plugins/tui/ (ywai-logo,
-# ywai-statusline) that the host resolves by source extension.
-if [ -f "$SA_SERVER_BUNDLE" ]; then
-    cp -a "$SA_SERVER_BUNDLE" "$EMBED_DIR/plugins/subagent-statusline-server.js"
-fi
-if [ -f "$SA_TUI_BUNDLE" ]; then
-    mkdir -p "$EMBED_DIR/plugins/tui"
-    cp -a "$SA_TUI_BUNDLE" "$EMBED_DIR/plugins/tui/subagent-statusline-tui.tsx"
 fi
 
 # ywai TUI logo (home_logo slot). Plain .tsx source — no build step.
