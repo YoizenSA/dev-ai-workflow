@@ -19,8 +19,6 @@
  *   toward a block (a legitimate re-read after the file changed).
  * - tool.execute.before never increments the counter, so overlapping
  *   parallel calls cannot inflate the count before results are known.
- *
- * Ported from oh-my-opencode-slim (MIT), src/hooks/tool-loop-guard.
  */
 
 const LOOP_GUARD_WARN_AT = 3

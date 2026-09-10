@@ -196,9 +196,9 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 
 	await registerV2Tools(ctx, manager)
 
-	// Ported guard hooks (oh-my-opencode-slim): loop guard + JSON recovery on
-	// the v2 tool stream. Each hook degrades to a no-op when the host lacks
-	// tool.hook; log a line via the manager so the gap is visible in debug.
+	// Guard hooks: loop guard + JSON recovery on the v2 tool stream. Each
+	// hook degrades to a no-op when the host lacks tool.hook; log a line via
+	// the manager so the gap is visible in debug.
 	if (typeof ctx.tool?.hook === "function") {
 		const loopGuard = createToolLoopGuardHook()
 		const jsonRecovery = createJsonErrorRecoveryHook()

@@ -129,7 +129,7 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	const openCodeFlavor = readOpenCodeFlavor()
 	const manager = new DelegationManager(client as OpencodeClient, baseDir, log, { nativeSteer })
 
-	// Ported guard hooks (oh-my-opencode-slim): loop guard + JSON recovery.
+	// Guard hooks: loop guard + JSON recovery.
 	const loopGuard = createToolLoopGuardHook()
 	const jsonRecovery = createJsonErrorRecoveryHook()
 
@@ -142,9 +142,9 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	return {
 		tool: openCodeFlavor === "v2" ? v2Tools(manager) : v1Tools(manager),
 
-		// Ported guard hooks (oh-my-opencode-slim): the loop guard stops
-		// infinite identical tool calls. It runs on every host flavor, then
-		// the delegation guard does its task-tool check below.
+		// Guard hooks: the loop guard stops infinite identical tool calls. It
+		// runs on every host flavor, then the delegation guard does its
+		// task-tool check below.
 		"tool.execute.before": async (
 			input: { tool: string; sessionID?: string; callID?: string },
 			output: { args?: { subagent_type?: string } },

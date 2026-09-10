@@ -2206,9 +2206,20 @@ export async function hydratePreviousSubagents(
     });
     if (!synced) topLevelHydrationFailed = true;
 
+    const rootID = safeRead(() => ctx.data.session.root(currentSessionID));
+
     const family =
-      safeRead(() => ctx.data.session.family(currentSessionID)) ?? [];
-    const childIDs = family.filter((id) => id !== currentSessionID);
+      safeRead(() => ctx.data.session.family(rootID ?? currentSessionID)) ?? [];
+    let childIDs = family.filter((id) => id !== currentSessionID);
+    if (childIDs.length === 0) {
+      // Fallback for stores that do not track a family: scan the flat list.
+      const all = safeRead(() => ctx.data.session.list()) ?? [];
+      childIDs = all
+        .map((session) => asRecord(session))
+        .filter((session) => session?.parentID === currentSessionID)
+        .map((session) => asString(session?.id))
+        .filter((id): id is string => !!id);
+    }
 
     const allStatuses: Record<string, unknown> = {};
     for (const id of childIDs) {

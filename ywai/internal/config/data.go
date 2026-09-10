@@ -42,6 +42,23 @@ const TuiLogoBundleName = "ywai-logo.tsx"
 // opencode-subagent-statusline, whose peer range excludes OpenCode 2.
 const TuiStatuslineBundleName = "ywai-statusline.tsx"
 
+// SubagentStatuslineServerBundleName is the filename of the vendored
+// sub-agent statusline server plugin bundle (OpenCode v2 only), both in the
+// embedded FS and once seeded to disk. It replaces the published
+// opencode-subagent-statusline package, which cannot load on v2.
+const SubagentStatuslineServerBundleName = "subagent-statusline-server.js"
+
+// SubagentStatuslineTuiBundleName is the filename of the vendored sub-agent
+// statusline TUI plugin once seeded under DataPluginsDir()/tui/ and installed
+// into tui-plugins/. The bundle is built as .js and renamed to .tsx so the
+// TUI host resolves it the same way it resolves the plain-source plugins
+// (ywai-logo.tsx, ywai-statusline.tsx).
+const SubagentStatuslineTuiBundleName = "subagent-statusline-tui.tsx"
+
+// SubagentStatuslineTuiSrcBundleName is the pre-rename built filename in the
+// source dist/ directory. SubagentStatuslineTuiBundlePath resolves it first.
+const SubagentStatuslineTuiSrcBundleName = "subagent-statusline-tui.js"
+
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
@@ -705,6 +722,59 @@ func TuiStatuslineBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("ywai TUI statusline plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// SubagentStatuslineServerBundlePath resolves the path to the sub-agent
+// statusline server bundle. Same resolution order as BackgroundAgentsBundlePath:
+// source checkout, then seeded data dir, then the embedded FS.
+func SubagentStatuslineServerBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/subagent-statusline/dist/subagent-statusline-server.js
+	srcBundle := filepath.Join(PluginsSourceDir(), "subagent-statusline", "dist", SubagentStatuslineServerBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), SubagentStatuslineServerBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("sub-agent statusline server bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// SubagentStatuslineTuiBundlePath resolves the path to the sub-agent statusline
+// TUI bundle the same way TuiLogoBundlePath resolves the logo. The source
+// checkout carries the built .js (SubagentStatuslineTuiSrcBundleName); the
+// seeded copy is renamed to the .tsx name the TUI host expects.
+func SubagentStatuslineTuiBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/subagent-statusline/dist/subagent-statusline-tui.js
+	srcBundle := filepath.Join(PluginsSourceDir(), "subagent-statusline", "dist", SubagentStatuslineTuiSrcBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), "tui", SubagentStatuslineTuiBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("sub-agent statusline TUI bundle not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

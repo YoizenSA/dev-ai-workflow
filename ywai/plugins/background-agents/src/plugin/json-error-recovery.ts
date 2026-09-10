@@ -10,8 +10,6 @@
  * Excluded tools are the ones whose output legitimately quotes JSON errors
  * (a bash command printing one, a webfetch of an erroring API) — nagging
  * there is noise, not recovery.
- *
- * Ported from oh-my-opencode-slim (MIT), src/hooks/json-error-recovery.
  */
 
 export const JSON_ERROR_TOOL_EXCLUDE_LIST = ["bash", "read", "glob", "webfetch", "gh_grep_searchgithub"] as const
