@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { configApi, missionsApi } from "../../api/client";
+import { configApi, toolsApi } from "../../api/client";
 import YdSelect from "../shared/YdSelect";
 import type {
 	AgentInfo,
@@ -11,7 +11,7 @@ import type {
 	SkillInfo,
 } from "../../api/types";
 import { CANONICAL_ROLES } from "../../api/types";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 
 const ROLE_LABELS: Record<RoleName, string> = {
 	planning: "Planning",
@@ -48,7 +48,7 @@ export default function RoleDefaultsTab() {
 	useEffect(() => {
 		Promise.all([
 			configApi.getUserConfig().catch(() => null),
-			missionsApi.listModels().catch(() => null),
+			toolsApi.listModels().catch(() => null),
 			// Use the config agents source (reads opencode.json + the ywai agents
 			// dir) — the same one other screens use. The missions opencode endpoint
 			// returns empty when the opencode HTTP server isn't running (e.g. on

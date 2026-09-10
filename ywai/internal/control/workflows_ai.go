@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 )
 
@@ -81,7 +81,7 @@ func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// aiEditWorkflow drives the opencode CLI (mirrors missions.RefineGoalWithOpencode:
+// aiEditWorkflow drives the opencode CLI (mirrors toolsapi.RefineGoalWithOpencode:
 // the HTTP session API has known issues processing prompts via REST) to rewrite
 // the workflow JSON per the instruction. Identity fields are preserved from the
 // source so the AI cannot rename or re-id the workflow.
@@ -89,9 +89,9 @@ func (a *workflowsAPI) handleAIEdit(w http.ResponseWriter, r *http.Request) {
 // history carries recent turns (optional) so the AI can refine the workflow
 // conversationally; only the last few are passed to stay within prompt limits.
 func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, model string, history []workflows.ConversationMessage) (*workflows.Workflow, error) {
-	opencodePath, err := missions.DetectOpencode()
-	if err != nil {
-		return nil, fmt.Errorf("opencode is not available: %w", err)
+	opencodePath, _ := agent.FindOpenCode()
+	if opencodePath == "" {
+		return nil, fmt.Errorf("opencode is not available")
 	}
 
 	cur, err := json.MarshalIndent(wf, "", "  ")

@@ -14,7 +14,7 @@ vi.mock("../../api/client", () => ({
 		listAgents: vi.fn().mockResolvedValue({ agents: ["memory"] }),
 	},
 	configApi: {},
-	missionsApi: {
+	toolsApi: {
 		listModels: vi.fn().mockResolvedValue({ modelsByProvider: {} }),
 		listAgents: vi.fn().mockResolvedValue({ agents: ["memory"] }),
 	},

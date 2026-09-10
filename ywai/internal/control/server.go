@@ -16,9 +16,8 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/toolsapi"
 )
 
 const DefaultPort = 5768
@@ -37,11 +36,12 @@ func RegisterEmbeddedUI(ui func() fs.FS) {
 	embeddedUI = ui
 }
 
-// Server is the unified ywai control server combining the config API and Missions.
+// Server is the unified ywai control server combining the config API and the
+// shared tool API.
 type Server struct {
 	port      int
 	configAPI *configapi.Server
-	missions  *web.Server
+	tools     *toolsapi.Server
 	httpSrv   *http.Server
 	mux       *http.ServeMux
 	portReady chan struct{}
@@ -61,16 +61,10 @@ func New(port int) (*Server, error) {
 
 	kServer := configapi.New(port)
 
-	missionsStore, err := missions.OpenStore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open missions store: %w", err)
-	}
-	mServer := web.New(port, missionsStore)
-
 	s := &Server{
 		port:      port,
 		configAPI: kServer,
-		missions:  mServer,
+		tools:     toolsapi.New(),
 		portReady: make(chan struct{}),
 		startedAt: time.Now(),
 	}
@@ -85,7 +79,6 @@ func New(port int) (*Server, error) {
 	pushStore, _ := NewPushStore()
 	if pushStore != nil {
 		s.push = NewPushAPI(pushStore)
-		mServer.SetEventSink(newFeaturePushSink(s.push.sender.Send))
 	}
 
 	s.teamAPI = NewTeamAPI()
@@ -109,9 +102,9 @@ func (s *Server) buildRoutes() {
 	// ─── Config API ──────────────────────────────────────────────
 	s.mux.HandleFunc("/api/", s.configAPIHandler)
 
-	// ─── Missions API ────────────────────────────────────────────
-	for _, pattern := range missionsProxyPaths {
-		s.mux.HandleFunc(pattern, s.missionsHandler)
+	// —— Shared Tool API ——
+	for _, pattern := range toolsAPIProxyPaths {
+		s.mux.HandleFunc(pattern, s.toolsAPIHandler)
 	}
 
 	// ─── MCP Store API ──────────────────────────────────────────
@@ -166,25 +159,25 @@ func (s *Server) configAPIHandler(w http.ResponseWriter, r *http.Request) {
 	s.configAPI.HTTPHandler().ServeHTTP(w, r)
 }
 
-// missionsProxyPaths are the control-server patterns forwarded to the missions
-// mux. Every path that mux serves needs an entry here: anything missing falls
+// toolsAPIProxyPaths are the control-server patterns forwarded to the tools
+// API mux. Every path that mux serves needs an entry here: anything missing falls
 // through to the SPA catch-all, which answers 200 with index.html. For an API
 // call that looks like a puzzling parse error, and for a websocket it fails the
 // handshake with "Unexpected response code: 200" — how /missions/engram/ws
-// stayed broken while /missions/ws worked.
-var missionsProxyPaths = []string{
+// stayed broken while /missions/ws worked. The /missions/ws proxy died with the
+// missions UI; the remaining prefixes are a frozen contract with the frontend.
+var toolsAPIProxyPaths = []string{
 	"/missions/api/",
-	"/missions/ws",
 	"/missions/engram/ws",
 }
 
-// missionsHandler strips the /missions prefix and forwards to missions handler.
-func (s *Server) missionsHandler(w http.ResponseWriter, r *http.Request) {
+// toolsAPIHandler strips the /missions prefix and forwards to the tools API.
+func (s *Server) toolsAPIHandler(w http.ResponseWriter, r *http.Request) {
 	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/missions")
 	if r.URL.Path == "" {
 		r.URL.Path = "/"
 	}
-	s.missions.Handler().ServeHTTP(w, r)
+	s.tools.Handler().ServeHTTP(w, r)
 }
 
 // healthHandler returns server health status.
@@ -292,7 +285,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	// Root or known SPA routes → index.html
-	if path == "/" || path == "/missions" || path == "/settings" || path == "/memories" || path == "/workflows" {
+	if path == "/" || path == "/settings" || path == "/memories" || path == "/workflows" {
 		s.serveSPAIndex(w, r)
 		return
 	}
@@ -387,9 +380,6 @@ func (s *Server) Start() error {
 
 	// Start the config API hub in background
 	go s.configAPI.Hub().Run()
-
-	// Start missions hub in background
-	go s.missions.Hub().Run()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
 	if err != nil {

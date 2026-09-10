@@ -21,8 +21,7 @@ package mcp
 //
 // These tests use stdlib only (no testify), live in `package mcp` so they
 // can reach any unexported helpers @dev chooses to add, and follow the
-// conventions in internal/missions/worker_test.go and the existing
-// credentials_test.go in this same package.
+// conventions of credentials_test.go in this same package.
 
 import (
 	"context"

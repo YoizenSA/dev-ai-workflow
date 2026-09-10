@@ -22,7 +22,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -268,7 +267,7 @@ var stopCmd = &cobra.Command{
 // If the default port (4096, or the one in OPENCODE_URL) is already taken by a
 // non-opencode process, it walks up to find a free port and starts opencode
 // there, exporting the chosen URL via OPENCODE_URL so the rest of ywai
-// (chat proxy, missions) all point at the same instance.
+// (chat proxy, tools API) all point at the same instance.
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
 	explicitURL := url != ""
@@ -672,21 +671,6 @@ type configField struct {
 }
 
 var configFields = map[string]configField{
-	"default_scope": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultScope },
-		Set: func(c *config.UserConfig, v string) error { c.DefaultScope = v; return nil },
-	},
-	"default_tui": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultTUI },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.DefaultTUI = b
-			return nil
-		},
-	},
 	"default_mcp": {
 		Get: func(c *config.UserConfig) interface{} { return c.DefaultMCP },
 		Set: func(c *config.UserConfig, v string) error {
@@ -697,26 +681,6 @@ var configFields = map[string]configField{
 			c.DefaultMCP = b
 			return nil
 		},
-	},
-	"colored_output": {
-		Get: func(c *config.UserConfig) interface{} {
-			if c.ColoredOutput != nil {
-				return *c.ColoredOutput
-			}
-			return nil
-		},
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.ColoredOutput = &b
-			return nil
-		},
-	},
-	"log_level": {
-		Get: func(c *config.UserConfig) interface{} { return c.LogLevel },
-		Set: func(c *config.UserConfig, v string) error { c.LogLevel = v; return nil },
 	},
 	"opencode_version": {
 		Get: func(c *config.UserConfig) interface{} { return c.OpencodeVersion },
@@ -748,50 +712,6 @@ var configFields = map[string]configField{
 				}
 			}
 			c.Agents = agents
-			return nil
-		},
-	},
-	"server.port": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Port },
-		Set: func(c *config.UserConfig, v string) error {
-			port, err := strconv.Atoi(v)
-			if err != nil {
-				return fmt.Errorf("port must be a number")
-			}
-			c.Server.Port = port
-			return nil
-		},
-	},
-	"server.background": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Background },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.Background = b
-			return nil
-		},
-	},
-	"server.mcp": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.MCP },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.MCP = b
-			return nil
-		},
-	},
-	"server.autostart": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Autostart },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.Autostart = b
 			return nil
 		},
 	},
@@ -1079,11 +999,11 @@ var groupsDisableCmd = &cobra.Command{
 	},
 }
 
-// serveCmd starts the control ywai server (config API + Missions).
+// serveCmd starts the control ywai server (config API + tool API).
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the control ywai server",
-	Long:  "Start the control ywai server (config API + Missions) on a single port.",
+	Long:  "Start the control ywai server (config API + tool API) on a single port.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port, _ := cmd.Flags().GetInt("port")
 		background, _ := cmd.Flags().GetBool("background")
@@ -1465,8 +1385,6 @@ func configureAutostart() error {
 }
 
 func init() {
-	cli.RegisterCommands(rootCmd)
-
 	serveCmd.Flags().IntP("port", "p", 5768, "Port for control server")
 	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
 	serveCmd.Flags().Bool("no-update", false, "Skip auto-update before starting")

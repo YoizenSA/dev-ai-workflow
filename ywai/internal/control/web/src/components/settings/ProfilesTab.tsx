@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Save, Plus, Search, Zap, AlertTriangle, Boxes } from "lucide-react";
-import { configApi, missionsApi } from "../../api/client";
+import { configApi, toolsApi } from "../../api/client";
 import type { OrchestratorProfilesResponse, OrchestratorProfile, ModelInfo } from "../../api/types";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 
 // Preferred display order for the real agents/ folders. Unknown folders append
 // alphabetically so a new group still shows up without a code change.
@@ -63,7 +63,7 @@ export default function ProfilesTab() {
 
 	useEffect(() => {
 		fetchProfiles();
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((r) => setModels(Object.values(r.modelsByProvider ?? {}).flat()))
 			.catch(() => setModels([]));

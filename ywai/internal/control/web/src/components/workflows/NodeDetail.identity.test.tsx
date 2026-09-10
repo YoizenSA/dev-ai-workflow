@@ -13,7 +13,7 @@ vi.mock("../../api/client", () => ({
 		]),
 		getAgent: vi.fn().mockResolvedValue({ name: "orchestrator", content: "# Orchestrator\nYou own the goal." }),
 	},
-	missionsApi: { listModels: vi.fn().mockResolvedValue({ modelsByProvider: {} }) },
+	toolsApi: { listModels: vi.fn().mockResolvedValue({ modelsByProvider: {} }) },
 	workflowApi: {
 		listSkills: vi.fn().mockResolvedValue([]),
 		list: vi.fn().mockResolvedValue([]),

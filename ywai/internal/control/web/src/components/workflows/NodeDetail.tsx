@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { configApi, missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
+import { configApi, toolsApi, workflowApi, type McpCatalogItem } from '../../api/client'
 import type { AgentDetail, AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
 import MultiSelect from './MultiSelect'
@@ -106,7 +106,7 @@ export function useOpencodeModels(): ModelInfo[] {
 	const [models, setModels] = useState<ModelInfo[]>(modelCache ?? [])
 	useEffect(() => {
 		if (modelCache) return
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((r) => {
 				modelCache = Object.values(r.modelsByProvider ?? {}).flat()

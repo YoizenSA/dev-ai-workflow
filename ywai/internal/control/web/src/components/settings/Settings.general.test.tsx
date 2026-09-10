@@ -36,7 +36,7 @@ vi.mock("../../api/client", () => ({
 		updateConfig: vi.fn(),
 		updateUserConfig: vi.fn(),
 	},
-	missionsApi: {
+	toolsApi: {
 		// Intentionally never resolves until the test releases it — proves the
 		// General form does not wait on the slow opencode models CLI.
 		listModels: vi.fn(() => listModelsDeferred.promise),

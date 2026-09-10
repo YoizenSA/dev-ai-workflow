@@ -45,15 +45,6 @@ type RoleDefaults map[string]RoleDefault
 // UserConfig represents the user's ywai configuration file
 type UserConfig struct {
 
-	// Default persona
-	DefaultPersona string `yaml:"default_persona,omitempty" json:"default_persona,omitempty"`
-
-	// Default scope (global or workspace)
-	DefaultScope string `yaml:"default_scope,omitempty" json:"default_scope,omitempty"`
-
-	// Whether to use TUI by default
-	DefaultTUI bool `yaml:"default_tui,omitempty" json:"default_tui,omitempty"`
-
 	// Agents is an explicit list of agents ywai should manage.
 	// When non-empty, ywai will only operate on these agents instead of auto-detecting.
 	Agents []string `yaml:"agents,omitempty" json:"agents,omitempty"`
@@ -61,27 +52,9 @@ type UserConfig struct {
 	// Whether to install MCP by default for opencode
 	DefaultMCP bool `yaml:"default_mcp,omitempty" json:"default_mcp,omitempty"`
 
-	// Whether to install ponytail plugin by default for opencode/kilocode
-	DefaultPonytail bool `yaml:"default_ponytail,omitempty" json:"default_ponytail,omitempty"`
-
-	// Whether to use colored output
-	ColoredOutput *bool `yaml:"colored_output,omitempty" json:"colored_output,omitempty"`
-
-	// Log level (debug, info, warn, error)
-	LogLevel string `yaml:"log_level,omitempty" json:"log_level,omitempty"`
-
-	// Custom agent profiles directory
-	CustomAgentsDir string `yaml:"custom_agents_dir,omitempty" json:"custom_agents_dir,omitempty"`
-
-	// Custom skills directory
-	CustomSkillsDir string `yaml:"custom_skills_dir,omitempty" json:"custom_skills_dir,omitempty"`
-
 	// TokenBank proxy configuration
 	TokenBankURL    string `yaml:"tokenbank_url,omitempty" json:"tokenbank_url,omitempty"`
 	TokenBankAPIKey string `yaml:"tokenbank_api_key,omitempty" json:"tokenbank_api_key,omitempty"`
-
-	// Server configuration
-	Server ServerConfig `yaml:"server,omitempty" json:"server,omitempty"`
 
 	// RoleDefaults assigns default agent + model + fallbacks + skills per mission role.
 	RoleDefaults RoleDefaults `yaml:"role_defaults,omitempty" json:"role_defaults,omitempty"`
@@ -130,21 +103,6 @@ func NormalizeOpencodeVersion(v string) string {
 		return "opencode2"
 	}
 	return ""
-}
-
-// ServerConfig contains configuration for the control server
-type ServerConfig struct {
-	// Port for the control server (default 5768)
-	Port int `yaml:"port,omitempty" json:"port,omitempty"`
-
-	// Whether to run in background mode
-	Background bool `yaml:"background,omitempty" json:"background,omitempty"`
-
-	// Whether to start MCP adapter
-	MCP bool `yaml:"mcp,omitempty" json:"mcp,omitempty"`
-
-	// Whether to configure autostart
-	Autostart bool `yaml:"autostart,omitempty" json:"autostart,omitempty"`
 }
 
 // ConfigPath returns the path to the user config file
@@ -200,12 +158,7 @@ func SaveConfig(config *UserConfig) error {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *UserConfig {
 	return &UserConfig{
-		DefaultPersona:            "gentleman",
-		DefaultScope:              "global",
-		DefaultTUI:                true,
 		DefaultMCP:                false,
-		ColoredOutput:             func() *bool { b := true; return &b }(),
-		LogLevel:                  "info",
 		RoleDefaults:              DefaultRoleDefaults(),
 		ActiveOrchestratorProfile: DefaultOrchestratorModelProfileName,
 		OrchestratorProfiles:      DefaultOrchestratorModelProfiles(),

@@ -1,91 +1,4 @@
-// ─── Missions Types ────────────────────────────────────────────────────────
-
-export type MissionStatus =
-  | 'pending'
-  | 'planning'
-  | 'active'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'validating'
-
-export type FeatureStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-
-export interface Feature {
-  id: string
-  description: string
-  status: FeatureStatus
-  skillName?: string
-  milestone?: string
-  preconditions?: string[]
-  expectedBehavior?: string[]
-  fulfills?: string[]
-  workerSessionIds?: string[]
-}
-
-export interface Milestone {
-  name: string
-  description: string
-}
-
-export interface PlanMilestone {
-  name: string
-  description: string
-}
-
-export interface PlanFeature {
-  id: string
-  description: string
-  skillName: string
-  milestone: string
-  preconditions?: string[]
-  expectedBehavior?: string[]
-  fulfills?: string[]
-}
-
-export interface PlanMission {
-  name: string
-  description: string
-  project?: string
-  milestones: PlanMilestone[]
-  features: PlanFeature[]
-  model?: string
-  agent?: string
-}
-
-export interface Mission {
-  id: string
-  name: string
-  project?: string
-  status: MissionStatus
-  createdAt: string
-  updatedAt: string
-  completedAt?: string | null
-  features?: Feature[] // undefined in list view, present in detail
-  milestones?: Milestone[] // undefined in list view
-  featureCount?: number
-  milestoneCount?: number
-  model?: string
-  agent?: string
-}
-
-export interface Project {
-  name: string
-  path: string
-  branch?: string
-}
-
-export interface GitInfo {
-  isGitRepo: boolean
-  currentBranch?: string
-  branches?: string[]
-}
+// —— Tools API Types ——
 
 export interface FSEntry {
   name: string
@@ -112,19 +25,6 @@ export interface ModelsResponse {
 
 export interface AgentsResponse {
   agents: string[]
-}
-
-export interface FeatureLogLine {
-  missionId: string
-  featureId: string
-  line: string
-  timestamp: number
-}
-
-export interface FeatureLogsResponse {
-  missionId: string
-  featureId: string
-  content: string
 }
 
 // ─── WebSocket Messages ────────────────────────────────────────────────────
@@ -290,23 +190,10 @@ export type RoleDefaults = Partial<Record<RoleName, RoleDefault>>
 export interface UserConfig {
   default_preset?: string
   default_sdd_mode?: string
-  default_persona?: string
-  default_scope?: string
-  default_tui?: boolean
   default_mcp?: boolean
   agents?: string[]
-  colored_output?: boolean
-  log_level?: string
-  custom_agents_dir?: string
-  custom_skills_dir?: string
   tokenbank_url?: string
   tokenbank_api_key?: string
-  server?: {
-    port?: number
-    background?: boolean
-    mcp?: boolean
-    autostart?: boolean
-  }
   role_defaults?: RoleDefaults
   vision_model?: string
   vision_model_override?: string

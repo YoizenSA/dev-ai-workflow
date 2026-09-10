@@ -798,7 +798,7 @@ function snapshot(key?: string): void {
 }
 
 // ─── workflow run WebSocket ────────────────────────────────────────────────
-// A single on-demand socket for streaming run output. Unlike the missions
+// A single on-demand socket for streaming run output. Unlike the memories
 // useWebSocket hook, this does NOT auto-reconnect: a run is a bounded event and
 // a dropped socket should surface an error rather than silently resync.
 

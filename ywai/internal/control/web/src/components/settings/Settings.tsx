@@ -15,7 +15,7 @@ import {
 	User,
 } from "lucide-react";
 import { useUrlTab } from "../../hooks/useUrlTab";
-import { configApi, missionsApi } from "../../api/client";
+import { configApi, toolsApi } from "../../api/client";
 import type {
 	MCPServer,
 	ModelInfo,
@@ -24,7 +24,7 @@ import type {
 } from "../../api/types";
 import { NotificationsTab } from "./NotificationsTab";
 import SearchSelect from "../shared/SearchSelect";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 import Modal from "../shared/Modal";
 import "./Settings.css";
 
@@ -122,7 +122,7 @@ export default function Settings() {
 	// payloads in parallel. Tabs still own their UI state; this only primes
 	// network caches so switching tabs / second visit feels instant.
 	useEffect(() => {
-		void missionsApi.listModels({ force: true }).catch(() => {});
+		void toolsApi.listModels({ force: true }).catch(() => {});
 		void Promise.all([
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => null),
@@ -224,7 +224,7 @@ function GeneralTab() {
 
 	useEffect(() => {
 		// Fast path only: local config + agents + vision catalog. Never block
-		// first paint on missionsApi.listModels() — that shells out to
+		// first paint on toolsApi.listModels() — that shells out to
 		// `opencode models` (multi-second cold start). Model pickers fill in
 		// once the slow catalog arrives (see second effect below).
 		Promise.all([
@@ -270,13 +270,13 @@ function GeneralTab() {
 		// Models: paint from client/server cache immediately, then revalidate
 		// in parallel (force kicks CLI refresh server-side without blocking).
 		const applyModels = (modelsRes: Awaited<
-			ReturnType<typeof missionsApi.listModels>
+			ReturnType<typeof toolsApi.listModels>
 		> | null) => {
 			if (!modelsRes) return;
 			setModels(Object.values(modelsRes.modelsByProvider ?? {}).flat());
 		};
-		missionsApi.listModels().then(applyModels).catch(() => {});
-		missionsApi
+		toolsApi.listModels().then(applyModels).catch(() => {});
+		toolsApi
 			.listModels({ force: true })
 			.then(applyModels)
 			.catch(() => {});
@@ -809,7 +809,7 @@ function AgentsTab() {
 
 	// Load the available model catalog once for the model picker.
 	useEffect(() => {
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((m) => {
 				if (m?.modelsByProvider) {

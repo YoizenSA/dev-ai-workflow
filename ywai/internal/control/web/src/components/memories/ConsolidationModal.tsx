@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import Modal from '../shared/Modal'
-import ModelCombobox from '../missions/ModelCombobox'
+import ModelCombobox from '../shared/ModelCombobox'
 import SearchSelect from '../shared/SearchSelect'
 import { useMemoriesStore } from '../../stores/memoriesStore'
-import { missionsApi } from '../../api/client'
+import { toolsApi } from '../../api/client'
 import ConsolidationPlanReview from './ConsolidationPlanReview'
 import type { ModelInfo } from '../../api/types'
 
@@ -45,8 +45,8 @@ export default function ConsolidationModal({ open, onClose, initialScope }: Prop
 		setLoading(true)
 		try {
 			const [modelsRes, agentsRes] = await Promise.all([
-				missionsApi.listModels().catch(() => null),
-				missionsApi.listAgents().catch(() => null),
+				toolsApi.listModels().catch(() => null),
+				toolsApi.listAgents().catch(() => null),
 			])
 			if (modelsRes) {
 				const all = Object.values(modelsRes.modelsByProvider).flat() as ModelInfo[]

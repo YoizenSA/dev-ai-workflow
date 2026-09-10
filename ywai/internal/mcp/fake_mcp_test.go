@@ -6,13 +6,13 @@ package mcp
 // (not `_test`) so the stub can be shared with discovery_test.go. The stub
 // itself is a Go program compiled via `go build` and cached, then copied to
 // a per-test tempdir. Its behavior is driven by a JSON spec file written
-// next to the executable (same pattern as internal/missions/fake_opencode_test.go).
+// next to the executable (compiled-stub pattern).
 //
 // Why a compiled binary and not a shell script: the stdio MCP probe in the
 // real codebase must run identically on Unix and Windows. exec.Command
 // cannot launch a bare .sh or .cmd script directly, which is exactly why
-// the missions package switched to a compiled stub. We follow the same
-// precedent so the discovery tests do not regress on Windows CI.
+// a compiled stub is used. That precedent keeps the discovery tests from
+// regressing on Windows CI.
 
 import (
 	"encoding/json"
@@ -155,8 +155,7 @@ var (
 )
 
 // buildFakeMCPStub compiles the fake MCP stub once per test binary run and
-// caches the resulting executable path for reuse. Same pattern as
-// internal/missions/buildFakeOpencodeStub.
+// caches the resulting executable path for reuse.
 func buildFakeMCPStub() (string, error) {
 	fakeMCPOnce.Do(func() {
 		buildDir, err := os.MkdirTemp("", "ywai-fake-mcp-build-*")
@@ -219,8 +218,7 @@ func writeFakeMCPBin(t *testing.T, spec fakeMCPSpec) string {
 }
 
 // prependFakeMCPPath puts dir at the front of PATH for the duration of the
-// test, so `exec.LookPath("mcpfake")` resolves the fake binary. Mirrors
-// the helper used in internal/missions/integration_test.go.
+// test, so `exec.LookPath("mcpfake")` resolves the fake binary.
 func prependFakeMCPPath(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

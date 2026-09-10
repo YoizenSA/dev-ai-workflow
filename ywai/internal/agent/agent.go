@@ -269,8 +269,8 @@ func OpenCodeBinaryName() string {
 }
 
 // OpenCodeIsV2 reports whether the active OpenCode host is OpenCode 2. Callers
-// use it to skip v1-only wiring, such as the background-agents plugin, whose
-// child sessions need a parentID the v2 plugin API no longer passes.
+// use it to gate v2-only wiring, such as the background-agents plugin, which
+// supervises v2's built-in subagent tool and no longer installs under v1.
 func OpenCodeIsV2() bool { return OpenCodeBinaryName() == "opencode2" }
 
 func whichViaShell(name string) string {

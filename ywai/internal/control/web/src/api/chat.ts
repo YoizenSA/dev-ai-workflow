@@ -29,7 +29,7 @@ export function getQuestionReplyURL(sessionId: string, requestId: string): strin
 
 // startOpencode asks the ywai backend to spawn `opencode serve` (it resolves
 // the binary via agent.FindBinary, so nvm/asdf installs work). Mirrors
-// missionsApi.startOpencode but lives here so the chat view can import it from
+// toolsApi.startOpencode but lives here so the chat view can import it from
 // the same module as its other endpoints.
 export async function startOpencode(): Promise<{ status: string; message: string; pid?: number }> {
   const resp = await fetch("/missions/api/opencode/start", { method: "POST" });

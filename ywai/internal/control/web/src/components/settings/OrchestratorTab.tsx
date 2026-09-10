@@ -26,7 +26,7 @@ import {
 	Save,
 } from "lucide-react";
 import { useAgentsDiagramStore } from "../../stores/agentsDiagramStore";
-import { configApi, missionsApi, profilesApi } from "../../api/client";
+import { configApi, toolsApi, profilesApi } from "../../api/client";
 import type {
 	AgentGraphNode,
 	AgentGraphEdge,
@@ -37,7 +37,7 @@ import type {
 } from "../../api/types";
 import Modal from "../shared/Modal";
 import ImportAgentsModal from "./ImportAgentsModal";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 import "./Orchestrator.css";
 
 /**
@@ -405,7 +405,7 @@ export default function OrchestratorTab() {
 	}, [load]);
 
 	useEffect(() => {
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((r) => setModels(Object.values(r.modelsByProvider).flat()))
 			.catch(() => setModels([]));

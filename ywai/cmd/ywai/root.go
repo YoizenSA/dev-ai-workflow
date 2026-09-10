@@ -608,15 +608,12 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			continue
 		}
 
-		// background-agents is an opencode plugin (delegate/delegation_* async
+		// background-agents is an opencode plugin (subagent/delegation async
 		// tools); it only applies to opencode-format configs (opencode/kilocode).
-		// Two gates, because the plugins do not share a compatibility story.
 		//
-		// background-agents runs on both. v2's plugin host drops parentID when
-		// it builds session.create, so what the plugin spawns is a root session
-		// rather than a child: nesting and the depth chain degrade, delegation
-		// itself does not. It also carries the `subagent` override, which only
-		// matters on v2 — that is where the built-in it replaces exists.
+		// It is v2-only now: the plugin is the supervision layer on top of
+		// OpenCode 2's built-in `subagent` tool (notifications, steer/stop,
+		// watchdog, crash recovery) and no longer carries the v1 host surface.
 		//
 		// vision-bridge and advisor are built against the v1 plugin surface and
 		// are not confirmed on v2, so they stay off there rather than being
@@ -646,10 +643,12 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: failed to remove mcp-vision MCP: %v\n", a.Name, err)
 		}
 
-		// OpenCode v1 has no native delegation tool, so the background-agents
-		// plugin is what provides `delegate` and the delegation_* family.
+		// OpenCode 2 launches subagents natively; the plugin adds the async
+		// supervision layer. Under v1 there is nothing to supervise with.
 		if supportsDelegationPlugin {
-			if err := plugins.InstallBackgroundAgents(configPath); err != nil {
+			if !agent.OpenCodeIsV2() {
+				fmt.Printf("  [%s] Skipped background-agents plugin: requires OpenCode 2 (opencode2)\n", a.Name)
+			} else if err := plugins.InstallBackgroundAgents(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
 			}
 		}

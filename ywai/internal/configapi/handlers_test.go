@@ -6,42 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-// setupTestServer creates a server on a random port, starts it, and returns
-// the server and base URL. The caller must defer s.Stop().
-func setupTestServer(t *testing.T) (*Server, string) {
+// setupTestServer serves the config API over httptest and returns its base URL.
+func setupTestServer(t *testing.T) string {
 	s := New(0)
-	go func() {
-		if err := s.Start(); err != nil {
-			// Server may fail to start (e.g., port conflict); log and skip.
-			t.Logf("server Start returned: %v", err)
-		}
-	}()
-
-	client := &http.Client{Timeout: 1 * time.Second}
-	for i := 0; i < 100; i++ {
-		port := s.Port()
-		if port == 0 {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		baseURL := fmt.Sprintf("http://localhost:%d", port)
-		resp, err := client.Get(baseURL + "/api/config/agents")
-		if err == nil {
-			resp.Body.Close()
-			return s, baseURL
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatalf("server did not start within timeout, last port: %d", s.Port())
-	return s, "" // unreachable
+	ts := httptest.NewServer(s.HTTPHandler())
+	t.Cleanup(ts.Close)
+	return ts.URL
 }
 
 // --- Permission Frontmatter Helper Tests ---
@@ -329,8 +306,7 @@ Prompt body
 		t.Fatalf("write agent md: %v", err)
 	}
 
-	s, baseURL := setupTestServer(t)
-	defer s.Stop()
+	baseURL := setupTestServer(t)
 
 	payload := map[string]string{
 		"read": "allow",

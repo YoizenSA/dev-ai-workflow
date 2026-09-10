@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite" // fallback driver when system sqlite3 is unavailable
+	_ "modernc.org/sqlite" // pure-Go SQLite driver
 )
 
 // SessionAnalytics is an aggregate view of real OpenCode session activity:
@@ -151,8 +151,6 @@ func openOpenCodeDB(path string) (*sql.DB, error) {
 // LoadSessionAnalytics reads OpenCode's SQLite DB and aggregates usage.
 // dbPath may be empty to use the default ~/.local/share/opencode/opencode.db.
 //
-// Prefers the system `sqlite3` CLI (fast on multi-GB DBs). Falls back to the
-// pure-Go modernc driver when sqlite3 is not installed.
 // A sandboxed editor records into its own OpenCode install, so the canonical DB
 // is usually not the only one. Each install is read on its own — a UNION across
 // attached DBs reads the same rows but loses the per-table indexes, and `part`
@@ -189,11 +187,6 @@ func LoadSessionAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) 
 }
 
 func loadOneAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*SessionAnalytics, error) {
-	if fast, err := loadSessionAnalyticsFast(ctx, dbPath, q); err == nil {
-		enrichAnalytics(fast)
-		return fast, nil
-	}
-
 	db, err := openOpenCodeDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -727,6 +720,12 @@ func applyShares(items []SessionNamedCount, total int) {
 	for i := range items {
 		items[i].Share = float64(items[i].Count) / float64(total)
 	}
+}
+
+func sortNamedByCount(items []SessionNamedCount) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Count > items[j].Count
+	})
 }
 
 // normalizeModelLabel turns OpenCode's JSON model blob into provider/id.

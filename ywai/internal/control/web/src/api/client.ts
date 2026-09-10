@@ -1,8 +1,4 @@
 import type {
-	Mission,
-	PlanMission,
-	Project,
-	GitInfo,
 	AgentInfo,
 	AgentDetail,
 	AgentGraph,
@@ -14,7 +10,6 @@ import type {
 	ToolsResponse,
 	ModelsResponse,
 	AgentsResponse,
-	FeatureLogsResponse,
 	BrowseFSResponse,
 	UserConfig,
 	RoleDefaults,
@@ -52,22 +47,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 		throw new Error(`${res.status}: ${body}`);
 	}
 	return res.json();
-}
-
-// requestText fetches a plain-text response (e.g. mission artifacts like
-// REPORT.md, architecture.md). Returns empty string on 404 so callers can
-// treat "not generated yet" uniformly.
-async function requestText(
-	path: string,
-	options?: RequestInit,
-): Promise<string> {
-	const res = await fetch(`${BASE}${path}`, options);
-	if (!res.ok) {
-		if (res.status === 404) return "";
-		const body = await res.text().catch(() => res.statusText);
-		throw new Error(`${res.status}: ${body}`);
-	}
-	return res.text();
 }
 
 // ─── Models client cache ───────────────────────────────────────────────────
@@ -113,90 +92,11 @@ function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
 	return p;
 }
 
-// ─── Missions API ──────────────────────────────────────────────────────────
+// —— Tools API ——
+// Shared opencode/fs/refine endpoints. Served by internal/toolsapi behind the
+// historical /missions/api/ prefixes — that URL contract is frozen with the UI.
 
-export const missionsApi = {
-	// Missions
-	listMissions: () =>
-		request<{ missions: Mission[] }>("/missions/api/missions").then(
-			(r) => r.missions,
-		),
-	getMission: (id: string) => request<Mission>(`/missions/api/missions/${id}`),
-	generatePlan: (data: {
-		goal: string;
-		project?: string;
-		model?: string;
-		agent?: string;
-	}) =>
-		request<{ plan: PlanMission }>("/missions/api/missions", {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
-
-	approvePlan: (plan: PlanMission) =>
-		request<{ mission: Mission }>("/missions/api/missions/approve", {
-			method: "POST",
-			body: JSON.stringify({ plan }),
-		}),
-	runMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/run`, { method: "POST" }),
-	autoMission: (data: {
-		goal: string;
-		project?: string;
-		model?: string;
-		agent?: string;
-		autoApprove?: boolean;
-	}) =>
-		request<{ status: string; missionId: string }>(
-			"/missions/api/missions/auto",
-			{ method: "POST", body: JSON.stringify(data) },
-		),
-	pauseMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/pause`, { method: "POST" }),
-	resumeMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/resume`, { method: "POST" }),
-	cancelMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/cancel`, { method: "POST" }),
-	deleteMission: (id: string) =>
-		request<{ status: string; id: string }>(`/missions/api/missions/${id}`, {
-			method: "DELETE",
-		}),
-
-	// Mission artifacts (plain text): architecture, report, services, etc.
-	// Returns empty string when the artifact hasn't been generated yet.
-	getMissionArtifact: (id: string, type: string) =>
-		requestText(`/missions/api/missions/${id}/artifacts/${type}`),
-
-	// Projects
-	listProjects: () =>
-		request<{ projects: Project[] }>("/missions/api/projects").then(
-			(r) => r.projects,
-		),
-	createProject: (name: string, path: string) =>
-		request<{ project: Project }>("/missions/api/projects", {
-			method: "POST",
-			body: JSON.stringify({ name, path }),
-		}).then((r) => r.project),
-	deleteProject: (name: string) =>
-		fetch(`${BASE}/missions/api/projects/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
-
-	// Git introspection for a project's repo.
-	getProjectGitInfo: (name: string) =>
-		request<GitInfo>(`/missions/api/projects/${name}/git-info`),
-	initProjectGit: (name: string) =>
-		request<{ status: string; git: GitInfo }>(
-			`/missions/api/projects/${name}/init-git`,
-			{ method: "POST" },
-		),
-	getFeatureLogs: (missionId: string, featureId: string) =>
-		request<FeatureLogsResponse>(
-			`/missions/api/missions/${missionId}/features/${featureId}/logs`,
-		),
-
+export const toolsApi = {
 	// Models & Agents
 	// Client-side singleflight + TTL. Use force:true on Settings entry to kick
 	// a server-side background revalidate while still returning cache fast.
@@ -207,6 +107,12 @@ export const missionsApi = {
 			"/missions/api/opencode/start",
 			{ method: "POST" },
 		),
+	opencodeStatus: () =>
+		request<{
+			connected: boolean;
+			source?: string;
+			error?: string;
+		}>("/missions/api/opencode/status"),
 
 	// File system browser
 	browseFS: (path?: string) =>
