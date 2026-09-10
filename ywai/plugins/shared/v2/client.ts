@@ -9,6 +9,7 @@
  * and logs honest degradation instead of throwing.
  */
 
+import { linkChildSession } from "./link-parent"
 import type { V2PluginContext } from "./types"
 
 /** Log a v2 shim degradation message to stderr in debug environments. */
@@ -88,11 +89,23 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 
 		async create(input: { body?: { title?: string; parentID?: string } }): Promise<{ data: any }> {
 			if (caps.sessionCreate && ctx.session.create) {
-				return {
-					data: unwrap(
-						await ctx.session.create({ title: input.body?.title, parentID: input.body?.parentID }),
-					),
+				const created = unwrap(
+					await ctx.session.create({ title: input.body?.title, parentID: input.body?.parentID }),
+				)
+
+				// The host accepts parentID and drops it: the created session
+				// comes back unlinked. Anything that finds a subagent through
+				// its parent then cannot see this session at all, so write the
+				// edge ourselves when the host did not. Best-effort by design —
+				// an unlinked delegation still runs.
+				const parentID = input.body?.parentID
+				if (parentID && created?.id && !created.parentID) {
+					const linked = await linkChildSession(created.id, parentID)
+					if (linked) created.parentID = parentID
+					else shimLog("could not link child session to parent", { child: created.id, parentID })
 				}
+
+				return { data: created }
 			}
 			shimLog("session.create not supported; returning synthetic ID")
 			return { data: { id: `v2-session-${Date.now()}` } }
