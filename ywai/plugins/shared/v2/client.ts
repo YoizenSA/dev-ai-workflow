@@ -5,10 +5,58 @@
  * calls (prompt, switchModel, switchAgent, interrupt, wait, etc.).
  *
  * Supports `noReply: true` by routing through `session.synthetic` when present,
- * or falling back to a steer prompt.
+ * or falling back to a steer prompt. Probes host capabilities defensively
+ * and logs honest degradation instead of throwing.
  */
 
 import type { V2PluginContext } from "./types"
+
+/** Log a v2 shim degradation message to stderr in debug environments. */
+function shimLog(message: string, details?: Record<string, any>): void {
+	if (process.env.DEBUG || process.env.YWAI_DEBUG) {
+		const extra = details ? ` ${JSON.stringify(details)}` : ""
+		process.stderr.write(`[ywai-v2-shim] ${message}${extra}\n`)
+	}
+}
+
+/** Probed capabilities of an OpenCode v2 host context. */
+export interface V2Capabilities {
+	sessionGet: boolean
+	sessionCreate: boolean
+	sessionPrompt: boolean
+	sessionSynthetic: boolean
+	sessionSwitchModel: boolean
+	sessionSwitchAgent: boolean
+	sessionInterrupt: boolean
+	sessionContext: boolean
+	sessionWait: boolean
+	sessionDelete: boolean
+	sessionHook: boolean
+	toolTransform: boolean
+	providerList: boolean
+	agentList: boolean
+}
+
+/** Probes the available capabilities on a v2 plugin context. */
+export function probeV2Capabilities(ctx: V2PluginContext): V2Capabilities {
+	const s = ctx?.session
+	return {
+		sessionGet: typeof s?.get === "function",
+		sessionCreate: typeof s?.create === "function",
+		sessionPrompt: typeof s?.prompt === "function",
+		sessionSynthetic: typeof s?.synthetic === "function",
+		sessionSwitchModel: typeof s?.switchModel === "function",
+		sessionSwitchAgent: typeof s?.switchAgent === "function",
+		sessionInterrupt: typeof s?.interrupt === "function",
+		sessionContext: typeof s?.context === "function",
+		sessionWait: typeof s?.wait === "function",
+		sessionDelete: typeof s?.delete === "function",
+		sessionHook: typeof s?.hook === "function",
+		toolTransform: typeof ctx?.tool?.transform === "function",
+		providerList: typeof ctx?.provider?.list === "function",
+		agentList: typeof ctx?.agent?.list === "function",
+	}
+}
 
 /** v1 SDK responses are {data}-wrapped; some v2 ctx returns may be too. */
 export function unwrap(value: any): any {
@@ -23,26 +71,30 @@ export function toArray(value: any): any[] {
 }
 
 export function createV1ShapedClient(ctx: V2PluginContext): any {
+	const caps = probeV2Capabilities(ctx)
+
 	const session = {
 		async status(): Promise<{ data: undefined }> {
 			return { data: undefined }
 		},
 
 		async get(input: { path: { id: string } }): Promise<{ data: any }> {
-			if (typeof ctx.session.get === "function") {
+			if (caps.sessionGet) {
 				return { data: unwrap(await ctx.session.get({ sessionID: input.path.id })) }
 			}
+			shimLog("session.get not supported on this host", { id: input?.path?.id })
 			return { data: undefined }
 		},
 
 		async create(input: { body?: { title?: string; parentID?: string } }): Promise<{ data: any }> {
-			if (typeof ctx.session.create === "function") {
+			if (caps.sessionCreate) {
 				return {
 					data: unwrap(
 						await ctx.session.create({ title: input.body?.title, parentID: input.body?.parentID }),
 					),
 				}
 			}
+			shimLog("session.create not supported; returning synthetic ID")
 			return { data: { id: `v2-session-${Date.now()}` } }
 		},
 
@@ -54,39 +106,47 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 				.filter((part) => part.type === "text")
 				.map((part) => part.text ?? "")
 				.join("\n")
-			if (input.body?.agent && typeof ctx.session.switchAgent === "function") {
-				await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
+			if (input.body?.agent) {
+				if (caps.sessionSwitchAgent) {
+					await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
+				} else {
+					shimLog("session.switchAgent not supported", { agent: input.body.agent })
+				}
 			}
-			if (typeof ctx.session.prompt === "function") {
+			if (caps.sessionPrompt) {
 				await ctx.session.prompt({
 					sessionID: input.path.id,
 					text,
 					delivery: "steer",
 				})
+			} else {
+				shimLog("session.prompt not supported on promptAsync")
 			}
 			return { data: undefined }
 		},
 
 		async abort(input: { path: { id: string } }): Promise<{ data: undefined }> {
-			if (typeof ctx.session.interrupt === "function") {
+			if (caps.sessionInterrupt) {
 				await ctx.session.interrupt({ sessionID: input.path.id })
+			} else {
+				shimLog("session.interrupt not supported", { id: input?.path?.id })
 			}
 			return { data: undefined }
 		},
 
 		async delete(input: { path: { id: string } }): Promise<{ data: undefined }> {
-			if (typeof ctx.session.delete === "function") {
+			if (caps.sessionDelete) {
 				try {
 					await ctx.session.delete({ sessionID: input.path.id })
 				} catch {
-					// best-effort
+					// best-effort cleanup
 				}
 			}
 			return { data: undefined }
 		},
 
 		async messages(input: { path: { id: string } }): Promise<{ data: any }> {
-			if (typeof ctx.session.context === "function") {
+			if (caps.sessionContext) {
 				const items = toArray(await ctx.session.context({ sessionID: input.path.id }))
 				return {
 					data: items.map((item: any) => {
@@ -97,6 +157,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 					}),
 				}
 			}
+			shimLog("session.context not supported; returning empty messages", { id: input?.path?.id })
 			return { data: [] }
 		},
 
@@ -128,7 +189,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			// Route noReply: true through session.synthetic when available,
 			// so the message is visible in transcript without spending a turn.
 			if (body.noReply) {
-				if (typeof ctx.session.synthetic === "function") {
+				if (caps.sessionSynthetic) {
 					await ctx.session.synthetic({
 						sessionID: input.path.id,
 						text,
@@ -136,32 +197,42 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 					return { data: { parts: [] } }
 				}
 				// Fallback: steer delivery without expecting response parts
-				if (typeof ctx.session.prompt === "function") {
+				if (caps.sessionPrompt) {
 					await ctx.session.prompt({
 						sessionID: input.path.id,
 						text,
 						delivery: "steer",
 					})
+				} else {
+					shimLog("neither session.synthetic nor session.prompt available for noReply")
 				}
 				return { data: { parts: [] } }
 			}
 
-			if (body.agent && typeof ctx.session.switchAgent === "function") {
-				await ctx.session.switchAgent({ sessionID: input.path.id, agent: body.agent })
+			if (body.agent) {
+				if (caps.sessionSwitchAgent) {
+					await ctx.session.switchAgent({ sessionID: input.path.id, agent: body.agent })
+				} else {
+					shimLog("session.switchAgent not supported; keeping current agent", { agent: body.agent })
+				}
 			}
 
-			if (body.model && typeof ctx.session.switchModel === "function") {
-				await ctx.session.switchModel({
-					sessionID: input.path.id,
-					model: {
-						providerID: body.model.providerID,
-						id: body.model.modelID,
-						...(body.model.variant ? { variant: body.model.variant } : {}),
-					},
-				})
+			if (body.model) {
+				if (caps.sessionSwitchModel) {
+					await ctx.session.switchModel({
+						sessionID: input.path.id,
+						model: {
+							providerID: body.model.providerID,
+							id: body.model.modelID,
+							...(body.model.variant ? { variant: body.model.variant } : {}),
+						},
+					})
+				} else {
+					shimLog("session.switchModel not supported; keeping default model", { model: body.model })
+				}
 			}
 
-			if (typeof ctx.session.prompt === "function") {
+			if (caps.sessionPrompt) {
 				const promptArgs: Record<string, any> = {
 					sessionID: input.path.id,
 					text,
@@ -171,9 +242,11 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 					promptArgs.files = fileParts
 				}
 				await ctx.session.prompt(promptArgs)
+			} else {
+				shimLog("session.prompt not supported on this host")
 			}
 
-			if (typeof ctx.session.wait === "function") {
+			if (caps.sessionWait) {
 				try {
 					await ctx.session.wait({ sessionID: input.path.id })
 				} catch {
@@ -182,7 +255,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			}
 
 			// Try to recover assistant response text from context
-			if (typeof ctx.session.context === "function") {
+			if (caps.sessionContext) {
 				try {
 					const items = toArray(await ctx.session.context({ sessionID: input.path.id }))
 					const lastAssistant = [...items].reverse().find((m: any) => {
@@ -204,7 +277,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 
 	const provider = {
 		async list(): Promise<{ data: { all: any[] } }> {
-			if (typeof ctx.provider?.list === "function") {
+			if (caps.providerList) {
 				try {
 					const result = await ctx.provider.list()
 					return { data: { all: toArray(result) } }
@@ -221,7 +294,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			return { data: undefined }
 		},
 		async agents() {
-			if (typeof ctx.agent?.list === "function") {
+			if (caps.agentList) {
 				try {
 					const agents = toArray(await ctx.agent.list())
 					return {
