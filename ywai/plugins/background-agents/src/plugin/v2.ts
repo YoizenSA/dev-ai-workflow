@@ -32,7 +32,6 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { formatDelegationContext } from "./context"
 import { DelegationManager } from "./delegation-manager"
-import { mapV2EventToV1 } from "./event-adapter"
 import { createLogger } from "./logger"
 import { getProjectId } from "./primitives/get-project-id"
 import type { OpencodeClient } from "./primitives/types"
@@ -45,183 +44,13 @@ import {
 	createDelegationStop,
 } from "./tools"
 import { DEFAULT_MAX_RUN_TIME_MS } from "./types"
+import {
+	createV1ShapedClient,
+	mapV2EventToV1,
+	type V2PluginContext,
+} from "../../../shared/v2"
 
-/**
- * The slice of the v2 plugin context this module uses. Typed loosely on
- * purpose: the v2 plugin API is beta and its effect-based SDK types churn,
- * so every boundary here is structural.
- */
-interface V2PluginContext {
-	location: { directory: string }
-	session: Record<string, (...args: any[]) => Promise<any>>
-	agent: Record<string, (...args: any[]) => Promise<any>>
-	tool: Record<string, any>
-	event: { subscribe(options?: { signal?: AbortSignal }): AsyncIterable<any> }
-}
-
-/** v1 SDK responses are {data}-wrapped; some v2 ctx returns may be too. */
-function unwrap(value: any): any {
-	return value && typeof value === "object" && !Array.isArray(value) && "data" in value ? value.data : value
-}
-
-/** First array hidden inside a client-style envelope. */
-function toArray(value: any): any[] {
-	const inner = unwrap(value)
-	if (Array.isArray(inner)) return inner
-	return inner?.agents ?? inner?.sessions ?? inner?.items ?? []
-}
-
-/**
- * A v1-SDK-shaped client over the v2 plugin context, covering exactly the
- * calls DelegationManager makes. Each mapping degrades consciously:
- *
- * - session.status: v2 has no server-wide status poll; returning undefined
- *   data means "unknown", which every caller already handles by falling back
- *   to event-driven heartbeats.
- * - session.delete: v2 exposes no session deletion; finished-delegation
- *   cleanup becomes a no-op, so old delegation sessions stay listed.
- * - session.promptAsync: delivered as a "steer" prompt, which is the v2
- *   spelling of "inject this into a running session".
- */
-export function createV1ShapedClient(ctx: V2PluginContext): OpencodeClient {
-	const session = {
-		async status(): Promise<{ data: undefined }> {
-			return { data: undefined }
-		},
-		async get(input: { path: { id: string } }): Promise<{ data: any }> {
-			return { data: unwrap(await ctx.session.get({ sessionID: input.path.id })) }
-		},
-		async promptAsync(input: {
-			path: { id: string }
-			body?: { agent?: string; parts?: Array<{ type: string; text?: string }> }
-		}): Promise<{ data: undefined }> {
-			const text = (input.body?.parts ?? [])
-				.filter((part) => part.type === "text")
-				.map((part) => part.text ?? "")
-				.join("\n")
-			if (input.body?.agent) {
-				await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
-			}
-			await ctx.session.prompt({
-				sessionID: input.path.id,
-				text,
-				delivery: "steer",
-			})
-			return { data: undefined }
-		},
-		async abort(input: { path: { id: string } }): Promise<{ data: undefined }> {
-			await ctx.session.interrupt({ sessionID: input.path.id })
-			return { data: undefined }
-		},
-		async delete(_input: { path: { id: string } }): Promise<{ data: undefined }> {
-			// v2 exposes no session deletion to plugins; cleanup is skipped.
-			return { data: undefined }
-		},
-		async messages(input: { path: { id: string } }): Promise<{ data: any }> {
-			const items = toArray(await ctx.session.context({ sessionID: input.path.id }))
-			// v1 messages are {info:{role,...}, parts:[...]}; v2 flattens role to
-			// the top level. Normalize so the transcript digest works on both.
-			return {
-				data: items.map((item: any) => {
-					if (!item || typeof item !== "object") return item
-					const role = item.info?.role ?? item.message?.role ?? item.role ?? item.type
-					const parts = item.parts ?? item.content ?? item.info?.parts ?? []
-					return { ...item, info: { ...item, role }, parts }
-				}),
-			}
-		},
-		async prompt(input: {
-			path: { id: string }
-			body?: {
-				agent?: string
-				model?: { providerID: string; modelID: string; variant?: string }
-				parts?: Array<{ type: string; text?: string }>
-			}
-		}): Promise<{ data: { parts: never[] } }> {
-			const text = (input.body?.parts ?? [])
-				.filter((part) => part.type === "text")
-				.map((part) => part.text ?? "")
-				.join("\n")
-			// v2's SessionPromptInput carries no model field: the override lives
-			// on session.switchModel. Passing it to prompt() was silently
-			// dropped, so every delegation ran on the agent's configured model.
-			// The variant rides along — it is how `effort` reaches the model.
-			const model = input.body?.model
-				? {
-						providerID: input.body.model.providerID,
-						id: input.body.model.modelID,
-						...(input.body.model.variant ? { variant: input.body.model.variant } : {}),
-					}
-				: undefined
-			// Same story as the model: SessionPromptInput carries no agent field
-			// either, so passing it to prompt() left every delegation on v2's
-			// default agent ("build") no matter which agent was requested.
-			if (input.body?.agent) {
-				await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
-			}
-			if (model) {
-				await ctx.session.switchModel({ sessionID: input.path.id, model })
-			}
-			await ctx.session.prompt({
-				sessionID: input.path.id,
-				text,
-				delivery: "steer",
-			})
-			// v1's prompt() resolves when the assistant turn is done; v2's
-			// resolves at admission. Riding out the turn keeps the manager's
-			// turn-error detection and completion scheduling meaningful.
-			try {
-				await ctx.session.wait({ sessionID: input.path.id })
-			} catch {
-				// Waiting is best-effort; the idle-event path still finalizes.
-			}
-			// No assistant parts here: metadata generation falls back, and the
-			// initial delegation prompt only reads the turn's error field.
-			return { data: { parts: [] } }
-		},
-		async create(input: { body?: { title?: string; parentID?: string } }): Promise<{ data: any }> {
-			// v2's host drops parentID (known beta degradation: the delegation
-			// session is a root session rather than a child).
-			return {
-				data: unwrap(
-					await ctx.session.create({ title: input.body?.title, parentID: input.body?.parentID }),
-				),
-			}
-		},
-	}
-	return {
-		session,
-		config: {
-			// v2 plugin contexts expose no config reader; callers degrade to
-			// their fallbacks (metadata without small_model, capability parse
-			// without an agent permission map).
-			async get(): Promise<{ data: undefined }> {
-				return { data: undefined }
-			},
-		},
-		app: {
-			// v2 plugin contexts have no app-log endpoint; debug logging
-			// degrades to the manager's file logger.
-			async log(): Promise<{ data: undefined }> {
-				return { data: undefined }
-			},
-			async agents() {
-				const agents = toArray(await ctx.agent.list())
-				return {
-					data: agents.map((agent) => ({
-						name: agent.id ?? agent.name,
-						description: agent.description,
-						mode: agent.mode,
-					})),
-				}
-			},
-		},
-		tui: {
-			// v2 plugin contexts have no TUI surface; toasts are dropped.
-			async showToast(): Promise<void> {},
-		},
-	} as unknown as OpencodeClient
-}
+export { createV1ShapedClient }
 
 /** v1 tool defs return plain strings or {title, output}; v2 wants content. */
 function toV2Result(result: any): { content: string; metadata?: Record<string, string> } {

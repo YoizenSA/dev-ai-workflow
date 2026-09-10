@@ -8,14 +8,10 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// v1OnlyBundles are the ywai plugin bundles that only work on OpenCode v1.
-// background-agents is deliberately absent: it runs on v2 too (losing session
-// nesting, not delegation), and it carries the subagent override that only
-// matters there — removing it would uninstall delegation on v2.
-var v1OnlyBundles = []string{
-	config.VisionBridgeBundleName,
-	config.AdvisorBundleName,
-}
+// v1OnlyBundles lists plugin bundles that only work on OpenCode v1.
+// Both vision-bridge and advisor now carry v2 dual exports and are installed
+// into the auto-discovered plugins directory on v2, so the list is empty.
+var v1OnlyBundles = []string{}
 
 // orphanBundles are ywai plugin bundles no ywai version installs any more. They
 // have no source in this repo and nothing updates them, but an older install

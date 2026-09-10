@@ -20,15 +20,17 @@ func writeConfigWithPlugins(t *testing.T, entries []any) string {
 	return path
 }
 
-// On v2 the v1-only bundles must go: left in place, the next write moves them
-// to the "plugins" key v2 does read, and it then tries to load a v1 plugin.
-func TestRemoveV1OnlyPlugins_V2StripsBundles(t *testing.T) {
+// On v2, orphan bundles (like legacy background-agents-v2.js) must go, while
+// supported dual-export bundles (background-agents, vision-bridge, advisor)
+// survive because they now carry v2 setup hooks.
+func TestRemoveV1OnlyPlugins_V2StripsOrphansOnly(t *testing.T) {
 	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 
 	path := writeConfigWithPlugins(t, []any{
 		"/home/u/.config/opencode/ywai-plugins/vision-bridge.js",
 		"/home/u/.config/opencode/ywai-plugins/background-agents.js",
 		"/home/u/.config/opencode/ywai-plugins/advisor.js",
+		"/home/u/.config/opencode/ywai-plugins/background-agents-v2.js",
 		"keep-me.js",
 	})
 
@@ -36,8 +38,8 @@ func TestRemoveV1OnlyPlugins_V2StripsBundles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveV1OnlyPlugins: %v", err)
 	}
-	if removed != 2 {
-		t.Errorf("removed = %d, want 2 (background-agents runs on v2 and must stay)", removed)
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1 (only orphan background-agents-v2.js)", removed)
 	}
 
 	root, err := config.ReadJSONC(path)
@@ -48,9 +50,14 @@ func TestRemoveV1OnlyPlugins_V2StripsBundles(t *testing.T) {
 	if !ok {
 		t.Fatalf("v2 must write the plugins key, got %v", root)
 	}
-	want := []any{"/home/u/.config/opencode/ywai-plugins/background-agents.js", "keep-me.js"}
+	want := []any{
+		"/home/u/.config/opencode/ywai-plugins/vision-bridge.js",
+		"/home/u/.config/opencode/ywai-plugins/background-agents.js",
+		"/home/u/.config/opencode/ywai-plugins/advisor.js",
+		"keep-me.js",
+	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("plugins = %v, want %v (background-agents and unrelated entries must survive)", got, want)
+		t.Errorf("plugins = %v, want %v", got, want)
 	}
 }
 

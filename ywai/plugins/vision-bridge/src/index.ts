@@ -331,4 +331,19 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
   }
 }
 
-export default VisionBridgePlugin
+import { setupV2 } from "./v2.js"
+
+const VisionBridgeExport = Object.assign(
+  async function (ctx: Parameters<typeof VisionBridgePlugin>[0]) {
+    return VisionBridgePlugin(ctx)
+  },
+  {
+    id: "ywai-vision-bridge",
+    setup: setupV2,
+    async server(ctx: Parameters<typeof VisionBridgePlugin>[0]) {
+      return VisionBridgePlugin(ctx)
+    },
+  },
+)
+
+export default VisionBridgeExport

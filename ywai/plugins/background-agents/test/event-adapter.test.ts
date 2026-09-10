@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mapV2EventToV1, usageToMessageUpdated } from "../src/plugin/event-adapter"
+import { mapV2EventToV1, usageToMessageUpdated } from "../../shared/v2"
 
 const usageProps = {
 	sessionID: "ses_1",

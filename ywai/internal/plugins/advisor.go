@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -24,6 +25,10 @@ func InstallAdvisor(configPath string) error {
 }
 
 func installAdvisorWithBundle(configPath, bundleSrc string) error {
+	if agent.OpenCodeIsV2() {
+		return installVendorPluginV2(configPath, bundleSrc, config.AdvisorBundleName)
+	}
+
 	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create plugins dir %s: %w", destDir, err)

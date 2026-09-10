@@ -261,4 +261,19 @@ async function runAdvisor(
 
 
 
-export default AdvisorPlugin
+import { setupV2 } from "./v2.js"
+
+const AdvisorExport = Object.assign(
+  async function (ctx: Parameters<typeof AdvisorPlugin>[0], options?: Record<string, unknown>) {
+    return AdvisorPlugin(ctx, options)
+  },
+  {
+    id: "ywai-advisor",
+    setup: setupV2,
+    async server(ctx: Parameters<typeof AdvisorPlugin>[0], options?: Record<string, unknown>) {
+      return AdvisorPlugin(ctx, options)
+    },
+  },
+)
+
+export default AdvisorExport
