@@ -30,6 +30,42 @@ func TestAssetNameStripsVersionPrefix(t *testing.T) {
 	}
 }
 
+// The releases API is not newest-first: it sorts tag names as text, so
+// beta.9 comes before beta.11. This is the order it returned on 2026-09-10,
+// which pinned every beta install at beta.9.
+func TestPickLatestPrerelease_HighestVersionNotListOrder(t *testing.T) {
+	releases := []releaseInfo{
+		{TagName: "v8.25.0-beta.9", Prerelease: true},
+		{TagName: "v8.25.0-beta.8", Prerelease: true},
+		{TagName: "v8.25.0-beta.6", Prerelease: true},
+		{TagName: "v8.25.0-beta.11", Prerelease: true},
+		{TagName: "v8.25.0-beta.5", Prerelease: true},
+		{TagName: "v8.24.3", Prerelease: false},
+	}
+	if tag, ok := pickLatestPrerelease(releases); !ok || tag != "v8.25.0-beta.11" {
+		t.Fatalf("got %q ok=%v, want v8.25.0-beta.11", tag, ok)
+	}
+}
+
+func TestComparePrereleaseVersions(t *testing.T) {
+	cases := []struct{ a, b string }{ // a < b
+		{"v8.25.0-beta.9", "v8.25.0-beta.11"},
+		{"v8.25.0-beta.11", "v8.26.0-beta.1"},
+		{"v8.9.0-beta.1", "v8.10.0-beta.1"},
+		{"v8.25.0-alpha.3", "v8.25.0-beta.1"},
+		{"v8.25.0-beta.2", "v8.25.0-rc.1"},
+		{"v8.25.0-beta", "v8.25.0-beta.1"},
+	}
+	for _, c := range cases {
+		if compareVersions(c.a, c.b) >= 0 || compareVersions(c.b, c.a) <= 0 {
+			t.Errorf("want %s < %s", c.a, c.b)
+		}
+	}
+	if compareVersions("v1.2.3-beta.4", "1.2.3-beta.4") != 0 {
+		t.Error("the v prefix must not affect ordering")
+	}
+}
+
 func TestPickLatestPrerelease(t *testing.T) {
 	// Newest first (GitHub order)
 	releases := []releaseInfo{
