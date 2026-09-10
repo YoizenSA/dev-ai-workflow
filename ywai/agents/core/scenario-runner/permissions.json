@@ -14,7 +14,7 @@
   "delegate": "deny",
   "question": "allow",
   "skill": "allow",
-  "opencode-in-chrome_*": "allow",
+  "chrome-devtools_*": "allow",
   "grafana_*": "allow",
   "graft_*": "allow",
   "memory": "allow",

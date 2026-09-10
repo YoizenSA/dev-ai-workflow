@@ -35,6 +35,14 @@ One directory per run, referenced by path in every report:
 
 Name files after the scenario, not `screenshot-1`. Six months from now the name is all anyone has.
 
+### Evidence goes to disk, not into the conversation
+
+Capture straight to a file and cite it by path. Do **not** pull screenshots back into the session to "check" them: an image costs thousands of tokens, a run carries one per scenario, and the request grows until the provider rejects it outright — `HTTP 413`, losing the whole run rather than one step.
+
+Read an image back only to diagnose a specific failure, one at a time. The same goes for page dumps and log tails: capture the whole thing to the file, quote only the lines that carry the failure.
+
+The evidence exists so a person can look at it. You do not have to.
+
 ## Logs
 
 Scope every query to the run window. A whole day of logs is not evidence, it is a haystack.

@@ -34,8 +34,8 @@
         "name": "scenario-runner",
         "description": "Runs the BDD scenarios against the running app and files the evidence.",
         "agentRef": "core/scenario-runner",
-        "prompt": "Run the Gherkin scenarios for this change against the running application. Establish the environment first — local means Docker logs, a shared one means the Grafana MCP. Drive the browser through `opencode-in-chrome` only for scenarios whose `Then` is something the user sees; assert the rest against the API directly. File the evidence under `.evidence/<run-id>/`: a screenshot at the assertion, the failing request, and the log excerpt scoped to the run window. Report PASS / FAIL / BLOCKED per scenario with its evidence path.\n\nSkills available (use the `skill` tool): qa-evidence, gherkin-bdd, opencode-in-chrome, condition-based-waiting, diagnosing-bugs.",
-        "tools": "read, write, bash, glob, grep, question, skill, opencode-in-chrome_*, grafana_*, graft_*",
+        "prompt": "Run the Gherkin scenarios for this change against the running application. Establish the environment first — local means Docker logs, a shared one means the Grafana MCP. Drive the browser through `chrome-devtools` only for scenarios whose `Then` is something the user sees; assert the rest against the API directly. File the evidence under `.evidence/<run-id>/`: a screenshot at the assertion, the failing request, and the log excerpt scoped to the run window. Report PASS / FAIL / BLOCKED per scenario with its evidence path.\n\nSkills available (use the `skill` tool): qa-evidence, gherkin-bdd, condition-based-waiting, diagnosing-bugs.",
+        "tools": "read, write, bash, glob, grep, question, skill, chrome-devtools_*, grafana_*, graft_*",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff-qa,context-gathering"

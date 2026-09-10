@@ -1,6 +1,5 @@
 qa-evidence
 gherkin-bdd
-opencode-in-chrome
 condition-based-waiting
 playwright-e2e-testing
 diagnosing-bugs
