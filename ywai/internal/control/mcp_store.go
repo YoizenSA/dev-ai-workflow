@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
@@ -40,6 +42,7 @@ type McpCatalogEntry struct {
 	Command     []string     `json:"command,omitempty"`
 	URL         string       `json:"url,omitempty"`
 	InstallCmd  string       `json:"installCmd,omitempty"`
+	URLRequired bool         `json:"urlRequired,omitempty"`
 	RequiredEnv []McpEnvSpec `json:"requiredEnv,omitempty"`
 	Tools       []string     `json:"tools"`
 	Docs        string       `json:"docs"`
@@ -92,6 +95,7 @@ func catalogEntryFromMCP(e mcp.CatalogEntry) McpCatalogEntry {
 		Command:     e.Command,
 		URL:         e.URL,
 		InstallCmd:  e.InstallCmd,
+		URLRequired: e.URLRequired,
 		RequiredEnv: req,
 		Tools:       e.Tools,
 		Docs:        e.Docs,
@@ -236,6 +240,9 @@ type mcpInstallRequest struct {
 	TargetAgent string            `json:"target_agent"`
 	Credentials map[string]string `json:"credentials"`
 	ProjectDir  string            `json:"project_dir,omitempty"`
+	// URL is the endpoint for a catalog entry marked URLRequired — a remote
+	// server that lives on the user's own network, so the catalog ships none.
+	URL string `json:"url,omitempty"`
 }
 
 // mcpInstallResponse is the 202 body returned by handleMcpInstall.
@@ -296,6 +303,29 @@ func (s *Server) handleMcpInstall(w http.ResponseWriter, r *http.Request) {
 	if target != "opencode" && target != "pi" && target != "claude-code" && target != "omp" {
 		writeJSON(w, http.StatusBadRequest, mcpErrorResponse{Error: "invalid target_agent: " + target})
 		return
+	}
+
+	// A URLRequired entry has no endpoint until the user gives one. Installing
+	// it blank would write a server that can never connect and report no reason.
+	if entry.URLRequired {
+		endpoint := strings.TrimSpace(req.URL)
+		if endpoint == "" {
+			writeJSON(w, http.StatusUnprocessableEntity, mcpErrorResponse{
+				Error:    "missing_url",
+				Code:     "missing_url",
+				Required: []string{"url"},
+			})
+			return
+		}
+		parsed, err := url.Parse(endpoint)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			writeJSON(w, http.StatusBadRequest, mcpErrorResponse{
+				Error: "url must be an absolute http(s) endpoint",
+				Code:  "invalid_url",
+			})
+			return
+		}
+		entry.URL = endpoint
 	}
 
 	missing := mcp.ValidateCreds(entry.RequiredEnv, req.Credentials)
@@ -585,14 +615,25 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 	// Find the catalog entry to determine type and check params.
 	var entryType string
 	var command []string
-	var url string
+	var endpoint string
 	clientAuth := false
 
 	if ce, ok := mcp.CatalogByID(id); ok {
 		entryType = ce.Type
 		command = ce.Command
-		url = ce.URL
+		endpoint = ce.URL
 		clientAuth = ce.ClientAuth
+	}
+
+	// The installed entry wins: a URLRequired server has its endpoint only in
+	// the config, and a user may have repointed any other one by hand. Probing
+	// the catalog URL would report on a server nobody is actually running.
+	if cfg, err := readMcpConfig(); err == nil {
+		if m, ok := cfg[id].(map[string]interface{}); ok {
+			if u, ok := m["url"].(string); ok && strings.TrimSpace(u) != "" {
+				endpoint = u
+			}
+		}
 	}
 
 	item := mcpHealthItem{ID: id}
@@ -619,13 +660,13 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 		item.LatencyMs = time.Since(start).Milliseconds()
 
 	case "remote":
-		if url == "" {
+		if endpoint == "" {
 			item.Status = "unknown"
 			break
 		}
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		req, reqErr := http.NewRequestWithContext(checkCtx, http.MethodHead, url, nil)
+		req, reqErr := http.NewRequestWithContext(checkCtx, http.MethodHead, endpoint, nil)
 		if reqErr != nil {
 			item.Status = "unhealthy"
 			item.Error = reqErr.Error()
@@ -667,13 +708,19 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
-// configFilePath returns the path to opencode.json.
+// configFilePath returns the OpenCode config to read and write.
+//
+// OpenCode prefers opencode.jsonc over opencode.json when both exist, so this
+// has to resolve the same way. Reading only the .json meant a user whose config
+// is .jsonc saw an empty MCP list in the UI — their servers were installed, we
+// were looking at the wrong file — and a write would have created a second
+// config the agent ignores.
 func configFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
+	return config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode"), nil
 }
 
 // readMcpConfig reads the mcp section from opencode.json.
@@ -687,16 +734,13 @@ func readMcpConfig() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]interface{}{}, nil
-		}
-		return nil, fmt.Errorf("reading config: %w", err)
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return map[string]interface{}{}, nil
 	}
-
-	var full map[string]interface{}
-	if err := json.Unmarshal(data, &full); err != nil {
+	// ReadJSONC, not encoding/json: a .jsonc carrying comments fails a plain
+	// Unmarshal, and the UI would report "no MCPs" for a config full of them.
+	full, err := config.ReadJSONC(path)
+	if err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
@@ -719,13 +763,8 @@ func writeMcpConfig(servers map[string]interface{}) error {
 		return err
 	}
 
-	data, err := os.ReadFile(path)
+	full, err := config.ReadJSONC(path)
 	if err != nil {
-		return fmt.Errorf("reading config: %w", err)
-	}
-
-	var full map[string]interface{}
-	if err := json.Unmarshal(data, &full); err != nil {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
@@ -746,23 +785,20 @@ func writeMcpConfig(servers map[string]interface{}) error {
 
 // projectMcpConfigFilePath returns the path to the project-local MCP config file.
 func projectMcpConfigFilePath(projectDir string) string {
-	return filepath.Join(projectDir, ".opencode", "mcp.json")
+	return config.FindJSONCPath(filepath.Join(projectDir, ".opencode"), "mcp")
 }
 
 // readProjectMcpConfig reads the mcpServers section from a project-local
 // .opencode/mcp.json file. Returns an empty map if the file doesn't exist.
 func readProjectMcpConfig(projectDir string) (map[string]interface{}, error) {
 	path := projectMcpConfigFilePath(projectDir)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]interface{}{}, nil
-		}
-		return nil, fmt.Errorf("reading project mcp config %s: %w", path, err)
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return map[string]interface{}{}, nil
 	}
-
-	var mcpSection map[string]interface{}
-	if err := json.Unmarshal(data, &mcpSection); err != nil {
+	// Same reason as the global read: a project config may be .jsonc, and
+	// comments must not read as "this project has no MCP servers".
+	mcpSection, err := config.ReadJSONC(path)
+	if err != nil {
 		return nil, fmt.Errorf("parsing project mcp config %s: %w", path, err)
 	}
 	// Handle the case where the file has a top-level "mcpServers" key.
