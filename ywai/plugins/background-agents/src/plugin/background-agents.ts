@@ -21,6 +21,8 @@ import type { Plugin } from "@opencode-ai/plugin"
 import type { Event } from "@opencode-ai/sdk"
 import { parseAgentMode, parseAgentWriteCapability } from "./agent-capability"
 import { formatDelegationContext } from "./context"
+import { createJsonErrorRecoveryHook } from "./json-error-recovery"
+import { createToolLoopGuardHook } from "./tool-loop-guard"
 import { DelegationManager } from "./delegation-manager"
 import { createLogger } from "./logger"
 import { createNativeSteer } from "./native"
@@ -127,6 +129,10 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	const openCodeFlavor = readOpenCodeFlavor()
 	const manager = new DelegationManager(client as OpencodeClient, baseDir, log, { nativeSteer })
 
+	// Ported guard hooks (oh-my-opencode-slim): loop guard + JSON recovery.
+	const loopGuard = createToolLoopGuardHook()
+	const jsonRecovery = createJsonErrorRecoveryHook()
+
 	await manager.debugLog("BackgroundAgentsPlugin initialized with delegation system")
 
 	// Re-adopt delegations orphaned by a previous process exit (fire-and-forget so plugin
@@ -136,11 +142,15 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 	return {
 		tool: openCodeFlavor === "v2" ? v2Tools(manager) : v1Tools(manager),
 
-		// Prevent read-only agents from using native task tool (symmetric to delegate enforcement)
+		// Ported guard hooks (oh-my-opencode-slim): the loop guard stops
+		// infinite identical tool calls. It runs on every host flavor, then
+		// the delegation guard does its task-tool check below.
 		"tool.execute.before": async (
-			input: { tool: string },
+			input: { tool: string; sessionID?: string; callID?: string },
 			output: { args?: { subagent_type?: string } },
 		) => {
+			await loopGuard["tool.execute.before"](input, output)
+
 			// Guard: Only intercept task tool
 			if (input.tool !== "task") return
 
@@ -185,6 +195,17 @@ const BackgroundAgentsPlugin: Plugin = async (ctx) => {
 					`Use delegate for read-only sub-agents.\n` +
 					`Use task for write-capable sub-agents.`,
 			)
+		},
+
+		// Recovery + loop detection on completed tool calls: JSON recovery
+		// appends fix-it instructions on parse failures, the loop guard counts
+		// identical args/results runs and warns at the threshold.
+		"tool.execute.after": async (
+			input: { tool: string; sessionID?: string; callID?: string },
+			output: { output?: unknown; title?: string; metadata?: unknown },
+		) => {
+			await jsonRecovery["tool.execute.after"](input, output as never)
+			await loopGuard["tool.execute.after"](input, output as never)
 		},
 
 		// Inject delegation rules into system prompt

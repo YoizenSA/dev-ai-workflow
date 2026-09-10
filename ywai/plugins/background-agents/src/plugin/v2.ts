@@ -31,10 +31,11 @@ import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
 import { formatDelegationContext } from "./context"
+import { createJsonErrorRecoveryHook } from "./json-error-recovery"
+import { createToolLoopGuardHook } from "./tool-loop-guard"
 import { DelegationManager } from "./delegation-manager"
 import { createLogger } from "./logger"
 import { getProjectId } from "./primitives/get-project-id"
-import type { OpencodeClient } from "./primitives/types"
 import { DELEGATION_RULES } from "./rules"
 import {
 	createSubagent,
@@ -163,7 +164,7 @@ async function registerV2Tools(ctx: V2PluginContext, manager: DelegationManager)
 		subagent_stop: createDelegationStop(manager) as any,
 	}
 
-	await ctx.tool.transform((editor: any) => {
+	await ctx.tool?.transform?.((editor: any) => {
 		for (const [name, def] of Object.entries(defs)) {
 			editor.add({
 				name,
@@ -195,10 +196,32 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 
 	await registerV2Tools(ctx, manager)
 
+	// Ported guard hooks (oh-my-opencode-slim): loop guard + JSON recovery on
+	// the v2 tool stream. Each hook degrades to a no-op when the host lacks
+	// tool.hook; log a line via the manager so the gap is visible in debug.
+	if (typeof ctx.tool?.hook === "function") {
+		const loopGuard = createToolLoopGuardHook()
+		const jsonRecovery = createJsonErrorRecoveryHook()
+		const guardAfter = async (event: { tool: string; sessionID?: string; callID?: string; result?: any }) => {
+			const output = { output: typeof event.result?.content === "string" ? event.result.content : undefined }
+			await jsonRecovery["tool.execute.after"](event as never, output as never)
+			await loopGuard["tool.execute.after"](event as never, output as never)
+			if (typeof output.output === "string" && event.result) {
+				event.result.content = output.output
+			}
+		}
+		await ctx.tool.hook("execute.after", guardAfter)
+		await ctx.tool.hook("execute.before", async (event: { tool: string; sessionID?: string; callID?: string; input?: unknown }) => {
+			const output = { args: event.input }
+			await loopGuard["tool.execute.before"](event as never, output as never)
+			event.input = output.args
+		})
+	}
+
 	// System injection + delegation context. v2 runs the context hook for
 	// compaction calls too, so this also carries delegation state across
 	// compaction — the role the v1 compacting hook played.
-	await ctx.session.hook("context", async (event: any) => {
+	await ctx.session.hook?.("context", async (event: any) => {
 		try {
 			event.system.push({ type: "text", text: DELEGATION_RULES })
 			const rootSessionID = await manager.getRootSessionID(event.sessionID)
@@ -230,7 +253,7 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 
 	// Deliver queued parent notifications on the next user turn (the v2
 	// spelling of the v1 chat.message hook).
-	await ctx.session.hook("prompt", (event: any) => {
+	await ctx.session.hook?.("prompt", (event: any) => {
 		try {
 			const pending = manager.drainPendingNotificationText(event.sessionID)
 			if (pending) {

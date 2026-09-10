@@ -79,7 +79,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 		},
 
 		async get(input: { path: { id: string } }): Promise<{ data: any }> {
-			if (caps.sessionGet) {
+			if (caps.sessionGet && ctx.session.get) {
 				return { data: unwrap(await ctx.session.get({ sessionID: input.path.id })) }
 			}
 			shimLog("session.get not supported on this host", { id: input?.path?.id })
@@ -87,7 +87,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 		},
 
 		async create(input: { body?: { title?: string; parentID?: string } }): Promise<{ data: any }> {
-			if (caps.sessionCreate) {
+			if (caps.sessionCreate && ctx.session.create) {
 				return {
 					data: unwrap(
 						await ctx.session.create({ title: input.body?.title, parentID: input.body?.parentID }),
@@ -107,13 +107,13 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 				.map((part) => part.text ?? "")
 				.join("\n")
 			if (input.body?.agent) {
-				if (caps.sessionSwitchAgent) {
+				if (caps.sessionSwitchAgent && ctx.session.switchAgent) {
 					await ctx.session.switchAgent({ sessionID: input.path.id, agent: input.body.agent })
 				} else {
 					shimLog("session.switchAgent not supported", { agent: input.body.agent })
 				}
 			}
-			if (caps.sessionPrompt) {
+			if (caps.sessionPrompt && ctx.session.prompt) {
 				await ctx.session.prompt({
 					sessionID: input.path.id,
 					text,
@@ -126,7 +126,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 		},
 
 		async abort(input: { path: { id: string } }): Promise<{ data: undefined }> {
-			if (caps.sessionInterrupt) {
+			if (caps.sessionInterrupt && ctx.session.interrupt) {
 				await ctx.session.interrupt({ sessionID: input.path.id })
 			} else {
 				shimLog("session.interrupt not supported", { id: input?.path?.id })
@@ -135,7 +135,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 		},
 
 		async delete(input: { path: { id: string } }): Promise<{ data: undefined }> {
-			if (caps.sessionDelete) {
+			if (caps.sessionDelete && ctx.session.delete) {
 				try {
 					await ctx.session.delete({ sessionID: input.path.id })
 				} catch {
@@ -146,7 +146,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 		},
 
 		async messages(input: { path: { id: string } }): Promise<{ data: any }> {
-			if (caps.sessionContext) {
+			if (caps.sessionContext && ctx.session.context) {
 				const items = toArray(await ctx.session.context({ sessionID: input.path.id }))
 				return {
 					data: items.map((item: any) => {
@@ -189,7 +189,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			// Route noReply: true through session.synthetic when available,
 			// so the message is visible in transcript without spending a turn.
 			if (body.noReply) {
-				if (caps.sessionSynthetic) {
+				if (caps.sessionSynthetic && ctx.session.synthetic) {
 					await ctx.session.synthetic({
 						sessionID: input.path.id,
 						text,
@@ -197,7 +197,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 					return { data: { parts: [] } }
 				}
 				// Fallback: steer delivery without expecting response parts
-				if (caps.sessionPrompt) {
+				if (caps.sessionPrompt && ctx.session.prompt) {
 					await ctx.session.prompt({
 						sessionID: input.path.id,
 						text,
@@ -210,7 +210,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			}
 
 			if (body.agent) {
-				if (caps.sessionSwitchAgent) {
+				if (caps.sessionSwitchAgent && ctx.session.switchAgent) {
 					await ctx.session.switchAgent({ sessionID: input.path.id, agent: body.agent })
 				} else {
 					shimLog("session.switchAgent not supported; keeping current agent", { agent: body.agent })
@@ -218,7 +218,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			}
 
 			if (body.model) {
-				if (caps.sessionSwitchModel) {
+				if (caps.sessionSwitchModel && ctx.session.switchModel) {
 					await ctx.session.switchModel({
 						sessionID: input.path.id,
 						model: {
@@ -232,7 +232,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 				}
 			}
 
-			if (caps.sessionPrompt) {
+			if (caps.sessionPrompt && ctx.session.prompt) {
 				const promptArgs: Record<string, any> = {
 					sessionID: input.path.id,
 					text,
@@ -246,7 +246,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 				shimLog("session.prompt not supported on this host")
 			}
 
-			if (caps.sessionWait) {
+			if (caps.sessionWait && ctx.session.wait) {
 				try {
 					await ctx.session.wait({ sessionID: input.path.id })
 				} catch {
@@ -255,7 +255,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			}
 
 			// Try to recover assistant response text from context
-			if (caps.sessionContext) {
+			if (caps.sessionContext && ctx.session.context) {
 				try {
 					const items = toArray(await ctx.session.context({ sessionID: input.path.id }))
 					const lastAssistant = [...items].reverse().find((m: any) => {
@@ -277,7 +277,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 
 	const provider = {
 		async list(): Promise<{ data: { all: any[] } }> {
-			if (caps.providerList) {
+			if (caps.providerList && ctx.provider?.list) {
 				try {
 					const result = await ctx.provider.list()
 					return { data: { all: toArray(result) } }
@@ -294,7 +294,7 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			return { data: undefined }
 		},
 		async agents() {
-			if (caps.agentList) {
+			if (caps.agentList && ctx.agent?.list) {
 				try {
 					const agents = toArray(await ctx.agent.list())
 					return {
