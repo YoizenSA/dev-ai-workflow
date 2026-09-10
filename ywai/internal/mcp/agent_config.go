@@ -29,10 +29,11 @@ func EntryTargetPath(target string) (string, error) {
 		if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
 			return config.FindJSONCPath(dir, "opencode"), nil
 		}
+		base := filepath.Join(home, ".config", "opencode")
 		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, "opencode", "opencode.json"), nil
+			base = filepath.Join(xdg, "opencode")
 		}
-		return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
+		return config.FindJSONCPath(base, "opencode"), nil
 	case "pi":
 		return filepath.Join(home, ".pi", "agent", "mcp.json"), nil
 	case "omp":

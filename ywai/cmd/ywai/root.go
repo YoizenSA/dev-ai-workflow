@@ -705,6 +705,12 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: failed to install Chrome DevTools MCP: %v\n", a.Name, err)
 		}
 
+		// Grafana MCP. Installed blank and disabled: the endpoint is
+		// per-network, so the user supplies it in Settings and switches it on.
+		if err := plugins.InstallGrafanaMCP(configPath, a.Name); err != nil {
+			fmt.Printf("  [%s] Warning: failed to install Grafana MCP: %v\n", a.Name, err)
+		}
+
 		// Install Microsoft Learn MCP if requested
 		if installMCP {
 			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {

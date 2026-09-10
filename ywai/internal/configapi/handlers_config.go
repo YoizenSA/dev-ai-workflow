@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
 // toolCacheTTL is how long an assembled tools payload is considered fresh.
@@ -105,12 +107,15 @@ func (c *toolCache) refresh(fetch func() (map[string]interface{}, error)) {
 
 // --- Config Handlers ---
 
+// opencodeConfigPath resolves the OpenCode config the same way the installer
+// does, through mcp.EntryTargetPath.
+//
+// It used to hardcode ~/.config/opencode/opencode.json. On a host that sets
+// OPENCODE_CONFIG_DIR (Orca) that is not the file ywai writes, so an MCP
+// installed by `ywai install` never appeared in Settings and a toggle here
+// edited a config the agent was not reading. One resolver, one file.
 func opencodeConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
+	return mcp.EntryTargetPath("opencode")
 }
 
 func agentsDir() (string, error) {
@@ -406,18 +411,18 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	data, err := os.ReadFile(path)
+	// ReadJSONC, not ReadFile+Unmarshal: the config may be .jsonc, and a
+	// comment would otherwise read as "this user has no MCP servers".
+	root, err := userconfig.ReadJSONC(path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
 	var config struct {
 		MCP json.RawMessage `json:"mcp"`
 	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+	if raw, ok := root["mcp"]; ok {
+		config.MCP, _ = json.Marshal(raw)
 	}
 
 	type mcpInfo struct {
@@ -442,7 +447,12 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, mcps)
 }
 
-// PUT /api/config/mcp/{name} - toggle enabled/disabled
+// PUT /api/config/mcp/{name} - toggle enabled/disabled, and set the endpoint
+// of a remote server.
+//
+// url is optional and only meaningful for a remote entry. It is here because a
+// server whose endpoint is per-network (Grafana) ships blank: without a way to
+// fill it in from Settings the entry is permanently useless.
 func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" || !isValidName(name) {
@@ -453,7 +463,8 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
 
 	var body struct {
-		Enabled bool `json:"enabled"`
+		Enabled bool    `json:"enabled"`
+		URL     *string `json:"url,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -493,6 +504,29 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(serverRaw, &serverCfg); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
+		}
+
+		if body.URL != nil {
+			endpoint := strings.TrimSpace(*body.URL)
+			if endpoint != "" {
+				if parsed, perr := url.Parse(endpoint); perr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url must be an absolute http(s) endpoint"})
+					return
+				}
+			}
+			serverCfg["url"] = endpoint
+		}
+
+		// Enabling a remote server with no endpoint would have it fail on every
+		// agent start, so refuse rather than write it.
+		if body.Enabled && serverCfg["type"] == "remote" {
+			if u, _ := serverCfg["url"].(string); strings.TrimSpace(u) == "" {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+					"error": "this server needs a URL before it can be enabled",
+					"code":  "missing_url",
+				})
+				return
+			}
 		}
 
 		delete(serverCfg, "enabled")

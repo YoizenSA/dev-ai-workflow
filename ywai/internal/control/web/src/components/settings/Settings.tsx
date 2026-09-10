@@ -1543,6 +1543,10 @@ function MCPTab() {
 	const [servers, setServers] = useState<MCPServer[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [toggling, setToggling] = useState<string | null>(null);
+	// Draft endpoints, keyed by server name. A remote server installed without
+	// one (Grafana) is unusable until it is filled in here.
+	const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
+	const [urlError, setUrlError] = useState<Record<string, string>>({});
 
 	useEffect(() => {
 		configApi
@@ -1565,8 +1569,45 @@ function MCPTab() {
 					s.name === server.name ? { ...s, enabled: !s.enabled } : s,
 				),
 			);
+			setUrlError((prev) => ({ ...prev, [server.name]: "" }));
 		} catch (err) {
-			alert(`Error: ${err}`);
+			// The common failure is enabling a remote server that has no
+			// endpoint yet; say so next to the field instead of in an alert.
+			setUrlError((prev) => ({
+				...prev,
+				[server.name]: needsUrl(server)
+					? "Set the server URL before enabling it"
+					: String(err),
+			}));
+		} finally {
+			setToggling(null);
+		}
+	};
+
+	const needsUrl = (server: MCPServer) =>
+		server.config.type === "remote" && !(server.config.url ?? "").trim();
+
+	const saveUrl = async (server: MCPServer) => {
+		const next = (urlDrafts[server.name] ?? server.config.url ?? "").trim();
+		setToggling(server.name);
+		try {
+			await configApi.updateMCP(server.name, {
+				enabled: server.enabled,
+				url: next,
+			});
+			setServers((prev) =>
+				prev.map((s) =>
+					s.name === server.name
+						? { ...s, config: { ...s.config, url: next } }
+						: s,
+				),
+			);
+			setUrlError((prev) => ({ ...prev, [server.name]: "" }));
+		} catch {
+			setUrlError((prev) => ({
+				...prev,
+				[server.name]: "Must be an absolute http(s) URL",
+			}));
 		} finally {
 			setToggling(null);
 		}
@@ -1621,9 +1662,41 @@ function MCPTab() {
 									{server.enabled ? "Enabled" : "Disabled"}
 								</span>
 							</div>
-							<p className="mcp-command-desc">
-								{server.config.command?.join(" ") ?? server.config.url ?? "—"}
-							</p>
+							{server.config.type === "remote" ? (
+								<div className="mcp-url-row">
+									<input
+										className="input"
+										type="url"
+										aria-label={`${server.name} server URL`}
+										placeholder="https://grafana.internal.example/mcp"
+										value={urlDrafts[server.name] ?? server.config.url ?? ""}
+										onChange={(e) =>
+											setUrlDrafts((prev) => ({
+												...prev,
+												[server.name]: e.target.value,
+											}))
+										}
+									/>
+									<button
+										className="btn btn-sm"
+										onClick={() => saveUrl(server)}
+										disabled={
+											toggling === server.name ||
+											(urlDrafts[server.name] ?? server.config.url ?? "") ===
+												(server.config.url ?? "")
+										}
+									>
+										Save URL
+									</button>
+								</div>
+							) : (
+								<p className="mcp-command-desc">
+									{server.config.command?.join(" ") ?? "—"}
+								</p>
+							)}
+							{urlError[server.name] && (
+								<p className="mcp-command-desc error">{urlError[server.name]}</p>
+							)}
 						</div>
 						<div className="mcp-actions-row">
 							<button

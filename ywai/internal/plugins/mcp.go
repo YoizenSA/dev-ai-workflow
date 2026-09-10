@@ -255,3 +255,52 @@ func InstallChromeDevToolsMCP(configPath, agentName string) error {
 	}
 	return nil
 }
+
+// InstallGrafanaMCP registers the Grafana MCP server, disabled and with no
+// endpoint.
+//
+// A Grafana MCP lives on the user's own network, so ywai has no URL to write
+// and shipping one in a public repo is out of the question. Installing it blank
+// but disabled is what makes it visible in Settings, where the URL is filled in
+// and the server switched on — a catalog entry nobody installs is a server
+// nobody discovers. Disabled matters: an enabled entry with no URL is a server
+// the agent tries and fails to reach on every start.
+func InstallGrafanaMCP(configPath, agentName string) error {
+	root, err := config.ReadJSONC(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+
+	key := mcpConfigKey(agentName)
+
+	if key == "mcpServers" {
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+			root[key] = mcp
+		}
+		if _, exists := mcp["grafana"]; !exists {
+			mcp["grafana"] = map[string]any{"type": "remote", "url": "", "disabled": true}
+			root[key] = mcp
+		}
+	} else {
+		mcp, _ := root[key].(map[string]any)
+		if mcp == nil {
+			mcp = map[string]any{}
+		}
+		servers := mcppkg.CollectOpenCodeServers(mcp)
+		if _, exists := servers["grafana"]; !exists {
+			servers["grafana"] = map[string]any{
+				"type":    "remote",
+				"url":     "",
+				"enabled": false,
+			}
+		}
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
+	}
+
+	if err := config.WriteJSONC(configPath, root); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
+	}
+	return nil
+}

@@ -334,7 +334,9 @@ export const configApi = {
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),
-	updateMCP: (name: string, data: Partial<MCPServer>) =>
+	// url is optional and only meaningful for a remote server: an entry whose
+	// endpoint is per-network (Grafana) ships blank and is filled in here.
+	updateMCP: (name: string, data: { enabled: boolean; url?: string }) =>
 		request<void>(`/api/config/mcp/${name}`, {
 			method: "PUT",
 			body: JSON.stringify(data),

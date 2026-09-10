@@ -708,19 +708,17 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
-// configFilePath returns the OpenCode config to read and write.
+// configFilePath returns the OpenCode config to read and write, resolved the
+// same way the installer resolves it.
 //
-// OpenCode prefers opencode.jsonc over opencode.json when both exist, so this
-// has to resolve the same way. Reading only the .json meant a user whose config
-// is .jsonc saw an empty MCP list in the UI — their servers were installed, we
-// were looking at the wrong file — and a write would have created a second
-// config the agent ignores.
+// It used to hardcode ~/.config/opencode/opencode.json and parse it as strict
+// JSON. Two things followed: a user whose config is .jsonc saw an empty MCP
+// list because comments are not valid JSON, and on a host that sets
+// OPENCODE_CONFIG_DIR (Orca) this read a different file than `ywai install`
+// writes — so an auto-installed server never showed up here at all. One
+// resolver for both sides is what keeps them looking at the same file.
 func configFilePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-	return config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode"), nil
+	return mcp.EntryTargetPath("opencode")
 }
 
 // readMcpConfig reads the mcp section from opencode.json.

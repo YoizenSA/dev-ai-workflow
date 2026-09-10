@@ -1191,3 +1191,23 @@
 		flex-direction: column;
 	}
 }
+
+/* Endpoint editor for a remote MCP whose URL is per-network (Grafana ships
+   blank, so the field has to be reachable from Settings). */
+.mcp-url-row {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	margin-top: var(--space-1);
+}
+
+.mcp-url-row .input {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--font-mono, monospace);
+	font-size: var(--text-sm, 0.85rem);
+}
+
+.mcp-command-desc.error {
+	color: var(--color-danger, #d33);
+}
