@@ -102,7 +102,6 @@ import {
 import { takeColumns, textColumns, truncateToColumns } from "../text-width.js";
 import { createV2EventAdapter } from "../server/v2-event-adapter.js";
 import {
-  focusPromptWithDeferredRetry,
   resolveSidebarReturnFocusAction,
   resolveSiblingSidebarRefocus,
   shouldReleaseSidebarListFocus,
@@ -3189,15 +3188,6 @@ function initializeTui(ctx: V2TuiContext): () => void {
   // v2 events are adapted to the v1-shaped internal events the vendored core
   // reduces; one raw event can produce several internal events.
   const adapter = createV2EventAdapter();
-
-  const applyInternalEvent = (next: StatuslineState, event: unknown): void => {
-    const changed = applySubagentEvent(next, event);
-    const hydrated = hydrateStateTokensFromData(ctx, next);
-    const refreshed = refreshLiveState(next);
-    void changed;
-    void hydrated;
-    void refreshed;
-  };
 
   const applyRawEvent = (raw: unknown): void => {
     debugEvent(raw);
