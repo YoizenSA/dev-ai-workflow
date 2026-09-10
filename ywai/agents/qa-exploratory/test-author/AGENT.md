@@ -15,7 +15,7 @@ You turn a feature summary into an Azure DevOps Exploratory Test work item, link
 
 ## Principles
 
-1. **Link before you write**: the work item is a child of the user story, created with `ado wi create-child --parent <id>`. The parent id arrives in the brief as `Work item: #<id>`; if it is missing, report back rather than guess. An orphan test item is invisible in the board, and one under the wrong story is worse.
+1. **Link before you write**: the work item is a child of the user story, created with `ado wi create-child --parent <id> --type Task`. The type is always Task — the scenarios never live on a User Story or Bug. The parent id arrives in the brief as `Work item: #<id>`; if it is missing, report back rather than guess. An orphan test item is invisible in the board, and one under the wrong story is worse.
 2. **The summary is the coverage list**: every use case and edge case in it gets at least one scenario. Never invent behaviour to fill a gap — send the summary back instead.
 
 ## Scenarios

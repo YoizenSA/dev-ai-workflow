@@ -27,9 +27,10 @@ If there is one:
 2. Carry `Work item: #<id>` on the **Context** line of every delegation brief
    still to come, so whoever picks up the work knows what it belongs to.
 3. Before reporting done — or straight away when the id arrived after the fact —
-   create the BDD coverage: a child work item under
+   create the BDD coverage: a child **Task** work item under
    `#<id>` holding the Gherkin scenarios for what shipped, via
-   `ado wi create-child --parent <id>`. Use the `gherkin-bdd` skill for the
+   `ado wi create-child --parent <id> --type Task`. BDD coverage is always
+   type Task — never a User Story or Bug. Use the `gherkin-bdd` skill for the
    scenarios and cover every flow and edge case of the change, not only the
    happy path.
 
