@@ -44,7 +44,7 @@ func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 // the sidebar and footer. The install used to strip it on every run — a v2-era
 // decision — which quietly undid the entry Engram's installer had just written,
 // so the plugin was never there after an install.
-func TestInstallSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
+func TestInstallPublishedSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".config", "opencode")
@@ -56,8 +56,8 @@ func TestInstallSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := InstallSubAgentStatusline(); err != nil {
-		t.Fatalf("InstallSubAgentStatusline() error = %v", err)
+	if err := InstallPublishedSubAgentStatusline(); err != nil {
+		t.Fatalf("InstallPublishedSubAgentStatusline() error = %v", err)
 	}
 
 	arr := pluginArrayIn(t, path)
@@ -70,13 +70,13 @@ func TestInstallSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 }
 
 // Running install twice must not list the plugin twice.
-func TestInstallSubAgentStatuslineIsIdempotent(t *testing.T) {
+func TestInstallPublishedSubAgentStatuslineIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
 	for i := 0; i < 2; i++ {
-		if err := InstallSubAgentStatusline(); err != nil {
-			t.Fatalf("InstallSubAgentStatusline() run %d: %v", i+1, err)
+		if err := InstallPublishedSubAgentStatusline(); err != nil {
+			t.Fatalf("InstallPublishedSubAgentStatusline() run %d: %v", i+1, err)
 		}
 	}
 

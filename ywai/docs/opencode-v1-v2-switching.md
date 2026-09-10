@@ -50,8 +50,9 @@ Defined in `ywai/internal/mcp/agent_config.go` and consumed by `control/mcp_stor
 - **Config Key**:
   - v1: `"plugin": [...]`
   - v2: `"plugins": [...]`
-- **Incompatible v1 Plugins**:
-  - `sub-agent-statusline` and `background-agents` are automatically skipped when `OpenCodeIsV2()` is true because v2 changed plugin hooks and dropped `parentID`.
+- **v2 Compatibility**:
+  - `sub-agent-statusline`: the published npm package is v1-only, so on v2 `ywai` installs the vendored port instead — the server bundle is auto-discovered under `plugins/`, and the TUI bundle is registered in `cli.json`.
+  - `background-agents`: installs on both flavors. On v2 the host drops `parentID`, so delegation nesting degrades to a flat list; the installer keeps writing the plugin and strips stale explicit entries (string entries only — map-form entries survive, same as `sub-agent-statusline` before its map-aware filter).
 - **TUI/CLI Plugins**:
   - v1: `~/.config/opencode/tui.json` with `"plugin": [...]`
   - v2: `~/.config/opencode/cli.json` with `"plugins": [...]`

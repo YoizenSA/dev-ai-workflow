@@ -17,11 +17,13 @@ func tuiConfigPath() string {
 	return filepath.Join(home, ".config", "opencode", tuiConfigName)
 }
 
-// InstallSubAgentStatusline registers the sub-agent statusline TUI plugin,
-// which surfaces delegation activity in the sidebar and footer. It works on
-// opencode v1; it was only dropped for v2, and the install used to strip it on
-// every run, quietly undoing the entry Engram's own installer had written.
-func InstallSubAgentStatusline() error {
+// InstallPublishedSubAgentStatusline registers the published
+// opencode-subagent-statusline TUI plugin, which surfaces delegation activity
+// in the sidebar and footer. It works on opencode v1 only; on v2 the vendored
+// port is installed by InstallSubAgentStatusline instead. The install used to
+// strip it on every run, quietly undoing the entry Engram's own installer had
+// written.
+func InstallPublishedSubAgentStatusline() error {
 	path := tuiConfigPath()
 
 	// Ensure the config directory exists.

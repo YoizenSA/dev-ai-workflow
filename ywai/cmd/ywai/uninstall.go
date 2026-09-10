@@ -165,6 +165,44 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 				})
 			}
 
+			// Sub-agent statusline (v2 port) installs outside ywai-plugins:
+			// the server bundle lands in the auto-discovered "plugins" dir, the
+			// TUI bundle in tui-plugins/, registered in the TUI client config.
+			// Uninstall has never swept either directory — ywai-logo.tsx and a
+			// superseded minimal statusline stay where they are — so only these
+			// two files are removed, each matched by its exact name rather than
+			// by sweeping the directory.
+			cfgDir := filepath.Dir(configPath)
+			serverBundle := filepath.Join(cfgDir, plugins.AutoDiscoveredPluginsSubdir, plugins.SubagentStatuslineServerBundleName)
+			if _, err := os.Stat(serverBundle); err == nil {
+				p := serverBundle
+				plan = append(plan, removal{
+					kind:  kindPlugin,
+					label: fmt.Sprintf("[%s] sub-agent statusline server bundle", a.Name),
+					apply: func() error { return os.Remove(p) },
+				})
+			}
+			tuiBundle := filepath.Join(cfgDir, "tui-plugins", plugins.SubagentStatuslineTuiBundleName)
+			if _, err := os.Stat(tuiBundle); err == nil {
+				p := tuiBundle
+				plan = append(plan, removal{
+					kind:  kindPlugin,
+					label: fmt.Sprintf("[%s] sub-agent statusline TUI bundle", a.Name),
+					apply: func() error { return os.Remove(p) },
+				})
+			}
+			// The TUI bundle's entry in the TUI client config. cli.json is v2's
+			// client config (tui.json in v1); uninstall handles it only for this
+			// one entry, the same scope as the two files above.
+			tuiConfigPath := filepath.Join(cfgDir, "cli.json")
+			if refs := countStatuslineRefs(tuiConfigPath); refs > 0 {
+				plan = append(plan, removal{
+					kind:  kindConfigRef,
+					label: fmt.Sprintf("[%s] %d sub-agent statusline entr(ies) in %s", a.Name, refs, tuiConfigPath),
+					apply: func() error { return stripStatuslineRefs(tuiConfigPath) },
+				})
+			}
+
 			// MCP servers ywai installed for features it has since removed.
 			// Uninstall is the last chance to take them out — nothing else will
 			// run afterwards to clean them up.
@@ -481,6 +519,50 @@ func stripYwaiConfigRefs(configPath string) error {
 		root["plugin"] = kept
 	}
 	return config.WriteJSONC(configPath, root)
+}
+
+// countStatuslineRefs reports how many entries in the TUI client config point
+// at the vendored sub-agent statusline TUI bundle.
+func countStatuslineRefs(tuiConfigPath string) int {
+	root, err := config.ReadJSONC(tuiConfigPath)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, v := range ywaiPluginLists(root) {
+		if s, ok := v.(string); ok && filepath.Base(s) == plugins.SubagentStatuslineTuiBundleName {
+			n++
+		}
+	}
+	return n
+}
+
+// stripStatuslineRefs drops the sub-agent statusline TUI bundle entry from the
+// TUI client config, preserving every other entry and key. Unlike
+// stripYwaiConfigRefs it keeps the spelling the config already carried (v2
+// stores TUI plugins under "plugins", v1 under "plugin") instead of
+// normalizing to the v1 key.
+func stripStatuslineRefs(tuiConfigPath string) error {
+	root, err := config.ReadJSONC(tuiConfigPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", tuiConfigPath, err)
+	}
+	list := ywaiPluginLists(root)
+	kept := make([]any, 0, len(list))
+	for _, v := range list {
+		if s, ok := v.(string); ok && filepath.Base(s) == plugins.SubagentStatuslineTuiBundleName {
+			continue
+		}
+		kept = append(kept, v)
+	}
+	if _, ok := root["plugin"]; ok {
+		root["plugin"] = kept
+		delete(root, "plugins")
+	} else {
+		root["plugins"] = kept
+		delete(root, "plugin")
+	}
+	return config.WriteJSONC(tuiConfigPath, root)
 }
 
 // printUninstallPlan shows the plan grouped by kind.

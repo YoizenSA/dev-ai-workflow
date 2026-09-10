@@ -114,11 +114,17 @@ func InstallBackgroundAgents(configPath string) error {
 // ywai-plugins dir alongside configPath and patches the config to reference it.
 // Split out from InstallBackgroundAgents so the copy + patch glue is unit
 // testable without resolving the real embedded/source bundle.
-// autoDiscoveredPluginsSubdir is the directory OpenCode scans for plugins on
+// AutoDiscoveredPluginsSubdir is the directory opencode scans for plugins on
 // its own. v2 rejects an absolute path to a .js file in the config array —
 // "configured plugin path must be a directory" — so on v2 the bundle has to be
-// discovered from here instead of being pointed at.
-const autoDiscoveredPluginsSubdir = "plugins"
+// discovered from here instead of being pointed at. It is exported so
+// cmd/ywai's uninstall removes from the same directory this package installs
+// into.
+const AutoDiscoveredPluginsSubdir = "plugins"
+
+// autoDiscoveredPluginsSubdir is the in-package spelling used by the sibling
+// installers; keep both names pointed at one value.
+const autoDiscoveredPluginsSubdir = AutoDiscoveredPluginsSubdir
 
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 	if agent.OpenCodeIsV2() {
@@ -177,6 +183,8 @@ func installBackgroundAgentsV2(configPath, bundleSrc string) error {
 	}
 	kept := make([]any, 0)
 	for _, raw := range openCodePlugins(root) {
+		// String entries only; map-form entries are intentionally left as-is
+		// here (see subagentStatuslineServerEntry for the map-aware variant).
 		if s, ok := raw.(string); ok && strings.Contains(s, config.BackgroundAgentsBundleName) {
 			continue
 		}

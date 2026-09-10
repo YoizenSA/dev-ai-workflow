@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 )
 
 // uninstall deletes files. Every predicate below decides whether something is
@@ -169,6 +171,99 @@ func TestUninstallStripYwaiConfigRefs_DrainsV2PluginsKey(t *testing.T) {
 	if !got["/home/u/.config/opencode/plugins/their-own.js"] || !got["/home/u/.config/opencode/plugins/legacy-keep.js"] {
 		t.Fatalf("expected both foreign plugin paths, got %v", plugins)
 	}
+}
+
+// countStatuslineRefs/stripStatuslineRefs remove the vendored TUI bundle entry
+// from cli.json. They must strip the entry while preserving the key spelling
+// the config already carried and every unrelated entry.
+func TestUninstallStatuslineRefs_PreservesKeySpellingAndOthers(t *testing.T) {
+	statusline := "/home/u/.config/opencode/tui-plugins/" + plugins.SubagentStatuslineTuiBundleName
+	cases := []struct {
+		name    string
+		config  map[string]any
+		wantKey string
+		want    []any
+	}{
+		{
+			name: "v2 plugins key only",
+			config: map[string]any{
+				"plugins": []any{statusline, "/home/u/other-tui.js"},
+			},
+			wantKey: "plugins",
+			want:    []any{"/home/u/other-tui.js"},
+		},
+		{
+			name: "v1 plugin key only",
+			config: map[string]any{
+				"plugin": []any{statusline, "/home/u/other-tui.js"},
+			},
+			wantKey: "plugin",
+			want:    []any{"/home/u/other-tui.js"},
+		},
+		{
+			name: "both keys drain under plugin",
+			config: map[string]any{
+				"plugin":  []any{statusline, "/home/u/legacy-keep.js"},
+				"plugins": []any{"/home/u/v2-keep.js"},
+			},
+			wantKey: "plugin",
+			want:    []any{"/home/u/legacy-keep.js", "/home/u/v2-keep.js"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.config["theme"] = "dark"
+			cfg := filepath.Join(t.TempDir(), "cli.json")
+			writeJSONFile(t, cfg, tc.config)
+
+			if n := countStatuslineRefs(cfg); n != 1 {
+				t.Fatalf("countStatuslineRefs = %d, want 1", n)
+			}
+			if err := stripStatuslineRefs(cfg); err != nil {
+				t.Fatalf("stripStatuslineRefs: %v", err)
+			}
+
+			root := readJSONFile(t, cfg)
+			got, ok := root[tc.wantKey].([]any)
+			if !ok {
+				t.Fatalf("key %q missing after strip, got %v", tc.wantKey, root)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("%s = %v, want %v", tc.wantKey, got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("%s = %v, want %v", tc.wantKey, got, tc.want)
+				}
+			}
+
+			// The other spelling must not be written back.
+			other := "plugins"
+			if tc.wantKey == "plugins" {
+				other = "plugin"
+			}
+			if _, ok := root[other]; ok {
+				t.Errorf("must not write the %q key", other)
+			}
+			if root["theme"] != "dark" {
+				t.Errorf("unrelated key dropped: %v", root)
+			}
+			if containsAnyString(got, statusline) {
+				t.Errorf("statusline entry survived: %v", got)
+			}
+		})
+	}
+}
+
+// containsAnyString reports whether slice holds want as a string element.
+func containsAnyString(slice []any, want string) bool {
+	for _, v := range slice {
+		if s, ok := v.(string); ok && s == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestUninstallStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {

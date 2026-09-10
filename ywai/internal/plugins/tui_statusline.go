@@ -15,8 +15,12 @@ import (
 // It is the v2 replacement for the published opencode-subagent-statusline,
 // whose peer range is "@opencode-ai/plugin >=1.14.50 <2" and therefore cannot
 // load on OpenCode 2. On v1 the published package still works and is what
-// InstallSubAgentStatusline registers, so this one installs only on v2 rather
-// than putting two statuslines in the same slot.
+// InstallPublishedSubAgentStatusline registers, so this one installs only on
+// v2 rather than putting two statuslines in the same slot.
+//
+// Superseded on v2 by InstallSubagentStatusline, which installs the full
+// monitor and removes this minimal stand-in. Kept intentionally without
+// callers pending the v1-only cleanup decision.
 func InstallTuiStatusline(configPath string) error {
 	if !agent.OpenCodeIsV2() {
 		return nil

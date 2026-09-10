@@ -579,17 +579,20 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	var done []string
 
 	// sub-agent-statusline shows delegation activity in the sidebar and footer.
-	// It works on opencode v1 — it was only dropped for v2 — and the install
-	// used to strip it from tui.json on every run, which quietly undid the
-	// entry Engram's own installer had just written.
+	// On opencode v1 the published npm package is installed by
+	// InstallPublishedSubAgentStatusline; its peer range excludes OpenCode 2,
+	// so the v2 port is vendored and installed per-agent below by
+	// InstallSubagentStatusline. The install used to strip the v1 entry from
+	// tui.json on every run, which quietly undid the entry Engram's own
+	// installer had just written.
 	switch {
 	case agent.OpenCodeIsV2():
-		// Dropped for v2: registering it there wires a plugin the client never
-		// loads, so the entry is noise in cli.json rather than a statusline.
+		// The published package cannot load on v2; the vendored port is
+		// installed per-agent below.
 	case dryRun:
 		fmt.Println("  Would install sub-agent-statusline TUI plugin")
 	default:
-		if err := plugins.InstallSubAgentStatusline(); err != nil {
+		if err := plugins.InstallPublishedSubAgentStatusline(); err != nil {
 			fmt.Printf("  Warning: failed to install sub-agent-statusline plugin: %v\n", err)
 		}
 	}
@@ -690,11 +693,12 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
 			}
 
-			// ywai statusline: the v2 stand-in for opencode-subagent-statusline,
-			// whose peer range stops at OpenCode 2. It is a no-op on v1, where
-			// the published package is installed above instead.
-			if err := plugins.InstallTuiStatusline(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ywai TUI statusline: %v\n", a.Name, err)
+			// Sub-agent statusline. v2: the vendored full monitor replaces the
+			// minimal ywai-statusline stand-in and supersedes it (two footer
+			// statuslines would fight for the same slot). v1: the published
+			// package is installed above and this is a no-op.
+			if err := plugins.InstallSubagentStatusline(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to install sub-agent statusline: %v\n", a.Name, err)
 			}
 		}
 
