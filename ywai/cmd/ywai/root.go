@@ -698,6 +698,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
+		// Orca deploys a status plugin into the config dir ywai manages, and on
+		// v2 it fails to load. Repair it here so the status bar is not dead
+		// until Orca ships its own fix; re-applied because Orca redeploys it.
+		if patched, err := plugins.RepairOrcaStatusPluginV2(configPath); err != nil {
+			fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
+		} else if patched {
+			fmt.Printf("  [%s] Repaired Orca status plugin for OpenCode v2\n", a.Name)
+		}
+
 		// Chrome DevTools MCP. Not behind a flag: the scenario-runner agent
 		// drives a browser to verify UI scenarios, so without this it installs
 		// and then cannot do the one thing it exists for.
