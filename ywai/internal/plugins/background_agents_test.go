@@ -33,24 +33,6 @@ func pluginArray(t *testing.T, path string) []any {
 	return arr
 }
 
-// permissionRules returns the root v2 "permissions" rule array as action →
-// effect (fatal if absent/wrong type).
-func permissionRules(t *testing.T, path string) map[string]string {
-	t.Helper()
-	root := readConfigRoot(t, path)
-	perms, ok := root["permission"].(map[string]any)
-	if !ok {
-		t.Fatalf("config has no map \"permission\"; got %T", root["permission"])
-	}
-	out := map[string]string{}
-	for action, raw := range perms {
-		if effect, ok := raw.(string); ok {
-			out[action] = effect
-		}
-	}
-	return out
-}
-
 // TestInstallBackgroundAgents_Integration exercises the full public installer
 // against the real resolved bundle (source checkout dist/). It is skipped when
 // no bundle has been built (e.g. CI without bun), so it never fails spuriously.

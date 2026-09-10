@@ -23,18 +23,6 @@ type Client struct {
 	hub  *Hub
 	conn *websocket.Conn
 	send chan []byte
-	mu   sync.Mutex
-}
-
-// write sends bytes to the client's send channel.
-func (c *Client) write(data []byte) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	select {
-	case c.send <- data:
-	default:
-		// Buffer full, drop message
-	}
 }
 
 // readPump reads messages from the WebSocket connection.
