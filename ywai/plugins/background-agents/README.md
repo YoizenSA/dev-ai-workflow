@@ -68,48 +68,8 @@ Notifications are split by audience: the model receives the `<task-notification>
 
 ## Installation
 
-### From npm
-
-Add the package to the `plugin` array in your OpenCode config at `~/.config/opencode/opencode.json`:
-
-```jsonc
-{
-  "plugin": ["@aeondave/opencode-background-agents@latest"]
-}
-```
-
-OpenCode installs the plugin and its dependencies automatically on the next start. To pin a version, replace `@latest` with a specific version (e.g. `@0.1.0`).
-
-### From source (git clone)
-
-Run from a local checkout — useful before publishing or while hacking on the plugin.
-
-1. Clone the repository and install dependencies:
-
-   ```bash
-   git clone https://github.com/AeonDave/opencode-background-agents.git
-   cd opencode-background-agents
-   npm install
-   ```
-
-2. Create a shim file in your global plugin directory that re-exports the checkout's entry point. The directory is `plugin` (singular):
-
-   - Path: `~/.config/opencode/plugin/background-agents.ts`
-   - Content — a single line pointing at the absolute path of the cloned entry point:
-
-   ```ts
-   export { default } from "/absolute/path/to/opencode-background-agents/src/plugin/background-agents.ts"
-   ```
-
-   On Windows, use forward slashes and include the drive letter:
-
-   ```ts
-   export { default } from "C:/opencode-background-agents/src/plugin/background-agents.ts"
-   ```
-
-3. Restart OpenCode. The plugin loads from your working tree, so edits to `src/` take effect on the next restart. Delete the shim file to uninstall.
-
-> Use one method at a time. If you add the npm entry, remove the local shim (and vice versa) to avoid loading the plugin twice.
+ywai vendors this plugin: `ywai install` copies the bundle into the OpenCode
+plugin directory and registers it. No npm step is needed.
 
 ## Configuration
 

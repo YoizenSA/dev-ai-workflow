@@ -3,7 +3,7 @@
  *
  * Detects a session re-issuing the exact same tool call (same tool, same
  * arguments) consecutively with no change, which is how model-side infinite
- * loops present (upstream opencode issue #1071: a sub-agent repeating
+ * loops present (opencode issue #1071: a sub-agent repeating
  * identical read/grep calls forever).
  *
  * Behavior:

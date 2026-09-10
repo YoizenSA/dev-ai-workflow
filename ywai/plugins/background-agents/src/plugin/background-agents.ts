@@ -1,9 +1,10 @@
 /**
  * background-agents
- * Unified delegation system for OpenCode
+ * Async delegation system for OpenCode
  *
- * Replaces native `task` tool with persistent, async-first agent delegation.
- * All agent outputs are persisted to storage, orchestrator receives only key references.
+ * Delegates tasks to sub-agents running in isolated sessions. All agent
+ * outputs are persisted to storage, the supervisor receives only key
+ * references.
  *
  * Based on oh-my-opencode by @code-yeongyu (MIT License)
  * https://github.com/code-yeongyu/oh-my-opencode
@@ -54,7 +55,7 @@ interface SystemTransformInput {
 
 /**
  * Which OpenCode this plugin is running under, read from the marker ywai writes
- * beside the vendored bundle. v1 and v2 expose no capability that cleanly
+ * beside the plugin bundle. v1 and v2 expose no capability that cleanly
  * separates them, so the installer — which already knows — records it instead
  * of the plugin guessing.
  *
