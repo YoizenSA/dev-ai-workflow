@@ -24,6 +24,7 @@
  */
 
 import type { EventLike } from "../events.js";
+import { lookupParentSessionID } from "./parent-lookup";
 
 /** Structural slice of the v2 event envelope. Never imported at runtime. */
 export type V2ServerEvent = {
@@ -172,9 +173,18 @@ function createAdapter(): V2EventAdapter {
   ): EventLike[] {
     // Only sessions with a parent are tracked (subagent sessions);
     // root sessions are ignored by `extractCreatedChild` anyway.
-    const parentID = asString(data.parentID);
     const sessionID = asString(data.sessionID);
-    if (!parentID || !sessionID) return [];
+    if (!sessionID) return [];
+
+    // v2 publishes session.created before anything sets a parent, so a
+    // subagent arrives here looking exactly like a root session. Remember it
+    // instead of dropping it: the edge is written moments later, and the next
+    // event for this session is the chance to notice.
+    const parentID = asString(data.parentID);
+    if (!parentID) {
+      rememberUnparented(sessionID, data, created);
+      return [];
+    }
 
     const info: Record<string, unknown> = {
       id: sessionID,
@@ -370,6 +380,45 @@ function createAdapter(): V2EventAdapter {
     ];
   }
 
+  /**
+   * Sessions seen at creation with no parent yet. Bounded like the tool-call
+   * memory: a session that never turns out to be a subagent must not pin
+   * memory for the life of the process.
+   */
+  const unparented = new Map<string, { data: Record<string, unknown>; created: unknown }>();
+
+  function rememberUnparented(
+    sessionID: string,
+    data: Record<string, unknown>,
+    created: unknown,
+  ): void {
+    if (unparented.size >= MAX_REMEMBERED_TOOL_CALLS && !unparented.has(sessionID)) {
+      const oldest = unparented.keys().next().value;
+      if (oldest !== undefined) unparented.delete(oldest);
+    }
+    unparented.set(sessionID, { data, created });
+  }
+
+  /**
+   * Emit the deferred session.created for a session whose parent has since
+   * been recorded. Returns the events to prepend, so a terminal event for a
+   * subagent the adapter had written off still reduces against a known child.
+   * Each session is resolved at most once, whatever the answer.
+   */
+  function resolveDeferredCreation(sessionID: string): EventLike[] {
+    const pending = unparented.get(sessionID);
+    if (!pending) return [];
+
+    const parentID = lookupParentSessionID(sessionID);
+    if (!parentID) return [];
+
+    unparented.delete(sessionID);
+    return adaptSessionCreated(
+      { ...pending.data, parentID },
+      pending.created,
+    );
+  }
+
   function adapt(raw: unknown): EventLike[] {
     try {
       if (!isRecord(raw)) return [];
@@ -378,6 +427,14 @@ function createAdapter(): V2EventAdapter {
       const data = payloadOf(raw);
       const created = raw.created;
 
+      // Any event other than the creation itself is a later moment, so it is
+      // also the first chance to learn that this session became a child.
+      const deferred =
+        type === "session.created"
+          ? []
+          : resolveDeferredCreation(asString(data.sessionID) ?? "");
+
+      const mapped = ((): EventLike[] => {
       switch (type) {
         case "session.created":
           return adaptSessionCreated(data, created);
@@ -490,6 +547,9 @@ function createAdapter(): V2EventAdapter {
           // Unknown/unmapped v2 types are intentionally ignored.
           return [];
       }
+      })();
+
+      return deferred.length > 0 ? [...deferred, ...mapped] : mapped;
     } catch {
       // Defensive by design: a malformed event must never take the plugin down.
       return [];
