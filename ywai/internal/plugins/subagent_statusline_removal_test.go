@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // The vendored statusline is retired in favour of opencode2's native subagent
@@ -18,7 +17,7 @@ func TestRemoveSubagentStatusline_SweepsBothHalvesAndItsEntry(t *testing.T) {
 	configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
 	dir := filepath.Dir(configPath)
 
-	server := filepath.Join(dir, autoDiscoveredPluginsSubdir, config.SubagentStatuslineServerBundleName)
+	server := filepath.Join(dir, autoDiscoveredPluginsSubdir, SubagentStatuslineServerBundleName)
 	tuiDir := filepath.Join(dir, autoDiscoveredPluginsSubdir, SubagentStatuslineTuiPluginDir)
 	mustWrite(t, server, "server bundle")
 	mustWrite(t, filepath.Join(tuiDir, tuiEntryName), "tui bundle")
@@ -76,7 +75,7 @@ func TestRemoveSubagentStatusline_SweepsTheLegacyLayout(t *testing.T) {
 	configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
 	dir := filepath.Dir(configPath)
 
-	legacy := filepath.Join(dir, tuiPluginsSubdir, config.SubagentStatuslineTuiBundleName)
+	legacy := filepath.Join(dir, tuiPluginsSubdir, SubagentStatuslineTuiBundleName)
 	mustWrite(t, legacy, "tui bundle")
 	writeJSON(t, filepath.Join(dir, tuiConfigName), map[string]any{"plugins": []any{legacy}})
 

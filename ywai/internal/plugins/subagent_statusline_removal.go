@@ -9,6 +9,16 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
+// SubagentStatuslineServerBundleName is the filename the retired sub-agent
+// statusline server bundle was installed under, inside the auto-discovered
+// plugins dir. Nothing writes it any more; it survives so an install can
+// still recognize and sweep what an older ywai left behind.
+const SubagentStatuslineServerBundleName = "subagent-statusline-server.js"
+
+// SubagentStatuslineTuiBundleName is the filename its TUI half was installed
+// under before the plugin-directory layout, kept for the same reason.
+const SubagentStatuslineTuiBundleName = "subagent-statusline-tui.tsx"
+
 // RemoveSubagentStatusline uninstalls the vendored sub-agent statusline: both
 // bundle halves and the TUI client config entry that registers the TUI one.
 //
@@ -23,7 +33,7 @@ func RemoveSubagentStatusline(configPath string) (bool, error) {
 	dir := filepath.Dir(configPath)
 	removed := false
 
-	server := filepath.Join(dir, autoDiscoveredPluginsSubdir, config.SubagentStatuslineServerBundleName)
+	server := filepath.Join(dir, autoDiscoveredPluginsSubdir, SubagentStatuslineServerBundleName)
 	if err := os.Remove(server); err == nil {
 		removed = true
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -40,7 +50,7 @@ func RemoveSubagentStatusline(configPath string) (bool, error) {
 
 	// The legacy loose bundle, for a config that never went through the
 	// directory layout.
-	legacy := filepath.Join(dir, tuiPluginsSubdir, config.SubagentStatuslineTuiBundleName)
+	legacy := filepath.Join(dir, tuiPluginsSubdir, SubagentStatuslineTuiBundleName)
 	if err := os.Remove(legacy); err == nil {
 		removed = true
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -93,5 +103,5 @@ func dropSubagentStatuslineTuiEntry(tuiConfigPath string) (bool, error) {
 // installs registered.
 func isSubagentStatuslineTuiPath(entry string) bool {
 	base := filepath.Base(entry)
-	return base == SubagentStatuslineTuiPluginDir || base == config.SubagentStatuslineTuiBundleName
+	return base == SubagentStatuslineTuiPluginDir || base == SubagentStatuslineTuiBundleName
 }
