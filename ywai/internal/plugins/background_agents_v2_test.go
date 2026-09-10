@@ -48,8 +48,8 @@ func TestInstallBackgroundAgents_V2UsesAutoDiscovery(t *testing.T) {
 	if _, err := os.Stat(discovered); err != nil {
 		t.Errorf("bundle not vendored into the scanned dir: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, autoDiscoveredPluginsSubdir, FlavorMarkerName)); err != nil {
-		t.Errorf("flavor marker must sit beside the bundle the plugin loads from: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, autoDiscoveredPluginsSubdir, FlavorMarkerName)); !os.IsNotExist(err) {
+		t.Errorf("flavor marker must not be written anymore; the v2-only plugin never reads it (err = %v)", err)
 	}
 
 	root, err := config.ReadJSONC(configPath)
@@ -72,33 +72,29 @@ func TestInstallBackgroundAgents_V2UsesAutoDiscovery(t *testing.T) {
 	}
 }
 
-// v1 accepts the explicit path and has always used it; changing that there
-// would move a working plugin for no reason.
-func TestInstallBackgroundAgents_V1KeepsExplicitPath(t *testing.T) {
+// v1 is refused outright: the plugin is the supervision layer on v2's native
+// subagent tool and carries no v1 host surface anymore. Nothing may be
+// written on a v1 host.
+func TestInstallBackgroundAgents_V1Refused(t *testing.T) {
 	t.Setenv(agent.OpenCodeOverrideEnv, "v1")
 	configPath, bundle := seedBundle(t)
 	dir := filepath.Dir(configPath)
 
-	if err := installBackgroundAgentsWithBundle(configPath, bundle); err != nil {
-		t.Fatalf("install: %v", err)
+	err := installBackgroundAgentsWithBundle(configPath, bundle)
+	if err == nil {
+		t.Fatal("install must fail on a v1 host")
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil {
-		t.Errorf("v1 bundle missing from ywai-plugins: %v", err)
-	}
 	if _, err := os.Stat(filepath.Join(dir, autoDiscoveredPluginsSubdir, config.BackgroundAgentsBundleName)); !os.IsNotExist(err) {
-		t.Errorf("v1 must not vendor into the scanned dir (err = %v)", err)
+		t.Errorf("refused install must not vendor any bundle (err = %v)", err)
 	}
-
-	root, _ := config.ReadJSONC(configPath)
+	// The config the earlier (v1-shaped) install left behind stays untouched.
+	root, readErr := config.ReadJSONC(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
 	entries, _ := root["plugin"].([]any)
-	found := false
-	for _, e := range entries {
-		if s, ok := e.(string); ok && filepath.Base(s) == config.BackgroundAgentsBundleName {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("v1 explicit entry missing: %v", entries)
+	if len(entries) != 2 {
+		t.Errorf("plugin array = %v, want the original 2 entries", entries)
 	}
 }

@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolContext, ToolResult } from "@opencode-ai/plugin"
 import type { DelegationManager } from "./delegation-manager"
+import type { DelegationRecord, NativeSubagentLaunch } from "./types"
 import {
 	DEFAULT_MAX_RUN_TIME_MS,
 	effortToVariant,
@@ -14,55 +15,6 @@ interface DelegateArgs {
 	timeout_minutes?: number
 	model?: string
 	effort?: string
-}
-
-function createDelegate(manager: DelegationManager): ReturnType<typeof tool> {
-	return tool({
-		description: `Delegate a task to an agent. Returns immediately with a readable ID.
-
-Use this for:
-- Research tasks (will be auto-saved)
-- Parallel work that can run in background
-- Any task where you want persistent, retrievable output
-
-On completion, a notification will arrive with the ID and terminal summary.
-Use \`delegation_read\` with the ID to retrieve full persisted output (including after compaction).`,
-		args: {
-			prompt: tool.schema
-				.string()
-				.describe("The full detailed prompt for the agent. Must be in English."),
-			agent: tool.schema
-				.string()
-				.describe(
-					'Agent to delegate to. Any sub-agent works; write/bash-capable agents run in the background too (their changes live outside undo/branching). Set BACKGROUND_AGENTS_STRICT_READONLY=1 to restrict to read-only sub-agents only.',
-				),
-			timeout_minutes: tool.schema
-				.number()
-				.int()
-				.min(0)
-				.optional()
-				.describe(
-					`Optional max runtime in minutes for THIS delegation (default ${Math.round(
-						DEFAULT_MAX_RUN_TIME_MS / 60_000,
-					)}). Use 0 for NO timeout — you stay in control via delegation_steer/delegation_stop. Size it to the task: short for quick lookups, long (or 0) for deep research/builds. A delivered steer re-opens a fresh window of the same size.`,
-				),
-			model: tool.schema
-				.string()
-				.optional()
-				.describe(
-					'Optional model override for THIS delegation as "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"). Size the brain to the task: a cheap/fast model for simple lookups, a strong one for deep work. Omitted = the agent\'s configured model.',
-				),
-			effort: tool.schema
-				.string()
-				.optional()
-				.describe(
-					'Optional reasoning effort for THIS run: "high", "medium" or "low". Applied as the model\'s variant, so it needs a model that publishes one. Omitted = the model\'s default.',
-				),
-		},
-		async execute(args: DelegateArgs, toolCtx: ToolContext): Promise<ToolResult> {
-			return runDelegation(manager, args, toolCtx, "delegate")
-		},
-	})
 }
 
 interface SubagentArgs extends DelegateArgs {
@@ -139,83 +91,140 @@ Use \`delegation_read\` with the ID to retrieve the full persisted output.`,
 }
 
 /**
- * Shared dispatch for every tool that starts a delegation. `delegate` and the
- * `subagent` override differ only in their argument surface, so the execution
- * lives here — two copies would drift, and the drift would be silent.
+ * Shared arg validation for every dispatch path: session/message context and
+ * the model+effort pair (effort is a model variant, so it needs a model to
+ * attach to). Returns the parsed model, or an error string for the tool to
+ * surface verbatim.
  */
-async function runDelegation(
+function parseDispatchArgs(
+	args: DelegateArgs,
+	toolCtx: ToolContext,
+	toolName: string,
+): { model?: ReturnType<typeof parseModelString> } | string {
+	if (!toolCtx?.sessionID) {
+		return `❌ ${toolName} requires sessionID. This is a system error.`
+	}
+	if (!toolCtx?.messageID) {
+		return `❌ ${toolName} requires messageID. This is a system error.`
+	}
+
+	let model: ReturnType<typeof parseModelString>
+	if (args.model !== undefined) {
+		model = parseModelString(args.model)
+		if (!model) {
+			return `❌ Invalid model "${args.model}". Expected "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"), or omit it to use the agent's configured model.`
+		}
+	}
+	// Effort is a model variant, so it needs a model to attach to. An
+	// explicit `#variant` on the model string wins: the caller spelled
+	// out exactly what they wanted.
+	if (args.effort !== undefined && args.effort.trim() !== "") {
+		if (!model) {
+			return `❌ effort "${args.effort}" needs a model: it is applied as that model's variant. Pass model="provider/model-id" as well, or drop effort to use the agent's default.`
+		}
+		if (!model.variant) {
+			model = { ...model, variant: effortToVariant(args.effort) }
+		}
+	}
+	return { model }
+}
+
+/** The dispatch response both launch paths return, plus the tool title. */
+function delegationStartedResult(
+	delegation: DelegationRecord,
+	args: DelegateArgs,
+	manager: DelegationManager,
+	parentSessionID: string,
+): ToolResult {
+	// A plugin tool's `state.title` comes from the RETURNED object, not ctx.metadata
+	// (registry.ts:150). We set a concise one — surfaces that render custom-tool
+	// titles get a clean header instead of the empty default. Note: OpenCode's
+	// generic tool renderer shows the raw args inline regardless of this title; the
+	// human-facing "a subagent launched" cue is the dispatch toast + the child
+	// session title, not this field.
+	const modelShort = delegation.model?.split("/").pop()
+	const toolTitle = `${args.agent}${modelShort ? ` · ${modelShort}` : ""} · ${delegation.id}`
+
+	// Get total active count for this parent session
+	const totalActive = manager.getPendingCount(parentSessionID)
+
+	const timeoutLabel = isUnlimitedRunTime(delegation.maxRunTimeMs)
+		? "none (steer/stop it whenever needed)"
+		: `${Math.round(delegation.maxRunTimeMs / 60_000)}min (a steer resets the window)`
+	let response = `Delegation started: ${delegation.id}\nAgent: ${args.agent}${delegation.model ? `\nModel: ${delegation.model}` : ""}\nTimeout: ${timeoutLabel}`
+	if (totalActive > 1) {
+		response += `\n\n${totalActive} delegations now active.`
+	}
+	response += `\nYou WILL be notified when ${totalActive > 1 ? "ALL complete" : "complete"}. Do NOT poll.`
+
+	return { title: toolTitle, output: response }
+}
+
+/** The `manager.dispatch` call body both launch paths build from tool args. */
+function delegationInput(
+	args: DelegateArgs,
+	toolCtx: ToolContext,
+	model?: ReturnType<typeof parseModelString>,
+) {
+	return {
+		parentSessionID: toolCtx.sessionID,
+		parentMessageID: toolCtx.messageID,
+		parentAgent: toolCtx.agent,
+		prompt: args.prompt,
+		agent: args.agent,
+		// 0 is meaningful (no timeout): only an omitted argument falls back to the default.
+		maxRunTimeMs:
+			args.timeout_minutes !== undefined ? args.timeout_minutes * 60_000 : undefined,
+		model,
+	}
+}
+
+/**
+ * Legacy dispatch: hand-rolled session.create + prompt launch. Fallback only,
+ * used when v2's built-in `subagent` tool is not available to ride.
+ */
+export async function runDelegation(
 	manager: DelegationManager,
 	args: DelegateArgs,
 	toolCtx: ToolContext,
 	toolName: string,
 ): Promise<ToolResult> {
 	{
-			if (!toolCtx?.sessionID) {
-				return `❌ ${toolName} requires sessionID. This is a system error.`
-			}
-			if (!toolCtx?.messageID) {
-				return `❌ ${toolName} requires messageID. This is a system error.`
-			}
-
-			let model: ReturnType<typeof parseModelString>
-			if (args.model !== undefined) {
-				model = parseModelString(args.model)
-				if (!model) {
-					return `❌ Invalid model "${args.model}". Expected "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"), or omit it to use the agent's configured model.`
-				}
-			}
-			// Effort is a model variant, so it needs a model to attach to. An
-			// explicit `#variant` on the model string wins: the caller spelled
-			// out exactly what they wanted.
-			if (args.effort !== undefined && args.effort.trim() !== "") {
-				if (!model) {
-					return `❌ effort "${args.effort}" needs a model: it is applied as that model's variant. Pass model="provider/model-id" as well, or drop effort to use the agent's default.`
-				}
-				if (!model.variant) {
-					model = { ...model, variant: effortToVariant(args.effort) }
-				}
-			}
+			const parsed = parseDispatchArgs(args, toolCtx, toolName)
+			if (typeof parsed === "string") return parsed
 
 			try {
-				const delegation = await manager.delegate({
-					parentSessionID: toolCtx.sessionID,
-					parentMessageID: toolCtx.messageID,
-					parentAgent: toolCtx.agent,
-					prompt: args.prompt,
-					agent: args.agent,
-					// 0 is meaningful (no timeout): only an omitted argument falls back to the default.
-					maxRunTimeMs:
-						args.timeout_minutes !== undefined ? args.timeout_minutes * 60_000 : undefined,
-					model,
-				})
-
-				// A plugin tool's `state.title` comes from the RETURNED object, not ctx.metadata
-				// (registry.ts:150). We set a concise one — surfaces that render custom-tool
-				// titles get a clean header instead of the empty default. Note: OpenCode's
-				// generic tool renderer shows the raw args inline regardless of this title; the
-				// human-facing "a subagent launched" cue is the dispatch toast + the child
-				// session title (`<agent> · <id>`), not this field.
-				const modelShort = delegation.model?.split("/").pop()
-				const toolTitle = `${args.agent}${modelShort ? ` · ${modelShort}` : ""} · ${delegation.id}`
-
-				// Get total active count for this parent session
-				const pendingSet = manager.getPendingCount(toolCtx.sessionID)
-				const totalActive = pendingSet
-
-				const timeoutLabel = isUnlimitedRunTime(delegation.maxRunTimeMs)
-					? "none (steer/stop it whenever needed)"
-					: `${Math.round(delegation.maxRunTimeMs / 60_000)}min (a steer resets the window)`
-				let response = `Delegation started: ${delegation.id}\nAgent: ${args.agent}${delegation.model ? `\nModel: ${delegation.model}` : ""}\nTimeout: ${timeoutLabel}`
-				if (totalActive > 1) {
-					response += `\n\n${totalActive} delegations now active.`
-				}
-				response += `\nYou WILL be notified when ${totalActive > 1 ? "ALL complete" : "complete"}. Do NOT poll.`
-
-				return { title: toolTitle, output: response }
+				const delegation = await manager.delegate(delegationInput(args, toolCtx, parsed.model))
+				return delegationStartedResult(delegation, args, manager, toolCtx.sessionID)
 			} catch (error) {
 				// Return validation errors as guidance, not exceptions
 				return `❌ Delegation failed:\n\n${error instanceof Error ? error.message : "Unknown error"}`
 			}
+	}
+}
+
+/**
+ * v2 dispatch: same arg validation, but the launch rides v2's built-in
+ * `subagent` tool — session creation, agent/model resolution, permissions and
+ * the child run loop stay OpenCode's. The manager wraps the dispatched child
+ * with registration, supervision and notifications. This is the ywai layer on
+ * top of the native component, not a replacement of it.
+ */
+export async function runDelegationNative(
+	manager: DelegationManager,
+	args: DelegateArgs,
+	toolCtx: ToolContext,
+	launch: NativeSubagentLaunch,
+): Promise<ToolResult> {
+	const parsed = parseDispatchArgs(args, toolCtx, "subagent")
+	if (typeof parsed === "string") return parsed
+
+	try {
+		const delegation = await manager.delegateNative(delegationInput(args, toolCtx, parsed.model), launch)
+		return delegationStartedResult(delegation, args, manager, toolCtx.sessionID)
+	} catch (error) {
+		// Return validation errors as guidance, not exceptions
+		return `❌ Delegation failed:\n\n${error instanceof Error ? error.message : "Unknown error"}`
 	}
 }
 
@@ -389,7 +398,6 @@ Read-only and instant. Do NOT poll: completion arrives on its own.`,
 }
 
 export {
-	createDelegate,
 	createSubagent,
 	createSubagentStatus,
 	createDelegationList,

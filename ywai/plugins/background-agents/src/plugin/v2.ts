@@ -43,6 +43,8 @@ import {
 	createDelegationRead,
 	createDelegationSteer,
 	createDelegationStop,
+	runDelegation,
+	runDelegationNative,
 } from "./tools"
 import { DEFAULT_MAX_RUN_TIME_MS } from "./types"
 import {
@@ -152,12 +154,21 @@ const V2_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
 /**
  * Registers the five-tool v2 surface. The v1 defs are reused for description
  * and execute so the two surfaces cannot drift; only the schema shape is
- * v2-native. Registering `subagent` overrides v2's built-in tool of the same
- * name — a later valid registration replaces the same effective tool name.
+ * v2-native.
+ *
+ * `subagent` is the ywai layer ON TOP of v2's built-in tool of the same name,
+ * not a replacement of its machinery: the built-in's execute is captured
+ * before our same-name registration and used as the launch transport, so
+ * session creation, agent/model resolution, permissions, parent linking and
+ * the child run loop stay native. Supervision, notifications and artifacts
+ * are ours. When the built-in is absent (not expected on v2), the tool falls
+ * back to the legacy hand-rolled launch so delegation keeps working.
  */
 async function registerV2Tools(ctx: V2PluginContext, manager: DelegationManager): Promise<void> {
-	const defs: Record<string, { description: string; execute: (args: any, toolCtx: any) => Promise<any> }> = {
-		subagent: createSubagent(manager) as any,
+	const supervisionDefs: Record<
+		string,
+		{ description: string; execute: (args: any, toolCtx: any) => Promise<any> }
+	> = {
 		subagent_status: createSubagentStatus(manager) as any,
 		subagent_read: createDelegationRead(manager) as any,
 		subagent_steer: createDelegationSteer(manager) as any,
@@ -165,7 +176,30 @@ async function registerV2Tools(ctx: V2PluginContext, manager: DelegationManager)
 	}
 
 	await ctx.tool?.transform?.((editor: any) => {
-		for (const [name, def] of Object.entries(defs)) {
+		// Capture the built-in BEFORE our same-name registration replaces it.
+		const native = typeof editor?.get === "function" ? editor.get("subagent") : undefined
+		const nativeExecute =
+			native && typeof native.execute === "function" ? native.execute.bind(native) : undefined
+
+		const subagentDef = createSubagent(manager) as any
+		editor.add({
+			name: "subagent",
+			description: subagentDef.description,
+			input: V2_INPUT_SCHEMAS.subagent,
+			execute: async (input: any, toolCtx: any) => {
+				if (nativeExecute) {
+					return toV2Result(
+						await runDelegationNative(manager, input, toolCtx, (launchInput) =>
+							nativeExecute(launchInput, toolCtx),
+						),
+					)
+				}
+				// No built-in to ride: launch through the legacy path instead.
+				return toV2Result(await runDelegation(manager, input, toolCtx, "subagent"))
+			},
+		})
+
+		for (const [name, def] of Object.entries(supervisionDefs)) {
 			editor.add({
 				name,
 				description: def.description,
@@ -222,6 +256,26 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 	// compaction calls too, so this also carries delegation state across
 	// compaction — the role the v1 compacting hook played.
 	await ctx.session.hook?.("context", async (event: any) => {
+		// Anti-recursion: a delegation child must not dispatch or control
+		// delegations. The legacy launch could disable tools per prompt; the
+		// native launch cannot, so strip them from the model request instead.
+		try {
+			if (event.tools && manager.isDelegationChild(event.sessionID)) {
+				for (const toolName of Object.keys(event.tools)) {
+					if (
+						toolName === "subagent" ||
+						toolName === "delegate" ||
+						toolName === "task" ||
+						toolName.startsWith("subagent_") ||
+						toolName.startsWith("delegation_")
+					) {
+						delete event.tools[toolName]
+					}
+				}
+			}
+		} catch {
+			// Stripping must never break the model call.
+		}
 		try {
 			event.system.push({ type: "text", text: DELEGATION_RULES })
 			const rootSessionID = await manager.getRootSessionID(event.sessionID)

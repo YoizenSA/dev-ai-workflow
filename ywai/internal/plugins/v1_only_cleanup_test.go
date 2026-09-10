@@ -1,10 +1,8 @@
 package plugins
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -110,31 +108,6 @@ func TestRemoveV1OnlyPlugins_MissingConfigIsNoOp(t *testing.T) {
 	}
 	if removed != 0 {
 		t.Errorf("removed = %d, want 0", removed)
-	}
-}
-
-// The plugin reads this marker to decide whether to register the v2-only
-// subagent override, so a wrong or missing value silently changes its tools.
-func TestWriteFlavorMarker_RecordsActiveFlavor(t *testing.T) {
-	for _, tc := range []struct{ flavor, want string }{
-		{"v1", `{"opencodeVersion":"v1"}`},
-		{"v2", `{"opencodeVersion":"v2"}`},
-	} {
-		t.Run(tc.flavor, func(t *testing.T) {
-			t.Setenv(agent.OpenCodeOverrideEnv, tc.flavor)
-			dir := t.TempDir()
-
-			if err := writeFlavorMarker(dir); err != nil {
-				t.Fatalf("writeFlavorMarker: %v", err)
-			}
-			body, err := os.ReadFile(filepath.Join(dir, FlavorMarkerName))
-			if err != nil {
-				t.Fatalf("read marker: %v", err)
-			}
-			if got := strings.TrimSpace(string(body)); got != tc.want {
-				t.Errorf("marker = %s, want %s", got, tc.want)
-			}
-		})
 	}
 }
 

@@ -77,30 +77,26 @@ func RemoveBackgroundAgents(configPath string) error {
 	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove legacy background-agents bundle: %w", err)
 	}
+	// Stale flavor markers from the v1-era dual plugin; best-effort sweep.
+	for _, markerDir := range []string{
+		filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir),
+		filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir),
+	} {
+		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale flavor marker: %w", err)
+		}
+	}
 	return nil
 }
 
-// InstallBackgroundAgents vendors the background-agents plugin bundle next to
-// the given opencode config and wires it into the config (plugin array +
-// delegation permissions). configPath is the path to opencode.json(c).
-// FlavorMarkerName is the file ywai writes beside the vendored bundle so the
-// plugin knows which OpenCode it is running under. The plugin cannot work this
-// out on its own: v1 and v2 expose no capability that cleanly separates them,
-// and guessing would either add a dead tool on v1 or skip the override on v2.
+// InstallBackgroundAgents vendors the background-agents plugin bundle into the
+// location OpenCode 2 scans by itself. The plugin is v2-only: it is the
+// supervision layer on top of v2's built-in `subagent` tool (notifications,
+// steer/stop, watchdog, crash recovery, artifacts) and no longer carries the
+// v1 host surface. FlavorMarkerName remains only so installs can sweep the
+// marker files the old v1+v2 dual plugin wrote beside its bundles; the
+// v2-only plugin never reads them.
 const FlavorMarkerName = "ywai-opencode-flavor.json"
-
-// writeFlavorMarker records the active flavor next to the vendored bundles.
-// Absent or unreadable means v1, which is the conservative default: the
-// subagent override is skipped rather than registering a tool that shadows
-// nothing.
-func writeFlavorMarker(destDir string) error {
-	flavor := "v1"
-	if agent.OpenCodeIsV2() {
-		flavor = "v2"
-	}
-	body := []byte(`{"opencodeVersion":"` + flavor + `"}` + "\n")
-	return os.WriteFile(filepath.Join(destDir, FlavorMarkerName), body, 0o644)
-}
 
 func InstallBackgroundAgents(configPath string) error {
 	bundle, err := config.BackgroundAgentsBundlePath()
@@ -127,25 +123,12 @@ const AutoDiscoveredPluginsSubdir = "plugins"
 const autoDiscoveredPluginsSubdir = AutoDiscoveredPluginsSubdir
 
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
-	if agent.OpenCodeIsV2() {
-		return installBackgroundAgentsV2(configPath, bundleSrc)
+	if !agent.OpenCodeIsV2() {
+		// The plugin is v2-only: it supervises v2's built-in `subagent` tool
+		// and no longer ships the v1 host surface it once also needed.
+		return errors.New("background-agents requires OpenCode 2 (opencode2); skip it under OpenCode v1")
 	}
-
-	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
-	}
-
-	destJS := filepath.Join(destDir, config.BackgroundAgentsBundleName)
-	if err := copyFile(bundleSrc, destJS); err != nil {
-		return fmt.Errorf("copy plugin bundle: %w", err)
-	}
-
-	if err := writeFlavorMarker(destDir); err != nil {
-		return fmt.Errorf("write flavor marker: %w", err)
-	}
-
-	return patchOpenCodeBackgroundAgents(configPath, destJS)
+	return installBackgroundAgentsV2(configPath, bundleSrc)
 }
 
 // installBackgroundAgentsV2 vendors the bundle into the directory OpenCode
@@ -167,9 +150,12 @@ func installBackgroundAgentsV2(configPath, bundleSrc string) error {
 		return fmt.Errorf("copy plugin bundle: %w", err)
 	}
 
-	// The plugin reads the marker from its own directory.
-	if err := writeFlavorMarker(destDir); err != nil {
-		return fmt.Errorf("write flavor marker: %w", err)
+	// The v1-era dual plugin wrote a flavor marker beside its bundles; the
+	// v2-only plugin never reads it, so sweep stale copies on every install.
+	for _, markerDir := range []string{destDir, filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)} {
+		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove stale flavor marker: %w", err)
+		}
 	}
 
 	// Drop the v1-shaped entry and the copy it pointed at, so the bundle is
@@ -196,53 +182,6 @@ func installBackgroundAgentsV2(configPath, bundleSrc string) error {
 	}
 	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
-	}
-	return nil
-}
-
-// patchOpenCodeBackgroundAgents adds pluginJSPath to the config's v2 "plugins"
-// array (idempotently) and merges the delegation allow rules into the
-// top-level v2 "permissions" array, preserving existing rules. A leftover v1
-// "permission" map is deleted entirely. It is safe to call repeatedly.
-func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
-	var root map[string]any
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
-	}
-
-	// Ensure parent dir exists (config may not have been created yet).
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	plugins := openCodePlugins(root)
-	if !containsPluginPath(plugins, pluginJSPath) {
-		plugins = append(plugins, pluginJSPath)
-	}
-	writePlugins(root, plugins)
-
-	// Top-level v1 permission map: add one entry per delegation action, without
-	// clobbering a value the user already set.
-	perms, _ := root["permission"].(map[string]any)
-	if perms == nil {
-		perms = map[string]any{}
-	}
-	for action, effect := range backgroundAgentsPermissions {
-		if _, covered := perms[action]; covered {
-			continue
-		}
-		perms[action] = effect
-	}
-	root["permission"] = perms
-
-	delete(root, "permissions")
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
 	}
 	return nil
 }

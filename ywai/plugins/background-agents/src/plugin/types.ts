@@ -213,6 +213,24 @@ interface DelegateInput {
 	model?: ModelRef
 }
 
+/**
+ * v2's built-in `subagent` tool execute, captured from the tool editor before
+ * the ywai wrapper registers over the same name. The launch transport: it owns
+ * session creation, agent/model resolution, permissions, parent linking and
+ * the child run loop. Resolves when the child is dispatched (background mode);
+ * the returned value may carry the child session id.
+ */
+type NativeSubagentLaunch = (input: {
+	agent: string
+	prompt: string
+	description?: string
+	/** "provider/model-id" for this run; omitted = the agent's configured model. */
+	model?: string
+	/** Reasoning effort for this run; applied as the model's variant. */
+	effort?: string
+	background: boolean
+}) => Promise<unknown>
+
 interface DelegationListItem {
 	id: string
 	status: DelegationStatus
@@ -283,6 +301,7 @@ export type {
 	DelegationManagerOptions,
 	ModelRef,
 	NativeSteerFn,
+	NativeSubagentLaunch,
 }
 export {
 	DEFAULT_MAX_RUN_TIME_MS,

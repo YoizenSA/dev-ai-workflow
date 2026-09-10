@@ -1,6 +1,6 @@
 /**
  * background-agents
- * Async delegation system for OpenCode
+ * Async delegation system for OpenCode — v2 only.
  *
  * Delegates tasks to sub-agents running in isolated sessions. All agent
  * outputs are persisted to storage, the supervisor receives only key
@@ -9,311 +9,38 @@
  * Based on oh-my-opencode by @code-yeongyu (MIT License)
  * https://github.com/code-yeongyu/oh-my-opencode
  *
- * This file is the plugin entry point. Implementation is split into sibling modules:
- *   id - metadata - types - logger - agent-capability - delegation-manager - tools - rules - context
+ * Architecture: v2's built-in `subagent` tool is the LAUNCH transport (it owns
+ * session creation, agent/model resolution, permissions, parent linking and
+ * the child run loop). This plugin is the supervision layer the native tool
+ * lacks — parent notifications, steer/stop/peek/status, watchdog timeouts,
+ * crash recovery, persisted artifacts, anti-recursion. See v2.ts.
+ *
+ * The v1 host surface (server() hooks, the delegate/delegation_* tool map,
+ * the task-tool guard, compaction hooks, the flavor marker) was removed:
+ * ywai installs this plugin only under opencode2.
  */
 
-import * as fsSync from "node:fs"
-import * as fs from "node:fs/promises"
-import * as os from "node:os"
-import * as path from "node:path"
-import * as url from "node:url"
-import type { Plugin } from "@opencode-ai/plugin"
-import type { Event } from "@opencode-ai/sdk"
-import { parseAgentMode, parseAgentWriteCapability } from "./agent-capability"
 import { formatDelegationContext } from "./context"
-import { createJsonErrorRecoveryHook } from "./json-error-recovery"
-import { createToolLoopGuardHook } from "./tool-loop-guard"
 import { DelegationManager } from "./delegation-manager"
-import { createLogger } from "./logger"
-import { createNativeSteer } from "./native"
-import { getProjectId } from "./primitives/get-project-id"
-import type { OpencodeClient } from "./primitives/types"
-import { DELEGATION_RULES } from "./rules"
 import { deserializeDelegation, serializeDelegation } from "./state"
-import {
-	createDelegate,
-	createSubagent,
-	createSubagentStatus,
-	createDelegationList,
-	createDelegationPeek,
-	createDelegationRead,
-	createDelegationStatus,
-	createDelegationSteer,
-	createDelegationStop,
-} from "./tools"
-import { STRICT_READONLY } from "./types"
 import { setupV2 } from "./v2"
+import type { V2PluginContext } from "../../../shared/v2"
 
 /**
- * Expected input for experimental.chat.system.transform hook.
+ * v2-only entry: v2 reads `id` and `setup()` from the default export and
+ * rejects function-shaped or v1-hook exports at load.
  */
-interface SystemTransformInput {
-	agent?: string
-	sessionID?: string
-}
-
-/**
- * Which OpenCode this plugin is running under, read from the marker ywai writes
- * beside the plugin bundle. v1 and v2 expose no capability that cleanly
- * separates them, so the installer — which already knows — records it instead
- * of the plugin guessing.
- *
- * Anything unreadable means v1. That is the conservative default: on v1 the
- * native delegation tool is `task`, so registering `subagent` there would add a
- * second name for `delegate` that shadows nothing and only costs context.
- */
-function readOpenCodeFlavor(): "v1" | "v2" {
-	try {
-		const here = path.dirname(url.fileURLToPath(import.meta.url))
-		const raw = fsSync.readFileSync(path.join(here, "ywai-opencode-flavor.json"), "utf8")
-		return JSON.parse(raw)?.opencodeVersion === "v2" ? "v2" : "v1"
-	} catch {
-		return "v1"
-	}
-}
-
-/**
- * v1 keeps the delegation_* surface it has always had: `task` is its native
- * delegation tool, so nothing here shadows a built-in and renaming would break
- * every prompt that names these tools.
- */
-function v1Tools(manager: DelegationManager) {
-	return {
-		delegate: createDelegate(manager),
-		delegation_read: createDelegationRead(manager),
-		delegation_list: createDelegationList(manager),
-		delegation_peek: createDelegationPeek(manager),
-		delegation_steer: createDelegationSteer(manager),
-		delegation_stop: createDelegationStop(manager),
-		delegation_status: createDelegationStatus(manager),
-	}
-}
-
-/**
- * v2 gets a deliberately smaller surface: five tools instead of eight.
- *
- * Every registered tool costs schema tokens in every turn, so the duplicates go.
- * `delegate` is dropped because `subagent` starts the same work under the name
- * v2 models already reach for, and list/status/peek collapse into one
- * `subagent_status` that zooms by whether an id is given.
- */
-function v2Tools(manager: DelegationManager) {
-	return {
-		subagent: createSubagent(manager),
-		subagent_status: createSubagentStatus(manager),
-		subagent_read: createDelegationRead(manager),
-		subagent_steer: createDelegationSteer(manager),
-		subagent_stop: createDelegationStop(manager),
-	}
-}
-
-const BackgroundAgentsPlugin: Plugin = async (ctx) => {
-	const { client, directory } = ctx
-
-	// Create logger early for all components
-	const log = createLogger(client as OpencodeClient)
-
-	// Project-level storage directory (shared across sessions)
-	// Uses git root commit hash for cross-worktree consistency
-	const projectId = await getProjectId(directory, client as OpencodeClient)
-	const baseDir = path.join(os.homedir(), ".local", "share", "opencode", "delegations", projectId)
-
-	// Ensure base directory exists (for debug logs etc)
-	await fs.mkdir(baseDir, { recursive: true })
-
-	// Native server-side steering (opencode >= 1.17 exposes serverUrl and the v2 prompt
-	// route with delivery:"steer"). Older hosts: undefined → v1 fallback inside the manager.
-	const serverUrl = (ctx as { serverUrl?: URL }).serverUrl
-	const nativeSteer = serverUrl ? createNativeSteer(serverUrl, log) : undefined
-
-	const openCodeFlavor = readOpenCodeFlavor()
-	const manager = new DelegationManager(client as OpencodeClient, baseDir, log, { nativeSteer })
-
-	// Guard hooks: loop guard + JSON recovery.
-	const loopGuard = createToolLoopGuardHook()
-	const jsonRecovery = createJsonErrorRecoveryHook()
-
-	await manager.debugLog("BackgroundAgentsPlugin initialized with delegation system")
-
-	// Re-adopt delegations orphaned by a previous process exit (fire-and-forget so plugin
-	// load is never delayed; reconciliation settles them as the server responds).
-	void manager.restoreActiveDelegations()
-
-	return {
-		tool: openCodeFlavor === "v2" ? v2Tools(manager) : v1Tools(manager),
-
-		// Guard hooks: the loop guard stops infinite identical tool calls. It
-		// runs on every host flavor, then the delegation guard does its
-		// task-tool check below.
-		"tool.execute.before": async (
-			input: { tool: string; sessionID?: string; callID?: string },
-			output: { args?: { subagent_type?: string } },
-		) => {
-			await loopGuard["tool.execute.before"](input, output)
-
-			// Guard: Only intercept task tool
-			if (input.tool !== "task") return
-
-			// Guard: Require agent name
-			const agentName = output.args?.subagent_type
-			if (!agentName) return
-
-			// Parse boundary 1: Check agent mode
-			const { isSubAgent } = await parseAgentMode(client as OpencodeClient, agentName, log)
-
-			// Guard: Allow non-sub-agents (main/built-in)
-			if (!isSubAgent) return
-
-			// Relaxed mode (default): every sub-agent — read-only OR write-capable — must go
-			// through `delegate` so it runs async in the background. The native `task` tool is
-			// synchronous and would BLOCK this supervisor session until the sub-agent finishes,
-			// which is exactly the bug this guard prevents. Redirect all sub-agents to delegate.
-			if (!STRICT_READONLY) {
-				throw new Error(
-					`❌ Agent '${agentName}' is a sub-agent — use the delegate tool for async background execution.\n\n` +
-						`The native task tool runs synchronously and blocks this session until the sub-agent finishes.\n` +
-						`Call delegate(agent="${agentName}", prompt=...) instead — it returns an ID immediately and runs in the background.\n` +
-						`(Set BACKGROUND_AGENTS_STRICT_READONLY=1 to route write-capable sub-agents through task instead.)`,
-				)
-			}
-
-			// Strict mode: only read-only sub-agents are forced onto delegate; write-capable
-			// sub-agents keep using the native task tool to preserve undo/branching.
-			const { isReadOnly } = await parseAgentWriteCapability(
-				client as OpencodeClient,
-				agentName,
-				log,
-			)
-
-			// Guard: Allow write-capable agents (strict mode only)
-			if (!isReadOnly) return
-
-			// Fail fast: Read-only sub-agent via task is invalid
-			throw new Error(
-				`❌ Agent '${agentName}' is read-only and should use the delegate tool for async background execution.\n\n` +
-					`Read-only agents have: edit="deny", write="deny", bash={"*":"deny"}\n` +
-					`Use delegate for read-only sub-agents.\n` +
-					`Use task for write-capable sub-agents.`,
-			)
-		},
-
-		// Recovery + loop detection on completed tool calls: JSON recovery
-		// appends fix-it instructions on parse failures, the loop guard counts
-		// identical args/results runs and warns at the threshold.
-		"tool.execute.after": async (
-			input: { tool: string; sessionID?: string; callID?: string },
-			output: { output?: unknown; title?: string; metadata?: unknown },
-		) => {
-			await jsonRecovery["tool.execute.after"](input, output as never)
-			await loopGuard["tool.execute.after"](input, output as never)
-		},
-
-		// Inject delegation rules into system prompt
-		"experimental.chat.system.transform": async (_input: SystemTransformInput, output) => {
-			output.system.push(DELEGATION_RULES)
-		},
-
-		// Deliver queued parent notifications on the next user turn if direct delivery failed.
-		"chat.message": async (
-			input: { sessionID?: string },
-			output: { message?: { id?: string }; parts?: Array<{ type: string; text?: string }> },
-		) => {
-			if (!input.sessionID) return
-			manager.injectPendingNotificationsIntoChatMessage(output, input.sessionID)
-		},
-
-		// Compaction hook - inject delegation context for context recovery
-		"experimental.session.compacting": async (
-			input: { sessionID: string },
-			output: { context: string[]; prompt?: string },
-		) => {
-			const rootSessionID = await manager.getRootSessionID(input.sessionID)
-
-			// Running delegations in this root session tree
-			const running = manager.getRunningDelegations(rootSessionID).map((d) => ({
-				id: d.id,
-				agent: d.agent,
-				title: d.title,
-				description: d.description,
-				status: d.status,
-				startedAt: d.startedAt,
-				lastHeartbeatAt: d.progress.lastHeartbeatAt,
-				prompt: d.prompt,
-			}))
-
-			// Unread completed delegations to carry forward through compaction
-			const unreadCompleted = manager.getUnreadCompletedDelegations(rootSessionID, 10).map((d) => ({
-				id: d.id,
-				agent: d.agent,
-				title: d.title,
-				description: d.description,
-				status: d.status,
-				completedAt: d.completedAt,
-			}))
-
-			// Early exit if nothing to inject
-			if (running.length === 0 && unreadCompleted.length === 0) return
-
-			output.context.push(formatDelegationContext(running, unreadCompleted))
-		},
-
-		// Event hook
-		event: async ({ event }: { event: Event }): Promise<void> => {
-			if (event.type === "session.status") {
-				const statusType = event.properties.status?.type
-				const sessionID = event.properties.sessionID
-				if (statusType === "idle" && sessionID) {
-					await manager.handleSessionIdle(sessionID)
-				}
-			}
-
-			if (event.type === "session.idle") {
-				const sessionID = event.properties.sessionID
-				if (sessionID) {
-					await manager.handleSessionIdle(sessionID)
-				}
-			}
-
-			// message.updated carries only the message info (no parts): use it as a heartbeat.
-			if (event.type === "message.updated") {
-				const sessionID = event.properties.info.sessionID
-				if (sessionID) {
-					manager.handleMessageEvent(sessionID)
-				}
-			}
-
-			// Part-level updates carry the actual content: text for lastMessage,
-			// tool parts for the tool-call counter, and a heartbeat either way.
-			if (event.type === "message.part.updated") {
-				manager.handlePartEvent(event.properties.part)
-			}
-		},
-	}
-}
-
-/**
- * Dual export per the v2 plugins guide ("Support V1"):
- *
- * - v2 reads `id` and `setup()` and ignores `server()`. A function-shaped
- *   default (the old export) is rejected at load with "Plugin must export a
- *   default definition with an id and an effect or setup function".
- * - v1 calls `server()` and uses the returned hooks. The object form needs
- *   OpenCode v1 >= 1.18.29; older v1 releases only accept function exports.
- */
-const BackgroundAgentsDualExport = {
-	id: "ywai-background-agents",
-	setup: setupV2,
-	async server(ctx: Parameters<typeof BackgroundAgentsPlugin>[0]) {
-		return BackgroundAgentsPlugin(ctx)
+export default Object.assign(
+	{
+		id: "ywai-background-agents",
+		setup: (ctx: V2PluginContext) => setupV2(ctx),
 	},
-}
-
-export default Object.assign(BackgroundAgentsDualExport, {
-	testInternals: {
-		DelegationManager,
-		formatDelegationContext,
-		serializeDelegation,
-		deserializeDelegation,
-	},
-} as const)
+	{
+		testInternals: {
+			DelegationManager,
+			formatDelegationContext,
+			serializeDelegation,
+			deserializeDelegation,
+		},
+	} as const,
+)

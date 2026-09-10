@@ -895,3 +895,55 @@ describe("transcript digest error rendering", () => {
 		expect(typeof errorText({ a: 1 }).slice(0, 3)).toBe("string")
 	})
 })
+
+describe("native delegation (v2 launch)", () => {
+	test("registers the child session the native launch returned and rides it for supervision", async () => {
+		const { manager } = await setup()
+		const launchCalls: any[] = []
+		const delegation = await manager.delegateNative(
+			delegateInput({
+				model: { providerID: "anthropic", modelID: "claude-x", variant: "high" },
+			}) as never,
+			async (input) => {
+				launchCalls.push(input)
+				return { content: "Launched ses_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6." }
+			},
+		)
+
+		expect(delegation.sessionID).toBe("ses_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
+		expect(delegation.model).toBe("anthropic/claude-x#high")
+		// The launch input is the native tool's argument surface: model and
+		// effort split, background forced on.
+		expect(launchCalls[0]).toMatchObject({
+			agent: "researcher",
+			prompt: "Research the topic",
+			model: "anthropic/claude-x",
+			effort: "high",
+			background: true,
+		})
+		// The child counts as a delegation child (anti-recursion tool strip).
+		expect(manager.isDelegationChild("ses_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")).toBe(true)
+	})
+
+	test("rejects when the native result carries no child session id", async () => {
+		const { manager } = await setup()
+		await expect(
+			manager.delegateNative(
+				delegateInput() as never,
+				async () => ({ content: "done, but no id in here" }),
+			),
+		).rejects.toThrow(/no child session id/)
+		// Nothing registered: an unsupervisable delegation must not linger as running.
+		expect(manager.getPendingCount("ses_parent")).toBe(0)
+	})
+
+	test("propagates launch failures instead of registering a zombie delegation", async () => {
+		const { manager } = await setup()
+		await expect(
+			manager.delegateNative(delegateInput() as never, async () => {
+				throw new Error("agent catalog unavailable")
+			}),
+		).rejects.toThrow("agent catalog unavailable")
+		expect(manager.getPendingCount("ses_parent")).toBe(0)
+	})
+})

@@ -36,6 +36,7 @@ import type {
 	DelegationStatus,
 	DelegationTerminalStatus,
 	NativeSteerFn,
+	NativeSubagentLaunch,
 	ParentNotificationState,
 	SessionMessageItem,
 } from "./types"
@@ -57,6 +58,38 @@ export function errorText(error: unknown): string {
 		}
 	}
 	return String(error ?? "unknown error")
+}
+
+const SESSION_ID_PATTERN = /ses_[a-f0-9][a-f0-9-]{7,}/
+
+/**
+ * Pull the child session id out of a native `subagent` tool result. The result
+ * shape belongs to the host, not this plugin, so scan every string in it
+ * instead of depending on one field.
+ */
+function extractSessionId(result: unknown): string | undefined {
+	const scan = (value: unknown, depth: number): string | undefined => {
+		if (depth > 4) return undefined
+		if (typeof value === "string") {
+			const match = SESSION_ID_PATTERN.exec(value)
+			return match ? match[0] : undefined
+		}
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				const found = scan(item, depth + 1)
+				if (found) return found
+			}
+			return undefined
+		}
+		if (value && typeof value === "object") {
+			for (const item of Object.values(value as Record<string, unknown>)) {
+				const found = scan(item, depth + 1)
+				if (found) return found
+			}
+		}
+		return undefined
+	}
+	return scan(result, 0)
 }
 
 class DelegationManager {
@@ -1348,7 +1381,11 @@ class DelegationManager {
 	/**
 	 * Delegate a task to an agent
 	 */
-	async delegate(input: DelegateInput): Promise<DelegationRecord> {
+	/**
+	 * Shared pre-flight for both launch paths: the agent must exist and, in
+	 * strict mode, must be read-only. Throws with a model-facing message.
+	 */
+	private async validateLaunch(input: DelegateInput): Promise<void> {
 		// Validate agent exists before creating session
 		const agentsResult = await this.client.app.agents({})
 		const agents = (agentsResult.data ?? []) as {
@@ -1388,6 +1425,10 @@ class DelegationManager {
 					`Set BACKGROUND_AGENTS_STRICT_READONLY=1 to forbid this.`,
 			)
 		}
+	}
+
+	async delegate(input: DelegateInput): Promise<DelegationRecord> {
+		await this.validateLaunch(input)
 
 		const artifactDir = await this.ensureDelegationsDir(input.parentSessionID)
 		const rootSessionID = await this.getRootSessionID(input.parentSessionID)
@@ -1490,6 +1531,86 @@ class DelegationManager {
 			})
 
 		return delegation
+	}
+
+	/**
+	 * Launch through v2's built-in `subagent` tool instead of hand-rolled
+	 * session.create + prompt. The native call owns session creation, agent and
+	 * model resolution, permissions, parent linking and the child run loop;
+	 * this layer keeps everything the native tool lacks — the stable
+	 * delegation id, supervision (steer/stop/peek/watchdog), parent
+	 * notifications, persisted artifacts and crash recovery.
+	 *
+	 * Completion is detected by the existing event machinery (session.idle →
+	 * finalize), exactly as for any other session; the launch promise only
+	 * covers dispatch.
+	 *
+	 * Throws when the native launch fails, or when its result carries no child
+	 * session id: without the id there is nothing to supervise, and a silent
+	 * unsupervised delegation would look "running" forever.
+	 */
+	async delegateNative(
+		input: DelegateInput,
+		launch: NativeSubagentLaunch,
+	): Promise<DelegationRecord> {
+		await this.validateLaunch(input)
+
+		const artifactDir = await this.ensureDelegationsDir(input.parentSessionID)
+		const rootSessionID = await this.getRootSessionID(input.parentSessionID)
+		const stableId = await this.generateUniqueDelegationId(artifactDir)
+		const artifactPath = path.join(artifactDir, `${stableId}.md`)
+
+		const launchResult = await launch({
+			agent: input.agent,
+			prompt: input.prompt,
+			model: input.model ? `${input.model.providerID}/${input.model.modelID}` : undefined,
+			// The native tool applies effort as the model's variant — same
+			// semantics this plugin's own `effort` argument documents.
+			effort: input.model?.variant,
+			background: true,
+		})
+
+		const sessionID = extractSessionId(launchResult)
+		if (!sessionID) {
+			throw new Error(
+				`Native subagent launched but its result carried no child session id, so the delegation cannot be supervised (id ${stableId} reserved, not registered).`,
+			)
+		}
+
+		const delegation = this.registerDelegation({
+			id: stableId,
+			rootSessionID,
+			sessionID,
+			parentSessionID: input.parentSessionID,
+			parentMessageID: input.parentMessageID,
+			parentAgent: input.parentAgent,
+			prompt: input.prompt,
+			agent: input.agent,
+			artifactPath,
+			maxRunTimeMs: input.maxRunTimeMs,
+			// formatModelRef keeps the #variant: dropping it here would record a
+			// model that never ran and hide the effort the supervisor chose.
+			model: input.model ? formatModelRef(input.model) : undefined,
+		})
+
+		this.scheduleTimeout(delegation.id)
+		this.markStarted(delegation.id)
+		this.persistState(delegation.id)
+
+		// Human-facing dispatch signal, same contract as the legacy path.
+		void this.showToast(
+			`Delegation started: ${delegation.id} → ${input.agent}${
+				delegation.model ? ` (${delegation.model})` : ""
+			}`,
+			"info",
+		)
+
+		return delegation
+	}
+
+	/** True when the session is a delegation child (anti-recursion tool stripping). */
+	isDelegationChild(sessionID: string): boolean {
+		return this.getDelegationBySession(sessionID) !== undefined
 	}
 
 	/**
