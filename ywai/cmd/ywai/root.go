@@ -624,7 +624,10 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		// installed on a guess.
 		isOpenCode := a.Name == "opencode" || a.Name == "kilocode"
 		supportsDelegationPlugin := isOpenCode
-		supportsV1OnlyPlugins := (a.Name == "opencode" && !agent.OpenCodeIsV2()) || a.Name == "kilocode"
+		// vision-bridge and advisor carry v2 dual exports and their installers
+		// route to the auto-discovered plugins dir on v2, so both flavors get
+		// them. Only the v2 sweep of genuinely orphaned bundles is flavor-bound.
+		supportsVendoredPlugins := isOpenCode
 
 		if dryRun {
 			done = append(done, a.Name)
@@ -652,7 +655,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
-		if supportsV1OnlyPlugins {
+		if supportsVendoredPlugins {
 			// vision-bridge: auto-route attached images through TokenBank vision
 			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
 			if err := plugins.InstallVisionBridge(configPath); err != nil {
@@ -672,15 +675,17 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				}
 			}
 
-		} else if a.Name == "opencode" {
-			// v2: strip the v1-only bundles an earlier v1 install left behind.
+		}
+
+		if a.Name == "opencode" && agent.OpenCodeIsV2() {
+			// v2: strip the orphaned bundles an earlier install left behind.
 			// They are inert under the "plugin" key v2 ignores, but the next
 			// write moves the array to "plugins" and v2 would then try to load
-			// a v1 plugin.
+			// a bundle nothing maintains.
 			if removed, err := plugins.RemoveV1OnlyPlugins(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove v1-only plugins: %v\n", a.Name, err)
+				fmt.Printf("  [%s] Warning: failed to remove orphaned plugins: %v\n", a.Name, err)
 			} else if removed > 0 {
-				fmt.Printf("  [%s] Removed %d v1-only plugin(s) (not supported on opencode2)\n", a.Name, removed)
+				fmt.Printf("  [%s] Removed %d orphaned plugin(s) (nothing maintains them)\n", a.Name, removed)
 			}
 		}
 

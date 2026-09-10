@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import AdvisorPlugin from "../src/index"
+import AdvisorExport from "../src/index"
 import { loadConfig, loadWatchdog, parseModelRef, readTopLevelFields, toastVariant } from "../src/config"
 import { extractText, toTracked } from "../src/messages"
 
@@ -94,7 +94,7 @@ describe("plugin activation", () => {
     // not exist: reading the developer's real config would make this pass or
     // fail depending on whether they happen to have the advisor turned on.
     const dir = await tmpdir()
-    const hooks = await AdvisorPlugin({ client: {}, directory: "/tmp" } as never, {
+    const hooks = await AdvisorExport.server({ client: {}, directory: "/tmp" } as never, {
       configPath: path.join(dir, "absent.yaml"),
     })
     expect(hooks.event).toBeUndefined()
@@ -102,7 +102,7 @@ describe("plugin activation", () => {
 
   test("registers the event hook when a model is configured", async () => {
     const cfg = await writeConfig("advisor_enabled: true\nadvisor_model: test/model\n")
-    const hooks = await AdvisorPlugin({ client: {}, directory: "/tmp" } as never, { configPath: cfg })
+    const hooks = await AdvisorExport.server({ client: {}, directory: "/tmp" } as never, { configPath: cfg })
     expect(typeof hooks.event).toBe("function")
   })
 })

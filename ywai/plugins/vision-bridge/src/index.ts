@@ -333,17 +333,19 @@ const VisionBridgePlugin: Plugin = async (ctx) => {
 
 import { setupV2 } from "./v2.js"
 
-const VisionBridgeExport = Object.assign(
-  async function (ctx: Parameters<typeof VisionBridgePlugin>[0]) {
+/**
+ * v2 validates the default export against an object schema, so a callable
+ * export — even one carrying id/setup as properties — is rejected outright
+ * with "Expected object at [\"default\"]" and the plugin never loads. The
+ * object form serves both flavors: v2 reads id/setup, v1 calls server().
+ * (Object form needs OpenCode v1 >= 1.18.29.)
+ */
+const VisionBridgeExport = {
+  id: "ywai-vision-bridge",
+  setup: setupV2,
+  async server(ctx: Parameters<typeof VisionBridgePlugin>[0]) {
     return VisionBridgePlugin(ctx)
   },
-  {
-    id: "ywai-vision-bridge",
-    setup: setupV2,
-    async server(ctx: Parameters<typeof VisionBridgePlugin>[0]) {
-      return VisionBridgePlugin(ctx)
-    },
-  },
-)
+}
 
 export default VisionBridgeExport

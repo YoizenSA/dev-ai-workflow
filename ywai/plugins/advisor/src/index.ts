@@ -263,17 +263,19 @@ async function runAdvisor(
 
 import { setupV2 } from "./v2.js"
 
-const AdvisorExport = Object.assign(
-  async function (ctx: Parameters<typeof AdvisorPlugin>[0], options?: Record<string, unknown>) {
+/**
+ * v2 validates the default export against an object schema, so a callable
+ * export — even one carrying id/setup as properties — is rejected outright
+ * with "Expected object at [\"default\"]" and the plugin never loads. The
+ * object form serves both flavors: v2 reads id/setup, v1 calls server().
+ * (Object form needs OpenCode v1 >= 1.18.29.)
+ */
+const AdvisorExport = {
+  id: "ywai-advisor",
+  setup: setupV2,
+  async server(ctx: Parameters<typeof AdvisorPlugin>[0], options?: Record<string, unknown>) {
     return AdvisorPlugin(ctx, options)
   },
-  {
-    id: "ywai-advisor",
-    setup: setupV2,
-    async server(ctx: Parameters<typeof AdvisorPlugin>[0], options?: Record<string, unknown>) {
-      return AdvisorPlugin(ctx, options)
-    },
-  },
-)
+}
 
 export default AdvisorExport

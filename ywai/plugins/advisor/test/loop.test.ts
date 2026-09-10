@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import AdvisorPlugin from "../src/index"
+import AdvisorExport from "../src/index"
 
 // End-to-end over a stubbed OpenCode client: event in, note out. The units are
 // covered elsewhere; what these pin is the wiring between them — including the
@@ -73,7 +73,7 @@ beforeEach(async () => {
 
 /** Boots the plugin against the test config. */
 async function boot(client: FakeClient, directory = "/tmp/project") {
-  return await AdvisorPlugin({ client, directory } as never, { configPath })
+  return await AdvisorExport.server({ client, directory } as never, { configPath })
 }
 
 const idle = (sessionID: string) => ({ event: { type: "session.idle", properties: { sessionID } } }) as never

@@ -20,8 +20,12 @@ describe("plugin entry surface", () => {
     expect(Object.keys(entry)).toEqual(["default"])
   })
 
-  test("the default export is the plugin factory", () => {
-    expect(typeof entry.default).toBe("function")
+  // v2 loads the plugin from an object carrying id + setup and rejects a
+  // callable default outright; v1 reaches the same plugin through server().
+  test("the default export is the plugin definition", () => {
+    expect(typeof entry.default).toBe("object")
+    expect(typeof entry.default.setup).toBe("function")
+    expect(typeof entry.default.server).toBe("function")
   })
 })
 
