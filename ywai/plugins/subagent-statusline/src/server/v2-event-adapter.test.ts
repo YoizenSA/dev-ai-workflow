@@ -442,7 +442,7 @@ describe("v2 adapter: defensive behavior", () => {
   });
 });
 
-describe("v2 adapter drives the vendored state machine", () => {
+describe("v2 adapter drives the state machine", () => {
   it("tracks a subagent session from creation to idle", () => {
     const adapter = createV2EventAdapter();
     const state = createEmptyState();

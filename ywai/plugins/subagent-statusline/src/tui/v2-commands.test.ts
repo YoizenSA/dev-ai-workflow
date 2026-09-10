@@ -39,7 +39,7 @@ function createInput(overrides: Partial<RegisterSubagentCommandsInput> = {}) {
 }
 
 describe("createSubagentKeymapLayer", () => {
-  test("registers the three upstream commands under the Subagents group", () => {
+  test("registers the three commands under the Subagents group", () => {
     const { input } = createInput();
     const layer = createSubagentKeymapLayer(input);
 

@@ -1,11 +1,11 @@
 /**
  * v1 `TuiThemeCurrent` → v2 `ResolvedTheme` adapter.
  *
- * Upstream v1 read `ctx.theme.current` with the fields the vendored sidebar
- * component needs: `success`, `error`, `warning`, `text`, `textMuted`,
- * `accent`, `backgroundPanel`, `backgroundElement`. The v2 host exposes a
- * flatter `ResolvedTheme`. This module is the only place that maps one onto
- * the other, so the ported components never touch the host theme directly.
+ * The sidebar component needs a small set of color fields: `success`,
+ * `error`, `warning`, `text`, `textMuted`, `accent`, `backgroundPanel`,
+ * `backgroundElement`. The v2 host exposes a flatter `ResolvedTheme`. This
+ * module is the only place that maps one onto the other, so the components
+ * never touch the host theme directly.
  *
  * Fallbacks keep the UI readable on a partial theme:
  * - `accent` falls back to `primary`.
@@ -16,7 +16,7 @@
  * typechecked and unit-tested without the missing `@opencode/theme` package.
  */
 
-/** The v1-shaped theme surface the ported components consume. */
+/** The theme surface the components consume. */
 export type TuiTheme = {
   success: string;
   error: string;

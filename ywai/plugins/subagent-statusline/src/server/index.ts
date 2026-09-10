@@ -1,18 +1,17 @@
 /**
- * OpenCode v2 server plugin entry for the vendored subagent statusline.
+ * OpenCode v2 server plugin entry for the subagent statusline.
  *
- * Replaces upstream `src/index.ts` (the v1 `Plugin` with an `event` hook).
  * The v2 server plugin contract is a default export:
  *
  *   { id: string, setup: (ctx) => void | Promise<Cleanup> }
  *
  * `setup` subscribes to the v2 event stream, translates every envelope
  * through `v2-event-adapter.ts` into the v1-shaped internal events the
- * vendored core (`applySubagentEvent`) already reduces, and then reuses the
- * exact upstream persistence flow: load state → apply → if changed,
+ * core (`applySubagentEvent`) already reduces, and then runs the
+ * persistence flow: load state → apply → if changed,
  * saveState + saveStatusText. On-disk contract (state.json + status.txt,
  * env overrides, startup reset unless OPENCODE_SUBAGENT_STATUSLINE_PRESERVE_STATE=1)
- * is identical to upstream v1 so the TUI half can be ported unchanged.
+ * is stable so the TUI half can be ported unchanged.
  *
  * The `@opencode/plugin` package is intentionally NOT imported, even as a
  * type: the context below is structural typing only, matching the other
@@ -50,7 +49,7 @@ export default {
     const statePath = resolveStatePath();
     const textPath = resolveTextPath(statePath);
 
-    // Same startup contract as upstream v1: start from an empty statusline
+    // Startup contract: start from an empty statusline
     // unless the operator explicitly preserves state across restarts.
     if (!shouldPreserveStateOnStartup()) {
       try {
@@ -85,7 +84,7 @@ export default {
             }
           } catch {
             // Defensive by design: one bad event must never kill the stream
-            // loop (same posture as the upstream v1 event hook).
+            // loop (same posture as the v1 event hook).
           }
         }
       } catch {

@@ -1,8 +1,5 @@
-// Upstream: test/setup.ts from opencode-subagent-statusline @ 070fd66.
-// Adapted for the ywai vendored copy: upstream relies on vitest's
-// `globals: true` for `afterEach`/`vi`; this repo runs the suite with
-// `bun test` (see bunfig.toml preload), so the hooks are imported from
-// `bun:test` explicitly. Everything else is upstream logic unchanged.
+// Test bootstrap. Adapted for `bun test` (see bunfig.toml preload): the
+// afterEach/vi hooks are imported from `bun:test` explicitly.
 import { afterEach, vi } from "bun:test";
 import {
   cleanupRegisteredTempDirs,

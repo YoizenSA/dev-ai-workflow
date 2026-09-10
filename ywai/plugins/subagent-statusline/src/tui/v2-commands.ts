@@ -1,11 +1,10 @@
 /**
  * v2 keymap-layer registration for the Subagent Monitor command palette.
  *
- * Port of upstream `tui-commands.ts`. Upstream registered commands through a
- * v1 `keymap.registerLayer` / `command.register` shape; v2 replaces that with
- * `ctx.keymap.layer(input: () => KeymapLayer)`. This module takes the smallest
- * structural slice of that API plus the same callbacks, so it stays pure and
- * host-independent and can be unit-tested with a fake.
+ * Commands register through `ctx.keymap.layer(input: () => KeymapLayer)`.
+ * This module takes the smallest structural slice of that API plus the
+ * callbacks, so it stays pure and host-independent and can be unit-tested
+ * with a fake.
  */
 
 export type TuiCommandDispose = () => void;
@@ -45,7 +44,7 @@ export const TOGGLE_COMPLETED_HISTORY_COMMAND =
   "subagent-statusline.toggle-completed-history";
 export const COMMAND_GROUP = "Subagents";
 
-/** Same metadata as upstream `SHARED_COMMAND_METADATA.toggle`. */
+/** Palette metadata for toggling the sidebar section. */
 export const TOGGLE_SECTION_METADATA = {
   id: TOGGLE_SECTION_COMMAND,
   title: "Subagents: Toggle sidebar section",
@@ -53,7 +52,7 @@ export const TOGGLE_SECTION_METADATA = {
   group: COMMAND_GROUP,
 } as const;
 
-/** Same metadata as upstream `SHARED_COMMAND_METADATA.focus`. */
+/** Palette metadata for focusing the sidebar list. */
 export const FOCUS_SIDEBAR_LIST_METADATA = {
   id: FOCUS_SIDEBAR_LIST_COMMAND,
   title: "Subagents: Focus sidebar list",
@@ -61,7 +60,7 @@ export const FOCUS_SIDEBAR_LIST_METADATA = {
   group: COMMAND_GROUP,
 } as const;
 
-/** Same metadata as upstream `SHARED_COMMAND_METADATA.toggleCompletedHistory`. */
+/** Palette metadata for toggling completed rows. */
 export const TOGGLE_COMPLETED_HISTORY_METADATA = {
   id: TOGGLE_COMPLETED_HISTORY_COMMAND,
   title: "Subagents: Toggle completed history",

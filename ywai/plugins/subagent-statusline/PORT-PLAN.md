@@ -69,39 +69,39 @@ Created `ywai/plugins/subagent-statusline/`:
   `_PRESERVE_STATE=1`; dir `0o700`, files `0o600`, atomic writes; child ids
   `ses_…` / `tool:<partID>` / `subtask:<partID>`.
 
-## Phase 2 — TUI half port ⬜ TODO
+## Phase 2 — TUI half port ✅ DONE (2026-09-10)
 
-Port the v1 TUI half (`tui.tsx` ~3,193 lines, `tui-commands.ts`, `tui-focus.ts`) to the
-v2 contract, reusing the vendored pure modules (state/render/reconcile/i18n/text-width).
+Delivered as a **v2-native** plugin in `src/tui/` (not a line-for-line port —
+the v1 `client`/`route`/`kv`/`event`/`slots` seams map to different v2 APIs):
 
-- Entry: default export `{ id: "subagent-statusline-tui", setup }`; plain TSX with
-  `/** @jsxImportSource @opentui/solid */`.
-- Slots: claim `sidebar.content` (main monitor sidebar), `prompt.footer.status` with
-  `after` (compact summary, must not suppress host status), `home.footer` if upstream
-  used it.
-- Command palette: `keymap.layer` commands for "Subagents: Focus sidebar list" with
-  `bind: "alt+b"`, section collapse/expand, history toggle (`c`), open session (`Enter`),
-  focus navigation (`j`/`k`/arrows) — mapped from `tui-commands.ts`.
-- Focused-list keyboard capture: keymap layer with `target` bound to the sidebar
-  renderable.
-- Mouse: `onMouseDown` on rows and the aggregate `Σ` toggle; installer guarantees
-  `"mouse": true`.
-- Session open (click/Enter): use `ctx.client` (v2 typed client) instead of v1's
-  `execFileSync` shell-out.
-- Theme: map v1 `TuiThemeCurrent` field reads onto v2 `ctx.theme` (`ResolvedTheme`);
-  keep a small theme-mapping module so upstream render code stays untouched.
-- **Documented degradation**: focus-return-to-prompt after opening a child session
-  (v1 `TuiPromptRef` + `session_parent`) has no v2 equivalent; nearest substitutes
-  (`tui.prompt.append`, `session.composer.top`) do not restore focus — feature ships
-  degraded, noted in user-facing docs.
-- Packaging: single bundled file per the background-agents precedent (bun build,
-  peers external: `solid-js`, `@opentui/core`, `@opentui/solid`). No runtime import of
-  `@opencode/plugin`.
-- Tests: structural smoke tests for the ported entry + reuse of vendored module tests;
-  upstream's 1,750-line `tui.test.ts` is v1-harness-coupled and is NOT ported 1:1 —
-  replaced by targeted tests for the v2 glue (documented in VENDOR.md).
+- `src/tui/tui-focus.ts` — byte-identical vendor of upstream (pure, zero imports).
+- `src/tui/theme.ts` — maps v1 `TuiThemeCurrent` reads onto v2 `ResolvedTheme`
+  (`accent`→`primary`, `backgroundElement`→`backgroundPanel`→`background`).
+- `src/tui/v2-commands.ts` — host-independent `keymap.layer` registration of
+  the three palette commands (same ids/titles; focus binds `alt+b`).
+- `src/tui/index.tsx` — entry `{ id: "subagent-statusline-tui", setup }`
+  (solid-js root, full cleanup); slots `sidebar.content` (append),
+  `home.footer` (append), `prompt.footer.status` (**after**, additive — never
+  replaces host status); 12 v2 event types via `ctx.data.on` adapted through
+  the server adapter; hydration via `ctx.data` stores (+ flat-list fallback);
+  session open via `ctx.ui.router.navigate`; `kv`→`ctx.storage.store`;
+  `useKeyboard` list handler (focus-guarded) + list-targeted keymap layer;
+  mouse row handlers kept. `// @ts-nocheck` (host UI deps lack local types,
+  same precedent as `ywai/plugins/tui/*.tsx`).
+- Degradations (in code + `VENDOR.md`): no focus-return-to-prompt
+  (`TuiPromptRef` dropped with the Prompt wrappers); no sqlite/log token
+  rehydration (data-store messages + usage events only); context % may be
+  absent.
+- Packaging: `bun run build:tui` → `dist/subagent-statusline-tui.js`
+  (166 KB; externals `solid-js`, `@opentui/core`, `@opentui/solid`,
+  `@opentui/solid/*`). No `@opencode/plugin` import (verified in bundle).
+- Tests: 16 new TUI-glue tests (`theme`, `v2-commands`, entry smoke with fake
+  ctx: id, slot claims, palette + `alt+b`, 12 subscriptions, cleanup).
+  Upstream `tui.test.ts`/`tui-maintenance.test.ts` intentionally not ported
+  (v1-harness-coupled).
+- Evidence: `bun test` → 164 pass / 0 fail; `tsc --noEmit` → clean.
 
-## Phase 3 — Go installer + wiring ⬜ TODO
+## Phase 3 — Go installer + wiring ✅ DONE (2026-09-10)
 
 - `scripts/prepare-embedded.sh`: bun build both halves; copy server + TUI bundles into
   `cmd/ywai/embedded_data/plugins/`.
@@ -133,13 +133,18 @@ v2 contract, reusing the vendored pure modules (state/render/reconcile/i18n/text
 
 ## Known risks / gaps ledger
 
-1. **Beta drift**: type defs are beta-19296, binary is beta-19381; slot catalog already
-   drifted (richer in the binary). Treat `Context` fields as stable, slot catalog as
-   fast-moving; re-check on opencode2 upgrade.
+1. **Beta drift**: type defs are beta-19296, installed binary is beta-19422;
+   slot catalog already drifted once (richer in the binary). Treat `Context`
+   fields as stable, slot catalog as fast-moving; re-check on opencode2 upgrade.
 2. **No prompt-focus equivalent** in v2 — degraded feature (phase 2).
 3. **Event coverage**: subtask tracking and context-window % degraded by v2 event
    shapes (phase 1 ledger).
-4. **cli.json key discrepancy**: ywai tests enforce `"plugin"` singular; docs say
-   `"plugins"` — installer follows the tests; stale docs fixed in phase 3.
+4. **cli.json key discrepancy** ✅ RESOLVED (2026-09-10): the plan had it
+   backwards. The v2 key is `"plugins"` (plural) — verified against the
+   published `https://opencode.ai/v2/cli.json` schema (no singular `plugin`
+   key) and the beta-19422 migration (legacy tui.json `plugin` → `plugins`,
+   `-`-prefixed disable directives). The flavor-aware installer
+   (`openCodePlugins`/`writePlugins`) and both docs were already correct;
+   only this plan was wrong.
 5. **Upstream TUI test suite not ported 1:1** (v1 harness-coupled); v2 glue gets its
    own targeted tests instead.

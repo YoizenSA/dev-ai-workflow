@@ -2,10 +2,9 @@
 /**
  * OpenCode v2 TUI half of the Subagent Monitor.
  *
- * Port of upstream v1 `src/tui.tsx` (@ 070fd66, release v1.3.0) onto the v2
- * `{ id, setup(ctx) }` TUI module contract. The vendored pure modules
- * (`events`, `state`, `reconcile`, `render`, `text-width`, `i18n`) are reused
- * unchanged; only the host glue is adapted:
+ * Runs on the v2 `{ id, setup(ctx) }` TUI module contract. The pure modules
+ * (`events`, `state`, `reconcile`, `render`, `text-width`, `i18n`) carry the
+ * logic; only the host glue lives here:
  *
  * - Entry: default export `{ id, setup }`; reactive work runs inside a
  *   solid-js `createRoot` that `setup` returns a cleanup for.
@@ -578,15 +577,28 @@ function normalizeContentPart(
 
 /**
  * Normalize one v2 `SessionMessageInfo` into the v1 `{ info, parts }` shape the
- * vendored reconcile helpers already understand. Defensive: unknown message
- * types become an empty user message instead of throwing.
+ * reconcile helpers already understand.
+ *
+ * The v2 protocol carries no `sessionID` on messages (verified against
+ * `@opencode/protocol` `message.d.ts`), so the caller passes the known session
+ * id and the normalizer keeps it in `info.sessionID`. This is what
+ * `extractLatestAssistantModel` needs to attribute a model to a child session.
+ * The assistant `model` is a `ModelRef` `{ id, providerID, variant? }`, so
+ * `info.modelID` is read from `model.id`.
+ *
+ * Defensive: unknown message types become an empty user message instead of
+ * throwing.
  */
-function normalizeV2Message(raw: unknown): Record<string, unknown> {
+export function normalizeV2Message(
+  raw: unknown,
+  sessionID?: string,
+): Record<string, unknown> {
   const message = asRecord(raw);
   if (!message) return { info: {}, parts: [] };
   const type = asString(message.type);
   const time = asRecord(message.time);
   const id = asString(message.id);
+  const fallbackSessionID = asString(message.sessionID) ?? sessionID;
 
   if (type === "assistant") {
     const model = asRecord(message.model);
@@ -595,8 +607,8 @@ function normalizeV2Message(raw: unknown): Record<string, unknown> {
       info: {
         id,
         role: "assistant",
-        sessionID: asString(message.sessionID),
-        modelID: asString(model?.modelID),
+        sessionID: fallbackSessionID,
+        modelID: asString(model?.id),
         providerID: asString(model?.providerID),
         variant: asString(model?.variant),
         error: message.error,
@@ -616,7 +628,7 @@ function normalizeV2Message(raw: unknown): Record<string, unknown> {
     info: {
       id,
       role: type,
-      sessionID: asString(message.sessionID),
+      sessionID: fallbackSessionID,
       time,
     },
     parts: [],
@@ -663,25 +675,33 @@ async function readSessionMessages(
  * Token hydration from data-store messages only. The v1 sqlite shell-out and
  * opencode log scan are deleted (see the file header): v2 usage events feed
  * tokens directly and the store carries the rest. Context percent may be absent.
+ *
+ * The v2 client store does not auto-sync before reads: `session.message.list`
+ * returns only what events and explicit `session.message.sync` calls populated
+ * (verified in `@opencode/client` `solid/data.d.ts`). Every session is synced
+ * before listing, reusing `readSessionMessages`, the file's sync-before-list
+ * pattern.
  */
-function hydrateChildTokensFromData(
+export async function hydrateChildTokensFromData(
   ctx: V2TuiContext,
   child: ChildSessionState,
-): ChildTokenState | undefined {
+): Promise<ChildTokenState | undefined> {
   const candidates: unknown[] = [];
 
-  const messages = safeRead(() => ctx.data.session.message.list(child.id)) ?? [];
+  const messages = (await readSessionMessages(ctx, child.id)) ?? [];
   for (const message of messages) {
-    candidates.push(normalizeV2Message(message));
+    candidates.push(normalizeV2Message(message, child.id));
   }
 
   if (child.messageID) {
     const parentMessages =
-      safeRead(() => ctx.data.session.message.list(child.parentID)) ?? [];
+      (await readSessionMessages(ctx, child.parentID)) ?? [];
     const parentMessage = parentMessages.find(
       (message) => messageIDOf(message) === child.messageID,
     );
-    if (parentMessage) candidates.push(normalizeV2Message(parentMessage));
+    if (parentMessage) {
+      candidates.push(normalizeV2Message(parentMessage, child.parentID));
+    }
   }
 
   let tokens: ChildTokenState | undefined;
@@ -697,15 +717,26 @@ function hydrateChildTokensFromData(
   return tokens;
 }
 
-function hydrateStateTokensFromData(
+/**
+ * Hydrate token deltas for every eligible child, mutating `state` in place.
+ * The data-store reads are async (sync-before-list), so a fetch phase runs
+ * first and a synchronous merge phase applies the results. Returns whether
+ * any child token state changed.
+ */
+async function hydrateStateTokensFromData(
   ctx: V2TuiContext,
   state: StatuslineState,
-): boolean {
-  let changed = false;
-
+): Promise<boolean> {
+  const fetched = new Map<string, ChildTokenState | undefined>();
   for (const child of Object.values(state.children)) {
     if (child.status !== "running" && hasTokenTotal(child.tokens)) continue;
-    const hydrated = hydrateChildTokensFromData(ctx, child);
+    fetched.set(child.id, await hydrateChildTokensFromData(ctx, child));
+  }
+
+  let changed = false;
+  for (const [childID, hydrated] of fetched) {
+    const child = state.children[childID];
+    if (!child) continue;
     const nextTokens = mergeTokenState(child.tokens, hydrated);
     if (!sameTokens(child.tokens, nextTokens)) {
       child.tokens = nextTokens;
@@ -726,6 +757,30 @@ function hydrateStateTokensFromData(
     });
   }
 
+  return changed;
+}
+
+/**
+ * Merge only the token deltas a probe computed onto a live state clone. This
+ * is the safe way to apply async hydration results: the live state is never
+ * replaced by the probe, so events that land during the reads survive.
+ */
+function mergeHydratedTokens(
+  target: StatuslineState,
+  source: StatuslineState,
+): boolean {
+  let changed = false;
+  for (const child of Object.values(target.children)) {
+    const sourceChild = source.children[child.id];
+    if (!sourceChild?.tokens) continue;
+    const nextTokens = mergeTokenState(child.tokens, sourceChild.tokens);
+    if (!sameTokens(child.tokens, nextTokens)) {
+      child.tokens = nextTokens;
+      child.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+  if (changed) target.updatedAt = new Date().toISOString();
   return changed;
 }
 
@@ -760,12 +815,17 @@ function refreshLiveState(state: StatuslineState): boolean {
   return false;
 }
 
-export function runTuiStateMaintenance(
+/**
+ * One maintenance pass: hydrate tokens from the data store, then refresh the
+ * derived fields. Returns the mutated clone, or `current` when nothing
+ * changed. The data-store reads are async (sync-before-list).
+ */
+export async function runTuiStateMaintenance(
   ctx: V2TuiContext,
   current: StatuslineState,
-): StatuslineState {
+): Promise<StatuslineState> {
   const next = cloneState(current);
-  const hydrated = hydrateStateTokensFromData(ctx, next);
+  const hydrated = await hydrateStateTokensFromData(ctx, next);
   const refreshed = refreshLiveState(next);
   return hydrated || refreshed ? next : current;
 }
@@ -1587,7 +1647,7 @@ function SidebarSubagents(props: {
   });
 
   /**
-   * Upstream's `useKeyboard` handler stays the authority for the list keys: it
+   * The `useKeyboard` handler stays the authority for the list keys: it
    * needs `listFocused()` and `event.preventDefault()/stopPropagation()`, which
    * a keymap command cannot express. A keymap layer is still registered with
    * `target` bound to the list container so OpenCode's command discovery knows
@@ -2238,7 +2298,9 @@ export async function hydratePreviousSubagents(
       topLevelHydrationFailed = true;
       parentMessageHydrationFailed = true;
     }
-    const messages = (parentRaw ?? []).map(normalizeV2Message);
+    const messages = (parentRaw ?? []).map((message) =>
+      normalizeV2Message(message, currentSessionID),
+    );
     const parentTaskEvidenceByChildID =
       collectParentTaskEvidenceByChildSessionID(messages, currentSessionID);
 
@@ -2258,7 +2320,9 @@ export async function hydratePreviousSubagents(
           childHydrationFailed = true;
           fetchFailed = true;
         }
-        const childMessages = (raw ?? []).map(normalizeV2Message);
+        const childMessages = (raw ?? []).map((message) =>
+          normalizeV2Message(message, childID),
+        );
         return {
           childID,
           ...summarizeSessionMessages(childMessages),
@@ -2593,7 +2657,9 @@ export async function probeRunningEvidence(input: {
       canApplyStaleFallback: false,
     };
   }
-  const messages = raw.map(normalizeV2Message);
+  const messages = raw.map((message) =>
+    normalizeV2Message(message, input.targetSessionID),
+  );
   const summary = summarizeSessionMessages(messages);
   const resolvedStatus = resolveSessionStatusWithMessageSummary({
     status: hasDoneStatus ? "done" : undefined,
@@ -3178,13 +3244,22 @@ function initializeTui(ctx: V2TuiContext): () => void {
         void reconcileRunningChildren();
       }
 
-      setState((current: StatuslineState) => {
-        const next = runTuiStateMaintenance(ctx, current);
-        if (next === current) return current;
-        snapshotSidebarScrollOffsets();
-        persistStateSnapshot(statePath, textPath, next);
-        return next;
-      });
+      void (async () => {
+        // Hydrate on a probe of a state snapshot; the data-store reads are
+        // async (sync-before-list). Merge only the token deltas into the live
+        // state, never replacing it: events that land during the reads must
+        // survive. Derived fields are recomputed from the live state.
+        const probe = await runTuiStateMaintenance(ctx, state());
+        setState((current: StatuslineState) => {
+          const next = cloneState(current);
+          const tokenChanged = mergeHydratedTokens(next, probe);
+          const refreshed = refreshLiveState(next);
+          if (!tokenChanged && !refreshed) return current;
+          snapshotSidebarScrollOffsets();
+          persistStateSnapshot(statePath, textPath, next);
+          return next;
+        });
+      })();
     },
   });
 
@@ -3196,7 +3271,7 @@ function initializeTui(ctx: V2TuiContext): () => void {
     );
   });
 
-  // v2 events are adapted to the v1-shaped internal events the vendored core
+  // v2 events are adapted to the v1-shaped internal events the core
   // reduces; one raw event can produce several internal events.
   const adapter = createV2EventAdapter();
 
@@ -3204,19 +3279,29 @@ function initializeTui(ctx: V2TuiContext): () => void {
     debugEvent(raw);
     const events = adapter.adapt(raw);
     if (events.length === 0) return;
-    snapshotSidebarScrollOffsets();
-    setState((current: StatuslineState) => {
-      const next = cloneState(current);
-      let changed = false;
-      for (const event of events) {
-        changed = applySubagentEvent(next, event) || changed;
-      }
-      const hydrated = hydrateStateTokensFromData(ctx, next);
-      const refreshed = refreshLiveState(next);
-      if (!changed && !hydrated && !refreshed) return current;
-      persistStateSnapshot(statePath, textPath, next);
-      return next;
-    });
+
+    void (async () => {
+      // Hydrate on a probe of a state snapshot first: the data-store reads are
+      // async (sync-before-list). The event application stays synchronous
+      // inside setState; hydrating a probe keeps events that arrive during the
+      // reads from being lost, and only the token deltas are merged back.
+      const probe = cloneState(state());
+      await hydrateStateTokensFromData(ctx, probe);
+
+      snapshotSidebarScrollOffsets();
+      setState((current: StatuslineState) => {
+        const next = cloneState(current);
+        let changed = false;
+        for (const event of events) {
+          changed = applySubagentEvent(next, event) || changed;
+        }
+        const tokenChanged = mergeHydratedTokens(next, probe);
+        const refreshed = refreshLiveState(next);
+        if (!changed && !tokenChanged && !refreshed) return current;
+        persistStateSnapshot(statePath, textPath, next);
+        return next;
+      });
+    })();
   };
 
   const disposers: Array<() => void> = [];

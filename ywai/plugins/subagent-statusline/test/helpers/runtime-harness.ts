@@ -2,12 +2,10 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// ADAPTED for the ywai vendored copy (bun test): upstream calls
-// vi.useFakeTimers() + vi.setSystemTime(), but bun:test's `vi` has no
-// setSystemTime and its fake timers can only advance forward, while the
-// frozen instants used by the tests lie in the past. We freeze Date
-// deterministically with a patched subclass instead; test/setup.ts calls
-// useRealTime() in afterEach to restore it.
+// bun:test's `vi` has no setSystemTime and its fake timers can only
+// advance forward, while the frozen instants used by the tests lie in the
+// past. We freeze Date deterministically with a patched subclass instead;
+// test/setup.ts calls useRealTime() in afterEach to restore it.
 
 const tempDirs = new Set<string>();
 

@@ -1,11 +1,11 @@
 /**
- * OpenCode v2 → v1-shaped event adapter for the vendored statusline core.
+ * OpenCode v2 → v1-shaped event adapter for the statusline core.
  *
  * OpenCode v2 delivers server events as an async stream of envelopes:
  *
  *   { id, created, type, data }        (payload lives in `data`)
  *
- * The vendored state machine (`src/events.ts`, `applySubagentEvent`) consumes
+ * The state machine (`src/events.ts`, `applySubagentEvent`) consumes
  * the v1 wire shape instead:
  *
  *   { type, properties: { info?, part?, status?, ... } }
@@ -170,7 +170,7 @@ function createAdapter(): V2EventAdapter {
     data: Record<string, unknown>,
     created: unknown,
   ): EventLike[] {
-    // v1 upstream only tracked sessions with a parent (subagent sessions);
+    // Only sessions with a parent are tracked (subagent sessions);
     // root sessions are ignored by `extractCreatedChild` anyway.
     const parentID = asString(data.parentID);
     const sessionID = asString(data.sessionID);
@@ -412,6 +412,36 @@ function createAdapter(): V2EventAdapter {
               ...session.base,
               info: { ...session.base },
               error: data.error,
+            }),
+          ];
+        }
+        // In opencode2 the durable terminal events are session.execution.*:
+        // `session.idle` and `session.status` have no V2 publisher (the app
+        // keys "session done" on execution.succeeded / .interrupted). A
+        // successful run reduces through the internal session.idle path, which
+        // the vendored core already maps to done; an interruption reduces
+        // through session.error (aborted/cancelled is an error status).
+        case "session.execution.succeeded": {
+          const session = sessionProperties(data);
+          if (!session) return [];
+          return [
+            internalEvent("session.idle", {
+              ...session.base,
+              info: { ...session.base },
+            }),
+          ];
+        }
+        case "session.execution.interrupted": {
+          const session = sessionProperties(data);
+          if (!session) return [];
+          // "superseded" means a newer execution replaced this one: the
+          // session is still running, so only the other interruption reasons
+          // are terminal.
+          if (data.reason === "superseded") return [];
+          return [
+            internalEvent("session.error", {
+              ...session.base,
+              info: { ...session.base },
             }),
           ];
         }

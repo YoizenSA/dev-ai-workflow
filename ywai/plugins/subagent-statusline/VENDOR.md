@@ -11,11 +11,12 @@
   reads `0.7.0`; the v1.3.0 release identifier comes from upstream releases,
   and the local `package.json` here records `1.3.0`.
 - Vendored into ywai on: 2026-09-09.
-- Purpose: phase 1 of the OpenCode **v2** port. The upstream server half is a
+- Purpose: OpenCode **v2** port of both halves. The upstream server half is a
   v1 plugin (`event` hook, `properties` payloads); it is replaced by a v2
-  server plugin under `src/server/`. The upstream TUI half is **not** vendored
-  yet (later phase). The on-disk state contract is unchanged so the TUI port
-  stays compatible.
+  server plugin under `src/server/`. The upstream TUI half is ported as a
+  v2-native plugin under `src/tui/` (entry, slots, palette, events, hydration,
+  theme, focus). The on-disk state contract is unchanged and shared by both
+  halves.
 
 ## File inventory
 
@@ -64,6 +65,24 @@ OpenCode SDK.
 - `src/server/v2-event-adapter.ts` — the v2→v1 event translator (see mapping
   table below).
 - `src/server/v2-event-adapter.test.ts`, `src/server/index.test.ts`
+- `src/tui/tui-focus.ts` — byte-identical vendor of upstream
+  `src/tui-focus.ts` (pure logic, zero imports; verified by diff)
+- `src/tui/theme.ts` + `src/tui/theme.test.ts` — maps v1 `TuiThemeCurrent`
+  field reads onto v2 `ResolvedTheme` (`accent`→`primary`,
+  `backgroundElement`→`backgroundPanel`→`background` fallbacks)
+- `src/tui/v2-commands.ts` + `src/tui/v2-commands.test.ts` — host-independent
+  `keymap.layer` registration of the three upstream palette commands (same
+  ids/titles/descriptions; focus command binds `alt+b`)
+- `src/tui/index.tsx` + `src/tui/index.test.ts` — v2 entry
+  `{ id: "subagent-statusline-tui", setup }`; claims `sidebar.content`
+  (append), `home.footer` (append), `prompt.footer.status` (after, additive —
+  never replaces host status); 12 v2 event types via `ctx.data.on` adapted
+  through the server adapter; hydration via `ctx.data` stores;
+  session open via `ctx.ui.router.navigate`; `kv`→`ctx.storage.store`;
+  list keyboard kept via `useKeyboard` (focus-guarded) plus a
+  list-targeted keymap layer; mouse row handlers kept; `// @ts-nocheck`
+  (host-embedded `solid-js`/`@opentui/*` have no local types, same precedent
+  as `ywai/plugins/tui/*.tsx`)
 - `package.json`, `tsconfig.json`, `bunfig.toml`, `.gitignore`
 - `test/types/vitest.d.ts` — type-only `vitest` → `bun:test` alias for tsc
 - `VENDOR.md` (this file)
@@ -71,8 +90,13 @@ OpenCode SDK.
 ### Intentionally NOT vendored
 
 - `src/index.ts` — the v1 plugin entry (replaced by `src/server/index.ts`).
-- `src/tui.tsx`, `src/tui-commands.ts`, `src/tui-focus.ts`,
-  `src/tui.test.ts`, `src/tui-maintenance.test.ts` — TUI half, later phase.
+- `src/tui.tsx`, `src/tui-commands.ts` — ported with v2 adaptations as
+  `src/tui/index.tsx`, `src/tui/v2-commands.ts` (v1 Prompt wrappers,
+  `TuiPromptRef` focus-return, sqlite/log token rehydration, and v1
+  `client`/`route`/`kv`/`event`/`slots` seams have no v2 equivalent or map
+  to a different API; see degradations below).
+- `src/tui.test.ts`, `src/tui-maintenance.test.ts` — v1-harness-coupled;
+  replaced by targeted v2-glue tests (`src/tui/*.test.ts`).
 - `test/index.integration.test.ts` — integration test of the v1 entry.
 - `tsup.config.ts`, upstream `vitest.config.ts`, `pnpm-*`, docs, scripts —
   build tooling superseded by the ywai plugin layout (`bun test` +
@@ -117,7 +141,16 @@ v2 envelope is `{ id, created, type, data }` (payload in `data`); a v1-style
   no context-window figure, so the compact context % display degrades to
   absent unless a later v2 payload provides it.
 
-## State contract (for the later TUI phase)
+### TUI degradations (ported behavior, v2 has no equivalent)
+
+- Focus-return-to-prompt after opening a child session (v1 `TuiPromptRef`):
+  `focusActivePrompt` is an explicit no-op; the `home_prompt` /
+  `session_prompt` Prompt wrappers are dropped.
+- Token rehydration: the sqlite `execFileSync` path and the opencode log-file
+  scan are deleted (no `node:child_process` import); tokens come from
+  data-store messages plus usage events.
+
+## State contract (shared by the server and TUI halves)
 
 Unchanged from upstream — `src/state.ts` is vendored verbatim:
 
