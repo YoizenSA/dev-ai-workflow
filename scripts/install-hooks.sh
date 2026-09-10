@@ -9,4 +9,4 @@ chmod +x \
 git -C "$ROOT" config core.hooksPath .githooks
 echo "Git hooks installed (core.hooksPath=.githooks)."
 echo "pre-commit: golangci-lint on staged ywai/*.go"
-echo "pre-push:   go vet + golangci-lint (same as CI)"
+echo "pre-push:   go vet + golangci-lint (same as CI) + control UI tsc"

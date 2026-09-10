@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-# Same full Go lint gate as GitHub CI. Break here, not on the PR.
+# Same full Go lint gate as GitHub CI, plus the control UI typecheck that only
+# ran inside the Release workflow — a tag push used to be the first thing to
+# notice a TS error (v8.25.0-beta.7).
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
-exec bash "$ROOT/ywai/scripts/lint.sh"
+bash "$ROOT/ywai/scripts/lint.sh"
+
+WEB="$ROOT/ywai/internal/control/web"
+if [ -d "$WEB/node_modules" ]; then
+    echo "typecheck (control UI): tsc --noEmit"
+    (cd "$WEB" && npx --no-install tsc --noEmit)
+    echo "typecheck: ok"
+else
+    # ponytail: no node_modules means this clone never built the UI; nothing to
+    # typecheck against, and `npm ci` on every push is not worth the minute.
+    echo "typecheck (control UI): skipped, no node_modules (run npm ci in $WEB)"
+fi
