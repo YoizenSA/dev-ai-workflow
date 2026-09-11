@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -376,20 +377,31 @@ func TestOpencodeEnv_CorrectsSnapXDG(t *testing.T) {
 
 func TestResolveOpencodeBin_PrefersOpenCode2(t *testing.T) {
 	dir := t.TempDir()
-	v1 := filepath.Join(dir, "opencode")
-	v2 := filepath.Join(dir, "opencode2")
-	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	home := t.TempDir()
+	// On Windows exec.LookPath only resolves executables with an extension
+	// (PATHEXT), so the fakes must be named accordingly there.
+	exeName := func(base string) string {
+		if runtime.GOOS == "windows" {
+			return base + ".bat"
+		}
+		return base
 	}
-	if err := os.WriteFile(v2, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	v1 := filepath.Join(dir, exeName("opencode"))
+	v2 := filepath.Join(dir, exeName("opencode2"))
+	for _, path := range []string{v1, v2} {
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir)
 	// This test is about autodetection, so it must not inherit the package's
 	// v1 pin (see opencode_flavor_testmain_test.go) or the preference it
 	// asserts would never be exercised.
 	t.Setenv(agent.OpenCodeOverrideEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	// USERPROFILE is what homeDir()/well-known-dir probes read on Windows;
+	// without pinning it a really installed opencode2.exe leaks in.
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	got := resolveOpencodeBin()
 	if got != v2 {

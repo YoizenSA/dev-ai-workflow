@@ -367,9 +367,11 @@ func TestProfileDirsFor_KilocodeHasNoFileDir(t *testing.T) {
 	if dirs := profileDirsFor("opencode", "/home/u"); len(dirs) != 1 {
 		t.Errorf("opencode should have exactly one profile directory, got %v", dirs)
 	}
-	if dirs := profileDirsFor("omp", "/home/u"); len(dirs) != 1 ||
-		dirs[0] != "/home/u/.omp/agent/agents" {
-		t.Errorf("omp profile dir = %v, want [~/.omp/agent/agents]", dirs)
+	// profileDirsFor joins with the platform separator, so the expected value
+	// must be built the same way: the fake home plus .omp/agent/agents.
+	want := filepath.Join("/home/u", ".omp", "agent", "agents")
+	if dirs := profileDirsFor("omp", "/home/u"); len(dirs) != 1 || dirs[0] != want {
+		t.Errorf("omp profile dir = %v, want [%s]", dirs, want)
 	}
 }
 

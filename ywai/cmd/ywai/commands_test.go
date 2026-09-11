@@ -51,9 +51,11 @@ func TestAcquirePort_KillsOccupantAndBinds(t *testing.T) {
 	}
 	port := freePort(t)
 
-	// Occupy the port with a child that holds the socket until SIGTERM lands.
-	// This mirrors the real ywai server.
-	cmd := exec.Command("python3", "-c", "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', "+itoa(port)+")); s.listen(5); time.sleep(30)")
+	// Occupy the port with a child that holds the socket until it is killed.
+	// The child is this test binary itself (the canonical Go helper-process
+	// pattern), so no python/POSIX tooling is needed on any GOOS.
+	cmd := helperProcess(t, "^TestHelperPortOccupant$",
+		envHelperPort+"="+itoa(port))
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("spawn occupant: %v", err)
 	}
@@ -62,9 +64,9 @@ func TestAcquirePort_KillsOccupantAndBinds(t *testing.T) {
 		_, _ = cmd.Process.Wait()
 	}()
 
-	// Wait until the child actually holds the port (python startup is async)
-	// before we assert it's occupied and try to acquire it.
-	if !waitForOccupied(port, 3*time.Second) {
+	// Wait until the child actually holds the port before we assert it's
+	// occupied and try to acquire it.
+	if !waitForOccupied(port, 10*time.Second) {
 		t.Fatalf("occupant did not bind port %d", port)
 	}
 
@@ -98,18 +100,19 @@ func TestKillPIDs_KillsMultipleRealProcesses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns child processes")
 	}
-	// Spawn two dummy long-lived children. We keep the *exec.Cmd handles so we
-	// can Wait() on them: a child that received SIGTERM but was never waited
-	// for stays as a zombie, and Signal(0) would still report it "alive", so
-	// probing the PID is unreliable. Wait() reaps the zombie and reports the
-	// real exit status.
+	// Spawn two dummy long-lived children (this test binary in sleeper mode,
+	// so the test needs no `sleep` binary and runs on every GOOS). We keep
+	// the *exec.Cmd handles so we can Wait() on them: a child that received
+	// SIGTERM but was never waited for stays as a zombie, and Signal(0)
+	// would still report it "alive", so probing the PID is unreliable.
+	// Wait() reaps the zombie and reports the real exit status.
 	type child struct {
 		cmd *exec.Cmd
 		pid int
 	}
 	var children []child
 	for i := 0; i < 2; i++ {
-		cmd := exec.Command("sleep", "30")
+		cmd := helperProcess(t, "^TestHelperSleeper$", envHelperPort+"=0")
 		if err := cmd.Start(); err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -122,17 +125,61 @@ func TestKillPIDs_KillsMultipleRealProcesses(t *testing.T) {
 		t.Fatalf("killPIDs(%v) failed: %v", pids, err)
 	}
 
-	// Wait reaps each child; a SIGTERM'd sleep exits with "signal: terminated"
-	// (non-nil err from Wait), which is the success case here. An error of
-	// "signal: terminated" means the signal landed — that's what we want.
+	// Wait reaps each child; a signalled child exits non-cleanly (non-nil err
+	// from Wait: "signal: terminated" on POSIX, "exit status 1" from
+	// TerminateProcess on Windows), which is the success case here.
 	for _, c := range children {
 		err := c.cmd.Wait()
 		if err == nil {
-			// sleep 30 exiting cleanly on its own means it ignored SIGTERM — bad.
+			// The sleeper exiting cleanly on its own means the kill never landed.
 			t.Errorf("child %d exited without receiving a signal", c.pid)
 		}
 		// Any non-nil err (signal: terminated / killed) confirms we signalled it.
 	}
+}
+
+// ─── helper-process plumbing ──────────────────────────────────────────────
+
+// envHelperPort tells the port-occupant helper which port to bind. "0"
+// (sleeper mode) binds nothing.
+const envHelperPort = "YWAI_TEST_HELPER_PORT"
+
+// helperProcess builds an exec.Cmd that re-runs this test binary with only
+// the named test, guarded by envHelperPort so a plain `go test` run never
+// enters helper mode. This replaces python3/sleep children, which do not
+// exist on every machine the suite must pass on.
+func helperProcess(t *testing.T, runPattern string, extraEnv string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run", runPattern, "-test.count=1")
+	cmd.Env = append(os.Environ(), extraEnv)
+	return cmd
+}
+
+// TestHelperPortOccupant binds 127.0.0.1:<envHelperPort> and holds it until
+// killed. It is only ever selected as a child process of
+// TestAcquirePort_KillsOccupantAndBinds.
+func TestHelperPortOccupant(t *testing.T) {
+	port := os.Getenv(envHelperPort)
+	if port == "" || port == "0" {
+		t.Skip("helper process only: set YWAI_TEST_HELPER_PORT")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:"+port)
+	if err != nil {
+		t.Fatalf("helper cannot bind port %s: %v", port, err)
+	}
+	defer ln.Close()
+	// Hold the socket until the parent kills us. A plain sleep bounds the
+	// process lifetime if the parent dies before killing us.
+	time.Sleep(30 * time.Second)
+}
+
+// TestHelperSleeper just lives for a while so TestKillPIDs has a real
+// process to signal.
+func TestHelperSleeper(t *testing.T) {
+	if os.Getenv(envHelperPort) == "" {
+		t.Skip("helper process only")
+	}
+	time.Sleep(30 * time.Second)
 }
 
 // itoa formats a non-negative int without pulling in strconv for a single use.

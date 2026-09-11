@@ -51,7 +51,9 @@ func TestOpenCodeIsV2TracksBinaryName(t *testing.T) {
 }
 
 func TestOpenCodeBinaryNameNeverEmpty(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv(OpenCodeOverrideEnv, "")
 	t.Setenv("PATH", t.TempDir()) // neither binary installed
 	if got := OpenCodeBinaryName(); got == "" {
@@ -66,6 +68,9 @@ func TestOpenCodeBinaryNameNeverEmpty(t *testing.T) {
 func TestOpenCodeBinaryNameReadsStoredSetting(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// os.UserHomeDir reads USERPROFILE on Windows; without pinning it the
+	// test would read the developer's live ~/.ywai/config.yaml there.
+	t.Setenv("USERPROFILE", home)
 	t.Setenv(OpenCodeOverrideEnv, "")
 
 	if err := os.MkdirAll(filepath.Join(home, ".ywai"), 0o755); err != nil {

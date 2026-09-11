@@ -24,10 +24,13 @@ func pinOCFlavor(t *testing.T, flavor string) {
 // isolateOpenCodeConfig points every path ConfigureOpenCode writes into temp
 // dirs and returns the fake HOME. Hosts may export OPENCODE_CONFIG_DIR at a real
 // shared config, which ConfigureOpenCode writes too, so tests must never inherit it.
+// USERPROFILE must be pinned as well: os.UserHomeDir reads it on Windows, and
+// without it ConfigureOpenCode would write the developer's live config there.
 func isolateOpenCodeConfig(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("OPENCODE_CONFIG_DIR", filepath.Join(t.TempDir(), "orca-isolate"))
 	return home

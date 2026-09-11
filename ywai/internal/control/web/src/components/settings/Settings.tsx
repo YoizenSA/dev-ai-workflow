@@ -538,10 +538,10 @@ function GeneralTab() {
 					<option value="v1">v1 — opencode</option>
 				</select>
 				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
-					Both versions read ~/.config/opencode, so exactly one can be the
-					active host — this picks which. The background-agents and advisor
-					plugins are wired only on v1: the v2 plugin API no longer passes the
-					parentID they need to spawn child sessions.
+					ywai requires OpenCode 2 (opencode2). Autodetect prefers it when
+					present; the v1 binary is not supported (see ADR-0001). Both
+					flavors read ~/.config/opencode, so exactly one can be the active
+					host.
 				</span>
 			</div>
 

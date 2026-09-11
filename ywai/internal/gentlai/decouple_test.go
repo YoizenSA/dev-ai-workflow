@@ -3,6 +3,7 @@ package gentlai
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -55,9 +56,18 @@ func TestInstallEngram_SkipsDownloadWhenCurrent(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Windows resolves executables by extension (PATHEXT) and cannot run a
+	// shebang script, so the fake must take the shape each GOOS can exec.
 	fake := filepath.Join(binDir, "engram")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho engram 1.20.0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS == "windows" {
+		fake += ".bat"
+		if err := os.WriteFile(fake, []byte("@echo engram 1.20.0\r\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err := os.WriteFile(fake, []byte("#!/bin/sh\necho engram 1.20.0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", binDir)
 
