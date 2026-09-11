@@ -1,0 +1,95 @@
+name: Evals Bench
+
+# Synthetic agent benchmark. Report-only until a gating decision is made
+# (see TODO(gate) below). NEVER runs on pull_request/push and is NEVER wired
+# into release.yml: every attempt is minutes of paid model time against a
+# live OpenCode server.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Eval task id (see ywai/internal/evals/tasks/)"
+        required: false
+        default: "find-session-deletes"
+        type: string
+      model:
+        description: "Single model id (one model per run keeps cost bounded)"
+        required: false
+        default: "claude-sonnet-4-5"
+        type: string
+      rounds:
+        description: "Rounds per model"
+        required: false
+        default: "1"
+        type: string
+  schedule:
+    # Weekly canary, Monday 06:00 UTC. One model, one round.
+    - cron: "0 6 * * 1"
+
+# The bench serializes runs machine-wide (server TryLock single-flight);
+# mirror that here so two dispatches never stampede the server.
+concurrency:
+  group: evals-bench
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: ywai
+
+jobs:
+  bench:
+    # Provisioning: the Runner needs a LIVE OpenCode server whose cwd is this
+    # checkout (it under-measures on a cwd mismatch) plus OPENCODE_URL.
+    # Preferred: a self-hosted runner labeled `evals` with a persistent
+    # server (change runs-on below when it exists).
+    # Fallback (documented, not wired): boot `opencode serve` as a background
+    # step with a provider-key secret before the bench step.
+    runs-on: ubuntu-latest
+    # Must exceed the Runner's 6h whole-run context.
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: ywai/go.sum
+
+      - name: Build ywai
+        run: go build -o ./bin/ywai ./cmd/ywai
+
+      - name: Preflight server
+        env:
+          OPENCODE_URL: ${{ secrets.OPENCODE_URL }}
+        run: |
+          if [ -z "$OPENCODE_URL" ]; then
+            echo "::error::OPENCODE_URL is empty. Point it at a reachable OpenCode server (persistent self-hosted preferred; see provisioning notes above)."
+            exit 1
+          fi
+          echo "OPENCODE_URL is set; the Runner probes it first."
+
+      - name: Run bench (report-only)
+        id: bench
+        # TODO(gate): remove continue-on-error once two report-only weeks pass
+        # and gating is explicitly approved. Never gate release.yml.
+        continue-on-error: true
+        env:
+          OPENCODE_URL: ${{ secrets.OPENCODE_URL }}
+          EVAL_TASK: ${{ inputs.task }}
+          EVAL_MODEL: ${{ inputs.model }}
+          EVAL_ROUNDS: ${{ inputs.rounds }}
+        run: |
+          : "${EVAL_TASK:=find-session-deletes}"
+          : "${EVAL_MODEL:=claude-sonnet-4-5}"
+          : "${EVAL_ROUNDS:=1}"
+          ./bin/ywai eval bench --task "$EVAL_TASK" --model "$EVAL_MODEL" \
+            --rounds "$EVAL_ROUNDS" --max-cost-usd 5.00 --out results.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: ywai/results.json
+          if-no-files-found: warn

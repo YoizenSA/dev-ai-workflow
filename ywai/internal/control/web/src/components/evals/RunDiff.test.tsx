@@ -43,9 +43,13 @@ describe("RunDiff", () => {
     }
 
     // A computed zero keeps its flat glyph and a visible value, and never
-    // claims "no comparison".
-    for (const cell of cellsOf("m/zero").slice(1)) {
-      expect(cell.textContent).toBe("— 0.00");
+    // claims "no comparison". Money keeps its four decimals.
+    const zeroCells = cellsOf("m/zero");
+    expect(zeroCells[1].textContent).toBe("— 0.00");
+    expect(zeroCells[2].textContent).toBe("— 0.00");
+    expect(zeroCells[3].textContent).toBe("— 0.00");
+    expect(zeroCells[4].textContent).toBe("— $0.0000");
+    for (const cell of zeroCells.slice(1)) {
       expect(cell.querySelector('[title="no comparison"]')).toBeNull();
     }
   });

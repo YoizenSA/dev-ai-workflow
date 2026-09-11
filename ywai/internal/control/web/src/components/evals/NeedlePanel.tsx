@@ -94,14 +94,16 @@ export default function NeedlePanel({ attempts }: NeedlePanelProps) {
               aria-controls={bodyId}
               onClick={() => toggle(key)}
             >
-              <span className="np-model">{a.model}</span>
-              <span className="np-round">round {a.round}</span>
-              {a.score.gotHard && <span className="np-hard">hard</span>}
+              {/* Explicit spaces keep the accessible name readable; the flex
+                  gap owns the visual spacing, so they render as nothing. */}
+              <span className="np-model">{a.model}</span>{" "}
+              <span className="np-round">round {a.round}</span>{" "}
+              {a.score.gotHard && <span className="np-hard">hard</span>}{" "}
               {a.score.answered ? (
                 <span className="np-percent">{Math.round(a.score.weighted * 100)}%</span>
               ) : (
                 <span className="np-percent muted">no answer</span>
-              )}
+              )}{" "}
               <span className="np-caret" aria-hidden="true" data-expanded={expanded}>
                 ▶
               </span>

@@ -1,16 +1,17 @@
 import { useState } from "react";
 import AgentBenchmarks from "./AgentBenchmarks";
+import BenchHistory from "./BenchHistory";
 import MemoryRecallEval from "./MemoryRecallEval";
 import SessionAnalytics from "./SessionAnalytics";
 import "./Evals.css";
 
-type EvalKind = "tasks" | "recall" | "sessions";
+type EvalKind = "tasks" | "recall" | "sessions" | "history";
 
 function initialKind(): EvalKind {
   // Deep-linkable so a tab is reachable by URL: ?tab=tasks opens Agent Benchmarks
   // directly, which also keeps the view shareable and survives a reload.
   const t = new URLSearchParams(window.location.search).get("tab");
-  return t === "tasks" || t === "recall" || t === "sessions" ? t : "sessions";
+  return t === "tasks" || t === "recall" || t === "sessions" || t === "history" ? t : "sessions";
 }
 
 export default function Evals() {
@@ -54,12 +55,20 @@ export default function Evals() {
         >
           Memory Recall
         </button>
+        <button
+          className={`tab${kind === "history" ? " active" : ""}`}
+          onClick={() => setKind("history")}
+        >
+          History
+        </button>
       </div>
 
       {kind === "sessions" ? (
         <SessionAnalytics />
       ) : kind === "recall" ? (
         <MemoryRecallEval />
+      ) : kind === "history" ? (
+        <BenchHistory />
       ) : (
         <AgentBenchmarks />
       )}
