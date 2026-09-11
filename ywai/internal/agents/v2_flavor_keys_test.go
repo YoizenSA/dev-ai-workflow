@@ -13,7 +13,6 @@ import (
 // map mirror lands under `agents`, and the legacy `agent` key does not
 // coexist with it.
 func TestApplyDelegations_V2WritesAgentsKey(t *testing.T) {
-	t.Setenv("YWAI_OPENCODE", "opencode2")
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 	agentsDir := filepath.Join(dir, "agents")
