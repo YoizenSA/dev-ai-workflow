@@ -31,7 +31,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		},
 	}
 
-	claude := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+	claude := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 	_, files, err := claude.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -54,7 +54,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		}
 	}
 
-	oc := NewExporterWithDirs(cmdDir, agentsDir)
+	oc := newExporterWithDirs(cmdDir, agentsDir)
 	_, files, err = oc.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -75,7 +75,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 func TestSlashCommandOptionsOmittedByDefault(t *testing.T) {
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(cmdDir, agentsDir)
+	e := newExporterWithDirs(cmdDir, agentsDir)
 
 	_, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -222,7 +222,7 @@ func TestValidateSlashCommandOptions(t *testing.T) {
 func TestEstimatedTokensPopulated(t *testing.T) {
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(cmdDir, agentsDir)
+	e := newExporterWithDirs(cmdDir, agentsDir)
 	plan, _, err := e.Plan(exportFixture())
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -461,7 +461,7 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 			{From: "qa", To: "e"},
 		},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -512,7 +512,7 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 			{From: "qa", To: "rev"},
 		},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)

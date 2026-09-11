@@ -128,16 +128,6 @@ func NewExporterForTarget(target string) *Exporter {
 	}
 }
 
-// NewExporterWithDirs is for tests and targets an explicit pair of dirs (opencode).
-func NewExporterWithDirs(commandsDir, agentsDir string) *Exporter {
-	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: TargetOpenCode}
-}
-
-// NewExporterWithDirsForTarget is for tests: explicit dirs + target dialect.
-func NewExporterWithDirsForTarget(commandsDir, agentsDir, target string) *Exporter {
-	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: target}
-}
-
 // Plan renders the workflow into in-memory file contents and records the
 // artifact list without writing anything. Apply writes the same set.
 func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {

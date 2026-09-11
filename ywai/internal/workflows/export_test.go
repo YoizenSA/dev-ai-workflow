@@ -8,6 +8,17 @@ import (
 	"testing"
 )
 
+
+func newExporterWithDirs(commandsDir, agentsDir string) *Exporter {
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: TargetOpenCode}
+}
+
+// newExporterWithDirsForTarget is newExporterWithDirs for an explicit target
+// dialect (see Target* constants).
+func newExporterWithDirsForTarget(commandsDir, agentsDir, target string) *Exporter {
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: target}
+}
+
 // exportFixture builds a small but representative workflow exercising the main
 // node types.
 func exportFixture() *Workflow {
@@ -64,7 +75,7 @@ func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	plan, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -98,7 +109,7 @@ func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 func TestOrchestratorHasTaskPermission(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	_, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -128,7 +139,7 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 func TestApplyWritesFilesToDisk(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	plan, err := e.Apply(exportFixture())
 	if err != nil {
@@ -309,7 +320,7 @@ func TestExportClaudeCodeTarget(t *testing.T) {
 	wf := exportFixture()
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+	e := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 
 	plan, files, err := e.Plan(wf)
 	if err != nil {
@@ -350,7 +361,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		wf := exportFixture()
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirs(cmdDir, agentsDir)
+		e := newExporterWithDirs(cmdDir, agentsDir)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -380,7 +391,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		wf := exportFixture()
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+		e := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -415,7 +426,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		}
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirs(cmdDir, agentsDir)
+		e := newExporterWithDirs(cmdDir, agentsDir)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -503,7 +514,7 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 		},
 		Connections: []Connection{{From: "s", To: "a"}},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)

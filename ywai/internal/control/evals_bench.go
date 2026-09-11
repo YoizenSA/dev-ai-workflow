@@ -13,6 +13,7 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/evals"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
 // benchStore keeps benchmark runs. Runs are worth minutes of real model time each,
@@ -197,12 +198,38 @@ func truncateResponse(s string) string {
 	return s[:max] + "\n…[truncated]"
 }
 
+// detectOpenCodeURL tries to find a running OpenCode server.
+func detectOpenCodeURL() string {
+	if url := strings.TrimSpace(os.Getenv("OPENCODE_URL")); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	// Try common ports. OpenCode's default is 4096.
+	ports := []string{"4096", "3000", "3001"}
+	for _, port := range ports {
+		url := fmt.Sprintf("http://localhost:%s", port)
+		client := &http.Client{Timeout: 1 * time.Second}
+		req, err := http.NewRequest(http.MethodGet, url+"/app", nil)
+		if err != nil {
+			continue
+		}
+		opencode.ApplyServerAuth(req)
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return url
+			}
+		}
+	}
+	return ""
+}
+
 func opencodeURLForBench() string {
 	if u := strings.TrimSpace(os.Getenv("OPENCODE_URL")); u != "" {
 		return strings.TrimRight(u, "/")
 	}
-	// Same discovery as the chat proxy: probe with credentials so a server that
-	// requires auth (opencode2) is found, not just an unauthenticated v1.
+	// Probe with credentials so a server that requires auth (opencode2) is
+	// found, not just an unauthenticated v1.
 	if u := detectOpenCodeURL(); u != "" {
 		return u
 	}

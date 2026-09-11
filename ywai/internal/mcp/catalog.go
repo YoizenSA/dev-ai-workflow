@@ -15,8 +15,8 @@ package mcp
 //   - For remote entries: URL is the HTTP(S) endpoint, Command is empty,
 //     and InstallCmd is empty (there is nothing to install).
 //   - RequiredEnv lists credentials / connection strings the install UI
-//     must collect. Secret=true entries are redacted from log output by
-//     RedactMessage.
+//     must collect. Secret=true entries are counted as secrets by
+//     MergeEnv.
 //   - Tools is a scout-estimated list of tool names. The runtime re-probes
 //     via DiscoverStdio / DiscoverHTTP and replaces this with the real one;
 //     Tools is the fallback for offline / pre-install display.

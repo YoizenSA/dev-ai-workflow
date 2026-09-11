@@ -335,7 +335,7 @@ func startOpencodeServe() {
 	// OpenCode v2 protects every `serve` instance with Basic Auth; a v1 child
 	// ignores the header, which is harmless. Generate a private credential for
 	// the ywai-managed child and retain it in this process so readiness checks
-	// and the chat proxy authenticate correctly.
+	// authenticate correctly.
 	cmd.Env = openCodeChildEnv(os.Environ(), password)
 	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
@@ -344,7 +344,7 @@ func startOpencodeServe() {
 	}
 	_ = os.Setenv("OPENCODE_SERVER_PASSWORD", password)
 	_ = os.Setenv("OPENCODE_SERVER_USERNAME", "opencode")
-	// Persist so detached processes (chat proxy, evals runner, mission workers)
+	// Persist so detached processes (evals runner, mission workers)
 	// can reach the child server even when they did not inherit the env.
 	_ = opencode.SaveServerAuth("opencode", password)
 	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
@@ -352,8 +352,8 @@ func startOpencodeServe() {
 	os.Setenv("OPENCODE_URL", chosenURL)
 	fmt.Printf("opencode server starting on %s (PID %d, via %s)\n", chosenURL, cmd.Process.Pid, binName)
 
-	// Wait briefly for opencode to bind its port, so the control server's chat
-	// route registration (which runs right after) sees it. Poll /status up to
+	// Wait briefly for opencode to bind its port so the control server (which
+	// starts right after) finds it reachable. Poll /status up to
 	// ~5s; opencode usually binds in under a second.
 	for i := 0; i < 25; i++ {
 		pctx, pcancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -365,7 +365,7 @@ func startOpencodeServe() {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s — chat may need a moment.\n", chosenURL)
+	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s.\n", chosenURL)
 }
 
 // openCodeChildEnv removes inherited server credentials before starting the
@@ -1043,9 +1043,8 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
-		// Auto-start opencode serve BEFORE the control server, so that when the
-		// control server registers its chat routes (which probe for opencode),
-		// opencode is already binding its port.
+		// Auto-start opencode serve BEFORE the control server, so opencode is
+		// already binding its port when the control server starts.
 		startOpencodeServe()
 
 		// Start control server

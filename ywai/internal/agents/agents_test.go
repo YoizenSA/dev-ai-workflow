@@ -856,39 +856,6 @@ func TestInstallOpenCodeMarkdownMigratesGroupedToFlat(t *testing.T) {
 	}
 }
 
-func TestMapToAgentProfile(t *testing.T) {
-	m := map[string]any{
-		"prompt":      "# Test\n\nBody",
-		"description": "Test agent",
-		"mode":        "primary",
-		"permission":  map[string]any{"read": "allow", "edit": "deny", "bash": "allow"},
-	}
-
-	profile := mapToAgentProfile("test", m)
-
-	if profile.Name != "test" {
-		t.Errorf("Name = %q, want test", profile.Name)
-	}
-	if profile.Description != "Test agent" {
-		t.Errorf("Description = %q, want Test agent", profile.Description)
-	}
-	if profile.Mode != "primary" {
-		t.Errorf("Mode = %q, want primary", profile.Mode)
-	}
-	if profile.Prompt != "# Test\n\nBody" {
-		t.Errorf("Prompt = %q", profile.Prompt)
-	}
-	if profile.Permission["read"] != "allow" {
-		t.Error("read permission should be allow")
-	}
-	if profile.Permission["edit"] != "deny" {
-		t.Error("edit permission should be deny")
-	}
-	if profile.Permission["bash"] != "allow" {
-		t.Error("bash permission should be allow")
-	}
-}
-
 // ─── Agent Group tests ──────────────────────────────────────────────────────
 
 // writeGroupsJSON is a test helper that writes a groups.json file to dir.
@@ -1454,28 +1421,6 @@ func TestPiToolsString(t *testing.T) {
 				t.Errorf("piToolsString() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFilterCoreAgentProfiles(t *testing.T) {
-	in := map[string]AgentProfile{
-		"core/dev":             {Name: "core/dev", Group: "core", Description: "d"},
-		"core/orchestrator":    {Name: "core/orchestrator", Group: "core", Description: "o"},
-		"qa-automation/qa-dev": {Name: "qa-automation/qa-dev", Group: "qa-automation", Description: "q"},
-		"finder":               {Name: "finder", Group: "", Description: "f"}, // known core base
-	}
-	got := FilterCoreAgentProfiles(in)
-	if len(got) != 3 {
-		t.Fatalf("want 3 core profiles, got %d: %v", len(got), got)
-	}
-	if _, ok := got["dev"]; !ok {
-		t.Fatal("expected flat key dev")
-	}
-	if _, ok := got["qa-dev"]; ok {
-		t.Fatal("qa-dev must not be in core filter")
-	}
-	if _, ok := got["finder"]; !ok {
-		t.Fatal("finder base name should pass with empty group")
 	}
 }
 

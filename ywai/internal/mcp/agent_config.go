@@ -141,48 +141,6 @@ func WriteAgentConfig(target string, entryID string, shape map[string]any) (stri
 	return path, nil
 }
 
-// RemoveAgentConfig deletes entryID from the target's config. Removing an
-// entry that does not exist (or a file that does not exist) is a no-op.
-func RemoveAgentConfig(target string, entryID string) error {
-	path, err := EntryTargetPath(target)
-	if err != nil {
-		return err
-	}
-	mu := lockFor(target)
-	mu.Lock()
-	defer mu.Unlock()
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil
-	}
-	root, err := readRoot(path)
-	if err != nil {
-		return err
-	}
-	key, err := topLevelKey(target)
-	if err != nil {
-		return err
-	}
-	section, ok := root[key].(map[string]any)
-	if !ok {
-		return nil
-	}
-	if target == "opencode" {
-		servers := CollectOpenCodeServers(section)
-		if _, exists := servers[entryID]; !exists {
-			return nil
-		}
-		delete(servers, entryID)
-		root[key] = WriteOpenCodeMCP(section, servers)
-		return writeRootAtomic(path, root)
-	}
-	if _, exists := section[entryID]; !exists {
-		return nil
-	}
-	delete(section, entryID)
-	return writeRootAtomic(path, root)
-}
-
 // ReadAgentConfig returns the target's mcp/mcpServers section. A missing
 // file yields an empty (non-nil) map and no error; malformed JSON yields
 // an error so the UI can surface corruption.

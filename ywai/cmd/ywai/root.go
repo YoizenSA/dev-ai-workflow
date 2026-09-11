@@ -547,8 +547,17 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		}
 	}
 
+	// Resolve the install policy once: the ~/.ywai/plugins.json override when
+	// valid, the embedded manifest otherwise. Warnings surface a bad override.
+	mf, manifestWarnings := plugins.LoadManifest()
+	for _, w := range manifestWarnings {
+		fmt.Printf("  Warning: %v\n", w)
+	}
+	flags := map[string]bool{"mcp": installMCP, "meta-mcp": installMetaMCP, "ponytail": installPonytail}
+
 	for _, a := range agents {
-		// Install MCP for agents that support it
+		// Plugin/MCP handling covers the config formats ywai writes entries
+		// for: opencode-style JSON and the claude-code/pi mcpServers shape.
 		if a.Name != "opencode" && a.Name != "claude-code" && a.Name != "pi" && a.Name != "omp" {
 			continue
 		}
@@ -558,23 +567,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] No config path found, skipping plugins\n", a.Name)
 			continue
 		}
-
-		// background-agents is an opencode plugin (subagent/delegation async
-		// tools); it only applies to opencode-format configs (opencode/kilocode).
-		//
-		// It is v2-only now: the plugin is the supervision layer on top of
-		// OpenCode 2's built-in `subagent` tool (notifications, steer/stop,
-		// watchdog, crash recovery) and no longer carries the v1 host surface.
-		//
-		// vision-bridge and advisor are built against the v1 plugin surface and
-		// are not confirmed on v2, so they stay off there rather than being
-		// installed on a guess.
-		isOpenCode := a.Name == "opencode" || a.Name == "kilocode"
-		supportsDelegationPlugin := isOpenCode
-		// vision-bridge and advisor carry v2 dual exports and their installers
-		// route to the auto-discovered plugins dir on v2, so both flavors get
-		// them.
-		supportsVendoredPlugins := isOpenCode
 
 		if dryRun {
 			done = append(done, a.Name)
@@ -594,45 +586,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: failed to remove mcp-vision MCP: %v\n", a.Name, err)
 		}
 
-		// OpenCode 2 launches subagents natively; the plugin adds the async
-		// supervision layer. Under v1 there is nothing to supervise with.
-		if supportsDelegationPlugin {
-			if !agent.OpenCodeIsV2() {
-				fmt.Printf("  [%s] Skipped background-agents plugin: requires OpenCode 2 (opencode2)\n", a.Name)
-			} else if err := plugins.InstallBackgroundAgents(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install background-agents plugin: %v\n", a.Name, err)
-			}
-		}
-
-		if supportsVendoredPlugins {
-			// vision-bridge: auto-route attached images through TokenBank vision
-			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
-			if err := plugins.InstallVisionBridge(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install vision-bridge plugin: %v\n", a.Name, err)
-			}
-
-			// advisor: a second model reviews each turn and injects notes the
-			// agent can weigh. Inert until advisor_enabled + advisor_model are
-			// set, so installing the bundle costs nothing by itself.
-			if err := plugins.InstallAdvisor(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install advisor plugin: %v\n", a.Name, err)
-			} else if a.Name == "opencode" {
-				// The /advisor command only works where the plugin's tools are
-				// registered, so it ships with the plugin and only for opencode.
-				if err := plugins.InstallAdvisorCommand(config.OpenCodeCommandsDir()); err != nil {
-					fmt.Printf("  [%s] Warning: failed to install /advisor command: %v\n", a.Name, err)
-				}
-			}
-
-		}
-
-		// ywai TUI logo (home_logo slot, click easter eggs). Unlike the
-		// opencode.json plugins above this one is not v1-only: it targets the
-		// TUI client config, which both flavors read — v1 as tui.json, v2 as
-		// cli.json — so it installs regardless of the active flavor.
-		if a.Name == "opencode" || a.Name == "kilocode" {
-			if err := plugins.InstallTuiLogo(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
+		// What installs is policy, not code: the manifest (~/.ywai/plugins.json
+		// override, embedded default otherwise) decides per id, agent, flag and
+		// flavor. Executor wiring lives in internal/plugins/manifest.go.
+		for _, r := range plugins.RunManifest(mf, a.Name, configPath, flags) {
+			switch {
+			case r.Skipped != "":
+				fmt.Printf("  [%s] Skipped %s: %s\n", a.Name, r.ID, r.Skipped)
+			case r.Err != nil:
+				fmt.Printf("  [%s] Warning: failed to install %s: %v\n", a.Name, r.ID, r.Err)
 			}
 		}
 
@@ -643,46 +605,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
 		} else if patched {
 			fmt.Printf("  [%s] Repaired Orca status plugin for OpenCode v2\n", a.Name)
-		}
-
-		// Chrome DevTools MCP. Not behind a flag: the scenario-runner agent
-		// drives a browser to verify UI scenarios, so without this it installs
-		// and then cannot do the one thing it exists for.
-		if err := plugins.InstallChromeDevToolsMCP(configPath, a.Name); err != nil {
-			fmt.Printf("  [%s] Warning: failed to install Chrome DevTools MCP: %v\n", a.Name, err)
-		}
-
-		// Grafana MCP. Installed blank and disabled: the endpoint is
-		// per-network, so the user supplies it in Settings and switches it on.
-		if err := plugins.InstallGrafanaMCP(configPath, a.Name); err != nil {
-			fmt.Printf("  [%s] Warning: failed to install Grafana MCP: %v\n", a.Name, err)
-		}
-
-		// Install Microsoft Learn MCP if requested
-		if installMCP {
-			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
-			}
-		}
-
-		// Meta Developer Tools MCP. Remote server whose OAuth sign-in happens
-		// in the agent client, so ywai only writes the entry.
-		if installMetaMCP {
-			if err := plugins.InstallMetaDevToolsMCP(configPath, a.Name); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install Meta Developer Tools MCP: %v\n", a.Name, err)
-			}
-		}
-
-		// Install Ponytail through Claude's marketplace when requested. For
-		// OpenCode-compatible agents, remove the incompatible legacy npm plugin.
-		if installPonytail && plugins.SupportsPonytail(a.Name) {
-			if err := plugins.InstallPonytail(a.Name, configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ponytail: %v\n", a.Name, err)
-			} else if a.Name == "claude-code" {
-				fmt.Printf("  [%s] Installed ponytail via Claude marketplace (%s)\n", a.Name, plugins.PonytailClaudePluginID)
-			} else {
-				fmt.Printf("  [%s] Removed incompatible ponytail OpenCode plugin\n", a.Name)
-			}
 		}
 
 		// Remove leftover Azure DevOps plugin entries from older installs. ywai

@@ -152,10 +152,6 @@ func (s *Server) buildRoutes() {
 	// ─── Evals / Session Analytics API ──────────────────────────
 	s.registerEvalsRoutes()
 
-	// ─── Chat API ───────────────────────────────────────────────
-	// Proxies to a local OpenCode server when one is running.
-	s.registerChatRoutes()
-
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
 

@@ -1,0 +1,13 @@
+{
+  "install": [
+    { "id": "background-agents", "agents": ["opencode"], "flavor": "v2" },
+    { "id": "vision-bridge", "agents": ["opencode"] },
+    { "id": "advisor", "agents": ["opencode"] },
+    { "id": "tui-logo", "agents": ["opencode"] },
+    { "id": "chrome-devtools" },
+    { "id": "grafana" },
+    { "id": "microsoft-learn", "flag": "mcp" },
+    { "id": "meta-devtools", "flag": "meta-mcp" },
+    { "id": "ponytail", "flag": "ponytail", "agents": ["opencode",  "claude-code"] }
+  ]
+}

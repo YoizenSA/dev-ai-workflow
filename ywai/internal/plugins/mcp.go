@@ -64,97 +64,33 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 	return removed, nil
 }
 
-// installRemoteMCPEntry adds a remote MCP server to an opencode-shaped config
-// (servers directly under `mcp`, each with an explicit enabled flag — the v1
-// layout). Existing entries are left alone so a user's own settings survive.
-func installRemoteMCPEntry(configPath, agentName, id, url string) error {
+// installMCPEntry merges one server definition into the agent's config,
+// writing the shape that format reads. buildEntry receives the config key
+// ("mcpServers" for claude-code/pi, "mcp" for opencode) so one server can
+// carry a per-format transport. An existing entry always wins: a user's own
+// settings are never overwritten by a re-install.
+func installMCPEntry(configPath, agentName, id string, buildEntry func(configKey string) map[string]any) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
+
 	key := mcpConfigKey(agentName)
+	entry := buildEntry(key)
 	mcp, _ := root[key].(map[string]any)
 	if mcp == nil {
 		mcp = map[string]any{}
 	}
-	servers := mcppkg.CollectOpenCodeServers(mcp)
-	if _, exists := servers[id]; !exists {
-		servers[id] = map[string]any{"type": "remote", "url": url}
-	}
-	root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("failed to write %s: %w", configPath, err)
-	}
-	return nil
-}
-
-// metaDevToolsMCPURL is Meta's remote MCP endpoint. Authentication is the
-// client's OAuth sign-in, not something ywai can do — the endpoint answers 401
-// until the user signs in from their agent, which is expected.
-const metaDevToolsMCPURL = "https://mcp.facebook.com/devtools"
-
-// InstallMetaDevToolsMCP adds Meta Developer Tools (manage Meta apps, webhooks,
-// compliance, app status, developer docs) to the agent's config.
-func InstallMetaDevToolsMCP(configPath, agentName string) error {
-	if mcpConfigKey(agentName) == "mcpServers" {
-		// Claude Code / pi: remote servers use type http + url.
-		root, err := config.ReadJSONC(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", configPath, err)
-		}
-		key := mcpConfigKey(agentName)
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-		}
-		if _, exists := mcp["meta-devtools"]; !exists {
-			mcp["meta-devtools"] = map[string]any{"type": "http", "url": metaDevToolsMCPURL}
-		}
-		root[key] = mcp
-		if err := config.WriteJSONC(configPath, root); err != nil {
-			return fmt.Errorf("failed to write %s: %w", configPath, err)
-		}
-		return nil
-	}
-	return installRemoteMCPEntry(configPath, agentName, "meta-devtools", metaDevToolsMCPURL)
-}
-
-// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's config file.
-func InstallMicrosoftLearnMCP(configPath, agentName string) error {
-	root, err := config.ReadJSONC(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configPath, err)
-	}
-
-	key := mcpConfigKey(agentName)
 
 	if key == "mcpServers" {
-		// Claude Code / pi format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
+		if _, exists := mcp[id]; !exists {
+			mcp[id] = entry
 		}
-		if _, exists := mcp["microsoft-learn"]; !exists {
-			mcp["microsoft-learn"] = map[string]any{
-				"command": "npx",
-				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
-			}
-			root[key] = mcp
-		}
+		root[key] = mcp
 	} else {
-		// OpenCode v2: mcp.servers.<id> (type/url; no "enabled").
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-		}
 		servers := mcppkg.CollectOpenCodeServers(mcp)
-		if _, exists := servers["microsoft-learn"]; !exists {
-			servers["microsoft-learn"] = map[string]any{
-				"type": "remote",
-				"url":  "https://learn.microsoft.com/api/mcp",
-			}
+		if _, exists := servers[id]; !exists {
+			servers[id] = entry
 		}
 		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	}
@@ -162,8 +98,78 @@ func InstallMicrosoftLearnMCP(configPath, agentName string) error {
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
-
 	return nil
+}
+
+// remoteEntry builds a remote-server entry in the spelling each config format
+// reads: claude-code/pi say "http", opencode says "remote". Disabled writes
+// the format's own off flag so an endpoint-less entry is never probed.
+func remoteEntry(configKey, url string, disabled bool) map[string]any {
+	if configKey == "mcpServers" {
+		entry := map[string]any{"type": "http", "url": url}
+		if disabled {
+			entry["disabled"] = true
+		}
+		return entry
+	}
+	entry := map[string]any{"type": "remote", "url": url}
+	if disabled {
+		entry["enabled"] = false
+	}
+	return entry
+}
+
+// catalogEntry fetches a catalog entry by id. An unknown id is an installer
+// bug, not a user problem, so it errors instead of silently writing nothing.
+func catalogEntry(id string) (mcppkg.CatalogEntry, error) {
+	entry, ok := mcppkg.CatalogByID(id)
+	if !ok {
+		return mcppkg.CatalogEntry{}, fmt.Errorf("unknown MCP catalog id %q", id)
+	}
+	return entry, nil
+}
+
+// argvAny copies a string argv into []any, the type JSON configs round-trip.
+func argvAny(argv []string) []any {
+	out := make([]any, len(argv))
+	for i, s := range argv {
+		out[i] = s
+	}
+	return out
+}
+
+// InstallMetaDevToolsMCP adds Meta Developer Tools (manage Meta apps, webhooks,
+// compliance, app status, developer docs) to the agent's config. The endpoint
+// is catalog data; authentication is the client's OAuth sign-in, not something
+// ywai can do — the endpoint answers 401 until the user signs in from their
+// agent, which is expected.
+func InstallMetaDevToolsMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("meta-devtools")
+	if err != nil {
+		return err
+	}
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		return remoteEntry(configKey, entry.URL, false)
+	})
+}
+
+// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's
+// config file. The endpoint is catalog data; claude-code/pi run the npm stdio
+// server instead of the remote one.
+func InstallMicrosoftLearnMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("microsoft-learn")
+	if err != nil {
+		return err
+	}
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		if configKey == "mcpServers" {
+			return map[string]any{
+				"command": "npx",
+				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
+			}
+		}
+		return remoteEntry(configKey, entry.URL, false)
+	})
 }
 
 // RemoveVisionMCP removes the legacy mcp-vision MCP server entry from the
@@ -201,11 +207,6 @@ func RemoveVisionMCP(configPath, agentName string) error {
 	return nil
 }
 
-// ChromeDevToolsMCPCommand is the argv that launches Google's Chrome DevTools
-// MCP server. Published unscoped on npm; the scoped @anthropic-ai/ name ywai
-// used to write does not exist, so those entries never spawned.
-var ChromeDevToolsMCPCommand = []any{"npx", "-y", "chrome-devtools-mcp@latest"}
-
 // InstallChromeDevToolsMCP registers the Chrome DevTools MCP server in the
 // agent's config, leaving an existing entry untouched.
 //
@@ -213,47 +214,21 @@ var ChromeDevToolsMCPCommand = []any{"npx", "-y", "chrome-devtools-mcp@latest"}
 // agent needs a browser to run a UI scenario at all: without it the agent
 // installs fine and then cannot do the one thing it exists for.
 func InstallChromeDevToolsMCP(configPath, agentName string) error {
-	root, err := config.ReadJSONC(configPath)
+	entry, err := catalogEntry("chrome-devtools")
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configPath, err)
+		return err
 	}
-
-	key := mcpConfigKey(agentName)
-
-	if key == "mcpServers" {
-		// Claude Code / pi format: command + args, not a single argv.
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
-		}
-		if _, exists := mcp["chrome-devtools"]; !exists {
-			mcp["chrome-devtools"] = map[string]any{
-				"command": ChromeDevToolsMCPCommand[0],
-				"args":    ChromeDevToolsMCPCommand[1:],
-			}
-			root[key] = mcp
-		}
-	} else {
-		// OpenCode v2: mcp.servers.<id> with type "local" and a full argv.
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-		}
-		servers := mcppkg.CollectOpenCodeServers(mcp)
-		if _, exists := servers["chrome-devtools"]; !exists {
-			servers["chrome-devtools"] = map[string]any{
-				"type":    "local",
-				"command": append([]any(nil), ChromeDevToolsMCPCommand...),
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		if configKey == "mcpServers" {
+			// Claude Code / pi split the argv into command + args.
+			return map[string]any{
+				"command": entry.Command[0],
+				"args":    argvAny(entry.Command[1:]),
 			}
 		}
-		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
-	}
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("failed to write %s: %w", configPath, err)
-	}
-	return nil
+		// OpenCode: mcp.servers.<id> with type "local" and a full argv.
+		return map[string]any{"type": "local", "command": argvAny(entry.Command)}
+	})
 }
 
 // InstallGrafanaMCP registers the Grafana MCP server, disabled and with no
@@ -266,41 +241,11 @@ func InstallChromeDevToolsMCP(configPath, agentName string) error {
 // nobody discovers. Disabled matters: an enabled entry with no URL is a server
 // the agent tries and fails to reach on every start.
 func InstallGrafanaMCP(configPath, agentName string) error {
-	root, err := config.ReadJSONC(configPath)
+	entry, err := catalogEntry("grafana")
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configPath, err)
+		return err
 	}
-
-	key := mcpConfigKey(agentName)
-
-	if key == "mcpServers" {
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
-		}
-		if _, exists := mcp["grafana"]; !exists {
-			mcp["grafana"] = map[string]any{"type": "remote", "url": "", "disabled": true}
-			root[key] = mcp
-		}
-	} else {
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-		}
-		servers := mcppkg.CollectOpenCodeServers(mcp)
-		if _, exists := servers["grafana"]; !exists {
-			servers["grafana"] = map[string]any{
-				"type":    "remote",
-				"url":     "",
-				"enabled": false,
-			}
-		}
-		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
-	}
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("failed to write %s: %w", configPath, err)
-	}
-	return nil
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		return remoteEntry(configKey, entry.URL, true)
+	})
 }

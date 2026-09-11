@@ -12,8 +12,8 @@ import (
 //
 // Nothing wraps the ResponseWriter on purpose: the real http.ResponseWriter
 // reaches every handler, so Flush, Hijack and Unwrap work natively. (An
-// earlier 405-rewriting wrapper made the chat proxy's `w.(http.Flusher)`
-// assertion fail unless Flush was hand-forwarded here.)
+// earlier 405-rewriting wrapper made handlers' `w.(http.Flusher)`
+// assertions fail unless Flush was hand-forwarded here.)
 func chain(next http.Handler) http.Handler {
 	return recoveryMiddleware(next)
 }

@@ -7,7 +7,6 @@ import {
 	Cloud,
 	Heart,
 	LineChart,
-	MessageSquare,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Settings,
@@ -59,11 +58,6 @@ const NAV_ITEMS = [
 ];
 
 const BETA_ITEMS = [
-	{
-		path: "/chat",
-		label: "Chat",
-		icon: <MessageSquare size={20} />,
-	},
 	{
 		path: "/health",
 		label: "Health",

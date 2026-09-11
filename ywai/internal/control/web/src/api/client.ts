@@ -641,7 +641,7 @@ export interface McpHealthResponse {
 }
 
 
-// ─── Team / Chat API ──────────────────────────────────────────────────────
+// ─── Team API ─────────────────────────────────────────────────────────────
 
 export const teamApi = {
 	steerTeammate: (memberId: string, message: string) =>

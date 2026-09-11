@@ -42,7 +42,7 @@ func TestExportQAAutomationSeed(t *testing.T) {
 
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	plan, err := e.Apply(&wf)
 	if err != nil {

@@ -9,6 +9,18 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
+// newLocalClientWithPaths creates a LocalClient with explicit paths so unit
+// tests control the data source via temp config files instead of the real
+// opencode config dir. Test-only counterpart of NewLocalClient (which sets
+// useCLI=true); tests set useCLI=false so 'opencode models' is never run.
+func newLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
+	return &LocalClient{
+		opencodeConfig: configPath,
+		agentsDir:      agentsDir,
+		useCLI:         false, // tests control the source via the config file
+	}
+}
+
 func TestLocalClient_Status_NotFound(t *testing.T) {
 	c := newLocalClientWithPaths("/nonexistent/opencode.json", "/nonexistent/agents")
 	ctx := context.Background()

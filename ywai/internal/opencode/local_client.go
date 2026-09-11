@@ -103,15 +103,6 @@ func NewLocalClient() *LocalClient {
 	}
 }
 
-// newLocalClientWithPaths creates a LocalClient with explicit paths (for testing).
-func newLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
-	return &LocalClient{
-		opencodeConfig: configPath,
-		agentsDir:      agentsDir,
-		useCLI:         false, // tests control the source via the config file
-	}
-}
-
 // ListAgents reads agent profiles from the opencode.json config. Agents are
 // defined under the top-level "agents" key (v2) or "agent" key (v1) as a map of
 // name -> definition, not as files in a directory (the agentsDir is a legacy

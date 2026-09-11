@@ -334,9 +334,8 @@ func TestCatalogByID_RequiredEnv_GitHub(t *testing.T) {
 
 // TestCatalogByID_RequiredEnv_Postgres pins the postgres entry's
 // single required+secret env var: DATABASE_URL. The connection
-// string contains a password in the URL, which is why Secret=true —
-// the redactor (RedactMessage) keys off this flag to mask the
-// password segment when logging the URL.
+// string contains a password in the URL, which is why Secret=true -
+// MergeEnv keys off this flag to count the value as a secret.
 func TestCatalogByID_RequiredEnv_Postgres(t *testing.T) {
 	entry, ok := CatalogByID("postgres")
 	if !ok {
@@ -441,7 +440,7 @@ func TestCatalog_AllLocalHaveInstallCmd(t *testing.T) {
 // TestCatalog_AllRequiredEnvHaveName pins that every EnvSpec declared
 // in any entry's RequiredEnv has a non-empty Name. The install UI
 // keys env-var lookup and credential form rendering off Name (it
-// also feeds the redactor in RedactMessage). An empty Name would
+// also feeds the secret counting in MergeEnv). An empty Name would
 // silently render as `<input name="">` and the credential would
 // never make it to the subprocess environment. The per-entry tests
 // assert on specific names (GITHUB_PERSONAL_ACCESS_TOKEN, DATABASE_URL)

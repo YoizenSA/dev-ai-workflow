@@ -59,8 +59,8 @@
 .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.82rem; }
 .btn-xs { padding: 0.3rem 0.6rem; font-size: 0.76rem; gap: 0.3rem; }
 
-/* Icon-only — circular. Self-sufficient so it also works WITHOUT the base .btn
-   class (chat header/composer icons use `btn-icon` alone) — otherwise they
+/* Icon-only - circular. Self-sufficient so it also works WITHOUT the base .btn
+   class (icon-only buttons can use `btn-icon` alone) - otherwise they
    render as bare floating icons with no border/centering/hover. */
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;

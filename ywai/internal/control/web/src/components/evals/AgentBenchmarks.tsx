@@ -89,14 +89,16 @@ export default function AgentBenchmarks() {
       try {
         const [t, p] = await Promise.all([
           fetch("/api/evals/tasks").then((r) => r.json()),
-          fetch("/api/chat/providers").then((r) => r.json()).catch(() => null),
+          fetch("/api/config/providers").then((r) => r.json()).catch(() => null),
         ]);
         const list: Task[] = t.tasks ?? [];
         setTasks(list);
         if (list.length) setTaskId(list[0].id);
 
-        const provider = (p?.providers ?? []).find((x: { id: string }) => x.id === PROVIDER);
-        setModels(Object.keys(provider?.models ?? {}).sort());
+        // /api/config/providers returns the opencode.json provider section,
+        // an object keyed by provider name (not the old proxy's array shape).
+        const section = (p ?? {}) as Record<string, { models?: Record<string, unknown> }>;
+        setModels(Object.keys(section[PROVIDER]?.models ?? {}).sort());
       } catch (e) {
         setError(String(e));
       }

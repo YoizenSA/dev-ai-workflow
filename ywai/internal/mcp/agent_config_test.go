@@ -12,10 +12,9 @@ package mcp
 //	undefined: EntryTargetPath
 //	undefined: BuildEntryShape
 //	undefined: WriteAgentConfig
-//	undefined: RemoveAgentConfig
 //	undefined: ReadAgentConfig
 //
-// All five symbols are pinned by the tests in this file. @dev's job is to
+// All four symbols are pinned by the tests in this file. @dev's job is to
 // add the implementation that makes them compile and pass.
 //
 // Target / format reference (per the slice 3 brief):
@@ -52,8 +51,6 @@ package mcp
 //     fresh install with no prior config must not be a special case.
 //   - ReadAgentConfig on malformed JSON returns an error (no silent
 //     fallback to {}; that would mask real corruption).
-//   - RemoveAgentConfig is idempotent: removing an entry that does not
-//     exist is a no-op, not an error.
 //
 // Tests use stdlib only and follow the conventions of the existing
 // *_test.go files in this package (per-test sections separated by
@@ -313,26 +310,20 @@ func TestEntryTargetPath_Unknown(t *testing.T) {
 	}
 }
 
-// TestAgentConfig_UnknownTarget pins the error pass-through: all three
-// public functions (Write/Read/Remove) must surface an error (not a
-// panic, not a silent empty path) when given a target outside the
-// three supported agents. The error originates in EntryTargetPath; the
-// pass-through path lives at lines 102-104 / 126-128 / 160-162 of
-// agent_config.go. TestEntryTargetPath_Unknown exercises the producer
-// (EntryTargetPath) directly but does not reach those pass-through
-// blocks — this test does.
+// TestAgentConfig_UnknownTarget pins the error pass-through: the public
+// functions (Write/Read) must surface an error (not a panic, not a
+// silent empty path) when given a target outside the three supported
+// agents. The error originates in EntryTargetPath; the pass-through
+// path lives at lines 102-104 / 126-128 of agent_config.go.
+// TestEntryTargetPath_Unknown exercises the producer (EntryTargetPath)
+// directly but does not reach those pass-through blocks — this test does.
 //
-// Subtests cover all three functions in one test, mirroring the
-// existing single-function test naming style.
+// Subtests cover both functions in one test, mirroring the existing
+// single-function test naming style.
 func TestAgentConfig_UnknownTarget(t *testing.T) {
 	t.Run("WriteAgentConfig", func(t *testing.T) {
 		if _, err := WriteAgentConfig("vim", "id", map[string]any{"x": 1}); err == nil {
 			t.Errorf("WriteAgentConfig(vim) err = nil, want error")
-		}
-	})
-	t.Run("RemoveAgentConfig", func(t *testing.T) {
-		if err := RemoveAgentConfig("vim", "id"); err == nil {
-			t.Errorf("RemoveAgentConfig(vim) err = nil, want error")
 		}
 	})
 	t.Run("ReadAgentConfig", func(t *testing.T) {
@@ -970,106 +961,6 @@ func TestReadAgentConfig_MalformedJSONC(t *testing.T) {
 
 	if _, err := ReadAgentConfig("opencode"); err == nil {
 		t.Errorf("ReadAgentConfig(malformed) err = nil, want error")
-	}
-}
-
-// ─── RemoveAgentConfig ────────────────────────────────────────────────────
-
-// TestRemoveAgentConfig_Opencode pins the basic remove path: write
-// two entries, remove one, the other must remain. The mcp section
-// must end with exactly one entry.
-func TestRemoveAgentConfig_Opencode(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]},"git":{"type":"local","command":["y"]}}}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "github"); err != nil {
-		t.Fatalf("RemoveAgentConfig(opencode, github) err = %v, want nil", err)
-	}
-
-	cfg := parseJSONFile(t, cfgPath)
-	servers := opencodeFileServers(t, cfg)
-	if len(servers) != 1 {
-		t.Errorf("mcp.servers has %d entries, want 1: keys = %v", len(servers), sortedKeys(servers))
-	}
-	if _, has := servers["github"]; has {
-		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
-	}
-	if _, has := servers["git"]; !has {
-		t.Errorf("mcp.servers lost 'git' during remove; servers = %v", servers)
-	}
-}
-
-// TestRemoveAgentConfig_NonExistent pins the idempotent remove
-// contract: removing an entry that is not in the file is a no-op,
-// not an error. The install UI may issue removes based on stale
-// state; a non-existent entry must not surface as a user-visible
-// error.
-func TestRemoveAgentConfig_NonExistent(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]}}}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "never-installed"); err != nil {
-		t.Errorf("RemoveAgentConfig on missing entry err = %v, want nil (idempotent)", err)
-	}
-
-	// The existing entry must NOT have been touched.
-	cfg := parseJSONFile(t, cfgPath)
-	mcp := cfg["mcp"].(map[string]any)
-	if _, has := mcp["github"]; !has {
-		if servers, ok := mcp["servers"].(map[string]any); !ok {
-			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
-		} else if _, has := servers["github"]; !has {
-			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
-		}
-	}
-}
-
-// TestRemoveAgentConfig_PreservesSiblings pins the read-modify-write
-// symmetry: removing one entry must not affect other entries, must
-// not affect other top-level keys in the file, and must keep the
-// file syntactically valid. This is the uninstall-all-except-one
-// path; a buggy implementation that rebuilds the file from scratch
-// would silently drop other top-level keys (e.g. "$schema",
-// "theme", plugin config).
-func TestRemoveAgentConfig_PreservesSiblings(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]},"git":{"type":"local","command":["y"]},"context7":{"type":"remote","url":"https://mcp.context7.com/mcp"}},"otherKey":"keep-me","$schema":"https://example.com/schema.json"}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "github"); err != nil {
-		t.Fatalf("RemoveAgentConfig err = %v, want nil", err)
-	}
-
-	cfg := parseJSONFile(t, cfgPath)
-	servers := opencodeFileServers(t, cfg)
-	if _, has := servers["github"]; has {
-		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
-	}
-	for _, want := range []string{"git", "context7"} {
-		if _, has := servers[want]; !has {
-			t.Errorf("mcp.servers lost sibling %q during remove; servers = %v", want, servers)
-		}
-	}
-	// top-level keys intact
-	if other, _ := cfg["otherKey"].(string); other != "keep-me" {
-		t.Errorf("top-level otherKey = %q, want \"keep-me\" (must survive remove)", other)
-	}
-	if schema, _ := cfg["$schema"].(string); schema != "https://example.com/schema.json" {
-		t.Errorf("top-level $schema = %q, want preserved (must survive remove)", schema)
 	}
 }
 

@@ -51,12 +51,6 @@ func NewHandlers() *Handlers {
 	return h
 }
 
-// Hub returns the hub these handlers broadcast on. New already starts its event
-// loop; callers only need this to fan out their own events.
-func (h *Handlers) Hub() *Hub {
-	return h.hub
-}
-
 // RegisterRoutes wires the tool API routes onto mux.
 func RegisterRoutes(mux *http.ServeMux, h *Handlers) {
 	// Filesystem browser

@@ -23,10 +23,7 @@ func TestWorkflowsE2E_CreateValidateExport(t *testing.T) {
 	srv.registerWorkflowsRoutes()
 	// Re-point store + exporter at temp dirs.
 	srv.workflows.store = storeAt(t, filepath.Join(home, ".ywai", "workflows"))
-	srv.workflows.exporter = exporterAt(t,
-		filepath.Join(home, ".config", "opencode", "commands"),
-		filepath.Join(home, ".config", "opencode", "agents"),
-	)
+	srv.workflows.exporter = exporterAt(t, filepath.Join(home, ".config", "opencode"))
 
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -165,10 +162,14 @@ func storeAt(t *testing.T, dir string) *workflows.Store {
 	return workflows.NewStore(dir)
 }
 
-// exporterAt returns an Exporter writing to explicit temp dirs.
-func exporterAt(t *testing.T, commandsDir, agentsDir string) *workflows.Exporter {
+// exporterAt returns an Exporter targeting the temp opencode config dir.
+// It uses the constructor production code uses (workflows.NewExporter) and
+// points it at dir via OPENCODE_CONFIG_DIR, which config.OpenCodeConfigDir
+// honors on every platform.
+func exporterAt(t *testing.T, configDir string) *workflows.Exporter {
 	t.Helper()
-	return workflows.NewExporterWithDirs(commandsDir, agentsDir)
+	t.Setenv("OPENCODE_CONFIG_DIR", configDir)
+	return workflows.NewExporter()
 }
 
 func mustDo(t *testing.T, c *http.Client, method, url, body string) *http.Response {

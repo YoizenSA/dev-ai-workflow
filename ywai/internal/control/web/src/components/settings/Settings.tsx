@@ -489,9 +489,9 @@ function GeneralTab() {
 					Vision bridge
 				</span>
 				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
-					When the chat model cannot see images (e.g. DeepSeek), the vision-bridge
+					When the main model cannot see images (e.g. DeepSeek), the vision-bridge
 					plugin analyzes attached images with a vision model and injects the text
-					for the chat model. The image is analyzed through OpenCode, so any model
+					for the main model. The image is analyzed through OpenCode, so any model
 					OpenCode knows works — no separate endpoint or API key needed.
 				</span>
 			</div>
