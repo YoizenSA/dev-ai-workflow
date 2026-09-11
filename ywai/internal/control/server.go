@@ -128,9 +128,6 @@ func (s *Server) buildRoutes() {
 	// ─── Health monitoring API ──────────────────────────────────
 	s.registerHealthRoutes()
 
-	// ─── Scheduler API ─────────────────────────────────────────
-	s.registerSchedulerRoutes()
-
 	// ─── Git status API ─────────────────────────────────────────
 	s.registerGitRoutes()
 
