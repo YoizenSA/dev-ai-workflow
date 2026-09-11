@@ -99,29 +99,56 @@ export default function AgentBenchmarks() {
   useEffect(() => {
     (async () => {
       try {
-        const [t, p] = await Promise.all([
+        const [t, live] = await Promise.all([
           fetch("/api/evals/tasks").then((r) => r.json()),
-          fetch("/api/config/providers").then((r) => r.json()).catch(() => null),
+          fetch("/api/evals/models-live")
+            .then((r) => {
+              if (!r.ok) throw new Error(`models-live: ${r.status}`);
+              return r.json();
+            })
+            .catch(() => null),
         ]);
         const list: Task[] = t.tasks ?? [];
         setTasks(list);
         if (list.length) setTaskId(list[0].id);
 
+        // Live models from the running OpenCode server (every provider it
+        // sees: built-ins, env logins, auth.json, all config layers).
+        const liveModels = (live?.models ?? []) as { provider: string; id: string }[];
+        if (liveModels.length) {
+          const byProvider: Record<string, { models: Record<string, unknown> }> = {};
+          for (const m of liveModels) {
+            if (!m.provider || !m.id) continue;
+            byProvider[m.provider] ??= { models: {} };
+            byProvider[m.provider].models[m.id] = {};
+          }
+          applyProviders(byProvider);
+          return;
+        }
+
+        // Fallback: the static opencode.json provider section (hand-configured
+        // providers only) when the live server is unreachable.
+        const p = await fetch("/api/config/providers")
+          .then((r) => r.json())
+          .catch(() => null);
         // /api/config/providers returns the opencode.json provider section,
         // an object keyed by provider name (not the old proxy's array shape).
-        const section = (p ?? {}) as Record<string, { models?: Record<string, unknown> }>;
-        const names = Object.keys(section).sort();
-        const chosen = section[DEFAULT_PROVIDER] ? DEFAULT_PROVIDER : (names[0] ?? DEFAULT_PROVIDER);
-        setProviderSections(section);
-        setProviders(names);
-        setProvider(chosen);
-        setModels(Object.keys(section[chosen]?.models ?? {}).sort());
+        applyProviders((p ?? {}) as Record<string, { models?: Record<string, unknown> }>);
       } catch (e) {
         setError(String(e));
       }
     })();
     loadRuns();
   }, [loadRuns]);
+
+  function applyProviders(section: Record<string, { models?: Record<string, unknown> }>) {
+    const names = Object.keys(section).sort();
+    const chosen = section[DEFAULT_PROVIDER] ? DEFAULT_PROVIDER : (names[0] ?? DEFAULT_PROVIDER);
+    setProviderSections(section);
+    setProviders(names);
+    setProvider(chosen);
+    setModels(Object.keys(section[chosen]?.models ?? {}).sort());
+  }
 
   const activeRun = runs.find((r) => r.status === "running");
 

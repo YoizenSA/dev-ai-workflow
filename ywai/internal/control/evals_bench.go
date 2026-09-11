@@ -45,6 +45,7 @@ var benchInFlight sync.Mutex
 
 func (s *Server) registerBenchRoutes() {
 	s.mux.HandleFunc("GET /api/evals/tasks", s.handleEvalTasks)
+	s.mux.HandleFunc("GET /api/evals/models-live", s.handleEvalModelsLive)
 	s.mux.HandleFunc("GET /api/evals/summary", s.handleEvalSummary)
 	s.mux.HandleFunc("POST /api/evals/runs", s.handleStartEvalRun)
 }
