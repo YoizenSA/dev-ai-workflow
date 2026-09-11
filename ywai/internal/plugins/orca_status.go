@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // orcaStatusBundleName is the status plugin Orca deploys into the OpenCode
@@ -131,10 +129,6 @@ export default {
 // all. Leaving it broken means the user's status bar stays dead until Orca
 // ships its own fix.
 func RepairOrcaStatusPluginV2(configPath string) (bool, error) {
-	if !agent.OpenCodeIsV2() {
-		return false, nil
-	}
-
 	path := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir, orcaStatusBundleName)
 	src, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -135,11 +134,7 @@ func RunManifest(mf Manifest, agentName, configPath string, flags map[string]boo
 			continue
 		}
 		r := ManifestResult{ID: e.ID}
-		if e.Flavor == "v2" && !agent.OpenCodeIsV2() {
-			r.Skipped = "requires OpenCode 2 (opencode2)"
-		} else {
-			r.Err = manifestExecutors[e.ID](agentName, configPath)
-		}
+		r.Err = manifestExecutors[e.ID](agentName, configPath)
 		results = append(results, r)
 	}
 	return results

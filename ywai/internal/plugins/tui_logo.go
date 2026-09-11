@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -124,18 +123,16 @@ func patchTuiPlugin(tuiConfigPath, pluginPath string, enableMouse bool) error {
 	}
 
 	plugins := openCodePlugins(root)
-	if agent.OpenCodeIsV2() {
-		// The write below moves this array to the "plugins" key v2 reads, so a
-		// v1-only entry that was inert until now would start being loaded.
-		kept := plugins[:0]
-		for _, raw := range plugins {
-			if s, ok := raw.(string); ok && s == subAgentStatuslinePlugin {
-				continue
-			}
-			kept = append(kept, raw)
+	// The write below moves this array to the "plugins" key v2 reads, so a
+	// v1-only entry that was inert until now would start being loaded.
+	kept := plugins[:0]
+	for _, raw := range plugins {
+		if s, ok := raw.(string); ok && s == subAgentStatuslinePlugin {
+			continue
 		}
-		plugins = kept
+		kept = append(kept, raw)
 	}
+	plugins = kept
 	// Entries under the legacy tui-plugins/ dir name a loose .tsx the v2
 	// loader silently discards. Drop them, or the config keeps pointing at a
 	// file that was just deleted by installTuiPluginDir.

@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -17,9 +16,5 @@ func InstallVisionBridge(configPath string) error {
 }
 
 func installVisionBridgeWithBundle(configPath, bundleSrc string) error {
-	if agent.OpenCodeIsV2() {
-		return installVendorPluginV2(configPath, bundleSrc, config.VisionBridgeBundleName)
-	}
-
-	return installVendoredV1(configPath, bundleSrc, config.VisionBridgeBundleName)
+	return installVendorPluginV2(configPath, bundleSrc, config.VisionBridgeBundleName)
 }

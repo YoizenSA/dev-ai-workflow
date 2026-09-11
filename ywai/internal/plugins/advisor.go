@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -21,9 +20,5 @@ func InstallAdvisor(configPath string) error {
 }
 
 func installAdvisorWithBundle(configPath, bundleSrc string) error {
-	if agent.OpenCodeIsV2() {
-		return installVendorPluginV2(configPath, bundleSrc, config.AdvisorBundleName)
-	}
-
-	return installVendoredV1(configPath, bundleSrc, config.AdvisorBundleName)
+	return installVendorPluginV2(configPath, bundleSrc, config.AdvisorBundleName)
 }

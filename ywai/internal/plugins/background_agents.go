@@ -1,11 +1,9 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -50,11 +48,6 @@ const AutoDiscoveredPluginsSubdir = "plugins"
 const autoDiscoveredPluginsSubdir = AutoDiscoveredPluginsSubdir
 
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
-	if !agent.OpenCodeIsV2() {
-		// The plugin is v2-only: it supervises v2's built-in `subagent` tool
-		// and no longer ships the v1 host surface it once also needed.
-		return errors.New("background-agents requires OpenCode 2 (opencode2); skip it under OpenCode v1")
-	}
 	return installBackgroundAgentsV2(configPath, bundleSrc)
 }
 
@@ -134,10 +127,7 @@ func pluginsToSlice(raw any) []any {
 // plugin edit funnels through here — see openCodePlugins for the read side,
 // which accepts either spelling so a flavor switch keeps existing entries.
 func writePlugins(root map[string]any, plugins []any) {
-	key, stale := "plugin", "plugins"
-	if agent.OpenCodeIsV2() {
-		key, stale = "plugins", "plugin"
-	}
+	key, stale := "plugins", "plugin"
 	delete(root, stale)
 	root[key] = plugins
 }
