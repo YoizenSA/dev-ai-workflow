@@ -45,9 +45,11 @@ if command -v bun >/dev/null 2>&1; then
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
     echo "Building advisor plugin (bun bundle)…"
+    # No --external: envs copy this bundle into config dirs without
+    # node_modules, where a bare @opencode-ai/plugin import fails to load.
+    # plugins/advisor/test/bundle.test.ts pins that the dist is self-contained.
     bun build "$AD_DIR/src/index.ts" \
-        --outfile "$AD_BUNDLE" --target node \
-        --external zod --external @opencode-ai/plugin
+        --outfile "$AD_BUNDLE" --target node
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then

@@ -111,8 +111,19 @@ func TestPresetSpecMergesOverrides(t *testing.T) {
 		t.Errorf("groups = %v, want [core]", got)
 	}
 	if got := PresetSkills(merged); got != nil {
-		t.Errorf("skills = %v, want nil (empty override = install none)", got)
+		t.Errorf("skills = %v, want nil list", got)
 	}
+	if !PresetNone(merged, "skills") {
+		t.Errorf("empty skills override must flag install-none")
+	}
+	if PresetNone(merged, "mcp") {
+		t.Errorf("nil mcp override must inherit, not flag none")
+	}
+	p.Overrides.Groups = []string{}
+	if got := PresetGroups(mustSpec(t, p)); len(got) != 1 || got[0] != "core" {
+		t.Errorf("empty groups override = %v, want [core]", got)
+	}
+	p.Overrides.Groups = []string{"core"}
 	// Manifest roundtrip keeps overrides.
 	if err := p.SaveManifest(profileDir(p.Name)); err != nil {
 		t.Fatal(err)
@@ -124,6 +135,18 @@ func TestPresetSpecMergesOverrides(t *testing.T) {
 	if reloaded.Overrides == nil || len(reloaded.Overrides.Groups) != 1 {
 		t.Errorf("overrides did not survive roundtrip: %+v", reloaded.Overrides)
 	}
+	if reloaded.Overrides != nil && (reloaded.Overrides.Skills == nil || reloaded.Overrides.MCP != nil) {
+		t.Errorf("empty vs nil lists lost in roundtrip: %+v", reloaded.Overrides)
+	}
+}
+
+func mustSpec(t *testing.T, p Profile) map[string]any {
+	t.Helper()
+	spec, err := PresetSpec(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return spec
 }
 
 func TestPresets(t *testing.T) {

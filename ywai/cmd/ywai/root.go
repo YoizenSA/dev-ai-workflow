@@ -225,7 +225,12 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	var done []string
 	// Preset enforcement (profile scope only): copy only preset skills[].
 	// Empty = keep current (copy all). Never deletes unlisted skills.
-	skillAllow := envprofile.PresetSkills(scopedPresetSpec())
+	spec := scopedPresetSpec()
+	if envprofile.PresetNone(spec, "skills") {
+		fmt.Println("  Preset skills: none (env override) — skipping ywai extra skills")
+		return
+	}
+	skillAllow := envprofile.PresetSkills(spec)
 	if len(skillAllow) > 0 {
 		fmt.Printf("  Preset skills filter: %s\n", strings.Join(skillAllow, ", "))
 	}
@@ -596,8 +601,16 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	// Preset enforcement (profile scope only): install only preset mcp[]
 	// servers. Empty = keep current. Never uninstalls extra servers, only
 	// skips installing unlisted ones. Plugins always install.
-	mcpAllow := envprofile.PresetMCPIDs(scopedPresetSpec())
-	if len(mcpAllow) > 0 {
+	mcpSpec := scopedPresetSpec()
+	mcpAllow := envprofile.PresetMCPIDs(mcpSpec)
+	// mcpNone: an env override emptied the list — skip every filterable server.
+	mcpNone := envprofile.PresetNone(mcpSpec, "mcp")
+	skipMCP := func(id string) bool {
+		return mcpNone || (len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP(id, mcpAllow))
+	}
+	if mcpNone {
+		fmt.Println("  Preset MCP filter: none (env override)")
+	} else if len(mcpAllow) > 0 {
 		fmt.Printf("  Preset MCP filter: %s\n", strings.Join(mcpAllow, ", "))
 	}
 
@@ -638,10 +651,10 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		// Preset enforcement: skip MCP servers outside the preset allowlist
 		// (existing entries are left alone, never removed).
 		mfForAgent := mf
-		if len(mcpAllow) > 0 {
+		if mcpNone || len(mcpAllow) > 0 {
 			var keep []plugins.ManifestEntry
 			for _, e := range mf.Install {
-				if envprofile.IsMCPServerManifestID(e.ID) && !envprofile.ShouldInstallMCP(e.ID, mcpAllow) {
+				if envprofile.IsMCPServerManifestID(e.ID) && skipMCP(e.ID) {
 					fmt.Printf("  [%s] Skipped %s: not in preset mcp list\n", a.Name, e.ID)
 					continue
 				}
@@ -717,7 +730,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		// instruction files are rewritten unexpectedly. Preset enforcement:
 		// skip when graft is outside the preset mcp[] allowlist; an existing
 		// entry is left alone, never removed.
-		if len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP("graft", mcpAllow) {
+		if skipMCP("graft") {
 			fmt.Println("  Skipped graft MCP wiring: not in preset mcp list")
 		} else {
 			fmt.Println("  Wiring Graft MCP into agent configs...")
@@ -730,7 +743,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
 		fmt.Println("  Would install Graft CLI (`graft`)")
-		if len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP("graft", mcpAllow) {
+		if skipMCP("graft") {
 			fmt.Println("  Would skip graft MCP wiring: not in preset mcp list")
 		} else {
 			fmt.Println("  Would wire Graft MCP into opencode")

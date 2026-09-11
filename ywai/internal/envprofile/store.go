@@ -146,6 +146,9 @@ func Create(name, preset string) (Profile, error) {
 	if err := p.SaveManifest(profileDir(name)); err != nil {
 		return Profile{}, err
 	}
+	if err := EnsureServicePort(p); err != nil {
+		return Profile{}, err
+	}
 	return p, nil
 }
 

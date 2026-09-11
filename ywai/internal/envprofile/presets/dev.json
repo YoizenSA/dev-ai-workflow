@@ -7,5 +7,6 @@
   "default_agent": "orchestrator",
   "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["git commit*", "git push*"],
-  "cli_theme": "tokyonight"
+  "cli_theme": "tokyonight",
+  "copy_global_providers": true
 }

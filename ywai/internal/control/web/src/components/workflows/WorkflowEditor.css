@@ -1221,3 +1221,36 @@
 	color: var(--yz-accent);
 	font-size: 12px;
 }
+
+/* ---- Block/edge deletion ---- */
+.wf-node .wf-node-del {
+  margin-left: auto; width: 18px; height: 18px; flex-shrink: 0;
+  display: inline-grid; place-items: center; padding: 0;
+  border-radius: 5px; border: 1px solid transparent; background: transparent;
+  color: var(--text-muted); font-size: 14px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity var(--t-fast) ease, background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.wf-node:hover .wf-node-del, .wf-node.is-selected .wf-node-del { opacity: 1; }
+.wf-node .wf-node-del:hover { color: var(--tint-danger); background: var(--danger-soft); border-color: var(--danger-border); }
+.wf-node .wf-node-del:focus-visible { opacity: 1; }
+
+.react-flow__edge.is-edge-selected .react-flow__edge-path { stroke: var(--danger) !important; stroke-width: 2.5px !important; }
+
+.wf-canvas-hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.35rem 0.75rem; border-radius: 999px;
+  background: var(--surface-strong); border: 1px solid var(--panel-border-strong);
+  color: var(--text-soft); font-size: var(--text-xs); box-shadow: var(--shadow-glass); pointer-events: auto;
+}
+.wf-canvas-hint kbd {
+  font-family: var(--font-mono); font-size: var(--text-2xs);
+  padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid var(--panel-border-strong); background: var(--surface-soft);
+}
+.wf-canvas-hint button {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: var(--tint-danger);
+}
+.wf-canvas-hint button:hover { text-decoration: underline; }
+
+/* ---- Export destination ---- */
+.wf-export-env { width: auto; min-width: 7.5rem; padding-block: 0.3rem; font-size: var(--text-sm); }

@@ -38,4 +38,13 @@ describe("bundle shape", () => {
     )
     expect(hooks).toBeDefined()
   })
+
+  // The shipped dist is copied into env config dirs that have no
+  // node_modules, so a bare import of @opencode-ai/plugin fails to load
+  // ("Cannot find package '@opencode-ai/plugin'"). It must be bundled in.
+  test("shipped dist is self-contained", async () => {
+    const dist = await Bun.file(path.join(import.meta.dir, "..", "dist", "advisor.js")).text()
+    expect(dist).not.toMatch(/from\s+["']@opencode-ai\/plugin["']/)
+    expect(dist).not.toMatch(/require\(\s*["']@opencode-ai\/plugin["']\s*\)/)
+  })
 })

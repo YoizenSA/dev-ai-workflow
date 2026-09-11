@@ -38,9 +38,11 @@ confirmation), and the OpenCode binary must resolve as `opencode2`
    snapshots (`lib/snapshot.sh`). Output assertions use only stable markers
    (`=== Done! ===`), never the dynamic step numbering.
 5. Update coverage has exactly two honest variants: an offline binary-swap
-   (two builds from the same source differing only in version string) and a
-   nightly real release N-1 -> N cell. A local dev binary plus network is
-   never tested — self-update would silently fetch the public release.
+   (two builds from the same source differing only in version string, run in
+   `network_mode: none` containers so self-update cannot fetch a real
+   release) and a nightly real release N-1 -> N cell. A local dev binary plus
+   network is never tested — self-update would silently fetch the public
+   release.
 6. CI: nightly full matrix (13 cells, `fail-fast: false`) plus manual
    dispatch; the release workflow gains an offline gate (the three dry cells,
    embedded binary) that must pass before GoReleaser publishes.

@@ -29,6 +29,8 @@ func (s *Server) registerEnvProfileRoutes() {
 	s.mux.HandleFunc("POST /api/envs/{name}/stop", s.handleEnvStop)
 	s.mux.HandleFunc("GET /api/envs/{name}/status", s.handleEnvStatus)
 	s.mux.HandleFunc("GET /api/envs/{name}/logs", s.handleEnvLogs)
+	s.mux.HandleFunc("POST /api/envs/{name}/import-providers", s.handleEnvImportProviders)
+	s.registerEnvPresetRoutes()
 }
 
 // envItem is one profile in list responses, with live service state.
@@ -68,17 +70,23 @@ func (s *Server) handleEnvList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toEnvItem(p))
 	}
 	descriptions := map[string]string{}
+	copyDefaults := map[string]bool{}
 	for _, name := range envprofile.Presets() {
 		if spec, err := envprofile.Preset(name); err == nil {
 			if d, _ := spec["description"].(string); d != "" {
 				descriptions[name] = d
 			}
+			copyDefaults[name] = envprofile.PresetCopyProviders(spec)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"envs":                items,
 		"presets":             envprofile.Presets(),
 		"preset_descriptions": descriptions,
+		"custom_presets":      customPresetNames(),
+		// Default of the "copy global providers" check per preset.
+		"preset_copy_providers": copyDefaults,
+		"catalog":             envCatalog(),
 	})
 }
 
@@ -86,6 +94,9 @@ func (s *Server) handleEnvList(w http.ResponseWriter, r *http.Request) {
 type envCreateRequest struct {
 	Name   string `json:"name"`
 	Preset string `json:"preset"`
+	// CopyProviders seeds the env with the global providers + credentials.
+	// Absent = the preset default (copy_global_providers).
+	CopyProviders *bool `json:"copy_providers"`
 }
 
 // handleEnvCreate creates one profile. Unknown presets are 400, duplicate
@@ -122,7 +133,60 @@ func (s *Server) handleEnvCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"profile": p, "running": false, "url": envprofile.Env(p)["OPENCODE_URL"]})
+	copyProviders := false
+	if req.CopyProviders != nil {
+		copyProviders = *req.CopyProviders
+	} else if spec, err := envprofile.Preset(p.Preset); err == nil {
+		copyProviders = envprofile.PresetCopyProviders(spec)
+	}
+	resp := map[string]any{"profile": p, "running": false, "url": envprofile.Env(p)["OPENCODE_URL"]}
+	if copyProviders {
+		copied, err := envprofile.CopyGlobalProviders(p)
+		if err != nil {
+			// The env exists; report the copy failure without failing create.
+			resp["copy_error"] = err.Error()
+		} else {
+			resp["copied"] = copied
+			restartEnvServiceForLogins(p, copied)
+		}
+	}
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+// handleEnvImportProviders copies the global providers + credentials into an
+// existing env (entries the env already has are kept).
+// POST /api/envs/{name}/import-providers
+func (s *Server) handleEnvImportProviders(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if err := envprofile.ValidateName(name); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	p, err := envprofile.Get(name)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("unknown profile %q", name)})
+		return
+	}
+	copied, err := envprofile.CopyGlobalProviders(p)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	restartEnvServiceForLogins(p, copied)
+	writeJSON(w, http.StatusOK, map[string]any{"name": name, "copied": copied})
+}
+
+// restartEnvServiceForLogins stops the env's managed opencode service after
+// new logins or providers landed, so its next start (TUI/run restart it on
+// demand) loads them. Best effort: a missing binary or stop failure is not
+// fatal to the import.
+func restartEnvServiceForLogins(p envprofile.Profile, copied envprofile.CopiedProviders) {
+	if len(copied.Credentials)+len(copied.Providers) == 0 {
+		return
+	}
+	if bin, _ := agent.FindOpenCode(); bin != "" {
+		_ = envprofile.StopManagedService(p, bin)
+	}
 }
 
 // envPatchRequest is the PATCH /api/envs/{name} body: preset change and/or
@@ -133,6 +197,10 @@ type envPatchRequest struct {
 	Groups *[]string `json:"groups"`
 	Skills *[]string `json:"skills"`
 	MCP    *[]string `json:"mcp"`
+	// Reset drops the named overrides ("groups", "skills", "mcp") so they
+	// inherit the preset again. JSON null cannot express this: a null list
+	// decodes to an absent field and leaves the override untouched.
+	Reset []string `json:"reset"`
 }
 
 // handleEnvPatch changes one profile preset and/or its content overrides.
@@ -183,6 +251,24 @@ func (s *Server) handleEnvPatch(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.MCP != nil {
 			p.Overrides.MCP = cleanStringList(*req.MCP)
+		}
+	}
+	if p.Overrides != nil {
+		for _, key := range req.Reset {
+			switch strings.TrimSpace(key) {
+			case "groups":
+				p.Overrides.Groups = nil
+			case "skills":
+				p.Overrides.Skills = nil
+			case "mcp":
+				p.Overrides.MCP = nil
+			default:
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown reset key %q", key)})
+				return
+			}
+		}
+		if p.Overrides.Groups == nil && p.Overrides.Skills == nil && p.Overrides.MCP == nil {
+			p.Overrides = nil
 		}
 	}
 	dirs := envprofile.Dirs(p)
@@ -396,6 +482,12 @@ func (s *Server) handleEnvStatus(w http.ResponseWriter, r *http.Request) {
 	if spec == nil {
 		spec = map[string]any{}
 	}
+	// The raw preset (no overrides) lets the editor label what "inherit"
+	// means for each list.
+	presetSpec, _ := envprofile.Preset(p.Preset)
+	if presetSpec == nil {
+		presetSpec = map[string]any{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":   p.Name,
 		"preset": p.Preset,
@@ -404,8 +496,9 @@ func (s *Server) handleEnvStatus(w http.ResponseWriter, r *http.Request) {
 		// Resolved content (preset + manifest overrides) drives the web
 		// editor: checkbox options come from spec lists, checked state from
 		// overrides (nil = inherits, shown checked).
-		"spec":      spec,
-		"overrides": p.Overrides,
+		"spec":        spec,
+		"preset_spec": presetSpec,
+		"overrides":   p.Overrides,
 		"service": map[string]any{
 			"running": running,
 			"port":    p.Port,

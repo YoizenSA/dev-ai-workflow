@@ -596,10 +596,14 @@ export const workflowApi = {
 
 	// Export. Dry-run (preview the file plan) by default; pass apply:true to
 	// actually write the opencode artifacts to ~/.config/opencode.
-	export: (name: string, apply = false, target = "opencode") => {
+	// profile: undefined = the shared Settings scope (withScope), "" = global
+	// explicitly (an empty profile= also stops withScope from adding one),
+	// "<env>" = write into that environment's opencode config.
+	export: (name: string, apply = false, target = "opencode", profile?: string) => {
 		const params = new URLSearchParams();
 		if (apply) params.set("apply", "true");
 		if (target && target !== "opencode") params.set("target", target);
+		if (profile !== undefined) params.set("profile", profile);
 		const qs = params.toString();
 		return request<WorkflowExportPlan>(
 			`/api/workflows/${name}/export${qs ? `?${qs}` : ""}`,

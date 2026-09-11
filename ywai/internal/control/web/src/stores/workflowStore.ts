@@ -176,7 +176,8 @@ interface WorkflowState {
 	renameCurrent: (newName: string) => Promise<void>
 	importRaw: (raw: unknown, name?: string) => Promise<void>
 	validateCurrent: () => Promise<void>
-	exportCurrent: (apply: boolean, target?: string) => Promise<void>
+	// profile: "" = global, "<env>" = that environment (see workflowApi.export).
+	exportCurrent: (apply: boolean, target?: string, profile?: string) => Promise<void>
 	clearExport: () => void
 	// Apply a natural-language edit via the backend AI endpoint. The result is
 	// loaded into the editor (undoable) and left dirty for the user to Save.
@@ -355,12 +356,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		}
 	},
 
-	exportCurrent: async (apply, target = 'opencode') => {
+	exportCurrent: async (apply, target = 'opencode', profile) => {
 		const { current } = get()
 		if (!current) return
 		set({ exporting: true, error: null })
 		try {
-			const plan = await workflowApi.export(current.name, apply, target)
+			const plan = await workflowApi.export(current.name, apply, target, profile)
 			set({ exportPlan: plan, exporting: false })
 		} catch (err) {
 			set({ exporting: false, error: errMsg(err) })

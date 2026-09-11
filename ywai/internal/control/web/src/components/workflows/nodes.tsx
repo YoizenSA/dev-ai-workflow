@@ -228,6 +228,20 @@ function WorkflowNodeView({ id, data, selected }: NodeProps) {
 						</span>
 					)
 				})()}
+				{d.__type !== 'start' && (
+					<button
+						type="button"
+						className="wf-node-del nodrag"
+						title="Delete block (Del) — undo with Ctrl+Z"
+						aria-label="Delete block"
+						onClick={(e) => {
+							e.stopPropagation()
+							useWorkflowStore.getState().removeNode(id)
+						}}
+					>
+						×
+					</button>
+				)}
 			</div>
 			<div className="wf-node-title">{title(d)}</div>
 			{sub && <div className="wf-node-sub">{sub}</div>}

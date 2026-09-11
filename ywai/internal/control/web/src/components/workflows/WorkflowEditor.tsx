@@ -46,6 +46,8 @@ import {
 	CornerUpLeft,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
+import { getConfigProfileScope } from '../../api/client'
+import { envsApi } from '../../api/envs'
 import type { WorkflowConnection, WorkflowNode, WorkflowNodeType } from '../../api/types'
 import Modal from '../shared/Modal'
 import YdSelect from '../shared/YdSelect'
@@ -191,6 +193,21 @@ function WorkflowEditorInner() {
 	const aiModels = useOpencodeModels()
 	const [exportTarget, setExportTarget] = useState('opencode')
 	const targetMeta = EXPORT_TARGETS.find((t) => t.value === exportTarget)
+	// Export destination: '' = global install, '<env>' = that environment.
+	// Defaults to the Settings scope so behavior matches what used to happen
+	// implicitly — but now it is visible and changeable here.
+	const [exportEnv, setExportEnv] = useState<string>(() => getConfigProfileScope() ?? '')
+	const [envNames, setEnvNames] = useState<string[]>([])
+	useEffect(() => {
+		envsApi.list().then((r) => setEnvNames((r.envs ?? []).map((e) => e.name)), () => {})
+	}, [])
+	// Only opencode config is per environment; other hosts always write global.
+	const envExport = exportEnv !== '' && exportTarget === 'opencode'
+	const exportDir = envExport ? `~/.ywai/profiles/${exportEnv}/config/opencode` : targetMeta?.dir
+	const exportWhere = `${targetMeta?.label ?? exportTarget}${envExport ? ` in env "${exportEnv}"` : ''} (${exportDir})`
+	// Edge picked on the canvas (click selects; Del removes).
+	const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+	const removeNode = useWorkflowStore((s) => s.removeNode)
 	// Run modal: args prompt before spawning the orchestrator.
 	const [runOpen, setRunOpen] = useState(false)
 	const [runArgs, setRunArgs] = useState('')
@@ -416,6 +433,50 @@ function WorkflowEditorInner() {
 		}
 		return edges
 	}, [current, animatedEdges, highlight, selectedNodeId])
+
+	// Selected edge gets a highlight class; the edge list itself stays derived.
+	const canvasEdges: Edge[] = useMemo(
+		() =>
+			selectedEdgeId
+				? flowEdges.map((e) =>
+						e.id === selectedEdgeId ? { ...e, selected: true, className: `${e.className ?? ''} is-edge-selected` } : e,
+					)
+				: flowEdges,
+		[flowEdges, selectedEdgeId],
+	)
+	const selectedNode = current?.nodes.find((n) => n.id === selectedNodeId) ?? null
+
+	// deleteSelection removes the selected edge, else the selected block
+	// (never the start node). Store-backed, so Ctrl+Z restores it.
+	const deleteSelection = useCallback(() => {
+		if (selectedEdgeId) {
+			disconnect(selectedEdgeId)
+			setSelectedEdgeId(null)
+			return
+		}
+		const wf = useWorkflowStore.getState().current
+		const node = wf?.nodes.find((n) => n.id === selectedNodeId)
+		if (node && node.type !== 'start') removeNode(node.id)
+	}, [selectedEdgeId, selectedNodeId, disconnect, removeNode])
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Delete' && e.key !== 'Backspace') return
+			const t = e.target as HTMLElement | null
+			// Never steal Delete/Backspace from text fields or the Monaco editor.
+			if (t && (t.closest('input, textarea, select, [contenteditable="true"], .monaco-editor'))) return
+			if (!selectedEdgeId && !selectedNodeId) return
+			e.preventDefault()
+			deleteSelection()
+		}
+		window.addEventListener('keydown', onKey)
+		return () => window.removeEventListener('keydown', onKey)
+	}, [deleteSelection, selectedEdgeId, selectedNodeId])
+
+	// A deleted/reloaded edge can't stay selected.
+	useEffect(() => {
+		if (selectedEdgeId && !flowEdges.some((e) => e.id === selectedEdgeId)) setSelectedEdgeId(null)
+	}, [flowEdges, selectedEdgeId])
 
 	const onConnect = useCallback(
 		(params: Connection) => {
@@ -699,21 +760,44 @@ function WorkflowEditorInner() {
 				{/* Export: target matters, keep the label */}
 					<div className="wf-tb-group" data-tour="export">
 						<span className="wf-export-label">Export</span>
-					{EXPORT_TARGETS.map((t) => (
-						<button
-							key={t.value}
-							className="btn btn-sm"
-							onClick={() => {
-								setExportTarget(t.value)
-								exportCurrent(false, t.value)
-							}}
-							disabled={!current || exporting}
-							data-tip={current && !exporting ? `Export to ${t.label} (${t.dir}) — preview, then apply` : ''}
-							aria-label={`Export to ${t.label}`}
+						<select
+							className="select wf-export-env"
+							value={exportEnv}
+							onChange={(e) => setExportEnv(e.target.value)}
+							aria-label="Export destination"
+							title="Where the exported agents/commands are written"
 						>
-							<FileCode2 /> {t.label}
-						</button>
-					))}
+							<option value="">Global</option>
+							{envNames.map((n) => (
+								<option key={n} value={n}>env: {n}</option>
+							))}
+						</select>
+					{EXPORT_TARGETS.map((t) => {
+						// Envs only isolate opencode config; other hosts would still write
+						// to the global home, so they are global-only.
+						const envOnlyBlocked = exportEnv !== '' && t.value !== 'opencode'
+						return (
+							<button
+								key={t.value}
+								className="btn btn-sm"
+								onClick={() => {
+									setExportTarget(t.value)
+									exportCurrent(false, t.value, exportEnv)
+								}}
+								disabled={!current || exporting || envOnlyBlocked}
+								data-tip={
+									envOnlyBlocked
+										? `${t.label} has no per-env config — pick Global to export there`
+										: current && !exporting
+											? `Export to ${t.label} (${exportEnv && t.value === 'opencode' ? `env ${exportEnv}` : t.dir}) — preview, then apply`
+											: ''
+								}
+								aria-label={`Export to ${t.label}`}
+							>
+								<FileCode2 /> {t.label}
+							</button>
+						)
+					})}
 				</div>
 
 				<span className="wf-tb-sep" />
@@ -939,17 +1023,26 @@ function WorkflowEditorInner() {
 						</div>
 						<ReactFlow data-tour="canvas"
 							nodes={flowNodes}
-							edges={flowEdges}
+							edges={canvasEdges}
 							nodeTypes={nodeTypes}
 							onNodesChange={onNodesChange}
 							onNodeDragStop={handleNodeDragStop}
 							onConnect={onConnect}
+							// Deletion goes through the store (see the Del handler) so it
+							// persists and is undoable; React Flow's own key handling would
+							// only drop the node from local canvas state.
+							deleteKeyCode={null}
 							onEdgeClick={(_, edge) => {
 								// Synthetic edges stand in for several real connections.
 								if (edge.id.startsWith(COLLAPSED_EDGE_PREFIX)) return
-								disconnect(edge.id)
+								// Select instead of deleting on click (too easy to lose wiring).
+								selectNode(null)
+								setSelectedEdgeId(edge.id)
 							}}
-							onNodeClick={(_, n) => selectNode(n.id)}
+							onNodeClick={(_, n) => {
+								setSelectedEdgeId(null)
+								selectNode(n.id)
+							}}
 							onNodeDoubleClick={(_, n) => {
 								// Double-clicking a sub-workflow node opens that workflow; any other
 								// node opens the Monaco focus editor.
@@ -957,7 +1050,10 @@ function WorkflowEditorInner() {
 								if (d.__type === 'subAgentFlow' && d.flowId) onSelect(d.flowId, current?.name)
 								else setFocusNode(n.id)
 							}}
-							onPaneClick={() => selectNode(null)}
+							onPaneClick={() => {
+								selectNode(null)
+								setSelectedEdgeId(null)
+							}}
 							fitView
 							snapToGrid={snapGrid}
 							snapGrid={[16, 16]}
@@ -966,6 +1062,13 @@ function WorkflowEditorInner() {
 						>
 							<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
 							<Controls />
+							{(selectedEdgeId || (selectedNode && selectedNode.type !== 'start')) && (
+								<div className="wf-canvas-hint" role="status">
+									<span>{selectedEdgeId ? 'Connection selected' : `Block "${selectedNode?.name || selectedNode?.type}" selected`}</span>
+									<button type="button" onClick={deleteSelection}>Delete</button>
+									<span><kbd>Del</kbd> delete · <kbd>Ctrl+Z</kbd> undo</span>
+								</div>
+							)}
 							{showMinimap && <MiniMap pannable zoomable />}
 						</ReactFlow>
 					</div>
@@ -1026,8 +1129,8 @@ function WorkflowEditorInner() {
 					<div className="export-plan">
 						<p>
 							{exportPlan.dryRun
-								? `Dry-run preview. These files would be written for ${targetMeta ? `${targetMeta.label} (${targetMeta.dir})` : exportTarget}:`
-								: `✅ Files written. Restart ${targetMeta?.label ?? exportTarget} to pick them up.`}
+								? `Dry-run preview. These files would be written for ${exportWhere}:`
+								: `✅ Files written to ${exportWhere}. Restart ${targetMeta?.label ?? exportTarget}${envExport ? ` (ywai ${exportEnv})` : ''} to pick them up.`}
 						</p>
 						{exportPlan.dryRun && exportPlan.estimatedTokens > 0 && (
 							<p className="wf-token-hint">
@@ -1040,14 +1143,14 @@ function WorkflowEditorInner() {
 						{(exportPlan.files ?? []).map((f, i) => (
 							<div className={`artifact kind-${f.kind}`} key={i}>
 								<span className="kind">{f.kind}</span>
-								<span>{shortExportPath(f.path, targetMeta?.dir)}</span>
+								<span>{shortExportPath(f.path, exportDir)}</span>
 							</div>
 						))}
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
 							<button className="btn" onClick={clearExport}>Close</button>
 							<button
 								className="btn btn-primary"
-								onClick={() => exportCurrent(true, exportTarget)}
+								onClick={() => exportCurrent(true, exportTarget, envExport ? exportEnv : '')}
 								disabled={exporting}
 							>
 								<RefreshCw size={14} /> {exportPlan.dryRun ? 'Apply (write files)' : 'Re-export'}

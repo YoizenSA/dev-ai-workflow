@@ -24,11 +24,13 @@ type Profile struct {
 	Overrides *ProfileOverrides `json:"overrides,omitempty"`
 }
 
-// ProfileOverrides replaces preset content lists per environment.
+// ProfileOverrides replaces preset content lists per environment. No
+// omitempty: an empty list ("install none") must survive the manifest
+// roundtrip distinct from null ("inherit the preset").
 type ProfileOverrides struct {
-	Groups []string `json:"groups,omitempty"`
-	Skills []string `json:"skills,omitempty"`
-	MCP    []string `json:"mcp,omitempty"`
+	Groups []string `json:"groups"`
+	Skills []string `json:"skills"`
+	MCP    []string `json:"mcp"`
 }
 
 // LoadManifest reads <dir>/manifest.json.

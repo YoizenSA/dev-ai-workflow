@@ -33,7 +33,7 @@ func Ensure(p Profile) error {
 			return fmt.Errorf("ensure profile config dir %s: %w", d, err)
 		}
 	}
-	return nil
+	return EnsureServicePort(p)
 }
 
 // Env returns the environment delta that isolates one profile. Applied on

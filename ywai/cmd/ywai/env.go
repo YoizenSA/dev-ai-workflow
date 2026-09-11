@@ -21,6 +21,8 @@ var (
 	envInit   bool
 	envYes    bool
 
+	envCopyProviders bool
+
 	envBootstrapPresets string
 )
 
@@ -67,6 +69,9 @@ func runEnvBootstrap() error {
 		p, err := envprofile.Create(name, name)
 		if err != nil {
 			return err
+		}
+		if spec, _ := envprofile.Preset(name); envprofile.PresetCopyProviders(spec) {
+			reportCopiedProviders(p)
 		}
 		fmt.Printf("Created environment %q (preset %s, port %d)\n", p.Name, p.Preset, p.Port)
 		ready = append(ready, p)
@@ -155,6 +160,15 @@ var envCreateCmd = &cobra.Command{
 			if err := copyGlobalConfigInto(p); err != nil {
 				return err
 			}
+		}
+		// --copy-providers defaults to the preset's copy_global_providers.
+		copyProviders := envCopyProviders
+		if !cmd.Flags().Changed("copy-providers") {
+			spec, _ := envprofile.Preset(preset)
+			copyProviders = envprofile.PresetCopyProviders(spec)
+		}
+		if copyProviders {
+			reportCopiedProviders(p)
 		}
 		fmt.Printf("Created environment %q (preset %s, port %d)\n", p.Name, p.Preset, p.Port)
 		fmt.Printf("Start it: ywai %s\n", p.Name)
@@ -312,6 +326,7 @@ func init() {
 	envCreateCmd.Flags().StringVar(&envPreset, "preset", "dev", "Preset to stamp (dev, qa, personal)")
 	envCreateCmd.Flags().BoolVar(&envInit, "init", false, "Seed from the current global opencode config (config files only, never DB/service)")
 	envRemoveCmd.Flags().BoolVar(&envYes, "yes", false, "Confirm deletion")
+	envCreateCmd.Flags().BoolVar(&envCopyProviders, "copy-providers", false, "Copy the global opencode providers and credentials into the env (default: the preset's copy_global_providers)")
 	rootCmd.AddCommand(envCmd)
 
 	// Dynamic shortcuts: ywai <profile> == ywai env start <profile>.
@@ -327,11 +342,37 @@ func init() {
 				Use:   name,
 				Short: "Enter isolated environment " + name,
 				Args:  cobra.ArbitraryArgs,
+				// A failing opencode run is not a usage error: don't dump help.
+				SilenceUsage: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
 					return envStart(name, args)
 				},
 			})
 		}
+	}
+}
+
+// reportCopiedProviders seeds a new env with the global providers and
+// credentials and prints what was copied. A failure only warns: the env is
+// already created and usable once providers are configured by hand.
+func reportCopiedProviders(p envprofile.Profile) {
+	copied, err := envprofile.CopyGlobalProviders(p)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: could not copy global providers: %v\n", err)
+		return
+	}
+	if len(copied.Providers)+len(copied.Credentials) == 0 {
+		fmt.Println("  No new global providers or logins to copy")
+	} else {
+		fmt.Printf("  Copied from global: providers [%s], logins [%s]\n",
+			strings.Join(copied.Providers, ", "), strings.Join(copied.Credentials, ", "))
+		// The env's managed service caches logins; restart it lazily.
+		if bin, _ := agent.FindOpenCode(); bin != "" {
+			_ = envprofile.StopManagedService(p, bin)
+		}
+	}
+	if copied.Note != "" {
+		fmt.Printf("  Note: %s\n", copied.Note)
 	}
 }
 
@@ -348,6 +389,12 @@ func envStart(name string, promptArgs []string) error {
 	}
 	p, err := envprofile.Get(name)
 	if err != nil {
+		return err
+	}
+	// The TUI and `run` attach to opencode2's managed service, not to the
+	// env's serve --port: pin its port so it never collides with the global
+	// service (envs created before this fix have no service.json yet).
+	if err := envprofile.EnsureServicePort(p); err != nil {
 		return err
 	}
 	running, err := envprofile.Status(p)

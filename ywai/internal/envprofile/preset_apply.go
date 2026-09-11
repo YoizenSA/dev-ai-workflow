@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -37,16 +38,48 @@ func PresetSpec(p Profile) (map[string]any, error) {
 	}
 	if p.Overrides != nil {
 		if p.Overrides.Groups != nil {
-			spec["groups"] = append([]string(nil), p.Overrides.Groups...)
+			groups := append([]string(nil), p.Overrides.Groups...)
+			if len(groups) == 0 {
+				// core always installs, so "no groups" means core only.
+				groups = []string{"core"}
+			}
+			spec["groups"] = groups
 		}
-		if p.Overrides.Skills != nil {
-			spec["skills"] = append([]string(nil), p.Overrides.Skills...)
-		}
-		if p.Overrides.MCP != nil {
-			spec["mcp"] = append([]string(nil), p.Overrides.MCP...)
+		// An empty skills/mcp list would read as "no filter" (install all)
+		// to every consumer, so it is flagged explicitly via <key>_none.
+		for key, list := range map[string][]string{"skills": p.Overrides.Skills, "mcp": p.Overrides.MCP} {
+			if list == nil {
+				continue
+			}
+			spec[key] = append([]string(nil), list...)
+			// A user preset may carry <key>_none; an env override replaces it.
+			delete(spec, key+"_none")
+			if len(list) == 0 {
+				spec[key+"_none"] = true
+			}
 		}
 	}
 	return spec, nil
+}
+
+// PresetNone reports whether an env override explicitly emptied a list
+// ("skills" or "mcp"): install none of it, as opposed to an empty preset
+// list, which means no filter.
+func PresetNone(spec map[string]any, key string) bool {
+	none, _ := spec[key+"_none"].(bool)
+	return none
+}
+
+// FilterableMCPIDs lists the MCP server ids the preset mcp[] allowlist can
+// filter (manifest MCP entries plus graft), sorted. Other MCP wiring
+// (engram, plugins) always installs.
+func FilterableMCPIDs() []string {
+	ids := []string{"graft"}
+	for id := range mcpServerManifestIDs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // IsBareSpec reports whether a preset spec marks a bare environment: one

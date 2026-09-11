@@ -10,10 +10,32 @@ export interface EnvProfile {
   url: string
 }
 
+export interface EnvCatalog {
+  groups: { name: string; description: string; agents: number }[]
+  // tags[0] is the skill's category (from its .ywai-extra marker).
+  skills: { name: string; description: string; tags: string[] }[]
+  mcp: string[]
+}
+
 export interface EnvListResponse {
   envs: EnvProfile[]
   presets: string[]
   preset_descriptions?: Record<string, string>
+  // User-created presets (editable); every other preset is built in.
+  custom_presets?: string[]
+  // Default of the "copy global providers" check per preset.
+  preset_copy_providers?: Record<string, boolean>
+  catalog?: EnvCatalog
+}
+
+export type EnvSpecSection = 'groups' | 'skills' | 'mcp'
+
+export interface EnvCopiedProviders {
+  providers: string[] | null
+  // opencode logins (integration ids) copied from the global opencode.db.
+  credentials: string[] | null
+  // Why a step was skipped, e.g. the env database does not exist yet.
+  note?: string
 }
 
 export interface EnvDoctorCheck {
@@ -22,10 +44,11 @@ export interface EnvDoctorCheck {
   message: string
 }
 
+// null/absent = inherit the preset; [] = install none (groups: core only).
 export interface EnvSpecOverrides {
-  groups?: string[]
-  skills?: string[]
-  mcp?: string[]
+  groups?: string[] | null
+  skills?: string[] | null
+  mcp?: string[] | null
 }
 
 export interface EnvStatus {
@@ -34,6 +57,7 @@ export interface EnvStatus {
   port: number
   url: string
   spec: Record<string, unknown>
+  preset_spec?: Record<string, unknown>
   overrides: EnvSpecOverrides | null
   service: { running: boolean; port: number; url: string }
   db: { path: string; exists: boolean; size_bytes: number }
@@ -72,17 +96,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const envsApi = {
   list: () => request<EnvListResponse>('/api/envs'),
-  create: (name: string, preset?: string) =>
-    request<{ profile: EnvProfile }>(`/api/envs`, {
+  create: (name: string, preset?: string, copyProviders?: boolean) =>
+    request<{ profile: EnvProfile; copied?: EnvCopiedProviders; copy_error?: string }>(`/api/envs`, {
       method: 'POST',
-      body: JSON.stringify({ name, preset }),
+      body: JSON.stringify({ name, preset, copy_providers: copyProviders }),
+    }),
+  // Merge the global providers + credentials into an existing env.
+  importProviders: (name: string) =>
+    request<{ name: string; copied: EnvCopiedProviders }>(`/api/envs/${encodeURIComponent(name)}/import-providers`, {
+      method: 'POST',
     }),
   updatePreset: (name: string, preset: string) =>
     request<{ profile: EnvProfile }>(`/api/envs/${encodeURIComponent(name)}`, {
       method: 'PATCH',
       body: JSON.stringify({ preset }),
     }),
-  patch: (name: string, body: { preset?: string; groups?: string[]; skills?: string[]; mcp?: string[] }) =>
+  patch: (name: string, body: { preset?: string; groups?: string[]; skills?: string[]; mcp?: string[]; reset?: EnvSpecSection[] }) =>
     request<{ profile: EnvProfile }>(`/api/envs/${encodeURIComponent(name)}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -103,6 +132,13 @@ export const envsApi = {
     request<{ name: string; running: boolean }>(`/api/envs/${encodeURIComponent(name)}/stop`, {
       method: 'POST',
     }),
+  // User presets. With env, the copy captures that env's customized content.
+  copyPreset: (body: { name: string; from?: string; env?: string; description?: string }) =>
+    request<{ name: string }>('/api/env-presets', { method: 'POST', body: JSON.stringify(body) }),
+  patchPreset: (name: string, body: { name?: string; description?: string }) =>
+    request<{ name: string }>(`/api/env-presets/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deletePreset: (name: string) =>
+    request<{ status: string }>(`/api/env-presets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   status: (name: string) =>
     request<EnvStatus>(`/api/envs/${encodeURIComponent(name)}/status`),
   logs: (name: string, lines = 200) =>
