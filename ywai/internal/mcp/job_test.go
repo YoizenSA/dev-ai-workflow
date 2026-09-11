@@ -325,8 +325,10 @@ func TestJobManager_Start_Transitions(t *testing.T) {
 		t.Errorf("Start(happy) TargetAgent = %q, want %q", job.TargetAgent, "opencode")
 	}
 
-	// Wait for the goroutine to drive the job to StateDone.
-	waitForState(t, m, job.ID, StateDone, 2*time.Second)
+	// Wait for the goroutine to drive the job to StateDone. Generous budget:
+	// under a full-suite run on a loaded machine the installer goroutine can
+	// be descheduled well past 2s even though the fake install is instant.
+	waitForState(t, m, job.ID, StateDone, 10*time.Second)
 
 	// Assert the broadcast sequence: progress events emit the state name
 	// in order. The brief pins the visible sequence as
