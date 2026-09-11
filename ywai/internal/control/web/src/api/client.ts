@@ -74,7 +74,7 @@ export function setConfigProfileScope(name: string | null): void {
 function scopedPath(path: string): string {
   const scope = readScope();
   if (!scope) return path;
-  if (!path.startsWith("/api/config/") && path !== "/api/agents-md") return path;
+  if (!path.startsWith("/api/config/") && path !== "/api/agents-md" && !path.startsWith("/api/workflows")) return path;
   if (/[?&]profile=/.test(path)) return path;
   return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(scope)}`;
 }

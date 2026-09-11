@@ -481,15 +481,18 @@ func applyManaged(o applyOpts) applyResult {
 	}
 
 	// ── default model ─────────────────────────────────────────────────────
-	// Root `model` is the default for a new session. It is written only when
-	// absent or empty; a model the user picked stays untouched.
+	// Root `model` is the default for a new session. Globally it is written
+	// only when absent or empty; a model the user picked stays untouched.
+	// Under preset scope the preset IS the choice, so it overwrites.
 	if plan.SetDefaultModel {
 		steps.next("Setting default model")
 		wantModel := defaultRootModel()
 		if preset.DefaultModel != "" {
 			wantModel = preset.DefaultModel
-		}
-		if err := setDefaultModel(wantModel, o.Opts.DryRun); err != nil {
+			if err := setDefaultModelForced(wantModel, o.Opts.DryRun); err != nil {
+				r.warnf("failed to set default model: %v", err)
+			}
+		} else if err := setDefaultModel(wantModel, o.Opts.DryRun); err != nil {
 			r.warnf("failed to set default model: %v", err)
 		}
 	}

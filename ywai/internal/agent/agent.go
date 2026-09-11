@@ -28,7 +28,12 @@ var KnownAgents = []struct {
 		// OpenCode 2 binary wins.
 		Binary: "opencode2",
 		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".config", "opencode", "skills")
+			// Sandbox-aware: under YWAI_PROFILE (or ?profile= scope) this
+			// resolves inside the environment (OPENCODE_CONFIG_DIR), so a
+			// scoped install writes skills to the profile instead of leaking
+			// them to the global ~/.config/opencode/skills. Globally it
+			// falls back to the same path as before.
+			return config.OpenCodeSkillsDir()
 		},
 	},
 	{

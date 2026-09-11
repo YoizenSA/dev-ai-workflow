@@ -2,10 +2,10 @@
   "name": "dev",
   "description": "Daily development: everything except QA automation.",
   "groups": ["core", "experiment"],
-  "skills": ["typescript", "react-19", "git-commit"],
-  "mcp": ["graft", "context7"],
+  "skills": [],
+  "mcp": [],
   "default_agent": "orchestrator",
-  "default_model": "anthropic/claude-sonnet-4-5",
+  "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["git commit*", "git push*"],
   "cli_theme": "tokyonight"
 }

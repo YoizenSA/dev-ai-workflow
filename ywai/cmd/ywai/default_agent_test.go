@@ -87,6 +87,8 @@ func TestIsManagedDefaultAgent(t *testing.T) {
 		"plan",                // its sibling built-in
 		"orchestrator",        // ywai's own
 		"gentle-orchestrator", // auto-set by gentle-ai
+		"qa",                  // qa preset's previous default (preset-owned)
+		"qa-orchestrator",     // qa preset's default (preset-owned)
 		"  build  ",           // whitespace must not defeat the check
 	}
 	for _, name := range claimable {
@@ -95,7 +97,7 @@ func TestIsManagedDefaultAgent(t *testing.T) {
 		}
 	}
 
-	userChosen := []string{"dev", "ask", "architect", "designer", "my-agent", "qa-orchestrator", "Build"}
+	userChosen := []string{"dev", "ask", "architect", "designer", "my-agent", "Build"}
 	for _, name := range userChosen {
 		if isManagedDefaultAgent(name) {
 			t.Errorf("isManagedDefaultAgent(%q) = true; install would overwrite the user's choice", name)

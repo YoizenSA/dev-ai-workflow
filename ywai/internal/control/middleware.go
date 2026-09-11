@@ -62,9 +62,13 @@ func profileScopeMiddleware(next http.Handler) http.Handler {
 }
 
 // isScopableSettingsPath reports whether a path belongs to the Settings UI
-// surface (the whole /api/config/* tree plus AGENTS.md editing).
+// surface (the whole /api/config/* tree plus AGENTS.md editing) or the
+// Workflow Studio surface (/api/workflows*), which also renders per profile:
+// the store is shared (D3) but the exporter + skills/MCP catalogs resolve
+// inside the environment via OPENCODE_CONFIG_DIR.
 func isScopableSettingsPath(path string) bool {
-	return strings.HasPrefix(path, "/api/config/") || path == "/api/agents-md"
+	return strings.HasPrefix(path, "/api/config/") || path == "/api/agents-md" ||
+		strings.HasPrefix(path, "/api/workflows")
 }
 
 // recoveryMiddleware turns a panicking handler into a 500 JSON response

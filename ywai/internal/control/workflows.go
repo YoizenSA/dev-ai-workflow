@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 )
 
@@ -233,7 +234,13 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Target dialect: opencode (default) or claude-code, via ?target=.
+	// Under ?profile= scope the cached exporter still points at the global
+	// config dirs (resolved at startup), so build a fresh one inside the
+	// sandbox: OpenCodeCommandsDir/AgentsDir then resolve to the profile.
 	exporter := a.exporter
+	if envprofile.InProfileScope() {
+		exporter = workflows.NewExporter()
+	}
 	if t := r.URL.Query().Get("target"); t != "" && t != workflows.TargetOpenCode {
 		exporter = workflows.NewExporterForTarget(t)
 	}

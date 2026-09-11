@@ -49,11 +49,14 @@ func TestPresetGetters(t *testing.T) {
 	if groups := PresetGroups(spec); len(groups) != 2 || groups[0] != "core" {
 		t.Errorf("PresetGroups(dev) = %v", groups)
 	}
-	if skills := PresetSkills(spec); len(skills) != 3 {
-		t.Errorf("PresetSkills(dev) = %v", skills)
+	// dev/qa install ALL skills/MCPs like a global install: empty allowlist
+	// means no filter (keep current behavior). Never re-add a filter here
+	// without an explicit user request.
+	if skills := PresetSkills(spec); skills != nil {
+		t.Errorf("PresetSkills(dev) = %v, want nil (all)", skills)
 	}
-	if mcp := PresetMCPIDs(spec); len(mcp) != 2 {
-		t.Errorf("PresetMCPIDs(dev) = %v", mcp)
+	if mcp := PresetMCPIDs(spec); mcp != nil {
+		t.Errorf("PresetMCPIDs(dev) = %v, want nil (all)", mcp)
 	}
 	if deny := PresetDenyBash(spec); len(deny) != 2 {
 		t.Errorf("PresetDenyBash(dev) = %v", deny)

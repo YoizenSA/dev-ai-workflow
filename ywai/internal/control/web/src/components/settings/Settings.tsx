@@ -505,11 +505,11 @@ function GeneralTab() {
 			</div>
 
 			{/* ─── Vision bridge ──────────────────────────────────────── */}
-			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
-				<span className="field-label" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-5)", marginTop: "var(--space-3)" }}>
+				<h4 style={{ fontSize: "var(--text-md)", color: "var(--text)" }}>
 					Vision bridge
-				</span>
-				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
+				</h4>
+				<span className="field-help" style={{ display: "block", maxWidth: "72ch", marginBottom: "var(--space-2)" }}>
 					When the main model cannot see images (e.g. DeepSeek), the vision-bridge
 					plugin analyzes attached images with a vision model and injects the text
 					for the main model. The image is analyzed through OpenCode, so any model
@@ -526,20 +526,20 @@ function GeneralTab() {
 					onChange={(v) => setVisionModel(v)}
 				/>
 				{visionModelsError && (
-					<span className="field-hint" style={{ color: "var(--danger, #c44)", display: "block", marginTop: "0.35rem" }}>
+					<span className="field-help error">
 						{visionModelsError}
 					</span>
 				)}
 				{!visionModelsError && visionModels.length === 0 && (
-					<span className="field-hint" style={{ display: "block", marginTop: "0.35rem" }}>
+					<span className="field-help">
 						No vision-capable models found in your OpenCode providers. Type a
 						model id as provider/model.
 					</span>
 				)}
 				<button
 					type="button"
-					className="btn btn-ghost"
-					style={{ marginTop: "0.5rem" }}
+					className="btn btn-ghost btn-sm"
+					style={{ alignSelf: "flex-start", marginTop: "0.25rem" }}
 					onClick={() => setVisionModel("")}
 					disabled={!visionModel}
 				>
@@ -557,6 +557,7 @@ function GeneralTab() {
 
 			<button
 				className="btn btn-primary"
+				style={{ marginTop: "var(--space-4)" }}
 				onClick={handleSave}
 				disabled={saving}
 				aria-busy={saving || undefined}
@@ -573,11 +574,11 @@ function GeneralTab() {
 
 			{/* ─── AGENTS.md Editor ────────────────────────────────────────── */}
 			<div className="card card-pad" style={{ marginTop: "2rem" }}>
-				<div className="card-header">
-					<h3>AGENTS.md</h3>
-					<span className="muted">{agentsMdPath || "Not found"}</span>
+				<div className="card-header" style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+					<h3 style={{ fontSize: "var(--text-lg)" }}>AGENTS.md</h3>
+					<code className="muted mono" style={{ fontSize: "var(--text-xs)" }}>{agentsMdPath || "Not found"}</code>
 				</div>
-				<p className="muted" style={{ marginBottom: "1rem" }}>
+				<p className="muted" style={{ margin: "0.35rem 0 1rem", fontSize: "var(--text-sm)" }}>
 					Edit the AGENTS.md file from the project root. This file contains
 					project-wide instructions for AI agents.
 				</p>

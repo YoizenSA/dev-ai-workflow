@@ -751,6 +751,8 @@ var managedDefaultAgents = map[string]bool{
 	"plan":                true,
 	"orchestrator":        true,
 	"gentle-orchestrator": true,
+	"qa":                  true,
+	"qa-orchestrator":     true,
 }
 
 func isManagedDefaultAgent(name string) bool {
@@ -853,6 +855,41 @@ func setDefaultModel(model string, dryRun bool) error {
 
 	cfg["model"] = model
 
+	if dryRun {
+		fmt.Printf("  Would set model to %q\n", model)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	if existed {
+		fmt.Printf("  model set to %q\n", model)
+	} else {
+		fmt.Printf("  Created opencode config with model=%q\n", model)
+	}
+	return nil
+}
+
+// setDefaultModelForced writes the root `model` key unconditionally (profile
+// preset scope only): the preset is the choice, so an older preset value or a
+// stale default never survives a reinstall. Global applies keep using
+// setDefaultModel, which never overwrites a user pick.
+func setDefaultModelForced(model string, dryRun bool) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	cfg, path, existed, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+	if cur, ok := cfg["model"]; ok {
+		if s, isString := cur.(string); isString && strings.TrimSpace(s) == model {
+			fmt.Printf("  model already set — leaving it\n")
+			return nil
+		}
+	}
+	cfg["model"] = model
 	if dryRun {
 		fmt.Printf("  Would set model to %q\n", model)
 		return nil

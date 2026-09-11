@@ -16,7 +16,7 @@
   --yz-primary-2: #4a3abf;  /* Secondary Purple */
   --yz-accent:    #fd6421;  /* Accent Orange  */
   --yz-yellow:    #fdbd27;  /* Yellow         */
-  --yz-dark:      #272a35;  /* Dark surface   */
+  --yz-dark:      #14171f;  /* App ground — darker than cards so panels lift off it */
   --yz-dark-soft: #1d2029;
   --yz-navy:      #00183f;  /* Dark Navy      */
   --yz-navy-deep: #00122d;  /* Darker Navy    */
@@ -38,18 +38,18 @@
   --black-rgb:        0, 0, 0;         /* flips in light theme */
 
   /* ---- Surfaces ---- */
-  --surface:             rgba(30, 35, 48, 0.72);
-  --surface-strong:      rgba(22, 26, 38, 0.92);
-  --surface-soft:        rgba(var(--white-rgb), 0.04);
-  --surface-hover:       rgba(var(--white-rgb), 0.07);
-  --panel-border:        rgba(var(--slate-rgb), 0.18);
-  --panel-border-strong: rgba(var(--slate-rgb), 0.32);
-  --table-head-bg:       rgba(var(--surf-12-rgb), 0.60);  /* separates header from body */
-  --input-bg:            rgba(var(--surf-4-rgb), 0.60);   /* field fill */
+  --surface:             rgba(30, 35, 48, 0.80);
+  --surface-strong:      rgba(22, 26, 38, 0.95);
+  --surface-soft:        rgba(var(--white-rgb), 0.05);
+  --surface-hover:       rgba(var(--white-rgb), 0.08);
+  --panel-border:        rgba(var(--slate-rgb), 0.24);
+  --panel-border-strong: rgba(var(--slate-rgb), 0.42);
+  --table-head-bg:       rgba(var(--surf-12-rgb), 0.80);  /* separates header from body */
+  --input-bg:            rgb(var(--surf-4-rgb));          /* field fill — solid well, reads against cards */
 
   /* ---- Glass surface channels (dark stack; flipped for light theme) ---- */
-  --surf-1-rgb: 38, 44, 60;   --surf-2-rgb: 22, 26, 38;
-  --surf-3-rgb: 20, 24, 36;   --surf-4-rgb: 15, 18, 28;
+  --surf-1-rgb: 36, 41, 56;   --surf-2-rgb: 22, 26, 38;
+  --surf-3-rgb: 29, 33, 46;   --surf-4-rgb: 13, 16, 24;
   --surf-5-rgb: 34, 39, 54;   --surf-6-rgb: 19, 23, 34;
   --surf-7-rgb: 16, 19, 30;   --surf-8-rgb: 8, 11, 22;
   --surf-9-rgb: 10, 13, 22;   --surf-10-rgb: 27, 32, 45;
@@ -61,10 +61,10 @@
   --option-bg:        #1b1f2b;
 
   /* ---- Text hierarchy ---- */
-  --text:       #f3f5fb;
-  --text-soft:  #c4cbdd;
-  --text-muted: #8b93ab;
-  --text-faint: #7a8298;   /* lifted to ~AA on dark */
+  --text:       #f5f7fc;
+  --text-soft:  #d3d9e8;
+  --text-muted: #a4acc2;
+  --text-faint: #8e97ae;   /* ≥4.5:1 on card surfaces */
 
   /* ---- Semantic ---- */
   --success:        #34d399;
