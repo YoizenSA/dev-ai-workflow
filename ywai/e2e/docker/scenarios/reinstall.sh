@@ -18,6 +18,10 @@ for t in $TARGETS; do
 done
 assert_targets_installed
 
+# install leaves a detached control server behind; a live serve writes
+# state files and would show up as snapshot churn.
+stop_serve
+
 before="/tmp/${CELL_NAME}-1.txt"
 snapshot_home "$before"
 
@@ -26,6 +30,7 @@ for t in $TARGETS; do
     install_target "$t"
 done
 
+stop_serve
 assert_targets_installed
 assert_home_unchanged "second install" "$before"
 finish

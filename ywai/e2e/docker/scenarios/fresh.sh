@@ -25,6 +25,7 @@ done
 
 assert_targets_installed
 
-# The fake agents log their argv the first time ywai probes them.
-assert_file "$YWAI_FAKE_LOG"
+# Note: ywai never executes the agent binaries during install — detection
+# only checks existence on PATH (internal/agent FindBinary), so the fakes'
+# argv log staying empty is expected, not a failure.
 finish

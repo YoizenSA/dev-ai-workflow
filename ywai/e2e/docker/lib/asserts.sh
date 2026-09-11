@@ -55,11 +55,40 @@ pass() {
 }
 
 # run_ywai runs the binary under test with stdin from /dev/null (no TTY).
+# Output is captured to a file, not a pipe: install spawns a detached
+# control-server child that inherits stdio, and a pipe never sees EOF, so
+# a command substitution would hang forever after a successful install.
 # Output lands in RUN_OUT; the ywai exit code is returned.
 RUN_OUT=""
 run_ywai() {
-    RUN_OUT="$(cd "$YWAI_WORKDIR" && "$YWAI_BIN" "$@" </dev/null 2>&1)"
-    return $?
+    local out="/tmp/ywai-run-out.$$"
+    (cd "$YWAI_WORKDIR" && "$YWAI_BIN" "$@" </dev/null >"$out" 2>&1)
+    local rc=$?
+    RUN_OUT="$(cat "$out")"
+    rm -f "$out"
+    return $rc
+}
+
+# run_binary works like run_ywai but for an explicit binary path (used by
+# update-swap to install with the previous build first).
+run_binary() {
+    local bin="$1"
+    shift
+    local out="/tmp/ywai-run-out.$$"
+    (cd "$YWAI_WORKDIR" && "$bin" "$@" </dev/null >"$out" 2>&1)
+    local rc=$?
+    RUN_OUT="$(cat "$out")"
+    rm -f "$out"
+    return $rc
+}
+
+# stop_serve kills a detached control server left behind by install.
+# Cells that snapshot HOME afterwards need this: a live serve keeps
+# writing state files, which would show up as snapshot churn. Not an
+# error when nothing is running.
+stop_serve() {
+    pkill -f "ywai serve" 2>/dev/null || true
+    sleep 1
 }
 
 assert_exit_zero() {

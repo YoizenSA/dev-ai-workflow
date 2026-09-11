@@ -50,6 +50,7 @@ for t in $TARGETS; do
 done
 
 # Managed state survives the update and the version file records the new build.
+stop_serve
 assert_targets_installed
 assert_json_field "$(version_file)" .installed "$new_version"
 finish
