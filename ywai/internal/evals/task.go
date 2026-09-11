@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -101,7 +102,7 @@ func LoadTasks(projectDir string) ([]Task, error) {
 		return nil, fmt.Errorf("read built-in tasks: %w", err)
 	}
 	for _, e := range entries {
-		raw, err := fs.ReadFile(builtinTasks, filepath.Join("tasks", e.Name()))
+		raw, err := fs.ReadFile(builtinTasks, path.Join("tasks", e.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", e.Name(), err)
 		}
