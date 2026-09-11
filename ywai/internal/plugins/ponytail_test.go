@@ -26,7 +26,7 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 			"plugin": []any{"some-other-plugin"},
 		})
 
-		if err := InstallPonytail("kilocode", path); err != nil {
+		if err := InstallPonytail("opencode", path); err != nil {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
@@ -85,7 +85,7 @@ func TestInstallPonytail_UnsupportedAgent(t *testing.T) {
 func TestSupportsPonytail(t *testing.T) {
 	cases := map[string]bool{
 		"opencode":    true,
-		"kilocode":    true,
+		"kilocode":    false,
 		"claude-code": true,
 		"cursor":      false,
 		"pi":          false,

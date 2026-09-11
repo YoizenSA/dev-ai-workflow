@@ -81,12 +81,13 @@ compute_version() {
 # ---------------------------------------------------------------------------
 
 do_test() {
-    # -timeout 10m: Go's default is 10m per test binary, which the e2e
-    # package can exceed on Windows (build + spawn heavy). Cap higher so
-    # slow machines fail on real assertions, not on the harness clock.
+    # -timeout 30m: Go's default is 10m per test binary, which the e2e
+    # package can exceed on Windows (build + spawn heavy; e2e alone is
+    # budgeted 25m in CI). Cap higher so slow machines fail on real
+    # assertions, not on the harness clock.
     info "Running all tests..."
-    cmd "go test ./... -v -timeout 10m"
-    go test ./... -v -timeout 10m
+    cmd "go test ./... -v -timeout 30m"
+    go test ./... -v -timeout 30m
     ok "All tests passed"
 }
 
