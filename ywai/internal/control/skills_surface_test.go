@@ -1,6 +1,9 @@
 package control
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -115,5 +118,79 @@ func TestScanSkillSurface_Symlink(t *testing.T) {
 	}
 	if linked.Entries[0].Symlink == "" || linked.Entries[0].Broken {
 		t.Fatalf("entry = %+v, want live symlink", linked.Entries[0])
+	}
+}
+
+func deleteSurface(t *testing.T, home, projectDir, path string) int {
+	t.Helper()
+	t.Setenv("USERPROFILE", home)
+	srv := &Server{}
+	req := httptest.NewRequest(http.MethodDelete, "/api/config/skills/surface?path="+url.QueryEscape(path)+"&project_dir="+url.QueryEscape(projectDir), nil)
+	rec := httptest.NewRecorder()
+	srv.handleSkillSurfaceDelete(rec, req)
+	return rec.Code
+}
+
+func TestHandleSkillSurfaceDelete(t *testing.T) {
+	home := t.TempDir()
+	proj := filepath.Join(t.TempDir(), "repo")
+	skillDir := filepath.Join(proj, ".opencode", "skills", "gone")
+	writeSkill(t, filepath.Join(proj, ".opencode", "skills"), "gone", "# gone")
+
+	if code := deleteSurface(t, home, proj, skillDir); code != http.StatusOK {
+		t.Fatalf("delete dir = %d, want 200", code)
+	}
+	if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+		t.Fatal("skill dir still exists after delete")
+	}
+
+	// Missing path param.
+	t.Setenv("USERPROFILE", home)
+	srv := &Server{}
+	rec := httptest.NewRecorder()
+	srv.handleSkillSurfaceDelete(rec, httptest.NewRequest(http.MethodDelete, "/api/config/skills/surface", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing path = %d, want 400", rec.Code)
+	}
+
+	// Outside every root.
+	outside := filepath.Join(t.TempDir(), "evil")
+	writeSkill(t, t.TempDir(), "evil", "# evil")
+	if code := deleteSurface(t, home, proj, outside); code != http.StatusForbidden {
+		t.Fatalf("outside roots = %d, want 403", code)
+	}
+
+	// Inside a root but no SKILL.md.
+	empty := filepath.Join(proj, ".opencode", "skills", "hollow")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := deleteSurface(t, home, proj, empty); code != http.StatusNotFound {
+		t.Fatalf("no SKILL.md = %d, want 404", code)
+	}
+}
+
+func TestHandleSkillSurfaceDelete_Symlink(t *testing.T) {
+	home := t.TempDir()
+	proj := filepath.Join(t.TempDir(), "repo")
+	realHolder := filepath.Join(t.TempDir(), "real")
+	writeSkill(t, realHolder, "keepme", "# keepme")
+	linkDir := filepath.Join(proj, ".opencode", "skills")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(linkDir, "keepme")
+	if err := os.Symlink(filepath.Join(realHolder, "keepme"), link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if code := deleteSurface(t, home, proj, link); code != http.StatusOK {
+		t.Fatalf("delete link = %d, want 200", code)
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatal("link still exists after delete")
+	}
+	if _, err := os.Stat(filepath.Join(realHolder, "keepme", "SKILL.md")); err != nil {
+		t.Fatalf("link target was harmed: %v", err)
 	}
 }

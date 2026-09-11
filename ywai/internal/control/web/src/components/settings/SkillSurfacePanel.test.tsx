@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import SkillSurfacePanel from "./SkillSurfacePanel";
 
 const surface = {
@@ -67,5 +67,29 @@ describe("SkillSurfacePanel", () => {
     render(<SkillSurfacePanel />);
 
     expect(await screen.findByText(/500/)).toBeInTheDocument();
+  });
+
+  it("deletes one location entry and reloads the surface", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if ((init?.method ?? "GET") === "DELETE") {
+        return { ok: true, json: async () => ({ status: "deleted" }) };
+      }
+      return { ok: true, json: async () => surface };
+    }) as unknown as typeof fetch;
+    globalThis.confirm = vi.fn(() => true);
+
+    render(<SkillSurfacePanel />);
+
+    const btn = await screen.findByTitle(/Delete dup at C:\/cl\/skills\/dup/);
+    await btn.click();
+
+    expect(calls.some((c) => c.startsWith("DELETE /api/config/skills/surface?path="))).toBe(true);
+    // Surface reloads after delete: the list endpoint is hit twice.
+    await waitFor(() => {
+      expect(calls.filter((c) => c === "GET /api/config/skills/surface").length).toBe(2);
+    });
   });
 });

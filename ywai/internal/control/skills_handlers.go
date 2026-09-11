@@ -12,6 +12,7 @@ import (
 // registerSkillsRoutes adds skill CRUD endpoints.
 func (s *Server) registerSkillsRoutes() {
 	s.mux.HandleFunc("GET /api/config/skills/surface", s.handleSkillSurface)
+	s.mux.HandleFunc("DELETE /api/config/skills/surface", s.handleSkillSurfaceDelete)
 	s.mux.HandleFunc("GET /api/config/skills", s.handleListSkills)
 	s.mux.HandleFunc("GET /api/config/skills/{name}", s.handleGetSkill)
 	s.mux.HandleFunc("POST /api/config/skills", s.handleCreateSkill)

@@ -258,6 +258,8 @@ export const configApi = {
 	deleteSkill: (name: string) => del(`/api/config/skills/${name}`),
 	listSkillSurface: (projectDir?: string) =>
 		request<SkillSurface>(`/api/config/skills/surface${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	deleteSurfaceSkill: (path: string, projectDir?: string) =>
+		del(`/api/config/skills/surface?path=${encodeURIComponent(path)}${projectDir ? `&project_dir=${encodeURIComponent(projectDir)}` : ""}`),
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),

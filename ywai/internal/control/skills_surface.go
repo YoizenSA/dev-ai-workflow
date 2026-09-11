@@ -161,6 +161,84 @@ func projectSkillChains(dir string) map[string][]string {
 	return out
 }
 
+// handleSkillSurfaceDelete removes one skill directory scanned by the
+// surface endpoint: bundled copies, project overrides, even symlinks (the
+// link itself is removed, never its target). ywai-managed copies come back
+// on the next install; project files are gone for good. The path must live
+// inside one of the scanned roots and contain a SKILL.md — anything else is
+// refused so the endpoint never becomes an arbitrary delete primitive.
+func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request) {
+	rawPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if rawPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path is required"})
+		return
+	}
+	projectDir := strings.TrimSpace(r.URL.Query().Get("project_dir"))
+	if projectDir == "" {
+		var err error
+		projectDir, err = os.Getwd()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	home, _ := os.UserHomeDir()
+	roots := []string{
+		filepath.Join(home, ".config", "opencode", "skills"),
+		filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".agents", "skills"),
+	}
+	for _, chain := range projectSkillChains(projectDir) {
+		roots = append(roots, chain...)
+	}
+
+	target, err := filepath.Abs(rawPath)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unresolvable path"})
+		return
+	}
+	inside := false
+	for _, root := range roots {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		if rel, err := filepath.Rel(abs, target); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			inside = true
+			break
+		}
+	}
+	if !inside {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path is outside every scanned skill root"})
+		return
+	}
+	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no SKILL.md at path"})
+		return
+	}
+
+	// Lstat first: a symlink is removed as a link, never followed.
+	st, err := os.Lstat(target)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		err = os.Remove(target)
+	} else if st.IsDir() {
+		err = os.RemoveAll(target)
+	} else {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a skill directory"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // handleSkillSurface returns every skill OpenCode can load for a project.
 func (s *Server) handleSkillSurface(w http.ResponseWriter, r *http.Request) {
 	projectDir := strings.TrimSpace(r.URL.Query().Get("project_dir"))

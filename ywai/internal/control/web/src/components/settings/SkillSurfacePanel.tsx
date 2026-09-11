@@ -9,12 +9,24 @@ export default function SkillSurfacePanel() {
   const [surface, setSurface] = useState<SkillSurface | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = () => {
     configApi
       .listSkillSurface()
       .then(setSurface)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+  };
+
+  useEffect(load, []);
+
+  const handleDelete = async (name: string, path: string) => {
+    if (!confirm(`Delete skill "${name}" at ${path}?`)) return;
+    try {
+      await configApi.deleteSurfaceSkill(path);
+      load();
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   if (error) {
     return <div className="alert alert-danger">{error}</div>;
@@ -74,6 +86,18 @@ export default function SkillSurfacePanel() {
                       {e.hash ? ` · ${e.hash.slice(0, 7)}` : " · ?"}
                       {e.broken ? " · broken link" : ""}
                     </span>
+                  ))}
+                  {skill.entries.map((e) => (
+                    <button
+                      key={`del:${e.location}:${e.path}`}
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      title={`Delete ${skill.name} at ${e.path}`}
+                      onClick={() => handleDelete(skill.name, e.path)}
+                      style={{ marginRight: "var(--space-1)" }}
+                    >
+                      Delete {e.location}
+                    </button>
                   ))}
                 </td>
               </tr>
