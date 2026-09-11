@@ -259,7 +259,7 @@ func TestDiscoverHTTP_OK(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	got, err := DiscoverHTTP(ctx, srv.URL)
+	got, err := DiscoverHTTP(ctx, srv.URL, nil)
 	if err != nil {
 		t.Fatalf("DiscoverHTTP OK: unexpected error: %v", err)
 	}
@@ -267,6 +267,33 @@ func TestDiscoverHTTP_OK(t *testing.T) {
 	want := []string{"fetch", "search"}
 	if !slices.Equal(got, want) {
 		t.Errorf("DiscoverHTTP OK = %v, want %v", got, want)
+	}
+}
+
+// TestDiscoverHTTP_Headers pins that the headers argument reaches the wire:
+// a protected endpoint answers 401 without the Authorization header, so the
+// install probe can never succeed anonymously.
+func TestDiscoverHTTP_Headers(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"result":  map[string]interface{}{"tools": []map[string]string{{"name": "t"}}},
+		})
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	headers := map[string]string{"Authorization": "Bearer tok123"}
+	if _, err := DiscoverHTTP(ctx, srv.URL, headers); err != nil {
+		t.Fatalf("DiscoverHTTP(headers) unexpected error: %v", err)
+	}
+	if gotAuth != "Bearer tok123" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer tok123")
 	}
 }
 
@@ -285,7 +312,7 @@ func TestDiscoverHTTP_NonOK(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := DiscoverHTTP(ctx, srv.URL)
+	_, err := DiscoverHTTP(ctx, srv.URL, nil)
 	if err == nil {
 		t.Fatalf("DiscoverHTTP(500) err = nil, want error")
 	}
@@ -326,7 +353,7 @@ func TestDiscoverHTTP_Timeout(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		tools, err := DiscoverHTTP(ctx, srv.URL)
+		tools, err := DiscoverHTTP(ctx, srv.URL, nil)
 		done <- result{tools, err}
 	}()
 
@@ -359,7 +386,7 @@ func TestDiscoverHTTP_MalformedJSON(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := DiscoverHTTP(ctx, srv.URL)
+	_, err := DiscoverHTTP(ctx, srv.URL, nil)
 	if err == nil {
 		t.Fatalf("DiscoverHTTP(malformed JSON) err = nil, want error")
 	}

@@ -30,34 +30,7 @@ import {
 	type V2PluginContext,
 	type V2SessionContextEvent,
 } from "../../shared/v2"
-
-type YwaiConfig = {
-	vision_model?: string
-	vision_model_override?: string
-}
-
-async function readYwaiConfig(): Promise<YwaiConfig> {
-	const cfgPath = path.join(os.homedir(), ".ywai", "config.yaml")
-	try {
-		const raw = await fs.readFile(cfgPath, "utf8")
-		const out: YwaiConfig = {}
-		for (const line of raw.split("\n")) {
-			const m = line.match(/^([a-z_]+):\s*(.*)$/)
-			if (!m) continue
-			const key = m[1]
-			let val = m[2].trim()
-			if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-				val = val.slice(1, -1)
-			}
-			if (key === "vision_model" || key === "vision_model_override") {
-				out[key as keyof YwaiConfig] = val
-			}
-		}
-		return out
-	} catch {
-		return {}
-	}
-}
+import { readYwaiConfig } from "../../shared/ywai-config"
 
 async function opencodeConfigSupportsImage(providerID: string, modelID: string): Promise<boolean | undefined> {
 	try {

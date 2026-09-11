@@ -13,6 +13,10 @@ import type {
 	BrowseFSResponse,
 	UserConfig,
 	RoleDefaults,
+	AdoCliStatus,
+	AdoConfig,
+	AdoPatStatus,
+	AdoProfile,
 	EngramObservation,
 	EngramSession,
 	EngramPrompt,
@@ -47,6 +51,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 		throw new Error(`${res.status}: ${body}`);
 	}
 	return res.json();
+}
+
+// del issues a DELETE and discards the (empty) response body, throwing on
+// non-2xx. Shared by every delete verb in the API clients below.
+async function del(path: string): Promise<void> {
+	const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+	if (!res.ok) throw new Error(`${res.status}`);
 }
 
 // ─── Models client cache ───────────────────────────────────────────────────
@@ -210,12 +221,7 @@ export const configApi = {
 			body: JSON.stringify({ content }),
 		}),
 
-	deleteAgent: (name: string) =>
-		fetch(`${BASE}/api/config/agents/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteAgent: (name: string) => del(`/api/config/agents/${name}`),
 
 	// Skills
 	listSkills: () => request<SkillInfo[]>("/api/config/skills"),
@@ -231,12 +237,7 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify({ content }),
 		}),
-	deleteSkill: (name: string) =>
-		fetch(`${BASE}/api/config/skills/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteSkill: (name: string) => del(`/api/config/skills/${name}`),
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),
@@ -247,10 +248,7 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteMCP: (name: string) =>
-		fetch(`${BASE}/api/config/mcp/${name}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	deleteMCP: (name: string) => del(`/api/config/mcp/${name}`),
 
 	// Providers
 	listProviders: () =>
@@ -260,12 +258,7 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteProvider: (name: string) =>
-		fetch(`${BASE}/api/config/providers/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteProvider: (name: string) => del(`/api/config/providers/${name}`),
 
 	// Tools. Pass refresh=true to bypass the server cache and force a fresh
 	// rediscovery (used by the resync button after adding a plugin/MCP).
@@ -321,6 +314,34 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify({ content }),
 		}),
+
+	// Azure DevOps integration (routes in internal/control/ado_config.go).
+	// Every mutating endpoint answers with the updated config, so callers
+	// re-render from data.config.
+	getAdoConfig: () => request<AdoConfig>("/api/ado/config"),
+	getAdoCliStatus: () => request<AdoCliStatus>("/api/ado/cli-status"),
+	getAdoPatStatus: () => request<AdoPatStatus>("/api/ado/pat-status"),
+	saveAdoProfile: (name: string, profile: AdoProfile) =>
+		request<{ config: AdoConfig }>("/api/ado/profile", {
+			method: "POST",
+			body: JSON.stringify({ name, profile }),
+		}),
+	deleteAdoProfile: (name: string) =>
+		request<{ config: AdoConfig }>("/api/ado/profile", {
+			method: "DELETE",
+			body: JSON.stringify({ name }),
+		}),
+	saveAdoConfig: (config: AdoConfig) =>
+		request<{ config: AdoConfig }>("/api/ado/config", {
+			method: "POST",
+			body: JSON.stringify(config),
+		}),
+	saveAdoPat: (pat: string) =>
+		request<void>("/api/ado/pat", {
+			method: "POST",
+			body: JSON.stringify({ pat }),
+		}),
+	updateAdoCli: () => request<AdoCliStatus>("/api/ado/cli-update", { method: "POST" }),
 };
 
 // ─── Orchestrator Profiles API ────────────────────────────────────────────────
@@ -346,10 +367,7 @@ export const profilesApi = {
 			method: "PUT",
 			body: JSON.stringify(profile),
 		}),
-	delete: (name: string) =>
-		fetch(`${BASE}/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	delete: (name: string) => del(`/api/profiles/${encodeURIComponent(name)}`),
 	activate: (name: string) =>
 		request<{ active: string }>(`/api/profiles/activate/${encodeURIComponent(name)}`, { method: "POST" }),
 };
@@ -382,12 +400,7 @@ export const memoriesApi = {
 			method: "PATCH",
 			body: JSON.stringify(data),
 		}),
-	deleteObservation: (id: string) =>
-		fetch(`/api/engram/observations/${id}`, {
-			method: "DELETE",
-		}).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	deleteObservation: (id: string) => del(`/api/engram/observations/${id}`),
 	save: (data: {
 		type: string;
 		content: string;
@@ -412,22 +425,12 @@ export const memoriesApi = {
 		request<{ sessions: EngramSession[] }>(
 			`/api/engram/sessions?limit=${limit}`,
 		).then((r) => r.sessions ?? []),
-	deleteSession: (id: string) =>
-		fetch(`/api/engram/sessions/${id}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteSession: (id: string) => del(`/api/engram/sessions/${id}`),
 	listPrompts: (limit = 100) =>
 		request<{ prompts: EngramPrompt[] }>(
 			`/api/engram/prompts?limit=${limit}`,
 		).then((r) => r.prompts ?? []),
-	deletePrompt: (id: string) =>
-		fetch(`/api/engram/prompts/${id}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deletePrompt: (id: string) => del(`/api/engram/prompts/${id}`),
 	exportAll: async (): Promise<Blob> => {
 		const res = await fetch("/api/engram/export");
 		if (!res.ok) throw new Error(`${res.status}`);
@@ -511,10 +514,7 @@ export const workflowApi = {
 			method: "PUT",
 			body: JSON.stringify(wf),
 		}),
-	delete: (name: string) =>
-		fetch(`${BASE}/api/workflows/${name}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	delete: (name: string) => del(`/api/workflows/${name}`),
 	rename: (oldName: string, newName: string) =>
 		request<Workflow>(`/api/workflows/${oldName}`, {
 			method: "PATCH",

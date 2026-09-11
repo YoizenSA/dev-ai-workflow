@@ -166,16 +166,6 @@ func TestRunManifest_FlagAndAgentGating(t *testing.T) {
 
 // The v2 flavor gate surfaces as a skip reason, not a silent no-op and not an
 // error: on v1 the entry is expected to stay off, and the output says why.
-func TestRunManifest_V2OnlySkipsOnV1(t *testing.T) {
-	// TestMain pins this package to v1.
-	mf := Manifest{Install: []ManifestEntry{{ID: "background-agents", Flavor: "v2"}}}
-
-	got := RunManifest(mf, "opencode", filepath.Join(t.TempDir(), "opencode.json"), nil)
-	if len(got) != 1 || got[0].Skipped == "" || got[0].Err != nil {
-		t.Fatalf("results = %+v, want one skipped entry", got)
-	}
-}
-
 // Dispatch must really run the executor for a catalog MCP: one manifest entry
 // in, a chrome-devtools entry in the agent config out.
 func TestRunManifest_DispatchesToExecutor(t *testing.T) {

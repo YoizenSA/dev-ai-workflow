@@ -63,7 +63,7 @@ func TestApplyDelegations_CreatesAgentAndTaskMap(t *testing.T) {
 	}
 
 	root, _ := loadJSON(t, configPath)
-	agents := root["agent"].(map[string]any)
+	agents := root["agents"].(map[string]any)
 	orch := agents["orchestrator"].(map[string]any)
 	perm := orch["permission"].(map[string]any)
 	task := perm["task"].(map[string]any)
@@ -75,7 +75,9 @@ func TestApplyDelegations_CreatesAgentAndTaskMap(t *testing.T) {
 func TestApplyDelegations_PreservesExistingScalars(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
-	// Pre-existing agent with a scalar permission block + a top-level model.
+	// Migration input: a pre-existing entry stored under the legacy `agent`
+	// key with a scalar permission block + a top-level model. The write must
+	// land under `agents` without losing any of it.
 	seed := map[string]any{
 		"agent": map[string]any{
 			"orchestrator": map[string]any{
@@ -99,7 +101,10 @@ func TestApplyDelegations_PreservesExistingScalars(t *testing.T) {
 	}
 
 	root, _ := loadJSON(t, configPath)
-	orch := root["agent"].(map[string]any)["orchestrator"].(map[string]any)
+	if _, ok := root["agent"]; ok {
+		t.Fatalf("legacy agent key must be deleted on write: %+v", root)
+	}
+	orch := root["agents"].(map[string]any)["orchestrator"].(map[string]any)
 	perm := orch["permission"].(map[string]any)
 
 	// Scalar permissions preserved.
@@ -151,14 +156,15 @@ func TestApplyDelegations_EmptyMapLeavesExistingTask(t *testing.T) {
 	delegations := map[string]map[string]string{
 		"finder": {}, // empty task map is ignored by the structured delegation doc
 	}
+	before, _ := os.ReadFile(configPath)
 	if err := applyTaskDelegationsForTest(t, configPath, dir, delegations); err != nil {
 		t.Fatal(err)
 	}
-	root, _ := loadJSON(t, configPath)
-	perm := root["agent"].(map[string]any)["finder"].(map[string]any)["permission"].(map[string]any)
-	task := perm["task"].(map[string]any)
-	if task["*"] != "allow" {
-		t.Errorf("expected existing task map to remain unchanged, got %+v", task)
+	// With no non-empty task map nothing is written: the config — including a
+	// migration-era `agent` key — is left byte-for-byte alone.
+	after, _ := os.ReadFile(configPath)
+	if string(before) != string(after) {
+		t.Errorf("empty delegations must not rewrite the config:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 }
 
@@ -186,7 +192,7 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 	agentsDir := filepath.Join(dir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
 	// Only "qa" is installed; "qa-reviewer" (a different group) is NOT.
-	os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("---\nmode: primary\npermission:\n  task: allow\n---\n\nbody."), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("---\nmode: primary\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n---\n\nbody."), 0o644)
 
 	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
 		"qa":          {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
@@ -198,7 +204,7 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 
 	// qa-reviewer must NOT be created in opencode.json.
 	root, _ := loadJSON(t, configPath)
-	if agents, ok := root["agent"].(map[string]any); ok {
+	if agents, ok := root["agents"].(map[string]any); ok {
 		if _, exists := agents["qa-reviewer"]; exists {
 			t.Errorf("uninstalled agent qa-reviewer was written to opencode.json: %+v", agents["qa-reviewer"])
 		}
@@ -218,7 +224,7 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 
 	// The installed agent's markdown task map must still be applied.
 	qaMD, _ := os.ReadFile(filepath.Join(agentsDir, "qa.md"))
-	if !strings.Contains(string(qaMD), "reviewer: allow") {
+	if !strings.Contains(string(qaMD), "resource: reviewer") || !strings.Contains(string(qaMD), "effect: allow") {
 		t.Errorf("installed agent qa did not get its delegation: %s", qaMD)
 	}
 }
@@ -304,8 +310,8 @@ func TestApplyDelegations_WritesTaskMapIntoMarkdownFrontmatter(t *testing.T) {
 	configPath := filepath.Join(dir, "opencode.json")
 	agentsDir := filepath.Join(dir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
-	// Realistic installed frontmatter: a scalar "task: allow" bucket, no sub-map.
-	md := "---\ndescription: orch\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n  task: allow\n---\n\nbody.\n"
+	// Realistic installed frontmatter: ordered rules, no subagent rules yet.
+	md := "---\ndescription: orch\nmode: primary\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n  - action: shell\n    resource: \"*\"\n    effect: deny\n---\n\nbody.\n"
 	os.WriteFile(filepath.Join(agentsDir, "orchestrator.md"), []byte(md), 0o644)
 
 	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
@@ -315,33 +321,41 @@ func TestApplyDelegations_WritesTaskMapIntoMarkdownFrontmatter(t *testing.T) {
 
 	out, _ := os.ReadFile(filepath.Join(agentsDir, "orchestrator.md"))
 	got := string(out)
-	// The scalar task bucket must become a nested allow/deny map.
-	if strings.Contains(got, "  task: allow\n") {
-		t.Errorf("scalar task bucket was not replaced:\n%s", got)
+	// The subagent rules must carry the delegation graph, catch-all first.
+	if !strings.Contains(got, "- action: subagent") {
+		t.Errorf("no subagent rules written:\n%s", got)
 	}
-	for _, want := range []string{"  task:\n", "    \"*\": deny", "    dev: allow", "    qa: allow"} {
+	for _, want := range []string{"resource: \"*\"", "resource: dev", "resource: qa"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("frontmatter missing %q in:\n%s", want, got)
 		}
 	}
-	// Other permission keys must be preserved.
-	if !strings.Contains(got, "  read: allow") {
-		t.Errorf("existing permission key lost:\n%s", got)
+	// Other rules must be preserved: the list is order-sensitive and the
+	// broad denies are what gate everything else.
+	for _, want := range []string{"- action: edit", "- action: shell"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("existing rule lost during injection:\n%s", got)
+		}
 	}
 }
 
 func TestInjectTaskPermission_InsertsWhenMissing(t *testing.T) {
-	md := "---\nmode: primary\npermission:\n  \"*\": deny\n  read: allow\n---\n\nbody."
+	md := "---\nmode: primary\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n  - action: read\n    resource: \"*\"\n    effect: allow\n---\n\nbody."
 	out, ok := injectTaskPermission(md, map[string]string{"*": "deny", "finder": "allow"})
 	if !ok {
 		t.Fatal("expected injection to succeed")
 	}
-	if !strings.Contains(out, "  task:\n") || !strings.Contains(out, "    finder: allow") {
-		t.Errorf("task block not inserted:\n%s", out)
+	if !strings.Contains(out, "- action: subagent") || !strings.Contains(out, "resource: finder") {
+		t.Errorf("subagent rules not inserted:\n%s", out)
+	}
+	// Existing rules must survive untouched.
+	if !strings.Contains(out, "- action: read") || !strings.Contains(out, "effect: allow") {
+		t.Errorf("existing rules dropped during injection:\n%s", out)
 	}
 }
 
 func TestReadTaskPermission_Nested(t *testing.T) {
+	// Migration read: the v1-era nested `permission: task:` map.
 	md := "---\npermission:\n  \"*\": deny\n  task:\n    \"*\": deny\n    dev: allow\n---\n\nbody."
 	got, ok := ReadTaskPermission(md)
 	if !ok {
@@ -353,6 +367,7 @@ func TestReadTaskPermission_Nested(t *testing.T) {
 }
 
 func TestReadTaskPermission_Scalar(t *testing.T) {
+	// Migration read: the v1-era scalar `task: allow`.
 	md := "---\npermission:\n  task: allow\n---\n\nbody."
 	got, _ := ReadTaskPermission(md)
 	if got["*"] != "allow" {
@@ -360,8 +375,20 @@ func TestReadTaskPermission_Scalar(t *testing.T) {
 	}
 }
 
+func TestReadTaskPermission_SubagentRules(t *testing.T) {
+	// The native shape: subagent rules in the ordered `permissions:` list.
+	md := "---\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n  - action: subagent\n    resource: \"*\"\n    effect: deny\n  - action: subagent\n    resource: dev\n    effect: allow\n---\n\nbody."
+	got, ok := ReadTaskPermission(md)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if got["*"] != "deny" || got["dev"] != "allow" {
+		t.Errorf("unexpected task map: %v", got)
+	}
+}
+
 func TestInjectThenReadTaskPermission_RoundTrip(t *testing.T) {
-	md := "---\npermission:\n  \"*\": deny\n  task: allow\n---\n\nbody."
+	md := "---\npermissions:\n  - action: shell\n    resource: \"*\"\n    effect: deny\n  - action: subagent\n    resource: \"*\"\n    effect: allow\n---\n\nbody."
 	want := map[string]string{"*": "deny", "qa": "allow", "finder": "allow"}
 	injected, ok := InjectTaskPermission(md, want)
 	if !ok {
@@ -375,16 +402,13 @@ func TestInjectThenReadTaskPermission_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestInjectTaskPermission_EmptyMapRendersScalarAllow(t *testing.T) {
-	// An empty task map must never produce a bare "task:" (YAML null) — opencode
-	// rejects it with "Expected PermissionRuleConfig, got null".
-	md := "---\npermission:\n  \"*\": deny\n  task: allow\n---\n\nbody."
+func TestInjectTaskPermission_EmptyMapRendersAllowAll(t *testing.T) {
+	// An empty task map means "no delegation restriction" — render the
+	// allow-all subagent rule instead of an empty/null entry.
+	md := "---\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n  - action: subagent\n    resource: \"*\"\n    effect: deny\n---\n\nbody."
 	injected, ok := InjectTaskPermission(md, map[string]string{})
 	if !ok {
 		t.Fatal("inject failed")
-	}
-	if strings.Contains(injected, "task:\n") || strings.HasSuffix(strings.SplitN(injected, "---", 3)[1], "task:") {
-		t.Errorf("empty map produced null task value:\n%s", injected)
 	}
 	got, _ := ReadTaskPermission(injected)
 	if got["*"] != "allow" {
@@ -395,7 +419,7 @@ func TestInjectTaskPermission_EmptyMapRendersScalarAllow(t *testing.T) {
 func TestInjectTaskPermission_NoPermissionBlock(t *testing.T) {
 	md := "---\nmode: primary\n---\n\nbody."
 	if _, ok := injectTaskPermission(md, map[string]string{"*": "deny"}); ok {
-		t.Error("expected no-op when there is no permission block")
+		t.Error("expected no-op when there is no permissions block")
 	}
 }
 

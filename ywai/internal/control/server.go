@@ -41,18 +41,18 @@ func RegisterEmbeddedUI(ui func() fs.FS) {
 // the control-server routes. There is no longer a per-package server wrapper
 // or a prefix proxy between them.
 type Server struct {
-	port       int
-	configAPI  *configapi.Handlers
-	toolsAPI   *toolsapi.Handlers
-	httpSrv    *http.Server
-	mux        *http.ServeMux
-	portReady  chan struct{}
-	startedAt  time.Time
-	startErr   error
-	jobs       *mcp.JobManager
-	workflows  *workflowsAPI
-	push       *PushAPI
-	teamAPI    *TeamAPI
+	port      int
+	configAPI *configapi.Handlers
+	toolsAPI  *toolsapi.Handlers
+	httpSrv   *http.Server
+	mux       *http.ServeMux
+	portReady chan struct{}
+	startedAt time.Time
+	startErr  error
+	jobs      *mcp.JobManager
+	workflows *workflowsAPI
+	push      *PushAPI
+	teamAPI   *TeamAPI
 }
 
 // New creates a new control server.

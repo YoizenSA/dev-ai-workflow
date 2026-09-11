@@ -33,39 +33,35 @@ func TestGetAgentGraph(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
 
-	// opencode.json: a primary orchestrator with a dense task allow/deny map
+	// opencode.json: a primary orchestrator with a dense delegation graph
 	// (mirrors the gentle-orchestrator shape), a subagent "dev", and an "ask"
-	// delegation to a reviewer subagent.
+	// delegation to a reviewer subagent. Entries live under the legacy
+	// `agent` key with subagent rules as `permissions` — the graph must read
+	// both spellings (migration) and the v2 rule shape.
 	config := `{
   "agent": {
     "orchestrator": {
       "mode": "primary",
       "description": "coordinates sub-agents",
-      "permission": {
-        "*": "deny",
-        "question": "allow",
-        "task": {
-          "*": "deny",
-          "dev": "allow",
-          "reviewer": "ask"
-        }
-      }
+      "permissions": [
+        {"action": "question", "resource": "*", "effect": "allow"},
+        {"action": "subagent", "resource": "*", "effect": "deny"},
+        {"action": "subagent", "resource": "dev", "effect": "allow"},
+        {"action": "subagent", "resource": "reviewer", "effect": "ask"}
+      ]
     },
     "dev": {
       "mode": "subagent",
       "description": "writes code",
-      "permission": {
-        "*": "deny",
-        "read": "allow",
-        "edit": "allow",
-        "task": "deny"
-      }
+      "permissions": [
+        {"action": "subagent", "resource": "*", "effect": "deny"}
+      ]
     },
     "reviewer": {
       "mode": "subagent",
-      "permission": {
-        "read": "allow"
-      }
+      "permissions": [
+        {"action": "read", "resource": "*", "effect": "allow"}
+      ]
     }
   }
 }`
@@ -153,9 +149,9 @@ func TestGetAgentGraph_GhostTarget(t *testing.T) {
   "agent": {
     "orch": {
       "mode": "primary",
-      "permission": {
-        "task": { "missing-sub": "allow" }
-      }
+      "permissions": [
+        {"action": "subagent", "resource": "missing-sub", "effect": "allow"}
+      ]
     }
   }
 }`

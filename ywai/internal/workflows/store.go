@@ -49,8 +49,9 @@ func NewStore(baseDir string) *Store {
 	return &Store{baseDir: baseDir}
 }
 
-// List returns metadata for every persisted workflow, sorted by name. Only the
-// top-level fields are read; node graphs are skipped to keep listings light.
+// List returns metadata for every persisted workflow, sorted by name. Each
+// file is parsed in full because NodeCount needs the node list; connections
+// and node payloads are discarded after the count.
 func (s *Store) List() ([]Summary, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -246,17 +247,26 @@ func normalize(wf *Workflow) *Workflow {
 }
 
 // atomicWrite writes data to a temp file then renames it atomically (POSIX
-// rename guarantee): a crash mid-write leaves the original intact.
+// rename guarantee): a crash mid-write leaves the original intact. The temp
+// file is removed on every exit path where we still own it; the flag skips
+// the removal after a successful rename, so a concurrent writer's fresh temp
+// file under the same deterministic name is never deleted.
 func atomicWrite(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmpFile := filepath.Join(dir, "."+filepath.Base(path)+".tmp")
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpFile)
+		}
+	}()
 	if err := os.WriteFile(tmpFile, data, 0o644); err != nil {
 		return fmt.Errorf("write temp file: %w", err)
 	}
 	if err := os.Rename(tmpFile, path); err != nil {
-		_ = os.Remove(tmpFile)
 		return fmt.Errorf("rename temp file: %w", err)
 	}
+	renamed = true
 	return nil
 }
 

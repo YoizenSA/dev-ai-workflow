@@ -11,7 +11,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -53,21 +52,16 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing opencode config: %w", err)
 	}
 
-	// Fetch models and inject context limits. GET /v1/models is the
-	// catalog: models the GET does not return are dropped from the provider.
-	// TokenBank only serves the v1 `provider` payload, so prune it in that
-	// shape and translate afterwards.
+	// The opencode.json section is always the v2 `providers` shape; TokenBank
+	// serves the v1 `provider` payload, so prune it in that shape and
+	// translate afterwards.
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
 		injectModelLimits(newConfig, modelsResp.Models, "provider")
 	} else {
 		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
 	}
-	v2 := agent.OpenCodeIsV2()
-	sectionKey := "provider"
-	if v2 {
-		sectionKey = "providers"
-		toV2Providers(newConfig)
-	}
+	sectionKey := "providers"
+	toV2Providers(newConfig)
 
 	var lastPath string
 	for _, configPath := range openCodeConfigPaths() {
@@ -77,17 +71,15 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		}
 
 		// Deep merge, then let the (GET-pruned) API provider own the slot so
-		// models dropped upstream are removed instead of lingering. The section
-		// key follows the active flavor: v2 reads `providers`, v1 `provider`.
+		// models dropped upstream are removed instead of lingering. The v1
+		// copy older runs wrote under `provider` is dropped; other v1
+		// providers are the user's.
 		merged := DeepMerge(existing, newConfig)
 		replaceOwnedProvider(merged, newConfig, sectionKey, "opencode-admin")
-		if v2 {
-			// Drop the v1 copy older runs wrote; other v1 providers are the user's.
-			if v1, ok := merged["provider"].(map[string]interface{}); ok {
-				delete(v1, "opencode-admin")
-				if len(v1) == 0 {
-					delete(merged, "provider")
-				}
+		if v1, ok := merged["provider"].(map[string]interface{}); ok {
+			delete(v1, "opencode-admin")
+			if len(v1) == 0 {
+				delete(merged, "provider")
 			}
 		}
 

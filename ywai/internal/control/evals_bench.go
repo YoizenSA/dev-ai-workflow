@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/evals"
@@ -154,11 +155,15 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // truncateResponse keeps enough of an answer to audit a score without letting the
-// run history grow into megabytes of transcript.
+// run history grow into megabytes of transcript. The cut backs up to a rune
+// boundary so a multi-byte character is never split into invalid UTF-8.
 func truncateResponse(s string) string {
-	const max = 4000
+	max := 4000
 	if len(s) <= max {
 		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
 	}
 	return s[:max] + "\n…[truncated]"
 }

@@ -262,18 +262,19 @@ func extractModeFromFrontmatter(fm string) string {
 	return ""
 }
 
-// updatePermissionsInFrontmatter replaces the permission block with a fresh v1
-// `permission:` map rendered from the given internal permission map. The
-// delegation (task) block is preserved: the map carried by this endpoint is
+// updatePermissionsInFrontmatter replaces the permission block with a fresh
+// v2 `permissions:` rule list rendered from the given internal permission map.
+// The delegation (task) block is preserved: the map carried by this endpoint is
 // tool permissions only. If no block exists, one is added. Returns the updated
-// full markdown content.
-func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
+// full markdown content. name is the flat agent id (write-scope/no-commit
+// lookups).
+func updatePermissionsInFrontmatter(content, name string, perms map[string]string) string {
 	// Preserve the delegation graph: swap tool permissions, keep the task map.
 	merged := map[string]string{}
 	for k, v := range perms {
 		merged[k] = v
 	}
-	updated := replacePermissionsBlock(content, merged)
+	updated := replacePermissionsBlock(content, name, merged)
 	if task, ok := agents.ReadTaskPermission(content); ok && len(task) > 0 {
 		if injected, ok := agents.InjectTaskPermission(updated, task); ok {
 			return injected
@@ -282,18 +283,20 @@ func updatePermissionsInFrontmatter(content string, perms map[string]string) str
 	return updated
 }
 
-// replacePermissionsBlock swaps the frontmatter permission block (dropping any
-// leftover v2 permissions: array and legacy tools: map) for a freshly rendered
-// v1 map, leaving every other frontmatter key untouched. Content without
-// frontmatter gets a minimal frontmatter with the block added.
-func replacePermissionsBlock(content string, perms map[string]string) string {
+// replacePermissionsBlock swaps the frontmatter permission block (dropping the
+// native permissions: list and any migration-era permission:/tools: maps) for
+// a freshly rendered v2 rules list, leaving every other frontmatter key
+// untouched. Content without frontmatter gets a minimal frontmatter with the
+// block added. name is the flat agent id used by the rules renderer.
+func replacePermissionsBlock(content, name string, perms map[string]string) string {
 	fm, body := parseFrontmatter(content)
 
 	var b strings.Builder
 	b.WriteString("---\n")
 	if fm != "" {
 		// Rebuild the frontmatter keeping every key except the permission-
-		// bearing blocks (v2 permissions: array + v1 permission:/tools: maps).
+		// bearing blocks (the permissions: list plus migration-era
+		// permission:/tools: maps).
 		// Block children are indented lines that follow their header until the
 		// next top-level key; other indented lines (e.g. description block
 		// scalars) belong to kept keys and must survive.
@@ -326,7 +329,10 @@ func replacePermissionsBlock(content string, perms map[string]string) string {
 	} else {
 		b.WriteString("description: agent\n")
 	}
-	b.WriteString(agents.RenderPermissionMapYAML("", agents.AgentProfile{Permission: perms}))
+	for _, line := range agents.RenderPermissionRulesYAML(agents.RulesFromPermissionMap(name, perms)) {
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
 	b.WriteString("---\n\n")
 	b.WriteString(body)
 	return b.String()

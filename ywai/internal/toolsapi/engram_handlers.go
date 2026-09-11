@@ -364,8 +364,9 @@ func (h *Handlers) StartConsolidation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	// Require the opencode server to be up (sessions() returns nil otherwise).
-	if h.opencodeClient == nil || h.opencodeClient.Sessions() == nil {
+	// Require the opencode server to be up (Sessions() returns nil otherwise).
+	oc := h.openCode()
+	if oc == nil || oc.Sessions() == nil {
 		writeError(w, http.StatusServiceUnavailable, "opencode server not running")
 		return
 	}

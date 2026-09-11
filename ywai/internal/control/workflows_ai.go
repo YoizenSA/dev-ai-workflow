@@ -327,7 +327,7 @@ func (a *workflowsAPI) handleMcpServerTools(w http.ResponseWriter, r *http.Reque
 func discoverServerTools(ctx context.Context, server map[string]interface{}) []string {
 	// Remote server: POST tools/list to its url.
 	if urlStr, ok := server["url"].(string); ok && urlStr != "" {
-		if tools, err := mcp.DiscoverHTTP(ctx, urlStr); err == nil {
+		if tools, err := mcp.DiscoverHTTP(ctx, urlStr, nil); err == nil {
 			return tools
 		}
 	}

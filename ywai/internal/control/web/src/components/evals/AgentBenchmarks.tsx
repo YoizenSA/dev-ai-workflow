@@ -22,6 +22,9 @@ interface Score {
   total: number;
   gotHard: boolean;
   answered: boolean;
+  // Weighted is the weight share the hits cover, 0..1. Old runs stored before
+  // weighted scoring omit it, so it stays optional.
+  weighted?: number;
 }
 
 interface Metrics {
@@ -44,6 +47,10 @@ interface Attempt {
   metrics: Metrics;
   response?: string;
   error?: string;
+  // costUsd/costKnown price the attempt from the backend's table; both are
+  // absent when the model has no known rates.
+  costUsd?: number;
+  costKnown?: boolean;
 }
 
 interface Run {
@@ -61,12 +68,17 @@ interface Run {
   endedAt?: string;
 }
 
-const PROVIDER = "opencode-admin";
+const DEFAULT_PROVIDER = "opencode-admin";
 
 export default function AgentBenchmarks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [providers, setProviders] = useState<string[]>([]);
+  const [providerSections, setProviderSections] = useState<
+    Record<string, { models?: Record<string, unknown> }>
+  >({});
+  const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [taskId, setTaskId] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [rounds, setRounds] = useState(1);
@@ -98,7 +110,12 @@ export default function AgentBenchmarks() {
         // /api/config/providers returns the opencode.json provider section,
         // an object keyed by provider name (not the old proxy's array shape).
         const section = (p ?? {}) as Record<string, { models?: Record<string, unknown> }>;
-        setModels(Object.keys(section[PROVIDER]?.models ?? {}).sort());
+        const names = Object.keys(section).sort();
+        const chosen = section[DEFAULT_PROVIDER] ? DEFAULT_PROVIDER : (names[0] ?? DEFAULT_PROVIDER);
+        setProviderSections(section);
+        setProviders(names);
+        setProvider(chosen);
+        setModels(Object.keys(section[chosen]?.models ?? {}).sort());
       } catch (e) {
         setError(String(e));
       }
@@ -130,7 +147,7 @@ export default function AgentBenchmarks() {
       const res = await fetch("/api/evals/runs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId, models: picked, provider: PROVIDER, rounds }),
+        body: JSON.stringify({ taskId, models: picked, provider, rounds }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? res.statusText);
@@ -145,6 +162,25 @@ export default function AgentBenchmarks() {
   return (
     <div className="bench">
       <section className="bench-config">
+        <label className="bench-field">
+          <span>Provider</span>
+          <select
+            value={provider}
+            onChange={(e) => {
+              const next = e.target.value;
+              setProvider(next);
+              setPicked([]); // model ids are provider-scoped; stale picks would POST a bad run
+              setModels(Object.keys(providerSections[next]?.models ?? {}).sort());
+            }}
+          >
+            {providers.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="bench-field">
           <span>Task</span>
           <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
@@ -227,6 +263,19 @@ export default function AgentBenchmarks() {
   );
 }
 
+// Same conventions as SessionAnalytics: sub-cent amounts keep four decimals so
+// they do not round to a misleading "$0.00"; weighted share drops the decimal
+// once it is above 10%.
+function formatCost(n: number): string {
+  if (!n) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
+}
+
+function formatWeighted(weighted: number): string {
+  return `${(weighted * 100).toFixed(weighted >= 0.1 ? 0 : 1)}%`;
+}
+
 function RunCard({ run }: { run: Run }) {
   // Rank by correctness first: a model that answers in eight turns while missing half
   // the expected findings is not better than one that grinds to the complete answer.
@@ -266,6 +315,7 @@ function RunCard({ run }: { run: Run }) {
               <th>Model</th>
               <th>R</th>
               <th>Score</th>
+              <th>Weighted</th>
               <th>Hard</th>
               <th>Turns</th>
               <th>Reads</th>
@@ -273,6 +323,7 @@ function RunCard({ run }: { run: Run }) {
               <th>Inv</th>
               <th>Worst file</th>
               <th>Tokens</th>
+              <th>Cost</th>
               <th>Time</th>
             </tr>
           </thead>
@@ -290,6 +341,7 @@ function RunCard({ run }: { run: Run }) {
                     <span className="muted">no answer</span>
                   )}
                 </td>
+                <td>{a.score.weighted != null ? formatWeighted(a.score.weighted) : "—"}</td>
                 <td>{a.score.gotHard ? "✓" : "—"}</td>
                 <td>{a.metrics.turns}</td>
                 <td>{a.metrics.reads}</td>
@@ -297,12 +349,13 @@ function RunCard({ run }: { run: Run }) {
                 <td>{a.metrics.invalid || ""}</td>
                 <td>{a.metrics.worstFileReads}</td>
                 <td>{(a.metrics.tokensInput + a.metrics.tokensOutput).toLocaleString()}</td>
+                <td>{a.costKnown ? formatCost(a.costUsd ?? 0) : "—"}</td>
                 <td>{a.seconds.toFixed(0)}s</td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={11} className="muted">
+                <td colSpan={13} className="muted">
                   Waiting for the first attempt…
                 </td>
               </tr>

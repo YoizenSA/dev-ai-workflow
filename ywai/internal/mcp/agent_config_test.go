@@ -65,8 +65,6 @@ import (
 	"sort"
 	"sync"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -80,10 +78,6 @@ func setTestHomeDir(t *testing.T, home string) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
-	// These tests assert the v1 layout, which opencode v1 rejects any other way
-	// (see adb9a18). Pin the flavor so a developer running opencode2 does not
-	// silently retarget them at the v2 nesting; v2 has its own tests.
-	t.Setenv(agent.OpenCodeOverrideEnv, "v1")
 }
 
 // shapeHasKey reports whether the shape map has the given top-level key.
@@ -125,33 +119,24 @@ func sortedKeys(m map[string]any) []string {
 
 // parseJSONFile reads a file and decodes it as JSON (not JSONC — we use
 // plain JSON in the test fixtures). Returns the decoded value.
+// opencodeFileServers extracts the MCP server map from a written opencode
+// config file. ADR-0001 dropped opencode v1: the writer targets the v2
+// layout where servers nest under mcp.servers, so that nesting is the
+// contract this helper asserts.
 func opencodeFileServers(t *testing.T, cfg map[string]any) map[string]any {
 	t.Helper()
 	mcp, ok := cfg["mcp"].(map[string]any)
 	if !ok {
 		t.Fatalf("cfg[mcp] = %v (%T), want map", cfg["mcp"], cfg["mcp"])
 	}
-	if _, nested := mcp["servers"]; nested {
-		t.Fatalf("v2 mcp.servers nesting must not be written: %v", mcp)
+	nested, ok := mcp["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp.servers nesting missing (v2 layout per ADR-0001): %v", mcp)
 	}
-	servers := map[string]any{}
-	for k, v := range mcp {
-		if k == "timeout" {
-			continue
-		}
-		entry, isObj := v.(map[string]any)
-		if !isObj {
-			continue
-		}
-		if _, ok := entry["enabled"].(bool); !ok {
-			t.Fatalf("server %q missing the enabled key v1 validates: %v", k, entry)
-		}
-		servers[k] = v
-	}
-	if len(servers) == 0 {
+	if len(nested) == 0 {
 		t.Fatalf("no mcp servers after write: %v", mcp)
 	}
-	return servers
+	return nested
 }
 
 // withoutV1Enabled drops the `enabled` key the v1 writer adds to every server

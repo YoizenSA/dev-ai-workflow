@@ -219,13 +219,17 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deleteObservation: async (id) => {
-		await memoriesApi.deleteObservation(id)
-		set((s) => ({
-			observations: s.observations.filter((o) => String(o.id) !== id),
-			selectedObservation:
-				String(s.selectedObservation?.id) === id ? null : s.selectedObservation,
-		}))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deleteObservation(id)
+			set((s) => ({
+				observations: s.observations.filter((o) => String(o.id) !== id),
+				selectedObservation:
+					String(s.selectedObservation?.id) === id ? null : s.selectedObservation,
+			}))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchStats: async () => {
@@ -245,9 +249,13 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deleteSession: async (id) => {
-		await memoriesApi.deleteSession(id)
-		set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deleteSession(id)
+			set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchPrompts: async (limit = 100) => {
@@ -260,9 +268,13 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deletePrompt: async (id) => {
-		await memoriesApi.deletePrompt(id)
-		set((s) => ({ prompts: s.prompts.filter((p) => String(p.id) !== id) }))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deletePrompt(id)
+			set((s) => ({ prompts: s.prompts.filter((p) => String(p.id) !== id) }))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchTimeline: async (observationId?: string) => {

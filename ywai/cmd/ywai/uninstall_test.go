@@ -265,8 +265,6 @@ func containsAnyString(slice []any, want string) bool {
 }
 
 func TestUninstallStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
-	// Pin v1: the surviving key must be `agent` regardless of the host binary.
-	t.Setenv("YWAI_OPENCODE", "opencode")
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{
@@ -287,25 +285,24 @@ func TestUninstallStripYwaiAgentKeys_KeepsUserAgents(t *testing.T) {
 	}
 
 	root := readJSONFile(t, cfg)
-	agents, _ := root["agent"].(map[string]any)
+	agents, _ := root["agents"].(map[string]any)
 	if len(agents) != 1 {
 		t.Fatalf("expected only the user's agent to remain, got %v", agents)
 	}
 	if _, ok := agents["my-agent"]; !ok {
 		t.Error("the user's agent must survive")
 	}
-	if _, ok := root["agents"]; ok {
-		t.Error("must not write the v2 agents key")
+	if _, ok := root["agent"]; ok {
+		t.Error("the legacy agent key must not be written")
 	}
 	if root["model"] != "keep-me" {
 		t.Error("unrelated keys must be preserved")
 	}
 }
 
-func TestUninstallStripYwaiAgentKeys_DrainsV2AgentsKey(t *testing.T) {
-	// Pin v2: merged survivors must land back under `agents`, and the legacy
-	// `agent` key must not coexist with it.
-	t.Setenv("YWAI_OPENCODE", "opencode2")
+func TestUninstallStripYwaiAgentKeys_MergesLegacyAgentKey(t *testing.T) {
+	// The merged survivors land back under `agents`, and the legacy `agent`
+	// key must not coexist with it.
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "opencode.json")
 	writeJSONFile(t, cfg, map[string]any{

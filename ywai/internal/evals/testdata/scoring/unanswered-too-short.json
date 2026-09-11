@@ -1,0 +1,12 @@
+{
+  "name": "unanswered-too-short",
+  "taskId": "golden-mixed",
+  "response": "retryloop shutdown",
+  "expected": {
+    "hits": [],
+    "missed": ["config.load", "retryLoop", "graceful shutdown"],
+    "total": 3,
+    "gotHard": false,
+    "answered": false
+  }
+}

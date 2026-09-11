@@ -353,6 +353,14 @@ export function McpStore() {
 				};
 				if (job.state === 'done') {
 					stopPolling(interval);
+					// Install succeeded — drop the entered credentials so the
+					// secrets do not linger in component state.
+					setCredentials((prev) => {
+						if (!(serverId in prev)) return prev;
+						const next = { ...prev };
+						delete next[serverId];
+						return next;
+					});
 					setInstallStates((prev) => ({
 						...prev,
 						[serverId]: { state: 'done', tools: job.result?.tools },

@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // DelegationsFile is the default name of the delegations source-of-truth file,
@@ -218,14 +215,10 @@ func applyTaskMaps(configPath string, doc *DelegationsDoc) error {
 		}
 	}
 
-	// The section key follows the flavor: v2 `agents`, v1 `agent`. This JSON
-	// copy is what the UI reads; the markdown sidecar is what opencode
-	// enforces. Merge both spellings first (the flavor's key wins per agent)
+	// The v2 `agents` key is the canonical section; a legacy `agent` key is
+	// migration-era data. Merge both spellings first (`agents` wins per agent)
 	// so rewriting one key never drops the other's entries.
-	sectionKey, legacyKey := "agent", "agents"
-	if agent.OpenCodeIsV2() {
-		sectionKey, legacyKey = "agents", "agent"
-	}
+	sectionKey, legacyKey := "agents", "agent"
 	agents := map[string]any{}
 	if raw, ok := root[legacyKey].(map[string]any); ok {
 		for name, entry := range raw {
@@ -312,9 +305,13 @@ func InjectTaskPermission(content string, task map[string]string) (string, bool)
 	return injectTaskPermission(content, task)
 }
 
-// ReadTaskPermission extracts the permission.task map from an agent's markdown
-// frontmatter. A scalar `task: allow` yields {"*": "allow"}; a missing task key
-// yields an empty map. ok is false only when there is no frontmatter at all.
+// ReadTaskPermission extracts the delegation task map from an agent's markdown
+// frontmatter: subagent rules from the `permissions:` list first, then — as a
+// migration read for v1-era files — a scalar or nested `task:` entry under a
+// `permission:` block. A scalar `task: allow` yields {"*": "allow"}; a missing
+// task entry yields an empty map. ok is false only when there is no frontmatter
+// at all. Rules read in order, so the last matching subagent rule wins, exactly
+// as opencode evaluates them.
 func ReadTaskPermission(content string) (map[string]string, bool) {
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
@@ -330,6 +327,38 @@ func ReadTaskPermission(content string) (map[string]string, bool) {
 	if fmEnd < 0 {
 		return nil, false
 	}
+
+	// v2 shape: subagent rules in the ordered `permissions:` list.
+	for i := 1; i < fmEnd; i++ {
+		if strings.TrimSpace(lines[i]) != "permissions:" {
+			continue
+		}
+		blockEnd := fmEnd
+		for j := i + 1; j < fmEnd; j++ {
+			if strings.TrimSpace(lines[j]) == "" {
+				continue
+			}
+			if leadingSpaces(lines[j]) <= leadingSpaces(lines[i]) {
+				blockEnd = j
+				break
+			}
+		}
+		if rules, ok := ParsePermissionRulesYAML(strings.Join(lines[i:blockEnd], "\n")); ok {
+			result := map[string]string{}
+			for _, r := range rules {
+				if r.Action == "subagent" {
+					res := r.Resource
+					if res == "" {
+						res = "*"
+					}
+					result[res] = r.Effect
+				}
+			}
+			return result, true
+		}
+	}
+
+	// Migration shape: a `task` entry nested under the v1 `permission:` map.
 	permIdx := -1
 	for i := 1; i < fmEnd; i++ {
 		if strings.TrimSpace(lines[i]) == "permission:" {
@@ -380,27 +409,13 @@ func ReadTaskPermission(content string) (map[string]string, bool) {
 	return result, true
 }
 
-// injectTaskPermission rewrites the "task" key inside the frontmatter
-// "permission:" block as a nested allow/deny map. It replaces an existing
-// scalar/nested task entry or inserts one as the first permission child.
-// Returns (content, false) when there is no frontmatter permission block to
-// patch.
 // injectTaskPermission writes the delegation task map into an agent's
-// frontmatter using the schema the active OpenCode reads. v1 nests it under
-// "permission:" as a task map; v2 carries ordered "permissions:" rules with a
-// subagent action. Applying the v1 shape to a v2 file finds no "permission:"
-// key and silently changes nothing, leaving delegation ungated.
+// frontmatter as ordered `permissions:` subagent rules, replacing the existing
+// subagent rules with the ones the delegation graph allows and leaving every
+// other rule in place and in order — order is semantics here, since last match
+// wins. Returns (content, false) when there is no frontmatter permissions
+// block to patch.
 func injectTaskPermission(content string, task map[string]string) (string, bool) {
-	if agent.OpenCodeIsV2() {
-		return injectSubagentRules(content, task)
-	}
-	return injectTaskPermissionV1(content, task)
-}
-
-// injectSubagentRules rewrites the "permissions:" list, replacing its subagent
-// rules with the ones the delegation graph allows and leaving every other rule
-// in place and in order — order is semantics here, since last match wins.
-func injectSubagentRules(content string, task map[string]string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
 		return content, false
@@ -447,72 +462,6 @@ func injectSubagentRules(content string, task map[string]string) (string, bool) 
 	out = append(out, lines[:permIdx]...)
 	out = append(out, RenderPermissionRulesYAML(ReplaceSubagentRules(rules, task))...)
 	out = append(out, lines[blockEnd:]...)
-	return strings.Join(out, "\n"), true
-}
-
-func injectTaskPermissionV1(content string, task map[string]string) (string, bool) {
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return content, false
-	}
-	fmEnd := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			fmEnd = i
-			break
-		}
-	}
-	if fmEnd < 0 {
-		return content, false
-	}
-	permIdx := -1
-	for i := 1; i < fmEnd; i++ {
-		if strings.TrimSpace(lines[i]) == "permission:" {
-			permIdx = i
-			break
-		}
-	}
-	if permIdx < 0 {
-		return content, false
-	}
-	permIndent := leadingSpaces(lines[permIdx])
-	childIndent := permIndent + 2
-
-	// Locate an existing "task" child and the extent of its (possibly nested) block.
-	taskStart, taskEnd := -1, -1
-	for i := permIdx + 1; i < fmEnd; i++ {
-		if strings.TrimSpace(lines[i]) == "" {
-			continue
-		}
-		ind := leadingSpaces(lines[i])
-		if ind <= permIndent {
-			break // end of permission block
-		}
-		if ind == childIndent && permKeyName(lines[i]) == "task" {
-			taskStart = i
-			taskEnd = i + 1
-			for j := i + 1; j < fmEnd; j++ {
-				if strings.TrimSpace(lines[j]) == "" || leadingSpaces(lines[j]) > childIndent {
-					taskEnd = j + 1
-					continue
-				}
-				break
-			}
-			break
-		}
-	}
-
-	block := renderTaskBlock(childIndent, task)
-	var out []string
-	if taskStart >= 0 {
-		out = append(out, lines[:taskStart]...)
-		out = append(out, block...)
-		out = append(out, lines[taskEnd:]...)
-	} else {
-		out = append(out, lines[:permIdx+1]...)
-		out = append(out, block...)
-		out = append(out, lines[permIdx+1:]...)
-	}
 	return strings.Join(out, "\n"), true
 }
 
@@ -689,44 +638,4 @@ func headingText(line string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimSpace(line)[level:])
-}
-
-// renderTaskBlock renders the nested "task:" YAML block at the given child
-// indent. Keys are sorted with the "*" catch-all first; keys with YAML-special
-// characters are quoted.
-func renderTaskBlock(childIndent int, task map[string]string) []string {
-	ind := strings.Repeat(" ", childIndent)
-	sub := strings.Repeat(" ", childIndent+2)
-
-	// An empty map would otherwise emit a bare "task:" (YAML null), which
-	// opencode rejects ("Expected PermissionRuleConfig, got null"). Empty
-	// means "no delegation restriction" — render the scalar allow-all form,
-	// matching ReadTaskPermission's scalar handling and the handler default.
-	if len(task) == 0 {
-		return []string{ind + "task: allow"}
-	}
-
-	out := []string{ind + "task:"}
-
-	keys := make([]string, 0, len(task))
-	for k := range task {
-		if k != "*" {
-			keys = append(keys, k)
-		}
-	}
-	sort.Strings(keys)
-	ordered := make([]string, 0, len(task))
-	if _, ok := task["*"]; ok {
-		ordered = append(ordered, "*")
-	}
-	ordered = append(ordered, keys...)
-
-	for _, k := range ordered {
-		key := k
-		if k == "*" || strings.ContainsAny(k, "*:#&!|>',[]{}%`@ ") {
-			key = fmt.Sprintf("%q", k)
-		}
-		out = append(out, fmt.Sprintf("%s%s: %s", sub, key, task[k]))
-	}
-	return out
 }

@@ -529,23 +529,10 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	var done []string
 
 	// sub-agent-statusline shows delegation activity in the sidebar and footer.
-	// On opencode v1 the published npm package is installed by
-	// InstallPublishedSubAgentStatusline; its peer range excludes OpenCode 2,
-	// so the v2 port is vendored and installed per-agent below by
-	// InstallSubagentStatusline. The install used to strip the v1 entry from
-	// tui.json on every run, which quietly undid the entry Engram's own
-	// installer had just written.
-	switch {
-	case agent.OpenCodeIsV2():
-		// The published package cannot load on v2; the vendored port is
-		// installed per-agent below.
-	case dryRun:
-		fmt.Println("  Would install sub-agent-statusline TUI plugin")
-	default:
-		if err := plugins.InstallPublishedSubAgentStatusline(); err != nil {
-			fmt.Printf("  Warning: failed to install sub-agent-statusline plugin: %v\n", err)
-		}
-	}
+	// The published npm package's peer range excludes OpenCode 2, so the
+	// vendored port is installed per-agent below by InstallSubagentStatusline.
+	// The install used to strip the v1 entry from tui.json on every run, which
+	// quietly undid the entry Engram's own installer had just written.
 
 	// Resolve the install policy once: the ~/.ywai/plugins.json override when
 	// valid, the embedded manifest otherwise. Warnings surface a bad override.

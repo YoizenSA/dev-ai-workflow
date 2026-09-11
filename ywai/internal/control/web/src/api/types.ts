@@ -197,7 +197,6 @@ export interface UserConfig {
   role_defaults?: RoleDefaults
   vision_model?: string
   vision_model_override?: string
-  opencode_version?: "v1" | "v2"
 }
 
 // ─── Memories Types ──────────────────────────────────────────────────────────
@@ -652,4 +651,34 @@ export interface WorkflowRunLine {
 	stream: 'stdout' | 'stderr';
 	text: string;
 	ts: number;
+}
+
+// ─── Azure DevOps ─────────────────────────────────────────────────────────
+// Mirror the Go structs in internal/control/ado_config.go. Shared by
+// AdoConfig.tsx, AdoSetupWizard.tsx and the ado methods on configApi.
+
+export interface AdoProfile {
+	org: string;
+	project: string;
+	patEnvVar: string;
+	repos: string[];
+	default?: boolean;
+}
+
+export interface AdoConfig {
+	defaultProfile: string;
+	profiles: Record<string, AdoProfile>;
+}
+
+export interface AdoPatStatus {
+	hasPat: boolean;
+	source: "env" | "file" | "none";
+}
+
+export interface AdoCliStatus {
+	installed: boolean;
+	version: string;
+	latest: string | null;
+	updateAvailable: boolean;
+	error?: string;
 }

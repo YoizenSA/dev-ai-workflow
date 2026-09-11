@@ -7,12 +7,14 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -159,13 +161,13 @@ func ReadAgentConfig(target string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	mu.Unlock()
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
 	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
+	root, err := config.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if root == nil {
@@ -195,13 +197,13 @@ func lockFor(target string) *sync.Mutex {
 func readRoot(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
 	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
+	root, err := config.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if root == nil {
@@ -261,20 +263,11 @@ func CollectOpenCodeServers(mcp map[string]any) map[string]any {
 	return out
 }
 
-// flattenOpenCodeMCP writes the opencode v1 MCP layout: each server sits
-// directly under `mcp`, and every entry carries an explicit `enabled` bool.
-// v1 validates that key, so a v2 entry (nested under `servers`, using
-// `disabled`) is converted rather than passed through.
-// writeOpenCodeMCP stores servers in the shape the active OpenCode actually
-// reads. v2 nests them under mcp.servers and treats an absent flag as enabled,
-// turning one off with "disabled"; v1 keeps them flat at the root of mcp with
-// an "enabled" bool. The shapes are not interchangeable: v2 ignores "enabled",
-// so writing the v1 shape into v2 leaves a disabled server running.
+// WriteOpenCodeMCP stores servers in the shape OpenCode 2 reads: nested under
+// mcp.servers, treating an absent flag as enabled, turning one off with
+// "disabled".
 func WriteOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	if agent.OpenCodeIsV2() {
-		return nestOpenCodeMCP(mcp, servers)
-	}
-	return flattenOpenCodeMCP(mcp, servers)
+	return nestOpenCodeMCP(mcp, servers)
 }
 
 // nestOpenCodeMCP writes the v2 shape: every server under mcp.servers, keyed by
@@ -320,45 +313,11 @@ func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any 
 	return out
 }
 
-func flattenOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	out := map[string]any{}
-	if mcp != nil {
-		for k, v := range mcp {
-			if k == "servers" {
-				continue
-			}
-			if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-				continue
-			}
-			out[k] = v
-		}
-	}
-	for id, raw := range servers {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			out[id] = raw
-			continue
-		}
-		next := make(map[string]any, len(entry)+1)
-		for k, v := range entry {
-			next[k] = v
-		}
-		enabled := true
-		if disabled, ok := next["disabled"].(bool); ok {
-			enabled = !disabled
-			delete(next, "disabled")
-		}
-		if e, ok := next["enabled"].(bool); ok {
-			enabled = e
-		}
-		next["enabled"] = enabled
-		out[id] = next
-	}
-	return out
-}
-
 // writeRootAtomic serializes root as indented JSON, writes to a sibling
 // .tmp file, forces mode 0o600 (umask-independent), and renames into place.
+// The tmp file is removed on every exit path where we still own it; the flag
+// skips the removal after a successful rename, so a concurrent writer's fresh
+// tmp under the same deterministic name is never deleted.
 func writeRootAtomic(path string, root map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
@@ -369,6 +328,12 @@ func writeRootAtomic(path string, root map[string]any) error {
 	}
 	data = append(data, '\n')
 	tmp := path + ".tmp"
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmp)
+		}
+	}()
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}
@@ -379,5 +344,6 @@ func writeRootAtomic(path string, root map[string]any) error {
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("rename %s -> %s: %w", tmp, path, err)
 	}
+	renamed = true
 	return nil
 }

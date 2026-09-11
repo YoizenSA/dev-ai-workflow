@@ -10,11 +10,11 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/host"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/toolsapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 	"github.com/creack/pty"
 )
@@ -190,12 +190,14 @@ func (a *workflowsAPI) spawnHostRun(ctx context.Context, wf *workflows.Workflow,
 	}()
 
 	// Stream the PTY output. Each line is broadcast as a run_output event and
-	// appended to the run record.
+	// appended to the run record. Wait() first: the stream ends when the child
+	// exits (EOF/EIO on the master), and on platforms where the master lags,
+	// waiting on the stream first could block Wait() forever.
 	done := make(chan struct{}, 1)
 	go a.streamPipe(wf.Name, runID, "stdout", ptmx, done)
-	<-done
 
 	waitErr := cmd.Wait()
+	<-done
 	exitCode := 0
 	if waitErr != nil {
 		var exitErr *exec.ExitError
@@ -216,7 +218,7 @@ func (a *workflowsAPI) streamPipe(workflow, runID, stream string, r io.Reader, d
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // allow long lines
 	for scanner.Scan() {
-		line := stripANSI(scanner.Text())
+		line := toolsapi.StripANSI(scanner.Text())
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -229,14 +231,6 @@ func (a *workflowsAPI) streamPipe(workflow, runID, stream string, r io.Reader, d
 			Text:     line,
 		})
 	}
-}
-
-// ansiRe matches ANSI escape sequences in PTY output.
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// stripANSI removes terminal escape codes from a line of PTY output.
-func stripANSI(s string) string {
-	return ansiRe.ReplaceAllString(s, "")
 }
 
 // handleWorkflowWS upgrades the connection and registers it with the workflows

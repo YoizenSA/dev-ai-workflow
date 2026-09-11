@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,7 +30,8 @@ var upgrader = websocket.Upgrader{
 // WarmModels seeds memory from disk (instant) then kicks a background CLI
 // refresh when the list is missing or stale. Safe to call more than once.
 func (h *Handlers) WarmModels() {
-	if h == nil || h.opencodeClient == nil {
+	oc := h.openCode()
+	if oc == nil {
 		return
 	}
 	h.modelCache.seedFromDisk()
@@ -44,7 +44,7 @@ func (h *Handlers) WarmModels() {
 	if fresh {
 		return
 	}
-	h.modelCache.kickRefresh(h.opencodeClient.ListModels)
+	h.modelCache.kickRefresh(oc.ListModels)
 }
 
 // —— Refine Goal ————————————————————————————————————————————————
@@ -89,17 +89,18 @@ func (h *Handlers) RefineGoal(w http.ResponseWriter, r *http.Request) {
 // always revalidates without blocking on the multi-second CLI).
 func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	oc := h.openCode()
 	if r.URL.Query().Get("refresh") == "1" {
-		h.modelCache.kickRefresh(h.opencodeClient.ListModels)
+		h.modelCache.kickRefresh(oc.ListModels)
 	}
-	models, err := h.modelCache.get(ctx, h.opencodeClient.ListModels)
+	models, err := h.modelCache.get(ctx, oc.ListModels)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"models": []string{}})
 		return
 	}
 
 	// Get connected providers from opencode status
-	status, err := h.opencodeClient.Status(ctx)
+	status, err := oc.Status(ctx)
 	connectedProviders := make(map[string]bool)
 	if err == nil && status.ConnectedProviders != nil {
 		for _, p := range status.ConnectedProviders {
@@ -141,7 +142,7 @@ func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 // ListAgents returns available opencode agent profiles.
 func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	agents, err := h.opencodeClient.ListAgents(ctx)
+	agents, err := h.openCode().ListAgents(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"agents": []string{}})
 		return
@@ -160,7 +161,7 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 // OpenCodeStatus returns the opencode server connection status.
 func (h *Handlers) OpenCodeStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	status, err := h.opencodeClient.Status(ctx)
+	status, err := h.openCode().Status(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"connected": false,
@@ -178,7 +179,7 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 	// "Already running" means the opencode SERVER is reachable and serving
 	// sessions. A LocalClient reports Connected=true just because opencode.json
 	// exists, but it does not support sessions — so we must require Source=="server".
-	status, err := h.opencodeClient.Status(ctx)
+	status, err := h.openCode().Status(ctx)
 	if err == nil && status.Connected && status.Source == "server" {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"status":  "already_running",
@@ -197,48 +198,29 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine the starting port from OPENCODE_URL (default 4096) and find a
-	// free one if it's busy. Another server on 4096 would make
-	// opencode fail to bind silently, leaving the UI stuck on "Starting…".
-	startPort := 4096
-	if u := os.Getenv("OPENCODE_URL"); u != "" {
-		host := strings.TrimPrefix(strings.TrimPrefix(u, "http://"), "https://")
-		if _, p, e := net.SplitHostPort(host); e == nil && p != "" {
-			if n, e := strconv.Atoi(p); e == nil {
-				startPort = n
-			}
+	// Determine the starting port from OPENCODE_URL (default 4096). Reuse an
+	// already-running opencode server before spawning a new one, so restarts
+	// of ywai don't accumulate orphan instances (one per restart). The /app
+	// validator rejects a non-opencode server squatting a port (e.g. Kilo on
+	// 4096).
+	startPort := opencode.StartPortFromURL(os.Getenv("OPENCODE_URL"))
+	if candidate, ok := opencode.FindRunningURL(ctx, startPort, 20, func(pctx context.Context, url string) bool {
+		req, _ := http.NewRequestWithContext(pctx, http.MethodGet, url+"/app", nil)
+		resp, err := (&http.Client{Timeout: 500 * time.Millisecond}).Do(req)
+		if resp != nil {
+			defer resp.Body.Close()
 		}
-	}
-	// Reuse an already-running opencode server before spawning a new one, so
-	// restarts of ywai don't accumulate orphan instances (one per restart).
-	// Probe /status AND /app so a non-opencode server squatting a port (e.g.
-	// Kilo on 4096) isn't mistaken for one.
-	for p := startPort; p < startPort+20; p++ {
-		candidate := "http://127.0.0.1:" + strconv.Itoa(p)
-		pctx, pcancel := context.WithTimeout(ctx, 500*time.Millisecond)
-		ok, _ := opencode.ProbeServer(pctx, candidate)
-		if ok {
-			req, _ := http.NewRequestWithContext(pctx, http.MethodGet, candidate+"/app", nil)
-			resp, err := (&http.Client{Timeout: 500 * time.Millisecond}).Do(req)
-			if err != nil || resp.StatusCode != http.StatusOK {
-				ok = false
-			}
-			if resp != nil {
-				resp.Body.Close()
-			}
-		}
-		pcancel()
-		if ok {
-			os.Setenv("OPENCODE_URL", candidate)
-			if h.trySwitchToServerClient(ctx) {
-				log.Printf("opencode start: reusing running server at %s", candidate)
-				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"status":  "already_running",
-					"message": "reusing running opencode server",
-					"url":     candidate,
-				})
-				return
-			}
+		return err == nil && resp.StatusCode == http.StatusOK
+	}); ok {
+		os.Setenv("OPENCODE_URL", candidate)
+		if h.trySwitchToServerClient(ctx) {
+			log.Printf("opencode start: reusing running server at %s", candidate)
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"status":  "already_running",
+				"message": "reusing running opencode server",
+				"url":     candidate,
+			})
+			return
 		}
 	}
 
@@ -293,7 +275,7 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 }
 
 // trySwitchToServerClient probes the opencode server at the configured URL and,
-// if reachable, replaces h.opencodeClient with a ServerClient. Returns true if
+// if reachable, swaps the handler's client for a ServerClient. Returns true if
 // the switch happened. This lets the UI recover after starting opencode serve,
 // without restarting the ywai server.
 func (h *Handlers) trySwitchToServerClient(ctx context.Context) bool {
@@ -306,7 +288,7 @@ func (h *Handlers) trySwitchToServerClient(ctx context.Context) bool {
 	if err != nil || !st.Connected || st.Source != "server" {
 		return false
 	}
-	h.opencodeClient = sc
+	h.setOpenCode(sc)
 	return true
 }
 

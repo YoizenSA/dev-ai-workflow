@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -19,17 +18,16 @@ func containsString(slice []any, want string) bool {
 	return false
 }
 
-// pluginArray returns the root v2 "plugins" array as []any (fatal if absent/wrong type).
+// pluginArray returns the root v2 "plugins" array as []any (nil when the key
+// is absent). A surviving v1-era "plugin" key means the write failed to
+// migrate the config, so it fails the test.
 func pluginArray(t *testing.T, path string) []any {
 	t.Helper()
 	root := readConfigRoot(t, path)
-	if _, ok := root["plugins"]; ok {
-		t.Fatalf("config still has legacy \"plugins\" key: %v", root["plugins"])
+	if _, ok := root["plugin"]; ok {
+		t.Fatalf("config still has the v1 \"plugin\" key: %v", root["plugin"])
 	}
-	arr, ok := root["plugin"].([]any)
-	if !ok {
-		t.Fatalf("config has no []any \"plugin\" array; got %T", root["plugin"])
-	}
+	arr, _ := root["plugins"].([]any)
 	return arr
 }
 
@@ -37,7 +35,6 @@ func pluginArray(t *testing.T, path string) []any {
 // against the real resolved bundle (source checkout dist/). It is skipped when
 // no bundle has been built (e.g. CI without bun), so it never fails spuriously.
 func TestInstallBackgroundAgents_Integration(t *testing.T) {
-	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 	if _, err := config.BackgroundAgentsBundlePath(); err != nil {
 		t.Skipf("no background-agents bundle built: %v", err)
 	}

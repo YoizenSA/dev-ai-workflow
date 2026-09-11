@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-
 func newExporterWithDirs(commandsDir, agentsDir string) *Exporter {
 	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: TargetOpenCode}
 }
@@ -104,8 +103,8 @@ func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 }
 
 // TestOrchestratorHasTaskPermission verifies the generated orchestrator agent
-// markdown includes a nested permission.task block with deny-all and an allow
-// entry for each subAgent node.
+// markdown includes subagent rules with deny-all and an allow entry for each
+// subAgent node.
 func TestOrchestratorHasTaskPermission(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
@@ -122,17 +121,14 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 		t.Fatalf("orchestrator markdown not found at %s", orchPath)
 	}
 
-	if !strings.Contains(orch, "permission:") {
-		t.Errorf("orchestrator missing permission block:\n%s", orch)
+	if !strings.Contains(orch, "permissions:") {
+		t.Errorf("orchestrator missing permissions block:\n%s", orch)
 	}
-	if !strings.Contains(orch, "\n  task:") {
-		t.Errorf("orchestrator missing nested permission.task block:\n%s", orch)
+	if !strings.Contains(orch, "- action: subagent\n    resource: \"*\"\n    effect: deny") {
+		t.Errorf("orchestrator missing subagent deny-all rule:\n%s", orch)
 	}
-	if !strings.Contains(orch, `"*": deny`) {
-		t.Errorf("orchestrator permission.task missing deny-all:\n%s", orch)
-	}
-	if !strings.Contains(orch, "daily-task-news-briefing: allow") {
-		t.Errorf("orchestrator permission.task missing subagent allow entry:\n%s", orch)
+	if !strings.Contains(orch, "- action: subagent\n    resource: daily-task-news-briefing\n    effect: allow") {
+		t.Errorf("orchestrator missing subagent allow rule for the workflow sub-agent:\n%s", orch)
 	}
 }
 

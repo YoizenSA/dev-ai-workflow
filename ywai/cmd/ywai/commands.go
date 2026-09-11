@@ -103,19 +103,25 @@ func killPort(port int) error {
 		}
 	}
 
-	// Fallback: Windows netstat -ano (findstr filters to lines with the port)
-	cmd = exec.Command("cmd", "/C",
-		fmt.Sprintf("netstat -ano | findstr :%d", port))
+	// Fallback: Windows netstat -ano. Only a socket LISTENING on the local
+	// address/port counts: matching any column would also hit connections
+	// whose REMOTE port happens to be this one, killing unrelated PIDs.
+	cmd = exec.Command("cmd", "/C", "netstat", "-ano")
 	out, err = cmd.Output()
 	if err == nil {
-		// netstat -ano output: "  TCP    0.0.0.0:5768    0.0.0.0:0    LISTENING    1234"
-		// The PID is the last whitespace-separated field on each line.
+		suffix := fmt.Sprintf(":%d", port)
 		for _, line := range strings.Split(string(out), "\n") {
 			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				if pids := parsePIDs(fields[len(fields)-1]); len(pids) > 0 {
-					return killPIDs(pids)
-				}
+			if len(fields) < 5 {
+				continue
+			}
+			if !strings.HasSuffix(fields[1], suffix) || fields[3] != "LISTENING" {
+				continue
+			}
+			// netstat output: "  TCP    0.0.0.0:5768    0.0.0.0:0    LISTENING    1234"
+			// The PID is the last whitespace-separated field on the line.
+			if pids := parsePIDs(fields[len(fields)-1]); len(pids) > 0 {
+				return killPIDs(pids)
 			}
 		}
 	}
@@ -271,17 +277,7 @@ var stopCmd = &cobra.Command{
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
 	explicitURL := url != ""
-	if url == "" {
-		url = "http://127.0.0.1:4096"
-	}
-
-	// Determine the starting port from the URL (default 4096).
-	startPort := 4096
-	if _, p, err := net.SplitHostPort(strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")); err == nil && p != "" {
-		if n, err := strconv.Atoi(p); err == nil {
-			startPort = n
-		}
-	}
+	startPort := opencode.StartPortFromURL(url)
 
 	// An explicit URL is an operator choice. For the default port, however,
 	// reuse a healthy ywai-started server on a later port before spawning a new
@@ -293,26 +289,22 @@ func startOpencodeServe() {
 		if ok, _ := opencode.ProbeServer(ctx, url); ok {
 			return
 		}
-	} else {
-		for candidatePort := startPort; candidatePort < startPort+50; candidatePort++ {
-			candidateURL := fmt.Sprintf("http://127.0.0.1:%d", candidatePort)
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-			ok, _ := opencode.ProbeServer(ctx, candidateURL)
-			cancel()
-			if ok {
-				os.Setenv("OPENCODE_URL", candidateURL)
-				fmt.Printf("opencode server ready on %s\n", candidateURL)
-				return
-			}
-		}
+	} else if found, ok := opencode.FindRunningURL(context.Background(), startPort, 50, nil); ok {
+		os.Setenv("OPENCODE_URL", found)
+		fmt.Printf("opencode server ready on %s\n", found)
+		return
 	}
 
-	// Resolve OpenCode 2 (opencode2) first; fall back to OpenCode v1
-	// (opencode) on machines that only carry the legacy binary.
+	// Resolve the OpenCode 2 binary; the retired v1 `opencode` CLI is never
+	// started (docs/adr/0001-drop-opencode-v1-support.md).
 	binPath, binName := agent.FindOpenCode()
 	if binPath == "" {
-		fmt.Fprintln(os.Stderr, "Warning: neither opencode2 nor opencode binary found (looked in PATH, "+
-			"~/.opencode2/bin, ~/.local/bin, and login-shell which). "+
+		if err := agent.GateOpenCodeV2(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v.\n", err)
+			return
+		}
+		fmt.Fprintln(os.Stderr, "Warning: opencode2 binary not found (looked in PATH, "+
+			"~/.opencode/bin, ~/.local/bin, and login-shell which). "+
 			"Install OpenCode 2 or set OPENCODE_URL to point at a running server.")
 		return
 	}
@@ -664,26 +656,6 @@ var configFields = map[string]configField{
 				return err
 			}
 			c.DefaultMCP = b
-			return nil
-		},
-	},
-	"opencode_version": {
-		Get: func(c *config.UserConfig) interface{} { return c.OpencodeVersion },
-		Set: func(c *config.UserConfig, v string) error {
-			// Empty clears the pin and goes back to autodetect.
-			if strings.TrimSpace(v) == "" {
-				c.OpencodeVersion = ""
-				return nil
-			}
-			bin := config.NormalizeOpencodeVersion(v)
-			if bin == "" {
-				return fmt.Errorf("opencode_version must be v1 or v2, got %q", v)
-			}
-			if bin == "opencode2" {
-				c.OpencodeVersion = "v2"
-			} else {
-				c.OpencodeVersion = "v1"
-			}
 			return nil
 		},
 	},

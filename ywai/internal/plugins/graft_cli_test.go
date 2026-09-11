@@ -72,7 +72,7 @@ func TestWriteGraftMCPEntry_FlattensServersAndKeepsSiblings(t *testing.T) {
 	if mcpMap["timeout"] != float64(15000) && mcpMap["timeout"] != 15000 {
 		t.Fatalf("timeout not preserved: %#v", mcpMap["timeout"])
 	}
-	servers := mcpMap // v1: servers sit directly under mcp
+	servers := mcpMap["servers"].(map[string]any)
 	if _, ok := servers["context7"].(map[string]any); !ok {
 		t.Fatalf("context7 missing from servers: %#v", servers)
 	}
@@ -102,10 +102,7 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 	if mcpMap == nil {
 		t.Fatal("missing mcp")
 	}
-	if _, nested := mcpMap["servers"].(map[string]any); nested {
-		t.Fatal("v1 must not nest servers under mcp.servers")
-	}
-	servers, ok := mcpMap, mcpMap != nil // v1: servers sit directly under mcp
+	servers, ok := mcpMap["servers"].(map[string]any)
 	if !ok {
 		t.Fatalf("mcp.servers missing: %v", mcpMap)
 	}
@@ -113,9 +110,8 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 	if got["type"] != "local" {
 		t.Errorf("type = %#v, want local", got["type"])
 	}
-	// v1 validates `enabled`, so it must be written explicitly.
-	if got["enabled"] != true {
-		t.Errorf("enabled = %#v, want true (v1 validates the key)", got["enabled"])
+	if _, has := got["enabled"]; has {
+		t.Errorf("enabled = %#v, want absent (v2 uses disabled)", got["enabled"])
 	}
 	cmd, ok := got["command"].([]any)
 	if !ok {

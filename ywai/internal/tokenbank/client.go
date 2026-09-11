@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -193,7 +195,10 @@ func FetchConfig(baseURL, apiKey, target string) (*ConfigResponse, error) {
 // Config file helpers
 // ---------------------------------------------------------------------------
 
-// ReadJSONFile reads and parses a JSON (or JSONC) file.
+// ReadJSONFile reads and parses a JSON (or JSONC) file. Files ending in
+// .jsonc may carry comments; the parser is the shared lenient one from
+// internal/config so every reader in the repo accepts the same syntax.
+// A missing file yields an empty map.
 func ReadJSONFile(path string) (map[string]interface{}, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -206,8 +211,8 @@ func ReadJSONFile(path string) (map[string]interface{}, error) {
 	// Strip BOM
 	data = []byte(strings.TrimLeft(string(data), "\ufeff"))
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	result, err := config.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	if result == nil {
@@ -238,15 +243,16 @@ func ReadJSONArrayFile(path string) ([]interface{}, error) {
 	return result, nil
 }
 
-// WriteJSONFile writes a pretty-printed JSON file with backup.
+// WriteJSONFile writes a pretty-printed JSON file atomically. The content is
+// marshaled first, written to a sibling .tmp file, and renamed into place, so
+// a failed or partial write can never truncate or remove the existing config:
+// the original stays intact until the rename replaces it.
 func WriteJSONFile(path string, data interface{}) error {
-	// Backup existing file
-	if _, err := os.Stat(path); err == nil {
-		backup := path + ".bak"
-		if err := os.Rename(path, backup); err != nil {
-			return fmt.Errorf("backing up %s: %w", path, err)
-		}
+	content, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling JSON: %w", err)
 	}
+	content = append(content, '\n')
 
 	// Ensure directory exists
 	dir := filepath.Dir(path)
@@ -254,14 +260,13 @@ func WriteJSONFile(path string, data interface{}) error {
 		return fmt.Errorf("creating directory %s: %w", dir, err)
 	}
 
-	content, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling JSON: %w", err)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, content, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
-	content = append(content, '\n')
-
-	if err := os.WriteFile(path, content, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename %s -> %s: %w", tmp, path, err)
 	}
 	return nil
 }

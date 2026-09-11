@@ -1,0 +1,13 @@
+{
+  "name": "partial-soft-only",
+  "taskId": "golden-mixed",
+  "response": "config.load runs on every tick and the rest of this trace stays out of scope here.",
+  "expected": {
+    "hits": ["config.load"],
+    "missed": ["retryLoop", "graceful shutdown"],
+    "total": 3,
+    "gotHard": false,
+    "answered": true,
+    "weighted": 0.25
+  }
+}

@@ -124,33 +124,26 @@ func TestRemoveVisionMCP(t *testing.T) {
 // writeAgentConfig writes a JSON config file inside a fresh temp dir and
 // returns its absolute path. The file is created with the content from data
 // (a map[string]any shaped as the agent would write it).
+// opencodeServers returns the nested mcp.servers map — the v2 layout, now the
+// only one ywai writes. Siblings such as "timeout" stay at the mcp level and
+// are not part of the result.
 func opencodeServers(t *testing.T, root map[string]any) map[string]any {
 	t.Helper()
 	mcp, _ := root["mcp"].(map[string]any)
 	if mcp == nil {
 		t.Fatal("missing mcp")
 	}
-	if _, flat := mcp["context7"]; flat {
-		if _, ok := mcp["servers"]; ok {
-			t.Fatal("flat mcp sibling servers must be lifted into mcp.servers on write")
-		}
-	}
-	servers, ok := mcp, mcp != nil // v1: servers sit directly under mcp
+	servers, ok := mcp["servers"].(map[string]any)
 	if !ok {
 		t.Fatalf("mcp.servers missing: %v", mcp)
-	}
-	for k, v := range mcp {
-		if k == "timeout" {
-			continue
-		}
-		if _, isObj := v.(map[string]any); isObj && k == "servers" {
-			t.Fatalf("v1 must not nest servers under mcp.servers: %v", v)
-		}
 	}
 	return servers
 }
 
-func TestInstallMicrosoftLearnMCP_OpenCodeV1Flat(t *testing.T) {
+// A config still carrying the v1 flat layout (mcp.<id> with "enabled") is
+// migrated on contact: the new server lands nested under mcp.servers and the
+// legacy "enabled" flag is not written back.
+func TestInstallMicrosoftLearnMCP_MigratesFlatSeed(t *testing.T) {
 	path := writeAgentConfig(t, "opencode.json", map[string]any{
 		"mcp": map[string]any{
 			"timeout": 30,
@@ -172,8 +165,8 @@ func TestInstallMicrosoftLearnMCP_OpenCodeV1Flat(t *testing.T) {
 		t.Fatal("context7 missing under mcp")
 	}
 	entry := servers["microsoft-learn"].(map[string]any)
-	if entry["enabled"] != true {
-		t.Fatalf("v1 must write enabled, got %v", entry)
+	if _, hasEnabled := entry["enabled"]; hasEnabled {
+		t.Fatalf("v1 enabled flag must not be written back, got %v", entry)
 	}
 	mcp := root["mcp"].(map[string]any)
 	if mcp["timeout"] != float64(30) && mcp["timeout"] != 30 {
@@ -196,13 +189,13 @@ func TestInstallMicrosoftLearnMCP_StripsLegacyEnabled(t *testing.T) {
 	}
 	root := readConfigRoot(t, path)
 	entry := opencodeServers(t, root)["jam"].(map[string]any)
-	// v1 validates `enabled`, so a disabled server persists as enabled:false
-	// rather than the v2 `disabled: true`.
-	if entry["enabled"] != false {
-		t.Fatalf("disabled server must persist as enabled:false, got %v", entry)
+	// v2 expresses a disabled server with the disabled key; the v1 enabled
+	// flag is never written back.
+	if entry["disabled"] != true {
+		t.Fatalf("disabled server must persist as disabled:true, got %v", entry)
 	}
-	if _, has := entry["disabled"]; has {
-		t.Fatalf("v1 must not persist the v2 disabled key, got %v", entry)
+	if _, has := entry["enabled"]; has {
+		t.Fatalf("v1 enabled key must not be written back, got %v", entry)
 	}
 }
 

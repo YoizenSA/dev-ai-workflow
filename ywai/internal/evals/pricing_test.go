@@ -311,3 +311,42 @@ func TestLookupCostFallsBackOnBadCatalogBody(t *testing.T) {
 		resetPricingState()
 	}
 }
+
+// TestLookupCostGoldenTable is a snapshot of the CURRENT fallbackPricing
+// table: one exact price per row at 300k input / 1M output tokens, so expected
+// = In*0.3 + Out. The asymmetric token counts make an accidental In/Out swap
+// turn red, and any silent rate edit shows up as a diff in this table.
+func TestLookupCostGoldenTable(t *testing.T) {
+	deadPricing(t)
+	const tokensIn = 300_000
+	const tokensOut = 1_000_000
+	cases := []struct {
+		model   string
+		wantUSD float64
+	}{
+		{"claude-opus-4-5", 26.50},
+		{"claude-opus-4-1", 79.50},
+		{"claude-opus-4", 79.50},
+		{"claude-opus", 79.50},
+		{"claude-sonnet-4-5", 15.90},
+		{"claude-sonnet-4", 15.90},
+		{"claude-sonnet", 15.90},
+		{"claude-haiku-4-5", 5.30},
+		{"claude-3-5-haiku", 4.24},
+		{"claude-haiku", 5.30},
+		{"gpt-5-pro", 124.50},
+		{"gpt-5-mini", 2.075},
+		{"gpt-5-nano", 0.415},
+		{"gpt-5", 10.375},
+		{"gemini-2.5-flash-lite", 0.43},
+		{"gemini-2.5-flash", 2.59},
+		{"gemini-2.5-pro", 10.375},
+	}
+	for _, tc := range cases {
+		usd, known := LookupCost(tc.model, tokensIn, tokensOut)
+		if !known || !costNearlyEqual(usd, tc.wantUSD) {
+			t.Errorf("%s: LookupCost at %d/%d tokens = (%v,%v), want (%v,true)",
+				tc.model, tokensIn, tokensOut, usd, known, tc.wantUSD)
+		}
+	}
+}

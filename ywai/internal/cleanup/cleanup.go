@@ -274,6 +274,9 @@ func entryText(entry any) string {
 	}
 }
 
+// cleanLegacyPlugins removes plugin bundles left by old ywai installs. This
+// is cleanup of past artifacts (ywai clean's one-shot path), not v1 support:
+// current installs never write these files again.
 func (c *collector) cleanLegacyPlugins(ocDir string) {
 	for _, rel := range legacyPluginFiles {
 		c.removePath(filepath.Join(ocDir, rel), "broken legacy plugin bundle")

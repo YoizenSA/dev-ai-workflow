@@ -1,0 +1,13 @@
+{
+  "name": "hard-hit-soft-missed",
+  "taskId": "golden-mixed",
+  "response": "the retryloop in worker.go guards the polling branch and nothing else was touched.",
+  "expected": {
+    "hits": ["retryLoop"],
+    "missed": ["config.load", "graceful shutdown"],
+    "total": 3,
+    "gotHard": true,
+    "answered": true,
+    "weighted": 0.5
+  }
+}

@@ -25,7 +25,7 @@ var KnownAgents = []struct {
 	{
 		Name: "opencode",
 		// Placeholder: Detect resolves this entry through FindOpenCode so the
-		// active flavor (v2, or v1 when that is what is installed) wins.
+		// OpenCode 2 binary wins.
 		Binary: "opencode2",
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".config", "opencode", "skills")
@@ -198,73 +198,45 @@ func FindBinary(name string) string {
 	return ""
 }
 
-// OpenCodeOverrideEnv forces which OpenCode CLI ywai drives. Accepted values
-// are "v1"/"opencode" and "v2"/"opencode2"; anything else means autodetect.
-const OpenCodeOverrideEnv = "YWAI_OPENCODE"
-
-// The persisted equivalent is opencode_version in config.yaml:
-//
-//	ywai config set opencode_version v2
-
-// openCodeOverride returns the pinned OpenCode binary name, or "" to autodetect.
-// The environment wins over the stored setting so a one-off run can override a
-// persisted choice without editing config.yaml.
-func openCodeOverride() string {
-	if v := config.NormalizeOpencodeVersion(os.Getenv(OpenCodeOverrideEnv)); v != "" {
-		return v
-	}
-	cfg, err := config.LoadConfig()
-	if err != nil || cfg == nil {
-		return ""
-	}
-	return config.NormalizeOpencodeVersion(cfg.OpencodeVersion)
-}
-
-// FindOpenCode resolves the OpenCode CLI binary, preferring OpenCode 2
-// (opencode2) and falling back to OpenCode v1 (opencode) when v2 is not
-// installed. OpenCodeOverrideEnv pins one of them instead. Returns the resolved
-// path and the binary name it resolved to, or "" when neither is found.
-//
-// v1 and v2 share ~/.config/opencode, so only one of them is ever the active
-// host: everything that needs to know which one must come through here.
+// FindOpenCode resolves the OpenCode 2 CLI binary (opencode2). OpenCode v1 is
+// withdrawn (docs/adr/0001-drop-opencode-v1-support.md) and is never resolved;
+// a machine that only carries the v1 binary gets the withdrawal notice from
+// GateOpenCodeV2 at install/apply time. Returns the resolved path and the
+// binary name, or "" when opencode2 is not found.
 func FindOpenCode() (string, string) {
-	if forced := openCodeOverride(); forced != "" {
-		// A pin selects which binary to look for; it cannot conjure one that is
-		// not installed, so report not-found rather than a name with no path.
-		if p := FindBinary(forced); p != "" {
-			return p, forced
-		}
-		return "", ""
-	}
 	if p := FindBinary("opencode2"); p != "" {
 		return p, "opencode2"
-	}
-	if p := FindBinary("opencode"); p != "" {
-		return p, "opencode"
 	}
 	return "", ""
 }
 
 // OpenCodeBinaryName is the binary name of the active OpenCode host. It falls
-// back to opencode2 when neither binary is installed, so callers that only need
-// a name (config writers, install summaries) never get "".
+// back to opencode2 when the binary is not installed, so callers that only
+// need a name (config writers, install summaries) never get "".
 func OpenCodeBinaryName() string {
-	// An explicit pin is the intent even when that binary is not installed yet:
-	// config writers must target the flavor the user chose, not the one that
-	// happens to be on PATH.
-	if forced := openCodeOverride(); forced != "" {
-		return forced
-	}
 	if _, name := FindOpenCode(); name != "" {
 		return name
 	}
 	return "opencode2"
 }
 
-// OpenCodeIsV2 reports whether the active OpenCode host is OpenCode 2. Callers
-// use it to gate v2-only wiring, such as the background-agents plugin, which
-// supervises v2's built-in subagent tool and no longer installs under v1.
-func OpenCodeIsV2() bool { return OpenCodeBinaryName() == "opencode2" }
+// GateOpenCodeV2 is the OpenCode 2 minimum-version gate for install/apply.
+// It returns an error when the only OpenCode binary installed is the retired
+// v1 `opencode` CLI: ywai writes v2-shaped config, which v1 rejects, so the
+// run must stop with the withdrawal notice instead of silently breaking the
+// user's config. A machine with neither binary passes — callers report their
+// own not-found error.
+func GateOpenCodeV2() error {
+	if FindBinary("opencode2") != "" {
+		return nil
+	}
+	if FindBinary("opencode") != "" {
+		return fmt.Errorf("ywai requires OpenCode 2 (the opencode2 binary): the installed 'opencode' is the " +
+			"retired v1 CLI, which ywai no longer supports (docs/adr/0001-drop-opencode-v1-support.md). " +
+			"Install OpenCode 2 and run this command again")
+	}
+	return nil
+}
 
 func whichViaShell(name string) string {
 	var cmd *exec.Cmd

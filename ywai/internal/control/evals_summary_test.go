@@ -56,8 +56,12 @@ func TestHandleEvalSummary_AggregatesSortsAndFilters(t *testing.T) {
 				Metrics: evals.Metrics{Turns: 99, TokensIn: 999, TokensOut: 999}, Seconds: 5, CostUSD: 9.9},
 		},
 	}
-	benchRuns.upsert(run1)
-	benchRuns.upsert(run2)
+	if err := benchRuns.UpsertRun(run1); err != nil {
+		t.Fatal(err)
+	}
+	if err := benchRuns.UpsertRun(run2); err != nil {
+		t.Fatal(err)
+	}
 
 	s := &Server{mux: http.NewServeMux()}
 	s.registerEvalsRoutes()

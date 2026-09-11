@@ -1,0 +1,180 @@
+/* Styles for RunDiff (rd-*) and NeedlePanel (np-*). Both components are pure
+   and mounted by the integrator; importing this file keeps them standalone. */
+
+/* ─── RunDiff ──────────────────────────────────────────────────── */
+.rd {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.rd-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.rd-legend {
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+
+.rd-delta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Up is good for score columns, up is heavier for turns/cost: the colour says
+   whether the move was an improvement, the glyph only says the direction. */
+.rd-good {
+  color: var(--success);
+}
+
+.rd-bad {
+  color: var(--danger);
+}
+
+/* An absent baseline: muted em dash, distinct from a computed zero. */
+.rd-none {
+  color: var(--text-muted);
+}
+
+/* ─── NeedlePanel ──────────────────────────────────────────────── */
+.np {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.np-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.np-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.np-row-head:hover {
+  background: var(--surface-soft);
+}
+
+.np-model {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.np-round {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.np-percent {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.np-caret {
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+
+.np-caret[aria-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+/* Hard-expectation badge: only rendered when the attempt got every hard
+   expectation, so absence means the run missed one. */
+.np-hard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--success-border);
+  background: var(--success-soft);
+  color: var(--tint-success);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.np-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.np-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.np-chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+}
+
+.np-chip.np-hit {
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--tint-success);
+}
+
+.np-chip.np-miss {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--tint-danger);
+}
+
+.np-response {
+  margin: 0;
+}
+
+.np-response summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.np-response pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}

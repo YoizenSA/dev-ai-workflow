@@ -11,7 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func newV2DB(t *testing.T) *sql.DB {
+func newRunnerDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/oc.db")
 	if err != nil {
@@ -43,10 +43,19 @@ func newV2DB(t *testing.T) *sql.DB {
 	return db
 }
 
-// v2-style server: probe answers /api/session, prompt accepts the FLAT shape
-// {text: ...} (beta-18684), wait is 204, messages return assistant text.
-func TestPromptV2FlatShape(t *testing.T) {
-	db := newV2DB(t)
+// healthyServer answers the ProbeMode health read so a Runner can reach the
+// DB-backed code paths in tests.
+func healthyServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+}
+
+// Server accepts only the FLAT prompt shape {text: ...} (beta-18684, the live
+// schema): prompt must admit the prompt and read the assistant answer back.
+func TestPromptFlatShape(t *testing.T) {
+	db := newRunnerDB(t)
 	defer db.Close()
 	var prompted bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +64,8 @@ func TestPromptV2FlatShape(t *testing.T) {
 		case r.URL.Path == "/api/session" && r.Method == http.MethodGet:
 			json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
 		case r.URL.Path == "/api/session" && r.Method == http.MethodPost:
-			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "ses_v2_1"}})
-		case r.URL.Path == "/api/session/ses_v2_1/prompt":
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "ses_1"}})
+		case r.URL.Path == "/api/session/ses_1/prompt":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
 			if _, ok := body["text"]; !ok {
@@ -66,11 +75,11 @@ func TestPromptV2FlatShape(t *testing.T) {
 			}
 			prompted = true
 			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "msg_1"}})
-		case r.URL.Path == "/api/session/ses_v2_1/wait":
+		case r.URL.Path == "/api/session/ses_1/wait":
 			w.WriteHeader(204)
-		case r.URL.Path == "/api/session/ses_v2_1/model":
+		case r.URL.Path == "/api/session/ses_1/model":
 			w.WriteHeader(204)
-		case r.URL.Path == "/api/session/ses_v2_1/message":
+		case r.URL.Path == "/api/session/ses_1/message":
 			json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{
 				{"id": "msg_1", "type": "assistant", "finish": "done", "content": []map[string]any{{"type": "text", "text": "flat ok"}}},
 			}})
@@ -80,7 +89,7 @@ func TestPromptV2FlatShape(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := &Runner{BaseURL: srv.URL, DB: db}
-	resp, err := r.prompt(context.Background(), "ses_v2_1", "ask", "m", "p", "hello")
+	resp, err := r.prompt(context.Background(), "ses_1", "ask", "m", "p", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,17 +101,17 @@ func TestPromptV2FlatShape(t *testing.T) {
 	}
 }
 
-// Same flow but the server accepts only the NESTED shape {prompt:{text}} (newer
-// schema) — promptV2 must retry and still succeed.
-func TestPromptV2NestedFallback(t *testing.T) {
-	db := newV2DB(t)
+// Server accepts only the NESTED shape {prompt:{text}} (older schema) —
+// prompt must retry with it and still succeed.
+func TestPromptNestedFallback(t *testing.T) {
+	db := newRunnerDB(t)
 	defer db.Close()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		switch {
 		case r.URL.Path == "/api/session" && r.Method == http.MethodGet:
 			json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
-		case r.URL.Path == "/api/session/ses_v2_1/prompt":
+		case r.URL.Path == "/api/session/ses_1/prompt":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
 			if _, ok := body["prompt"]; !ok {
@@ -111,9 +120,9 @@ func TestPromptV2NestedFallback(t *testing.T) {
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "msg_2"}})
-		case r.URL.Path == "/api/session/ses_v2_1/wait":
+		case r.URL.Path == "/api/session/ses_1/wait":
 			w.WriteHeader(204)
-		case r.URL.Path == "/api/session/ses_v2_1/message":
+		case r.URL.Path == "/api/session/ses_1/message":
 			json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{
 				{"id": "msg_2", "type": "assistant", "finish": "done", "payload": map[string]any{"text": "nested ok"}},
 			}})
@@ -123,7 +132,7 @@ func TestPromptV2NestedFallback(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := &Runner{BaseURL: srv.URL, DB: db}
-	resp, err := r.prompt(context.Background(), "ses_v2_1", "ask", "m", "p", "hello")
+	resp, err := r.prompt(context.Background(), "ses_1", "ask", "m", "p", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,10 +141,13 @@ func TestPromptV2NestedFallback(t *testing.T) {
 	}
 }
 
-// metricsV2 readback: tool calls nested in content[] at any index.
-func TestMetricsV2(t *testing.T) {
-	db := newV2DB(t)
+// metrics readback: tool calls nested in content[] at any index. metrics
+// gates on ProbeMode, so the test fronts a healthy server.
+func TestMetrics(t *testing.T) {
+	db := newRunnerDB(t)
 	defer db.Close()
+	hl := healthyServer()
+	defer hl.Close()
 	_, err := db.Exec(`INSERT INTO session_v2 (id, project_id, slug, directory, title, version, cost, tokens_input, tokens_output, time_created, time_updated)
 		VALUES ('ses_m', 'proj', 's', '/repo', 't', 'beta', 1.5, 1000, 100, 1, 2);
 	INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
@@ -145,7 +157,7 @@ func TestMetricsV2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &Runner{DB: db, Mode: ModeV2}
+	r := &Runner{BaseURL: hl.URL, DB: db}
 	m := r.metrics(context.Background(), "ses_m")
 	if m.Turns != 3 || m.Calls != 3 || m.Reads != 2 {
 		t.Fatalf("metrics=%+v", m)

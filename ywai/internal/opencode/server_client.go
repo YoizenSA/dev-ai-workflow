@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 const defaultTimeout = 3 * time.Second
@@ -79,16 +77,13 @@ type modelV2Response struct {
 	Data     []rawModelV2    `json:"data"`
 }
 
-// apiPath prefixes a route with /api when the active OpenCode is v2. v2 serves
-// its web UI from the bare paths, so GET /agent there returns the SPA's HTML
-// shell with a 200 — the JSON decode fails on a response that looks healthy.
-// The real routes moved under /api and are Basic-auth gated, which the client's
+// apiPath prefixes a route with /api. OpenCode 2 serves its web UI from the
+// bare paths, so GET /agent there returns the SPA's HTML shell with a 200 —
+// the JSON decode fails on a response that looks healthy. The real routes
+// moved under /api and are Basic-auth gated, which the client's
 // serverAuthTransport already supplies.
 func (c *ServerClient) apiPath(route string) string {
-	if agent.OpenCodeIsV2() {
-		return "/api" + route
-	}
-	return route
+	return "/api" + route
 }
 
 // ─── Client interface implementation ───────────────────────────────────────
@@ -156,12 +151,7 @@ func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 		return models, nil
 	}
 
-	models, err = c.listModelsV1(ctx)
-	if err == nil && len(models) > 0 {
-		return models, nil
-	}
-
-	return nil, fmt.Errorf("opencode server: all endpoints failed: %v", err)
+	return nil, fmt.Errorf("opencode server: no models at /api/model: %v", err)
 }
 
 func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
@@ -219,56 +209,6 @@ func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
 	}
 	if len(models) == 0 {
 		return nil, fmt.Errorf("no models in /api/model")
-	}
-	return models, nil
-}
-
-func (c *ServerClient) listModelsV1(ctx context.Context) ([]ModelInfo, error) {
-	url := c.baseURL + c.apiPath("/provider")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	var provResp providerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&provResp); err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
-	models := make([]ModelInfo, 0)
-	for _, p := range provResp.All {
-		// Iterate over models within each provider
-		for modelID, modelData := range p.Models {
-			modelMap, ok := modelData.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			modelName := modelID
-			if name, ok := modelMap["name"].(string); ok && name != "" {
-				modelName = name
-			}
-			modelKey := p.ID + "/" + modelID
-			if modelKey == "" || seen[modelKey] {
-				continue
-			}
-			seen[modelKey] = true
-			models = append(models, ModelInfo{
-				ID:       modelKey,
-				Provider: p.ID,
-				Name:     modelName,
-			})
-		}
 	}
 	return models, nil
 }

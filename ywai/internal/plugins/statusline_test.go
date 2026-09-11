@@ -34,7 +34,7 @@ func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 
 	cliPath := filepath.Join(filepath.Dir(configPath), "cli.json")
 	root := readConfigRoot(t, cliPath)
-	arr, _ := root["plugin"].([]any)
+	arr, _ := root["plugins"].([]any)
 	if !containsString(arr, "from-tui") {
 		t.Errorf("cli.json plugins %v missing leftover tui.json entry", arr)
 	}
@@ -110,9 +110,9 @@ func pluginArrayIn(t *testing.T, path string) []any {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatalf("parse %s: %v", filepath.Base(path), err)
 	}
-	arr, ok := root["plugin"].([]any)
+	arr, ok := root["plugins"].([]any)
 	if !ok {
-		t.Fatalf("%s has no []any \"plugin\": %v", filepath.Base(path), root)
+		t.Fatalf("%s has no []any \"plugins\": %v", filepath.Base(path), root)
 	}
 	return arr
 }

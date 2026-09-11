@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/engram"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
@@ -20,12 +21,32 @@ import (
 // Handlers holds the collaborators the tool endpoints need.
 type Handlers struct {
 	hub            *Hub
-	opencodeClient opencode.Client
 	engramClient   engram.Client
 	consolidations *ConsolidationManager
 
+	// openCodePtr holds the opencode client behind an atomic pointer:
+	// StartOpencode swaps LocalClient → ServerClient at runtime while other
+	// handlers read it concurrently.
+	openCodePtr atomic.Pointer[opencode.Client]
+
 	// modelCache memoizes the slow opencode model lookup (see model_cache.go).
 	modelCache modelCache
+}
+
+// openCode returns the current opencode client, or nil before one is set.
+func (h *Handlers) openCode() opencode.Client {
+	if h == nil {
+		return nil
+	}
+	if p := h.openCodePtr.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// setOpenCode swaps the opencode client.
+func (h *Handlers) setOpenCode(c opencode.Client) {
+	h.openCodePtr.Store(&c)
 }
 
 // NewHandlers builds the tool API handlers: hub, consolidation manager, and a
@@ -37,13 +58,13 @@ func NewHandlers() *Handlers {
 	engramClient := engram.DefaultClient()
 
 	h := &Handlers{
-		hub:            hub,
-		opencodeClient: oc,
-		engramClient:   engramClient,
+		hub:          hub,
+		engramClient: engramClient,
 	}
+	h.setOpenCode(oc)
 	h.consolidations = NewConsolidationManager(
 		engramClient,
-		func() opencode.SessionAPI { return h.opencodeClient.Sessions() },
+		func() opencode.SessionAPI { return h.openCode().Sessions() },
 		func(et string, payload any) { hub.BroadcastEvent(et, payload) },
 	)
 	h.WarmModels()

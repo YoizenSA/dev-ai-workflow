@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -63,7 +64,6 @@ func TestDetect_PrefersOpenCode2Binary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir)
-	t.Setenv(OpenCodeOverrideEnv, "")
 
 	found := Detect()
 	var oc *Agent
@@ -354,47 +354,84 @@ func writeFakeBin(t *testing.T, dir, name string) string {
 	return path
 }
 
-func TestFindOpenCode_PrefersV2(t *testing.T) {
+func TestFindOpenCode_ResolvesOpencode2(t *testing.T) {
 	dir := t.TempDir()
 	home := t.TempDir()
 	writeFakeBin(t, dir, "opencode2")
-	writeFakeBin(t, dir, "opencode")
 	// HOME + USERPROFILE override keeps real well-known dirs (~/.opencode/bin)
 	// out of the resolution so the test exercises PATH injection only.
 	// USERPROFILE matters on Windows, where os.UserHomeDir reads it, not HOME.
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", dir)
-	t.Setenv(OpenCodeOverrideEnv, "")
 
 	path, bin := FindOpenCode()
 	if bin != "opencode2" {
-		t.Fatalf("FindOpenCode bin = %q, want opencode2 (v2 wins when both exist)", bin)
+		t.Fatalf("FindOpenCode bin = %q, want opencode2 (the only supported host)", bin)
 	}
 	if filepath.Base(path) != fakeBinName("opencode2") {
 		t.Fatalf("FindOpenCode path = %q, want an opencode2 binary", path)
 	}
 }
 
-func TestFindOpenCode_FallsBackToV1(t *testing.T) {
+// GateOpenCodeV2 is the ADR-0001 minimum-version gate: a machine with only the
+// retired v1 `opencode` binary must get the withdrawal notice, not silent v2
+// config writes.
+func TestGateOpenCodeV2_ErrorsOnV1Only(t *testing.T) {
 	dir := t.TempDir()
 	home := t.TempDir()
 	writeFakeBin(t, dir, "opencode")
-	// HOME + USERPROFILE override keeps the real ~/.opencode/bin away from the
-	// resolution; without it a locally installed opencode2 would win on any
-	// machine (USERPROFILE is what os.UserHomeDir reads on Windows).
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", dir)
-	t.Setenv(OpenCodeOverrideEnv, "")
 
-	path, bin := FindOpenCode()
-	if bin != "opencode" {
-		t.Fatalf("FindOpenCode bin = %q, want opencode (v1 fallback)", bin)
+	err := GateOpenCodeV2()
+	if err == nil {
+		t.Fatal("v1-only machine must be gated with an error")
 	}
-	if filepath.Base(path) != fakeBinName("opencode") {
-		t.Fatalf("FindOpenCode path = %q, want a v1 opencode binary", path)
+	for _, want := range []string{"OpenCode 2", "opencode2", "0001-drop-opencode-v1-support"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("gate error must mention %q, got: %v", want, err)
+		}
 	}
+}
+
+func TestGateOpenCodeV2_PassesOnV2(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	writeFakeBin(t, dir, "opencode2")
+	writeFakeBin(t, dir, "opencode")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", dir)
+
+	if err := GateOpenCodeV2(); err != nil {
+		t.Fatalf("GateOpenCodeV2() = %v, want nil when opencode2 is installed", err)
+	}
+}
+
+func TestGateOpenCodeV2_NoBinaryPasses(t *testing.T) {
+	// Neither binary installed: not a gate error — the caller reports its own
+	// not-found error.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+
+	if err := GateOpenCodeV2(); err != nil {
+		t.Fatalf("GateOpenCodeV2() = %v, want nil when neither binary exists", err)
+	}
+}
+
+func TestOpenCodeBinaryNameNeverEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
+	t.Setenv("PATH", t.TempDir()) // binary not installed
+	if got := OpenCodeBinaryName(); got == "" {
+		t.Error("callers that only need a name must never get an empty string")
+	}
+	_ = os.Getenv("PATH")
 }
 
 func TestFindOpenCode_Missing(t *testing.T) {

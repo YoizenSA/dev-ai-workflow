@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// pinOpenCodeFlavor lives in orchestration_policy_test.go.
-
 // writeOpenCodeConfig writes opencode.json under a temp HOME layout.
 func writeOpenCodeConfig(t *testing.T, home, content string) string {
 	t.Helper()
@@ -32,7 +30,6 @@ func writeOpenCodeConfig(t *testing.T, home, content string) string {
 func TestApplyAgentModel_FallsThroughToMarkdownWithoutAgentMap(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
-	pinOpenCodeFlavor(t, "opencode2")
 
 	writeOpenCodeConfig(t, home, `{"model": "prov/other"}`)
 
@@ -64,7 +61,6 @@ func TestApplyAgentModel_FallsThroughToMarkdownWithoutAgentMap(t *testing.T) {
 func TestApplyAgentModel_MergesLegacyAgentKey(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
-	pinOpenCodeFlavor(t, "opencode2")
 
 	path := writeOpenCodeConfig(t, home, `{
   "agents": {"ask": {"mode": "subagent", "description": "answers"}},
@@ -102,52 +98,14 @@ func TestApplyAgentModel_MergesLegacyAgentKey(t *testing.T) {
 	}
 }
 
-// TestApplyAgentModel_V1MergesV2Key is the v1 mirror of the merge test.
-func TestApplyAgentModel_V1MergesV2Key(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	pinOpenCodeFlavor(t, "opencode")
-
-	path := writeOpenCodeConfig(t, home, `{
-  "agent": {"ask": {"mode": "subagent", "description": "answers"}},
-  "agents": {"dev": {"mode": "subagent", "description": "writes code"}}
-}`)
-
-	if !applyAgentModel("dev", "prov/m3") {
-		t.Fatalf("applyAgentModel = false, want true")
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(data, &root); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := root["agents"]; ok {
-		t.Fatalf("v2 agents key must be deleted on a v1 host, got:\n%s", data)
-	}
-	var agents map[string]map[string]any
-	if err := json.Unmarshal(root["agent"], &agents); err != nil {
-		t.Fatal(err)
-	}
-	if agents["dev"]["model"] != "prov/m3" {
-		t.Errorf("dev model = %v, want prov/m3", agents["dev"]["model"])
-	}
-	if _, ok := agents["ask"]; !ok {
-		t.Errorf("ask entry (v1 key) lost during write:\n%s", data)
-	}
-}
-
 // TestLookupProviderSection_MergesBothKeys pins P0-2 (providers): the merged
-// view contains entries from both spellings, with the flavor's key winning.
+// view contains entries from both spellings, with the canonical `providers`
+// key winning.
 func TestLookupProviderSection_MergesBothKeys(t *testing.T) {
-	t.Run("v2", func(t *testing.T) {
-		pinOpenCodeFlavor(t, "opencode2")
+	t.Run("legacy key fills the gaps", func(t *testing.T) {
 		config := map[string]json.RawMessage{
-			"providers": json.RawMessage(`{"admin": {"name": "v2 admin"}, "only-v2": {"name": "v2"}}`),
-			"provider":  json.RawMessage(`{"admin": {"name": "v1 admin"}, "only-v1": {"name": "v1"}}`),
+			"providers": json.RawMessage(`{"admin": {"name": "providers admin"}, "only-v2": {"name": "providers"}}`),
+			"provider":  json.RawMessage(`{"admin": {"name": "provider admin"}, "only-v1": {"name": "provider"}}`),
 		}
 		section := lookupProviderSection(config)
 		if section == nil {
@@ -162,29 +120,11 @@ func TestLookupProviderSection_MergesBothKeys(t *testing.T) {
 		if err := json.Unmarshal(section["admin"], &admin); err != nil {
 			t.Fatal(err)
 		}
-		if admin.Name != "v2 admin" {
-			t.Errorf("flavor key must win for admin, got %q", admin.Name)
-		}
-	})
-	t.Run("v1", func(t *testing.T) {
-		pinOpenCodeFlavor(t, "opencode")
-		config := map[string]json.RawMessage{
-			"providers": json.RawMessage(`{"admin": {"name": "v2 admin"}}`),
-			"provider":  json.RawMessage(`{"admin": {"name": "v1 admin"}}`),
-		}
-		section := lookupProviderSection(config)
-		var admin struct {
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal(section["admin"], &admin); err != nil {
-			t.Fatal(err)
-		}
-		if admin.Name != "v1 admin" {
-			t.Errorf("flavor key must win for admin, got %q", admin.Name)
+		if admin.Name != "providers admin" {
+			t.Errorf("canonical key must win for admin, got %q", admin.Name)
 		}
 	})
 	t.Run("empty", func(t *testing.T) {
-		pinOpenCodeFlavor(t, "opencode2")
 		if got := lookupProviderSection(map[string]json.RawMessage{}); got != nil {
 			t.Errorf("lookupProviderSection = %v, want nil", got)
 		}
@@ -197,7 +137,6 @@ func TestLookupProviderSection_MergesBothKeys(t *testing.T) {
 func TestDeleteProvider_MergedAndSingleKey(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
-	pinOpenCodeFlavor(t, "opencode2")
 
 	path := writeOpenCodeConfig(t, home, `{
   "providers": {

@@ -106,8 +106,8 @@ func TestIsPrereleaseTag(t *testing.T) {
 		"8.10.0":         false,
 	}
 	for tag, want := range cases {
-		if got := isPrereleaseTag(tag); got != want {
-			t.Errorf("isPrereleaseTag(%q)=%v want %v", tag, got, want)
+		if got := IsPrerelease(tag); got != want {
+			t.Errorf("IsPrerelease(%q)=%v want %v", tag, got, want)
 		}
 	}
 }

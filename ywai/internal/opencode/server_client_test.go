@@ -11,8 +11,9 @@ import (
 // ─── Agent endpoint test ───────────────────────────────────────────────────
 
 func TestServerClient_ListAgents(t *testing.T) {
+	// v2 serves agents under /api/agent; the bare /agent path is the SPA shell.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/agent" {
+		if r.URL.Path != "/api/agent" {
 			http.NotFound(w, r)
 			return
 		}
@@ -67,61 +68,7 @@ func TestServerClient_ListAgents_ServerError(t *testing.T) {
 	}
 }
 
-// ─── Provider endpoint (v1) test ───────────────────────────────────────────
-
-func TestServerClient_ListModels_V1(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/provider" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		resp := map[string]interface{}{
-			"all": []map[string]interface{}{
-				{
-					"name": "OpenAI",
-					"id":   "openai",
-					"type": "openai",
-					"models": map[string]interface{}{
-						"gpt-4": map[string]interface{}{
-							"id":   "gpt-4",
-							"name": "GPT-4",
-						},
-					},
-				},
-				{
-					"name": "Anthropic",
-					"id":   "anthropic",
-					"type": "anthropic",
-					"models": map[string]interface{}{
-						"claude-3": map[string]interface{}{
-							"id":   "claude-3",
-							"name": "Claude 3",
-						},
-					},
-				},
-			},
-			"default":   map[string]string{},
-			"connected": []string{},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer srv.Close()
-
-	c := NewServerClient(srv.URL)
-	c.useCLI = false
-	ctx := context.Background()
-	models, err := c.ListModels(ctx)
-	if err != nil {
-		t.Fatalf("ListModels() failed: %v", err)
-	}
-
-	if len(models) != 2 {
-		t.Fatalf("Expected 2 models, got %d", len(models))
-	}
-}
-
-// ─── Provider V2 endpoint test ─────────────────────────────────────────────
+// ─── Model endpoint (v2) test ──────────────────────────────────────────────
 
 func TestServerClient_ListModels_V2(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -160,51 +107,6 @@ func TestServerClient_ListModels_V2(t *testing.T) {
 		if want[m.ID] != m.Provider {
 			t.Errorf("model %+v is not a provider/model id", m)
 		}
-	}
-}
-
-func TestServerClient_ListModels_DoesNotTreatProvidersAsModels(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/provider":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data": []map[string]interface{}{
-					{"id": "opencode-admin", "name": "Token Bank Proxy"},
-					{"id": "openai", "name": "OpenAI"},
-				},
-			})
-		case "/provider":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"all": []map[string]interface{}{
-					{
-						"id":   "opencode-admin",
-						"name": "Token Bank Proxy",
-						"models": map[string]interface{}{
-							"deepseek-v4-flash": map[string]interface{}{"name": "DeepSeek V4 Flash"},
-						},
-					},
-				},
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	c := NewServerClient(srv.URL)
-	c.useCLI = false
-	models, err := c.ListModels(context.Background())
-	if err != nil {
-		t.Fatalf("ListModels() failed: %v", err)
-	}
-	for _, m := range models {
-		if m.ID == "opencode-admin" || m.Name == "Token Bank Proxy" && m.ID == "opencode-admin" {
-			t.Fatalf("listed a provider as a model: %+v", m)
-		}
-	}
-	if len(models) != 1 || models[0].ID != "opencode-admin/deepseek-v4-flash" {
-		t.Fatalf("want the v1 nested model, got %+v", models)
 	}
 }
 

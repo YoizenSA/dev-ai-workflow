@@ -3,7 +3,6 @@ package control
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,7 +52,7 @@ func adoConfigPath() (string, error) {
 }
 
 // readAdoConfig reads profiles from ado.json. Returns an empty config (not an
-// empty config (not an error) when the file or key is absent.
+// error) when the file or key is absent.
 func readAdoConfig() (*adoConfig, error) {
 	adoConfigMu.Lock()
 	defer adoConfigMu.Unlock()
@@ -383,6 +382,3 @@ func (s *Server) handleAdoCLIUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
-
-// init guards against the log import being dropped if no handler logs directly.
-var _ = log.Printf

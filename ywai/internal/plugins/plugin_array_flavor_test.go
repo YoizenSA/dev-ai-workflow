@@ -3,37 +3,24 @@ package plugins
 import (
 	"reflect"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
-// v1 reads "plugin", v2 reads "plugins". Writing the wrong key leaves the
-// plugin registered where the client never looks, so it silently does nothing.
-func TestWritePlugins_KeyFollowsFlavor(t *testing.T) {
-	for _, tc := range []struct {
-		flavor, want, stale string
-	}{
-		{"v1", "plugin", "plugins"},
-		{"v2", "plugins", "plugin"},
-	} {
-		t.Run(tc.flavor, func(t *testing.T) {
-			t.Setenv(agent.OpenCodeOverrideEnv, tc.flavor)
+// v2 always writes "plugins"; a stale "plugin" key from a v1-era install must
+// not survive the write, or the plugin ends up registered where nothing looks.
+func TestWritePlugins_AlwaysPluginsKey(t *testing.T) {
+	// Seed the retired spelling: the write must not leave it behind.
+	root := map[string]any{"plugin": []any{"old"}}
+	writePlugins(root, []any{"a.js"})
 
-			// Seed the other spelling: a flavor switch must not leave it behind.
-			root := map[string]any{tc.stale: []any{"old"}}
-			writePlugins(root, []any{"a.js"})
-
-			if _, lingering := root[tc.stale]; lingering {
-				t.Errorf("stale %q key survived the write: %v", tc.stale, root)
-			}
-			got, ok := root[tc.want].([]any)
-			if !ok {
-				t.Fatalf("root[%q] = %v, want a slice", tc.want, root[tc.want])
-			}
-			if !reflect.DeepEqual(got, []any{"a.js"}) {
-				t.Errorf("root[%q] = %v, want [a.js]", tc.want, got)
-			}
-		})
+	if _, lingering := root["plugin"]; lingering {
+		t.Errorf("stale %q key survived the write: %v", "plugin", root)
+	}
+	got, ok := root["plugins"].([]any)
+	if !ok {
+		t.Fatalf("root[%q] = %v, want a slice", "plugins", root["plugins"])
+	}
+	if !reflect.DeepEqual(got, []any{"a.js"}) {
+		t.Errorf("root[%q] = %v, want [a.js]", "plugins", got)
 	}
 }
 
@@ -54,11 +41,12 @@ func TestOpenCodePlugins_ReadsEitherSpelling(t *testing.T) {
 	}
 }
 
-// The round trip is what an install actually does: read, append, write.
+// The round trip is what an install actually does: read, append, write. A
+// config still carrying the v1 "plugin" spelling is migrated: both spellings
+// are read, and the write lands everything under "plugins".
 func TestPluginRoundTrip_V1ToV2Migrates(t *testing.T) {
 	root := map[string]any{"plugin": []any{"existing.js"}}
 
-	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 	plugins := openCodePlugins(root)
 	writePlugins(root, append(plugins, "new.js"))
 

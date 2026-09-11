@@ -33,7 +33,8 @@ func (c *countingModelsClient) ListModels(ctx context.Context) ([]opencode.Model
 
 func TestWarmModelsPrefillsCache(t *testing.T) {
 	client := &countingModelsClient{}
-	h := &Handlers{opencodeClient: client}
+	h := &Handlers{}
+	h.setOpenCode(client)
 	h.modelCache.path = filepath.Join(t.TempDir(), "models.json")
 
 	h.WarmModels()
@@ -68,7 +69,8 @@ func TestWarmModelsPrefillsCache(t *testing.T) {
 
 func TestWarmModelsIsIdempotent(t *testing.T) {
 	client := &countingModelsClient{delay: 50 * time.Millisecond}
-	h := &Handlers{opencodeClient: client}
+	h := &Handlers{}
+	h.setOpenCode(client)
 	h.modelCache.path = filepath.Join(t.TempDir(), "models.json")
 
 	h.WarmModels()
@@ -277,7 +279,8 @@ func TestWarmModelsUsesDiskWithoutCLIWhenFresh(t *testing.T) {
 	}
 
 	client := &countingModelsClient{}
-	h := &Handlers{opencodeClient: client}
+	h := &Handlers{}
+	h.setOpenCode(client)
 	h.modelCache.path = path
 
 	h.WarmModels()

@@ -7,17 +7,25 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
-// opencodeToolIDsURL is opencode's authoritative tool catalog: it returns
-// every tool ID, including built-ins and tools registered dynamically by
-// plugins. It requires a running opencode server, so callers must treat a
-// failure as "server not up" and fall back to static discovery.
-const opencodeToolIDsURL = "http://127.0.0.1:4096/experimental/tool/ids"
+// opencodeToolIDsURL returns the URL of opencode's authoritative tool
+// catalog: it returns every tool ID, including built-ins and tools
+// registered dynamically by plugins. It requires a running opencode server,
+// so callers must treat a failure as "server not up" and fall back to
+// static discovery. The base comes from OPENCODE_URL when set (ywai exports
+// it whenever it starts or finds a server), else the well-known default.
+func opencodeToolIDsURL() string {
+	if base := strings.TrimRight(os.Getenv("OPENCODE_URL"), "/"); base != "" {
+		return base + "/experimental/tool/ids"
+	}
+	return "http://127.0.0.1:4096/experimental/tool/ids"
+}
 
 // discoverOpencodeToolIDs asks the running opencode server for the complete
 // list of tool IDs. Best-effort: returns nil if opencode is not reachable so
@@ -25,7 +33,7 @@ const opencodeToolIDsURL = "http://127.0.0.1:4096/experimental/tool/ids"
 func discoverOpencodeToolIDs() []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opencodeToolIDsURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opencodeToolIDsURL(), nil)
 	if err != nil {
 		return nil
 	}
@@ -51,7 +59,7 @@ func discoverOpencodeToolIDs() []string {
 // handler whose lifetime we don't propagate here (matches the prior behavior
 // of the old unexported implementation, which used a 3s client timeout).
 func discoverMCPTools(urlStr string) ([]string, error) {
-	return mcp.DiscoverHTTP(context.Background(), urlStr)
+	return mcp.DiscoverHTTP(context.Background(), urlStr, nil)
 }
 
 // discoverStdioMCPTools spawns a stdio MCP server subprocess, runs the
@@ -62,16 +70,6 @@ func discoverMCPTools(urlStr string) ([]string, error) {
 // inside mcp.DiscoverStdio.
 func discoverStdioMCPTools(command []string, env map[string]string) ([]string, error) {
 	return mcp.DiscoverStdio(context.Background(), command, env)
-}
-
-func sortStrings(a []string) {
-	for i := 0; i < len(a); i++ {
-		for j := i + 1; j < len(a); j++ {
-			if a[j] < a[i] {
-				a[i], a[j] = a[j], a[i]
-			}
-		}
-	}
 }
 
 // discoverPluginTools parses plugin source code to find tool registrations.
@@ -115,7 +113,7 @@ func discoverPluginTools(pluginDir string) []string {
 	for t := range toolSet {
 		tools = append(tools, t)
 	}
-	sortStrings(tools)
+	sort.Strings(tools)
 	return tools
 }
 
@@ -164,7 +162,7 @@ func scanPluginFile(path string) []string {
 	for t := range toolSet {
 		tools = append(tools, t)
 	}
-	sortStrings(tools)
+	sort.Strings(tools)
 	return tools
 }
 

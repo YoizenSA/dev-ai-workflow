@@ -43,21 +43,31 @@ func pkceChallenge() (verifier, challenge string, err error) {
 	return verifier, challenge, nil
 }
 
+// openURLCmdFor maps a GOOS to the command that opens a URL in the user's
+// default browser. Pure so tests can assert the mapping for every GOOS.
+func openURLCmdFor(goos, u string) (string, []string) {
+	switch goos {
+	case "darwin":
+		return "open", []string{u}
+	case "windows":
+		// rundll32 avoids two cmd.exe pitfalls of `start`: it treats a
+		// quoted first argument as a window title, and cmd metacharacters
+		// in the URL (like & in query strings) would need escaping.
+		return "rundll32", []string{"url.dll,FileProtocolHandler", u}
+	default:
+		return "xdg-open", []string{u}
+	}
+}
+
+// openURLCmd is the indirection openURL uses to pick its command; tests
+// may replace it.
+var openURLCmd = func(u string) (string, []string) {
+	return openURLCmdFor(runtime.GOOS, u)
+}
+
 // openURL opens the given URL in the user's default browser.
 func openURL(u string) error {
-	var cmd string
-	var args []string
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = "open"
-		args = []string{u}
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start", u}
-	default:
-		cmd = "xdg-open"
-		args = []string{u}
-	}
+	cmd, args := openURLCmd(u)
 	return exec.Command(cmd, args...).Start()
 }
 

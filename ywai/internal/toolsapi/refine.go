@@ -77,14 +77,21 @@ func RefineGoalWithOpencode(goal, extraContext, model, agentName string) string 
 }
 
 var (
-	ansiRE         = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	// ansiCSI matches ANSI CSI escape sequences (colors, cursor moves, …).
+	// Single source of truth: control's PTY streaming strips with it too.
+	ansiCSI        = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 	opencodeLineRE = regexp.MustCompile(`(?m)^>?\s*\w+\s*·\s*\S+\s*$`)
 )
+
+// StripANSI removes terminal ANSI escape sequences from command output.
+func StripANSI(s string) string {
+	return ansiCSI.ReplaceAllString(s, "")
+}
 
 // stripOpencodeNoise removes ANSI escape codes and opencode status lines
 // (e.g. "> orchestrator · mimo-v2.5-pro") from command output.
 func stripOpencodeNoise(s string) string {
-	s = ansiRE.ReplaceAllString(s, "")
+	s = StripANSI(s)
 	s = opencodeLineRE.ReplaceAllString(s, "")
 	return strings.TrimSpace(s)
 }

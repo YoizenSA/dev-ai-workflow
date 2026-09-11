@@ -1,0 +1,13 @@
+{
+  "name": "all-needles-hit",
+  "taskId": "golden-mixed",
+  "response": "The retryloop sits in worker.go, config.load runs on every tick, and shutdown drains the queue before exit.",
+  "expected": {
+    "hits": ["config.load", "retryLoop", "graceful shutdown"],
+    "missed": [],
+    "total": 3,
+    "gotHard": true,
+    "answered": true,
+    "weighted": 1
+  }
+}

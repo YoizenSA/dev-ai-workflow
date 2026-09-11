@@ -199,7 +199,14 @@ func Install(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]st
 		var probeErr error
 		switch entry.Type {
 		case "remote":
-			tools, probeErr = DiscoverHTTP(ctx, entry.URL)
+			// Credential-protected endpoints (OAuth or user-supplied
+			// AUTHORIZATION) reject an anonymous probe with 401; forward
+			// the merged credential as the Authorization header.
+			var probeHeaders map[string]string
+			if auth := probeEnvMap["AUTHORIZATION"]; auth != "" {
+				probeHeaders = map[string]string{"Authorization": auth}
+			}
+			tools, probeErr = DiscoverHTTP(ctx, entry.URL, probeHeaders)
 		case "local":
 			tools, probeErr = DiscoverStdio(ctx, entry.Command, probeEnvMap)
 		default:

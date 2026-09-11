@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
@@ -283,12 +282,15 @@ func buildToolsResponse() (map[string]interface{}, error) {
 	// MCP discovery — best effort for HTTP/SSE MCPs
 	// Include disabled MCPs so the UI can show them as inactive.
 	mcpTools := map[string]MCPToolGroup{}
-	var mcpServers map[string]json.RawMessage
+	var mcpServers map[string]any
 	if mcpRaw, ok := config["mcp"]; ok {
-		mcpServers = openCodeServersFromRaw(mcpRaw)
-		for name, serverRaw := range mcpServers {
-			var server map[string]interface{}
-			if err := json.Unmarshal(serverRaw, &server); err != nil {
+		var section map[string]any
+		if err := json.Unmarshal(mcpRaw, &section); err == nil {
+			mcpServers = mcp.CollectOpenCodeServers(section)
+		}
+		for name, raw := range mcpServers {
+			server, ok := raw.(map[string]interface{})
+			if !ok {
 				continue
 			}
 			disabled := false
@@ -390,7 +392,7 @@ func buildToolsResponse() (map[string]interface{}, error) {
 	for t := range toolSet {
 		allTools = append(allTools, t)
 	}
-	sortStrings(allTools)
+	sort.Strings(allTools)
 
 	return map[string]interface{}{
 		"built_in":     builtIn,
@@ -414,12 +416,6 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	var config struct {
-		MCP json.RawMessage `json:"mcp"`
-	}
-	if raw, ok := root["mcp"]; ok {
-		config.MCP, _ = json.Marshal(raw)
-	}
 
 	type mcpInfo struct {
 		Name    string          `json:"name"`
@@ -427,18 +423,19 @@ func (h *Handlers) ListMCP(w http.ResponseWriter, r *http.Request) {
 		Enabled bool            `json:"enabled"`
 	}
 	var mcps []mcpInfo
-	for name, cfg := range openCodeServersFromRaw(config.MCP) {
+	section, _ := root["mcp"].(map[string]any)
+	for name, cfg := range mcp.CollectOpenCodeServers(section) {
 		// Check if disabled or enabled flag is false
-		var serverCfg map[string]interface{}
 		enabled := true
-		if err := json.Unmarshal(cfg, &serverCfg); err == nil {
+		if serverCfg, ok := cfg.(map[string]any); ok {
 			if disabled, ok := serverCfg["disabled"].(bool); ok && disabled {
 				enabled = false
 			} else if val, ok := serverCfg["enabled"].(bool); ok && !val {
 				enabled = false
 			}
 		}
-		mcps = append(mcps, mcpInfo{Name: name, Config: cfg, Enabled: enabled})
+		raw, _ := json.Marshal(cfg)
+		mcps = append(mcps, mcpInfo{Name: name, Config: raw, Enabled: enabled})
 	}
 	writeJSON(w, http.StatusOK, mcps)
 }
@@ -467,7 +464,8 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read current config
+	// Read current config. The raw bytes back up the .bak below; ParseJSONC
+	// (shared with the mcp package) accepts the .jsonc spelling too.
 	path, err := opencodeConfigPath()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -478,71 +476,63 @@ func (h *Handlers) PutMCP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
+	root, err := userconfig.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	mcpRaw, hasMCP := config["mcp"]
-	servers, mcpLevel := splitOpenCodeMCP(mcpRaw)
-	if !hasMCP {
-		servers = map[string]json.RawMessage{}
-		mcpLevel = map[string]json.RawMessage{}
-	}
+	section, _ := root["mcp"].(map[string]any)
+	servers := mcp.CollectOpenCodeServers(section)
 
 	// v2 toggle: enabled servers carry no flag (absent = enabled),
 	// disabled ones carry "disabled": true. The legacy "enabled" bool is
 	// removed either way.
-	if serverRaw, ok := servers[name]; ok {
-		var serverCfg map[string]interface{}
-		if err := json.Unmarshal(serverRaw, &serverCfg); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-
-		if body.URL != nil {
-			endpoint := strings.TrimSpace(*body.URL)
-			if endpoint != "" {
-				if parsed, perr := url.Parse(endpoint); perr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url must be an absolute http(s) endpoint"})
-					return
-				}
-			}
-			serverCfg["url"] = endpoint
-		}
-
-		// Enabling a remote server with no endpoint would have it fail on every
-		// agent start, so refuse rather than write it.
-		if body.Enabled && serverCfg["type"] == "remote" {
-			if u, _ := serverCfg["url"].(string); strings.TrimSpace(u) == "" {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-					"error": "this server needs a URL before it can be enabled",
-					"code":  "missing_url",
-				})
-				return
-			}
-		}
-
-		delete(serverCfg, "enabled")
-		if body.Enabled {
-			delete(serverCfg, "disabled")
-		} else {
-			serverCfg["disabled"] = true
-		}
-
-		updated, _ := json.Marshal(serverCfg)
-		servers[name] = updated
-	} else {
+	serverRaw, ok := servers[name]
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
 		return
 	}
+	serverCfg, ok := serverRaw.(map[string]any)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mcp entry is not an object"})
+		return
+	}
+
+	if body.URL != nil {
+		endpoint := strings.TrimSpace(*body.URL)
+		if endpoint != "" {
+			if parsed, perr := url.Parse(endpoint); perr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url must be an absolute http(s) endpoint"})
+				return
+			}
+		}
+		serverCfg["url"] = endpoint
+	}
+
+	// Enabling a remote server with no endpoint would have it fail on every
+	// agent start, so refuse rather than write it.
+	if body.Enabled && serverCfg["type"] == "remote" {
+		if u, _ := serverCfg["url"].(string); strings.TrimSpace(u) == "" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": "this server needs a URL before it can be enabled",
+				"code":  "missing_url",
+			})
+			return
+		}
+	}
+
+	delete(serverCfg, "enabled")
+	if body.Enabled {
+		delete(serverCfg, "disabled")
+	} else {
+		serverCfg["disabled"] = true
+	}
+	servers[name] = serverCfg
 
 	// Write back as mcp.servers
-	mcpJSON, _ := json.Marshal(joinOpenCodeMCP(mcpLevel, servers))
-	config["mcp"] = mcpJSON
-	pretty, _ := json.MarshalIndent(config, "", "  ")
+	root["mcp"] = mcp.WriteOpenCodeMCP(section, servers)
+	pretty, _ := json.MarshalIndent(root, "", "  ")
 
 	// Backup
 	_ = os.WriteFile(path+".bak", data, 0644)
@@ -569,25 +559,19 @@ func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile(path)
+	root, err := userconfig.ReadJSONC(path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	var config map[string]json.RawMessage
-	if err := json.Unmarshal(data, &config); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	mcpRaw, ok := config["mcp"]
+	section, ok := root["mcp"].(map[string]any)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no mcp section"})
 		return
 	}
 
-	servers, mcpLevel := splitOpenCodeMCP(mcpRaw)
+	servers := mcp.CollectOpenCodeServers(section)
 	if _, ok := servers[name]; !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mcp server not found"})
 		return
@@ -595,9 +579,8 @@ func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
 
 	delete(servers, name)
 
-	mcpJSON, _ := json.Marshal(joinOpenCodeMCP(mcpLevel, servers))
-	config["mcp"] = mcpJSON
-	pretty, _ := json.MarshalIndent(config, "", "  ")
+	root["mcp"] = mcp.WriteOpenCodeMCP(section, servers)
+	pretty, _ := json.MarshalIndent(root, "", "  ")
 
 	if err := os.WriteFile(path, pretty, 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -607,81 +590,14 @@ func (h *Handlers) DeleteMCP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func openCodeServersFromRaw(mcpRaw json.RawMessage) map[string]json.RawMessage {
-	servers, _ := splitOpenCodeMCP(mcpRaw)
-	return servers
-}
-
-func splitOpenCodeMCP(mcpRaw json.RawMessage) (servers map[string]json.RawMessage, level map[string]json.RawMessage) {
-	servers = map[string]json.RawMessage{}
-	level = map[string]json.RawMessage{}
-	if len(mcpRaw) == 0 {
-		return servers, level
-	}
-	var section map[string]json.RawMessage
-	if err := json.Unmarshal(mcpRaw, &section); err != nil {
-		return servers, level
-	}
-	if inner, ok := section["servers"]; ok {
-		_ = json.Unmarshal(inner, &servers)
-		if servers == nil {
-			servers = map[string]json.RawMessage{}
-		}
-		for k, v := range section {
-			if k == "servers" {
-				continue
-			}
-			level[k] = v
-		}
-		return servers, level
-	}
-	for k, v := range section {
-		if k == "timeout" {
-			level[k] = v
-			continue
-		}
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(v, &obj) == nil {
-			servers[k] = v
-			continue
-		}
-		level[k] = v
-	}
-	return servers, level
-}
-
-func joinOpenCodeMCP(level map[string]json.RawMessage, servers map[string]json.RawMessage) map[string]json.RawMessage {
-	out := map[string]json.RawMessage{}
-	for k, v := range level {
-		if k == "servers" {
-			continue
-		}
-		out[k] = v
-	}
-	raw, _ := json.Marshal(servers)
-	out["servers"] = raw
-	return out
-}
-
-// providerSectionKey returns the top-level provider key for the active flavor:
-// `providers` on v2, `provider` on v1.
-func providerSectionKey() string {
-	if agent.OpenCodeIsV2() {
-		return "providers"
-	}
-	return "provider"
-}
-
 // lookupProviderSection returns the provider name → raw entry map from an
-// already-parsed config root. The map merges both spellings so an entry stored
-// only under the legacy key survives a write: the active flavor's key wins per
-// provider, and the other key fills the gaps. Callers write the merged map
-// under the flavor key and delete the other one.
+// already-parsed config root. This is migration machinery: the map merges both
+// spellings so an entry stored only under the legacy `provider` key (v1-era
+// ywai installs) survives a write. The canonical `providers` key wins per
+// provider, and the legacy key fills the gaps. Callers write the merged map
+// under `providers` and delete the legacy one.
 func lookupProviderSection(config map[string]json.RawMessage) map[string]json.RawMessage {
 	primary, legacy := "providers", "provider"
-	if !agent.OpenCodeIsV2() {
-		primary, legacy = "provider", "providers"
-	}
 	merged := map[string]json.RawMessage{}
 	for _, key := range []string{legacy, primary} {
 		raw, ok := config[key]
@@ -770,16 +686,11 @@ func (h *Handlers) PutProvider(w http.ResponseWriter, r *http.Request) {
 
 	providerSection[name] = provider
 
-	// Write back under the active flavor key, deleting the other so the two
-	// never coexist.
+	// Write back under the canonical `providers` key, deleting the legacy
+	// `provider` key so the two never coexist.
 	providerJSON, _ := json.Marshal(providerSection)
-	key := providerSectionKey()
-	config[key] = providerJSON
-	if key == "providers" {
-		delete(config, "provider")
-	} else {
-		delete(config, "providers")
-	}
+	config["providers"] = providerJSON
+	delete(config, "provider")
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
 	// Backup
@@ -830,16 +741,11 @@ func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write back under the active flavor key, deleting the other so the two
-	// never coexist.
+	// Write back under the canonical `providers` key, deleting the legacy
+	// `provider` key so the two never coexist.
 	providerJSON, _ := json.Marshal(providerSection)
-	key := providerSectionKey()
-	config[key] = providerJSON
-	if key == "providers" {
-		delete(config, "provider")
-	} else {
-		delete(config, "providers")
-	}
+	config["providers"] = providerJSON
+	delete(config, "provider")
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 
 	// Backup

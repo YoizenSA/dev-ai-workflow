@@ -58,47 +58,7 @@ func InstallEcosystem(opts InstallOptions) error {
 		return fmt.Errorf("failed to install engram: %w", err)
 	}
 	fmt.Printf("  Engram ready in %s\n", installDir)
-	UpgradeEngram()
 	return nil
-}
-
-func UpgradeEngram() {
-	engram := findBinary("engram")
-	if engram == "" {
-		return
-	}
-
-	fmt.Println("Checking for engram updates...")
-	cmd := exec.Command(engram, "version")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return
-	}
-
-	if strings.Contains(string(output), "Update available") {
-		fmt.Println("Updating engram...")
-		if runtime.GOOS == "windows" {
-			engramExe := engram
-			if strings.HasSuffix(engram, ".ps1") || strings.HasSuffix(engram, ".cmd") {
-				return
-			}
-			oldPath := engramExe + ".bak"
-			_ = os.Rename(engramExe, oldPath)
-			if err := runCommand("go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"); err != nil {
-				fmt.Printf("  Warning: engram update failed: %v\n", err)
-				_ = os.Rename(oldPath, engramExe)
-			} else {
-				_ = os.Remove(oldPath)
-				fmt.Println("  engram updated successfully.")
-			}
-		} else {
-			if err := runCommand("go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"); err != nil {
-				fmt.Printf("  Warning: engram update failed: %v\n", err)
-			} else {
-				fmt.Println("  engram updated successfully.")
-			}
-		}
-	}
 }
 
 // Doctor runs ywai-native health checks. Slice 1 contract: it must not

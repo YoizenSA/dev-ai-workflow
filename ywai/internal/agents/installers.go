@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
 // InstallClaude writes agent .md files to ~/.claude/agents/.
@@ -464,9 +464,9 @@ func PruneUnlistedAgents(agentsDir string, keep map[string]AgentProfile) int {
 // removeLegacyGroupDirs deletes every subdirectory under the agents dir. The
 // flat layout is the only valid one (opencode registers nested files under a
 // path-derived id that shadows the flat id), so any subdirectory — whether it
-// came from a current group profile or an orphaned legacy install whose profile
-// no longer exists — is removed wholesale. Top-level flat .md files are left
-// untouched.
+// came from a current group profile or an orphaned install left by a
+// migration-era grouped layout — is removed wholesale. Top-level flat .md
+// files are left untouched.
 func removeLegacyGroupDirs(agentsDir string) {
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
@@ -485,7 +485,7 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
-// openCodeNativePermissionKeys are the tools opencode v1 gates by name. Every
+// agentBackupRootFn is the snapshot root. It is a var so tests can redirect it.
 // Hosts only read their own agents/ folders; ~/.ywai/agent-backups stays private.
 var agentBackupRootFn = func() string {
 	return filepath.Join(config.DataDir(), "agent-backups")
@@ -550,15 +550,6 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 		fmt.Printf("  Removed agent without description: %s\n", e.Name())
 	}
 	return removed
-}
-
-// openCodeNativePermissionKeys are the tools opencode v1 gates by name. Every
-// one is emitted explicitly (defaulting to deny) so a profile's silence is not
-// read as permission.
-var openCodeNativePermissionKeys = []string{
-	"read", "edit", "write", "bash", "glob", "grep", "list", "lsp",
-	"ast_grep", "websearch", "code_search", "webfetch", "task", "todowrite",
-	"delegate", "question", "skill", "external_directory", "doom_loop",
 }
 
 // ywaiBucketPatterns maps ywai's coarse permission buckets to the opencode-native
@@ -650,33 +641,6 @@ var verifyBashAllowPatterns = []string{
 	"ruff check*",
 	"mypy *",
 	"mypy*",
-}
-
-// BashPermissionBlockLines is the v1 renderer for the opencode v1
-// `permission:` frontmatter block. OpenCode v2 agents get shell rules via
-// RulesFromPermissionMap instead.
-func BashPermissionBlockLines(val, baseName string) []string {
-	if val == "deny" {
-		return []string{"  bash: deny"}
-	}
-	lines := []string{"  bash:"}
-	if val == "verify" {
-		lines = append(lines, fmt.Sprintf("    %q: deny", "*"))
-		for _, pattern := range verifyBashAllowPatterns {
-			lines = append(lines, fmt.Sprintf("    %q: allow", pattern))
-		}
-	} else {
-		lines = append(lines, fmt.Sprintf("    %q: %s", "*", val))
-	}
-	for _, pattern := range falseGreenBashPatterns {
-		lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
-	}
-	if noCommitAgents[baseName] && val != "verify" {
-		for _, pattern := range noCommitBashDenyPatterns {
-			lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
-		}
-	}
-	return lines
 }
 
 // noCommitBashDenyPatterns block commit/push for code executors. Review-then-
@@ -778,37 +742,23 @@ func ConfiguredMCPServers() []string {
 	if err != nil {
 		return nil
 	}
-	set := map[string]bool{}
-	// v1 layout: servers directly under "mcp" (skip reserved v2 keys).
-	if raw, ok := root["mcp"].(map[string]any); ok {
-		for name := range raw {
-			if name == "servers" || name == "timeout" {
-				continue
-			}
-			if strings.TrimSpace(name) != "" {
-				set[name] = true
-			}
-		}
-	}
-	// v2 layout: servers nested under mcp.servers.
-	if mcp, ok := root["mcp"].(map[string]any); ok {
-		if servers, ok := mcp["servers"].(map[string]any); ok {
-			for name := range servers {
-				if strings.TrimSpace(name) != "" {
-					set[name] = true
-				}
-			}
-		}
-	}
-	if len(set) == 0 {
+	section, ok := root["mcp"].(map[string]any)
+	if !ok {
 		return nil
 	}
-	servers := make([]string, 0, len(set))
-	for name := range set {
-		servers = append(servers, name)
+	// CollectOpenCodeServers is the shared reader for both layouts (v1 flat
+	// and v2 mcp.servers); mcp keeps the single implementation the plugins
+	// and the control server also use, so they cannot drift apart again.
+	servers := mcp.CollectOpenCodeServers(section)
+	if len(servers) == 0 {
+		return nil
 	}
-	sort.Strings(servers)
-	return servers
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // dedicatedBucketPrefixes are MCP servers that already have their own bucket,
@@ -853,67 +803,6 @@ func mcpBucketPatterns() []string {
 	return patterns
 }
 
-// RenderPermissionMapYAML renders an agent's permission map as the nested
-// opencode v1 `permission:` frontmatter block. Exported so the config API
-// rewrites permissions through the same code that installs them — two
-// renderers drift, and a drifted one silently changes what an agent may do.
-func RenderPermissionMapYAML(name string, profile AgentProfile) string {
-	var out strings.Builder
-	out.WriteString("permission:\n")
-	emitPermission := func(key, val string) {
-		// bash renders as a nested allow/deny map when the agent may run
-		// commands at all, so specific commands can be denied inside a general
-		// allow. permissions.json is a flat string map and cannot express that.
-		if key == "bash" {
-			for _, line := range BashPermissionBlockLines(val, filepath.Base(name)) {
-				out.WriteString(line + "\n")
-			}
-			return
-		}
-		if patterns, ok := ywaiBucketPatterns[key]; ok {
-			for _, p := range patterns {
-				// A profile naming the exact pattern is overriding its bucket on
-				// purpose. Emitting the bucket value too would write the key twice
-				// and the last one wins, silently handing the tool back.
-				if _, explicit := profile.Permission[p]; explicit && p != key {
-					continue
-				}
-				out.WriteString(fmt.Sprintf("  %q: %s\n", p, val))
-			}
-			return
-		}
-		if key == "*" || strings.ContainsAny(key, "*:#&!|>',[]{}%`@") {
-			out.WriteString(fmt.Sprintf("  %q: %s\n", key, val))
-		} else {
-			out.WriteString(fmt.Sprintf("  %s: %s\n", key, val))
-		}
-	}
-
-	// Explicit restrictions only: no catch-all "*: deny". opencode enables
-	// unlisted tools by default, which keeps MCP servers added outside ywai
-	// available without a release for each new server.
-	written := map[string]bool{}
-	for _, key := range openCodeNativePermissionKeys {
-		val := profile.Permission[key]
-		if val == "" {
-			val = "deny"
-		}
-		emitPermission(key, val)
-		written[key] = true
-	}
-	var remaining []string
-	for k := range profile.Permission {
-		if !written[k] {
-			remaining = append(remaining, k)
-		}
-	}
-	sort.Strings(remaining)
-	for _, key := range remaining {
-		emitPermission(key, profile.Permission[key])
-	}
-	return out.String()
-}
-
 // BuildOpenCodeMarkdown converts an AgentProfile to OpenCode markdown format.
 // Exported so the workflows exporter can reuse the single source of truth for
 // permission rendering and bucket expansion (the workflow's sub-agent nodes
@@ -935,23 +824,16 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString(fmt.Sprintf("description: %s\n", yamlScalar(description)))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
 	// Group membership stays out of the frontmatter and lives in
-	// GroupSidecarFile. opencode v1 would accept a `group:` key, but an unknown
-	// key is what makes v2 fall back to the legacy decode path, so keeping the
-	// sidecar leaves the same file readable by both.
+	// GroupSidecarFile. An unknown frontmatter key is what makes opencode fall
+	// back to the legacy decode path, so keeping the sidecar leaves the file
+	// readable as a plain agent file.
 
 	// ywai's coarse buckets (ado, memory, intercom, mcp) expand to
-	// opencode-native wildcard patterns either way, so the deny/allow is
-	// enforced rather than silently dropped. The schema differs per flavor:
-	// v1 reads a nested "permission:" map, v2 an ordered "permissions:" list
-	// where the last matching rule wins. v2 rejects the v1 map as an unknown
-	// key and falls back to the legacy decode, which drops the permissions
-	// entirely and pastes the frontmatter into the system prompt.
-	if agent.OpenCodeIsV2() {
-		for _, line := range RenderPermissionRulesYAML(RulesFromPermissionMap(name, profile.Permission)) {
-			b.WriteString(line + "\n")
-		}
-	} else {
-		b.WriteString(RenderPermissionMapYAML(name, profile))
+	// opencode-native wildcard patterns so the deny/allow is enforced rather
+	// than silently dropped. The ordered `permissions:` list is the schema
+	// OpenCode 2 enforces: the last matching rule wins.
+	for _, line := range RenderPermissionRulesYAML(RulesFromPermissionMap(name, profile.Permission)) {
+		b.WriteString(line + "\n")
 	}
 	b.WriteString("---\n\n")
 
@@ -1090,15 +972,16 @@ func uniqueSortedStrings(s []string) []string {
 	return slices.Compact(s)
 }
 
-// legacyAgentFrontmatterKeys are keys ywai used to emit that opencode v2 does
-// not accept in agent frontmatter. Any of them makes config/plugin/agent.ts
-// classify the file as legacy v1 and decode it with a schema that knows
-// `permission` (a map) instead of the v2 `permissions` rule array — so the
-// agent silently loses its permissions.
+// legacyAgentFrontmatterKeys are keys migration-era installs emitted that
+// opencode does not accept in agent frontmatter. Any of them makes
+// config/plugin/agent.ts classify the file as legacy and decode it with a
+// schema that knows `permission` (a map) instead of the `permissions` rule
+// array — so the agent silently loses its permissions.
 var legacyAgentFrontmatterKeys = []string{"group:"}
 
 // StripLegacyAgentKeys removes those keys from every flat agent file in
-// agentsDir. Several writers assemble these files by preserving existing
+// agentsDir. This is the migration sweep that converts v1-era files on first
+// contact. Several writers assemble these files by preserving existing
 // frontmatter lines, so a key written once survives every later rewrite; this
 // sweep runs last and is idempotent. Returns how many files it changed.
 func StripLegacyAgentKeys(agentsDir string) int {

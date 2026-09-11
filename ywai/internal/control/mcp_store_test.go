@@ -234,14 +234,15 @@ func defaultInstallMock(ctx context.Context, entry mcp.CatalogEntry, opts mcp.In
 // is used. The returned *mcp.JobManager lets tests inspect job
 // state directly (e.g. wait for StateDone / StateFailed).
 //
-// Pinned test seam: mcp.WithInstallFn must exist for this helper
-// to compile. @dev adds it to internal/mcp/job.go.
+// Pinned test seam: mcp.WithInstallFn swaps the install pipeline and
+// returns the restore function, which this helper registers via
+// t.Cleanup so every test gets the production pipeline back.
 func newTestMcpServer(t *testing.T, mockInstall func(ctx context.Context, entry mcp.CatalogEntry, opts mcp.InstallOptions) ([]string, error)) (*Server, *mcp.JobManager) {
 	t.Helper()
 	if mockInstall == nil {
 		mockInstall = defaultInstallMock
 	}
-	mcp.WithInstallFn(t, mockInstall)
+	t.Cleanup(mcp.WithInstallFn(mockInstall))
 
 	hub := newCaptureHub()
 	jobs := mcp.NewJobManager(hub)

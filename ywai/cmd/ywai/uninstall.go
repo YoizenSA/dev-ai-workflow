@@ -366,6 +366,8 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
 	merged := map[string]any{}
+	// Migration read: merge both spellings so a user agent stored only under
+	// the legacy `agent` key (v1-era ywai installs) survives the strip.
 	for _, key := range []string{"agents", "agent"} {
 		if agents, ok := root[key].(map[string]any); ok {
 			for name, val := range agents {
@@ -375,12 +377,8 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 			}
 		}
 	}
-	// The surviving key follows the active flavor so a v2 host keeps reading
-	// `agents`; either way both spellings never coexist.
-	sectionKey := "agent"
-	if agent.OpenCodeIsV2() {
-		sectionKey = "agents"
-	}
+	// The canonical `agents` key is what opencode reads; the legacy key is
+	// deleted so both spellings never coexist.
 	delete(root, "agent")
 	delete(root, "agents")
 	for name := range merged {
@@ -389,7 +387,7 @@ func stripYwaiAgentKeysWith(configPath string, owned map[string]bool) error {
 		}
 	}
 	if len(merged) > 0 {
-		root[sectionKey] = merged
+		root["agents"] = merged
 	}
 	return config.WriteJSONC(configPath, root)
 }

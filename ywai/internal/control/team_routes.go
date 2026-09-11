@@ -76,6 +76,25 @@ func (api *TeamAPI) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// Check if pi binary is available
 	piBin, _ := exec.LookPath("pi")
 
+	// Register the member and task before launching the worker: the
+	// goroutine updates both on completion, so spawning it first could run
+	// those updates before the entries exist.
+	api.store.AddMember(TeamMember{
+		ID:        memberID,
+		Name:      req.Profile,
+		Status:    "running",
+		StartedAt: time.Now().Format(time.RFC3339),
+		TaskID:    taskID,
+	})
+
+	api.store.AddTask(TeamTask{
+		ID:       taskID,
+		Title:    req.Task,
+		Status:   "running",
+		Assignee: memberID,
+		Priority: "high",
+	})
+
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -104,22 +123,6 @@ func (api *TeamAPI) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	api.store.AddMember(TeamMember{
-		ID:        memberID,
-		Name:      req.Profile,
-		Status:    "running",
-		StartedAt: time.Now().Format(time.RFC3339),
-		TaskID:    taskID,
-	})
-
-	api.store.AddTask(TeamTask{
-		ID:       taskID,
-		Title:    req.Task,
-		Status:   "running",
-		Assignee: memberID,
-		Priority: "high",
-	})
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
@@ -138,10 +141,8 @@ func (api *TeamAPI) handleSteer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In a real implementation, this would send steer to the RPC process
-	// For now, record the steer in the store
-	api.store.RecordSteer(req.MemberID, req.Message)
-
+	// No backing RPC steer exists yet: the message is accepted so the UI
+	// keeps working, but nothing is recorded or delivered.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }

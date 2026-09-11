@@ -126,6 +126,9 @@ func pluginsToSlice(raw any) []any {
 // other never lingers as a stale second list. Every opencode.json and cli.json
 // plugin edit funnels through here — see openCodePlugins for the read side,
 // which accepts either spelling so a flavor switch keeps existing entries.
+// TODO(decision): tui_logo_test.go and plugin_array_flavor_test.go currently
+// assert opposite key conventions; the surviving key for opencode2-only
+// builds is an open call for the drop-v1 batch owner.
 func writePlugins(root map[string]any, plugins []any) {
 	key, stale := "plugins", "plugin"
 	delete(root, stale)

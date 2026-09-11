@@ -62,18 +62,19 @@ func TestSetMcpEnabledTogglesInstalledServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	mcp := root["mcp"].(map[string]any)
-	// v1: servers sit directly under mcp, never nested under mcp.servers.
-	if _, nested := mcp["servers"]; nested {
-		t.Fatalf("v1 must not nest under mcp.servers, got %v", mcp)
-	}
-	entry, ok := mcp["graft"].(map[string]any)
+	// v2: servers live under mcp.servers, keyed by id.
+	servers, ok := mcp["servers"].(map[string]any)
 	if !ok {
-		t.Fatalf("graft missing under mcp, got %v", mcp)
+		t.Fatalf("servers must be nested under mcp.servers, got %v", mcp)
 	}
-	// The test disables then re-enables, so the persisted state is enabled:true
-	// — and v1 requires the key to be present either way.
-	if entry["enabled"] != true {
-		t.Fatalf("enable must persist as enabled:true, got %v", entry)
+	entry, ok := servers["graft"].(map[string]any)
+	if !ok {
+		t.Fatalf("graft missing under mcp.servers, got %v", mcp)
+	}
+	// The test disables then re-enables, so the persisted state is enabled —
+	// which v2 spells as the absence of disabled (and there is no enabled key).
+	if _, off := entry["disabled"]; off {
+		t.Fatalf("enable must persist without disabled:true, got %v", entry)
 	}
 }
 

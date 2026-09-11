@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 )
 
@@ -88,15 +87,21 @@ func (e *JobInProgressError) Unwrap() error {
 	return ErrJobInProgress
 }
 
-// WithInstallFn temporarily replaces the package installFn and restores
-// it on test cleanup. Intended for tests in other packages that need to
-// stub the install pipeline; the in-package withInstallFn in job_test.go
-// uses the defer-restore pattern instead.
-func WithInstallFn(t *testing.T, fn func(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]string, error)) {
-	t.Helper()
+// WithInstallFn replaces the package installFn and returns a restore
+// function that puts the original back. Keeping testing out of the
+// signature lets production code import this package without pulling
+// the test framework. Intended for tests in other packages that need
+// to stub the install pipeline:
+//
+//	restore := mcp.WithInstallFn(fake)
+//	defer restore()
+//
+// The in-package withInstallFn in job_test.go uses the defer-restore
+// pattern over setInstallFn instead.
+func WithInstallFn(fn func(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]string, error)) (restore func()) {
 	orig := loadInstallFn()
 	setInstallFn(fn)
-	t.Cleanup(func() { setInstallFn(orig) })
+	return func() { setInstallFn(orig) }
 }
 
 type Broadcaster interface {

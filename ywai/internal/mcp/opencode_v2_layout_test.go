@@ -4,8 +4,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // v2Home pins the flavor to v2 and redirects the config path into a temp dir.
@@ -15,7 +13,6 @@ func v2Home(t *testing.T) string {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
-	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 	return home
 }
 

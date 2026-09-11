@@ -43,7 +43,6 @@ type Hub struct {
 	clients   map[*Client]bool
 	broadcast chan []byte
 	readLimit int64
-	loopOnce  sync.Once
 }
 
 // New creates a hub and starts its event loop.
@@ -56,24 +55,16 @@ func New(opts Options) *Hub {
 	if h.readLimit <= 0 {
 		h.readLimit = 4096
 	}
-	h.Run()
+	go h.loop()
 	return h
 }
 
-// Run starts the hub event loop if no loop is running yet. New already
-// starts one, so calling Run on a fresh hub does nothing. It exists for
-// callers that receive a hub and want to guarantee a loop is running.
-func (h *Hub) Run() {
-	h.loopOnce.Do(func() {
-		go h.loop()
-	})
-}
-
 // loop drains the broadcast queue and fans each message out to every
-// client. It exits when the broadcast channel closes.
+// client. It exits when the broadcast channel closes. It holds the write
+// lock because a full send queue evicts the client (map mutation).
 func (h *Hub) loop() {
 	for msg := range h.broadcast {
-		h.mu.RLock()
+		h.mu.Lock()
 		for c := range h.clients {
 			select {
 			case c.send <- msg:
@@ -83,7 +74,7 @@ func (h *Hub) loop() {
 				delete(h.clients, c)
 			}
 		}
-		h.mu.RUnlock()
+		h.mu.Unlock()
 	}
 }
 

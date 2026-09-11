@@ -9,17 +9,7 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
-
-// pinOCFlavor forces the OpenCode flavor so these tests stay deterministic on
-// hosts with either binary installed.
-func pinOCFlavor(t *testing.T, flavor string) {
-	t.Helper()
-	t.Setenv(agent.OpenCodeOverrideEnv, flavor)
-	t.Setenv("XDG_CONFIG_HOME", "")
-}
 
 // isolateOpenCodeConfig points every path ConfigureOpenCode writes into temp
 // dirs and returns the fake HOME. Hosts may export OPENCODE_CONFIG_DIR at a real
@@ -399,11 +389,8 @@ func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
 // TestConfigureOpenCode_DropsModelsAbsentFromGET is the user-facing contract:
 // `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
 // an OPENCODE_CONFIG_DIR isolate) and the models there must match GET
-// /v1/models, even when GET /api/setup/config still lists extras. The flavor
-// is pinned to v1 because the v2 shape is covered by
-// TestConfigureOpenCode_WritesV2Providers.
+// /v1/models, even when GET /api/setup/config still lists extras.
 func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
-	pinOCFlavor(t, "opencode")
 	home := isolateOpenCodeConfig(t)
 
 	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
@@ -412,7 +399,7 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	}
 	existing := map[string]interface{}{
 		"model": "opencode-admin/kept",
-		"provider": map[string]interface{}{
+		"providers": map[string]interface{}{
 			"opencode-admin": map[string]interface{}{
 				"models": map[string]interface{}{
 					"kept":    map[string]interface{}{"name": "Kept"},
@@ -470,7 +457,7 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	models := got["provider"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
+	models := got["providers"].(map[string]interface{})["opencode-admin"].(map[string]interface{})["models"].(map[string]interface{})
 	if _, stale := models["retired"]; stale {
 		t.Errorf("stale local model must be removed from %s, got %v", userPath, models)
 	}
@@ -482,12 +469,10 @@ func TestConfigureOpenCode_DropsModelsAbsentFromGET(t *testing.T) {
 	}
 }
 
-// TestConfigureOpenCode_WritesV2Providers pins the v2 shape. TokenBank only
-// serves the v1 `provider` payload (npm/options/variants map); v2 ignores npm
-// and fails with "Unsupported package", and drops models whose variants are a
-// map or whose fields are null. So ywai must translate it into `providers`.
+// TestConfigureOpenCode_WritesV2Providers pins the user-facing contract:
+// `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
+// an OPENCODE_CONFIG_DIR isolate) in the `providers` shape.
 func TestConfigureOpenCode_WritesV2Providers(t *testing.T) {
-	pinOCFlavor(t, "opencode2")
 	home := isolateOpenCodeConfig(t)
 	userPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {

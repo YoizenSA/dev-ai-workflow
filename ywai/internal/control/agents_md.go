@@ -9,19 +9,14 @@ import (
 )
 
 // agentsMdPath returns the path to the AGENTS.md file in opencode config dir.
+// The file may not exist yet; callers create it on save, so the expected path
+// is returned either way.
 func agentsMdPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-
-	path := filepath.Join(home, ".config", "opencode", "AGENTS.md")
-	if _, err := os.Stat(path); err == nil {
-		return path
-	}
-
-	// If it doesn't exist, return the expected path anyway (so we can create it)
-	return path
+	return filepath.Join(home, ".config", "opencode", "AGENTS.md")
 }
 
 // registerAgentsMdRoutes registers API routes for AGENTS.md editing.

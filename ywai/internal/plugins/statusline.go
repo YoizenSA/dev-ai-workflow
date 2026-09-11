@@ -36,9 +36,9 @@ func InstallPublishedSubAgentStatusline() error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("reading %s: %w", tuiConfigName, err)
 		}
-		// tui.json does not exist yet — create it with the plugin.
+		// cli.json does not exist yet — create it with the plugin.
 		root := map[string]any{
-			"plugin": []any{subAgentStatuslinePlugin},
+			"plugins": []any{subAgentStatuslinePlugin},
 		}
 		updated, mErr := json.MarshalIndent(root, "", "  ")
 		if mErr != nil {
@@ -56,26 +56,33 @@ func InstallPublishedSubAgentStatusline() error {
 		return fmt.Errorf("parsing %s: %w", tuiConfigName, err)
 	}
 
-	pluginsRaw, ok := root["plugin"]
+	pluginsRaw, ok := root["plugins"]
 	if !ok {
-		pluginsRaw = []any{}
-		root["plugin"] = pluginsRaw
+		// Migrate the v1-era "plugin" spelling on contact instead of leaving
+		// a stale array the TUI no longer reads.
+		pluginsRaw, ok = root["plugin"]
+		if ok {
+			delete(root, "plugin")
+		} else {
+			pluginsRaw = []any{}
+		}
+		root["plugins"] = pluginsRaw
 	}
 
 	plugins, ok := pluginsRaw.([]any)
 	if !ok {
 		plugins = []any{}
-		root["plugin"] = plugins
+		root["plugins"] = plugins
 	}
 
 	for _, p := range plugins {
 		if s, ok := p.(string); ok && s == subAgentStatuslinePlugin {
-			fmt.Printf("  %s plugin already installed in tui.json\n", subAgentStatuslinePlugin)
+			fmt.Printf("  %s plugin already installed in %s\n", subAgentStatuslinePlugin, tuiConfigName)
 			return nil
 		}
 	}
 
-	root["plugin"] = append(plugins, subAgentStatuslinePlugin)
+	root["plugins"] = append(plugins, subAgentStatuslinePlugin)
 
 	updated, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {

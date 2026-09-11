@@ -9,8 +9,11 @@
  */
 
 import * as fs from "node:fs/promises"
-import * as os from "node:os"
 import * as path from "node:path"
+import {
+  YWAI_CONFIG_PATH,
+  readTopLevelFields,
+} from "../../shared/ywai-config"
 import type { Severity } from "./emission-guard"
 
 export type ModelRef = { providerID: string; modelID: string }
@@ -20,14 +23,15 @@ export type AdvisorConfig = {
   model?: ModelRef
 }
 
-export const CONFIG_PATH = path.join(os.homedir(), ".ywai", "config.yaml")
+export const CONFIG_PATH = YWAI_CONFIG_PATH
 
 /**
  * Reads the advisor settings from ywai's config.
  *
- * The file is YAML, and both keys sit at the top level, so a line scan reads
- * them without pulling a YAML parser into the bundle — the same approach
- * vision-bridge uses for its model preference.
+ * The file is YAML, and both keys sit at the top level, so the shared line
+ * scan in plugins/shared/ywai-config.ts reads them without pulling a YAML
+ * parser into the bundle — vision-bridge reads its model preference through
+ * the same module.
  */
 export async function loadConfig(configPath = CONFIG_PATH): Promise<AdvisorConfig> {
   try {
@@ -40,32 +44,9 @@ export async function loadConfig(configPath = CONFIG_PATH): Promise<AdvisorConfi
   }
 }
 
-/**
- * Pulls specific top-level scalars out of a YAML document.
- *
- * Only column-zero keys are considered, so a nested key that happens to share a
- * name (say `advisor_model` under some profile block) cannot be mistaken for
- * the global setting.
- */
-export function readTopLevelFields(raw: string, keys: string[]): Record<string, string> {
-  const wanted = new Set(keys)
-  const out: Record<string, string> = {}
-  for (const line of raw.split("\n")) {
-    const m = /^([a-z_]+):\s*(.*)$/.exec(line)
-    if (!m) continue
-    const key = m[1]
-    if (!key || !wanted.has(key)) continue
-    let value = (m[2] ?? "").trim()
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-    out[key] = value
-  }
-  return out
-}
+// Re-exported for the advisor's own tests; the implementation lives in the
+// shared module so advisor and vision-bridge parse config.yaml identically.
+export { readTopLevelFields }
 
 /**
  * Accepts "provider/model" or a bare id. A bare id cannot be resolved without

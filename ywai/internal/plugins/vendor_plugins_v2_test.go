@@ -1,17 +1,14 @@
 package plugins
 
 import (
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 func TestInstallVisionBridge_V2UsesAutoDiscovery(t *testing.T) {
-	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 
@@ -51,7 +48,6 @@ func TestInstallVisionBridge_V2UsesAutoDiscovery(t *testing.T) {
 }
 
 func TestInstallAdvisor_V2UsesAutoDiscovery(t *testing.T) {
-	t.Setenv(agent.OpenCodeOverrideEnv, "v2")
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 

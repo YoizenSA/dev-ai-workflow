@@ -58,11 +58,13 @@ func (ps *PushSender) Send(title, body string) error {
 	payload := fmt.Sprintf(`{"title":%q,"body":%q}`, title, body)
 	payloadBytes := []byte(payload)
 	// Surface the first real delivery failure so the test endpoint can report it.
-	// Dead subscriptions (410/404) are pruned and never counted as an error.
+	// Dead subscriptions (410 Gone / 404 Not Found) are pruned and never counted
+	// as an error.
 	var firstErr error
 	for _, sub := range subs {
-		if err := ps.sendToSubscription(sub, payloadBytes); err != nil {
-			if strings.Contains(err.Error(), "410") || strings.Contains(err.Error(), "404") {
+		status, err := ps.sendToSubscription(sub, payloadBytes)
+		if err != nil {
+			if status == http.StatusGone || status == http.StatusNotFound {
 				_ = ps.store.Unsubscribe(sub.Endpoint)
 				continue
 			}
@@ -74,36 +76,39 @@ func (ps *PushSender) Send(title, body string) error {
 	return firstErr
 }
 
-func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) error {
+// sendToSubscription encrypts and delivers one notification. On an HTTP level
+// failure it reports the response status (0 when the request never got that
+// far) alongside the error, so callers can classify it without parsing text.
+func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) (int, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("salt: %w", err)
+		return 0, fmt.Errorf("salt: %w", err)
 	}
 
 	ephemeral, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return fmt.Errorf("ephemeral: %w", err)
+		return 0, fmt.Errorf("ephemeral: %w", err)
 	}
 
 	// Decode subscription keys (RFC 8291)
 	p256dh, err := base64.RawURLEncoding.DecodeString(sub.Keys.P256DH)
 	if err != nil {
-		return fmt.Errorf("decode p256dh: %w", err)
+		return 0, fmt.Errorf("decode p256dh: %w", err)
 	}
 	auth, err := base64.RawURLEncoding.DecodeString(sub.Keys.Auth)
 	if err != nil {
-		return fmt.Errorf("decode auth: %w", err)
+		return 0, fmt.Errorf("decode auth: %w", err)
 	}
 
 	subPubX, subPubY := elliptic.Unmarshal(elliptic.P256(), p256dh)
 	if subPubX == nil {
-		return fmt.Errorf("invalid subscription public key")
+		return 0, fmt.Errorf("invalid subscription public key")
 	}
 
 	// ECDH: shared secret = ephemeral.D * subPub
 	sharedX, _ := elliptic.P256().ScalarMult(subPubX, subPubY, ephemeral.D.Bytes())
 	if sharedX == nil {
-		return fmt.Errorf("ecdh: nil shared secret")
+		return 0, fmt.Errorf("ecdh: nil shared secret")
 	}
 
 	// RFC 8291 §3.1: derive PRK (pseudo-random key)
@@ -128,11 +133,11 @@ func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) e
 
 	block, err := aes.NewCipher(cek)
 	if err != nil {
-		return fmt.Errorf("aes: %w", err)
+		return 0, fmt.Errorf("aes: %w", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("gcm: %w", err)
+		return 0, fmt.Errorf("gcm: %w", err)
 	}
 	ciphertext := gcm.Seal(nil, nonce, padded, nil)
 
@@ -147,14 +152,14 @@ func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) e
 	// Build VAPID JWT with endpoint origin as audience
 	vapidJWT, err := ps.buildVAPIDJWT(sub.Endpoint)
 	if err != nil {
-		return fmt.Errorf("vapid jwt: %w", err)
+		return 0, fmt.Errorf("vapid jwt: %w", err)
 	}
 
 	authHeader := "vapid t=" + vapidJWT + ", k=" + strings.TrimRight(ps.vapid.PublicKey, "=")
 
 	req, err := http.NewRequest("POST", sub.Endpoint, &body)
 	if err != nil {
-		return fmt.Errorf("request: %w", err)
+		return 0, fmt.Errorf("request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("TTL", "86400")
@@ -164,15 +169,15 @@ func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) e
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send: %w", err)
+		return 0, fmt.Errorf("send: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 && resp.StatusCode != 204 && resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("push service returned %d: %s", resp.StatusCode, string(bodyBytes))
+		return resp.StatusCode, fmt.Errorf("push service returned %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	return nil
+	return resp.StatusCode, nil
 }
 
 // buildVAPIDJWT creates a signed JWT for VAPID per RFC 8292.

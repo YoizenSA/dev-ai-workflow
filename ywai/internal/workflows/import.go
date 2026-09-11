@@ -86,7 +86,6 @@ func Import(raw []byte, opts ImportOptions) (*ImportResult, error) {
 // ensureEndpoints adds start/end nodes if missing and wires any dangling node
 // inputs/outputs to them so the graph is connected.
 func ensureEndpoints(wf *Workflow) {
-	byID := wf.nodeByID()
 	hasStart := wf.findNode(NodeTypeStart) != nil
 	hasEnd := wf.findNode(NodeTypeEnd) != nil
 
@@ -99,7 +98,7 @@ func ensureEndpoints(wf *Workflow) {
 		}
 		wf.Nodes = append(wf.Nodes, start)
 		// Wire start → first non-end node that has no incoming edges.
-		if target := firstSink(wf, byID, NodeTypeStart); target != "" {
+		if target := firstSink(wf, NodeTypeStart); target != "" {
 			wf.Connections = append(wf.Connections, Connection{From: start.ID, To: target, FromPort: "out", ToPort: "input"})
 		}
 	}
@@ -112,7 +111,7 @@ func ensureEndpoints(wf *Workflow) {
 		}
 		wf.Nodes = append(wf.Nodes, end)
 		// Wire last node with no outgoing edges → end.
-		if source := firstSourceless(wf, byID, NodeTypeEnd); source != "" {
+		if source := firstSourceless(wf, NodeTypeEnd); source != "" {
 			wf.Connections = append(wf.Connections, Connection{From: source, To: end.ID, FromPort: "out", ToPort: "input"})
 		}
 	}
@@ -120,7 +119,7 @@ func ensureEndpoints(wf *Workflow) {
 
 // firstSink returns the id of the first node (excluding 'exclude' and groups)
 // that has no incoming connection.
-func firstSink(wf *Workflow, byID map[string]*Node, excludeType string) string {
+func firstSink(wf *Workflow, excludeType string) string {
 	incoming := make(map[string]bool)
 	for _, c := range wf.Connections {
 		incoming[c.To] = true
@@ -139,7 +138,7 @@ func firstSink(wf *Workflow, byID map[string]*Node, excludeType string) string {
 
 // firstSourceless returns the id of the first non-start/group node with no
 // outgoing connection.
-func firstSourceless(wf *Workflow, byID map[string]*Node, excludeType string) string {
+func firstSourceless(wf *Workflow, excludeType string) string {
 	outgoing := make(map[string]bool)
 	for _, c := range wf.Connections {
 		outgoing[c.From] = true

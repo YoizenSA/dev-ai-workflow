@@ -1,42 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { mergeRepos, parseRepoNames } from "./repoNames";
+import { configApi } from "../../api/client";
+import type { AdoCliStatus, AdoConfig, AdoPatStatus } from "../../api/types";
 import Modal from "../shared/Modal";
 import AdoSetupWizard from "./AdoSetupWizard";
 import { buildToml, buildTomlCommand, defaultToml, type TomlConfig } from "./tomlBuilder";
 import "./AdoConfig.css";
 
-// ─── Types (mirror the Go structs in internal/control/ado_config.go) ───────
-
-interface AdoProfile {
-	org: string;
-	project: string;
-	patEnvVar: string;
-	repos: string[];
-	default?: boolean;
-}
-
-interface AdoConfig {
-	defaultProfile: string;
-	profiles: Record<string, AdoProfile>;
-}
-
-interface PatStatus {
-	hasPat: boolean;
-	source: "env" | "file" | "none";
-}
-
-interface CliStatus {
-	installed: boolean;
-	version: string;
-	latest: string | null;
-	updateAvailable: boolean;
-	error?: string;
-}
+// ─── Types live in api/types.ts (mirror the Go structs in ado_config.go) ───
 
 export default function AdoConfig() {
 	const [config, setConfig] = useState<AdoConfig | null>(null);
-	const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
-	const [patStatus, setPatStatus] = useState<PatStatus | null>(null);
+	const [cliStatus, setCliStatus] = useState<AdoCliStatus | null>(null);
+	const [patStatus, setPatStatus] = useState<AdoPatStatus | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -66,9 +42,9 @@ export default function AdoConfig() {
 
 	useEffect(() => {
 		Promise.all([
-			fetch("/api/ado/config").then((r) => r.json()),
-			fetch("/api/ado/cli-status").then((r) => r.json()),
-			fetch("/api/ado/pat-status").then((r) => r.json()),
+			configApi.getAdoConfig(),
+			configApi.getAdoCliStatus(),
+			configApi.getAdoPatStatus(),
 		])
 			.then(([cfg, cli, pat]) => {
 				setConfig(cfg);
@@ -151,18 +127,14 @@ export default function AdoConfig() {
 			return;
 		}
 		try {
-			const res = await fetch("/api/ado/profile", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name,
-					// A name typed but never committed with Enter is still the
-					// user's intent; without this the profile saves with no repos.
-					profile: { org: globalOrg, project: formProject.trim(), patEnvVar: "AZURE_DEVOPS_PAT", repos: mergeRepos(formRepos, repoInput) },
-				}),
+			const data = await configApi.saveAdoProfile(name, {
+				// A name typed but never committed with Enter is still the
+				// user's intent; without this the profile saves with no repos.
+				org: globalOrg,
+				project: formProject.trim(),
+				patEnvVar: "AZURE_DEVOPS_PAT",
+				repos: mergeRepos(formRepos, repoInput),
 			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to save profile");
 			setConfig(data.config);
 			setMessage({ text: `Profile "${name}" saved`, type: "success" });
 			closeModal();
@@ -174,13 +146,7 @@ export default function AdoConfig() {
 	const handleDeleteProfile = async (name: string) => {
 		if (!confirm(`Delete profile "${name}"?`)) return;
 		try {
-			const res = await fetch("/api/ado/profile", {
-				method: "DELETE",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name }),
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to delete profile");
+			const data = await configApi.deleteAdoProfile(name);
 			setConfig(data.config);
 			setMessage({ text: `Profile "${name}" deleted`, type: "success" });
 		} catch (e) {
@@ -192,13 +158,7 @@ export default function AdoConfig() {
 		if (!config) return;
 		const updated = { ...config, defaultProfile: name };
 		try {
-			const res = await fetch("/api/ado/config", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(updated),
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to set default");
+			const data = await configApi.saveAdoConfig(updated);
 			setConfig(data.config);
 		} catch (e) {
 			setMessage({ text: (e as Error).message, type: "error" });
@@ -213,13 +173,7 @@ export default function AdoConfig() {
 			return;
 		}
 		try {
-			const res = await fetch("/api/ado/pat", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ pat: patValue.trim() }),
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to save PAT");
+			await configApi.saveAdoPat(patValue.trim());
 			setPatStatus({ hasPat: true, source: "file" });
 			setMessage({ text: "PAT saved to ~/.azure-devops-cli/pat (chmod 600)", type: "success" });
 			setPatValue("");
@@ -249,9 +203,7 @@ export default function AdoConfig() {
 		setCliUpdateStatus("updating");
 		setMessage(null);
 		try {
-			const res = await fetch("/api/ado/cli-update", { method: "POST" });
-			const data: CliStatus = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to update ado CLI");
+			const data = await configApi.updateAdoCli();
 			setCliStatus(data);
 			setCliUpdateStatus("idle");
 			setMessage(data.updateAvailable

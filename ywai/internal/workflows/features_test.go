@@ -477,10 +477,9 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 	}
 	orch := files[orchPath]
 	for _, want := range []string{
-		`"*": deny`,
-		"task:",
-		"deploy-dev: allow",
-		"deploy-qa: allow",
+		"- action: subagent\n    resource: \"*\"\n    effect: deny",
+		"- action: subagent\n    resource: deploy-dev\n    effect: allow",
+		"- action: subagent\n    resource: deploy-qa\n    effect: allow",
 		"Typed Contracts (orchestrator)",
 	} {
 		if !strings.Contains(orch, want) {
@@ -528,10 +527,10 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 		t.Fatal("dev agent file not found")
 	}
 	dev := files[devPath]
-	if !strings.Contains(dev, "w-qa: allow") {
+	if !strings.Contains(dev, "- action: subagent\n    resource: w-qa\n    effect: allow") {
 		t.Errorf("dev should delegate to qa:\n%s", dev)
 	}
-	if strings.Contains(dev, "w-rev: allow") {
+	if strings.Contains(dev, "resource: w-rev") {
 		t.Errorf("dev should NOT delegate to rev (no edge):\n%s", dev)
 	}
 }

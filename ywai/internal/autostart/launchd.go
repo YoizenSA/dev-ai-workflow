@@ -30,7 +30,8 @@ func configureLaunchd() error {
 	}
 
 	plistPath := filepath.Join(agentsDir, launchdPlistName)
-	plistContent := launchdPlistContent(binaryPath)
+	logsDir := filepath.Join(usr.HomeDir, "Library", "Logs")
+	plistContent := launchdPlistContent(binaryPath, logsDir)
 
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to write plist file: %w", err)
@@ -44,13 +45,16 @@ func configureLaunchd() error {
 	return nil
 }
 
-// launchdPlistContent renders the user agent plist.
+// launchdPlistContent renders the user agent plist. logsDir receives the
+// StandardOutPath / StandardErrorPath files; configureLaunchd passes the
+// user's ~/Library/Logs so the agent's logs live with the rest of the
+// user logs instead of /tmp.
 //
 // No --background: launchd IS the supervisor and expects the server in the
 // foreground. A forking process exits immediately, KeepAlive reads that as a
 // crash and relaunches, and acquirePort kills the orphan left by the previous
 // cycle — a relaunch loop that never serves anything.
-func launchdPlistContent(binaryPath string) string {
+func launchdPlistContent(binaryPath, logsDir string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -67,12 +71,12 @@ func launchdPlistContent(binaryPath string) string {
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/ywai-server.log</string>
+    <string>%s/ywai-server.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/ywai-server-error.log</string>
+    <string>%s/ywai-server-error.log</string>
 </dict>
 </plist>
-`, binaryPath)
+`, binaryPath, logsDir, logsDir)
 }
 
 // disableLaunchd removes the launchd agent.

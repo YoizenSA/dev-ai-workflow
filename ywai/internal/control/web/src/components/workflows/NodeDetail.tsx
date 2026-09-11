@@ -14,9 +14,6 @@ import {
 	setToCsv,
 } from './toolCatalog'
 
-// Shared cache so every node editor reuses one opencode model fetch.
-let modelCache: ModelInfo[] | null = null
-
 // Caches for the skill + MCP catalogs, fetched once and reused across editors.
 let skillCache: { name: string; description: string }[] | null = null
 let mcpCache: McpCatalogItem[] | null = null
@@ -102,16 +99,14 @@ export function useMcpServers(): { id: string; enabled: boolean }[] {
 	return servers
 }
 
+// No module cache here: client.ts already dedupes + TTL-caches listModels,
+// so a second cache would only freeze stale data for the tab's lifetime.
 export function useOpencodeModels(): ModelInfo[] {
-	const [models, setModels] = useState<ModelInfo[]>(modelCache ?? [])
+	const [models, setModels] = useState<ModelInfo[]>([])
 	useEffect(() => {
-		if (modelCache) return
 		toolsApi
 			.listModels()
-			.then((r) => {
-				modelCache = Object.values(r.modelsByProvider ?? {}).flat()
-				setModels(modelCache)
-			})
+			.then((r) => setModels(Object.values(r.modelsByProvider ?? {}).flat()))
 			.catch(() => undefined)
 	}, [])
 	return models

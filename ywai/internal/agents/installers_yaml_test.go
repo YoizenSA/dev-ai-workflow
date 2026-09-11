@@ -52,9 +52,9 @@ func TestBuildOpenCodeMarkdown_FrontmatterIsValidYAML(t *testing.T) {
 		md := BuildOpenCodeMarkdown("probe", profile)
 
 		var fm struct {
-			Description string         `yaml:"description"`
-			Mode        string         `yaml:"mode"`
-			Permission  map[string]any `yaml:"permission"`
+			Description string           `yaml:"description"`
+			Mode        string           `yaml:"mode"`
+			Permissions []map[string]any `yaml:"permissions"`
 		}
 		if err := yaml.Unmarshal([]byte(frontmatterOf(t, md)), &fm); err != nil {
 			t.Fatalf("frontmatter does not parse for %q: %v\n%s", desc, err, md)
@@ -65,8 +65,8 @@ func TestBuildOpenCodeMarkdown_FrontmatterIsValidYAML(t *testing.T) {
 		if fm.Mode != "all" {
 			t.Errorf("mode lost for %q: got %q", desc, fm.Mode)
 		}
-		if len(fm.Permission) == 0 {
-			t.Errorf("permission map lost for %q:\n%s", desc, md)
+		if len(fm.Permissions) == 0 {
+			t.Errorf("permissions rule list lost for %q:\n%s", desc, md)
 		}
 	}
 }

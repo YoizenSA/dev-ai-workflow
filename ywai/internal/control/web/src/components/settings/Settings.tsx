@@ -5,8 +5,6 @@ import {
 	Check,
 	Monitor,
 	Package,
-	Plug,
-	RefreshCw,
 	Server,
 	Settings as SettingsIcon,
 	Share2,
@@ -29,7 +27,6 @@ import Modal from "../shared/Modal";
 import "./Settings.css";
 
 // Heavy tabs: only pull their JS when the user opens them.
-const RoleDefaultsTab = lazy(() => import("./RoleDefaultsTab"));
 const ReferencesTab = lazy(() => import("./ReferencesTab"));
 const OrchestratorTab = lazy(() => import("./OrchestratorTab"));
 const ProfilesTab = lazy(() => import("./ProfilesTab"));
@@ -50,16 +47,13 @@ function TabChunkFallback() {
 
 type Tab =
 	| "general"
-	| "roles"
 	| "agents"
 	| "orchestrator"
 	| "skills"
 	| "mcp"
 	| "providers"
-	| "tools"
 	| "references"
-	| "profiles"
-	| "notifications";
+	| "profiles";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	{
@@ -67,12 +61,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "General",
 		icon: <SettingsIcon size={16} />,
 	},
-	// ponytail: role defaults hidden — configure per-agent instead
-	// {
-	// 	id: "roles",
-	// 	label: "Role Defaults",
-	// 	icon: <Users size={16} />,
-	// },
 	{
 		id: "agents",
 		label: "Agents",
@@ -104,8 +92,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "Providers",
 		icon: <Activity size={16} />,
 	},
-	// ponytail: Tools tab hidden — read-only tool listing, redundant with the
-	// per-agent Permissions view.
 	{
 		id: "references",
 		label: "References",
@@ -122,7 +108,9 @@ export default function Settings() {
 	// payloads in parallel. Tabs still own their UI state; this only primes
 	// network caches so switching tabs / second visit feels instant.
 	useEffect(() => {
-		void toolsApi.listModels({ force: true }).catch(() => {});
+		// No force: the General tab owns the single forced revalidation.
+		// This call only warms the client/server model cache.
+		void toolsApi.listModels().catch(() => {});
 		void Promise.all([
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => null),
@@ -164,11 +152,6 @@ export default function Settings() {
 
 			<div className="tab-content">
 				{activeTab === "general" && <GeneralTab />}
-				{activeTab === "roles" && (
-					<Suspense fallback={<TabChunkFallback />}>
-						<RoleDefaultsTab />
-					</Suspense>
-				)}
 				{activeTab === "agents" && <AgentsTab />}
 				{activeTab === "orchestrator" && (
 					<Suspense fallback={<TabChunkFallback />}>
@@ -181,10 +164,8 @@ export default function Settings() {
 					</Suspense>
 				)}
 				{activeTab === "skills" && <SkillsTab />}
-				{activeTab === "notifications" && <NotificationsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
-				{activeTab === "tools" && <ToolsTab />}
 				{activeTab === "references" && (
 					<Suspense fallback={<TabChunkFallback />}>
 						<ReferencesTab />
@@ -200,7 +181,6 @@ export default function Settings() {
 function GeneralTab() {
 	const [config, setConfig] = useState<OpenCodeConfigType | null>(null);
 	const [visionModel, setVisionModel] = useState("");
-	const [opencodeVersion, setOpencodeVersion] = useState("");
 	// Optional OpenAI-compatible vision provider override. Empty = use TokenBank.
 	const [agentList, setAgentList] = useState<string[]>([]);
 
@@ -255,7 +235,6 @@ function GeneralTab() {
 				("current" in (visionRes ?? {}) ? visionRes?.current : undefined) ||
 				"";
 			setVisionModel(preferred ?? "");
-			setOpencodeVersion(userCfg?.opencode_version ?? "");
 			setAgentList((agents ?? []).map((a) => a.name));
 			const vModels = (visionRes?.models ?? []).map((m) => ({
 				id: m.id,
@@ -336,10 +315,6 @@ function GeneralTab() {
 				vision_model: visionModel || "",
 				// Clear override so Settings is the single source of truth
 				vision_model_override: "",
-				opencode_version: (opencodeVersion || undefined) as
-					| "v1"
-					| "v2"
-					| undefined,
 				// Optional OpenAI-compatible provider override (empty = TokenBank)
 			});
 
@@ -524,25 +499,6 @@ function GeneralTab() {
 				>
 					Use catalog default
 				</button>
-			</div>
-
-			<div className="field span-2">
-				<label htmlFor="cfg-opencode-version">OpenCode version</label>
-				<select
-					id="cfg-opencode-version"
-					value={opencodeVersion}
-					onChange={(e) => setOpencodeVersion(e.target.value)}
-				>
-					<option value="">Autodetect (prefers v2)</option>
-					<option value="v2">v2 — opencode2</option>
-					<option value="v1">v1 — opencode</option>
-				</select>
-				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
-					ywai requires OpenCode 2 (opencode2). Autodetect prefers it when
-					present; the v1 binary is not supported (see ADR-0001). Both
-					flavors read ~/.config/opencode, so exactly one can be the active
-					host.
-				</span>
 			</div>
 
 			{message && (
@@ -1923,107 +1879,3 @@ function ProvidersTab() {
 	);
 }
 
-// ─── Tools Tab ─────────────────────────────────────────────────────────────
-
-function ToolsTab() {
-	const [tools, setTools] = useState<{
-		built_in: string[];
-		all: string[];
-		mcp_tools: Record<string, { tools: string[]; enabled: boolean }>;
-		plugin_tools: Record<string, string[]>;
-	} | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [resyncing, setResyncing] = useState(false);
-
-	const load = useCallback((refresh: boolean) => {
-		if (refresh) setResyncing(true);
-		configApi
-			.listTools(refresh)
-			.then((data) => {
-				setTools(data);
-				setLoading(false);
-			})
-			.catch(() => setLoading(false))
-			.finally(() => setResyncing(false));
-	}, []);
-
-	useEffect(() => {
-		load(false);
-	}, [load]);
-
-	if (loading) {
-		return (
-			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
-				<div className="skel-line title" />
-				<div className="skel-line desc" />
-				<div className="skel-line desc sm" />
-			</div>
-		);
-	}
-
-	if (!tools) {
-		return (
-			<div className="card card-pad">
-				<p className="muted">No tools data available</p>
-			</div>
-		);
-	}
-
-	const sections: { label: string; data: string[]; icon: React.ReactNode }[] = [
-		{ label: "Built-in", data: tools.built_in, icon: <SettingsIcon size={16} /> },
-		...Object.entries(tools.mcp_tools).map(([server, group]) => ({
-			label: `MCP: ${server}${group.enabled ? "" : " (disabled)"}`,
-			data: group.tools,
-			icon: <Plug size={16} />,
-		})),
-		...Object.entries(tools.plugin_tools).map(([plugin, toolsList]) => ({
-			label: `Plugin: ${plugin}`,
-			data: toolsList,
-			icon: <Package size={16} />,
-		})),
-	];
-
-	return (
-		<div className="card card-pad">
-			<div className="tools-header">
-				<button
-					type="button"
-					className="btn btn-sm"
-					onClick={() => load(true)}
-					disabled={resyncing}
-					title="Re-scan tools (built-in, MCP servers, and plugins)"
-				>
-					<RefreshCw
-						size={14}
-						className={resyncing ? "spin" : undefined}
-						aria-hidden="true"
-					/>
-					{resyncing ? "Resyncing…" : "Resync"}
-				</button>
-			</div>
-			{sections.length === 0 && <p className="muted">No tools found</p>}
-			{sections.map((section) => {
-				const toolsList = Array.isArray(section.data) ? section.data : [];
-				if (toolsList.length === 0) return null;
-				return (
-					<div key={section.label} className="tools-section">
-						<h3 className="tools-section-title">
-							<span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
-								{section.icon}
-								{section.label}
-							</span>
-							<span className="tools-section-count">({toolsList.length})</span>
-						</h3>
-						<div className="tools-pills-container">
-							{toolsList.map((tool) => (
-								<span key={tool} className="pill pill-muted tools-pill">
-									{tool}
-								</span>
-							))}
-						</div>
-					</div>
-				);
-			})}
-		</div>
-	);
-}

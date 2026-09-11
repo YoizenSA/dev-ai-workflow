@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 )
 
 // newLocalClientWithPaths creates a LocalClient with explicit paths so unit
@@ -394,10 +392,6 @@ func TestResolveOpencodeBin_PrefersOpenCode2(t *testing.T) {
 		}
 	}
 	t.Setenv("PATH", dir)
-	// This test is about autodetection, so it must not inherit the package's
-	// v1 pin (see opencode_flavor_testmain_test.go) or the preference it
-	// asserts would never be exercised.
-	t.Setenv(agent.OpenCodeOverrideEnv, "")
 	// USERPROFILE is what homeDir()/well-known-dir probes read on Windows;
 	// without pinning it a really installed opencode2.exe leaks in.
 	t.Setenv("HOME", home)

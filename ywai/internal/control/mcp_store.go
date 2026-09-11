@@ -139,12 +139,7 @@ func (s *Server) handleMcpCatalog(w http.ResponseWriter, r *http.Request) {
 			if m, ok := rawCfg.(map[string]interface{}); ok {
 				cfg = m
 				installed = true
-				// If enabled field is missing, default to true
-				if enabledVal, hasEnabled := m["enabled"]; hasEnabled {
-					if e, ok := enabledVal.(bool); ok {
-						enabled = e
-					}
-				}
+				enabled = mcpEntryEnabled(m)
 			}
 		}
 		status, label, message, action := mcpCatalogStatus(entry, installed, enabled, cfg)
@@ -173,9 +168,9 @@ func mcpCatalogStatus(entry McpCatalogEntry, installed, enabled bool, cfg map[st
 
 	if entry.Type == "local" {
 		command := entry.Command
-		if rawCommand, ok := cfg["command"].([]string); ok && len(rawCommand) > 0 {
-			command = rawCommand
-		} else if rawCommand, ok := cfg["command"].([]interface{}); ok && len(rawCommand) > 0 {
+		// Config maps come from JSON decoding, so the command is always a
+		// []interface{} of strings — never a []string.
+		if rawCommand, ok := cfg["command"].([]interface{}); ok && len(rawCommand) > 0 {
 			command = commandFromInterfaceSlice(rawCommand)
 		}
 		if entry.ID == "playwright" && commandContains(command, "@anthropic-ai/playwright-mcp") {
@@ -596,7 +591,7 @@ func (s *Server) handleMcpHealth(w http.ResponseWriter, r *http.Request) {
 
 	for id := range mcpConfig {
 		go func(id string) {
-			ch <- result{checkMcpHealth(ctx, id)}
+			ch <- result{checkMcpHealth(ctx, id, mcpConfig)}
 		}(id)
 	}
 
@@ -608,8 +603,9 @@ func (s *Server) handleMcpHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, mcpHealthResponse{Servers: items})
 }
 
-// checkMcpHealth checks health for a single MCP server by ID.
-func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
+// checkMcpHealth checks health for a single MCP server by ID. cfg is the
+// shared, already-loaded MCP config; it is only read here.
+func checkMcpHealth(ctx context.Context, id string, cfg map[string]interface{}) mcpHealthItem {
 	start := time.Now()
 
 	// Find the catalog entry to determine type and check params.
@@ -628,11 +624,9 @@ func checkMcpHealth(ctx context.Context, id string) mcpHealthItem {
 	// The installed entry wins: a URLRequired server has its endpoint only in
 	// the config, and a user may have repointed any other one by hand. Probing
 	// the catalog URL would report on a server nobody is actually running.
-	if cfg, err := readMcpConfig(); err == nil {
-		if m, ok := cfg[id].(map[string]interface{}); ok {
-			if u, ok := m["url"].(string); ok && strings.TrimSpace(u) != "" {
-				endpoint = u
-			}
+	if m, ok := cfg[id].(map[string]interface{}); ok {
+		if u, ok := m["url"].(string); ok && strings.TrimSpace(u) != "" {
+			endpoint = u
 		}
 	}
 

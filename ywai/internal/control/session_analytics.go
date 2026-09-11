@@ -17,27 +17,18 @@ import (
 // SessionAnalytics is an aggregate view of real OpenCode session activity:
 // skills invoked, tools used, cost/tokens, broken down by project.
 type SessionAnalytics struct {
-	GeneratedAt    string               `json:"generatedAt"`
-	DBPath         string               `json:"dbPath"`
-	Days           int                  `json:"days"` // 0 = all time
-	ProjectID      string               `json:"projectId,omitempty"`
-	Summary        SessionAnalyticsSum  `json:"summary"`
-	Insights       []string             `json:"insights"`
-	Activity       []SessionDayCount    `json:"activity"`
-	ToolCategories []SessionNamedCount  `json:"toolCategories"`
-	UnusedSkills   []string             `json:"unusedSkills"`
-	Projects       []SessionProjectStat `json:"projects"`
-	Engram         SessionEngramStats   `json:"engram"`
-	Skills         []SessionNamedCount  `json:"skills"`
-	Tools          []SessionNamedCount  `json:"tools"`
-	Agents         []SessionNamedCount  `json:"agents"`
-	Models         []SessionNamedCount  `json:"models"`
-}
-
-// SessionDayCount is sessions created on one calendar day (local time).
-type SessionDayCount struct {
-	Day      string `json:"day"` // YYYY-MM-DD
-	Sessions int    `json:"sessions"`
+	GeneratedAt  string               `json:"generatedAt"`
+	DBPath       string               `json:"dbPath"`
+	Days         int                  `json:"days"` // 0 = all time
+	ProjectID    string               `json:"projectId,omitempty"`
+	Summary      SessionAnalyticsSum  `json:"summary"`
+	Insights     []string             `json:"insights"`
+	UnusedSkills []string             `json:"unusedSkills"`
+	Projects     []SessionProjectStat `json:"projects"`
+	Skills       []SessionNamedCount  `json:"skills"`
+	Tools        []SessionNamedCount  `json:"tools"`
+	Agents       []SessionNamedCount  `json:"agents"`
+	Models       []SessionNamedCount  `json:"models"`
 }
 
 // SessionAnalyticsSum holds top-line KPIs.
@@ -50,11 +41,7 @@ type SessionAnalyticsSum struct {
 	TotalCost          float64 `json:"totalCost"`
 	TokensInput        int64   `json:"tokensInput"`
 	TokensOutput       int64   `json:"tokensOutput"`
-	TokensReasoning    int64   `json:"tokensReasoning"`
-	TokensCacheRead    int64   `json:"tokensCacheRead"`
-	TokensCacheWrite   int64   `json:"tokensCacheWrite"`
 	SessionsWithSkill  int     `json:"sessionsWithSkill"`
-	ChildSessions      int     `json:"childSessions"`
 	RootSessions       int     `json:"rootSessions"`
 	AvgToolsPerSession float64 `json:"avgToolsPerSession"`
 	AvgCostPerSession  float64 `json:"avgCostPerSession"`
@@ -62,21 +49,6 @@ type SessionAnalyticsSum struct {
 	DelegationCalls    int     `json:"delegationCalls"`
 	InstalledSkills    int     `json:"installedSkills"`
 	UnusedSkillCount   int     `json:"unusedSkillCount"`
-}
-
-// SessionEngramStats measures how persistent memory is actually used, not just how
-// often it is called. Memory only pays off when it is read back, so the telling
-// numbers are the sessions that write without ever searching, the ones that never
-// close with a summary, and how rarely a stored memory is corrected instead of
-// another one piled on top.
-type SessionEngramStats struct {
-	Sessions    int     `json:"sessions"`    // sessions that called any engram tool
-	WriteOnly   int     `json:"writeOnly"`   // saved but never searched
-	WithSummary int     `json:"withSummary"` // closed with mem_session_summary
-	Saves       int     `json:"saves"`
-	Searches    int     `json:"searches"`
-	Updates     int     `json:"updates"`
-	Coverage    float64 `json:"coverage"` // sessions using engram / all sessions
 }
 
 // SessionProjectStat is one OpenCode project row with usage stats.
@@ -511,26 +483,12 @@ func enrichAnalytics(a *SessionAnalytics) {
 	if a == nil {
 		return
 	}
-	if a.Insights == nil {
-		a.Insights = []string{}
-	}
-	if a.Activity == nil {
-		a.Activity = []SessionDayCount{}
-	}
-	if a.ToolCategories == nil {
-		a.ToolCategories = []SessionNamedCount{}
-	}
-	if a.UnusedSkills == nil {
-		a.UnusedSkills = []string{}
-	}
-
 	s := &a.Summary
 	if s.Sessions > 0 {
-		a.Engram.Coverage = float64(a.Engram.Sessions) / float64(s.Sessions)
 		s.AvgToolsPerSession = float64(s.ToolCalls) / float64(s.Sessions)
 		s.AvgCostPerSession = s.TotalCost / float64(s.Sessions)
 		s.SkillCoverage = float64(s.SessionsWithSkill) / float64(s.Sessions)
-		if s.RootSessions == 0 && s.ChildSessions == 0 {
+		if s.RootSessions == 0 {
 			// Fallback when SQL path did not set them.
 			s.RootSessions = s.Sessions
 		}
@@ -557,17 +515,10 @@ func enrichAnalytics(a *SessionAnalytics) {
 	a.UnusedSkills = unused
 	s.UnusedSkillCount = len(unused)
 
-	// Delegation calls from tool categories or tools list
-	for _, c := range a.ToolCategories {
-		if c.Name == "delegation" {
-			s.DelegationCalls = c.Count
-		}
-	}
-	if s.DelegationCalls == 0 {
-		for _, t := range a.Tools {
-			if t.Name == "delegate" || t.Name == "task" || strings.HasPrefix(t.Name, "delegation") {
-				s.DelegationCalls += t.Count
-			}
+	// Delegation calls from the tools list.
+	for _, t := range a.Tools {
+		if t.Name == "delegate" || t.Name == "task" || strings.HasPrefix(t.Name, "delegation") {
+			s.DelegationCalls += t.Count
 		}
 	}
 
@@ -635,45 +586,7 @@ func buildInsights(a *SessionAnalytics) []string {
 		))
 	}
 
-	if s.TokensCacheRead > 0 && s.TokensInput > 0 {
-		ratio := 100 * float64(s.TokensCacheRead) / float64(s.TokensInput+s.TokensCacheRead)
-		out = append(out, fmt.Sprintf(
-			"Prompt cache read ≈ %.0f%% of input+cache volume (%s cache-read tokens).",
-			ratio, compactNum(s.TokensCacheRead),
-		))
-	}
-
-	if s.ChildSessions > 0 {
-		out = append(out, fmt.Sprintf(
-			"%d child sessions (sub-agents) vs %d root sessions.",
-			s.ChildSessions, s.RootSessions,
-		))
-	}
-
-	// Busiest day
-	busyDay, busyN := "", 0
-	for _, d := range a.Activity {
-		if d.Sessions > busyN {
-			busyN = d.Sessions
-			busyDay = d.Day
-		}
-	}
-	if busyDay != "" {
-		out = append(out, fmt.Sprintf("Busiest day: %s with %d sessions.", busyDay, busyN))
-	}
-
 	return out
-}
-
-func compactNum(n int64) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fk", float64(n)/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
 }
 
 // listInstalledSkillNames reads skill folder names from common OpenCode / ywai paths.

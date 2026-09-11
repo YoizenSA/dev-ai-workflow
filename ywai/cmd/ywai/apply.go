@@ -198,6 +198,21 @@ func applyManaged(o applyOpts) applyResult {
 		return r
 	}
 
+	// Gate: OpenCode 2 is the minimum supported host. Runs before any write so
+	// a machine with only the retired v1 `opencode` binary fails fast with the
+	// withdrawal notice instead of receiving v2-shaped config it rejects.
+	for _, a := range agents {
+		if a.Name != "opencode" {
+			continue
+		}
+		if err := agent.GateOpenCodeV2(); err != nil {
+			r.Fatal = err
+			fmt.Fprintf(os.Stderr, "Error: %v.\n", err)
+			return r
+		}
+		break
+	}
+
 	// Update already printed its own banner + [pre] steps; just open the
 	// managed phase. Install has no prior banner, so print the full one.
 	if o.Mode == applyUpdate {
@@ -403,26 +418,6 @@ func applyManaged(o applyOpts) applyResult {
 		if cleaned > 0 {
 			fmt.Printf("  Cleaned legacy frontmatter keys in %d agent files\n", cleaned)
 		}
-
-		// The v2 permissions array → v1 permission map conversion is a v1-only
-		// repair. On v2 the array is the native shape, so running the sweep
-		// would downgrade every agent back to the v1 map.
-		jsonPaths := v1PermissionSweepPaths()
-		seenJSON := map[string]bool{}
-		rewritten := 0
-		for _, p := range jsonPaths {
-			if p == "" || seenJSON[p] {
-				continue
-			}
-			seenJSON[p] = true
-			n, err := agentprofiles.RewriteOpenCodeJSONV1Permissions(p)
-			if err == nil {
-				rewritten += n
-			}
-		}
-		if rewritten > 0 {
-			fmt.Printf("  Converted v2 permissions arrays to v1 maps in %d OpenCode agents\n", rewritten)
-		}
 	}
 
 	// ── control server start (install: ensure it is running) ──────────────
@@ -474,26 +469,6 @@ func mirrorOpenCodeToOrca(dryRun bool) {
 		return
 	}
 	fmt.Printf("  ✓ Orca OpenCode config synced: %s\n", dst)
-}
-
-// v1PermissionSweepPaths returns the opencode config JSON paths the v1-only
-// permissions sweep rewrites. On a v2 host the ordered `permissions` array is
-// the native shape, so the sweep is a no-op (empty result) — running it would
-// downgrade every agent back to the v1 `permission` map. The paths are found
-// with FindJSONCPath so a .jsonc config is covered, and the canonical
-// ~/.config/opencode copy is swept alongside an OPENCODE_CONFIG_DIR isolate.
-func v1PermissionSweepPaths() []string {
-	if agent.OpenCodeIsV2() {
-		return nil
-	}
-	paths := []string{config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode")}
-	if home, err := os.UserHomeDir(); err == nil {
-		canonical := config.FindJSONCPath(filepath.Join(home, ".config", "opencode"), "opencode")
-		if canonical != paths[0] {
-			paths = append(paths, canonical)
-		}
-	}
-	return paths
 }
 
 // resolveApplyAgents returns the agents to install for this run.

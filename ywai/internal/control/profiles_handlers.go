@@ -4,23 +4,29 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 )
 
-// profileStore is the singleton instance used by the handlers.
-var profileStoreInstance *ProfileStore
+// profileStoreInstance is the singleton used by the handlers.
+var (
+	profileStoreOnce      sync.Once
+	profileStoreInstance  *ProfileStore
+	profileStoreInitError error
+)
 
-// getProfileStore returns the singleton ProfileStore, initializing it on first call.
+// getProfileStore returns the singleton ProfileStore, initializing it on
+// first use. sync.Once makes the lazy init race-free: concurrent first
+// requests each either get the store or the same init error.
 func getProfileStore() (*ProfileStore, error) {
-	if profileStoreInstance == nil {
-		var err error
-		profileStoreInstance, err = NewProfileStore()
-		if err != nil {
-			return nil, err
-		}
+	profileStoreOnce.Do(func() {
+		profileStoreInstance, profileStoreInitError = NewProfileStore()
+	})
+	if profileStoreInitError != nil {
+		return nil, profileStoreInitError
 	}
 	return profileStoreInstance, nil
 }
@@ -177,12 +183,6 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Merge updates.
-	if req.DisplayName != "" {
-		// DisplayName is not stored in our simple Profile struct but
-		// we handle it through AgentConfig labels.
-	}
-	_ = req.Description
-
 	cfg := existing.Config
 	if req.Config != nil {
 		cfg = *req.Config

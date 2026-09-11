@@ -11,7 +11,6 @@ func TestMergeAnalyticsCombinesCountsAndRerank(t *testing.T) {
 		},
 		Skills:   []SessionNamedCount{{Name: "tdd", Count: 4}},
 		Projects: []SessionProjectStat{{ID: "p1", Sessions: 10, ToolCalls: 100}},
-		Activity: []SessionDayCount{{Day: "2026-07-01", Sessions: 10}},
 	}
 	src := &SessionAnalytics{
 		DBPath:  "b.db",
@@ -21,7 +20,6 @@ func TestMergeAnalyticsCombinesCountsAndRerank(t *testing.T) {
 		},
 		Skills:   []SessionNamedCount{{Name: "tdd", Count: 2}},
 		Projects: []SessionProjectStat{{ID: "p1", Sessions: 5, ToolCalls: 90}, {ID: "p2", Sessions: 1}},
-		Activity: []SessionDayCount{{Day: "2026-07-01", Sessions: 3}, {Day: "2026-06-30", Sessions: 2}},
 	}
 
 	mergeAnalytics(dst, src, AnalyticsQuery{ToolsLimit: 30, SkillsLimit: 50})
@@ -49,9 +47,6 @@ func TestMergeAnalyticsCombinesCountsAndRerank(t *testing.T) {
 	if dst.Summary.Projects != 2 {
 		t.Fatalf("summary.Projects must follow merged list, got %d", dst.Summary.Projects)
 	}
-	if len(dst.Activity) != 2 || dst.Activity[0].Day != "2026-06-30" || dst.Activity[1].Sessions != 13 {
-		t.Fatalf("activity not merged/sorted: %+v", dst.Activity)
-	}
 	if dst.Skills[0].Count != 6 || dst.Summary.DistinctSkills != 1 {
 		t.Fatalf("skills not merged: %+v / %d", dst.Skills, dst.Summary.DistinctSkills)
 	}
@@ -72,31 +67,5 @@ func TestExplicitOpenCodeDBSkipsDiscovery(t *testing.T) {
 	t.Setenv("OPENCODE_DB", "/tmp/whatever.db")
 	if extras := discoverExtraOpenCodeDBs("/tmp/whatever.db"); extras != nil {
 		t.Fatalf("explicit override must stay single-source, got %v", extras)
-	}
-}
-
-func TestMergeAnalyticsCombinesEngram(t *testing.T) {
-	dst := &SessionAnalytics{
-		Summary: SessionAnalyticsSum{Sessions: 100},
-		Engram:  SessionEngramStats{Sessions: 20, WriteOnly: 12, WithSummary: 4, Saves: 60, Searches: 15, Updates: 1},
-	}
-	src := &SessionAnalytics{
-		Summary: SessionAnalyticsSum{Sessions: 100},
-		Engram:  SessionEngramStats{Sessions: 10, WriteOnly: 8, WithSummary: 1, Saves: 40, Searches: 5, Updates: 0},
-	}
-
-	mergeAnalytics(dst, src, AnalyticsQuery{})
-
-	e := dst.Engram
-	if e.Sessions != 30 || e.WriteOnly != 20 || e.WithSummary != 5 {
-		t.Fatalf("engram session counters not summed: %+v", e)
-	}
-	if e.Saves != 100 || e.Searches != 20 || e.Updates != 1 {
-		t.Fatalf("engram call counters not summed: %+v", e)
-	}
-	// Coverage must be recomputed against the combined session total (30/200), never
-	// carried over from one install's view.
-	if got := e.Coverage; got < 0.149 || got > 0.151 {
-		t.Fatalf("coverage must follow merged totals, got %v", got)
 	}
 }

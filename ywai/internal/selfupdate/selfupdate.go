@@ -116,7 +116,7 @@ func LatestPrereleaseVersion() (string, error) {
 // install at beta.9.
 func pickLatestPrerelease(releases []releaseInfo) (tag string, ok bool) {
 	for _, r := range releases {
-		if r.TagName == "" || !(r.Prerelease || isPrereleaseTag(r.TagName)) {
+		if r.TagName == "" || !(r.Prerelease || IsPrerelease(r.TagName)) {
 			continue
 		}
 		if !ok || compareVersions(r.TagName, tag) > 0 {
@@ -168,20 +168,15 @@ func compareIdents(a, b []string) int {
 	return cmp.Compare(len(a), len(b))
 }
 
-// isPrereleaseTag reports whether a tag looks like a beta/rc/pre channel even
-// if the GitHub "prerelease" flag was not set.
-// IsPrerelease reports whether a version string is a prerelease (beta, rc,
-// alpha, pre). Callers use it to keep a binary on the channel it came from:
-// a beta build must auto-update to the next beta, never sideways into stable.
-// `ywai serve` used to call Run (stable) unconditionally, so every server
-// start silently downgraded a beta install back to the latest stable release —
-// and since serve restarts on every `ywai update`, a beta could never stick.
+// IsPrerelease reports whether a version or tag looks like a prerelease
+// (beta, rc, alpha, pre) even if the GitHub "prerelease" flag was not set.
+// Callers use it to keep a binary on the channel it came from: a beta build
+// must auto-update to the next beta, never sideways into stable. `ywai serve`
+// used to call Run (stable) unconditionally, so every server start silently
+// downgraded a beta install back to the latest stable release — and since
+// serve restarts on every `ywai update`, a beta could never stick.
 func IsPrerelease(version string) bool {
-	return isPrereleaseTag(version)
-}
-
-func isPrereleaseTag(tag string) bool {
-	t := strings.ToLower(strings.TrimPrefix(tag, "v"))
+	t := strings.ToLower(strings.TrimPrefix(version, "v"))
 	// semver pre-release segment starts after the first '-'
 	i := strings.IndexByte(t, '-')
 	if i < 0 {
