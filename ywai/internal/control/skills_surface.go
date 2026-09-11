@@ -213,12 +213,8 @@ func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path is outside every scanned skill root"})
 		return
 	}
-	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no SKILL.md at path"})
-		return
-	}
-
-	// Lstat first: a symlink is removed as a link, never followed.
+	// Lstat first: a symlink is removed as a link, never followed, and
+	// needs no SKILL.md (a broken link has none readable by definition).
 	st, err := os.Lstat(target)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -226,11 +222,20 @@ func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request
 	}
 	if st.Mode()&os.ModeSymlink != 0 {
 		err = os.Remove(target)
-	} else if st.IsDir() {
-		err = os.RemoveAll(target)
-	} else {
+	} else if !st.IsDir() {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a skill directory"})
 		return
+	} else if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
+		// No SKILL.md: only an empty directory may go (cleanup debris —
+		// removing it destroys nothing). Anything else is refused.
+		entries, readErr := os.ReadDir(target)
+		if readErr != nil || len(entries) > 0 {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no SKILL.md at path"})
+			return
+		}
+		err = os.Remove(target)
+	} else {
+		err = os.RemoveAll(target)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

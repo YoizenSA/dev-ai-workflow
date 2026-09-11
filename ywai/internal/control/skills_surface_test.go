@@ -160,13 +160,26 @@ func TestHandleSkillSurfaceDelete(t *testing.T) {
 		t.Fatalf("outside roots = %d, want 403", code)
 	}
 
-	// Inside a root but no SKILL.md.
+	// Inside a root but no SKILL.md and not empty: refused.
 	empty := filepath.Join(proj, ".opencode", "skills", "hollow")
 	if err := os.MkdirAll(empty, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if code := deleteSurface(t, home, proj, empty); code != http.StatusNotFound {
-		t.Fatalf("no SKILL.md = %d, want 404", code)
+	stuffed := filepath.Join(proj, ".opencode", "skills", "stuffed")
+	if err := os.MkdirAll(stuffed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stuffed, "notes.txt"), []byte("not a skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := deleteSurface(t, home, proj, empty); code != http.StatusOK {
+		t.Fatalf("empty dir = %d, want 200", code)
+	}
+	if code := deleteSurface(t, home, proj, stuffed); code != http.StatusNotFound {
+		t.Fatalf("non-empty dir without SKILL.md = %d, want 404", code)
+	}
+	if _, err := os.Stat(stuffed); err != nil {
+		t.Fatal("refused dir must be left intact")
 	}
 }
 
