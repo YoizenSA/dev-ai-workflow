@@ -22,6 +22,7 @@ package plugins
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -132,8 +133,16 @@ func TestPlugins_GraftSurfacePresent(t *testing.T) {
 	t.Log("InstallGraftCLI and WireGraftMCP are exported by internal/plugins")
 
 	dir := t.TempDir()
-	fake := filepath.Join(dir, "graft")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho graft 0.1.0\n"), 0o755); err != nil {
+	// graftVersionFromBinary execs the binary, so on Windows it must have an
+	// extension LookPath/cmd can run — a shebang script is not launchable there.
+	name := "graft"
+	body := "#!/bin/sh\necho graft 0.1.0\n"
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+		body = "@echo graft 0.1.0\r\n"
+	}
+	fake := filepath.Join(dir, name)
+	if err := os.WriteFile(fake, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got, err := graftVersionFromBinary(fake)

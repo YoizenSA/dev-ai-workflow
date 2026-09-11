@@ -10,6 +10,9 @@ import (
 func TestTuiConfigPathIsCliJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// os.UserHomeDir reads USERPROFILE on Windows; without pinning it the
+	// path would resolve into the TestMain sandbox home there.
+	t.Setenv("USERPROFILE", home)
 	got := tuiConfigPath()
 	want := filepath.Join(home, ".config", "opencode", "cli.json")
 	if got != want {
@@ -47,6 +50,10 @@ func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
 func TestInstallPublishedSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// tuiConfigPath resolves the home via os.UserHomeDir, which is
+	// USERPROFILE on Windows — pin both so the install lands in this
+	// test's own temp home instead of the TestMain sandbox.
+	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".config", "opencode")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -73,6 +80,7 @@ func TestInstallPublishedSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 func TestInstallPublishedSubAgentStatuslineIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 
 	for i := 0; i < 2; i++ {
 		if err := InstallPublishedSubAgentStatusline(); err != nil {

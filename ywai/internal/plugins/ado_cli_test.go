@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -64,7 +65,9 @@ func TestAdoVersionFromBinary_FollowsSymlink(t *testing.T) {
 	}
 	link := filepath.Join(linkDir, "ado")
 	if err := os.Symlink(realBin, link); err != nil {
-		t.Fatalf("symlink: %v", err)
+		// Creating file symlinks on Windows needs admin rights or Developer
+		// Mode; the machine cannot exercise the symlink path, so say so.
+		t.Skipf("cannot create symlink on this machine (Windows needs Developer Mode or admin): %v", err)
 	}
 
 	got, err := adoVersionFromBinary(link)
@@ -94,7 +97,13 @@ func TestInstallAdoCLI_SkipsWhenPresent(t *testing.T) {
 		t.Skip("PATH rewrite")
 	}
 	dir := t.TempDir()
+	// LookPath on Windows resolves executables by extension (PATHEXT); a
+	// shebang script named "ado" would not be found there and the install
+	// would proceed to the (absent) npm instead of short-circuiting.
 	name := "ado"
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}

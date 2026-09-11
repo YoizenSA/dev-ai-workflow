@@ -131,6 +131,26 @@ func writeFakeCmd(t *testing.T, dir, name, mode string) string {
 	return path
 }
 
+// writeFakeSh places the compiled stub as a `sh` command in dir (with its
+// mode file set to "sh") so the Install step's `sh -c <InstallCmd>`
+// (installer.go) resolves on Windows, where no POSIX shell exists. The fake
+// interprets only the simple `sh -c <words>` form these tests use.
+func writeFakeSh(t *testing.T, dir string) {
+	t.Helper()
+	stub, err := buildFakeCmdStub()
+	if err != nil {
+		t.Fatalf("compile fake cmd stub: %v", err)
+	}
+	path := filepath.Join(dir, "sh"+exeSuffix())
+	// #nosec G306 — test fixture must be executable on POSIX.
+	if err := copyFile(stub, path, 0o755); err != nil {
+		t.Fatalf("copy fake sh %s: %v", path, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sh.mode"), []byte("sh"), 0o644); err != nil {
+		t.Fatalf("write fake sh mode: %v", err)
+	}
+}
+
 var (
 	fakeCmdOnce    sync.Once
 	fakeCmdBinPath string
@@ -307,6 +327,32 @@ func main() {
 		for {
 			time.Sleep(time.Second)
 		}
+	case "sh":
+		// Minimal stand-in for the POSIX shell the Install step uses
+		// ("sh -c <line>"): word-split the command and exec it, so the
+		// install pipeline is testable on Windows too. Covers exactly the
+		// simple "cmd arg arg" lines these tests install.
+		args := os.Args[1:]
+		if len(args) != 2 || args[0] != "-c" {
+			fmt.Fprintln(os.Stderr, "fakecmd sh: want exactly: -c <command>")
+			os.Exit(2)
+		}
+		fields := strings.Fields(args[1])
+		if len(fields) == 0 {
+			os.Exit(0)
+		}
+		child := exec.Command(fields[0], fields[1:]...)
+		child.Stdin = os.Stdin
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				os.Exit(ee.ExitCode())
+			}
+			fmt.Fprintln(os.Stderr, "fakecmd sh: exec:", err)
+			os.Exit(127) // conventional "command not found"
+		}
+		os.Exit(0)
 	default:
 		fmt.Fprintln(os.Stderr, "fakecmd: unknown mode")
 		os.Exit(2)
@@ -330,6 +376,7 @@ func TestInstall_LocalNpx_HappyPath(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "ok")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -375,6 +422,7 @@ func TestInstall_LocalGoInstall_HappyPath(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "go", "go-install")
+	writeFakeSh(t, binDir)
 	// $GOPATH/bin must be in PATH so exec.LookPath("myserver") resolves
 	// the binary that fake go install just created.
 	t.Setenv("PATH",
@@ -528,6 +576,7 @@ func TestInstall_PrereqMissing(t *testing.T) {
 func TestInstall_InstallTimeout(t *testing.T) {
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "sleep")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -574,6 +623,7 @@ func TestInstall_InstallTimeout(t *testing.T) {
 func TestInstall_InstallNonZero(t *testing.T) {
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "exit1")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -621,6 +671,7 @@ func TestInstall_InstallNonZero(t *testing.T) {
 func TestInstall_ProbeFails(t *testing.T) {
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "fakebin", "fakebin-install")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -751,6 +802,7 @@ func TestInstall_ProgressCallback(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "ok")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	rec := newProgressRecorder()
@@ -842,6 +894,7 @@ func TestInstall_EnvInjection(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "ok")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
@@ -884,6 +937,7 @@ func TestInstall_TargetRequired(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCmd(t, binDir, "npx", "ok")
+	writeFakeSh(t, binDir)
 	prependFakeMCPPath(t, binDir)
 
 	entry := CatalogEntry{
