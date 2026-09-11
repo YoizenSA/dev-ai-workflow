@@ -54,10 +54,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 // del issues a DELETE and discards the (empty) response body, throwing on
-// non-2xx. Shared by every delete verb in the API clients below.
+// non-2xx. The backend answers errors as {"error": "..."} — surface that
+// message after the status so alerts name the cause, not just the code.
 async function del(path: string): Promise<void> {
 	const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
-	if (!res.ok) throw new Error(`${res.status}`);
+	if (!res.ok) throw new Error(`${res.status}: ${await errorMessage(res)}`);
+}
+
+async function errorMessage(res: Response): Promise<string> {
+	try {
+		const data = await res.json();
+		if (data && typeof data.error === "string" && data.error) return data.error;
+	} catch {
+		/* not JSON — fall through to text below */
+	}
+	try {
+		const text = await res.text();
+		if (text) return text;
+	} catch {
+		/* unreadable body — fall through to status text */
+	}
+	return res.statusText;
 }
 
 // ─── Models client cache ───────────────────────────────────────────────────

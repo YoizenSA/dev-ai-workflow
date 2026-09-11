@@ -1401,6 +1401,11 @@ function SkillsTab() {
 							{skill.hasSkillMD && (
 								<span className="pill pill-accent">Enabled</span>
 							)}
+							{skill.scope === "bundled" && (
+								<span className="pill" title="Shipped with ywai; cannot be deleted">
+									Bundled
+								</span>
+							)}
 						</div>
 						{skill.description && (
 							<p className="skill-card-desc skill-card-desc-truncate">
@@ -1420,12 +1425,14 @@ function SkillsTab() {
 							>
 								Edit
 							</button>
-							<button
-								className="btn btn-sm btn-danger"
-								onClick={() => handleDelete(skill.name)}
-							>
-								Delete
-							</button>
+							{skill.scope !== "bundled" && (
+								<button
+									className="btn btn-sm btn-danger"
+									onClick={() => handleDelete(skill.name)}
+								>
+									Delete
+								</button>
+							)}
 						</div>
 					</div>
 				))}
