@@ -3,6 +3,7 @@ package control
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -161,12 +162,74 @@ func projectSkillChains(dir string) map[string][]string {
 	return out
 }
 
-// handleSkillSurfaceDelete removes one skill directory scanned by the
-// surface endpoint: bundled copies, project overrides, even symlinks (the
-// link itself is removed, never its target). ywai-managed copies come back
-// on the next install; project files are gone for good. The path must live
-// inside one of the scanned roots and contain a SKILL.md — anything else is
-// refused so the endpoint never becomes an arbitrary delete primitive.
+// userHomeDir is os.UserHomeDir behind a seam: on Windows the stdlib
+// resolves home via the shell API, ignoring %USERPROFILE% overrides, so
+// tests point this at temp dirs instead.
+var userHomeDir = os.UserHomeDir
+
+func surfaceGlobals() map[string]string {
+	home, _ := userHomeDir()
+	return map[string]string{
+		"global-opencode": filepath.Join(home, ".config", "opencode", "skills"),
+		"global-claude":   filepath.Join(home, ".claude", "skills"),
+		"global-agents":   filepath.Join(home, ".agents", "skills"),
+	}
+}
+
+// surfaceRoots returns every scanned skill root for a project: the three
+// globals plus the walked-up project chains.
+func surfaceRoots(projectDir string) []string {
+	roots := []string{}
+	for _, dir := range surfaceGlobals() {
+		roots = append(roots, dir)
+	}
+	for _, chain := range projectSkillChains(projectDir) {
+		roots = append(roots, chain...)
+	}
+	return roots
+}
+
+// resolveSurfacePath cleans a user-supplied skill path and verifies it lives
+// inside one of the scanned roots.
+func resolveSurfacePath(rawPath, projectDir string) (string, error) {
+	target, err := filepath.Abs(rawPath)
+	if err != nil {
+		return "", fmt.Errorf("unresolvable path")
+	}
+	for _, root := range surfaceRoots(projectDir) {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		if rel, err := filepath.Rel(abs, target); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return target, nil
+		}
+	}
+	return "", fmt.Errorf("path is outside every scanned skill root")
+}
+
+// removeSurfaceEntry removes one scanned skill directory: symlinks go as
+// links (never followed); directories need SKILL.md unless empty.
+func removeSurfaceEntry(target string) error {
+	st, err := os.Lstat(target)
+	if err != nil {
+		return err
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(target)
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("not a skill directory")
+	}
+	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
+		entries, readErr := os.ReadDir(target)
+		if readErr != nil || len(entries) > 0 {
+			return fmt.Errorf("no SKILL.md at path")
+		}
+		return os.Remove(target)
+	}
+	return os.RemoveAll(target)
+}
 func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request) {
 	rawPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if rawPath == "" {
@@ -183,65 +246,138 @@ func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	home, _ := os.UserHomeDir()
-	roots := []string{
-		filepath.Join(home, ".config", "opencode", "skills"),
-		filepath.Join(home, ".claude", "skills"),
-		filepath.Join(home, ".agents", "skills"),
-	}
-	for _, chain := range projectSkillChains(projectDir) {
-		roots = append(roots, chain...)
-	}
-
-	target, err := filepath.Abs(rawPath)
+	target, err := resolveSurfacePath(rawPath, projectDir)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unresolvable path"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
 		return
 	}
-	inside := false
-	for _, root := range roots {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			continue
+	if err := removeSurfaceEntry(target); err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "no SKILL.md") {
+			status = http.StatusNotFound
 		}
-		if rel, err := filepath.Rel(abs, target); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			inside = true
-			break
-		}
-	}
-	if !inside {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "path is outside every scanned skill root"})
-		return
-	}
-	// Lstat first: a symlink is removed as a link, never followed, and
-	// needs no SKILL.md (a broken link has none readable by definition).
-	st, err := os.Lstat(target)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
-	}
-	if st.Mode()&os.ModeSymlink != 0 {
-		err = os.Remove(target)
-	} else if !st.IsDir() {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a skill directory"})
-		return
-	} else if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
-		// No SKILL.md: only an empty directory may go (cleanup debris —
-		// removing it destroys nothing). Anything else is refused.
-		entries, readErr := os.ReadDir(target)
-		if readErr != nil || len(entries) > 0 {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no SKILL.md at path"})
-			return
-		}
-		err = os.Remove(target)
-	} else {
-		err = os.RemoveAll(target)
-	}
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// standardizeAction is one planned or executed normalization step.
+type standardizeAction struct {
+	Kind   string `json:"kind"` // delete-broken-link | delete-empty-dir | resolve-shadow
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Detail string `json:"detail"`
+}
+
+// locationRank orders where the canonical copy of a shadowed skill lives:
+// project intent beats global defaults, native beats compat.
+func locationRank(location string) int {
+	switch location {
+	case "project-opencode":
+		return 0
+	case "global-opencode":
+		return 1
+	case "project-claude":
+		return 2
+	case "global-claude":
+		return 3
+	case "project-agents":
+		return 4
+	case "global-agents":
+		return 5
+	}
+	return 6
+}
+
+// planStandardize derives the normalization plan from a fresh scan. Broken
+// links and empty debris dirs go unconditionally; shadowed names keep the
+// highest-ranked location and drop the rest; byte-identical duplicates are
+// left alone (usually intentional compat copies).
+func planStandardize(surface skillSurface) []standardizeAction {
+	actions := []standardizeAction{}
+	for _, sk := range surface.Skills {
+		if sk.Status == "shadowed" {
+			best := sk.Entries[0]
+			for _, e := range sk.Entries[1:] {
+				if locationRank(e.Location) < locationRank(best.Location) {
+					best = e
+				}
+			}
+			for _, e := range sk.Entries {
+				if e.Path == best.Path {
+					continue
+				}
+				actions = append(actions, standardizeAction{
+					Kind:   "resolve-shadow",
+					Name:   sk.Name,
+					Path:   e.Path,
+					Detail: fmt.Sprintf("kept %s (%s)", best.Path, best.Location),
+				})
+			}
+			continue
+		}
+		for _, e := range sk.Entries {
+			switch {
+			case e.Broken:
+				actions = append(actions, standardizeAction{
+					Kind: "delete-broken-link", Name: sk.Name, Path: e.Path,
+					Detail: "symlink target is gone; removing the link only",
+				})
+			case e.Hash == "":
+				actions = append(actions, standardizeAction{
+					Kind: "delete-empty-dir", Name: sk.Name, Path: e.Path,
+					Detail: "no readable SKILL.md; removed only when empty",
+				})
+			}
+		}
+	}
+	sort.Slice(actions, func(i, j int) bool {
+		if actions[i].Name != actions[j].Name {
+			return actions[i].Name < actions[j].Name
+		}
+		return actions[i].Path < actions[j].Path
+	})
+	return actions
+}
+
+// handleSkillSurfaceStandardize previews (dry_run=1) or executes the
+// normalization plan: drop broken links, drop empty debris, resolve
+// shadowed names to one canonical copy. Identical duplicates are untouched.
+func (s *Server) handleSkillSurfaceStandardize(w http.ResponseWriter, r *http.Request) {
+	projectDir := strings.TrimSpace(r.URL.Query().Get("project_dir"))
+	if projectDir == "" {
+		var err error
+		projectDir, err = os.Getwd()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	surface := scanSkillSurface(
+		surfaceGlobals(),
+		projectSkillChains(projectDir),
+	)
+	actions := planStandardize(surface)
+	if r.URL.Query().Get("dry_run") == "1" {
+		writeJSON(w, http.StatusOK, map[string]any{"projectDir": projectDir, "actions": actions})
+		return
+	}
+	done := []standardizeAction{}
+	failed := []map[string]string{}
+	for _, a := range actions {
+		target, err := resolveSurfacePath(a.Path, projectDir)
+		if err != nil {
+			failed = append(failed, map[string]string{"path": a.Path, "error": err.Error()})
+			continue
+		}
+		if err := removeSurfaceEntry(target); err != nil {
+			failed = append(failed, map[string]string{"path": a.Path, "error": err.Error()})
+			continue
+		}
+		done = append(done, a)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": done, "failed": failed})
 }
 
 // handleSkillSurface returns every skill OpenCode can load for a project.
@@ -256,13 +392,8 @@ func (s *Server) handleSkillSurface(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	home, _ := os.UserHomeDir()
 	surface := scanSkillSurface(
-		map[string]string{
-			"global-opencode": filepath.Join(home, ".config", "opencode", "skills"),
-			"global-claude":   filepath.Join(home, ".claude", "skills"),
-			"global-agents":   filepath.Join(home, ".agents", "skills"),
-		},
+		surfaceGlobals(),
 		projectSkillChains(projectDir),
 	)
 	surface.ProjectDir = projectDir

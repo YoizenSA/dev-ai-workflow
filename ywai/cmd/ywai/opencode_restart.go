@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 )
 
 // openCodeProcess is one running OpenCode process found on this machine.
@@ -71,11 +73,22 @@ func findOpenCodeProcesses() []openCodeProcess {
 // Interactive sessions are reported, never killed: they hold conversation
 // state that exists nowhere else, so reopening one is the user's call.
 func restartOpenCodeServers(r *applyResult, dryRun bool) {
+	// Profile scope: only the profile's own server may be restarted. Its
+	// pid lives in <profile>/run/service.pid; nothing global is scanned.
+	if name := strings.TrimSpace(os.Getenv("YWAI_PROFILE")); name != "" {
+		restartProfileOpenCodeServer(r, dryRun, name)
+		return
+	}
+
 	procs := findOpenCodeProcesses()
 	if len(procs) == 0 {
 		fmt.Println("  No OpenCode process running; the next start reads the new config.")
 		return
 	}
+
+	// Profile servers are owned by their environments (`ywai env`), not by
+	// the global install: never stop one from a global apply.
+	owned := profileServerPIDs()
 
 	var servers, sessions []openCodeProcess
 	for _, p := range procs {
@@ -87,6 +100,10 @@ func restartOpenCodeServers(r *applyResult, dryRun bool) {
 	}
 
 	for _, p := range servers {
+		if owner, ok := owned[p.pid]; ok {
+			fmt.Printf("  Skipping OpenCode server (PID %d) owned by environment %q\n", p.pid, owner)
+			continue
+		}
 		if dryRun {
 			fmt.Printf("  Would stop OpenCode server (PID %d)\n", p.pid)
 			continue
@@ -112,4 +129,49 @@ func joinPIDs(procs []openCodeProcess) string {
 		out = append(out, strconv.Itoa(p.pid))
 	}
 	return strings.Join(out, ", ")
+}
+
+// restartProfileOpenCodeServer stops only the server recorded in the
+// profile's own pid file. A missing or stale pid file means already
+// stopped, which is success.
+func restartProfileOpenCodeServer(r *applyResult, dryRun bool, name string) {
+	p, err := envprofile.Get(name)
+	if err != nil {
+		r.warnf("unknown environment %q: %v", name, err)
+		return
+	}
+	pid, err := readStopPIDFile(envprofile.PidFile(p))
+	if err != nil {
+		fmt.Printf("  No OpenCode server running for environment %q.\n", p.Name)
+		return
+	}
+	if dryRun {
+		fmt.Printf("  Would stop OpenCode server for environment %q (PID %d)\n", p.Name, pid)
+		return
+	}
+	if err := killPIDInt(pid); err != nil {
+		r.warnf("could not stop the OpenCode server for environment %q on PID %d (%v); it keeps serving the previous "+
+			"config until you restart it yourself", p.Name, pid, err)
+		return
+	}
+	fmt.Printf("  Stopped OpenCode server for environment %q (PID %d) — it restarts on the next request\n", p.Name, pid)
+}
+
+// profileServerPIDs maps every live profile-server pid to its environment
+// name, so global applies can leave those servers alone. Profiles without
+// a readable pid file are skipped.
+func profileServerPIDs() map[int]string {
+	owned := map[int]string{}
+	profiles, err := envprofile.List()
+	if err != nil {
+		return owned
+	}
+	for _, p := range profiles {
+		pid, err := readStopPIDFile(envprofile.PidFile(p))
+		if err != nil {
+			continue
+		}
+		owned[pid] = p.Name
+	}
+	return owned
 }

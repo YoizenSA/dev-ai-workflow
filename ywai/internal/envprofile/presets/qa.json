@@ -1,0 +1,11 @@
+{
+  "name": "qa",
+  "description": "Strict testing: everything installed, verify-only shell.",
+  "groups": ["core", "qa-automation", "experiment"],
+  "skills": ["tdd", "testing-expert", "playwright-e2e-testing"],
+  "mcp": ["graft"],
+  "default_agent": "qa",
+  "default_model": "anthropic/claude-sonnet-4-5",
+  "deny_bash": ["* -u", "*--update-snapshot*", "git commit*", "git push*"],
+  "cli_theme": "tokyonight"
+}

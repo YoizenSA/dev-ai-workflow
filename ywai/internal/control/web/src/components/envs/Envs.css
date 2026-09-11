@@ -1,0 +1,41 @@
+.envs { display: flex; flex-direction: column; gap: 1rem; }
+.envs-refresh { align-self: flex-start; }
+.envs-error { background: #fee; border: 1px solid #f99; padding: 0.5rem 0.75rem; border-radius: 6px; }
+.envs-create-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.envs-create-row input, .envs-create-row select { padding: 0.4rem 0.6rem; }
+.envs-table { width: 100%; border-collapse: collapse; }
+.envs-table th, .envs-table td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+.envs-url { font-size: 0.8em; color: #666; }
+.envs-badge { padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8em; font-weight: 600; border: 1px solid transparent; }
+.envs-badge.on { background: var(--success-soft, rgba(16, 185, 129, 0.16)); color: var(--success, #34d399); border-color: var(--success-border, rgba(52, 211, 153, 0.4)); }
+.envs-badge.off { background: rgba(139, 148, 158, 0.16); color: var(--text-muted); border-color: rgba(139, 148, 158, 0.4); }
+.envs-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.envs-actions .danger { color: var(--danger, #f87171); font-weight: 600; }
+.envs-details-row td { background: #fafafa; }
+.envs-details { display: flex; flex-direction: column; gap: 1rem; }
+.envs-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.envs-muted { color: var(--text-muted); font-size: 0.85em; word-break: break-all; }
+.envs-pre { background: #111; color: #eee; padding: 0.75rem; border-radius: 6px; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.envs-empty { color: var(--text-muted); }
+.envs-grid { display: flex; flex-direction: column; gap: 1rem; }
+.envs-card-head { display: flex; gap: 0.75rem; align-items: flex-start; }
+.envs-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-top: 0.35rem; flex-shrink: 0; }
+.envs-dot.on { background: var(--success, #34d399); box-shadow: 0 0 8px var(--success, #34d399); }
+.envs-dot.off { background: #8b949e; }
+.envs-card-name { margin: 0; font-size: 1.1rem; }
+.envs-card-head .envs-badge { margin-left: auto; }
+.envs-field { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.envs-field label { font-size: 0.85em; color: #666; }
+.envs-field select { padding: 0.4rem 0.6rem; max-width: 24rem; }
+.envs-hint { color: var(--text-muted); font-size: 0.85em; margin: 0.25rem 0 0; }
+.envs-card .envs-actions { margin-top: 0.75rem; }
+.envs-editor { margin-top: 1rem; border-top: 1px solid #eee; padding-top: 0.75rem; }
+.envs-editor-section { margin-top: 0.5rem; }
+.envs-editor-section h4 { margin: 0.5rem 0 0.25rem; }
+.envs-check { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 0.75rem 0.35rem 0; padding: 0.25rem 0.6rem; border: 1px solid #ddd; border-radius: 999px; font-size: 0.9em; }
+.envs-card select { max-width: 26rem; width: 100%; }
+.envs-create-row select { max-width: 14rem; }
+.envs-check input { margin: 0; }
+.envs-details ul { margin: 0.25rem 0; padding-left: 1.1rem; }
+.envs-details li.ok { color: var(--success, #34d399); }
+.envs-details li.bad { color: var(--danger, #f87171); }

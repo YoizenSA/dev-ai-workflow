@@ -395,6 +395,7 @@ var installCmd = &cobra.Command{
 		mcpFlag, _ := cmd.Flags().GetBool("mcp")
 		ponytailFlag, _ := cmd.Flags().GetBool("ponytail")
 		autostartFlag, _ := cmd.Flags().GetBool("autostart")
+		profileFlag, _ := cmd.Flags().GetString("profile")
 
 		agents := detectAgents(cmd)
 		if agents == nil {
@@ -462,7 +463,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag)
+		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag, profileFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -501,6 +502,7 @@ After update, restart OpenCode once so it reloads plugins.`,
 		beta, _ := cmd.Flags().GetBool("beta")
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		profileFlag, _ := cmd.Flags().GetString("profile")
 
 		if beta {
 			fmt.Println("=== ywai update (beta channel) ===")
@@ -541,8 +543,10 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  No cached plugins to clear.")
 		}
 
-		result := applyManaged(applyOpts{
+		result := applyManagedScoped(applyOpts{
 			Mode: applyUpdate,
+			// Profile scope applies only inside the environment's sandbox.
+			Profile: profileFlag,
 			Opts: gentlai.InstallOptions{
 				AgentName: agentFlag,
 				DryRun:    dryRun,
@@ -550,12 +554,15 @@ After update, restart OpenCode once so it reloads plugins.`,
 			OverwriteAgents:       true,
 			RestartServeIfRunning: true,
 		})
-		// Re-apply TokenBank last: applyManaged rewrites agent configs, so
-		// re-running the same work as `ywai tokenbank configure` here refreshes
-		// the model list and restores the proxy wiring instead of leaving it
-		// clobbered. Soft failure — a down TokenBank must not fail the update.
-		reapplyTokenBank(dryRun)
-		mirrorOpenCodeToOrca(dryRun)
+		// The global post-passes stay global: skip them for profile scope.
+		if strings.TrimSpace(profileFlag) == "" {
+			// Re-apply TokenBank last: applyManaged rewrites agent configs, so
+			// re-running the same work as `ywai tokenbank configure` here refreshes
+			// the model list and restores the proxy wiring instead of leaving it
+			// clobbered. Soft failure — a down TokenBank must not fail the update.
+			reapplyTokenBank(dryRun)
+			mirrorOpenCodeToOrca(dryRun)
+		}
 
 		// Surface binary-phase soft failures into the summary when we only printed them.
 		result.printFooter(applyUpdate)
@@ -1354,12 +1361,14 @@ func init() {
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
+	installCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 
 	rootCmd.AddCommand(installCmd)
 
 	updateCmd.Flags().Bool("beta", false, "Upgrade to the newest prerelease (beta) instead of stable latest")
 	updateCmd.Flags().StringP("agent", "a", "", "Limit re-apply to one agent (default: all detected)")
 	updateCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
+	updateCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)

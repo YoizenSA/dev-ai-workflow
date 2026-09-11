@@ -10,6 +10,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -115,7 +116,7 @@ func skipDataSeeding(cmd *cobra.Command) bool {
 	// Direct leaves / parents we always skip.
 	skip := map[string]bool{
 		"eval": true, "completion": true, "help": true,
-		"version": true, "stop": true, "ui": true,
+		"version": true, "stop": true, "ui": true, "env": true,
 	}
 	for _, n := range names {
 		if skip[n] {
@@ -177,6 +178,14 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		fmt.Printf("  Warning: failed to install Engram: %v\n", err)
 	}
 
+	// Bare preset (profile scope only): the shared Engram binary stays
+	// installed, but nothing is wired into the profile — no plugin files,
+	// no MCP sections, no tui.json entries.
+	if spec := scopedPresetSpec(); spec != nil && envprofile.IsBareSpec(spec) {
+		fmt.Println("  Skipping Engram MCP wiring for bare preset.")
+		return
+	}
+
 	hosts := engramMCPHostNames(agents)
 	if len(hosts) == 0 {
 		return
@@ -214,6 +223,12 @@ func summarizeAgents(dryRun bool, what string, names []string) {
 
 func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	var done []string
+	// Preset enforcement (profile scope only): copy only preset skills[].
+	// Empty = keep current (copy all). Never deletes unlisted skills.
+	skillAllow := envprofile.PresetSkills(scopedPresetSpec())
+	if len(skillAllow) > 0 {
+		fmt.Printf("  Preset skills filter: %s\n", strings.Join(skillAllow, ", "))
+	}
 	for _, a := range agents {
 		if skip, reason := skipSkillCopy(a, agents); skip {
 			if !dryRun {
@@ -227,13 +242,33 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 			done = append(done, a.Name)
 			continue
 		}
-		if err := skills.CopyTo(a.SkillsDir); err != nil {
-			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
+		var copyErr error
+		if len(skillAllow) > 0 {
+			copyErr = skills.CopyFiltered(a.SkillsDir, skillAllow)
+		} else {
+			copyErr = skills.CopyTo(a.SkillsDir)
+		}
+		if copyErr != nil {
+			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, copyErr)
 			continue
 		}
 		done = append(done, a.Name)
 	}
 	summarizeAgents(dryRun, "ywai extra skills", done)
+}
+
+// scopedPresetSpec returns the active profile's preset spec, or nil when
+// global or when the profile/preset cannot be read (fail open to current
+// behavior). Callers treat nil as "no filter".
+func scopedPresetSpec() map[string]any {
+	if !envprofile.InProfileScope() {
+		return nil
+	}
+	_, spec, err := envprofile.ScopedPreset()
+	if err != nil {
+		return nil
+	}
+	return spec
 }
 
 // skipSkillCopy reports whether a host already sees the skills through another
@@ -265,9 +300,10 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
-	return applyManaged(applyOpts{
+func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
+	return applyManagedScoped(applyOpts{
 		Mode:            applyInstall,
+		Profile:         profile,
 		Opts:            opts,
 		InstallMCP:      installMCP,
 		InstallMetaMCP:  installMetaMCP,
@@ -279,6 +315,15 @@ func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, ins
 }
 
 func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofiles.GroupFilter, overwriteAgents bool) {
+	// Preset enforcement (profile scope only): the preset stamped in the
+	// manifest filters agent groups. Empty/missing = no filter, keep the
+	// caller's default. Global behavior is bit-identical.
+	if spec := scopedPresetSpec(); spec != nil {
+		if groups := envprofile.PresetGroups(spec); len(groups) > 0 {
+			fmt.Printf("  Preset groups filter: %s\n", strings.Join(groups, ", "))
+			filter = agentprofiles.GroupFilter{Groups: groups}
+		}
+	}
 	// Read agent profiles: prefer source dir (has latest groups.json when running
 	// from source checkout), fall back to seeded data dir.
 	sourceDir := config.AgentsSourceDir()
@@ -339,11 +384,17 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// patched in place by the delegation/permission rewriters, so its
 			// prompt body went stale while its frontmatter kept being updated.
 			// Write the full markdown to both.
+			//
+			// Profile scope (YWAI_PROFILE set by the env sandbox): agentsDir
+			// already points inside the profile, so write there only. The
+			// canonical copy is global state and stays untouched.
 			targets := []string{agentsDir}
-			if home, err := os.UserHomeDir(); err == nil {
-				canonical := filepath.Join(home, ".config", "opencode", "agents")
-				if canonical != agentsDir {
-					targets = append(targets, canonical)
+			if os.Getenv("YWAI_PROFILE") == "" {
+				if home, err := os.UserHomeDir(); err == nil {
+					canonical := filepath.Join(home, ".config", "opencode", "agents")
+					if canonical != agentsDir {
+						targets = append(targets, canonical)
+					}
 				}
 			}
 			for _, target := range targets {
@@ -542,6 +593,14 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	}
 	flags := map[string]bool{"mcp": installMCP, "meta-mcp": installMetaMCP, "ponytail": installPonytail}
 
+	// Preset enforcement (profile scope only): install only preset mcp[]
+	// servers. Empty = keep current. Never uninstalls extra servers, only
+	// skips installing unlisted ones. Plugins always install.
+	mcpAllow := envprofile.PresetMCPIDs(scopedPresetSpec())
+	if len(mcpAllow) > 0 {
+		fmt.Printf("  Preset MCP filter: %s\n", strings.Join(mcpAllow, ", "))
+	}
+
 	for _, a := range agents {
 		// Plugin/MCP handling covers the config formats ywai writes entries
 		// for: opencode-style JSON and the claude-code/pi mcpServers shape.
@@ -576,7 +635,21 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		// What installs is policy, not code: the manifest (~/.ywai/plugins.json
 		// override, embedded default otherwise) decides per id, agent, flag and
 		// flavor. Executor wiring lives in internal/plugins/manifest.go.
-		for _, r := range plugins.RunManifest(mf, a.Name, configPath, flags) {
+		// Preset enforcement: skip MCP servers outside the preset allowlist
+		// (existing entries are left alone, never removed).
+		mfForAgent := mf
+		if len(mcpAllow) > 0 {
+			var keep []plugins.ManifestEntry
+			for _, e := range mf.Install {
+				if envprofile.IsMCPServerManifestID(e.ID) && !envprofile.ShouldInstallMCP(e.ID, mcpAllow) {
+					fmt.Printf("  [%s] Skipped %s: not in preset mcp list\n", a.Name, e.ID)
+					continue
+				}
+				keep = append(keep, e)
+			}
+			mfForAgent = plugins.Manifest{Install: keep}
+		}
+		for _, r := range plugins.RunManifest(mfForAgent, a.Name, configPath, flags) {
 			switch {
 			case r.Skipped != "":
 				fmt.Printf("  [%s] Skipped %s: %s\n", a.Name, r.ID, r.Skipped)
@@ -641,17 +714,27 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		// Wire the graft MCP server into the agent config natively
 		// (`graft mcp` entry written by ywai, not `graft init`), so no
-		// instruction files are rewritten unexpectedly.
-		fmt.Println("  Wiring Graft MCP into agent configs...")
-		if err := plugins.WireGraftMCP(); err != nil {
-			fmt.Printf("  Warning: %v\n", err)
+		// instruction files are rewritten unexpectedly. Preset enforcement:
+		// skip when graft is outside the preset mcp[] allowlist; an existing
+		// entry is left alone, never removed.
+		if len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP("graft", mcpAllow) {
+			fmt.Println("  Skipped graft MCP wiring: not in preset mcp list")
 		} else {
-			fmt.Println("  ✓ graft MCP wired")
+			fmt.Println("  Wiring Graft MCP into agent configs...")
+			if err := plugins.WireGraftMCP(); err != nil {
+				fmt.Printf("  Warning: %v\n", err)
+			} else {
+				fmt.Println("  ✓ graft MCP wired")
+			}
 		}
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
 		fmt.Println("  Would install Graft CLI (`graft`)")
-		fmt.Println("  Would wire Graft MCP into opencode")
+		if len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP("graft", mcpAllow) {
+			fmt.Println("  Would skip graft MCP wiring: not in preset mcp list")
+		} else {
+			fmt.Println("  Would wire Graft MCP into opencode")
+		}
 	}
 }
 

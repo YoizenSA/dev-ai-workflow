@@ -25,7 +25,7 @@ func (s *Server) handleEvalLeaderboard(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	rows := evals.BuildLeaderboard(runs, taskID, days, time.Now().UTC())
+	rows := evals.BuildLeaderboard(filterRunsByEnv(runs, r.URL.Query().Get("env")), taskID, days, time.Now().UTC())
 	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
 

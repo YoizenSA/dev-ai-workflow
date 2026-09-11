@@ -42,8 +42,45 @@ import type {
 
 const BASE = "";
 
+// Profile scope for the Settings surface. When set to an env name, every
+// request to the scopable surface (/api/config/* and /api/agents-md) carries
+// ?profile=<env> and the server answers from that environment's config
+// instead of the global one. Persisted so Envs can deep-link with scope.
+const SCOPE_KEY = "ywai-settings-scope";
+
+function readScope(): string | null {
+  try {
+    const v = window.localStorage.getItem(SCOPE_KEY);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getConfigProfileScope(): string | null {
+  return readScope();
+}
+
+export function setConfigProfileScope(name: string | null): void {
+  try {
+    const v = name && name.trim() ? name.trim() : "";
+    if (v) window.localStorage.setItem(SCOPE_KEY, v);
+    else window.localStorage.removeItem(SCOPE_KEY);
+  } catch {
+    // Storage unavailable (private mode): scope still applies below per call.
+  }
+}
+
+function scopedPath(path: string): string {
+  const scope = readScope();
+  if (!scope) return path;
+  if (!path.startsWith("/api/config/") && path !== "/api/agents-md") return path;
+  if (/[?&]profile=/.test(path)) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(scope)}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	const res = await fetch(`${BASE}${scopedPath(path)}`, {
 		headers: { "Content-Type": "application/json" },
 		...options,
 	});
@@ -58,7 +95,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // non-2xx. The backend answers errors as {"error": "..."} — surface that
 // message after the status so alerts name the cause, not just the code.
 async function del(path: string): Promise<void> {
-	const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+	const res = await fetch(`${BASE}${scopedPath(path)}`, { method: "DELETE" });
 	if (!res.ok) throw new Error(`${res.status}: ${await errorMessage(res)}`);
 }
 

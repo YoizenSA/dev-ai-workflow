@@ -131,7 +131,7 @@ function diffRuns(current: Run, baseline: Run): RunDiffDelta[] {
   });
 }
 
-export default function BenchHistory() {
+export default function BenchHistory({ env = "" }: { env?: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [rows, setRows] = useState<LeaderRow[]>([]);
@@ -148,7 +148,7 @@ export default function BenchHistory() {
       try {
         const [t, r] = await Promise.all([
           fetch("/api/evals/tasks").then((res) => res.json()),
-          fetch("/api/evals/runs").then((res) => res.json()),
+          fetch(`/api/evals/runs${env ? `?env=${encodeURIComponent(env)}` : ""}`).then((res) => res.json()),
         ]);
         setTasks(t.tasks ?? []);
         setRuns(r.runs ?? []);
@@ -164,8 +164,9 @@ export default function BenchHistory() {
   // every task, which is exactly what the filter's All option shows below.
   useEffect(() => {
     const query = taskFilter ? `?taskId=${encodeURIComponent(taskFilter)}` : "";
+    const envQuery = env ? `${query ? "&" : "?"}env=${encodeURIComponent(env)}` : "";
     let alive = true;
-    fetch(`/api/evals/leaderboard${query}`)
+    fetch(`/api/evals/leaderboard${query}${envQuery}`)
       .then((res) => res.json())
       .then((data) => {
         if (alive) setRows(data.rows ?? []);

@@ -6,17 +6,17 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// agentsMdPath returns the path to the AGENTS.md file in opencode config dir.
-// The file may not exist yet; callers create it on save, so the expected path
-// is returned either way.
+// agentsMdPath returns the path to the AGENTS.md file in the active opencode
+// config dir (OpenCodeConfigDir honors OPENCODE_CONFIG_DIR, so profile-scoped
+// requests via ?profile= resolve inside the environment). The file may not
+// exist yet; callers create it on save, so the expected path is returned
+// either way.
 func agentsMdPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".config", "opencode", "AGENTS.md")
+	return filepath.Join(config.OpenCodeConfigDir(), "AGENTS.md")
 }
 
 // registerAgentsMdRoutes registers API routes for AGENTS.md editing.

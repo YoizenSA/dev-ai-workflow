@@ -153,6 +153,9 @@ func (s *Server) buildRoutes() {
 	s.registerEvalsRoutes()
 	s.registerLeaderboardRoutes()
 
+	// ─── Isolated env profiles API (ywai env) ───────────────────
+	s.registerEnvProfileRoutes()
+
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 )
 
 // GET /api/config/agents
@@ -632,7 +633,14 @@ func ApplyAgentModel(name, model string) bool {
 }
 
 // agentMarkdownSearchDirs returns host dirs where ywai writes agent .md files.
+// Under profile scope (YWAI_PROFILE set by the env sandbox or the ?profile=
+// middleware) only the profile agents dir is returned: a scoped model apply
+// must never rewrite the global install. Callers outside scope keep the
+// historical multi-host behavior.
 func agentMarkdownSearchDirs() []string {
+	if envprofile.InProfileScope() {
+		return []string{userconfig.OpenCodeAgentsDir()}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil

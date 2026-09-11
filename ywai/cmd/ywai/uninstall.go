@@ -12,6 +12,7 @@ import (
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/spf13/cobra"
@@ -72,6 +73,13 @@ see it without confirming, or --yes to skip the prompt in scripts.`,
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		assumeYes, _ := cmd.Flags().GetBool("yes")
 		purge, _ := cmd.Flags().GetBool("purge")
+		profileName, _ := cmd.Flags().GetString("profile")
+
+		// Profile scope: stop the environment's own service and delete the
+		// environment only. Global sweeps never run on this path.
+		if strings.TrimSpace(profileName) != "" {
+			return runUninstallProfile(strings.TrimSpace(profileName), dryRun, assumeYes)
+		}
 
 		agents := detectAgents(cmd)
 		if agents == nil {
@@ -608,7 +616,47 @@ func init() {
 	uninstallCmd.Flags().Bool("dry-run", false, "Show what would be removed without removing it")
 	uninstallCmd.Flags().Bool("yes", false, "Skip the confirmation prompt")
 	uninstallCmd.Flags().Bool("purge", false, "Also remove ~/.ywai (config and TokenBank credentials)")
+	uninstallCmd.Flags().String("profile", "", "Remove only an isolated environment: stop its service and delete it (skips all global removal)")
 	rootCmd.AddCommand(uninstallCmd)
+}
+
+// runUninstallProfile stops an isolated environment's service and deletes
+// the environment directory. It never touches the global install: no agent
+// configs, no skills, no autostart, no control server, no ~/.ywai purge.
+func runUninstallProfile(name string, dryRun, assumeYes bool) error {
+	p, err := envprofile.Get(name)
+	if err != nil {
+		return fmt.Errorf("unknown environment %q: %w", name, err)
+	}
+
+	fmt.Println("=== ywai uninstall ===")
+	fmt.Printf("\nThe following environment will be removed:\n\n  - %s (preset %s, port %d)\n\n", p.Name, p.Preset, p.Port)
+
+	if dryRun {
+		fmt.Println("Dry run — nothing was removed.")
+		fmt.Printf("  Would stop the %q service and delete the environment.\n", p.Name)
+		return nil
+	}
+
+	if !assumeYes {
+		if !isInteractiveTerminal() {
+			return fmt.Errorf("uninstall needs confirmation: re-run with --yes (or --dry-run to preview)")
+		}
+		if !confirmUninstall(1) {
+			fmt.Println("Cancelled. Nothing was removed.")
+			return nil
+		}
+	}
+
+	if err := envprofile.Stop(p); err != nil {
+		return fmt.Errorf("could not stop environment %q: %w", p.Name, err)
+	}
+	fmt.Printf("  ✓ environment %q service stopped\n", p.Name)
+	if err := envprofile.Delete(p.Name); err != nil {
+		return fmt.Errorf("could not delete environment %q: %w", p.Name, err)
+	}
+	fmt.Printf("  ✓ environment %q deleted\n", p.Name)
+	return nil
 }
 
 // pidExists reports whether a serve PID file holds a usable PID.

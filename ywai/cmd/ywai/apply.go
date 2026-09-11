@@ -5,12 +5,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
@@ -43,11 +45,18 @@ type managedPlan struct {
 	ApplyOverrides  bool
 	RefreshVersion  bool
 	ExportWorkflows bool
+	// Reseed refreshes the shared ~/.ywai skills + agent profile cache.
+	// Profile-scoped applies skip it: the cache is global state outside
+	// the profile sandbox.
+	Reseed bool
 }
 
 // planManaged returns the fixed ywai-managed work for install/update.
-func planManaged(mode applyMode) managedPlan {
+// The optional profile names a profile-scoped apply: with one set, the
+// shared reseed is skipped. Variadic so existing callers keep compiling.
+func planManaged(mode applyMode, profile ...string) managedPlan {
 	_ = mode
+	scoped := len(profile) > 0 && strings.TrimSpace(profile[0]) != ""
 	return managedPlan{
 		CopyExtraSkills: true,
 		InstallProfiles: true,
@@ -58,12 +67,18 @@ func planManaged(mode applyMode) managedPlan {
 		ApplyOverrides:  true,
 		RefreshVersion:  true,
 		ExportWorkflows: true,
+		Reseed:          !scoped,
 	}
 }
 
 // applyOpts drives the shared install/update pipeline.
 type applyOpts struct {
 	Mode applyMode
+
+	// Profile names an isolated environment (`ywai env`). When set, the
+	// pipeline runs inside the profile sandbox and applies only there;
+	// the global install is left alone.
+	Profile string
 
 	Opts            gentlai.InstallOptions
 	InstallMCP      bool
@@ -135,7 +150,7 @@ func (s *stepCounter) next(title string) {
 
 func countApplySteps(plan managedPlan, o applyOpts) int {
 	n := 0
-	n++ // reseed
+	n++ // reseed (profile scope prints a skip line, so the count is stable)
 	n++ // list agents
 	n++ // ecosystem
 	if plan.CopyExtraSkills {
@@ -182,10 +197,109 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 	return n
 }
 
+// presetApplyContext carries preset enforcement values for one apply run.
+// InScope is false for global applies, where every other field stays zero
+// and behavior is bit-identical to before presets existed.
+type presetApplyContext struct {
+	InScope      bool
+	Bare         bool
+	DefaultAgent string
+	DefaultModel string
+	DenyBash     []string
+}
+
+// applyPresetHook enforces the profile preset for scoped applies. A bare
+// preset disables the install steps entirely (agents, skills, MCP/plugins,
+// defaults, AGENTS.md); other presets only contribute
+// default_agent/default_model/deny_bash here — groups/skills/MCP filtering
+// lives in root.go via envprofile helpers. Global applies return zero.
+// DB/service/pids are untouched by every branch below by design.
+func applyPresetHook(plan *managedPlan, o *applyOpts) presetApplyContext {
+	var ctx presetApplyContext
+	name := strings.TrimSpace(o.Profile)
+	if name == "" {
+		name = envprofile.ScopedProfileName()
+	}
+	if name == "" {
+		return ctx
+	}
+	p, err := envprofile.Get(name)
+	if err != nil {
+		return ctx
+	}
+	spec, err := envprofile.PresetSpec(p)
+	if err != nil {
+		return ctx
+	}
+	ctx.InScope = true
+	if envprofile.IsBareSpec(spec) {
+		ctx.Bare = true
+		plan.CopyExtraSkills = false
+		plan.InstallProfiles = false
+		plan.InstallPlugins = false
+		plan.SetDefaultAgent = false
+		plan.SetDefaultModel = false
+		plan.WriteAgentsMd = false
+		plan.ExportWorkflows = false
+		plan.ApplyOverrides = false
+		fmt.Printf("  Bare preset %q: skipping agents, skills, MCP/plugins, defaults, AGENTS.md, workflows and overrides.\n", p.Preset)
+		fmt.Println("  Skipping agent profiles install for bare preset.")
+		fmt.Println("  Skipping skills copy for bare preset.")
+		fmt.Println("  Skipping MCP/plugin wiring for bare preset.")
+		fmt.Println("  Skipping default_agent/default_model writes for bare preset.")
+		fmt.Println("  Skipping AGENTS.md write for bare preset.")
+		fmt.Println("  Skipping workflows export and overrides for bare preset.")
+		return ctx
+	}
+	ctx.DefaultAgent = envprofile.PresetDefaultAgent(spec)
+	ctx.DefaultModel = envprofile.PresetDefaultModel(spec)
+	ctx.DenyBash = envprofile.PresetDenyBash(spec)
+	fmt.Printf("  Enforcing preset %q.\n", p.Preset)
+	return ctx
+}
+
+// applyManagedScoped runs the shared pipeline inside the profile sandbox
+// when o.Profile names an environment, and runs it directly otherwise.
+// The sandbox redirects every XDG/OPENCODE path the pipeline writes
+// through, so the step bodies need no profile branches.
+func applyManagedScoped(o applyOpts) applyResult {
+	name := strings.TrimSpace(o.Profile)
+	if name == "" {
+		return applyManaged(o)
+	}
+	p, err := envprofile.Get(name)
+	if err != nil {
+		var r applyResult
+		r.Fatal = fmt.Errorf("unknown environment %q: %w (create it with `ywai env create %s`)", name, err, name)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", r.Fatal)
+		return r
+	}
+	fmt.Printf("Applying inside environment %q (global install untouched)...\n", p.Name)
+	var r applyResult
+	if err := envprofile.WithProfileEnv(p, func() error {
+		r = applyManaged(o)
+		return nil
+	}); err != nil {
+		r.Fatal = err
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	}
+	return r
+}
+
 // applyManaged is the shared body for `ywai install` and `ywai update`.
 func applyManaged(o applyOpts) applyResult {
 	var r applyResult
-	plan := planManaged(o.Mode)
+	o.Profile = strings.TrimSpace(o.Profile)
+	if o.Profile != "" {
+		// Profile-scoped applies run inside the profile sandbox and must
+		// not touch shared machine state: no control-server restart, no
+		// autostart registration (the machine has one control server).
+		o.RestartServeIfRunning = false
+		o.Autostart = false
+	}
+	plan := planManaged(o.Mode, o.Profile)
+	// Preset enforcement hook (profile scope only; global bit-identical).
+	preset := applyPresetHook(&plan, &o)
 	// Update always re-applies managed state with overwrite so new profiles land.
 	if o.Mode == applyUpdate {
 		o.OverwriteAgents = true
@@ -227,9 +341,12 @@ func applyManaged(o applyOpts) applyResult {
 
 	// ── reseed ────────────────────────────────────────────────────────────
 	steps.next("Re-seeding skills + agent profile cache")
-	if o.Opts.DryRun {
+	switch {
+	case !plan.Reseed:
+		fmt.Println("  Skipping global re-seed for profile-scoped apply.")
+	case o.Opts.DryRun:
 		fmt.Println("  Would re-seed ~/.ywai skills and agent profiles.")
-	} else {
+	default:
 		reseedData()
 	}
 
@@ -281,6 +398,19 @@ func applyManaged(o applyOpts) applyResult {
 		// TokenBank proxy into opencode / pi / omp / copilot when credentials exist.
 		steps.next("Configuring TokenBank providers")
 		reapplyTokenBank(o.Opts.DryRun)
+
+		// Preset enforcement: append preset deny_bash patterns to the
+		// profile's agent shell rules. The agents dir is already
+		// sandbox-resolved, so the global install is never touched.
+		if preset.InScope && !preset.Bare && len(preset.DenyBash) > 0 {
+			if o.Opts.DryRun {
+				fmt.Printf("  Would append %d preset shell-deny rule(s)\n", len(preset.DenyBash))
+			} else if n, err := envprofile.AppendDenyBashToAgents(config.OpenCodeAgentsDir(), preset.DenyBash); err != nil {
+				r.warnf("failed to append preset shell-deny rules: %v", err)
+			} else if n > 0 {
+				fmt.Printf("  ✓ %d agent file(s) gained preset shell-deny rules\n", n)
+			}
+		}
 	}
 
 	// ── overrides ─────────────────────────────────────────────────────────
@@ -341,7 +471,11 @@ func applyManaged(o applyOpts) applyResult {
 	// ── default agent ─────────────────────────────────────────────────────
 	if plan.SetDefaultAgent {
 		steps.next("Setting default_agent")
-		if err := setDefaultAgent("orchestrator", o.Opts.DryRun); err != nil {
+		wantAgent := "orchestrator"
+		if preset.DefaultAgent != "" {
+			wantAgent = preset.DefaultAgent
+		}
+		if err := setDefaultAgent(wantAgent, o.Opts.DryRun); err != nil {
 			r.warnf("failed to set default_agent: %v", err)
 		}
 	}
@@ -351,10 +485,18 @@ func applyManaged(o applyOpts) applyResult {
 	// absent or empty; a model the user picked stays untouched.
 	if plan.SetDefaultModel {
 		steps.next("Setting default model")
-		if err := setDefaultModel(defaultRootModel(), o.Opts.DryRun); err != nil {
+		wantModel := defaultRootModel()
+		if preset.DefaultModel != "" {
+			wantModel = preset.DefaultModel
+		}
+		if err := setDefaultModel(wantModel, o.Opts.DryRun); err != nil {
 			r.warnf("failed to set default model: %v", err)
 		}
 	}
+
+	// Follow-up (not this lane): wire preset cli_theme with
+	// cfg["theme"] = theme via openCodeRootForWrite/writeOpenCodeRoot
+	// (profile-scoped opencode.json).
 
 	// ── version file ──────────────────────────────────────────────────────
 	if plan.RefreshVersion {
@@ -401,11 +543,14 @@ func applyManaged(o applyOpts) applyResult {
 	if !o.Opts.DryRun && (o.Mode == applyInstall || o.Mode == applyUpdate) {
 		// OpenCodeAgentsDir may point at a host-managed location (e.g. Orca's
 		// shared hooks dir). opencode itself always reads ~/.config/opencode/
-		// agents, and other tooling syncs into it, so sweep both.
+		// agents, and other tooling syncs into it, so sweep both — except
+		// under profile scope, where the canonical copy is global state.
 		seen := map[string]bool{}
 		dirs := []string{config.OpenCodeAgentsDir()}
-		if home, err := os.UserHomeDir(); err == nil {
-			dirs = append(dirs, filepath.Join(home, ".config", "opencode", "agents"))
+		if os.Getenv("YWAI_PROFILE") == "" {
+			if home, err := os.UserHomeDir(); err == nil {
+				dirs = append(dirs, filepath.Join(home, ".config", "opencode", "agents"))
+			}
 		}
 		cleaned := 0
 		for _, dir := range dirs {
@@ -421,7 +566,9 @@ func applyManaged(o applyOpts) applyResult {
 	}
 
 	// ── control server start (install: ensure it is running) ──────────────
-	if o.Mode == applyInstall {
+	// Never under profile scope: the machine has one control server and the
+	// scoped apply may itself run as its child (web Apply would orphan).
+	if o.Mode == applyInstall && strings.TrimSpace(o.Profile) == "" && os.Getenv("YWAI_PROFILE") == "" {
 		steps.next("Starting control server (if not running)")
 		ensureControlServerRunning(&r, o.Opts.DryRun)
 		// Last, so Orca gets everything the steps above wrote. Update mirrors
@@ -438,6 +585,11 @@ func applyManaged(o applyOpts) applyResult {
 // and agents. A full copy by design: Orca's config is meant to be the user's.
 // The replaced file is kept as .bak. No-op when Orca is not installed.
 func mirrorOpenCodeToOrca(dryRun bool) {
+	// Profile-scoped applies run inside the profile sandbox: the global
+	// Orca mirror is shared state and stays untouched.
+	if strings.TrimSpace(os.Getenv("YWAI_PROFILE")) != "" {
+		return
+	}
 	userDir := config.OpenCodeUserConfigDir()
 	orcaDir := filepath.Join(filepath.Dir(userDir), "orca", "opencode-hooks", "shared")
 	if info, err := os.Stat(orcaDir); err != nil || !info.IsDir() {

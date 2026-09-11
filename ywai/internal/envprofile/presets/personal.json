@@ -1,0 +1,8 @@
+{
+  "name": "personal",
+  "description": "Side projects: bare environment, installs no agents, groups, skills or MCP servers.",
+  "bare": true,
+  "groups": [],
+  "skills": [],
+  "mcp": []
+}

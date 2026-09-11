@@ -61,6 +61,7 @@ interface Run {
   provider: string;
   rounds: number;
   models: string[];
+  environment?: string;
   attempts: Attempt[];
   status: string;
   error?: string;
@@ -70,7 +71,7 @@ interface Run {
 
 const DEFAULT_PROVIDER = "opencode-admin";
 
-export default function AgentBenchmarks() {
+export default function AgentBenchmarks({ env = "" }: { env?: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -88,20 +89,20 @@ export default function AgentBenchmarks() {
 
   const loadRuns = useCallback(async () => {
     try {
-      const res = await fetch("/api/evals/runs");
+      const res = await fetch(`/api/evals/runs${env ? `?env=${encodeURIComponent(env)}` : ""}`);
       const data = await res.json();
       setRuns(data.runs ?? []);
     } catch {
       /* a failed poll is not worth interrupting a running benchmark for */
     }
-  }, []);
+  }, [env]);
 
   useEffect(() => {
     (async () => {
       try {
         const [t, live] = await Promise.all([
           fetch("/api/evals/tasks").then((r) => r.json()),
-          fetch("/api/evals/models-live")
+          fetch(`/api/evals/models-live${env ? `?env=${encodeURIComponent(env)}` : ""}`)
             .then((r) => {
               if (!r.ok) throw new Error(`models-live: ${r.status}`);
               return r.json();
@@ -171,7 +172,7 @@ export default function AgentBenchmarks() {
     setError("");
     setStarting(true);
     try {
-      const res = await fetch("/api/evals/runs", {
+      const res = await fetch(`/api/evals/runs${env ? `?env=${encodeURIComponent(env)}` : ""}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskId, models: picked, provider, rounds }),
@@ -323,6 +324,7 @@ function RunCard({ run }: { run: Run }) {
         <strong>{run.taskName}</strong>
         <span className="muted">
           @{run.agent} · {run.rounds} round(s) · {run.models.length} model(s)
+          {run.environment ? ` · ${run.environment}` : ""}
         </span>
         <span className={`badge badge-${run.status === "done" ? "ok" : run.status === "failed" ? "danger" : "warn"}`}>
           {run.status}

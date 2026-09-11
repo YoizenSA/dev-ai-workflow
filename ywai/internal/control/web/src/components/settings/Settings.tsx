@@ -13,7 +13,8 @@ import {
 	User,
 } from "lucide-react";
 import { useUrlTab } from "../../hooks/useUrlTab";
-import { configApi, toolsApi } from "../../api/client";
+import { configApi, toolsApi, getConfigProfileScope, setConfigProfileScope } from "../../api/client";
+import { envsApi } from "../../api/envs";
 import type {
 	MCPServer,
 	ModelInfo,
@@ -104,6 +105,23 @@ const TAB_IDS = TABS.map((t) => t.id);
 
 export default function Settings() {
 	const [activeTab, setActiveTab] = useUrlTab<Tab>("general", TAB_IDS);
+	const [scope, setScope] = useState<string | null>(() => getConfigProfileScope());
+	const [envNames, setEnvNames] = useState<string[]>([]);
+
+	function changeScope(v: string | null) {
+		setConfigProfileScope(v);
+		setScope(v);
+	}
+
+	// Envs deep-link lands here with scope pre-set (localStorage): adopt it.
+	// Plus load env names for the picker.
+	useEffect(() => {
+		setScope(getConfigProfileScope());
+		envsApi.list().then(
+			(res) => setEnvNames((res.envs ?? []).map((e) => e.name)),
+			() => {},
+		);
+	}, []);
 
 	// On enter: revalidate models (server cache kick) + warm common config
 	// payloads in parallel. Tabs still own their UI state; this only primes
@@ -149,9 +167,36 @@ export default function Settings() {
 						{tab.label}
 					</button>
 				))}
+				<span className="scope-picker" title="Choose which config every tab reads and writes">
+					<span className="scope-picker-label">Editing:</span>
+					<select
+						aria-label="settings scope"
+						value={scope ?? ""}
+						onChange={(e) => changeScope(e.target.value || null)}
+					>
+						<option value="">Global</option>
+						{envNames.map((n) => (
+							<option key={n} value={n}>{n}</option>
+						))}
+						{scope && !envNames.includes(scope) && (
+							<option value={scope}>{scope} (deleted?)</option>
+						)}
+					</select>
+				</span>
 			</div>
 
-			<div className="tab-content">
+			{scope && (
+				<div className="scope-banner" role="status">
+					<strong>Editing env: {scope}</strong>
+					<span>
+						Every change below applies to <code>~/.ywai/profiles/{scope}/</code> — global
+						config stays untouched. ywai-level model profiles and server settings stay global.
+					</span>
+					<button className="btn btn-ghost btn-sm" onClick={() => changeScope(null)}>Back to global</button>
+				</div>
+			)}
+
+			<div className="tab-content" key={scope ?? "global"}>
 				{activeTab === "general" && <GeneralTab />}
 				{activeTab === "agents" && <AgentsTab />}
 				{activeTab === "orchestrator" && (

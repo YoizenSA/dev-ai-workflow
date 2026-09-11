@@ -1,11 +1,13 @@
 package control
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -180,6 +182,97 @@ func TestHandleSkillSurfaceDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(stuffed); err != nil {
 		t.Fatal("refused dir must be left intact")
+	}
+}
+
+func TestPlanStandardize(t *testing.T) {
+	surface := skillSurface{Skills: []surfaceSkill{
+		{Name: "dup", Status: "shadowed", Entries: []surfaceEntry{
+			{Location: "global-claude", Path: "/c/dup", Hash: "aa"},
+			{Location: "global-opencode", Path: "/o/dup", Hash: "bb"},
+		}},
+		{Name: "same", Status: "unique", Entries: []surfaceEntry{
+			{Location: "global-opencode", Path: "/o/same", Hash: "cc"},
+			{Location: "global-claude", Path: "/c/same", Hash: "cc"},
+		}},
+		{Name: "dead", Status: "unreadable", Entries: []surfaceEntry{
+			{Location: "global-opencode", Path: "/o/dead", Hash: ""},
+		}},
+	}}
+	actions := planStandardize(surface)
+	if len(actions) != 2 {
+		t.Fatalf("actions = %+v, want 2", actions)
+	}
+	if actions[0].Kind != "delete-empty-dir" || actions[0].Path != "/o/dead" {
+		t.Fatalf("actions[0] = %+v, want delete-empty-dir /o/dead", actions[0])
+	}
+	// Shadowed: global-opencode outranks global-claude, so the claude copy goes.
+	if actions[1].Kind != "resolve-shadow" || actions[1].Path != "/c/dup" {
+		t.Fatalf("actions[1] = %+v, want resolve-shadow /c/dup", actions[1])
+	}
+	if !strings.Contains(actions[1].Detail, "/o/dup") {
+		t.Fatalf("detail = %q, must name the kept copy", actions[1].Detail)
+	}
+}
+
+func TestHandleSkillSurfaceStandardize(t *testing.T) {
+	home := t.TempDir()
+	g1 := filepath.Join(home, ".config", "opencode", "skills")
+	g2 := filepath.Join(home, ".claude", "skills")
+	proj := filepath.Join(t.TempDir(), "repo")
+	writeSkill(t, g1, "shadow", "# one")
+	writeSkill(t, g2, "shadow", "# two")
+	writeSkill(t, g1, "same", "# identical")
+	writeSkill(t, g2, "same", "# identical")
+	hollow := filepath.Join(g1, "hollow")
+	if err := os.MkdirAll(hollow, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	standardize := func(dryRun string) (int, map[string]any) {
+		t.Helper()
+		t.Setenv("USERPROFILE", home)
+		srv := &Server{}
+		q := "?dry_run=" + dryRun + "&project_dir=" + url.QueryEscape(proj)
+		rec := httptest.NewRecorder()
+		srv.handleSkillSurfaceStandardize(rec, httptest.NewRequest(http.MethodPost, "/api/config/skills/surface/standardize"+q, nil))
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("bad json: %v", err)
+		}
+		return rec.Code, body
+	}
+
+	// Dry run plans without touching disk.
+	code, body := standardize("1")
+	if code != http.StatusOK {
+		t.Fatalf("dry run = %d, want 200", code)
+	}
+	actions, _ := body["actions"].([]any)
+	if len(actions) != 2 {
+		t.Fatalf("dry-run actions = %v, want 2 (shadow + hollow)", body["actions"])
+	}
+	if _, err := os.Stat(filepath.Join(g2, "shadow", "SKILL.md")); err != nil {
+		t.Fatal("dry run must not delete")
+	}
+
+	// Execute: claude shadow goes, opencode shadow stays, hollow goes,
+	// identical copies stay.
+	code, body = standardize("0")
+	if code != http.StatusOK {
+		t.Fatalf("execute = %d, want 200", code)
+	}
+	if _, err := os.Stat(filepath.Join(g2, "shadow")); !os.IsNotExist(err) {
+		t.Fatal("losing shadow copy still exists")
+	}
+	if _, err := os.Stat(filepath.Join(g1, "shadow", "SKILL.md")); err != nil {
+		t.Fatal("kept shadow copy is gone")
+	}
+	if _, err := os.Stat(hollow); !os.IsNotExist(err) {
+		t.Fatal("hollow dir still exists")
+	}
+	if _, err := os.Stat(filepath.Join(g2, "same", "SKILL.md")); err != nil {
+		t.Fatal("identical duplicate must be left alone")
 	}
 }
 

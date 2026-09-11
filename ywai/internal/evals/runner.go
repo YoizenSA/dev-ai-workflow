@@ -54,18 +54,19 @@ type RunRequest struct {
 
 // Run is a completed or in-flight benchmark.
 type Run struct {
-	ID        string    `json:"id"`
-	TaskID    string    `json:"taskId"`
-	TaskName  string    `json:"taskName"`
-	Agent     string    `json:"agent"`
-	Provider  string    `json:"provider"`
-	Rounds    int       `json:"rounds"`
-	Models    []string  `json:"models"`
-	Attempts  []Attempt `json:"attempts"`
-	Status    string    `json:"status"` // running | done | failed
-	Error     string    `json:"error,omitempty"`
-	StartedAt time.Time `json:"startedAt"`
-	EndedAt   time.Time `json:"endedAt,omitempty"`
+	ID          string    `json:"id"`
+	TaskID      string    `json:"taskId"`
+	TaskName    string    `json:"taskName"`
+	Agent       string    `json:"agent"`
+	Provider    string    `json:"provider"`
+	Rounds      int       `json:"rounds"`
+	Models      []string  `json:"models"`
+	Environment string    `json:"environment,omitempty"` // eval env name; "" reads as local
+	Attempts    []Attempt `json:"attempts"`
+	Status      string    `json:"status"` // running | done | failed
+	Error       string    `json:"error,omitempty"`
+	StartedAt   time.Time `json:"startedAt"`
+	EndedAt     time.Time `json:"endedAt,omitempty"`
 }
 
 // Runner drives an OpenCode server and reads results back out of its database.

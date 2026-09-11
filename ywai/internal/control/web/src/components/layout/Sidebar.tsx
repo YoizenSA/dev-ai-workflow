@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
 	Brain,
+	Boxes,
 	ChevronDown,
 	ChevronRight,
 	Cloud,
@@ -39,6 +40,11 @@ const NAV_ITEMS = [
 		path: "/evals",
 		label: "Evals",
 		icon: <LineChart size={20} />,
+	},
+	{
+		path: "/envs",
+		label: "Environments",
+		icon: <Boxes size={20} />,
 	},
 	{
 		path: "/settings",

@@ -75,9 +75,11 @@ func fetchLiveModels(baseURL string, client *http.Client) ([]liveModel, error) {
 }
 
 // handleEvalModelsLive proxies the live model list of the OpenCode server
-// the bench would run against.
+// the bench would run against. ?env= targets one environment's server;
+// absent means the default resolution.
 func (s *Server) handleEvalModelsLive(w http.ResponseWriter, r *http.Request) {
-	base := opencodeURLForBench()
+	env := resolveEvalEnv(loadEvalEnvironments(), r.URL.Query().Get("env"))
+	base := evalServerURL(env)
 	models, err := fetchLiveModels(base, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})

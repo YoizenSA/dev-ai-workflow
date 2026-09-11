@@ -89,7 +89,14 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := openOpenCodeDB(defaultOpenCodeDBPath())
+	// The bench targets one environment: its server runs the attempts, its
+	// database feeds metrics. Empty env preserves historical resolution.
+	env := resolveEvalEnv(loadEvalEnvironments(), r.URL.Query().Get("env"))
+	dbPath := defaultOpenCodeDBPath()
+	if p := evalDBPath(env); p != "" {
+		dbPath = p
+	}
+	db, err := openOpenCodeDB(dbPath)
 	if err != nil {
 		benchInFlight.Unlock()
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -97,23 +104,24 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	run := evals.Run{
-		ID:        fmt.Sprintf("run-%d", time.Now().UnixMilli()),
-		TaskID:    task.ID,
-		TaskName:  task.Name,
-		Agent:     task.Agent,
-		Provider:  req.Provider,
-		Rounds:    req.Rounds,
-		Models:    req.Models,
-		Attempts:  []evals.Attempt{},
-		Status:    "running",
-		StartedAt: time.Now().UTC(),
+		ID:          fmt.Sprintf("run-%d", time.Now().UnixMilli()),
+		Environment: strings.TrimSpace(r.URL.Query().Get("env")),
+		TaskID:      task.ID,
+		TaskName:    task.Name,
+		Agent:       task.Agent,
+		Provider:    req.Provider,
+		Rounds:      req.Rounds,
+		Models:      req.Models,
+		Attempts:    []evals.Attempt{},
+		Status:      "running",
+		StartedAt:   time.Now().UTC(),
 	}
 	// Best effort like the persist it replaces: a failed write must never fail
 	// or kill a benchmark that costs real model time.
 	_ = benchRuns.UpsertRun(run)
 
 	runner := &evals.Runner{
-		BaseURL: opencodeURLForBench(),
+		BaseURL: evalServerURL(env),
 		DB:      db,
 		// Each attempt is a full agent session; the ceiling is per-request, not per-run.
 		Client: &http.Client{Timeout: 30 * time.Minute},

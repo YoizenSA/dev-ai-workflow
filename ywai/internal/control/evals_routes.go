@@ -15,13 +15,17 @@ import (
 // registerEvalsRoutes wires Agent Benchmarks + Session Analytics API.
 func (s *Server) registerEvalsRoutes() {
 	s.mux.HandleFunc("GET /api/evals/runs", s.handleEvalRuns)
+	s.mux.HandleFunc("GET /api/evals/environments", s.handleEvalEnvironments)
+	s.mux.HandleFunc("POST /api/evals/environments", s.handleSetEvalEnvironment)
+	s.mux.HandleFunc("DELETE /api/evals/environments", s.handleDeleteEvalEnvironment)
 	s.mux.HandleFunc("GET /api/evals/session-analytics", s.handleSessionAnalytics)
 	s.mux.HandleFunc("POST /api/evals/baselines", s.handleSetEvalBaseline)
 	s.mux.HandleFunc("DELETE /api/evals/baselines", s.handleClearEvalBaseline)
 	s.registerBenchRoutes()
 }
 
-// handleEvalRuns returns benchmark runs, newest first.
+// handleEvalRuns returns benchmark runs, newest first. ?env= filters to one
+// environment (pre-environment runs read as local); absent means all.
 func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
 	runs, err := benchRuns.ListRuns()
 	if err != nil {
@@ -31,6 +35,7 @@ func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
 	if runs == nil {
 		runs = []evals.Run{}
 	}
+	runs = filterRunsByEnv(runs, r.URL.Query().Get("env"))
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
 
@@ -46,7 +51,7 @@ func (s *Server) handleEvalSummary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	current := evals.Aggregate(runs, taskID)
+	current := evals.Aggregate(filterRunsByEnv(runs, r.URL.Query().Get("env")), taskID)
 	body := map[string]any{
 		"taskId":    taskID,
 		"summaries": current,
@@ -165,8 +170,10 @@ func (s *Server) handleSessionAnalytics(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 
-	// Always use the local OpenCode DB (OPENCODE_DB / XDG_DATA_HOME override).
-	result, err := LoadSessionAnalytics(ctx, "", q)
+	// The database comes from ?env= (explicit per-environment path) or falls
+	// back to the historical default (OPENCODE_DB / XDG_DATA_HOME override).
+	env := resolveEvalEnv(loadEvalEnvironments(), r.URL.Query().Get("env"))
+	result, err := LoadSessionAnalytics(ctx, evalDBPath(env), q)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error": err.Error(),

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import Memories from './components/memories/Memories'
+import Envs from './components/envs/Envs'
 import Evals from './components/evals/Evals'
 import Settings from './components/settings/Settings'
 import McpStore from './components/mcp-store/McpStore'
@@ -16,6 +17,7 @@ function App() {
           <Route path="/" element={<Navigate to="/workflows" replace />} />
           <Route path="/workflows" element={<WorkflowEditor />} />
           <Route path="/memories" element={<Memories />} />
+          <Route path="/envs" element={<Envs />} />
           <Route path="/evals" element={<Evals />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/mcp-store" element={<McpStore />} />

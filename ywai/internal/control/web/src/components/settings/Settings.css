@@ -61,6 +61,54 @@
 	display: none;
 }
 
+/* --- Scope picker + banner (edit global vs one env) --- */
+.settings-page .scope-picker {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0 var(--space-2);
+	white-space: nowrap;
+}
+.settings-page .scope-picker-label {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+.settings-page .scope-picker select {
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--panel-border);
+	background: var(--surface);
+	color: var(--text);
+}
+.scope-banner {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	margin-bottom: var(--space-4);
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius-md);
+	border: 1px solid var(--yz-accent);
+	background: color-mix(in srgb, var(--yz-accent) 14%, transparent);
+}
+.scope-banner strong {
+	white-space: nowrap;
+}
+.scope-banner span {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	flex: 1 1 auto;
+	min-width: 16rem;
+}
+.scope-banner code {
+	font-family: monospace;
+	font-size: 0.8em;
+}
+.scope-banner button {
+	white-space: nowrap;
+}
+
 /* --- Section cards --- */
 .settings-section {
 	background: var(--surface);

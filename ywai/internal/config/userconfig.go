@@ -85,6 +85,21 @@ type UserConfig struct {
 	// both a wrong review and an unexpected bill. Empty keeps the advisor off
 	// regardless of AdvisorEnabled.
 	AdvisorModel string `yaml:"advisor_model,omitempty" json:"advisor_model,omitempty"`
+
+	// EvalEnvironments names the OpenCode environments the evals UI can target.
+	// Each pairs a bench server URL with a local analytics database path;
+	// empty fields fall back to the default resolution. Empty list means one
+	// implicit "local" environment.
+	EvalEnvironments []EvalEnvironment `yaml:"evalEnvironments,omitempty" json:"evalEnvironments,omitempty"`
+}
+
+// EvalEnvironment is one named OpenCode environment for the evals UI: which
+// server a bench runs against and which local SQLite database session
+// analytics reads.
+type EvalEnvironment struct {
+	Name      string `yaml:"name" json:"name"`
+	ServerURL string `yaml:"serverUrl,omitempty" json:"serverUrl,omitempty"`
+	DBPath    string `yaml:"dbPath,omitempty" json:"dbPath,omitempty"`
 }
 
 // ConfigPath returns the path to the user config file
