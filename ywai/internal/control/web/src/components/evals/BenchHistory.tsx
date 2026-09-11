@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import TrendChart, { type TrendSeries } from "./TrendChart";
+import RunDiff, { type RunDiffDelta } from "./RunDiff";
+import NeedlePanel, { type NeedleAttempt } from "./NeedlePanel";
 import "./BenchHistory.css";
 
 // Types mirror the evals API: Run (internal/evals runner.go) over
@@ -8,7 +10,9 @@ import "./BenchHistory.css";
 // (leaderboard.go) over GET /api/evals/leaderboard.
 interface Score {
   hits: string[];
+  missed: string[];
   total: number;
+  gotHard: boolean;
   answered: boolean;
   // Weighted is the weight share the hits cover, 0..1. Runs scored before
   // weighted scoring omit it, so it stays optional.
@@ -22,6 +26,7 @@ interface Attempt {
   metrics: { turns: number };
   costUsd?: number;
   costKnown?: boolean;
+  response?: string;
 }
 
 interface Run {
@@ -65,6 +70,67 @@ function statusClass(status: string): string {
   return "bh-status bh-status-running";
 }
 
+function toNeedleAttempts(run: Run): NeedleAttempt[] {
+  return run.attempts.map((a) => ({
+    model: a.model,
+    round: a.round,
+    score: {
+      hits: a.score.hits,
+      missed: a.score.missed,
+      gotHard: a.score.gotHard,
+      answered: a.score.answered,
+      weighted: a.score.weighted ?? 0,
+    },
+    responsePreview: a.response ?? "",
+  }));
+}
+
+interface ModelSummary {
+  model: string;
+  avgWeighted: number;
+  hardRate: number;
+  avgTurns: number;
+  totalCost: number;
+}
+
+function summarizeRun(run: Run): ModelSummary[] {
+  const byModel = new Map<string, { w: number; h: number; t: number; c: number; n: number }>();
+  for (const a of run.attempts) {
+    if (!a.score.answered) continue;
+    let s = byModel.get(a.model);
+    if (!s) {
+      s = { w: 0, h: 0, t: 0, c: 0, n: 0 };
+      byModel.set(a.model, s);
+    }
+    s.w += a.score.weighted ?? 0;
+    s.h += a.score.gotHard ? 1 : 0;
+    s.t += a.metrics.turns;
+    s.c += a.costKnown ? (a.costUsd ?? 0) : 0;
+    s.n += 1;
+  }
+  return [...byModel].map(([model, s]) => ({
+    model,
+    avgWeighted: s.n ? s.w / s.n : 0,
+    hardRate: s.n ? s.h / s.n : 0,
+    avgTurns: s.n ? s.t / s.n : 0,
+    totalCost: s.c,
+  }));
+}
+
+function diffRuns(current: Run, baseline: Run): RunDiffDelta[] {
+  const base = new Map(summarizeRun(baseline).map((s) => [s.model, s]));
+  return summarizeRun(current).map((s) => {
+    const b = base.get(s.model);
+    return {
+      model: s.model,
+      weightedDelta: b ? s.avgWeighted - b.avgWeighted : null,
+      hardDelta: b ? s.hardRate - b.hardRate : null,
+      turnsDelta: b ? s.avgTurns - b.avgTurns : null,
+      costDeltaUsd: b ? s.totalCost - b.totalCost : null,
+    };
+  });
+}
+
 export default function BenchHistory() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -75,6 +141,7 @@ export default function BenchHistory() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, Run>>({});
   const [detailError, setDetailError] = useState("");
+  const [compareIds, setCompareIds] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -113,9 +180,22 @@ export default function BenchHistory() {
 
   const visible = taskFilter ? runs.filter((r) => r.taskId === taskFilter) : runs;
   const series: TrendSeries[] = rows.map((row) => ({ model: row.model, values: row.trend ?? [] }));
+  const compareRuns =
+    compareIds.length === 2 ? [details[compareIds[0]], details[compareIds[1]]] : null;
 
   // Expansion reads GET /api/evals/runs/{id} once per run, so the detail shows
   // the run as stored — attempts keep landing while a running run is open.
+  async function fetchDetail(id: string) {
+    try {
+      const res = await fetch(`/api/evals/runs/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? res.statusText);
+      setDetails((prev) => ({ ...prev, [id]: data }));
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function toggleRun(run: Run) {
     if (expandedId === run.id) {
       setExpandedId(null);
@@ -124,14 +204,17 @@ export default function BenchHistory() {
     setExpandedId(run.id);
     setDetailError("");
     if (details[run.id]) return;
-    try {
-      const res = await fetch(`/api/evals/runs/${run.id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? res.statusText);
-      setDetails((prev) => ({ ...prev, [run.id]: data }));
-    } catch (e) {
-      setDetailError(e instanceof Error ? e.message : String(e));
-    }
+    await fetchDetail(run.id);
+  }
+
+  // Compare mode: pick two runs, diff per-model averages client-side (current
+  // minus baseline, mirroring evals.DiffModels: models missing from the
+  // baseline render as "no comparison", never zero).
+  function toggleCompare(id: string) {
+    setCompareIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 2 ? prev : [...prev, id],
+    );
+    if (!details[id]) void fetchDetail(id);
   }
 
   if (loading) {
@@ -174,6 +257,22 @@ export default function BenchHistory() {
         </section>
       )}
 
+      {compareRuns &&
+        (compareRuns[0] && compareRuns[1] ? (
+          <section className="bh-panel">
+            <RunDiff
+              aTitle={compareIds[0]}
+              bTitle={compareIds[1]}
+              deltas={diffRuns(compareRuns[0], compareRuns[1])}
+            />
+            <button type="button" className="btn" onClick={() => setCompareIds([])}>
+              Clear comparison
+            </button>
+          </section>
+        ) : (
+          <p className="muted">Loading runs for comparison…</p>
+        ))}
+
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No benchmark runs yet. Start one from the Agent Benchmarks tab.</p>
@@ -187,6 +286,9 @@ export default function BenchHistory() {
           <table className="data-table">
             <thead>
               <tr>
+                <th title="Pick two runs to compare">
+                  <span aria-hidden="true">⇄</span>
+                </th>
                 <th>Run</th>
                 <th>Date</th>
                 <th>Task</th>
@@ -198,6 +300,15 @@ export default function BenchHistory() {
               {visible.map((run) => (
                 <Fragment key={run.id}>
                   <tr>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Compare ${run.id}`}
+                        checked={compareIds.includes(run.id)}
+                        disabled={!compareIds.includes(run.id) && compareIds.length >= 2}
+                        onChange={() => toggleCompare(run.id)}
+                      />
+                    </td>
                     <td>
                       <button
                         type="button"
@@ -224,10 +335,15 @@ export default function BenchHistory() {
                   </tr>
                   {expandedId === run.id && (
                     <tr>
-                      <td colSpan={5} className="bh-detail-cell">
+                      <td colSpan={6} className="bh-detail-cell">
                         {detailError && <div className="alert alert-danger">{detailError}</div>}
                         {!detailError && !details[run.id] && <p className="muted">Loading run…</p>}
-                        {details[run.id] && <AttemptTable run={details[run.id]} />}
+                        {details[run.id] && (
+                          <>
+                            <AttemptTable run={details[run.id]} />
+                            <NeedlePanel attempts={toNeedleAttempts(details[run.id])} />
+                          </>
+                        )}
                       </td>
                     </tr>
                   )}

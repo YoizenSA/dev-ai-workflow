@@ -143,10 +143,51 @@ describe("BenchHistory", () => {
 
     // RunCard column set: model, score, weighted, cost, turns.
     expect(await screen.findByText("3/3")).toBeInTheDocument();
-    expect(screen.getByText("83%")).toBeInTheDocument();
+    // 83% renders twice: the attempt table cell and the NeedlePanel row
+    // header mounted below it for the same attempt.
+    expect(screen.getAllByText("83%")).toHaveLength(2);
     expect(screen.getByText("$0.0012")).toBeInTheDocument();
-    expect(screen.getByText("no answer")).toBeInTheDocument();
+    // "no answer" renders twice: the attempt table cell and the NeedlePanel
+    // row header for the same unanswered attempt.
+    expect(screen.getAllByText("no answer")).toHaveLength(2);
     expect(fetch).toHaveBeenCalledWith("/api/evals/runs/run-1");
+  });
+
+  it("compares two runs picked with the checkboxes", async () => {
+    const user = userEvent.setup();
+    const run2Detail = {
+      ...run1Detail,
+      id: "run-2",
+      attempts: [
+        {
+          model: "model-a",
+          round: 1,
+          score: { hits: ["a"], missed: ["b", "c"], total: 3, answered: true, weighted: 0.3333 },
+          metrics: { turns: 9 },
+          costUsd: 0.002,
+          costKnown: true,
+        },
+      ],
+    };
+    mockFetchByUrl({
+      "/api/evals/runs/run-1": run1Detail,
+      "/api/evals/runs/run-2": run2Detail,
+      "/api/evals/tasks": tasks,
+      "/api/evals/runs": { runs: [run1, run2] },
+      "/api/evals/leaderboard": { rows: [] },
+    });
+
+    render(<BenchHistory />);
+
+    await user.click(await screen.findByRole("checkbox", { name: /compare run-1/i }));
+    await user.click(await screen.findByRole("checkbox", { name: /compare run-2/i }));
+
+    // run-1 model-a weighted 0.8333 vs run-2 0.3333 -> current-minus-baseline.
+    expect(await screen.findByText("+0.50")).toBeInTheDocument();
+    expect(screen.getByText("Clear comparison")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Clear comparison"));
+    expect(screen.queryByText("+0.50")).not.toBeInTheDocument();
   });
 
   it("filters runs and refetches trends when a task is picked", async () => {
