@@ -601,6 +601,17 @@ export function McpStore() {
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 					/>
+					{search !== "" && (
+						<button
+							type="button"
+							className="mcp-store-search-clear"
+							aria-label="Clear search"
+							title="Clear search"
+							onClick={() => setSearch("")}
+						>
+							×
+						</button>
+					)}
 				</div>
 
 				<div className="mcp-store-filters">
