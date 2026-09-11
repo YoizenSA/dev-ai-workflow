@@ -663,8 +663,8 @@ func applyAgentModel(name, model string) bool {
 				// out of the file at once.
 				//
 				// A missing or empty agent map is not a stop condition: the
-				// agent may live only as host markdown (MigrateOpenCodeAgents
-				// drains the JSON). Fall through so the markdown loop runs.
+				// agent may live only as host markdown. Fall through so the
+				// markdown loop runs.
 				if agentMap, ok := lookupAgentMapFromRoot(config); ok {
 					if existingRaw, exists := agentMap[name]; exists {
 						var agentCfg map[string]json.RawMessage
@@ -1686,9 +1686,7 @@ func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) s
 }
 
 // replaceLocalMarkdownSection replaces the body content under a heading. Local
-// copy (the configapi package already has extractMarkdownSection/replaceMarkdownSection
-// in frontmatter.go; this is that same helper, kept here to avoid duplication
-// confusion — it delegates to the frontmatter.go implementation).
+// thin wrapper: it delegates to replaceMarkdownSection in frontmatter.go.
 func replaceLocalMarkdownSection(content, headerText, headingPrefix, newContent string, includeSubsections bool) string {
 	return replaceMarkdownSection(content, headerText, headingPrefix, newContent, includeSubsections)
 }

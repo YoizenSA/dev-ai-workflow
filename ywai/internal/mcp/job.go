@@ -132,20 +132,18 @@ func (j *Job) Snapshot() State {
 }
 
 type JobManager struct {
-	hub       Broadcaster
-	mu        sync.Mutex
-	jobs      map[string]*Job
-	byKey     map[string]string
-	seq       atomic.Uint64
-	retention time.Duration
+	hub   Broadcaster
+	mu    sync.Mutex
+	jobs  map[string]*Job
+	byKey map[string]string
+	seq   atomic.Uint64
 }
 
 func NewJobManager(hub Broadcaster) *JobManager {
 	return &JobManager{
-		hub:       hub,
-		jobs:      map[string]*Job{},
-		byKey:     map[string]string{},
-		retention: 1 * time.Hour,
+		hub:   hub,
+		jobs:  map[string]*Job{},
+		byKey: map[string]string{},
 	}
 }
 
@@ -211,46 +209,6 @@ func (m *JobManager) Get(id string) (*Job, bool) {
 	defer m.mu.Unlock()
 	j, ok := m.jobs[id]
 	return j, ok
-}
-
-// List returns a snapshot of every tracked job. Order is unspecified.
-func (m *JobManager) List() []*Job {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]*Job, 0, len(m.jobs))
-	for _, j := range m.jobs {
-		out = append(out, j)
-	}
-	return out
-}
-
-// gc drops terminal jobs whose UpdatedAt is older than the retention
-// window and prunes byKey entries that no longer point at a live job.
-// Returns the number of jobs removed.
-func (m *JobManager) gc() int {
-	cutoff := time.Now().Add(-m.retention)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for id, j := range m.jobs {
-		j.mu.RLock()
-		terminal := j.State == StateDone || j.State == StateFailed
-		old := j.UpdatedAt.Before(cutoff)
-		j.mu.RUnlock()
-		if terminal && old {
-			delete(m.jobs, id)
-			n++
-		}
-	}
-	// Sweep byKey for any entry pointing at a job we just removed (or
-	// that was removed by some other path). Keeps the conflict map
-	// honest so a fresh Start after GC isn't blocked by a stale key.
-	for key, jid := range m.byKey {
-		if _, ok := m.jobs[jid]; !ok {
-			delete(m.byKey, key)
-		}
-	}
-	return n
 }
 
 // runJob executes the install pipeline under the given context, routing

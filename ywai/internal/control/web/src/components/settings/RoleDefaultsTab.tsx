@@ -50,7 +50,7 @@ export default function RoleDefaultsTab() {
 			configApi.getUserConfig().catch(() => null),
 			toolsApi.listModels().catch(() => null),
 			// Use the config agents source (reads opencode.json + the ywai agents
-			// dir) — the same one other screens use. The missions opencode endpoint
+			// dir) — the same one other screens use. The tools API opencode endpoint
 			// returns empty when the opencode HTTP server isn't running (e.g. on
 			// Windows), which left this dropdown blank.
 			configApi.listAgents().catch(() => [] as AgentInfo[]),

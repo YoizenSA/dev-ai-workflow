@@ -86,42 +86,6 @@ func IsVisionModel(m ModelInfo) bool {
 	return false
 }
 
-// FilterVisionModels returns only vision-capable models from the catalog.
-func FilterVisionModels(models []ModelInfo) []ModelInfo {
-	out := make([]ModelInfo, 0, len(models))
-	for _, m := range models {
-		if IsVisionModel(m) {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
-// ResolveVisionModelID picks the effective vision model id.
-// preferred (from user config) wins when non-empty and present in visionModels
-// (or when visionModels is empty — trust the override). Otherwise the first
-// vision model from the live catalog is used. Empty when nothing is available.
-func ResolveVisionModelID(preferred string, visionModels []ModelInfo) string {
-	preferred = strings.TrimSpace(preferred)
-	if i := strings.LastIndex(preferred, "/"); i >= 0 && i+1 < len(preferred) {
-		preferred = preferred[i+1:]
-	}
-	if preferred != "" {
-		if len(visionModels) == 0 {
-			return preferred
-		}
-		for _, m := range visionModels {
-			if m.ID == preferred {
-				return preferred
-			}
-		}
-	}
-	if len(visionModels) > 0 {
-		return visionModels[0].ID
-	}
-	return ""
-}
-
 // FetchModels fetches the models this API key can call from GET /v1/models.
 func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
 	origin := strings.TrimRight(baseURL, "/")

@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 )
 
 // uninstall deletes files. Every predicate below decides whether something is
@@ -177,7 +175,7 @@ func TestUninstallStripYwaiConfigRefs_DrainsV2PluginsKey(t *testing.T) {
 // from cli.json. They must strip the entry while preserving the key spelling
 // the config already carried and every unrelated entry.
 func TestUninstallStatuslineRefs_PreservesKeySpellingAndOthers(t *testing.T) {
-	statusline := "/home/u/.config/opencode/tui-plugins/" + plugins.SubagentStatuslineTuiBundleName
+	statusline := "/home/u/.config/opencode/tui-plugins/" + retiredStatuslineTuiBundle
 	cases := []struct {
 		name    string
 		config  map[string]any

@@ -30,7 +30,7 @@ func registerEngramTestRoutes(h *Handlers) http.Handler {
 	mux.HandleFunc("GET /api/engram/consolidations/{id}", h.GetConsolidation)
 	mux.HandleFunc("POST /api/engram/consolidations/{id}/apply", h.ApplyConsolidation)
 	mux.HandleFunc("POST /api/engram/consolidations/{id}/discard", h.DiscardConsolidation)
-	return recoveryMiddleware(json405Middleware(mux))
+	return mux
 }
 
 func doReq(t *testing.T, handler http.Handler, method, target string, body string) *http.Response {

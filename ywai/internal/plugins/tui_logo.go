@@ -57,10 +57,6 @@ func installTuiLogoWithBundle(configPath, bundleSrc string) error {
 // TuiLogoPluginDir is the plugin directory name the logo is installed under.
 const TuiLogoPluginDir = "ywai-logo"
 
-// TuiStatuslinePluginDir is the plugin directory name the minimal statusline
-// stand-in is installed under.
-const TuiStatuslinePluginDir = "ywai-statusline"
-
 // SubagentStatuslineTuiPluginDir is the plugin directory name the vendored
 // sub-agent statusline TUI half is installed under.
 const SubagentStatuslineTuiPluginDir = "subagent-statusline"

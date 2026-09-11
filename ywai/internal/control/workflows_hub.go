@@ -1,17 +1,14 @@
 package control
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
-	"sync"
-	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/wshub"
 	"github.com/gorilla/websocket"
 )
 
-// Workflow events streamed to the UI during a run. Mirrors the missions hub's
-// BroadcastEvent shape: each message is {"type": <event>, "payload": <data>}.
+// Workflow events streamed to the UI during a run. Each message is
+// {"type": <event>, "payload": <data>}.
 const (
 	eventRunStarted = "workflow_run_started" // payload: RunStartedEvent
 	eventRunOutput  = "workflow_run_output"  // payload: RunOutputEvent (one line/chunk)
@@ -40,136 +37,37 @@ type RunDoneEvent struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// wsHub mirrors missions/web/hub.go: a fan-out broadcaster for workflow run
-// events. Kept small and self-contained in the control package so workflow
-// streaming stays isolated from the missions and config API hubs.
+// wsHub fans workflow run events out to the Run panel's WebSocket clients.
+// It wraps the shared wshub.Hub and keeps the lowercase broadcastEvent
+// helper so existing call sites keep their spelling.
 type wsHub struct {
-	mu        sync.RWMutex
-	clients   map[*wsClient]bool
-	broadcast chan []byte
-	done      chan struct{}
+	*wshub.Hub
 }
-
-const (
-	wfWsWriteWait     = 10 * time.Second
-	wfWsPongWait      = 60 * time.Second
-	wfWsPingPeriod    = (wfWsPongWait * 9) / 10
-	wfWsMaxMessage    = 4096
-	wfWsCloseShutdown = 1001
-)
 
 func newWsHub() *wsHub {
-	h := &wsHub{
-		clients:   make(map[*wsClient]bool),
-		broadcast: make(chan []byte, 256),
-		done:      make(chan struct{}),
-	}
-	go h.run()
-	return h
+	return &wsHub{Hub: wshub.New(wshub.Options{ReadLimit: 4096})}
 }
 
-func (h *wsHub) run() {
-	for {
-		select {
-		case msg := <-h.broadcast:
-			h.mu.RLock()
-			for c := range h.clients {
-				select {
-				case c.send <- msg:
-				default:
-					// Buffer full: drop the client.
-					close(c.send)
-					delete(h.clients, c)
-				}
-			}
-			h.mu.RUnlock()
-		case <-h.done:
-			return
-		}
-	}
-}
-
+// broadcastEvent sends one structured event to every connected client. It
+// is nil-safe: a nil hub drops the event.
 func (h *wsHub) broadcastEvent(eventType string, payload any) {
 	if h == nil {
 		return
 	}
-	msg, err := json.Marshal(map[string]any{"type": eventType, "payload": payload})
+	h.Hub.BroadcastEvent(eventType, payload)
+}
+
+// serveWorkflowWS upgrades the request and attaches the connection to h
+// for the lifetime of the WebSocket. Registered clients receive
+// run_output/run_done events.
+func serveWorkflowWS(h *wsHub, w http.ResponseWriter, r *http.Request) {
+	conn, err := wfUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("workflow hub marshal error: %v", err)
 		return
 	}
-	select {
-	case h.broadcast <- msg:
-	default:
-		log.Println("workflow hub broadcast channel full, dropping message")
-	}
-}
-
-func (h *wsHub) register(c *wsClient) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.clients[c] = true
-}
-
-func (h *wsHub) unregister(c *wsClient) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if _, ok := h.clients[c]; ok {
-		delete(h.clients, c)
-		close(c.send)
-	}
-}
-
-// wsClient is one WebSocket connection subscribed to workflow run events.
-type wsClient struct {
-	hub  *wsHub
-	conn *websocket.Conn
-	send chan []byte
-}
-
-func (c *wsClient) readPump() {
-	defer func() {
-		c.hub.unregister(c)
-		_ = c.conn.Close()
-	}()
-	c.conn.SetReadLimit(wfWsMaxMessage)
-	_ = c.conn.SetReadDeadline(time.Now().Add(wfWsPongWait))
-	c.conn.SetPongHandler(func(string) error {
-		_ = c.conn.SetReadDeadline(time.Now().Add(wfWsPongWait))
-		return nil
-	})
-	for {
-		if _, _, err := c.conn.ReadMessage(); err != nil {
-			return
-		}
-	}
-}
-
-func (c *wsClient) writePump() {
-	ticker := time.NewTicker(wfWsPingPeriod)
-	defer func() {
-		ticker.Stop()
-		_ = c.conn.Close()
-	}()
-	for {
-		select {
-		case msg, ok := <-c.send:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(wfWsWriteWait))
-			if !ok {
-				_ = c.conn.WriteMessage(websocket.CloseMessage,
-					websocket.FormatCloseMessage(wfWsCloseShutdown, "server shutdown"))
-				return
-			}
-			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				return
-			}
-		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(wfWsWriteWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
+	client := wshub.NewClient(h.Hub, conn)
+	h.Register(client)
+	client.Serve()
 }
 
 // upgrader is the WebSocket upgrader for the workflows endpoint. Same limits as

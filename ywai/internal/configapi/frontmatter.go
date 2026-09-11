@@ -390,22 +390,6 @@ func setScalarFrontmatterField(content, key, value string) string {
 	return "---\n" + newFM + "\n---\n\n" + body
 }
 
-// sortedPermissionKeys returns ValidPermissionKeys as a sorted slice for error messages.
-func sortedPermissionKeys() []string {
-	keys := make([]string, 0, len(ValidPermissionKeys))
-	for k := range ValidPermissionKeys {
-		keys = append(keys, k)
-	}
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[j] < keys[i] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
-	return keys
-}
-
 // --- Markdown body section helpers (operate on the prompt body, NOT frontmatter) ---
 //
 // These let the delegation-rules endpoint read/write a specific "### Header"
@@ -436,70 +420,6 @@ func headingText(line string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimSpace(line)[level:])
-}
-
-// extractMarkdownSection returns the body text under the first heading whose
-// title equals headerText (compared case-insensitively, ignoring the leading
-// "### " markers). The returned content is the section body WITHOUT the heading
-// line and WITHOUT nested sub-sections: it stops at the next heading of equal
-// or higher level. The boolean reports whether the heading was found.
-//
-// Example: for body
-//
-//	### Delegation Rules
-//	core principle ...
-//	| Action | Inline | Delegate |
-//	#### Mandatory Triggers
-//	...
-//	### Cost
-//
-// extractMarkdownSection(body, "Delegation Rules", false) returns the lines
-// between "### Delegation Rules" and "#### Mandatory Triggers" (the table),
-// because a "####" is a higher numeric level (shallower depth) ... wait:
-// includeSubsections=false stops at the NEXT heading of equal-or-HIGHER level
-// (same or fewer '#'). "####" has more '#', so it is a sub-section and is NOT
-// a stop boundary when includeSubsections is false only in the "equal-or-fewer"
-// sense — see the implementation: stop when nextLevel>0 && nextLevel<=level.
-//
-// Concretely:
-//   - includeSubsections=false returns only the direct content (stops at any
-//     heading with level <= the section's level, i.e. same-or-shallower).
-//   - includeSubsections=true returns the direct content PLUS nested headings
-//     (stops only at headings of the same-or-shallower level as the section).
-func extractMarkdownSection(body, headerText string, includeSubsections bool) (string, bool) {
-	target := strings.ToLower(strings.TrimSpace(headerText))
-	level := 0
-	startLine := -1
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		if headingLevel(line) == 0 {
-			continue
-		}
-		if strings.ToLower(headingText(line)) == target {
-			level = headingLevel(line)
-			startLine = i + 1
-			break
-		}
-	}
-	if startLine < 0 {
-		return "", false
-	}
-
-	var out []string
-	for _, line := range lines[startLine:] {
-		lvl := headingLevel(line)
-		if lvl > 0 && lvl <= level {
-			// A heading at the same level or shallower ends the section.
-			break
-		}
-		if !includeSubsections && lvl > level {
-			// Caller asked for direct content only — a nested heading is a stop
-			// boundary for the *direct* slice.
-			break
-		}
-		out = append(out, line)
-	}
-	return strings.TrimRight(strings.Join(out, "\n"), "\n"), true
 }
 
 // replaceMarkdownSection replaces the body content under the heading

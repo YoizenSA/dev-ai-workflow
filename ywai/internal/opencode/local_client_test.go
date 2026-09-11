@@ -10,7 +10,7 @@ import (
 )
 
 func TestLocalClient_Status_NotFound(t *testing.T) {
-	c := NewLocalClientWithPaths("/nonexistent/opencode.json", "/nonexistent/agents")
+	c := newLocalClientWithPaths("/nonexistent/opencode.json", "/nonexistent/agents")
 	ctx := context.Background()
 	status, err := c.Status(ctx)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestLocalClient_Status_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	status, err := c.Status(ctx)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestLocalClient_Status_Found(t *testing.T) {
 
 func TestLocalClient_ListAgents_Empty(t *testing.T) {
 	dir := t.TempDir()
-	c := NewLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
+	c := newLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestLocalClient_ListAgents_FromConfig(t *testing.T) {
 	}
 
 	// Use a non-existent agents dir to prove the config is the source, not files.
-	c := NewLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	c := newLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestLocalClient_ListAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
+	c := newLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestLocalClient_ListModels_Empty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -169,7 +169,7 @@ func TestLocalClient_ListModels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -205,7 +205,7 @@ func TestLocalClient_ListModels_NoProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestLocalClient_ListAgents_V2FromConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	c := newLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -278,7 +278,7 @@ func TestLocalClient_ListModels_V2Providers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {

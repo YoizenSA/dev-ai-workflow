@@ -11,83 +11,12 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// backgroundAgentsPermissions are the opencode permission keys the
-// background-agents plugin needs. "delegate" launches an async sub-agent;
-// "delegation_*" globs the supervisor/retrieval tools (read, list, status,
-// peek, steer, stop). Set at the top-level config so the primary agent can use
-// them; per-agent frontmatter still governs sub-agents (see installers.go).
-var backgroundAgentsPermissions = map[string]string{
-	"delegate":     "allow",
-	"delegation_*": "allow",
-}
-
 // ywaiPluginsSubdir is a ywai-owned directory under the opencode config dir
 // where vendored plugin bundles live. It deliberately avoids opencode's own
 // auto-discovered "plugin"/"plugins" directory so the bundle is loaded exactly
 // once — via the explicit absolute path we add to the "plugin" array — instead
 // of being double-loaded by directory discovery.
 const ywaiPluginsSubdir = "ywai-plugins"
-
-// RemoveBackgroundAgents unwires the delegation plugin from a config. OpenCode
-// v1 has no native delegation tool, so this is only used to clean up, never as
-// part of a normal install: InstallBackgroundAgents is what wires it in.
-func RemoveBackgroundAgents(configPath string) error {
-	var root map[string]any
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
-	} else if os.IsNotExist(err) {
-		return nil
-	} else {
-		return fmt.Errorf("stat %s: %w", configPath, err)
-	}
-
-	plugins := openCodePlugins(root)
-	kept := make([]any, 0, len(plugins))
-	for _, plugin := range plugins {
-		path := ""
-		if value, ok := plugin.(string); ok {
-			path = value
-		} else if value, ok := plugin.(map[string]any); ok {
-			path, _ = value["package"].(string)
-		}
-		if filepath.Base(path) != config.BackgroundAgentsBundleName {
-			kept = append(kept, plugin)
-		}
-	}
-	writePlugins(root, kept)
-
-	if perms, ok := root["permission"].(map[string]any); ok {
-		for action := range backgroundAgentsPermissions {
-			delete(perms, action)
-		}
-		if len(perms) == 0 {
-			delete(root, "permission")
-		} else {
-			root["permission"] = perms
-		}
-	}
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove legacy background-agents bundle: %w", err)
-	}
-	// Stale flavor markers from the v1-era dual plugin; best-effort sweep.
-	for _, markerDir := range []string{
-		filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir),
-		filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir),
-	} {
-		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove stale flavor marker: %w", err)
-		}
-	}
-	return nil
-}
 
 // InstallBackgroundAgents vendors the background-agents plugin bundle into the
 // location OpenCode 2 scans by itself. The plugin is v2-only: it is the

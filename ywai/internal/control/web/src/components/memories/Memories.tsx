@@ -133,7 +133,7 @@ export default function Memories() {
 	const handleWSMessage = useCallback((msg: WSMessage) => {
 		useMemoriesStore.getState().handleWSMessage(msg)
 	}, [])
-	useWebSocket('/missions/engram/ws', handleWSMessage)
+	useWebSocket('/api/engram/ws', handleWSMessage)
 
 	// Initial load + tab-driven loads
 	useEffect(() => {

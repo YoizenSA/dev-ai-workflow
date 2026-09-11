@@ -427,16 +427,5 @@ func (h *Handlers) DiscardConsolidation(w http.ResponseWriter, r *http.Request) 
 // Consolidation events are broadcast via hub.BroadcastEvent, so this handler
 // only needs the standard client lifecycle (read/write pumps owned by Hub).
 func (h *Handlers) HandleEngramWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
-	}
-	client := &Client{
-		hub:  h.hub,
-		conn: conn,
-		send: make(chan []byte, 256),
-	}
-	h.hub.Register(client)
-	go client.writePump()
-	go client.readPump()
+	serveEngramWS(h.hub, w, r)
 }

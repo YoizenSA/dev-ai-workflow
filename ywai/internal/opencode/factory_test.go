@@ -145,7 +145,7 @@ func TestFactory_WorksWithLocalConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, agentsDir)
+	c := newLocalClientWithPaths(configPath, agentsDir)
 	ctx := context.Background()
 
 	models, err := c.ListModels(ctx)

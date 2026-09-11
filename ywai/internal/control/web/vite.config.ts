@@ -38,8 +38,7 @@ export default defineConfig({
       '/ws': {
         target: 'ws://localhost:5768',
         ws: true
-      },
-      '/missions': 'http://localhost:5768'
+      }
     }
   }
 })

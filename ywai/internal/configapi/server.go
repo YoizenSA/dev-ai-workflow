@@ -7,24 +7,22 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
-// DefaultUIPort is the default port for the UI server.
-const DefaultUIPort = 5768
-
-// Server is the embedded HTTP server for the config/UI API.
-type Server struct {
-	hub *Hub
-	mux *http.ServeMux
-}
-
-// New creates a new config/UI API server listening on the given port.
-// Use port 0 to let the OS pick a free port.
-func New(port int) *Server {
+// NewHandlers builds the config API handlers and their WebSocket hub.
+func NewHandlers() *Handlers {
 	hub := NewHub()
 	oc := opencode.DefaultClient(context.Background())
-	handlers := &Handlers{hub: hub, opencodeClient: oc}
+	return &Handlers{hub: hub, opencodeClient: oc}
+}
 
-	mux := http.NewServeMux()
+// Hub returns the WebSocket hub these handlers broadcast on. The control
+// server wires it into the MCP job manager so install events reach the UI over
+// the same /api/events socket.
+func (h *Handlers) Hub() *Hub {
+	return h.hub
+}
 
+// RegisterRoutes wires the config API routes onto mux.
+func RegisterRoutes(mux *http.ServeMux, handlers *Handlers) {
 	// WebSocket route
 	mux.HandleFunc("GET /api/events", handlers.HandleWebSocket)
 
@@ -70,23 +68,4 @@ func New(port int) *Server {
 
 	// Native directory picker
 	mux.HandleFunc("POST /api/browse-directory", handlers.BrowseDirectory)
-
-	// UI (frontend)
-	mux.Handle("GET /", uiHandler())
-
-	return &Server{
-		hub: hub,
-		mux: mux,
-	}
-}
-
-// HTTPHandler returns the HTTP handler for the config API server.
-// This allows the server to be mounted in other muxes.
-func (s *Server) HTTPHandler() http.Handler {
-	return s.mux
-}
-
-// Hub returns the WebSocket hub for the config API server.
-func (s *Server) Hub() *Hub {
-	return s.hub
 }

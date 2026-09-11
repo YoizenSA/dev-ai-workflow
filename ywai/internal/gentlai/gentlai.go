@@ -35,27 +35,6 @@ func IsInstalled() bool {
 	return findBinary(config.GentleAIBin) != ""
 }
 
-// Install installs gentle-ai only when it is missing. Upgrading an existing
-// install is `ywai update`'s job (it calls Upgrade explicitly), so `ywai
-// install` never moves a working gentle-ai version underneath the user.
-// Install no longer provisions the gentle-ai binary. The gentle-ai binary is
-// optional for ywai: engram is installed through ywai's own release path
-// (InstallEngram) and skills/profiles/plugins are applied by the ywai
-// pipeline. This is the slice-1 decoupling contract: ywai install must never
-// install gentle-ai.
-func Install() error {
-	if IsInstalled() {
-		if version := CurrentVersion(); version != "" {
-			fmt.Printf("gentle-ai already installed (%s) — ywai does not manage it.\n", version)
-		} else {
-			fmt.Println("gentle-ai already installed — ywai does not manage it.")
-		}
-		return nil
-	}
-	fmt.Println("gentle-ai is not installed; ywai no longer installs it.")
-	return nil
-}
-
 // InstallEngram installs the engram binary through ywai's own manual release
 // path (installEngramReleaseBinary) and returns the directory it was
 // installed into. It never invokes the gentle-ai binary. Slice 1 contract:
@@ -126,15 +105,6 @@ func UpgradeEngram() {
 	}
 }
 
-// Upgrade no longer shells out to the gentle-ai binary. Slice 1 contract:
-// `ywai update` must not run `gentle-ai upgrade`. It preserves only the
-// ywai/engram-owned behavior — refreshing the engram binary when an update
-// is available.
-func Upgrade() error {
-	UpgradeEngram()
-	return nil
-}
-
 // Doctor runs ywai-native health checks. Slice 1 contract: it must not
 // require the gentle-ai binary and must not depend on .gentle-ai paths.
 // It reports on ywai data locations and the tool binaries ywai works with;
@@ -178,15 +148,6 @@ func findBinary(name string) string {
 		}
 	}
 	return ""
-}
-
-func CurrentVersion() string {
-	return ""
-}
-
-func parseVersion(output string) string {
-	match := versionPattern.FindString(output)
-	return normalizeVersion(match)
 }
 
 func normalizeVersion(version string) string {

@@ -1,7 +1,6 @@
 package workflows
 
 import (
-	"fmt"
 	"sort"
 )
 
@@ -330,44 +329,4 @@ func (wf *Workflow) executionLayers() [][]string {
 		layers = append(layers, rest)
 	}
 	return layers
-}
-
-// topoOrder returns nodes in topological order using longest-path layering so
-// that linear chains read left→right (matching the OrchestratorTab layout).
-// Cyclic graphs return an error. Disconnected nodes are appended last.
-func (wf *Workflow) topoOrder() ([]string, error) {
-	if wf.hasCycle() {
-		return nil, fmt.Errorf("workflow graph has a cycle")
-	}
-	adj := wf.adjacency()
-	inDegree := make(map[string]int, len(wf.Nodes))
-	for _, n := range wf.Nodes {
-		inDegree[n.ID] = 0
-	}
-	for _, targets := range adj {
-		for _, t := range targets {
-			inDegree[t]++
-		}
-	}
-
-	// Kahn's algorithm; tie-break by node order for determinism.
-	order := make([]string, 0, len(wf.Nodes))
-	queue := make([]string, 0)
-	for _, n := range wf.Nodes {
-		if inDegree[n.ID] == 0 {
-			queue = append(queue, n.ID)
-		}
-	}
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		order = append(order, cur)
-		for _, t := range adj[cur] {
-			inDegree[t]--
-			if inDegree[t] == 0 {
-				queue = append(queue, t)
-			}
-		}
-	}
-	return order, nil
 }

@@ -36,21 +36,23 @@ func RegisterEmbeddedUI(ui func() fs.FS) {
 	embeddedUI = ui
 }
 
-// Server is the unified ywai control server combining the config API and the
-// shared tool API.
+// Server is the unified ywai control server. It owns one http.ServeMux that
+// every API registers onto directly: the config API, the shared tool API, and
+// the control-server routes. There is no longer a per-package server wrapper
+// or a prefix proxy between them.
 type Server struct {
-	port      int
-	configAPI *configapi.Server
-	tools     *toolsapi.Server
-	httpSrv   *http.Server
-	mux       *http.ServeMux
-	portReady chan struct{}
-	startedAt time.Time
-	startErr  error
-	jobs      *mcp.JobManager
-	workflows *workflowsAPI
-	push      *PushAPI
-	teamAPI   *TeamAPI
+	port       int
+	configAPI  *configapi.Handlers
+	toolsAPI   *toolsapi.Handlers
+	httpSrv    *http.Server
+	mux        *http.ServeMux
+	portReady  chan struct{}
+	startedAt  time.Time
+	startErr   error
+	jobs       *mcp.JobManager
+	workflows  *workflowsAPI
+	push       *PushAPI
+	teamAPI    *TeamAPI
 }
 
 // New creates a new control server.
@@ -59,12 +61,10 @@ func New(port int) (*Server, error) {
 		port = DefaultPort
 	}
 
-	kServer := configapi.New(port)
-
 	s := &Server{
 		port:      port,
-		configAPI: kServer,
-		tools:     toolsapi.New(),
+		configAPI: configapi.NewHandlers(),
+		toolsAPI:  toolsapi.NewHandlers(),
 		portReady: make(chan struct{}),
 		startedAt: time.Now(),
 	}
@@ -99,13 +99,25 @@ func (s *Server) buildRoutes() {
 	// Self-update trigger: spawns a detached `ywai update` process.
 	s.mux.HandleFunc("POST /api/update", s.updateHandler)
 
-	// ─── Config API ──────────────────────────────────────────────
-	s.mux.HandleFunc("/api/", s.configAPIHandler)
+	// ─── Config + Tool APIs ─────────────────────────────────────
+	// Both register their routes flat on this mux, in the order they are
+	// declared. Go's ServeMux resolves by specificity, not registration
+	// order, so the only rule is that no two packages claim the same
+	// method+pattern.
+	configapi.RegisterRoutes(s.mux, s.configAPI)
+	toolsapi.RegisterRoutes(s.mux, s.toolsAPI)
 
-	// —— Shared Tool API ——
-	for _, pattern := range toolsAPIProxyPaths {
-		s.mux.HandleFunc(pattern, s.toolsAPIHandler)
-	}
+	// Unknown /api/* paths must stay a 404 the client can parse. Without this
+	// catch-all they fall through to the SPA handler, which answers 200 with
+	// index.html — an API call that looks like a puzzling parse error.
+	//
+	// This also absorbs wrong-method requests (POST /api/version and the
+	// like): a pattern that matches the path but not the method resolves here
+	// rather than to ServeMux's built-in plain-text 405, so the UI gets JSON
+	// either way.
+	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	})
 
 	// ─── MCP Store API ──────────────────────────────────────────
 	s.registerMcpStoreRoutes()
@@ -147,34 +159,8 @@ func (s *Server) buildRoutes() {
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
 
-	// Everything else (/, /missions, /settings, /app.js, etc.)
+	// Everything else (/, /settings, /memories, /workflows, /assets/*, …)
 	s.mux.HandleFunc("/", s.serveSPA)
-}
-
-// configAPIHandler forwards requests to the config API HTTP handler.
-func (s *Server) configAPIHandler(w http.ResponseWriter, r *http.Request) {
-	s.configAPI.HTTPHandler().ServeHTTP(w, r)
-}
-
-// toolsAPIProxyPaths are the control-server patterns forwarded to the tools
-// API mux. Every path that mux serves needs an entry here: anything missing falls
-// through to the SPA catch-all, which answers 200 with index.html. For an API
-// call that looks like a puzzling parse error, and for a websocket it fails the
-// handshake with "Unexpected response code: 200" — how /missions/engram/ws
-// stayed broken while /missions/ws worked. The /missions/ws proxy died with the
-// missions UI; the remaining prefixes are a frozen contract with the frontend.
-var toolsAPIProxyPaths = []string{
-	"/missions/api/",
-	"/missions/engram/ws",
-}
-
-// toolsAPIHandler strips the /missions prefix and forwards to the tools API.
-func (s *Server) toolsAPIHandler(w http.ResponseWriter, r *http.Request) {
-	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/missions")
-	if r.URL.Path == "" {
-		r.URL.Path = "/"
-	}
-	s.tools.Handler().ServeHTTP(w, r)
 }
 
 // healthHandler returns server health status.
@@ -375,9 +361,6 @@ func guessContentType(path string) string {
 func (s *Server) Start() error {
 	log.Printf("Starting control server on port %d", s.port)
 
-	// Start the config API hub in background
-	go s.configAPI.Hub().Run()
-
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
 	if err != nil {
 		s.startErr = fmt.Errorf("failed to listen on port %d: %w", s.port, err)
@@ -385,7 +368,7 @@ func (s *Server) Start() error {
 		return s.startErr
 	}
 
-	s.httpSrv = &http.Server{Handler: s.mux}
+	s.httpSrv = &http.Server{Handler: chain(s.mux)}
 
 	// Signal port is ready
 	close(s.portReady)

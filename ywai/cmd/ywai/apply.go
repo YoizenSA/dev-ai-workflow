@@ -38,7 +38,6 @@ type managedPlan struct {
 	InstallProfiles bool
 	WriteAgentsMd   bool
 	InstallPlugins  bool
-	RemoveQuota     bool
 	SetDefaultAgent bool
 	SetDefaultModel bool
 	ApplyOverrides  bool
@@ -54,7 +53,6 @@ func planManaged(mode applyMode) managedPlan {
 		InstallProfiles: true,
 		WriteAgentsMd:   true,
 		InstallPlugins:  true,
-		RemoveQuota:     true,
 		SetDefaultAgent: true,
 		SetDefaultModel: true,
 		ApplyOverrides:  true,
@@ -75,8 +73,6 @@ type applyOpts struct {
 	OverwriteAgents bool
 	Autostart       bool
 
-	// SkipGentleAIBinary skips gentlai.Install/Upgrade (caller already did it).
-	SkipGentleAIBinary bool
 	// RestartServeIfRunning restarts the control server only when it was up.
 	RestartServeIfRunning bool
 }
@@ -160,9 +156,6 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++
 	}
 	if plan.InstallPlugins {
-		n++
-	}
-	if plan.RemoveQuota {
 		n++
 	}
 	if plan.SetDefaultAgent {
@@ -328,12 +321,6 @@ func applyManaged(o applyOpts) applyResult {
 	if plan.InstallPlugins {
 		steps.next("Installing plugins + MCP + companion CLIs")
 		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallMetaMCP, o.InstallPonytail)
-	}
-
-	// ── cleanup ───────────────────────────────────────────────────────────
-	if plan.RemoveQuota {
-		steps.next("Removing deprecated opencode-quota plugin")
-		removeQuotaForAgents(agents, o.Opts.DryRun)
 	}
 
 	// ── default agent ─────────────────────────────────────────────────────

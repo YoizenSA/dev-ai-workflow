@@ -27,8 +27,8 @@ func writeOpenCodeConfig(t *testing.T, home, content string) string {
 
 // TestApplyAgentModel_FallsThroughToMarkdownWithoutAgentMap pins P0-1: an
 // opencode.json without an agent map must not stop the markdown update.
-// MigrateOpenCodeAgents drains the JSON, so markdown-only agents are the
-// normal case.
+// ywai installs agents as markdown, so markdown-only agents are the normal
+// case.
 func TestApplyAgentModel_FallsThroughToMarkdownWithoutAgentMap(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)

@@ -103,8 +103,8 @@ func NewLocalClient() *LocalClient {
 	}
 }
 
-// NewLocalClientWithPaths creates a LocalClient with explicit paths (for testing).
-func NewLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
+// newLocalClientWithPaths creates a LocalClient with explicit paths (for testing).
+func newLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
 	return &LocalClient{
 		opencodeConfig: configPath,
 		agentsDir:      agentsDir,
@@ -280,7 +280,8 @@ func (c *LocalClient) Status(_ context.Context) (ClientStatus, error) {
 	return ClientStatus{Connected: false}, nil
 }
 
-// Sessions returns a stub that always errors — local config does not support sessions.
+// Sessions returns nil — local config does not support sessions. Callers
+// nil-check this and report that the opencode server is required.
 func (c *LocalClient) Sessions() SessionAPI {
-	return &localSessionAPI{}
+	return nil
 }

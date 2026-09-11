@@ -32,7 +32,7 @@ export function getQuestionReplyURL(sessionId: string, requestId: string): strin
 // toolsApi.startOpencode but lives here so the chat view can import it from
 // the same module as its other endpoints.
 export async function startOpencode(): Promise<{ status: string; message: string; pid?: number }> {
-  const resp = await fetch("/missions/api/opencode/start", { method: "POST" });
+  const resp = await fetch("/api/opencode/start", { method: "POST" });
   if (!resp.ok) {
     throw new Error(`Failed to start opencode (HTTP ${resp.status})`);
   }

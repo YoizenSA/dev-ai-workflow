@@ -215,31 +215,6 @@ func RulesFromPermissionMap(baseName string, perms map[string]string) []Permissi
 	return rules
 }
 
-// ApplySkillAllowlist replaces a broad skill:* allow with deny-all plus
-// per-id allows. Empty ids leave rules unchanged. Last match wins, so
-// the specific allows must come after the deny.
-func ApplySkillAllowlist(rules []PermissionRule, ids []string) []PermissionRule {
-	if len(ids) == 0 {
-		return rules
-	}
-	out := make([]PermissionRule, 0, len(rules)+len(ids)+1)
-	for _, r := range rules {
-		if r.Action == "skill" {
-			continue
-		}
-		out = append(out, r)
-	}
-	out = append(out, PermissionRule{Action: "skill", Resource: "*", Effect: EffectDeny})
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		out = append(out, PermissionRule{Action: "skill", Resource: id, Effect: EffectAllow})
-	}
-	return out
-}
-
 // SubagentRulesFromTaskMap converts a v1 delegation task map (agent id →
 // effect) into ordered subagent rules: the "*" catch-all first, specific ids
 // after, so an explicit entry always overrides the catch-all.
@@ -511,58 +486,6 @@ func splitYAMLKV(s string) (string, string, bool) {
 	val := strings.TrimSpace(s[idx+1:])
 	val = strings.Trim(val, `"'`)
 	return key, val, key != ""
-}
-
-// LegacyPermissionBlockToRules converts a v1 frontmatter `permission:` map
-// into broad v2 rules so a legacy file's tool posture survives a delegation
-// injection. Scalar children map to resource-"*" rules; a nested bash block
-// contributes its broad ("*") value as the shell rule and its per-command
-// patterns as additional shell rules.
-func LegacyPermissionBlockToRules(fm string) []PermissionRule {
-	lines := strings.Split(fm, "\n")
-	start := -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "permission:" {
-			start = i + 1
-			break
-		}
-	}
-	if start < 0 {
-		return nil
-	}
-	var rules []PermissionRule
-	childIndent := -1
-	for i := start; i < len(lines); i++ {
-		line := lines[i]
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		ind := leadingSpaces(line)
-		if childIndent == -1 {
-			childIndent = ind
-		}
-		if ind < childIndent {
-			break // block ended
-		}
-		k, v, ok := splitYAMLKV(strings.TrimSpace(line))
-		if !ok {
-			continue
-		}
-		if ind > childIndent {
-			// Nested bash pattern (4-space under "bash:"): carried over as a
-			// shell rule so deny patterns survive the conversion.
-			continue
-		}
-		if v == "" {
-			continue // nested header (e.g. "bash:") — children handled below
-		}
-		action := V2ActionForInternalKey(k)
-		if action == "" {
-			continue
-		}
-		rules = append(rules, PermissionRule{Action: action, Resource: "*", Effect: v})
-	}
-	return rules
 }
 
 // RulesToJSONShape converts rules to the []map[string]any shape written into

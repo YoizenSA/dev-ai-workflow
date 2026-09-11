@@ -2,7 +2,6 @@ package gentlai
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,28 +31,6 @@ func TestDoctor_DoesNotRequireGentleAIBinary(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "gentle-ai is not installed") {
 		t.Fatalf("Doctor() must not require gentle-ai binary, got %v", err)
-	}
-}
-
-// ─── Install must not install the gentle-ai binary ────────────────────────
-
-// TestInstall_GentleAIBinaryUntouched is a regression guard: the public
-// Install() entry point must NOT install the gentle-ai binary. Even when
-// gentle-ai is missing on PATH, calling Install() must leave `gentle-ai`
-// off PATH. (Slice 1 acceptance: ywai install does not install gentle-ai.)
-func TestInstall_GentleAIBinaryUntouched(t *testing.T) {
-	if _, err := exec.LookPath("gentle-ai"); err == nil {
-		t.Skip("gentle-ai is on PATH; this test only proves the no-op when absent")
-	}
-	// Any error that is NOT a "gentle-ai installed" side effect is fine.
-	// The hard contract: after Install(), gentle-ai must still be absent.
-	if err := Install(); err != nil {
-		// Surface the error for the dev to inspect, but the assertion below
-		// is the real one.
-		t.Logf("Install() returned %v (acceptable as long as binary is untouched)", err)
-	}
-	if _, err := exec.LookPath("gentle-ai"); err == nil {
-		t.Fatal("Install() must not install the gentle-ai binary")
 	}
 }
 
@@ -126,23 +103,6 @@ func TestInstallEngram_NoGentleAIRequisite(t *testing.T) {
 		if strings.Contains(string(src), forbidden) {
 			t.Fatalf("gentlai.go must not exec the gentle-ai binary; found %q", forbidden)
 		}
-	}
-}
-
-// ─── Upgrade must not shell to gentle-ai upgrade ──────────────────────────
-
-// TestUpgrade_NoGentleAIUpgrade is a regression guard: the public Upgrade()
-// function must not exec `gentle-ai upgrade`. Slice 1 acceptance: ywai update
-// does not run gentle-ai upgrade; it may still update ywai/engram.
-func TestUpgrade_NoGentleAIUpgrade(t *testing.T) {
-	if _, err := exec.LookPath("gentle-ai"); err == nil {
-		t.Skip("gentle-ai is on PATH; this test only proves the no-op when absent")
-	}
-	// After decouple, Upgrade() must NOT return "gentle-ai is not installed"
-	// because it must not depend on gentle-ai at all.
-	err := Upgrade()
-	if err != nil && strings.Contains(err.Error(), "gentle-ai is not installed") {
-		t.Fatalf("Upgrade() must not depend on gentle-ai, got %v", err)
 	}
 }
 

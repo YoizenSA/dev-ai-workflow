@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -14,154 +15,78 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// InstallOpenCode injects agent profiles into opencode.json (or opencode.jsonc).
-// If the file does not exist, it is created. The entry shape follows the active
-// OpenCode flavor: v2 writes an `agents` map with `system` + a `permissions`
-// rule array; v1 writes an `agent` map with `prompt` + a `permission` map. The
-// two keys are never left together.
-func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error {
-	root := map[string]any{}
-
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
+// mapToAgentProfile converts a map from JSON to AgentProfile. Handles both
+// the v1 entry shape (prompt + permission/tools maps) and the v2 shape
+// (system + permissions rule array).
+func mapToAgentProfile(name string, m map[string]any) AgentProfile {
+	prompt := ""
+	if p, ok := m["prompt"].(string); ok {
+		prompt = p
+	}
+	// v2 renamed prompt → system.
+	if p, ok := m["system"].(string); ok && prompt == "" {
+		prompt = p
 	}
 
-	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
+	description := ""
+	if d, ok := m["description"].(string); ok {
+		description = d
 	}
 
-	targetKey, otherKey := openCodeAgentKeys()
-	_, hadOtherKey := root[otherKey]
-	agents := openCodeJSONAgents(root, targetKey, otherKey)
+	mode := "primary"
+	if md, ok := m["mode"].(string); ok {
+		mode = md
+	}
 
-	installed := 0
-	for name, profile := range profiles {
-		if existing, exists := agents[name]; exists {
-			// Migrate agents that were injected with frontmatter in the prompt (old bug).
-			existingMap, ok := existing.(map[string]any)
+	permission := map[string]string{"read": "allow", "edit": "allow", "write": "allow", "bash": "allow"}
+	if rules, ok := m["permissions"].([]any); ok {
+		// v2 rule array → internal map (subagent rules are the delegation
+		// graph, re-injected separately, so skip them here).
+		for _, raw := range rules {
+			r, ok := raw.(map[string]any)
 			if !ok {
 				continue
 			}
-			existingPrompt := openCodeJSONSystem(existingMap)
-			if !strings.HasPrefix(existingPrompt, "---") {
+			action, _ := r["action"].(string)
+			resource, _ := r["resource"].(string)
+			effect, _ := r["effect"].(string)
+			if action == "subagent" || resource != "*" || effect == "" {
 				continue
 			}
-			agents[name] = openCodeJSONEntry(name, profile)
-			installed++
-			continue
+			key := NormalizePermissionKey(action)
+			if key == "edit" {
+				permission["edit"] = effect
+				permission["write"] = effect
+			} else {
+				permission[key] = effect
+			}
 		}
-
-		agents[name] = openCodeJSONEntry(name, profile)
-		installed++
-	}
-
-	if installed == 0 && !hadOtherKey {
-		return nil
-	}
-
-	// Never leave both keys in the file: the target key is canonical, and the
-	// other key was folded in above.
-	root[targetKey] = agents
-	delete(root, otherKey)
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-
-	fmt.Printf("  Installed %d agent profiles\n", installed)
-	return nil
-}
-
-// openCodeAgentKeys returns the canonical agent map key for the active flavor,
-// and the key whose entries must be folded in and removed.
-func openCodeAgentKeys() (target, other string) {
-	if agent.OpenCodeIsV2() {
-		return "agents", "agent"
-	}
-	return "agent", "agents"
-}
-
-// openCodeJSONAgents folds both agent map keys into one target-shaped map. The
-// target key is read first because it is canonical; an entry under the other
-// key only fills a name the target does not already define. A `model` override
-// survives the fold.
-func openCodeJSONAgents(root map[string]any, targetKey, otherKey string) map[string]any {
-	agents := map[string]any{}
-	fold := func(key string) {
-		raw, ok := root[key].(map[string]any)
-		if !ok {
-			return
+	} else if perm, ok := m["permission"].(map[string]any); ok {
+		for k, v := range perm {
+			if val, ok := v.(string); ok {
+				permission[k] = val
+			}
 		}
-		for name, entry := range raw {
-			if _, exists := agents[name]; exists {
-				continue
+	} else if t, ok := m["tools"].(map[string]any); ok {
+		// Legacy: convert tools bool map to permission strings
+		for k, v := range t {
+			if enabled, ok := v.(bool); ok {
+				if enabled {
+					permission[k] = "allow"
+				} else {
+					permission[k] = "deny"
+				}
 			}
-			m, ok := entry.(map[string]any)
-			if !ok {
-				agents[name] = entry
-				continue
-			}
-			converted := normalizeOpenCodeJSONAgent(name, m)
-			if model, ok := m["model"]; ok {
-				converted["model"] = model
-			}
-			agents[name] = converted
 		}
 	}
-	fold(targetKey)
-	fold(otherKey)
-	return agents
-}
 
-func normalizeOpenCodeJSONAgent(name string, m map[string]any) map[string]any {
-	return openCodeJSONEntry(name, mapToAgentProfile(name, m))
-}
-
-// openCodeJSONEntry builds the agent entry for the active flavor.
-func openCodeJSONEntry(name string, profile AgentProfile) map[string]any {
-	if agent.OpenCodeIsV2() {
-		return openCodeJSONEntryV2(name, profile)
+	return AgentProfile{
+		Name:        name,
+		Description: description,
+		Prompt:      prompt,
+		Permission:  permission,
+		Mode:        mode,
 	}
-	return openCodeJSONEntryV1(name, profile)
-}
-
-// openCodeJSONEntryV1 builds the v1 entry: a `prompt` string and a flat
-// `permission` map. Buckets are expanded here for the same reason the markdown
-// builder expands them — opencode ignores bare bucket names.
-func openCodeJSONEntryV1(name string, profile AgentProfile) map[string]any {
-	_ = name
-	return map[string]any{
-		"mode":        profile.Mode,
-		"description": profile.Description,
-		"prompt":      profile.Prompt,
-		"permission":  ExpandPermissionBuckets(profile.Permission),
-	}
-}
-
-// openCodeJSONEntryV2 builds the v2 entry: `system` is the prompt, and
-// `permissions` is the ordered rule array v2 enforces.
-func openCodeJSONEntryV2(name string, profile AgentProfile) map[string]any {
-	return map[string]any{
-		"mode":        profile.Mode,
-		"description": profile.Description,
-		"system":      profile.Prompt,
-		"permissions": RulesToJSONShape(RulesFromPermissionMap(name, profile.Permission)),
-	}
-}
-
-func openCodeJSONSystem(m map[string]any) string {
-	if s, ok := m["system"].(string); ok && s != "" {
-		return s
-	}
-	if s, ok := m["prompt"].(string); ok {
-		return s
-	}
-	return ""
 }
 
 // InstallClaude writes agent .md files to ~/.claude/agents/.
@@ -204,10 +129,31 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	return nil
 }
 
-// piToolsString renders the enabled tools from a parsed profile as a
-// lowercase comma-separated list of PI.dev-style tool names, in stable order.
-func piToolsString(perms map[string]string) string {
-	order := []struct{ oc, pi string }{
+// toolsMapping is one ordered entry of a host tool table: the opencode
+// permission key and the host's display name for it.
+type toolsMapping struct {
+	oc   string
+	host string
+}
+
+// toolsString renders the enabled tools from a parsed profile as a
+// comma-separated list of host tool names, in table order.
+func toolsString(perms map[string]string, table []toolsMapping, fallback string) string {
+	var names []string
+	for _, t := range table {
+		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
+			names = append(names, t.host)
+		}
+	}
+	if len(names) == 0 {
+		return fallback
+	}
+	return strings.Join(names, ", ")
+}
+
+var (
+	// piToolsTable orders PI.dev tool names (lowercase).
+	piToolsTable = []toolsMapping{
 		{"read", "read"},
 		{"edit", "edit"},
 		{"write", "write"},
@@ -218,16 +164,50 @@ func piToolsString(perms map[string]string) string {
 		{"websearch", "websearch"},
 	}
 
-	var names []string
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			names = append(names, t.pi)
-		}
+	// ompToolsTable maps opencode permission keys to OMP tool names.
+	ompToolsTable = []toolsMapping{
+		{"read", "read"},
+		{"edit", "edit"},
+		{"write", "write"},
+		{"bash", "bash"},
+		{"glob", "glob"},
+		{"grep", "grep"},
+		{"websearch", "web_search"},
+		{"task", "task"},
+		{"todowrite", "todo"},
+		{"question", "ask"},
 	}
-	if len(names) == 0 {
-		return "read, glob, grep"
+
+	// claudeToolsTable maps opencode tool names to Claude display names.
+	claudeToolsTable = []toolsMapping{
+		{"read", "Read"},
+		{"edit", "Edit"},
+		{"write", "Write"},
+		{"bash", "Bash"},
+		{"glob", "Glob"},
+		{"grep", "Grep"},
+		{"lsp", "LSP"},
+		{"ast_grep", "ASTGrep"},
+		{"websearch", "WebSearch"},
+		{"code_search", "CodeSearch"},
 	}
-	return strings.Join(names, ", ")
+)
+
+// piToolsString renders the enabled tools from a parsed profile as a
+// lowercase comma-separated list of PI.dev-style tool names, in stable order.
+func piToolsString(perms map[string]string) string {
+	return toolsString(perms, piToolsTable, "read, glob, grep")
+}
+
+// ompToolsString maps ywai permissions to OMP tool names (lowercase, comma-separated).
+func ompToolsString(perms map[string]string) string {
+	return toolsString(perms, ompToolsTable, "read, glob, grep")
+}
+
+// claudeToolsString renders the enabled tools from a parsed profile as a
+// comma-separated list of Claude-style tool names, in a stable order.
+func claudeToolsString(perms map[string]string) string {
+	return toolsString(perms, claudeToolsTable, "Read, Glob, Grep")
 }
 
 // InstallPi writes agent .md files to ~/.pi/agent/agents/.
@@ -342,36 +322,6 @@ func installPiStyleAgents(
 	return nil
 }
 
-// ompToolsString maps ywai permissions to OMP tool names (lowercase, comma-separated).
-func ompToolsString(perms map[string]string) string {
-	order := []struct{ oc, omp string }{
-		{"read", "read"},
-		{"edit", "edit"},
-		{"write", "write"},
-		{"bash", "bash"},
-		{"glob", "glob"},
-		{"grep", "grep"},
-		{"websearch", "web_search"},
-		{"task", "task"},
-		{"todowrite", "todo"},
-		{"question", "ask"},
-	}
-	var names []string
-	seen := map[string]bool{}
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			if !seen[t.omp] {
-				names = append(names, t.omp)
-				seen[t.omp] = true
-			}
-		}
-	}
-	if len(names) == 0 {
-		return "read, glob, grep"
-	}
-	return strings.Join(names, ", ")
-}
-
 // InstallVSCode writes agent profiles as .instructions.md files to VS Code Copilot prompts dir.
 // VS Code Copilot reads *.instructions.md files from the User/prompts/ directory.
 // Users activate them from Copilot Chat with @workspace or participant selection.
@@ -413,35 +363,6 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, promptsDir)
 	}
 	return nil
-}
-
-// claudeToolsString renders the enabled tools from a parsed profile as a
-// comma-separated list of Claude-style tool names, in a stable order.
-func claudeToolsString(perms map[string]string) string {
-	// Ordered opencode tool name -> Claude display name.
-	order := []struct{ oc, claude string }{
-		{"read", "Read"},
-		{"edit", "Edit"},
-		{"write", "Write"},
-		{"bash", "Bash"},
-		{"glob", "Glob"},
-		{"grep", "Grep"},
-		{"lsp", "LSP"},
-		{"ast_grep", "ASTGrep"},
-		{"websearch", "WebSearch"},
-		{"code_search", "CodeSearch"},
-	}
-
-	var names []string
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			names = append(names, t.claude)
-		}
-	}
-	if len(names) == 0 {
-		return "Read, Glob, Grep"
-	}
-	return strings.Join(names, ", ")
 }
 
 // toolStringEnabled reports whether a flat host tool string (Claude/PI) should
@@ -536,7 +457,6 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 	// the file path, so a nested copy (e.g. core/orchestrator.md) registers as
 	// "core/orchestrator" and shadows the canonical flat "orchestrator" id.
 	removeLegacyGroupDirs(agentsDir)
-	RemoveAgentBackups(agentsDir)
 	PruneUnlistedAgents(agentsDir, profiles)
 
 	if err := WriteGroupSidecar(agentsDir, profiles); err != nil {
@@ -646,168 +566,10 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
-// retiredConfigPaths are artifacts ywai used to write into a host's config
-// directory and has since dropped, relative to that directory. They are swept
-// on every install and update so a retired mechanism does not keep running
-// from an old release.
-//
-// `.atl/` and `skills/skill-registry` held the pre-v2 skill registry: a
-// generated index of SKILL.md paths for orchestrators to hand to sub-agents.
-// OpenCode v2 injects <available_skills> and loads skills by id, so the
-// registry survived only as a stale index pointing at files that no longer
-// exist — worse than no index, since an agent follows the dead path, fails,
-// and continues degraded.
-var retiredConfigPaths = []string{
-	".atl",
-	filepath.Join("skills", "skill-registry"),
-}
-
-// retiredSkillDirNames are host skill folders that rewrite .atl/ on every run.
-// OpenCode v2 injects skills natively; these directories must not come back.
-var retiredSkillDirNames = []string{"skill-registry"}
-
-func wellKnownSkillRoots(home string) []string {
-	if home == "" {
-		return nil
-	}
-	return []string{
-		filepath.Join(home, ".claude", "skills"),
-		filepath.Join(home, ".agents", "skills"),
-		filepath.Join(home, ".config", "agents", "skills"),
-		filepath.Join(home, ".config", "opencode", "skills"),
-		filepath.Join(home, ".kimi", "skills"),
-		filepath.Join(home, ".openclaw", "skills"),
-		filepath.Join(home, ".pi", "agent", "skills"),
-		filepath.Join(home, ".cursor", "skills"),
-		filepath.Join(home, ".codex", "skills"),
-		filepath.Join(home, ".gemini", "skills"),
-		filepath.Join(home, ".copilot", "skills"),
-		filepath.Join(home, ".codeium", "windsurf", "skills"),
-	}
-}
-
-func removeExisting(path string) bool {
-	if path == "" {
-		return false
-	}
-	if _, err := os.Lstat(path); err != nil {
-		return false
-	}
-	if err := os.RemoveAll(path); err != nil {
-		fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
-		return false
-	}
-	return true
-}
-
-func removeAtlDirs(root string) []string {
-	if root == "" {
-		return nil
-	}
-	var removed []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if name == ".git" || name == "node_modules" || name == "vendor" {
-			return filepath.SkipDir
-		}
-		if name == ".atl" {
-			if removeExisting(path) {
-				removed = append(removed, path)
-			}
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	return removed
-}
-
-// SweepRetiredSkillRegistry deletes skill-registry installs under well-known
-// host skill roots and every `.atl` directory under repoRoot. Missing paths
-// are skipped. The sweep is idempotent.
-func SweepRetiredSkillRegistry(home, repoRoot string) []string {
-	var removed []string
-	for _, root := range wellKnownSkillRoots(home) {
-		for _, name := range retiredSkillDirNames {
-			p := filepath.Join(root, name)
-			if removeExisting(p) {
-				removed = append(removed, p)
-			}
-		}
-		if p := filepath.Join(root, ".atl"); removeExisting(p) {
-			removed = append(removed, p)
-		}
-	}
-	for _, dir := range []string{
-		filepath.Join(home, ".config", "opencode"),
-		filepath.Join(home, ".claude"),
-		filepath.Join(home, ".ywai"),
-	} {
-		p := filepath.Join(dir, ".atl")
-		if removeExisting(p) {
-			removed = append(removed, p)
-		}
-	}
-	removed = append(removed, removeAtlDirs(repoRoot)...)
-	return removed
-}
-
-// RemoveRetiredConfigArtifacts deletes retiredConfigPaths from configDir and
-// returns the relative paths it removed. Missing paths are not an error: the
-// sweep runs on every install and is a no-op once the host is clean.
-func RemoveRetiredConfigArtifacts(configDir string) []string {
-	if configDir == "" {
-		return nil
-	}
-	var removed []string
-	for _, rel := range retiredConfigPaths {
-		path := filepath.Join(configDir, rel)
-		if _, err := os.Lstat(path); err != nil {
-			continue
-		}
-		if err := os.RemoveAll(path); err != nil {
-			fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
-			continue
-		}
-		removed = append(removed, rel)
-	}
-	return removed
-}
-
-// retiredAgentBases are agents removed from ywai that may still be installed
-// on a user's hosts from a previous release. The install sweeps them so stale
-// files don't keep showing up as runnable agents after an upgrade.
-var retiredAgentBases = []string{"qa-finder"}
-
-// RemoveRetiredAgents deletes installed agent markdown for retired bases from
-// agentsDir. Returns the number of files removed.
-func RemoveRetiredAgents(agentsDir string) int {
-	removed := 0
-	for _, base := range retiredAgentBases {
-		if err := os.Remove(filepath.Join(agentsDir, base+".md")); err == nil {
-			removed++
-		}
-	}
-	return removed
-}
-
-// agentBackupRootFn is the directory OpenCode/Claude/Cursor/PI/OMP never scan.
+// openCodeNativePermissionKeys are the tools opencode v1 gates by name. Every
 // Hosts only read their own agents/ folders; ~/.ywai/agent-backups stays private.
 var agentBackupRootFn = func() string {
 	return filepath.Join(config.DataDir(), "agent-backups")
-}
-
-// SetAgentBackupRootForTest redirects the stash directory. Restores the previous
-// resolver when the returned function is called.
-func SetAgentBackupRootForTest(dir string) func() {
-	prev := agentBackupRootFn
-	agentBackupRootFn = func() string { return dir }
-	return func() { agentBackupRootFn = prev }
 }
 
 // WriteAgentBackup stores a pre-overwrite snapshot under ~/.ywai/agent-backups,
@@ -830,49 +592,6 @@ func backupDestPath(name string) (string, error) {
 		dest = filepath.Join(root, fmt.Sprintf("%s.%d.bak", strings.TrimSuffix(name, ".bak"), time.Now().UnixNano()))
 	}
 	return dest, nil
-}
-
-// RemoveAgentBackups moves leftover *.bak files out of a host agents directory
-// into ~/.ywai/agent-backups so they are not enumerated as agents.
-func RemoveAgentBackups(agentsDir string) int {
-	entries, err := os.ReadDir(agentsDir)
-	if err != nil {
-		return 0
-	}
-	moved := 0
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".bak") {
-			continue
-		}
-		src := filepath.Join(agentsDir, name)
-		dest, err := backupDestPath(name)
-		if err != nil {
-			fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
-			continue
-		}
-		if err := os.Rename(src, dest); err != nil {
-			// Cross-device: copy then remove.
-			data, readErr := os.ReadFile(src)
-			if readErr != nil {
-				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
-				continue
-			}
-			if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
-				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, writeErr)
-				continue
-			}
-			if rmErr := os.Remove(src); rmErr != nil {
-				fmt.Printf("  Warning: backup copied but source remains %s: %v\n", name, rmErr)
-				continue
-			}
-		}
-		moved++
-	}
-	return moved
 }
 
 // RemoveAgentsWithoutDescription deletes every flat .md in agentsDir whose
@@ -1418,7 +1137,6 @@ func InstallPiTeamProfiles(agentsDir string, profiles map[string]AgentProfile, o
 
 		permTools := convertPermissionsToPiTools(profile.Permission)
 		tools = append(tools, permTools...)
-		sort.Strings(tools)
 		tools = uniqueSortedStrings(tools)
 
 		tp := TeammateProfile{
@@ -1447,18 +1165,10 @@ func InstallPiTeamProfiles(agentsDir string, profiles map[string]AgentProfile, o
 	return nil
 }
 
-// uniqueSortedStrings deduplicates a sorted string slice in place.
+// uniqueSortedStrings sorts s in place and removes adjacent duplicates.
 func uniqueSortedStrings(s []string) []string {
-	if len(s) < 2 {
-		return s
-	}
-	result := make([]string, 0, len(s))
-	for i, v := range s {
-		if i == 0 || v != s[i-1] {
-			result = append(result, v)
-		}
-	}
-	return result
+	slices.Sort(s)
+	return slices.Compact(s)
 }
 
 // legacyAgentFrontmatterKeys are keys ywai used to emit that opencode v2 does
@@ -1535,85 +1245,4 @@ func stripLegacyKeysFromFrontmatter(content string) (string, bool) {
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n"), dirty
-}
-
-// retiredHookCommandMarker matches the UserPromptSubmit hook that regenerated
-// the skill registry on every prompt. Sweeping the .atl directories is not
-// enough while the hook that writes them still runs.
-const retiredHookCommandMarker = "skill-registry refresh"
-
-// RemoveRetiredHooks strips hook groups whose command runs the retired skill
-// registry from a Claude Code settings.json. Returns how many it removed, so
-// an unchanged file is never rewritten.
-func RemoveRetiredHooks(settingsPath string) int {
-	if settingsPath == "" {
-		return 0
-	}
-	root, err := config.ReadJSONC(settingsPath)
-	if err != nil {
-		return 0
-	}
-	hooks, ok := root["hooks"].(map[string]any)
-	if !ok {
-		return 0
-	}
-
-	removed := 0
-	for event, raw := range hooks {
-		groups, ok := raw.([]any)
-		if !ok {
-			continue
-		}
-		kept := make([]any, 0, len(groups))
-		for _, g := range groups {
-			if hookGroupRuns(g, retiredHookCommandMarker) {
-				removed++
-				continue
-			}
-			kept = append(kept, g)
-		}
-		if len(kept) == len(groups) {
-			continue
-		}
-		// An event left with no groups is noise; drop the key entirely.
-		if len(kept) == 0 {
-			delete(hooks, event)
-			continue
-		}
-		hooks[event] = kept
-	}
-
-	if removed == 0 {
-		return 0
-	}
-	if len(hooks) == 0 {
-		delete(root, "hooks")
-	}
-	if err := config.WriteJSONC(settingsPath, root); err != nil {
-		fmt.Printf("  Warning: failed to rewrite %s: %v\n", settingsPath, err)
-		return 0
-	}
-	return removed
-}
-
-// hookGroupRuns reports whether any command in a hook group contains marker.
-func hookGroupRuns(group any, marker string) bool {
-	g, ok := group.(map[string]any)
-	if !ok {
-		return false
-	}
-	entries, ok := g["hooks"].([]any)
-	if !ok {
-		return false
-	}
-	for _, e := range entries {
-		entry, ok := e.(map[string]any)
-		if !ok {
-			continue
-		}
-		if cmd, ok := entry["command"].(string); ok && strings.Contains(cmd, marker) {
-			return true
-		}
-	}
-	return false
 }

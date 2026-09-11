@@ -362,41 +362,6 @@ func TestServerSession_Wait_ContextCancelled(t *testing.T) {
 	}
 }
 
-// ─── Local Session Stub ────────────────────────────────────────────────────
-
-func TestLocalSessionAPI_AllMethodsError(t *testing.T) {
-	api := &localSessionAPI{}
-	ctx := context.Background()
-
-	if _, err := api.Create(ctx, SessionCreateOpts{}); err == nil {
-		t.Error("Create should error")
-	}
-	if _, err := api.Get(ctx, "x"); err == nil {
-		t.Error("Get should error")
-	}
-	if _, err := api.Status(ctx); err == nil {
-		t.Error("Status should error")
-	}
-	if _, err := api.Prompt(ctx, "x", PromptInput{}); err == nil {
-		t.Error("Prompt should error")
-	}
-	if err := api.Wait(ctx, "x"); err == nil {
-		t.Error("Wait should error")
-	}
-	if _, err := api.Messages(ctx, "x"); err == nil {
-		t.Error("Messages should error")
-	}
-	if err := api.Delete(ctx, "x"); err == nil {
-		t.Error("Delete should error")
-	}
-	if _, err := api.ListQuestions(ctx); err == nil {
-		t.Error("ListQuestions should error")
-	}
-	if err := api.ReplyQuestion(ctx, "x", "a"); err == nil {
-		t.Error("ReplyQuestion should error")
-	}
-}
-
 // ─── ServerClient.Sessions() ───────────────────────────────────────────────
 
 func TestServerClient_Sessions_ReturnsAPI(t *testing.T) {
@@ -412,15 +377,13 @@ func TestServerClient_Sessions_ReturnsAPI(t *testing.T) {
 	}
 }
 
-func TestLocalClient_Sessions_ReturnsStub(t *testing.T) {
+// TestLocalClient_Sessions_ReturnsNil pins the LocalClient contract: without a
+// server there is no session API, and consumers nil-check instead of calling
+// methods that could never succeed.
+func TestLocalClient_Sessions_ReturnsNil(t *testing.T) {
 	c := NewLocalClient()
-	sa := c.Sessions()
-	if sa == nil {
-		t.Fatal("Sessions() should not return nil")
-	}
-	// The stub should return ErrSessionsUnavailable for all calls
-	if err := sa.Wait(context.Background(), "x"); err == nil {
-		t.Error("local Sessions().Wait() should error")
+	if sa := c.Sessions(); sa != nil {
+		t.Fatal("Sessions() should return nil for the local client")
 	}
 }
 

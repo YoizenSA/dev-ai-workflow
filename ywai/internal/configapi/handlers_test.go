@@ -15,8 +15,9 @@ import (
 
 // setupTestServer serves the config API over httptest and returns its base URL.
 func setupTestServer(t *testing.T) string {
-	s := New(0)
-	ts := httptest.NewServer(s.HTTPHandler())
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandlers())
+	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	return ts.URL
 }
@@ -252,18 +253,6 @@ func TestValidPermissionValues_RejectsInvalid(t *testing.T) {
 	for _, v := range invalid {
 		if ValidPermissionValues[v] {
 			t.Errorf("value %q should NOT be valid", v)
-		}
-	}
-}
-
-func TestSortedPermissionKeys_IsSorted(t *testing.T) {
-	keys := sortedPermissionKeys()
-	if len(keys) != len(ValidPermissionKeys) {
-		t.Errorf("expected %d keys, got %d", len(ValidPermissionKeys), len(keys))
-	}
-	for i := 1; i < len(keys); i++ {
-		if keys[i-1] >= keys[i] {
-			t.Errorf("keys not sorted: %q >= %q", keys[i-1], keys[i])
 		}
 	}
 }

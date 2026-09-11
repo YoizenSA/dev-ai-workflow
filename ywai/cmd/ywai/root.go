@@ -314,38 +314,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 
 	if dryRun {
 		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
-		fmt.Println("  Would sweep retired skill-registry / .atl artifacts")
 		return
 	}
 
 	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	if removed := agentprofiles.SweepRetiredSkillRegistry(home, cwd); len(removed) > 0 {
-		fmt.Printf("  Removed %d retired skill-registry/.atl artifact(s)\n", len(removed))
-	}
-
-	// Deleting the .atl directories is only half the sweep: the hook that
-	// regenerated them ran on every prompt, so they came back on the next one.
-	for host, settings := range agent.SettingsPaths() {
-		if removed := agentprofiles.RemoveRetiredHooks(settings); removed > 0 {
-			fmt.Printf("  [%s] Removed %d retired skill-registry hook(s)\n", host, removed)
-		}
-	}
 
 	for _, a := range agents {
-		// Sweep the SDD assets `gentle-ai sync` used to write into every host.
-		// ywai stopped shipping SDD, but dropping it from the install only stops
-		// new writes: hosts keep the old assets until something removes them.
-		// The Settings UI has a button for this, which means it only ever runs
-		// on the one machine whose owner opens that panel.
-		if a.SkillsDir != "" {
-			if removed, err := skills.RemoveSddAssets(a.SkillsDir); err != nil {
-				fmt.Printf("  [%s] Warning: SDD cleanup: %v\n", a.Name, err)
-			} else if len(removed) > 0 {
-				fmt.Printf("  [%s] Removed %d retired SDD asset(s)\n", a.Name, len(removed))
-			}
-		}
-
 		switch a.Name {
 		case "opencode":
 			configPath := ""
@@ -357,11 +331,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				continue
 			}
 			agentsDir := config.OpenCodeAgentsDir()
-
-			// Migrate existing agents from JSON to markdown
-			if err := agentprofiles.MigrateOpenCodeAgents(configPath, agentsDir); err != nil {
-				fmt.Printf("  [%s] Warning: migration failed: %v\n", a.Name, err)
-			}
 
 			// Install agents as markdown ONLY (no JSON fallback).
 			// OpenCodeAgentsDir may resolve to a host-managed location (Orca's
@@ -391,18 +360,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// the delegation filter sees only valid installed agents.
 			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
 
-			// Remove agents retired from ywai (e.g. qa-finder) still installed
-			// from a previous release.
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
-
-			// Same for retired config artifacts (the pre-v2 skill registry):
-			// dropping them from the source is not enough, they keep running on
-			// hosts until an install or update sweeps them.
-			if removed := agentprofiles.RemoveRetiredConfigArtifacts(filepath.Dir(agentsDir)); len(removed) > 0 {
-				fmt.Printf("  [%s] Removed retired artifacts: %s\n", a.Name, strings.Join(removed, ", "))
-			}
-
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json + agent markdown as v2 subagent
 			// triggers are rendered into each agent's markdown prompt body.
@@ -418,8 +375,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		case "claude-code":
 			agentsDir := filepath.Join(home, ".claude", "agents")
 			_ = agentprofiles.InstallClaude(agentsDir, profiles)
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
 
 		case "vscode-copilot":
 			promptsDir := agentprofiles.VSCodePromptsDir()
@@ -434,8 +389,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
 			}
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
 			teamProfilesDir := filepath.Join(home, ".pi", "agent")
 			if err := agentprofiles.InstallPiTeamProfiles(teamProfilesDir, profiles, overwriteAgents); err != nil {
 				fmt.Printf("  [%s] Warning: teammate profiles: %v\n", a.Name, err)
@@ -452,8 +405,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Core agent profiles installed → %s\n", a.Name, agentsDir)
 			}
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
 		}
 	}
 }
@@ -622,7 +573,7 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		supportsDelegationPlugin := isOpenCode
 		// vision-bridge and advisor carry v2 dual exports and their installers
 		// route to the auto-discovered plugins dir on v2, so both flavors get
-		// them. Only the v2 sweep of genuinely orphaned bundles is flavor-bound.
+		// them.
 		supportsVendoredPlugins := isOpenCode
 
 		if dryRun {
@@ -675,18 +626,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		}
 
-		if a.Name == "opencode" && agent.OpenCodeIsV2() {
-			// v2: strip the orphaned bundles an earlier install left behind.
-			// They are inert under the "plugin" key v2 ignores, but the next
-			// write moves the array to "plugins" and v2 would then try to load
-			// a bundle nothing maintains.
-			if removed, err := plugins.RemoveV1OnlyPlugins(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove orphaned plugins: %v\n", a.Name, err)
-			} else if removed > 0 {
-				fmt.Printf("  [%s] Removed %d orphaned plugin(s) (nothing maintains them)\n", a.Name, removed)
-			}
-		}
-
 		// ywai TUI logo (home_logo slot, click easter eggs). Unlike the
 		// opencode.json plugins above this one is not v1-only: it targets the
 		// TUI client config, which both flavors read — v1 as tui.json, v2 as
@@ -694,17 +633,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		if a.Name == "opencode" || a.Name == "kilocode" {
 			if err := plugins.InstallTuiLogo(configPath); err != nil {
 				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
-			}
-
-			// Sub-agent statusline: retired, and swept from configs that still
-			// carry it. opencode2 shows subagents natively — a Subagents panel
-			// in the sidebar and a count in the footer — off the same parent
-			// edge the delegation plugin writes, so the vendored one only
-			// duplicated the host in its own slots.
-			if removed, err := plugins.RemoveSubagentStatusline(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove sub-agent statusline: %v\n", a.Name, err)
-			} else if removed {
-				fmt.Printf("  [%s] Removed the vendored sub-agent statusline (opencode2 shows subagents natively)\n", a.Name)
 			}
 		}
 
@@ -754,12 +682,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				fmt.Printf("  [%s] Installed ponytail via Claude marketplace (%s)\n", a.Name, plugins.PonytailClaudePluginID)
 			} else {
 				fmt.Printf("  [%s] Removed incompatible ponytail OpenCode plugin\n", a.Name)
-			}
-		}
-
-		if a.Name == "opencode" {
-			if err := plugins.RemoveBrokenLegacyOpenCodePlugins(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove broken legacy plugins: %v\n", a.Name, err)
 			}
 		}
 
@@ -821,33 +743,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
 		fmt.Println("  Would install Graft CLI (`graft`)")
 		fmt.Println("  Would wire Graft MCP into opencode")
-	}
-}
-
-func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
-	agentSettingsPaths := agent.SettingsPaths()
-
-	for _, a := range agents {
-		// Only remove quota for opencode
-		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" {
-			continue
-		}
-
-		configPath, ok := agentSettingsPaths[a.Name]
-		if !ok || configPath == "" {
-			continue
-		}
-
-		if dryRun {
-			fmt.Printf("  [%s] Would remove opencode-quota plugin\n", a.Name)
-			continue
-		}
-
-		if err := plugins.RemoveQuota(configPath); err != nil {
-			fmt.Printf("  [%s] Warning: failed to remove opencode-quota: %v\n", a.Name, err)
-		} else {
-			fmt.Printf("  [%s] Removed opencode-quota plugin\n", a.Name)
-		}
 	}
 }
 

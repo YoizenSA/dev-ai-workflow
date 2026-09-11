@@ -162,15 +162,6 @@ func Detected(id ID) bool {
 	return false
 }
 
-// DetectedList returns Info for every known host.
-func DetectedList() []Info {
-	out := make([]Info, 0, len(All))
-	for _, id := range All {
-		out = append(out, Snapshot(id))
-	}
-	return out
-}
-
 // Snapshot builds capability + path info for one host.
 func Snapshot(id ID) Info {
 	info := Info{
@@ -220,36 +211,5 @@ func ParseID(s string) (ID, error) {
 		return OpenCode, nil // default runtime for the control plane
 	default:
 		return "", fmt.Errorf("unknown host %q (want opencode|pi|omp|claude-code)", s)
-	}
-}
-
-// AgentsDirs returns non-empty agent directories for hosts (for multi-list).
-func AgentsDirs(ids ...ID) []string {
-	if len(ids) == 0 {
-		ids = All
-	}
-	var out []string
-	for _, id := range ids {
-		d := AgentsDir(id)
-		if d == "" {
-			continue
-		}
-		if _, err := os.Stat(d); err == nil {
-			out = append(out, d)
-		}
-	}
-	return out
-}
-
-// WorkflowExportTarget maps a host to the workflows.Exporter target string.
-func WorkflowExportTarget(id ID) string {
-	switch id {
-	case Claude:
-		return "claude-code"
-	case Pi, OMP:
-		// Pi-style markdown agents (name/description/tools).
-		return "pi"
-	default:
-		return "opencode"
 	}
 }

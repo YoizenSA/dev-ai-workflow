@@ -30,7 +30,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("backups removed: %d\n", agentprofiles.RemoveAgentBackups(dir))
-	fmt.Printf("retired removed: %d\n", agentprofiles.RemoveRetiredAgents(dir))
 	fmt.Printf("ywai profiles written: %d → %s\n", len(profiles), dir)
 }

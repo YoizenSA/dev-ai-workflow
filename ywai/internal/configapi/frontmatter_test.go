@@ -46,59 +46,6 @@ func TestHeadingLevel(t *testing.T) {
 	}
 }
 
-func TestExtractMarkdownSection_DirectContent(t *testing.T) {
-	content, ok := extractMarkdownSection(sampleBody, "Delegation Rules", false)
-	if !ok {
-		t.Fatal("expected section to be found")
-	}
-	// Direct content stops before the "#### Mandatory..." sub-heading.
-	if strings.Contains(content, "4-file rule") {
-		t.Errorf("direct slice should not include sub-section, got:\n%s", content)
-	}
-	if !strings.Contains(content, "core principle") {
-		t.Errorf("expected direct body to contain 'core principle', got:\n%s", content)
-	}
-	if !strings.Contains(content, "| Action | Inline | Delegate |") {
-		t.Errorf("expected the table in direct content, got:\n%s", content)
-	}
-}
-
-func TestExtractMarkdownSection_WithSubsections(t *testing.T) {
-	content, ok := extractMarkdownSection(sampleBody, "Delegation Rules", true)
-	if !ok {
-		t.Fatal("expected section to be found")
-	}
-	// includeSubsections=true keeps nested headings.
-	if !strings.Contains(content, "4-file rule") {
-		t.Errorf("expected sub-section content, got:\n%s", content)
-	}
-	// But stops at the next same-level heading ("### Cost...").
-	if strings.Contains(content, "Cost and Context") {
-		t.Errorf("should not include sibling section, got:\n%s", content)
-	}
-}
-
-func TestExtractMarkdownSection_NotFound(t *testing.T) {
-	_, ok := extractMarkdownSection(sampleBody, "Nonexistent Section", false)
-	if ok {
-		t.Error("expected ok=false for a missing section")
-	}
-}
-
-func TestExtractMarkdownSection_StopsAtSiblingHeading(t *testing.T) {
-	content, ok := extractMarkdownSection(sampleBody, "Mandatory Delegation Triggers", true)
-	if !ok {
-		t.Fatal("expected sub-section found")
-	}
-	if !strings.Contains(content, "4-file rule") {
-		t.Errorf("expected trigger content, got:\n%s", content)
-	}
-	// "### Cost..." is a sibling (level 3 vs level 4) → stop boundary.
-	if strings.Contains(content, "Cost and Context") {
-		t.Errorf("should stop before sibling ### heading, got:\n%s", content)
-	}
-}
-
 func TestReplaceMarkdownSection_Existing(t *testing.T) {
 	newContent := "REPLACEMENT BODY\n| A | B |"
 	out := replaceMarkdownSection(sampleBody, "Delegation Rules", "###", newContent, false)
@@ -135,10 +82,38 @@ func TestReplaceMarkdownSection_AppendsWhenAbsent(t *testing.T) {
 	}
 }
 
+// directDelegationRulesSlice reads the direct (no-subsections) content of the
+// "### Delegation Rules" section: every line between that heading and the
+// next heading of any level, without the heading lines themselves.
+func directDelegationRulesSlice(body string) string {
+	lines := strings.Split(body, "\n")
+	start := -1
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "### Delegation Rules" {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	var out []string
+	for _, l := range lines[start:] {
+		if strings.HasPrefix(strings.TrimSpace(l), "#") {
+			break
+		}
+		out = append(out, l)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
 func TestReplaceMarkdownSection_RoundTrip(t *testing.T) {
-	original, _ := extractMarkdownSection(sampleBody, "Delegation Rules", false)
+	original := directDelegationRulesSlice(sampleBody)
+	if original == "" {
+		t.Fatal("could not read the Delegation Rules slice from sampleBody")
+	}
 	out := replaceMarkdownSection(sampleBody, "Delegation Rules", "###", original, false)
-	again, _ := extractMarkdownSection(out, "Delegation Rules", false)
+	again := directDelegationRulesSlice(out)
 	if strings.TrimSpace(again) != strings.TrimSpace(original) {
 		t.Errorf("round-trip mismatch:\nwant:\n%s\ngot:\n%s", original, again)
 	}

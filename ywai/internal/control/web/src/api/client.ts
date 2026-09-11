@@ -74,8 +74,8 @@ function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
 		return modelsClientInflight;
 	}
 	const path = force
-		? "/missions/api/opencode/models?refresh=1"
-		: "/missions/api/opencode/models";
+		? "/api/opencode/models?refresh=1"
+		: "/api/opencode/models";
 	const p = request<ModelsResponse>(path)
 		.then((data) => {
 			modelsClientCache = { at: Date.now(), data };
@@ -93,18 +93,18 @@ function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
 }
 
 // —— Tools API ——
-// Shared opencode/fs/refine endpoints. Served by internal/toolsapi behind the
-// historical /missions/api/ prefixes — that URL contract is frozen with the UI.
+// Shared opencode/fs/refine endpoints. Served by internal/toolsapi, registered
+// on the control server's mux under the flat /api/ prefix.
 
 export const toolsApi = {
 	// Models & Agents
 	// Client-side singleflight + TTL. Use force:true on Settings entry to kick
 	// a server-side background revalidate while still returning cache fast.
 	listModels: (opts?: { force?: boolean }) => listModelsCached(opts),
-	listAgents: () => request<AgentsResponse>("/missions/api/opencode/agents"),
+	listAgents: () => request<AgentsResponse>("/api/opencode/agents"),
 	startOpencode: () =>
 		request<{ status: string; message: string; pid?: number }>(
-			"/missions/api/opencode/start",
+			"/api/opencode/start",
 			{ method: "POST" },
 		),
 	opencodeStatus: () =>
@@ -112,22 +112,22 @@ export const toolsApi = {
 			connected: boolean;
 			source?: string;
 			error?: string;
-		}>("/missions/api/opencode/status"),
+		}>("/api/opencode/status"),
 
 	// File system browser
 	browseFS: (path?: string) =>
 		request<BrowseFSResponse>(
-			`/missions/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+			`/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
 		),
 	createFolder: (parentPath: string, name: string) =>
-		request<{ path: string }>("/missions/api/fs/mkdir", {
+		request<{ path: string }>("/api/fs/mkdir", {
 			method: "POST",
 			body: JSON.stringify({ parentPath, name }),
 		}),
 
 	// AI refinement
 	refineGoal: (goal: string, context?: string, model?: string) =>
-		request<{ refined: string }>("/missions/api/refine", {
+		request<{ refined: string }>("/api/refine", {
 			method: "POST",
 			body: JSON.stringify({ goal, context, model }),
 		}),
@@ -358,15 +358,15 @@ export const profilesApi = {
 
 export const memoriesApi = {
 	// Engram status
-	status: () => request<EngramStatus>("/missions/api/engram/status"),
+	status: () => request<EngramStatus>("/api/engram/status"),
 
 	// Observations
 	listObservations: (limit = 50) =>
 		request<{ observations: EngramObservation[] }>(
-			`/missions/api/engram/observations?limit=${limit}`,
+			`/api/engram/observations?limit=${limit}`,
 		).then((r) => r.observations ?? []),
 	getObservation: (id: string) =>
-		request<EngramObservation>(`/missions/api/engram/observations/${id}`),
+		request<EngramObservation>(`/api/engram/observations/${id}`),
 	updateObservation: (
 		id: string,
 		data: {
@@ -378,12 +378,12 @@ export const memoriesApi = {
 			topic_key?: string;
 		},
 	) =>
-		request<EngramObservation>(`/missions/api/engram/observations/${id}`, {
+		request<EngramObservation>(`/api/engram/observations/${id}`, {
 			method: "PATCH",
 			body: JSON.stringify(data),
 		}),
 	deleteObservation: (id: string) =>
-		fetch(`/missions/api/engram/observations/${id}`, {
+		fetch(`/api/engram/observations/${id}`, {
 			method: "DELETE",
 		}).then((r) => {
 			if (!r.ok) throw new Error(`${r.status}`);
@@ -395,7 +395,7 @@ export const memoriesApi = {
 		scope?: string;
 		project?: string;
 	}) =>
-		request<EngramObservation>("/missions/api/engram/save", {
+		request<EngramObservation>("/api/engram/save", {
 			method: "POST",
 			body: JSON.stringify(data),
 		}),
@@ -403,38 +403,38 @@ export const memoriesApi = {
 	// Search / stats / sessions / timeline / context
 	search: (q: string, limit = 50, type?: string) =>
 		request<{ observations: EngramObservation[] }>(
-			`/missions/api/engram/search?q=${encodeURIComponent(q)}&limit=${limit}${
+			`/api/engram/search?q=${encodeURIComponent(q)}&limit=${limit}${
 				type ? `&type=${encodeURIComponent(type)}` : ""
 			}`,
 		).then((r) => r.observations ?? []),
-	stats: () => request<EngramStats>("/missions/api/engram/stats"),
+	stats: () => request<EngramStats>("/api/engram/stats"),
 	listSessions: (limit = 50) =>
 		request<{ sessions: EngramSession[] }>(
-			`/missions/api/engram/sessions?limit=${limit}`,
+			`/api/engram/sessions?limit=${limit}`,
 		).then((r) => r.sessions ?? []),
 	deleteSession: (id: string) =>
-		fetch(`/missions/api/engram/sessions/${id}`, { method: "DELETE" }).then(
+		fetch(`/api/engram/sessions/${id}`, { method: "DELETE" }).then(
 			(r) => {
 				if (!r.ok) throw new Error(`${r.status}`);
 			},
 		),
 	listPrompts: (limit = 100) =>
 		request<{ prompts: EngramPrompt[] }>(
-			`/missions/api/engram/prompts?limit=${limit}`,
+			`/api/engram/prompts?limit=${limit}`,
 		).then((r) => r.prompts ?? []),
 	deletePrompt: (id: string) =>
-		fetch(`/missions/api/engram/prompts/${id}`, { method: "DELETE" }).then(
+		fetch(`/api/engram/prompts/${id}`, { method: "DELETE" }).then(
 			(r) => {
 				if (!r.ok) throw new Error(`${r.status}`);
 			},
 		),
 	exportAll: async (): Promise<Blob> => {
-		const res = await fetch("/missions/api/engram/export");
+		const res = await fetch("/api/engram/export");
 		if (!res.ok) throw new Error(`${res.status}`);
 		return res.blob();
 	},
 	importData: async (file: File): Promise<EngramImportResult> => {
-		const res = await fetch("/missions/api/engram/import", {
+		const res = await fetch("/api/engram/import", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: file,
@@ -443,28 +443,28 @@ export const memoriesApi = {
 		return res.json();
 	},
 	mergeProjects: (source: string, target: string) =>
-		request<EngramMergeResult>("/missions/api/engram/projects/merge", {
+		request<EngramMergeResult>("/api/engram/projects/merge", {
 			method: "POST",
 			body: JSON.stringify({ source, target }),
 		}),
 
 	runRecallEval: (req: MemoryEvalRequest = {}) =>
-		request<MemoryEvalResult>("/missions/api/engram/memory-evals", {
+		request<MemoryEvalResult>("/api/engram/memory-evals", {
 			method: "POST",
 			body: JSON.stringify(req),
 		}),
 	timeline: (observationId?: string, limit = 50) =>
 		request<{ events: EngramTimelineEvent[] }>(
-			`/missions/api/engram/timeline?limit=${limit}${observationId ? `&observation_id=${encodeURIComponent(observationId)}` : ""}`,
+			`/api/engram/timeline?limit=${limit}${observationId ? `&observation_id=${encodeURIComponent(observationId)}` : ""}`,
 		).then((r) => r.events ?? []),
 	context: (q?: string, limit = 100) =>
 		request<EngramContextResult>(
-			`/missions/api/engram/context?limit=${limit}${
+			`/api/engram/context?limit=${limit}${
 				q ? `&q=${encodeURIComponent(q)}` : ""
 			}`,
 		),
 	saveContext: (text: string) =>
-		request<EngramContextResult>("/missions/api/engram/context", {
+		request<EngramContextResult>("/api/engram/context", {
 			method: "PUT",
 			body: JSON.stringify({ context: text }),
 		}),
@@ -477,19 +477,19 @@ export const memoriesApi = {
 		project?: string;
 	}) =>
 		request<{ run_id: string; status: string }>(
-			"/missions/api/engram/consolidations",
+			"/api/engram/consolidations",
 			{ method: "POST", body: JSON.stringify(data) },
 		),
 	getConsolidation: (id: string) =>
-		request<ConsolidationRun>(`/missions/api/engram/consolidations/${id}`),
+		request<ConsolidationRun>(`/api/engram/consolidations/${id}`),
 	applyConsolidation: (id: string, sel: ApplySelection) =>
 		request<{ status: string }>(
-			`/missions/api/engram/consolidations/${id}/apply`,
+			`/api/engram/consolidations/${id}/apply`,
 			{ method: "POST", body: JSON.stringify(sel) },
 		),
 	discardConsolidation: (id: string) =>
 		request<{ status: string }>(
-			`/missions/api/engram/consolidations/${id}/discard`,
+			`/api/engram/consolidations/${id}/discard`,
 			{ method: "POST" },
 		),
 };

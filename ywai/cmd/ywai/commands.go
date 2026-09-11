@@ -549,20 +549,6 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  No cached plugins to clear.")
 		}
 
-		// CodeGraph was retired in favour of Graft. Sweep the leftover global
-		// npm CLI and this repo's index so they stop shadowing Graft.
-		cwd, _ := os.Getwd()
-		if removed, err := plugins.RemoveRetiredCLIs(cwd, dryRun); err != nil {
-			fmt.Printf("  Warning: %v\n", err)
-		} else if len(removed) > 0 {
-			fmt.Println("\n[cleanup] Removing retired CodeGraph CLI/index...")
-			verb := "✓ removed"
-			if dryRun {
-				verb = "Would remove"
-			}
-			fmt.Printf("  %s: %s\n", verb, strings.Join(removed, ", "))
-		}
-
 		result := applyManaged(applyOpts{
 			Mode: applyUpdate,
 			Opts: gentlai.InstallOptions{
@@ -570,7 +556,6 @@ After update, restart OpenCode once so it reloads plugins.`,
 				DryRun:    dryRun,
 			},
 			OverwriteAgents:       true,
-			SkipGentleAIBinary:    true,
 			RestartServeIfRunning: true,
 		})
 		// Re-apply TokenBank last: applyManaged rewrites agent configs, so
@@ -1391,7 +1376,7 @@ func init() {
 
 	stopCmd.Flags().IntP("port", "p", 5768, "Port to stop (fallback if no PID file)")
 
-	uiCmd.Flags().IntP("port", "p", configapi.DefaultUIPort, "Port for the ywai UI server")
+	uiCmd.Flags().IntP("port", "p", control.DefaultPort, "Port for the ywai UI server")
 
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(stopCmd)

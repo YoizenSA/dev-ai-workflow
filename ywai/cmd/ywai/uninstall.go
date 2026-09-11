@@ -173,7 +173,7 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 			// two files are removed, each matched by its exact name rather than
 			// by sweeping the directory.
 			cfgDir := filepath.Dir(configPath)
-			serverBundle := filepath.Join(cfgDir, plugins.AutoDiscoveredPluginsSubdir, plugins.SubagentStatuslineServerBundleName)
+			serverBundle := filepath.Join(cfgDir, plugins.AutoDiscoveredPluginsSubdir, retiredStatuslineServerBundle)
 			if _, err := os.Stat(serverBundle); err == nil {
 				p := serverBundle
 				plan = append(plan, removal{
@@ -294,8 +294,8 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 // files. Mirrors the install switch in root.go.
 //
 // kilocode is deliberately absent: it installs profiles as keys inside its JSON
-// config (InstallOpenCode), not as files, so it is handled by
-// ywaiAgentKeysIn/stripYwaiAgentKeys instead.
+// config, not as files, so it is handled by ywaiAgentKeysIn/stripYwaiAgentKeys
+// instead.
 func profileDirsFor(agentName, home string) []string {
 	switch agentName {
 	case "opencode":
@@ -662,11 +662,20 @@ func retiredMCPsIn(configPath, agentName string) []string {
 	return found
 }
 
+// retiredStatuslineBundleNames are the filenames the vendored sub-agent
+// statusline (retired from ywai) was installed under: the server half's
+// bundle and the TUI half's loose pre-v2 file. Uninstall still recognizes
+// and removes what an older release left behind.
+const (
+	retiredStatuslineServerBundle = "subagent-statusline-server.js"
+	retiredStatuslineTuiBundle    = "subagent-statusline-tui.tsx"
+)
+
 // isSubagentStatuslineTuiEntry reports whether a TUI client config entry names
 // the vendored sub-agent statusline TUI half. v2 registers the plugin
 // directory the loader resolves the entry against; older installs registered
 // the loose bundle file, and uninstall must still recognize those.
 func isSubagentStatuslineTuiEntry(entry string) bool {
 	base := filepath.Base(entry)
-	return base == plugins.SubagentStatuslineTuiPluginDir || base == plugins.SubagentStatuslineTuiBundleName
+	return base == plugins.SubagentStatuslineTuiPluginDir || base == retiredStatuslineTuiBundle
 }

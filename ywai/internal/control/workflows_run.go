@@ -244,14 +244,7 @@ func stripANSI(s string) string {
 // HandleWebSocket (handlers.go:1385) without the initial state push (workflows
 // don't need one — the UI subscribes after kicking off a run).
 func (a *workflowsAPI) handleWorkflowWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := wfUpgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
-	}
-	client := &wsClient{hub: a.hub, conn: conn, send: make(chan []byte, 256)}
-	a.hub.register(client)
-	go client.writePump()
-	client.readPump()
+	serveWorkflowWS(a.hub, w, r)
 }
 
 // newRunID returns a short hex id for a run (8 chars, enough to disambiguate).

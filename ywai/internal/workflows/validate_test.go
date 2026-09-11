@@ -107,26 +107,6 @@ func TestHasCycle(t *testing.T) {
 	}
 }
 
-func TestTopoOrder(t *testing.T) {
-	wf := simpleValidWorkflow()
-	order, err := wf.topoOrder()
-	if err != nil {
-		t.Fatalf("topoOrder: %v", err)
-	}
-	// start must come before a, a before end.
-	pos := func(id string) int {
-		for i, n := range order {
-			if n == id {
-				return i
-			}
-		}
-		return -1
-	}
-	if pos("s") >= pos("a") || pos("a") >= pos("e") {
-		t.Fatalf("topo order wrong: %v", order)
-	}
-}
-
 func hasIssueContaining(issues []ValidationIssue, substr string) bool {
 	for _, iss := range issues {
 		if strings.Contains(iss.Message, substr) {
