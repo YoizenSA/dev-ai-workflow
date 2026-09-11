@@ -4,6 +4,7 @@ import type {
 	AgentGraph,
 	DelegationRulesResp,
 	SkillInfo,
+	SkillSurface,
 	MCPServer,
 	ProviderInfo,
 	OpenCodeConfig,
@@ -255,6 +256,8 @@ export const configApi = {
 			body: JSON.stringify({ content }),
 		}),
 	deleteSkill: (name: string) => del(`/api/config/skills/${name}`),
+	listSkillSurface: (projectDir?: string) =>
+		request<SkillSurface>(`/api/config/skills/surface${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),

@@ -119,6 +119,33 @@ export interface SkillInfo {
   scope: 'bundled' | 'custom'
 }
 
+export interface SkillSurfaceLocation {
+  key: string
+  label: string
+  path: string
+  found: boolean
+}
+
+export interface SkillSurfaceEntry {
+  location: string
+  path: string
+  hash: string
+  symlink?: string
+  broken?: boolean
+}
+
+export interface SkillSurfaceSkill {
+  name: string
+  status: 'unique' | 'shadowed' | 'unreadable'
+  entries: SkillSurfaceEntry[]
+}
+
+export interface SkillSurface {
+  projectDir: string
+  locations: SkillSurfaceLocation[]
+  skills: SkillSurfaceSkill[]
+}
+
 export interface MCPServer {
   name: string
   config: {

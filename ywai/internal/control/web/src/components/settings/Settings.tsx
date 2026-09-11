@@ -21,6 +21,7 @@ import type {
 	OpenCodeConfig as OpenCodeConfigType,
 } from "../../api/types";
 import { NotificationsTab } from "./NotificationsTab";
+import SkillSurfacePanel from "./SkillSurfacePanel";
 import SearchSelect from "../shared/SearchSelect";
 import ModelCombobox from "../shared/ModelCombobox";
 import Modal from "../shared/Modal";
@@ -1438,8 +1439,9 @@ function SkillsTab() {
 				))}
 			</div>
 
-			{/* View Modal */}
-			{viewingSkill && (
+			<SkillSurfacePanel />
+
+			{/* View Modal */}			{viewingSkill && (
 				<Modal
 					open={true}
 					onClose={() => setViewingSkill(null)}
