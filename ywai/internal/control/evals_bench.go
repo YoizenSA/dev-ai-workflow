@@ -84,6 +84,7 @@ var benchInFlight sync.Mutex
 
 func (s *Server) registerBenchRoutes() {
 	s.mux.HandleFunc("GET /api/evals/tasks", s.handleEvalTasks)
+	s.mux.HandleFunc("GET /api/evals/summary", s.handleEvalSummary)
 	s.mux.HandleFunc("POST /api/evals/runs", s.handleStartEvalRun)
 }
 
@@ -94,6 +95,18 @@ func (s *Server) handleEvalTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
+}
+
+// handleEvalSummary aggregates every stored run of one task into per-model
+// summaries, best model first. Read-only over the run history: it takes no
+// lock beyond the read benchRuns.list() already performs. The math lives in
+// evals.Aggregate so it stays unit-testable without a server.
+func (s *Server) handleEvalSummary(w http.ResponseWriter, r *http.Request) {
+	taskID := strings.TrimSpace(r.URL.Query().Get("taskId"))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"taskId":    taskID,
+		"summaries": evals.Aggregate(benchRuns.list(), taskID),
+	})
 }
 
 func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {

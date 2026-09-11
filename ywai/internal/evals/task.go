@@ -32,17 +32,28 @@ type Expectation struct {
 	// Hard marks the expectation that separates a real trace from a shallow one, so a
 	// partial score can still say whether the model did the difficult part.
 	Hard bool `json:"hard,omitempty"`
+	// Weight overrides the default pull this expectation has on the weighted score.
+	// Zero means unset: hard expectations then weigh 2, soft ones 1.
+	Weight int `json:"weight,omitempty"`
 }
 
 // Task is one benchmark: a brief for an agent, plus the answer it should produce.
 type Task struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Agent       string        `json:"agent"`
-	Description string        `json:"description,omitempty"`
-	Brief       string        `json:"brief"`
-	Expect      []Expectation `json:"expect"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Agent       string `json:"agent"`
+	Description string `json:"description,omitempty"`
+	Brief       string `json:"brief"`
+	// Tags and Difficulty classify the task so runs can be grouped or compared within
+	// a class. Both are optional; an empty Difficulty means unclassified.
+	Tags       []string      `json:"tags,omitempty"`
+	Difficulty string        `json:"difficulty,omitempty"`
+	Expect     []Expectation `json:"expect"`
 }
+
+// difficultyLevels are the values a task may declare in Difficulty. Empty means
+// the task is unclassified and stays valid.
+var difficultyLevels = map[string]bool{"easy": true, "medium": true, "hard": true}
 
 func (t Task) validate() error {
 	switch {
@@ -54,6 +65,8 @@ func (t Task) validate() error {
 		return fmt.Errorf("task %q is missing a brief", t.ID)
 	case len(t.Expect) == 0:
 		return fmt.Errorf("task %q has no expectations, so a run could not be scored", t.ID)
+	case t.Difficulty != "" && !difficultyLevels[t.Difficulty]:
+		return fmt.Errorf("task %q has unknown difficulty %q (want easy, medium or hard)", t.ID, t.Difficulty)
 	}
 	return nil
 }
@@ -65,6 +78,10 @@ type Score struct {
 	Total    int      `json:"total"`
 	GotHard  bool     `json:"gotHard"`
 	Answered bool     `json:"answered"`
+	// Weighted is the weight share the hits cover, from 0 to 1. It is blank on runs
+	// scored before weighting existed, so old and new results never look comparable
+	// by accident.
+	Weighted float64 `json:"weighted,omitempty"`
 }
 
 // Score checks a response against the task's expectations. An empty or errored
@@ -75,13 +92,16 @@ func (t Task) Score(response string) Score {
 	trimmed := strings.TrimSpace(response)
 	s.Answered = len(trimmed) >= 20 && !strings.HasPrefix(trimmed, "ERROR:")
 	low := strings.ToLower(response)
+	var hitWeight, totalWeight int
 	for _, e := range t.Expect {
+		totalWeight += effectiveWeight(e)
 		label := e.Label
 		if label == "" {
 			label = e.Needle
 		}
 		if s.Answered && strings.Contains(low, strings.ToLower(e.Needle)) {
 			s.Hits = append(s.Hits, label)
+			hitWeight += effectiveWeight(e)
 			if e.Hard {
 				s.GotHard = true
 			}
@@ -89,6 +109,7 @@ func (t Task) Score(response string) Score {
 		}
 		s.Missed = append(s.Missed, label)
 	}
+	s.Weighted = weightedRatio(hitWeight, totalWeight)
 	return s
 }
 
