@@ -2,23 +2,118 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/evals"
 )
 
 // registerEvalsRoutes wires Agent Benchmarks + Session Analytics API.
 func (s *Server) registerEvalsRoutes() {
 	s.mux.HandleFunc("GET /api/evals/runs", s.handleEvalRuns)
 	s.mux.HandleFunc("GET /api/evals/session-analytics", s.handleSessionAnalytics)
+	s.mux.HandleFunc("POST /api/evals/baselines", s.handleSetEvalBaseline)
+	s.mux.HandleFunc("DELETE /api/evals/baselines", s.handleClearEvalBaseline)
 	s.registerBenchRoutes()
 }
 
 // handleEvalRuns returns benchmark runs, newest first.
 func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"runs": benchRuns.list()})
+	runs, err := benchRuns.ListRuns()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if runs == nil {
+		runs = []evals.Run{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}
+
+// handleEvalSummary aggregates every stored run of one task into per-model
+// summaries, best model first. With ?baseline=auto|<runId> it also diffs each
+// summary against that baseline run; "none" (or no param) keeps the Phase-1
+// response shape exactly. The math lives in evals.Aggregate and
+// evals.DiffModels so it stays unit-testable without a server.
+func (s *Server) handleEvalSummary(w http.ResponseWriter, r *http.Request) {
+	taskID := strings.TrimSpace(r.URL.Query().Get("taskId"))
+	runs, err := benchRuns.ListRuns()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	current := evals.Aggregate(runs, taskID)
+	body := map[string]any{
+		"taskId":    taskID,
+		"summaries": current,
+	}
+
+	// A baseline that cannot resolve (none stored, or its run was purged) must
+	// not take the summary down: the response just carries no baseline key.
+	if mode := strings.TrimSpace(r.URL.Query().Get("baseline")); mode != "" && mode != "none" {
+		runID := mode
+		if mode == "auto" {
+			runID, _ = benchRuns.GetBaseline(taskID)
+		}
+		if runID != "" {
+			if baseRun, err := benchRuns.GetRun(runID); err == nil {
+				body["baseline"] = map[string]any{
+					"runId":  runID,
+					"deltas": evals.DiffModels(current, evals.Aggregate([]evals.Run{baseRun}, taskID)),
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+// handleSetEvalBaseline pins one stored run as the comparison anchor for a task.
+func (s *Server) handleSetEvalBaseline(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TaskID string `json:"taskId"`
+		RunID  string `json:"runId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body: " + err.Error()})
+		return
+	}
+	req.TaskID = strings.TrimSpace(req.TaskID)
+	req.RunID = strings.TrimSpace(req.RunID)
+	if req.TaskID == "" || req.RunID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "taskId and runId are required"})
+		return
+	}
+	// GetRun fails when the run is not addressable (never stored, or dropped by
+	// retention): 404 tells the client the anchor does not exist rather than
+	// pinning a ghost reference.
+	if _, err := benchRuns.GetRun(req.RunID); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "unknown run " + req.RunID})
+		return
+	}
+	if err := benchRuns.SetBaseline(req.TaskID, req.RunID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"taskId": req.TaskID, "baselineRunId": req.RunID})
+}
+
+// handleClearEvalBaseline unpins a task's baseline. Clearing an unset baseline
+// is still a success, so DELETE is idempotent.
+func (s *Server) handleClearEvalBaseline(w http.ResponseWriter, r *http.Request) {
+	taskID := strings.TrimSpace(r.URL.Query().Get("taskId"))
+	if taskID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "taskId is required"})
+		return
+	}
+	if err := benchRuns.ClearBaseline(taskID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type analyticsCacheEntry struct {

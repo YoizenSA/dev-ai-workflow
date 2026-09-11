@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,66 +15,27 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
-// benchStore keeps benchmark runs. Runs are worth minutes of real model time each,
-// so they survive a control-server restart rather than living only in memory.
-type benchStore struct {
-	mu   sync.RWMutex
-	path string
-	runs []evals.Run
-}
+// benchRuns keeps benchmark runs on disk under the shared data dir. Runs are
+// worth minutes of real model time each, so they survive a control-server
+// restart rather than living only in memory.
+var benchRuns = newBenchStore()
 
-const benchHistoryLimit = 50
-
-func newBenchStore() *benchStore {
+// newBenchStore opens the persistent run store at the shared data dir. The
+// server has nothing to serve without it, so an open failure is fatal at
+// startup.
+func newBenchStore() *evals.Store {
 	return newBenchStoreAt(config.DataDir())
 }
 
 // newBenchStoreAt builds a store rooted at dir (tests use a temp dir so real
 // runs on the machine never leak into assertions).
-func newBenchStoreAt(dir string) *benchStore {
-	_ = os.MkdirAll(dir, 0755)
-	s := &benchStore{path: filepath.Join(dir, "eval-runs.json")}
-	if data, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(data, &s.runs)
-	}
-	if s.runs == nil {
-		s.runs = []evals.Run{}
+func newBenchStoreAt(dir string) *evals.Store {
+	s, err := evals.OpenStore(dir)
+	if err != nil {
+		panic(fmt.Sprintf("evals: open run store at %s: %v", dir, err))
 	}
 	return s
 }
-
-func (s *benchStore) list() []evals.Run {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]evals.Run, len(s.runs))
-	copy(out, s.runs)
-	return out
-}
-
-func (s *benchStore) upsert(run evals.Run) {
-	s.mu.Lock()
-	replaced := false
-	for i := range s.runs {
-		if s.runs[i].ID == run.ID {
-			s.runs[i] = run
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		s.runs = append([]evals.Run{run}, s.runs...)
-		if len(s.runs) > benchHistoryLimit {
-			s.runs = s.runs[:benchHistoryLimit]
-		}
-	}
-	data, _ := json.MarshalIndent(s.runs, "", "  ")
-	path := s.path
-	s.mu.Unlock()
-	// Written outside the lock: a slow disk must not block an in-flight run's updates.
-	_ = os.WriteFile(path, data, 0644)
-}
-
-var benchRuns = newBenchStore()
 
 // benchInFlight guards against a second run starting while one is going: they would
 // contend for the same CodeGraph index and provider, inflating the very timings the
@@ -95,18 +55,6 @@ func (s *Server) handleEvalTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
-}
-
-// handleEvalSummary aggregates every stored run of one task into per-model
-// summaries, best model first. Read-only over the run history: it takes no
-// lock beyond the read benchRuns.list() already performs. The math lives in
-// evals.Aggregate so it stays unit-testable without a server.
-func (s *Server) handleEvalSummary(w http.ResponseWriter, r *http.Request) {
-	taskID := strings.TrimSpace(r.URL.Query().Get("taskId"))
-	writeJSON(w, http.StatusOK, map[string]any{
-		"taskId":    taskID,
-		"summaries": evals.Aggregate(benchRuns.list(), taskID),
-	})
 }
 
 func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +106,9 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 		Status:    "running",
 		StartedAt: time.Now().UTC(),
 	}
-	benchRuns.upsert(run)
+	// Best effort like the persist it replaces: a failed write must never fail
+	// or kill a benchmark that costs real model time.
+	_ = benchRuns.UpsertRun(run)
 
 	runner := &evals.Runner{
 		BaseURL: opencodeURLForBench(),
@@ -167,7 +117,9 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 		Client: &http.Client{Timeout: 30 * time.Minute},
 	}
 
-	go func() {
+	go func(run evals.Run) {
+		// Own copy of the run: the handler below still reads and serializes
+		// the original while this goroutine appends attempts to its local.
 		defer benchInFlight.Unlock()
 		defer db.Close()
 		// Detached from the request: the browser must not have to stay open for a run
@@ -179,7 +131,7 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 			run.Status = "failed"
 			run.Error = err.Error()
 			run.EndedAt = time.Now().UTC()
-			benchRuns.upsert(run)
+			_ = benchRuns.UpsertRun(run)
 			return
 		}
 
@@ -187,7 +139,7 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 			// Persist as each attempt lands so a long run is observable while it goes.
 			a.Response = truncateResponse(a.Response)
 			run.Attempts = append(run.Attempts, a)
-			benchRuns.upsert(run)
+			_ = benchRuns.UpsertRun(run)
 		})
 		run.Status = "done"
 		if err != nil {
@@ -195,8 +147,8 @@ func (s *Server) handleStartEvalRun(w http.ResponseWriter, r *http.Request) {
 			run.Error = err.Error()
 		}
 		run.EndedAt = time.Now().UTC()
-		benchRuns.upsert(run)
-	}()
+		_ = benchRuns.UpsertRun(run)
+	}(run)
 
 	writeJSON(w, http.StatusAccepted, run)
 }

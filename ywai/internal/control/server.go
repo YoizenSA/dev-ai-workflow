@@ -151,6 +151,7 @@ func (s *Server) buildRoutes() {
 
 	// ─── Evals / Session Analytics API ──────────────────────────
 	s.registerEvalsRoutes()
+	s.registerLeaderboardRoutes()
 
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
