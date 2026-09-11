@@ -151,7 +151,7 @@ func adoLatestFromRegistry() (string, error) {
 // an agent's config file so its tools are no longer loaded into context. It is
 // idempotent and safe to call on configs that never had the plugin.
 //
-//   - opencode-format configs (opencode/kilocode): drops any entry from the
+//   - opencode-format configs (opencode): drops any entry from the
 //     "plugins" array that references the ADO package (as a bare string spec or a
 //     ["<pkg>", {...}] pair).
 //   - claude-code / pi configs: drops any matching spec from the "packages"

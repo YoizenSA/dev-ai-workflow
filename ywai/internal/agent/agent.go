@@ -80,13 +80,6 @@ var KnownAgents = []struct {
 		},
 	},
 	{
-		Name:   "kilocode",
-		Binary: "kilo",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".config", "kilo", "skills")
-		},
-	},
-	{
 		Name:   "kimi",
 		Binary: "kimi",
 		SkillsPath: func() string {
@@ -381,7 +374,7 @@ func FindByName(name string) (*Agent, error) {
 }
 
 // SettingsPaths returns the config file paths for agents that have JSON settings.
-// OpenCode and Kilo Code prefer .jsonc when it exists, falling back to .json.
+// OpenCode prefers .jsonc when it exists, falling back to .json.
 // Used by plugins and other install steps.
 func SettingsPaths() map[string]string {
 	home, err := os.UserHomeDir()
@@ -392,7 +385,6 @@ func SettingsPaths() map[string]string {
 	return map[string]string{
 		"opencode":    config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode"),
 		"claude-code": pathIfExists(filepath.Join(home, ".claude", "settings.json")),
-		"kilocode":    config.FindJSONCPath(filepath.Join(home, ".config", "kilo"), "opencode"),
 		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli":  pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 		"pi":          pathIfExists(filepath.Join(home, ".pi", "agent", "mcp.json")),
@@ -413,7 +405,7 @@ func AvailableNames() []string {
 	return []string{
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
-		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
+		"kimi", "qwen-code", "antigravity", "kiro-ide",
 		"openclaw", "trae-ide", "pi", "omp",
 	}
 }
@@ -422,9 +414,9 @@ func AvailableNames() []string {
 // profiles (see install switch in cmd/ywai/root.go). Detection may find more
 // binaries on PATH; install UI and default install target only these.
 //
-// cursor and kilocode were dropped: nobody here runs them, and carrying an
+// cursor was dropped: nobody here runs it, and carrying an
 // install path costs a branch in every host switch. Uninstall still knows how
-// to clean them so an older install can be removed.
+// to clean it so an older install can be removed.
 var ProfileInstallHosts = []string{
 	"opencode",
 	"claude-code",

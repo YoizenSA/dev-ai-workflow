@@ -204,7 +204,7 @@ func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 	m := NewModel(agents)
 	m.selectedAgent = "all"
 	if m.shouldShowMCPStep() {
-		t.Fatal("shouldShowMCPStep should be false when 'all' has no opencode/kilocode/claude")
+		t.Fatal("shouldShowMCPStep should be false when 'all' has no opencode/claude")
 	}
 }
 

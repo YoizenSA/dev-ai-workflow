@@ -147,9 +147,9 @@ Check status: `ywai config get server.autostart`
 
 ## Supported Agents
 
-**Detected** (16) — ywai finds these and copies its extra skills into them:
+**Detected** (15) — ywai finds these and copies its extra skills into them:
 
-opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi, omp
+opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kimi, antigravity, pi, omp
 
 **Agent profiles installed** (5) — these get the full ywai agent set:
 

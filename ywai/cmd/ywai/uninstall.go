@@ -217,8 +217,8 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 				})
 			}
 
-			// Agents installed as JSON keys rather than files. Only opencode and
-			// kilocode take this path (see the install switch in root.go); every
+			// Agents installed as JSON keys rather than files. Only opencode
+			// takes this path (see the install switch in root.go); every
 			// other agent's config may legitimately hold an "agents" object we
 			// never wrote, and a name collision there must not delete it.
 			if installsAgentsAsJSONKeys(name) {
@@ -293,9 +293,8 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 // profileDirsFor returns the directories where ywai writes agent profiles as
 // files. Mirrors the install switch in root.go.
 //
-// kilocode is deliberately absent: it installs profiles as keys inside its JSON
-// config, not as files, so it is handled by ywaiAgentKeysIn/stripYwaiAgentKeys
-// instead.
+// Agents installed as JSON keys (opencode) are handled by
+// ywaiAgentKeysIn/stripYwaiAgentKeys instead.
 func profileDirsFor(agentName, home string) []string {
 	switch agentName {
 	case "opencode":
@@ -328,7 +327,7 @@ func ywaiProfileNames() map[string]bool {
 }
 
 // ywaiAgentKeysIn lists ywai-installed agent keys inside a JSON config's
-// "agents" object (the kilocode install path), plus leftover v1 "agent".
+// "agents" object (the opencode JSON-key install path), plus leftover v1 "agent".
 func ywaiAgentKeysIn(configPath string) []string {
 	return ywaiAgentKeysWith(configPath, ywaiProfileNames())
 }
@@ -632,10 +631,10 @@ func stopRunningServer(pidFile string) error {
 }
 
 // installsAgentsAsJSONKeys reports whether ywai installs agent profiles into
-// the agent's JSON config rather than as files. Mirrors the opencode/kilocode
-// cases in root.go's install switch; keep the two in sync.
+// the agent's JSON config rather than as files. Mirrors the opencode case in
+// root.go's install switch; keep the two in sync.
 func installsAgentsAsJSONKeys(agentName string) bool {
-	return agentName == "opencode" || agentName == "kilocode"
+	return agentName == "opencode"
 }
 
 // retiredMCPsIn reports which retired ywai MCP servers a config still lists, so

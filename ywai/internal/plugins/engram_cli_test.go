@@ -86,7 +86,7 @@ func TestWireEngramMCP_SkipsUnsupportedHosts(t *testing.T) {
 	runEngramSetup = func(string) error { t.Fatal("setup must not run"); return nil }
 	t.Cleanup(func() { runEngramSetup = orig })
 
-	if err := WireEngramMCP([]string{"cursor", "kilocode"}); err == nil {
+	if err := WireEngramMCP([]string{"cursor", "windsurf"}); err == nil {
 		t.Fatal("WireEngramMCP() err = nil, want error when no supported host")
 	}
 }

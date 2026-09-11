@@ -28,7 +28,7 @@ var claudeCLI = "claude"
 
 // InstallPonytail installs the official ponytail plugin for the given agent.
 //
-//   - opencode / kilocode: removes the legacy Ponytail npm plugin entry. Ponytail
+//   - opencode: removes the legacy Ponytail npm plugin entry. Ponytail
 //     is not installed in OpenCode v2 plugin mode because its published plugin
 //     contract is incompatible with the v2 loader.
 //   - claude-code: runs non-interactive Claude CLI marketplace add + plugin install
@@ -39,7 +39,7 @@ var claudeCLI = "claude"
 // Returns an error the caller should surface as a non-fatal warning.
 func InstallPonytail(agentName, configPath string) error {
 	switch agentName {
-	case "opencode", "kilocode":
+	case "opencode":
 		return removeOpenCodePluginName(configPath, PonytailNPMPackage)
 	case "claude-code":
 		return installPonytailClaude()
@@ -51,7 +51,7 @@ func InstallPonytail(agentName, configPath string) error {
 // SupportsPonytail reports whether ywai can install ponytail for the agent.
 func SupportsPonytail(agentName string) bool {
 	switch agentName {
-	case "opencode", "kilocode", "claude-code":
+	case "opencode", "claude-code":
 		return true
 	default:
 		return false

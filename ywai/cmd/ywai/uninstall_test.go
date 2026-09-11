@@ -346,24 +346,17 @@ func TestUninstallStripYwaiAgentKeys_DrainsV2AgentsKey(t *testing.T) {
 func TestInstallsAgentsAsJSONKeys_OnlyOpenCodeFormats(t *testing.T) {
 	// Guards against widening the JSON-key deletion to agents ywai never
 	// installs into that way — gemini-cli ships its own "agent" object.
-	for _, name := range []string{"opencode", "kilocode"} {
-		if !installsAgentsAsJSONKeys(name) {
-			t.Errorf("%s should use the JSON-key install path", name)
-		}
+	if !installsAgentsAsJSONKeys("opencode") {
+		t.Error("opencode should use the JSON-key install path")
 	}
-	for _, name := range []string{"gemini-cli", "windsurf", "claude-code", "pi", "omp", "cursor", "codex"} {
+	for _, name := range []string{"kilocode", "gemini-cli", "windsurf", "claude-code", "pi", "omp", "cursor", "codex"} {
 		if installsAgentsAsJSONKeys(name) {
 			t.Errorf("%s must not have its config's agent object touched", name)
 		}
 	}
 }
 
-func TestProfileDirsFor_KilocodeHasNoFileDir(t *testing.T) {
-	// kilocode installs profiles as JSON keys; returning opencode's agents dir
-	// here would delete opencode's profiles twice and report them as kilocode's.
-	if dirs := profileDirsFor("kilocode", "/home/u"); len(dirs) != 0 {
-		t.Errorf("kilocode should have no profile directory, got %v", dirs)
-	}
+func TestProfileDirsFor_FileDirs(t *testing.T) {
 	if dirs := profileDirsFor("opencode", "/home/u"); len(dirs) != 1 {
 		t.Errorf("opencode should have exactly one profile directory, got %v", dirs)
 	}

@@ -553,7 +553,7 @@ func (m *Model) shouldShowMCPStep() bool {
 		return false
 	}
 	// Optional plugins step: Microsoft Learn MCP + Ponytail for hosts we wire.
-	// opencode/kilocode get both; claude-code gets both (MCP via settings.json,
+	// opencode gets both; claude-code gets both (MCP via settings.json,
 	// ponytail via Claude marketplace CLI).
 	if optionalPluginsAgent(m.selectedAgent) {
 		return true
@@ -570,7 +570,7 @@ func (m *Model) shouldShowMCPStep() bool {
 
 func optionalPluginsAgent(name string) bool {
 	switch name {
-	case "opencode", "kilocode", "claude-code":
+	case "opencode", "claude-code":
 		return true
 	default:
 		return false

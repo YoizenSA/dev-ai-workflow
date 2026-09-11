@@ -92,21 +92,21 @@ func WireGraftMCP() error {
 	}
 
 	// Only agents whose SettingsPaths entry is a JSON config with a shape
-	// ywai understands (opencode/kilocode "mcp", claude-code/pi
+	// ywai understands (opencode "mcp", claude-code/pi
 	// "mcpServers"). omp points at models.yml and the IDE agents use their
 	// own file formats, so they are skipped.
 	wired := false
 	var failures []string
 	for name, configPath := range agent.SettingsPaths() {
 		switch name {
-		case "opencode", "kilocode", "claude-code", "pi":
+		case "opencode", "claude-code", "pi":
 		default:
 			continue
 		}
 		if configPath == "" {
 			continue
 		}
-		// SettingsPaths resolves kilocode with FindJSONCPath, which returns a
+		// SettingsPaths resolves opencode with FindJSONCPath, which returns a
 		// candidate path whether or not the file exists. Wiring an agent that
 		// was never installed only produced a puzzling "cannot find the path"
 		// warning, so skip what is not on disk.
@@ -135,7 +135,7 @@ func WireGraftMCP() error {
 }
 
 // writeGraftMCPEntry writes the graft MCP server in the target's native
-// shape. OpenCode/kilocode require type+command-array+enabled; Claude/pi
+// shape. OpenCode requires type+command-array+enabled; Claude/pi
 // use command+args. Always overwrites so a previous Claude-shaped write
 // cannot leave OpenCode unable to boot.
 func writeGraftMCPEntry(configPath, agentName string, command []string) error {

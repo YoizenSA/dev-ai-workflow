@@ -85,7 +85,6 @@ func TestInstallPonytail_UnsupportedAgent(t *testing.T) {
 func TestSupportsPonytail(t *testing.T) {
 	cases := map[string]bool{
 		"opencode":    true,
-		"kilocode":    false,
 		"claude-code": true,
 		"cursor":      false,
 		"pi":          false,

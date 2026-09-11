@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -69,50 +67,15 @@ func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
 // the bundle simply lives where OpenCode already looks. Any stale explicit
 // entry is removed, otherwise the warning keeps firing on every start.
 func installBackgroundAgentsV2(configPath, bundleSrc string) error {
-	destDir := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
-	}
-
-	destJS := filepath.Join(destDir, config.BackgroundAgentsBundleName)
-	if err := copyFile(bundleSrc, destJS); err != nil {
-		return fmt.Errorf("copy plugin bundle: %w", err)
-	}
-
 	// The v1-era dual plugin wrote a flavor marker beside its bundles; the
 	// v2-only plugin never reads it, so sweep stale copies on every install.
-	for _, markerDir := range []string{destDir, filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)} {
-		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove stale flavor marker: %w", err)
-		}
+	if err := sweepFlavorMarkers(configPath); err != nil {
+		return err
 	}
 
 	// Drop the v1-shaped entry and the copy it pointed at, so the bundle is
 	// discovered once rather than also being pointed at and rejected.
-	root, err := config.ReadJSONC(configPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", configPath, err)
-	}
-	kept := make([]any, 0)
-	for _, raw := range openCodePlugins(root) {
-		// String entries only; map-form entries are intentionally left as-is
-		// here (see subagentStatuslineServerEntry for the map-aware variant).
-		if s, ok := raw.(string); ok && strings.Contains(s, config.BackgroundAgentsBundleName) {
-			continue
-		}
-		kept = append(kept, raw)
-	}
-	writePlugins(root, kept)
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
+	return installVendorPluginV2(configPath, bundleSrc, config.BackgroundAgentsBundleName)
 }
 
 // containsPluginPath reports whether the plugin array already references path.

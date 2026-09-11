@@ -15,7 +15,7 @@ func TestAvailableNames_ContainsAllKnownAgents(t *testing.T) {
 	expected := []string{
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
-		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
+		"kimi", "qwen-code", "antigravity", "kiro-ide",
 		"openclaw", "trae-ide", "pi", "omp",
 	}
 
@@ -225,7 +225,7 @@ func TestSettingsPaths_ReturnsMap(t *testing.T) {
 		t.Fatal("SettingsPaths() returned nil")
 	}
 
-	expected := []string{"opencode", "kilocode", "windsurf", "gemini-cli", "pi"}
+	expected := []string{"opencode", "windsurf", "gemini-cli", "pi"}
 	for _, name := range expected {
 		if _, ok := paths[name]; !ok {
 			t.Fatalf("SettingsPaths() missing %q", name)

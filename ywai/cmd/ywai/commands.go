@@ -261,7 +261,7 @@ var stopCmd = &cobra.Command{
 // It resolves the opencode binary via agent.FindBinary (so binaries installed
 // via nvm/asdf/etc. — not in the raw process PATH — are still found), and
 // probes with opencode.ProbeServer (GET /status requiring 200) instead of a
-// bare /health ping, so another server (e.g. Kilo Code) on the same port does
+// bare /health ping, so another server on the same port does
 // not produce a false "already running" positive.
 //
 // If the default port (4096, or the one in OPENCODE_URL) is already taken by a
@@ -319,7 +319,7 @@ func startOpencodeServe() {
 
 	// Find a free port. If the default (startPort) is open, use it; otherwise
 	// walk up to 50 ports looking for one that binds. This handles the case
-	// where another server (Kilo Code, etc.) occupies the default opencode port.
+	// where another server occupies the default opencode port.
 	port := serverutil.FindFreePort(startPort)
 	if port != startPort {
 		fmt.Fprintf(os.Stderr, "Warning: port %d is busy; using %d instead.\n", startPort, port)

@@ -198,7 +198,7 @@ func (h *Handlers) StartOpencode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine the starting port from OPENCODE_URL (default 4096) and find a
-	// free one if it's busy. Another server (e.g. Kilo Code) on 4096 would make
+	// free one if it's busy. Another server on 4096 would make
 	// opencode fail to bind silently, leaving the UI stuck on "Starting…".
 	startPort := 4096
 	if u := os.Getenv("OPENCODE_URL"); u != "" {

@@ -111,7 +111,7 @@ cd ywai && bash scripts/dev.sh ui
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
-| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode/kilocode plugin array + Claude Code marketplace; default on (`--ponytail=false` to skip) |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode plugin array + Claude Code marketplace; default on (`--ponytail=false` to skip) |
 
 ---
 
@@ -125,7 +125,6 @@ cd ywai && bash scripts/dev.sh ui
 | Gemini CLI | `gemini-cli` | Binary in PATH |
 | VS Code Copilot | `vscode-copilot` | Binary in PATH |
 | Codex | `codex` | Binary in PATH |
-| Kilo Code | `kilocode` | Binary in PATH |
 | Kimi Code | `kimi` | Binary in PATH |
 | Qwen Code | `qwen-code` | Binary in PATH |
 | Antigravity | `antigravity` | Config dir `~/.gemini/antigravity/` |

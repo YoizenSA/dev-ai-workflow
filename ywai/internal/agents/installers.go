@@ -652,8 +652,8 @@ var verifyBashAllowPatterns = []string{
 	"mypy*",
 }
 
-// BashPermissionBlockLines is the v1 renderer kept only for the kilocode (v1
-// fork) JSON install path. OpenCode v2 agents get shell rules via
+// BashPermissionBlockLines is the v1 renderer for the opencode v1
+// `permission:` frontmatter block. OpenCode v2 agents get shell rules via
 // RulesFromPermissionMap instead.
 func BashPermissionBlockLines(val, baseName string) []string {
 	if val == "deny" {
