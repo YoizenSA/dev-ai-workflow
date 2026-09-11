@@ -1,0 +1,83 @@
+name: Docker matrix
+
+# Nightly lifecycle matrix: fresh install, idempotent reinstall, offline
+# update swap and clean uninstall for every supported agent shape, plus the
+# real release N-1 -> N update, each inside its own Docker container.
+# Can also be dispatched by hand with a narrower profile (dry | net).
+on:
+  schedule:
+    - cron: "0 4 * * *" # daily 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Which cells to run"
+        type: choice
+        default: nightly
+        options:
+          - dry
+          - net
+          - nightly
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: ywai
+
+jobs:
+  cell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # One red cell must not hide the result of the others.
+      fail-fast: false
+      matrix:
+        cell:
+          - dry-opencode2
+          - dry-claude
+          - dry-both
+          - fresh-opencode2
+          - fresh-claude
+          - fresh-both
+          - reinstall-opencode2
+          - reinstall-claude
+          - update-swap-opencode2
+          - update-swap-claude
+          - update-swap-both
+          - uninstall-clean-both
+          - update-release-opencode2
+    steps:
+      - uses: actions/checkout@v5
+
+      # Every job names one cell plus its profile; run-matrix.sh skips cells
+      # that do not belong to the profile, so one matrix definition serves
+      # all three profiles.
+      - name: Resolve cell profile and requested profile
+        run: |
+          set -euo pipefail
+          case "${{ matrix.cell }}" in
+            dry-*) cell_profile=dry ;;
+            update-release-*) cell_profile=nightly ;;
+            *) cell_profile=net ;;
+          esac
+          requested="${{ inputs.profile }}"
+          if [ -z "$requested" ]; then
+            requested=nightly # scheduled runs carry no inputs
+          fi
+          include=false
+          case "$requested" in
+            dry) [ "$cell_profile" = dry ] && include=true ;;
+            net) [ "$cell_profile" = net ] && include=true ;;
+            nightly) [ "$cell_profile" != dry ] && include=true ;;
+          esac
+          echo "CELL_PROFILE=$cell_profile" >> "$GITHUB_ENV"
+          echo "RUN_CELL=$include" >> "$GITHUB_ENV"
+
+      - name: Run cell
+        if: env.RUN_CELL == 'true'
+        run: bash e2e/docker/run-matrix.sh --profile "$CELL_PROFILE" --cell "${{ matrix.cell }}"
+
+      - name: Report skipped cell
+        if: env.RUN_CELL != 'true'
+        run: echo "cell ${{ matrix.cell }} is not part of profile ${{ inputs.profile || 'nightly' }}; skipped"

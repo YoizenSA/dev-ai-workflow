@@ -227,6 +227,28 @@ do_mcp_test() {
     fi
 }
 
+do_docker_matrix() {
+    local profile="${1:-dry}"
+    if ! command -v docker >/dev/null 2>&1; then
+        fail "Docker not found - skipping the lifecycle matrix (install Docker to run it)"
+        return 0
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        fail "Docker daemon not reachable - skipping the lifecycle matrix (start Docker to run it)"
+        return 0
+    fi
+    case "$profile" in
+    dry | net | nightly) ;;
+    *)
+        fail "Unknown docker-matrix profile: $profile (want dry, net or nightly)"
+        exit 1
+        ;;
+    esac
+    info "Running the Docker lifecycle matrix (profile: ${profile})..."
+    cmd "bash e2e/docker/run-matrix.sh --profile ${profile}"
+    bash e2e/docker/run-matrix.sh --profile "$profile"
+}
+
 do_version() {
     compute_version
 }
@@ -248,6 +270,8 @@ Subcommands:
   check        Full pipeline: lint → test → build-full → verify → install
   ui           Build + install + start the control server UI on port 5768
   mcp-test     Build + install + verify MCP daemon responds
+  docker-matrix [dry|net|nightly]
+               Docker lifecycle matrix (default dry; skips cleanly without Docker)
   version      Print the version string that would be used
   help         Show this usage message
 
@@ -288,6 +312,9 @@ case "${1:-help}" in
         ;;
     mcp-test)
         do_mcp_test
+        ;;
+    docker-matrix)
+        do_docker_matrix "${2:-dry}"
         ;;
     version)
         do_version
