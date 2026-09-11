@@ -112,7 +112,8 @@ Examples:
   ywai env list
   ywai env create qa --preset qa
   ywai env start dev
-  ywai dev "run the tests"`,
+  ywai dev "run the tests"
+  ywai dev "run the tests" --model opencode-go/glm-5.3-flash --agent ask --auto`,
 }
 
 var envListCmd = &cobra.Command{
@@ -177,10 +178,16 @@ var envCreateCmd = &cobra.Command{
 }
 
 var envStartCmd = &cobra.Command{
-	Use:   "start <name> [prompt...]",
+	Use:   `start <name> ["prompt"] [--model provider/model] [--agent name] [--auto]`,
 	Short: "Start (and enter) an isolated environment",
-	Args:  cobra.MinimumNArgs(1),
+	Long:  fmt.Sprintf(envRunHelp, "<name>"),
+	// Same flag handling as the ywai <name> shortcut.
+	DisableFlagParsing: true,
+	SilenceUsage:       true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 || wantsHelp(args) {
+			return cmd.Help()
+		}
 		return envStart(args[0], args[1:])
 	},
 }
@@ -339,12 +346,19 @@ func init() {
 			}
 			name := p.Name
 			rootCmd.AddCommand(&cobra.Command{
-				Use:   name,
+				Use:   name + ` ["prompt"] [--model provider/model] [--agent name] [--auto]`,
 				Short: "Enter isolated environment " + name,
+				Long:  fmt.Sprintf(envRunHelp, name),
 				Args:  cobra.ArbitraryArgs,
+				// ywai parses its own flags (--model:x style, passthrough of
+				// opencode flags), so cobra must not reject unknown ones.
+				DisableFlagParsing: true,
 				// A failing opencode run is not a usage error: don't dump help.
 				SilenceUsage: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
+					if wantsHelp(args) {
+						return cmd.Help()
+					}
 					return envStart(name, args)
 				},
 			})
@@ -379,7 +393,16 @@ func reportCopiedProviders(p envprofile.Profile) {
 // envStart ensures the profile server runs, then execs opencode2 under the
 // profile environment: bare for the interactive TUI, with args as a headless
 // `opencode2 run` prompt.
-func envStart(name string, promptArgs []string) error {
+func envStart(name string, rawArgs []string) error {
+	// Parse first so a bad flag fails fast, before any server starts.
+	prompt, opts, err := parseEnvRunArgs(rawArgs)
+	if err != nil {
+		return err
+	}
+	ocArgs, err := envOpencodeArgv(prompt, opts)
+	if err != nil {
+		return err
+	}
 	if err := agent.GateOpenCodeV2(); err != nil {
 		return err
 	}
@@ -406,12 +429,7 @@ func envStart(name string, promptArgs []string) error {
 			return err
 		}
 	}
-	argv := []string{bin}
-	if len(promptArgs) > 0 {
-		argv = append(argv, "run")
-		argv = append(argv, promptArgs...)
-	}
-	return runUnderProfileEnv(p, argv)
+	return runUnderProfileEnv(p, append([]string{bin}, ocArgs...))
 }
 
 // runUnderProfileEnv runs argv[0] with the profile environment applied,

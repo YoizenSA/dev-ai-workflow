@@ -496,6 +496,7 @@ function envCommands(name: string) {
   return [
     { label: 'Open TUI', cmd: `ywai ${name}`, help: 'Interactive opencode inside this env' },
     { label: 'Run a prompt', cmd: `ywai ${name} "describe the task here"`, help: 'Headless run, prints the answer and exits' },
+    { label: 'Model & agent', cmd: `ywai ${name} "describe the task here" --model opencode-go/glm-5.3-flash --agent ask --auto`, help: 'Pick model and agent for this run; --auto approves permissions so it never waits' },
     { label: 'Apply', cmd: `ywai install --profile ${name} --agent opencode`, help: 'Same as the Apply button' },
     { label: 'Status', cmd: `ywai env status ${name}`, help: 'Service, database and log paths' },
   ]
