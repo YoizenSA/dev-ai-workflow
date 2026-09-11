@@ -31,10 +31,6 @@ type githubRelease struct {
 	TagName string `json:"tag_name"`
 }
 
-func IsInstalled() bool {
-	return findBinary(config.GentleAIBin) != ""
-}
-
 // InstallEngram installs the engram binary through ywai's own manual release
 // path (installEngramReleaseBinary) and returns the directory it was
 // installed into. It never invokes the gentle-ai binary. Slice 1 contract:
@@ -126,16 +122,8 @@ func Doctor() error {
 		}
 	}
 
-	// gentle-ai is optional for ywai; report, never fail.
-	if _, err := exec.LookPath(config.GentleAIBin); err == nil {
-		fmt.Println("  [ok]  gentle-ai               found (optional)")
-	} else {
-		fmt.Println("  [info] gentle-ai               not found (optional; ywai does not require it)")
-	}
-
 	return nil
 }
-
 func findBinary(name string) string {
 	if path, err := exec.LookPath(name); err == nil {
 		return path

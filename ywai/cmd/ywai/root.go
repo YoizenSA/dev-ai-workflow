@@ -24,7 +24,7 @@ var version = "dev"
 var rootCmd = &cobra.Command{
 	Use:   "ywai",
 	Short: "One command to set up your AI dev environment",
-	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
+	Long:  "ywai installs and manages your AI dev environment: engram, agent profiles, extra skills, and project tooling.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Lightweight read-only commands must not seed skills/agents/workflows
 		// (and must not print "no embedded data" noise).

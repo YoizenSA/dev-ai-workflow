@@ -810,7 +810,7 @@ var configResetCmd = &cobra.Command{
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show ywai installation status",
-	Long:  "Display information about ywai, optional gentle-ai, and detected agents",
+	Long:  "Display information about ywai and detected agents",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("=== ywai Status ===")
 
@@ -822,14 +822,6 @@ var statusCmd = &cobra.Command{
 
 		// Data directory
 		fmt.Printf("Data dir: %s\n", config.DataDir())
-
-		// Optional gentle-ai status; ywai does not manage it.
-		fmt.Println("\n=== Optional: gentle-ai ===")
-		if gentlai.IsInstalled() {
-			fmt.Println("Status: Installed (optional, unmanaged by ywai)")
-		} else {
-			fmt.Println("Status: Not installed (optional, unmanaged by ywai)")
-		}
 
 		// Detected agents
 		fmt.Println("\n=== Detected Agents ===")
