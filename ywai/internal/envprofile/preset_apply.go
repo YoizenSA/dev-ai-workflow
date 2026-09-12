@@ -269,6 +269,13 @@ func AppendDenyBashToAgents(agentsDir string, patterns []string) (int, error) {
 // appendShellDenies inserts missing shell-deny rules into one agent file's
 // frontmatter permissions list. ok is false when the file has no permissions
 // block to extend. Existing patterns are left untouched.
+//
+// Rules go at the end of the permissions block itself, not at the end of the
+// frontmatter: a later top-level key (e.g. `model:`, written by the model
+// profile step) would otherwise swallow them, the YAML turns invalid and
+// opencode silently drops the whole frontmatter — every permission of the
+// agent is lost. Rules an older ywai left dangling under such a scalar key
+// are moved back into the permissions block, so re-applying heals the file.
 func appendShellDenies(content string, patterns []string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
@@ -284,39 +291,87 @@ func appendShellDenies(content string, patterns []string) (string, bool) {
 	if end < 0 {
 		return content, false
 	}
-	permIdx := -1
-	for i := 1; i < end; i++ {
-		if strings.TrimSpace(lines[i]) == "permissions:" {
-			permIdx = i
+
+	// Split the frontmatter into top-level blocks: a key line plus its
+	// indented continuation lines.
+	type block struct {
+		head string
+		body []string
+	}
+	var blocks []block
+	var orphans []string
+	inOrphan := false
+	for _, l := range lines[1:end] {
+		indented := strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")
+		if !indented && !strings.HasPrefix(l, "- ") {
+			blocks = append(blocks, block{head: l})
+			inOrphan = false
+			continue
+		}
+		if len(blocks) == 0 {
+			orphans = append(orphans, l)
+			continue
+		}
+		b := &blocks[len(blocks)-1]
+		t := strings.TrimSpace(l)
+		// A scalar key cannot own list items: these are permission rules that
+		// were appended after it by mistake.
+		if isScalarKeyLine(b.head) && (strings.HasPrefix(t, "- action:") || (inOrphan && (strings.HasPrefix(t, "resource:") || strings.HasPrefix(t, "effect:")))) {
+			orphans = append(orphans, l)
+			inOrphan = true
+			continue
+		}
+		inOrphan = false
+		b.body = append(b.body, l)
+	}
+	perm := -1
+	for i, b := range blocks {
+		if strings.TrimSpace(b.head) == "permissions:" {
+			perm = i
 			break
 		}
 	}
-	if permIdx < 0 {
+	if perm < 0 {
 		return content, false
 	}
-	front := strings.Join(lines[1:end], "\n")
-	var missing []string
+	blocks[perm].body = append(blocks[perm].body, orphans...)
+
+	permText := strings.Join(blocks[perm].body, "\n")
 	for _, p := range patterns {
-		if !strings.Contains(front, p) {
-			missing = append(missing, p)
+		if strings.Contains(permText, p) {
+			continue
 		}
-	}
-	if len(missing) == 0 {
-		return content, true
-	}
-	var ruleLines []string
-	for _, p := range missing {
-		ruleLines = append(ruleLines,
+		blocks[perm].body = append(blocks[perm].body,
 			"  - action: shell",
 			fmt.Sprintf("    resource: %s", yamlQuote(p)),
 			"    effect: deny",
 		)
 	}
-	out := make([]string, 0, len(lines)+len(ruleLines))
-	out = append(out, lines[:end]...)
-	out = append(out, ruleLines...)
+
+	out := make([]string, 0, len(lines)+3*len(patterns))
+	out = append(out, lines[0])
+	for _, b := range blocks {
+		out = append(out, b.head)
+		out = append(out, b.body...)
+	}
 	out = append(out, lines[end:]...)
 	return strings.Join(out, "\n"), true
+}
+
+// isScalarKeyLine reports whether a top-level frontmatter line is `key: value`
+// with an inline scalar value (not a block scalar like `key: >` or `key: |`,
+// and not a bare `key:` that opens a nested block or list).
+func isScalarKeyLine(line string) bool {
+	i := strings.Index(line, ":")
+	if i < 0 {
+		return false
+	}
+	v := strings.TrimSpace(line[i+1:])
+	switch v {
+	case "", ">", "|", ">-", "|-", ">+", "|+":
+		return false
+	}
+	return true
 }
 
 // yamlQuote quotes a scalar whenever a bare one would not survive a strict

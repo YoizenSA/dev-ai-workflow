@@ -3,7 +3,10 @@ package control
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,8 +36,10 @@ type surfaceEntry struct {
 }
 
 type surfaceSkill struct {
-	Name    string         `json:"name"`
-	Status  string         `json:"status"` // unique | shadowed | unreadable
+	Name string `json:"name"`
+	// unique: one readable copy · duplicate: 2+ byte-identical copies ·
+	// shadowed: 2+ copies with different content · unreadable: no SKILL.md.
+	Status  string         `json:"status"`
 	Entries []surfaceEntry `json:"entries"`
 }
 
@@ -112,24 +117,23 @@ func scanSkillSurface(globalRoots map[string]string, projectChains map[string][]
 			}
 			return entries[i].Path < entries[j].Path
 		})
-		status := "unique"
 		hashes := map[string]bool{}
-		readable := false
+		readable := 0
 		for _, e := range entries {
-			if e.Broken {
+			if e.Broken || e.Hash == "" {
 				continue
 			}
-			if e.Hash == "" {
-				continue
-			}
-			readable = true
+			readable++
 			hashes[e.Hash] = true
 		}
+		status := "unique"
 		switch {
-		case !readable:
+		case readable == 0:
 			status = "unreadable"
 		case len(hashes) > 1:
 			status = "shadowed"
+		case readable > 1:
+			status = "duplicate"
 		}
 		skills = append(skills, surfaceSkill{Name: name, Status: status, Entries: entries})
 	}
@@ -137,8 +141,11 @@ func scanSkillSurface(globalRoots map[string]string, projectChains map[string][]
 	return skillSurface{Locations: locs, Skills: skills}
 }
 
-// projectSkillChains walks from dir up to the filesystem root collecting the
-// three per-project skill roots, innermost first.
+// projectSkillChains walks from dir up to the repo root (the first dir with
+// a .git) collecting the three per-project skill roots, innermost first. It
+// never enters the user's home: ~/.agents, ~/.claude and ~/.config/opencode
+// are the global roots, and scanning them again as "project" roots made every
+// global skill look duplicated for repos living under the home dir.
 func projectSkillChains(dir string) map[string][]string {
 	out := map[string][]string{
 		"project-opencode": {},
@@ -149,10 +156,22 @@ func projectSkillChains(dir string) map[string][]string {
 	if err != nil {
 		return out
 	}
+	home := ""
+	if h, err := userHomeDir(); err == nil && h != "" {
+		if abs, err := filepath.Abs(h); err == nil {
+			home = abs
+		}
+	}
 	for i := 0; i < 25; i++ {
+		if home != "" && strings.EqualFold(filepath.Clean(cur), filepath.Clean(home)) {
+			break
+		}
 		out["project-opencode"] = append(out["project-opencode"], filepath.Join(cur, ".opencode", "skills"))
 		out["project-claude"] = append(out["project-claude"], filepath.Join(cur, ".claude", "skills"))
 		out["project-agents"] = append(out["project-agents"], filepath.Join(cur, ".agents", "skills"))
+		if _, err := os.Stat(filepath.Join(cur, ".git")); err == nil {
+			break // repo root: OpenCode does not look above it
+		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
 			break
@@ -230,6 +249,7 @@ func removeSurfaceEntry(target string) error {
 	}
 	return os.RemoveAll(target)
 }
+
 func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request) {
 	rawPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if rawPath == "" {
@@ -264,7 +284,7 @@ func (s *Server) handleSkillSurfaceDelete(w http.ResponseWriter, r *http.Request
 
 // standardizeAction is one planned or executed normalization step.
 type standardizeAction struct {
-	Kind   string `json:"kind"` // delete-broken-link | delete-empty-dir | resolve-shadow
+	Kind   string `json:"kind"` // delete-broken-link | delete-empty-dir | resolve-shadow | remove-duplicate
 	Name   string `json:"name"`
 	Path   string `json:"path"`
 	Detail string `json:"detail"`
@@ -290,33 +310,37 @@ func locationRank(location string) int {
 	return 6
 }
 
+// dedupeRank orders which byte-identical copy to keep: project intent first,
+// then the global dir the most tools read. opencode loads ~/.claude/skills
+// and ~/.agents/skills too, so a copy there serves opencode *and* Claude
+// Code / other agents, while ~/.config/opencode/skills serves opencode only.
+func dedupeRank(location string) int {
+	switch location {
+	case "project-opencode":
+		return 0
+	case "project-claude":
+		return 1
+	case "project-agents":
+		return 2
+	case "global-claude":
+		return 3
+	case "global-agents":
+		return 4
+	case "global-opencode":
+		return 5
+	}
+	return 6
+}
+
 // planStandardize derives the normalization plan from a fresh scan. Broken
 // links and empty debris dirs go unconditionally; shadowed names keep the
-// highest-ranked location and drop the rest; byte-identical duplicates are
-// left alone (usually intentional compat copies).
-func planStandardize(surface skillSurface) []standardizeAction {
+// highest-ranked readable copy and drop the rest; byte-identical duplicates
+// are dropped only when dedupe is set (they are sometimes intentional compat
+// copies), keeping the copy the most tools can read.
+func planStandardize(surface skillSurface, dedupe bool) []standardizeAction {
 	actions := []standardizeAction{}
 	for _, sk := range surface.Skills {
-		if sk.Status == "shadowed" {
-			best := sk.Entries[0]
-			for _, e := range sk.Entries[1:] {
-				if locationRank(e.Location) < locationRank(best.Location) {
-					best = e
-				}
-			}
-			for _, e := range sk.Entries {
-				if e.Path == best.Path {
-					continue
-				}
-				actions = append(actions, standardizeAction{
-					Kind:   "resolve-shadow",
-					Name:   sk.Name,
-					Path:   e.Path,
-					Detail: fmt.Sprintf("kept %s (%s)", best.Path, best.Location),
-				})
-			}
-			continue
-		}
+		var readable []surfaceEntry
 		for _, e := range sk.Entries {
 			switch {
 			case e.Broken:
@@ -329,7 +353,38 @@ func planStandardize(surface skillSurface) []standardizeAction {
 					Kind: "delete-empty-dir", Name: sk.Name, Path: e.Path,
 					Detail: "no readable SKILL.md; removed only when empty",
 				})
+			default:
+				readable = append(readable, e)
 			}
+		}
+		if len(readable) < 2 {
+			continue
+		}
+		var kind string
+		rank := locationRank
+		switch {
+		case sk.Status == "shadowed":
+			kind = "resolve-shadow"
+		case sk.Status == "duplicate" && dedupe:
+			kind, rank = "remove-duplicate", dedupeRank
+		default:
+			continue
+		}
+		best := readable[0]
+		for _, e := range readable[1:] {
+			if rank(e.Location) < rank(best.Location) {
+				best = e
+			}
+		}
+		for _, e := range readable {
+			if e.Path == best.Path {
+				continue
+			}
+			detail := fmt.Sprintf("kept %s (%s)", best.Path, best.Location)
+			if kind == "remove-duplicate" {
+				detail = fmt.Sprintf("identical copy; kept %s (%s)", best.Path, best.Location)
+			}
+			actions = append(actions, standardizeAction{Kind: kind, Name: sk.Name, Path: e.Path, Detail: detail})
 		}
 	}
 	sort.Slice(actions, func(i, j int) bool {
@@ -341,9 +396,18 @@ func planStandardize(surface skillSurface) []standardizeAction {
 	return actions
 }
 
+// standardizeRequest optionally narrows an execute to the paths the user
+// kept checked in the preview. Paths outside the fresh plan are ignored, so
+// the endpoint can never delete something the plan did not propose.
+type standardizeRequest struct {
+	Paths []string `json:"paths"`
+}
+
 // handleSkillSurfaceStandardize previews (dry_run=1) or executes the
 // normalization plan: drop broken links, drop empty debris, resolve
-// shadowed names to one canonical copy. Identical duplicates are untouched.
+// shadowed names to one canonical copy, and — with dedupe=1 — drop
+// byte-identical duplicates. A JSON body {"paths": [...]} limits an execute
+// to those planned actions.
 func (s *Server) handleSkillSurfaceStandardize(w http.ResponseWriter, r *http.Request) {
 	projectDir := strings.TrimSpace(r.URL.Query().Get("project_dir"))
 	if projectDir == "" {
@@ -358,11 +422,33 @@ func (s *Server) handleSkillSurfaceStandardize(w http.ResponseWriter, r *http.Re
 		surfaceGlobals(),
 		projectSkillChains(projectDir),
 	)
-	actions := planStandardize(surface)
+	actions := planStandardize(surface, r.URL.Query().Get("dedupe") == "1")
 	if r.URL.Query().Get("dry_run") == "1" {
 		writeJSON(w, http.StatusOK, map[string]any{"projectDir": projectDir, "actions": actions})
 		return
 	}
+
+	var req standardizeRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body: " + err.Error()})
+			return
+		}
+	}
+	if req.Paths != nil {
+		want := make(map[string]bool, len(req.Paths))
+		for _, p := range req.Paths {
+			want[filepath.Clean(p)] = true
+		}
+		selected := actions[:0:0]
+		for _, a := range actions {
+			if want[filepath.Clean(a.Path)] {
+				selected = append(selected, a)
+			}
+		}
+		actions = selected
+	}
+
 	done := []standardizeAction{}
 	failed := []map[string]string{}
 	for _, a := range actions {

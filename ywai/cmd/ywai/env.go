@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +52,9 @@ func runEnvBootstrap() error {
 		}
 	}
 	if len(presets) == 0 {
-		presets = envprofile.Presets()
+		// The default lanes only: other builtins (devops, dev-cheap,
+		// code-review) and user presets are opt-in via --presets or create.
+		presets = []string{"dev", "qa", "personal"}
 	}
 	ready := make([]envprofile.Profile, 0, len(presets))
 	for _, name := range presets {
@@ -113,7 +117,8 @@ Examples:
   ywai env create qa --preset qa
   ywai env start dev
   ywai dev "run the tests"
-  ywai dev "run the tests" --model opencode-go/glm-5.3-flash --agent ask --auto`,
+  ywai dev "run the tests" --model opencode-go/glm-5.3-flash --agent ask --auto
+  ywai dev <workflow> "task"    (or --workflow <name>; runs the exported workflow)`,
 }
 
 var envListCmd = &cobra.Command{
@@ -178,7 +183,7 @@ var envCreateCmd = &cobra.Command{
 }
 
 var envStartCmd = &cobra.Command{
-	Use:   `start <name> ["prompt"] [--model provider/model] [--agent name] [--auto]`,
+	Use:   `start <name> ["prompt"] [--workflow <name>] [--model provider/model] [--agent name] [--auto]`,
 	Short: "Start (and enter) an isolated environment",
 	Long:  fmt.Sprintf(envRunHelp, "<name>"),
 	// Same flag handling as the ywai <name> shortcut.
@@ -328,7 +333,7 @@ func init() {
 	envCmd.AddCommand(envDoctorCmd)
 	envCmd.AddCommand(envRemoveCmd)
 	envCmd.AddCommand(envCloneCmd)
-	envBootstrapCmd.Flags().StringVar(&envBootstrapPresets, "presets", "", "Comma-separated presets to bootstrap (default: all embedded presets)")
+	envBootstrapCmd.Flags().StringVar(&envBootstrapPresets, "presets", "", "Comma-separated presets to bootstrap (default: dev,qa,personal)")
 	envCmd.AddCommand(envBootstrapCmd)
 	envCreateCmd.Flags().StringVar(&envPreset, "preset", "dev", "Preset to stamp (dev, qa, personal)")
 	envCreateCmd.Flags().BoolVar(&envInit, "init", false, "Seed from the current global opencode config (config files only, never DB/service)")
@@ -346,7 +351,7 @@ func init() {
 			}
 			name := p.Name
 			rootCmd.AddCommand(&cobra.Command{
-				Use:   name + ` ["prompt"] [--model provider/model] [--agent name] [--auto]`,
+				Use:   name + ` ["prompt"] [--workflow <name>] [--model provider/model] [--agent name] [--auto]`,
 				Short: "Enter isolated environment " + name,
 				Long:  fmt.Sprintf(envRunHelp, name),
 				Args:  cobra.ArbitraryArgs,
@@ -399,10 +404,6 @@ func envStart(name string, rawArgs []string) error {
 	if err != nil {
 		return err
 	}
-	ocArgs, err := envOpencodeArgv(prompt, opts)
-	if err != nil {
-		return err
-	}
 	if err := agent.GateOpenCodeV2(); err != nil {
 		return err
 	}
@@ -420,6 +421,31 @@ func envStart(name string, rawArgs []string) error {
 	if err := envprofile.EnsureServicePort(p); err != nil {
 		return err
 	}
+	// `ywai <env> <workflow> "task"` runs the workflow's orchestrator, the
+	// same thing the Run button does in the Workflow Studio.
+	prompt, opts, err = resolveWorkflowRun(prompt, opts,
+		func(name string) (string, string, bool) { return envprofile.CommandRun(p, name) },
+		func() []string { return envprofile.Commands(p) },
+	)
+	if err != nil {
+		return err
+	}
+	ocArgs, err := envOpencodeArgv(prompt, opts)
+	if err != nil {
+		return err
+	}
+	if opts.Workflow != "" {
+		// The Run button exports before every run; mirror that so a workflow
+		// edited after the last install still runs its current version.
+		if err := refreshExportedWorkflow(p, opts.Workflow); err != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: could not refresh workflow export, running the env's copy: %v\n", err)
+		}
+		if opts.Agent != "" {
+			fmt.Printf("Running workflow %q in env %q (agent %s)\n", opts.Workflow, p.Name, opts.Agent)
+		} else {
+			fmt.Printf("Running command %q in env %q\n", opts.Workflow, p.Name)
+		}
+	}
 	running, err := envprofile.Status(p)
 	if err != nil {
 		return err
@@ -430,6 +456,57 @@ func envStart(name string, rawArgs []string) error {
 		}
 	}
 	return runUnderProfileEnv(p, append([]string{bin}, ocArgs...))
+}
+
+// refreshExportedWorkflow re-exports a workflow from the shared store into
+// the env before a CLI run, so `ywai <env> <workflow>` runs what the Run
+// button would run (it exports on every run too). Sub-workflows the
+// orchestrator can invoke are exported with it, so a delegation step never
+// points at a missing command. A name missing from the store keeps whatever
+// the env has, silently: the command may be hand-maintained or retired but
+// still pinned to this env.
+func refreshExportedWorkflow(p envprofile.Profile, name string) error {
+	store := workflows.NewStore(config.DataWorkflowsDir())
+	wf, err := store.Load(name)
+	if err != nil {
+		if errors.Is(err, workflows.ErrWorkflowNotFound) {
+			return nil
+		}
+		return err
+	}
+	return envprofile.WithProfileEnv(p, func() error {
+		exp := workflows.NewExporter()
+		if _, err := exp.Apply(wf); err != nil {
+			return err
+		}
+		exported := map[string]bool{wf.Name: true}
+		var walk func(w *workflows.Workflow) error
+		walk = func(w *workflows.Workflow) error {
+			for i := range w.Nodes {
+				n := &w.Nodes[i]
+				if n.Type != workflows.NodeTypeSubAgentFlow {
+					continue
+				}
+				flowID := n.Data.FlowID
+				if flowID == "" || exported[flowID] {
+					continue
+				}
+				exported[flowID] = true
+				sub, err := store.Load(flowID)
+				if err != nil {
+					continue
+				}
+				if _, err := exp.Apply(sub); err != nil {
+					return err
+				}
+				if err := walk(sub); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		return walk(wf)
+	})
 }
 
 // runUnderProfileEnv runs argv[0] with the profile environment applied,

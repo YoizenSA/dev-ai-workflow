@@ -843,6 +843,35 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 	return nil
 }
 
+// setDefaultAgentForced writes the root `default_agent` unconditionally
+// (profile preset scope only): the preset is the choice, so a previous
+// preset's agent never survives a preset switch. Global applies keep using
+// setDefaultAgent, which never overwrites a user pick.
+func setDefaultAgentForced(agentName string, dryRun bool) error {
+	agentName = strings.TrimSpace(agentName)
+	if agentName == "" {
+		return nil
+	}
+	cfg, path, _, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+	if cur, _ := cfg["default_agent"].(string); cur == agentName {
+		fmt.Printf("  default_agent already %q\n", agentName)
+		return nil
+	}
+	cfg["default_agent"] = agentName
+	if dryRun {
+		fmt.Printf("  Would set default_agent to %q (preset)\n", agentName)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	fmt.Printf("  default_agent set to %q (preset)\n", agentName)
+	return nil
+}
+
 // setDefaultModel writes the root `model` key (the default model for a new
 // session) when the key is absent or empty. A value the user already set is
 // left untouched: it is their choice, and overwriting it would change what

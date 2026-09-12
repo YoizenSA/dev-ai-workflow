@@ -213,7 +213,18 @@ describe("exportCurrent", () => {
 		useWorkflowStore.setState({ current: WORKFLOW });
 		mockApi.export.mockResolvedValue({ workflowName: "w", files: [], dryRun: false });
 		await useWorkflowStore.getState().exportCurrent(true);
-		expect(mockApi.export).toHaveBeenCalledWith("w", true, "opencode");
+		// No profile: the API falls back to the shared Settings scope.
+		expect(mockApi.export).toHaveBeenCalledWith("w", true, "opencode", undefined);
+	});
+
+	it("passes the export destination env through to the API", async () => {
+		useWorkflowStore.setState({ current: WORKFLOW });
+		mockApi.export.mockResolvedValue({ workflowName: "w", files: [], dryRun: true });
+		await useWorkflowStore.getState().exportCurrent(false, "opencode", "dev");
+		expect(mockApi.export).toHaveBeenCalledWith("w", false, "opencode", "dev");
+		// "" means global explicitly (overrides the Settings scope).
+		await useWorkflowStore.getState().exportCurrent(false, "opencode", "");
+		expect(mockApi.export).toHaveBeenLastCalledWith("w", false, "opencode", "");
 	});
 });
 

@@ -1261,3 +1261,53 @@
 .mcp-command-desc.error {
 	color: var(--color-danger, #d33);
 }
+
+/* ---- Skill surface panel ---- */
+.skill-surface { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.skill-surface .ss-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.skill-surface .ss-head h3 { font-size: var(--text-lg); }
+.skill-surface .ss-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.skill-surface .ss-search { max-width: 20rem; padding-block: 0.4rem; }
+.ss-count {
+  display: inline-block; margin-left: 0.25rem; padding: 0 0.4rem; border-radius: 999px;
+  font-family: var(--font-mono); font-size: var(--text-2xs); background: var(--surface-hover); color: var(--text-muted);
+}
+.seg-btn.active .ss-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.ss-pill-dup { background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning-border); }
+.ss-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ss-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.55rem; border-radius: 999px;
+  border: 1px solid var(--panel-border); background: var(--surface-soft);
+  font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-soft);
+}
+.ss-chip.is-debris { border-style: dashed; color: var(--text-muted); }
+.ss-chip-del {
+  display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; padding: 0;
+  border: none; border-radius: 50%; background: transparent; color: var(--text-muted);
+  font-size: 0.85rem; line-height: 1; cursor: pointer;
+}
+.ss-chip-del:hover { background: var(--danger-soft); color: var(--tint-danger); }
+.ss-opt {
+  display: flex; align-items: flex-start; gap: var(--space-3); cursor: pointer;
+  padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-soft); border: 1px solid var(--panel-border);
+}
+.ss-opt input { margin-top: 0.2rem; accent-color: var(--yz-primary-1); }
+.ss-opt > span { display: flex; flex-direction: column; gap: 0.15rem; }
+.ss-plan { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); max-height: 55vh; overflow: auto; }
+.ss-plan-group { border: 1px solid var(--panel-border); border-radius: var(--radius-md); overflow: hidden; }
+.ss-plan-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); background: var(--surface-soft); font-size: var(--text-sm);
+}
+.ss-link { margin-left: auto; background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: var(--text-xs); color: var(--tint-primary); }
+.ss-link:hover { text-decoration: underline; }
+.ss-plan-row {
+  display: grid; grid-template-columns: auto minmax(8rem, 12rem) minmax(0, 1fr); gap: 0.2rem var(--space-3); align-items: baseline;
+  padding: var(--space-2) var(--space-3); border-top: 1px solid var(--panel-border); cursor: pointer; font-size: var(--text-sm);
+}
+.ss-plan-row:hover { background: var(--surface-hover); }
+.ss-plan-row input { accent-color: var(--yz-primary-1); }
+.ss-plan-name { overflow: hidden; text-overflow: ellipsis; }
+.ss-plan-path { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-plan-detail { grid-column: 3; font-size: var(--text-xs); color: var(--text-muted); }

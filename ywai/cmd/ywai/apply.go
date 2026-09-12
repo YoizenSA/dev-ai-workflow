@@ -274,6 +274,12 @@ func applyManagedScoped(o applyOpts) applyResult {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", r.Fatal)
 		return r
 	}
+	// Envs created before the managed-service port fix have no service.json:
+	// their TUI/debug would collide with the global service on the default
+	// port. Pin it on every apply so re-applying fixes old envs too.
+	if err := envprofile.EnsureServicePort(p); err != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: could not pin env service port: %v\n", err)
+	}
 	fmt.Printf("Applying inside environment %q (global install untouched)...\n", p.Name)
 	var r applyResult
 	if err := envprofile.WithProfileEnv(p, func() error {
@@ -398,19 +404,6 @@ func applyManaged(o applyOpts) applyResult {
 		// TokenBank proxy into opencode / pi / omp / copilot when credentials exist.
 		steps.next("Configuring TokenBank providers")
 		reapplyTokenBank(o.Opts.DryRun)
-
-		// Preset enforcement: append preset deny_bash patterns to the
-		// profile's agent shell rules. The agents dir is already
-		// sandbox-resolved, so the global install is never touched.
-		if preset.InScope && !preset.Bare && len(preset.DenyBash) > 0 {
-			if o.Opts.DryRun {
-				fmt.Printf("  Would append %d preset shell-deny rule(s)\n", len(preset.DenyBash))
-			} else if n, err := envprofile.AppendDenyBashToAgents(config.OpenCodeAgentsDir(), preset.DenyBash); err != nil {
-				r.warnf("failed to append preset shell-deny rules: %v", err)
-			} else if n > 0 {
-				fmt.Printf("  ✓ %d agent file(s) gained preset shell-deny rules\n", n)
-			}
-		}
 	}
 
 	// ── overrides ─────────────────────────────────────────────────────────
@@ -445,6 +438,20 @@ func applyManaged(o applyOpts) applyResult {
 		}
 	}
 
+	// Preset enforcement: append preset deny_bash patterns to every agent's
+	// shell rules. Runs after the workflow export so workflow sub-agents are
+	// covered too (they are written by that step, after the profile install).
+	// The agents dir is already sandbox-resolved: global is never touched.
+	if plan.InstallProfiles && preset.InScope && !preset.Bare && len(preset.DenyBash) > 0 {
+		if o.Opts.DryRun {
+			fmt.Printf("  Would append %d preset shell-deny rule(s)\n", len(preset.DenyBash))
+		} else if n, err := envprofile.AppendDenyBashToAgents(config.OpenCodeAgentsDir(), preset.DenyBash); err != nil {
+			r.warnf("failed to append preset shell-deny rules: %v", err)
+		} else if n > 0 {
+			fmt.Printf("  ✓ %d agent file(s) gained preset shell-deny rules\n", n)
+		}
+	}
+
 	// ── AGENTS.md ─────────────────────────────────────────────────────────
 	// MUST run before plugins so Graft can append its marker section.
 	// Also runs BEFORE optional SDD so it can re-inject marker blocks.
@@ -471,11 +478,14 @@ func applyManaged(o applyOpts) applyResult {
 	// ── default agent ─────────────────────────────────────────────────────
 	if plan.SetDefaultAgent {
 		steps.next("Setting default_agent")
-		wantAgent := "orchestrator"
+		// Under preset scope the preset IS the choice (same rule as the
+		// default model below): switching an env to another preset must move
+		// its default agent too. Globally a user pick is never overwritten.
 		if preset.DefaultAgent != "" {
-			wantAgent = preset.DefaultAgent
-		}
-		if err := setDefaultAgent(wantAgent, o.Opts.DryRun); err != nil {
+			if err := setDefaultAgentForced(preset.DefaultAgent, o.Opts.DryRun); err != nil {
+				r.warnf("failed to set default_agent: %v", err)
+			}
+		} else if err := setDefaultAgent("orchestrator", o.Opts.DryRun); err != nil {
 			r.warnf("failed to set default_agent: %v", err)
 		}
 	}

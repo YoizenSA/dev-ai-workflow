@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import SkillSurfacePanel from "./SkillSurfacePanel";
 
 const surface = {
@@ -91,5 +91,55 @@ describe("SkillSurfacePanel", () => {
     await waitFor(() => {
       expect(calls.filter((c) => c === "GET /api/config/skills/surface").length).toBe(2);
     });
+  });
+
+  it("filters by status and search", async () => {
+    mockSurface();
+    render(<SkillSurfacePanel />);
+    await screen.findByText(/3 skill\(s\) visible/);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Shadowed/ }));
+    expect(screen.getByText("dup")).toBeInTheDocument();
+    expect(screen.queryByText("solo")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: /All/ }));
+    fireEvent.change(screen.getByLabelText("Search skills"), { target: { value: "sol" } });
+    expect(screen.getByText("solo")).toBeInTheDocument();
+    expect(screen.queryByText("dead")).not.toBeInTheDocument();
+  });
+
+  it("previews standardize and applies only the checked paths", async () => {
+    const posts: { url: string; body?: string }[] = [];
+    const plan = {
+      actions: [
+        { kind: "remove-duplicate", name: "x", path: "C:/a/x", detail: "identical copy; kept C:/c/x" },
+        { kind: "delete-empty-dir", name: "y", path: "C:/b/y", detail: "no readable SKILL.md" },
+      ],
+    };
+    globalThis.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        posts.push({ url, body: init?.body as string | undefined });
+        if (url.includes("dry_run=1")) return { ok: true, json: async () => plan };
+        return { ok: true, json: async () => ({ deleted: [plan.actions[0]], failed: [] }) };
+      }
+      return { ok: true, json: async () => surface };
+    }) as unknown as typeof fetch;
+
+    render(<SkillSurfacePanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /Standardize/ }));
+    expect(await screen.findByText("Duplicate copies")).toBeInTheDocument();
+    expect(posts[0].url).toContain("dry_run=1");
+    expect(posts[0].url).toContain("dedupe=1");
+
+    // Uncheck the empty-folder row, then apply.
+    const rows = screen.getAllByRole("checkbox").filter((c) => c.closest(".ss-plan-row"));
+    fireEvent.click(rows[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Apply 1 change/ }));
+
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(posts[1].url).toContain("dry_run=0");
+    expect(JSON.parse(posts[1].body ?? "{}")).toEqual({ paths: ["C:/a/x"] });
+    expect(await screen.findByText(/removed 1 item/)).toBeInTheDocument();
   });
 });

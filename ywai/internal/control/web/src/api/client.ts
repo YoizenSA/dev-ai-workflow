@@ -5,6 +5,7 @@ import type {
 	DelegationRulesResp,
 	SkillInfo,
 	SkillSurface,
+	SkillStandardizeResult,
 	MCPServer,
 	ProviderInfo,
 	OpenCodeConfig,
@@ -297,6 +298,17 @@ export const configApi = {
 		request<SkillSurface>(`/api/config/skills/surface${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
 	deleteSurfaceSkill: (path: string, projectDir?: string) =>
 		del(`/api/config/skills/surface?path=${encodeURIComponent(path)}${projectDir ? `&project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	// Plan (dryRun) or apply the skill surface normalization. dedupe also drops
+	// byte-identical copies; paths limits an apply to those planned actions.
+	standardizeSkillSurface: (opts: { dryRun: boolean; dedupe?: boolean; paths?: string[]; projectDir?: string }) => {
+		const q = new URLSearchParams({ dry_run: opts.dryRun ? "1" : "0" });
+		if (opts.dedupe) q.set("dedupe", "1");
+		if (opts.projectDir) q.set("project_dir", opts.projectDir);
+		return request<SkillStandardizeResult>(`/api/config/skills/surface/standardize?${q}`, {
+			method: "POST",
+			body: opts.paths ? JSON.stringify({ paths: opts.paths }) : undefined,
+		});
+	},
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),

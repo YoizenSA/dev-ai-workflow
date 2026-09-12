@@ -73,8 +73,59 @@ func TestScanSkillSurface_Shadowed(t *testing.T) {
 		t.Fatalf("same = %+v, want shadowed with 2 entries", same)
 	}
 	cp := findSkill(surface.Skills, "copy")
-	if cp == nil || cp.Status != "unique" || len(cp.Entries) != 2 {
-		t.Fatalf("copy = %+v, want unique (same bytes) with 2 entries", cp)
+	if cp == nil || cp.Status != "duplicate" || len(cp.Entries) != 2 {
+		t.Fatalf("copy = %+v, want duplicate (same bytes) with 2 entries", cp)
+	}
+}
+
+// pinHome points the surface's global roots at a temp home. USERPROFILE is
+// not enough on Windows: os.UserHomeDir ignores it there.
+func pinHome(t *testing.T, home string) {
+	t.Helper()
+	orig := userHomeDir
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = orig })
+}
+
+// newRepo makes a temp project with a .git so the project walk-up stops at
+// it, like a real checkout (and never wanders into the real home dir).
+func newRepo(t *testing.T) string {
+	t.Helper()
+	proj := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(proj, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return proj
+}
+
+func TestProjectSkillChains_StopsAtRepoRootAndHome(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "work", "repo")
+	sub := filepath.Join(repo, "pkg", "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pinHome(t, filepath.Join(root, "work")) // home above the repo
+	chain := projectSkillChains(sub)["project-agents"]
+	if len(chain) != 3 { // sub, pkg, repo
+		t.Fatalf("chain = %v, want sub → repo only", chain)
+	}
+	if last := chain[len(chain)-1]; last != filepath.Join(repo, ".agents", "skills") {
+		t.Fatalf("last = %s, want the repo root", last)
+	}
+
+	// Without a .git the walk still stops before entering the home dir.
+	noGit := filepath.Join(root, "work", "loose", "dir")
+	if err := os.MkdirAll(noGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range projectSkillChains(noGit)["project-agents"] {
+		if p == filepath.Join(root, "work", ".agents", "skills") {
+			t.Fatalf("walk entered the home dir: %v", projectSkillChains(noGit)["project-agents"])
+		}
 	}
 }
 
@@ -199,7 +250,7 @@ func TestPlanStandardize(t *testing.T) {
 			{Location: "global-opencode", Path: "/o/dead", Hash: ""},
 		}},
 	}}
-	actions := planStandardize(surface)
+	actions := planStandardize(surface, false)
 	if len(actions) != 2 {
 		t.Fatalf("actions = %+v, want 2", actions)
 	}
@@ -217,9 +268,10 @@ func TestPlanStandardize(t *testing.T) {
 
 func TestHandleSkillSurfaceStandardize(t *testing.T) {
 	home := t.TempDir()
+	pinHome(t, home)
 	g1 := filepath.Join(home, ".config", "opencode", "skills")
 	g2 := filepath.Join(home, ".claude", "skills")
-	proj := filepath.Join(t.TempDir(), "repo")
+	proj := newRepo(t)
 	writeSkill(t, g1, "shadow", "# one")
 	writeSkill(t, g2, "shadow", "# two")
 	writeSkill(t, g1, "same", "# identical")
@@ -273,6 +325,91 @@ func TestHandleSkillSurfaceStandardize(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(g2, "same", "SKILL.md")); err != nil {
 		t.Fatal("identical duplicate must be left alone")
+	}
+}
+
+func TestPlanStandardize_Dedupe(t *testing.T) {
+	surface := skillSurface{Skills: []surfaceSkill{
+		{Name: "same", Status: "duplicate", Entries: []surfaceEntry{
+			{Location: "global-opencode", Path: "/o/same", Hash: "cc"},
+			{Location: "global-claude", Path: "/c/same", Hash: "cc"},
+			{Location: "global-agents", Path: "/a/same", Hash: ""}, // debris copy
+		}},
+		// A shadowed skill must never keep an empty dir as the canonical copy.
+		{Name: "mix", Status: "shadowed", Entries: []surfaceEntry{
+			{Location: "global-opencode", Path: "/o/mix", Hash: ""},
+			{Location: "global-claude", Path: "/c/mix", Hash: "11"},
+			{Location: "global-agents", Path: "/a/mix", Hash: "22"},
+		}},
+	}}
+	if got := planStandardize(surface, false); len(got) != 3 {
+		// same: debris only · mix: debris + one shadow
+		t.Fatalf("no-dedupe actions = %+v, want 3", got)
+	}
+	actions := planStandardize(surface, true)
+	byPath := map[string]standardizeAction{}
+	for _, a := range actions {
+		byPath[a.Path] = a
+	}
+	if a, ok := byPath["/o/same"]; !ok || a.Kind != "remove-duplicate" || !strings.Contains(a.Detail, "/c/same") {
+		t.Fatalf("dedupe must drop the opencode-only copy and keep ~/.claude: %+v", actions)
+	}
+	if _, ok := byPath["/c/same"]; ok {
+		t.Fatal("kept duplicate copy was planned for removal")
+	}
+	if a := byPath["/a/same"]; a.Kind != "delete-empty-dir" {
+		t.Fatalf("debris copy = %+v, want delete-empty-dir", a)
+	}
+	if a := byPath["/a/mix"]; a.Kind != "resolve-shadow" || !strings.Contains(a.Detail, "/c/mix") {
+		t.Fatalf("shadow must keep the readable claude copy, not the empty opencode dir: %+v", actions)
+	}
+	if a := byPath["/o/mix"]; a.Kind != "delete-empty-dir" {
+		t.Fatalf("empty opencode dir = %+v, want delete-empty-dir", a)
+	}
+}
+
+func TestHandleSkillSurfaceStandardize_DedupeAndSelection(t *testing.T) {
+	home := t.TempDir()
+	pinHome(t, home)
+	oc := filepath.Join(home, ".config", "opencode", "skills")
+	cl := filepath.Join(home, ".claude", "skills")
+	proj := newRepo(t)
+	writeSkill(t, oc, "same", "# identical")
+	writeSkill(t, cl, "same", "# identical")
+	writeSkill(t, oc, "twin", "# twin")
+	writeSkill(t, cl, "twin", "# twin")
+
+	call := func(q, body string) map[string]any {
+		t.Helper()
+		srv := &Server{}
+		rec := httptest.NewRecorder()
+		srv.handleSkillSurfaceStandardize(rec, httptest.NewRequest(http.MethodPost,
+			"/api/config/skills/surface/standardize?project_dir="+url.QueryEscape(proj)+q, strings.NewReader(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+
+	plan := call("&dry_run=1&dedupe=1", "")
+	if acts, _ := plan["actions"].([]any); len(acts) != 2 {
+		t.Fatalf("dedupe plan = %v, want 2 (one per duplicated skill)", plan["actions"])
+	}
+	// Execute only one of them, plus a path the plan never proposed.
+	sel := `{"paths":["` + filepath.ToSlash(filepath.Join(oc, "same")) + `","` + filepath.ToSlash(filepath.Join(cl, "twin")) + `"]}`
+	res := call("&dry_run=0&dedupe=1", sel)
+	if del, _ := res["deleted"].([]any); len(del) != 1 {
+		t.Fatalf("deleted = %v, want only the selected planned path", res["deleted"])
+	}
+	if _, err := os.Stat(filepath.Join(oc, "same")); !os.IsNotExist(err) {
+		t.Fatal("selected duplicate still exists")
+	}
+	for _, keep := range []string{filepath.Join(cl, "same"), filepath.Join(oc, "twin"), filepath.Join(cl, "twin")} {
+		if _, err := os.Stat(filepath.Join(keep, "SKILL.md")); err != nil {
+			t.Fatalf("%s must be kept: %v", keep, err)
+		}
 	}
 }
 

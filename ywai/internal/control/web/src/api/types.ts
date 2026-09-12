@@ -136,8 +136,24 @@ export interface SkillSurfaceEntry {
 
 export interface SkillSurfaceSkill {
   name: string
-  status: 'unique' | 'shadowed' | 'unreadable'
+  // duplicate = 2+ byte-identical copies; shadowed = 2+ copies that differ.
+  status: 'unique' | 'duplicate' | 'shadowed' | 'unreadable'
   entries: SkillSurfaceEntry[]
+}
+
+export interface SkillStandardizeAction {
+  kind: 'delete-broken-link' | 'delete-empty-dir' | 'resolve-shadow' | 'remove-duplicate'
+  name: string
+  path: string
+  detail: string
+}
+
+// Dry run returns `actions`; an execute returns `deleted` + `failed`.
+export interface SkillStandardizeResult {
+  projectDir?: string
+  actions?: SkillStandardizeAction[]
+  deleted?: SkillStandardizeAction[]
+  failed?: { path: string; error: string }[]
 }
 
 export interface SkillSurface {

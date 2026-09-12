@@ -1,0 +1,12 @@
+{
+  "name": "devops",
+  "description": "Infra & CI/CD: Azure Pipelines, Helm/AKS, Docker and Azure DevOps work items. DevOps agent by default; destructive cluster and cloud commands are blocked.",
+  "groups": ["core"],
+  "skills": ["devops", "docker", "ado", "diks", "git-commit", "diagnosing-bugs", "bulk-read"],
+  "mcp": ["grafana", "microsoft-learn", "graft"],
+  "default_agent": "devops",
+  "default_model": "opencode-go/glm-5.3",
+  "deny_bash": ["kubectl delete*", "helm uninstall*", "terraform destroy*", "az group delete*", "git push --force*"],
+  "cli_theme": "tokyonight",
+  "copy_global_providers": true
+}

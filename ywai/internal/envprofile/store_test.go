@@ -3,6 +3,7 @@ package envprofile
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -151,8 +152,10 @@ func mustSpec(t *testing.T, p Profile) map[string]any {
 
 func TestPresets(t *testing.T) {
 	names := Presets()
-	if len(names) != 3 {
-		t.Fatalf("presets = %v, want 3", names)
+	for _, want := range []string{"code-review", "dev", "dev-cheap", "devops", "personal", "qa"} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("presets = %v, missing %q", names, want)
+		}
 	}
 	if _, err := Preset("qa"); err != nil {
 		t.Fatalf("Preset(qa): %v", err)

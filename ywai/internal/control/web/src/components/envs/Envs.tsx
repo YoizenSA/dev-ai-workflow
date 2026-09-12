@@ -497,6 +497,7 @@ function envCommands(name: string) {
     { label: 'Open TUI', cmd: `ywai ${name}`, help: 'Interactive opencode inside this env' },
     { label: 'Run a prompt', cmd: `ywai ${name} "describe the task here"`, help: 'Headless run, prints the answer and exits' },
     { label: 'Model & agent', cmd: `ywai ${name} "describe the task here" --model opencode-go/glm-5.3-flash --agent ask --auto`, help: 'Pick model and agent for this run; --auto approves permissions so it never waits' },
+    { label: 'Run a workflow', cmd: `ywai ${name} <workflow> "free text"`, help: 'Runs an exported workflow with its orchestrator agent (same as the Run button in Workflows)' },
     { label: 'Apply', cmd: `ywai install --profile ${name} --agent opencode`, help: 'Same as the Apply button' },
     { label: 'Status', cmd: `ywai env status ${name}`, help: 'Service, database and log paths' },
   ]
@@ -564,7 +565,7 @@ interface ChipOption {
 
 // Category display order; unknown categories sort alphabetically after
 // these, with "other" always last.
-const GROUP_ORDER = ['testing', 'qa', 'frontend', 'architecture', 'debugging', 'devops', 'git', 'planning', 'delegation', 'communication', 'meta']
+const GROUP_ORDER = ['review', 'testing', 'qa', 'frontend', 'architecture', 'debugging', 'devops', 'git', 'planning', 'delegation', 'communication', 'meta']
 
 function groupOptions(options: ChipOption[]): [string, ChipOption[]][] {
   if (!options.some((o) => o.group)) return [['', options]]

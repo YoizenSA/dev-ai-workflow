@@ -1,0 +1,12 @@
+{
+  "name": "code-review",
+  "description": "Review-only: reviewer agent with review, testing and architecture skills plus Azure DevOps PRs; the shell cannot commit, push or rewrite history.",
+  "groups": ["core"],
+  "skills": ["code-review", "testing-expert", "improve-codebase-architecture", "codebase-design", "domain-modeling", "ado", "bulk-read"],
+  "mcp": ["graft"],
+  "default_agent": "reviewer",
+  "default_model": "opencode-go/glm-5.3",
+  "deny_bash": ["git commit*", "git push*", "git reset*", "git rebase*", "git checkout*", "git merge*", "rm *"],
+  "cli_theme": "tokyonight",
+  "copy_global_providers": true
+}
