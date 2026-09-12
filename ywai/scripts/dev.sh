@@ -253,6 +253,30 @@ do_version() {
     compute_version
 }
 
+do_watch() {
+    if ! command -v air >/dev/null 2>&1; then
+        fail "air not found - install it with: go install github.com/air-verse/air@latest"
+        exit 1
+    fi
+    info "Building the web UI once (dist/) so the server has something to serve..."
+    if command -v npm >/dev/null 2>&1; then
+        npm --prefix internal/control/web run build
+    else
+        fail "npm not found - serving whatever dist/ already exists"
+    fi
+
+    info "Hot reload: rebuild + restart on every .go change (config: .air.toml)"
+    info "Frontend edits: refresh the browser, or run './scripts/dev.sh web' for live HMR on :3000"
+    cmd "air -c .air.toml"
+    air -c .air.toml
+}
+
+do_web() {
+    info "Vite dev server with HMR on http://localhost:3000 (API + WS proxied to :5768)"
+    cmd "npm --prefix internal/control/web run dev"
+    npm --prefix internal/control/web run dev
+}
+
 do_help() {
     cat <<USAGE
 ywai — Local development script
@@ -272,6 +296,9 @@ Subcommands:
   mcp-test     Build + install + verify MCP daemon responds
   docker-matrix [dry|net|nightly]
                Docker lifecycle matrix (default dry; skips cleanly without Docker)
+  watch        Hot reload for the Go server: air rebuilds ywai-dev.exe and
+               restarts it on every .go change (needs: go install github.com/air-verse/air@latest)
+  web          Vite dev server with HMR on :3000, API proxied to :5768
   version      Print the version string that would be used
   help         Show this usage message
 
@@ -315,6 +342,12 @@ case "${1:-help}" in
         ;;
     docker-matrix)
         do_docker_matrix "${2:-dry}"
+        ;;
+    watch)
+        do_watch
+        ;;
+    web)
+        do_web
         ;;
     version)
         do_version

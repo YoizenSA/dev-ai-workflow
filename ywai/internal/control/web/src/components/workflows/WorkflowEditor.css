@@ -82,6 +82,10 @@
 	border: 1px solid var(--panel-border);
 	border-radius: var(--radius);
 	font-size: var(--text-sm);
+	/* Many node kinds: scroll inside the column instead of stretching the
+	   page beyond the viewport. */
+	overflow-y: auto;
+	min-height: 0;
 }
 
 .workflow-palette h4 {

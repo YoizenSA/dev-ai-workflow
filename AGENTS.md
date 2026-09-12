@@ -54,6 +54,8 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | `hooks` | Install git hooks so lint fails locally | Once per clone |
 | `check` | Full pipeline: lint → test → build-full → verify → install | **Before pushing to main** |
 | `ui` | Build + install + start the control UI on port 5768 | To visually test the UI |
+| `watch` | Hot reload: air rebuilds `ywai-dev.exe` + restarts the server on every `.go` change | Go dev loop |
+| `web` | Vite dev server with HMR on port 3000, API proxied to 5768 | Frontend dev loop |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
 | `version` | Print the current dev version string | Debug |
 | `help` | Show all available subcommands | Reference |
@@ -85,6 +87,17 @@ cd ywai && bash scripts/dev.sh test-ui
 cd ywai && bash scripts/dev.sh ui
 # Opens http://localhost:5768
 ```
+
+**Hot reload dev loop (exe + web):**
+```bash
+cd ywai && bash scripts/dev.sh watch   # terminal 1: rebuilds + restarts the server on .go changes
+cd ywai && bash scripts/dev.sh web     # terminal 2: vite HMR on http://localhost:3000
+```
+The dev server (`ywai-dev.exe`, no embedded tag) serves the web UI from
+`internal/control/web/dist`, so frontend edits need only a browser refresh;
+`.go` edits are what trigger rebuild+restart. With the vite dev server
+(`web`), frontend edits are live without refresh (`/api` and `/ws` proxy to
+5768). One-time setup: `go install github.com/air-verse/air@latest`.
 
 ### Notes
 
