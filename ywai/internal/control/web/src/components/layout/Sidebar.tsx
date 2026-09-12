@@ -65,7 +65,9 @@ const NAV_ITEMS = [
 
 const BETA_ITEMS = [
 	{
-		path: "/health",
+		// /health itself is the server's liveness JSON endpoint, so the
+		// dashboard lives at /status — otherwise the SPA route never renders.
+		path: "/status",
 		label: "Health",
 		icon: <Heart size={20} />,
 	},

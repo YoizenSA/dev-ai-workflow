@@ -125,7 +125,7 @@ describe('HealthDashboard', () => {
 		render(<HealthDashboard />);
 
 		await waitFor(() => {
-			expect(screen.getByText(/3/)).toBeInTheDocument();
+			expect(screen.getByText('3 repos')).toBeInTheDocument();
 		});
 	});
 

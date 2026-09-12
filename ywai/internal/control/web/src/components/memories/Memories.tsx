@@ -16,6 +16,9 @@ import ConsolidationModal from './ConsolidationModal'
 import SettingsModal from './SettingsModal'
 import './Memories.css'
 
+// The search shortcut hint must match the platform: ⌘K on macOS, Ctrl+K elsewhere.
+const SEARCH_HINT = /Mac/i.test(navigator.platform) ? '⌘K' : 'Ctrl+K'
+
 type SubTab =
 	| 'memories'
 	| 'sessions'
@@ -425,7 +428,7 @@ export default function Memories() {
 					<input
 						ref={searchInputRef}
 						className="input memories-search"
-						placeholder="search memories…  (⌘K)"
+						placeholder={`search memories…  (${SEARCH_HINT})`}
 							value={filters.query}
 							onChange={(e) => setFilter('query', e.target.value)}
 							onKeyDown={(e) => {

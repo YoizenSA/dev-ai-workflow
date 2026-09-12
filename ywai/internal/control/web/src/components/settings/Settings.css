@@ -5,8 +5,7 @@
 
 /* --- Page layout --- */
 .settings-page {
-	max-width: 1400px;
-	margin: 0 auto;
+	/* Full width like every other page — no centered max-width column. */
 	padding: var(--space-6) var(--space-4);
 	/* Stable width across tabs so switching never shifts the layout. */
 	width: 100%;

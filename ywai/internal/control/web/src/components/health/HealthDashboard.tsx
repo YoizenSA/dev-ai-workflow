@@ -4,9 +4,11 @@ import { HealthBonesFallback, HealthCaptureFixture } from '../../bones/fallbacks
 import './health.css';
 
 function formatDate(iso: string): string {
+	// A "last check" is an instant: the day matters, not just the month.
 	return new Date(iso).toLocaleDateString('en-US', {
 		year: 'numeric',
 		month: 'long',
+		day: 'numeric',
 	});
 }
 

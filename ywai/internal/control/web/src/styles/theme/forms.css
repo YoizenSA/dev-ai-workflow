@@ -103,6 +103,9 @@ textarea::-webkit-resizer { background: transparent; }
   gap: 0;
   border-bottom: 2px solid var(--panel-border);
   padding-bottom: 0;
+  /* Wrap on narrow viewports: a hidden-scrollbar overflow hides the last
+     tabs with no hint they exist. */
+  flex-wrap: wrap;
   overflow-x: auto;
   scrollbar-width: none;
 }

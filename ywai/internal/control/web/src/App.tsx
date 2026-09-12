@@ -22,7 +22,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/mcp-store" element={<McpStore />} />
           <Route path="/ado" element={<AdoConfig />} />
-          <Route path="/health" element={<HealthDashboard />} />
+          <Route path="/status" element={<HealthDashboard />} />
           <Route path="/hub" element={<Navigate to="/workflows" replace />} />
         </Routes>
       </Layout>
