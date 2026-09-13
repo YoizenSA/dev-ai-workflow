@@ -158,6 +158,17 @@ func LoadSessionAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) 
 	return primary, nil
 }
 
+// hasTable reports whether the SQLite database contains the named table.
+func hasTable(ctx context.Context, db *sql.DB, name string) bool {
+	var n int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name,
+	).Scan(&n); err != nil {
+		return false
+	}
+	return n > 0
+}
+
 func loadOneAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*SessionAnalytics, error) {
 	db, err := openOpenCodeDB(dbPath)
 	if err != nil {
@@ -166,15 +177,25 @@ func loadOneAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*Se
 	defer db.Close()
 
 	out := &SessionAnalytics{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		DBPath:      dbPath,
-		Days:        q.Days,
-		ProjectID:   q.ProjectID,
-		Projects:    []SessionProjectStat{},
-		Skills:      []SessionNamedCount{},
-		Tools:       []SessionNamedCount{},
-		Agents:      []SessionNamedCount{},
-		Models:      []SessionNamedCount{},
+		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
+		DBPath:       dbPath,
+		Days:         q.Days,
+		ProjectID:    q.ProjectID,
+		Projects:     []SessionProjectStat{},
+		Skills:       []SessionNamedCount{},
+		Tools:        []SessionNamedCount{},
+		Agents:       []SessionNamedCount{},
+		Models:       []SessionNamedCount{},
+		Insights:     []string{},
+		UnusedSkills: []string{},
+	}
+
+	// A freshly created environment database has never run a session:
+	// opencode creates its schema lazily. An explicit empty report beats a
+	// raw SQL error ("no such table: session") for that case.
+	if !hasTable(ctx, db, "session") {
+		out.Insights = []string{"No sessions recorded in this environment yet."}
+		return out, nil
 	}
 
 	where, args := sessionFilter(q)

@@ -2,10 +2,13 @@ package control
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/evals"
 )
 
@@ -47,6 +50,42 @@ func resolveEvalEnv(envs []config.EvalEnvironment, name string) config.EvalEnvir
 	return config.EvalEnvironment{Name: "local"}
 }
 
+// mergeEvalEnvironments appends one auto entry per ywai environment (dev, qa,
+// personal, ...) to the registered list: their managed server port and
+// opencode database are known from the profile, so they are eval targets
+// without manual registration. Registered entries win on name collisions.
+func mergeEvalEnvironments(registered []config.EvalEnvironment, profiles []envprofile.Profile) []config.EvalEnvironment {
+	envs := registered
+	for _, p := range profiles {
+		dup := false
+		for _, e := range envs {
+			if e.Name == p.Name {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		envs = append(envs, config.EvalEnvironment{
+			Name:      p.Name,
+			ServerURL: fmt.Sprintf("http://127.0.0.1:%d", p.Port),
+			DBPath:    filepath.Join(envprofile.Dirs(p)["data"], "opencode", "opencode.db"),
+		})
+	}
+	return envs
+}
+
+// effectiveEvalEnvironments is the list the evals UI and the ?env= resolver
+// see: registered environments plus the auto ywai-environment entries.
+func effectiveEvalEnvironments() []config.EvalEnvironment {
+	profiles, err := envprofile.List()
+	if err != nil {
+		return loadEvalEnvironments()
+	}
+	return mergeEvalEnvironments(loadEvalEnvironments(), profiles)
+}
+
 // evalServerURL returns the bench server for an env: explicit URL wins,
 // otherwise the default OPENCODE_URL/probe resolution.
 func evalServerURL(env config.EvalEnvironment) string {
@@ -86,7 +125,7 @@ func filterRunsByEnv(runs []evals.Run, want string) []evals.Run {
 // GET /api/evals/environments — the configured list (implicit local alone
 // when nothing is configured).
 func (s *Server) handleEvalEnvironments(w http.ResponseWriter, r *http.Request) {
-	envs := loadEvalEnvironments()
+	envs := effectiveEvalEnvironments()
 	if len(envs) == 0 {
 		envs = []config.EvalEnvironment{{Name: "local"}}
 	}

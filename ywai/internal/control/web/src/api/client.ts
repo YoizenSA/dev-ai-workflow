@@ -448,6 +448,11 @@ export const profilesApi = {
 export const memoriesApi = {
 	// Engram status
 	status: () => request<EngramStatus>("/api/engram/status"),
+	startEngram: () =>
+		request<{ status: string; message: string; pid?: number; url?: string }>(
+			"/api/engram/start",
+			{ method: "POST" },
+		),
 
 	// Observations
 	listObservations: (limit = 50) =>

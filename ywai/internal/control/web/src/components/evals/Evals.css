@@ -562,3 +562,232 @@
      over a dark theme. */
   background: rgb(var(--surf-2-rgb));
 }
+
+/* Environment selector row (above the eval tabs). Only rendered when more
+   than one environment exists — local alone needs no picker. */
+.evals-env-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.evals-env-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.evals-env-select {
+  min-width: 200px;
+}
+
+/* --- Environment comparison (Session Analytics) --- */
+.env-compare-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.env-compare-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.env-compare-scroll {
+  overflow-x: auto;
+}
+
+.env-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.env-compare-table th,
+.env-compare-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.env-compare-table thead th {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.env-compare-table td:first-child,
+.env-compare-table th:first-child {
+  color: var(--text-muted);
+}
+
+.env-compare-metric {
+  white-space: nowrap;
+}
+
+.env-compare-err {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Ultra-compare extras (matrices, totals, project cards) */
+.env-compare-section {
+  margin-bottom: var(--space-5);
+}
+
+.env-compare-h3 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: 1rem;
+}
+
+.env-compare-count {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+.env-compare-total {
+  font-weight: 600;
+}
+
+.env-compare-best {
+  font-weight: 700;
+  color: var(--yz-primary-1, var(--text));
+}
+
+.env-compare-zero {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+.env-compare-cost {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.env-compare-more {
+  margin-top: var(--space-2);
+}
+
+.env-compare-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.env-compare-projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.env-compare-project-card {
+  background: var(--surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.env-compare-project-card h4 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.env-compare-project-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.env-compare-project-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.env-compare-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.env-compare-project-meta {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- Live attempt tail (Agent Benchmarks) --- */
+.bench-live {
+  border: 1px solid var(--yz-primary-1, var(--panel-border));
+  border-radius: var(--radius);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+.bench-live-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: rgba(var(--yz-primary-1-rgb, 99 102 241), 0.08);
+}
+
+.bench-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: bench-live-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bench-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.bench-live-tail {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bench-live-line {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bench-live-kind {
+  flex-shrink: 0;
+  width: 4.5rem;
+  color: var(--yz-primary-1, var(--text-muted));
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  padding-top: 0.1rem;
+}
+
+.bench-live-line.is-user .bench-live-kind { color: var(--warning, orange); }
+.bench-live-line.is-tool .bench-live-kind { color: var(--success, teal); }
+.bench-live-line.is-reasoning { opacity: 0.6; }

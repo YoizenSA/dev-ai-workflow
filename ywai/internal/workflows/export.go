@@ -231,6 +231,22 @@ func (e *Exporter) Apply(wf *Workflow) (*ExportPlan, error) {
 			return nil, fmt.Errorf("write %s: %w", path, err)
 		}
 	}
+	// Record group membership for the exported agents in the group sidecar
+	// (NOT frontmatter — opencode v2 rejects unknown agent keys), so the
+	// Settings → Agents list groups them under the workflow instead of
+	// dumping every export into "Other". Opencode-target only: the sidecar
+	// is a ywai/opencode concept.
+	if e.target == TargetOpenCode {
+		groups := map[string]string{wf.Name + "-orchestrator": wf.Name}
+		for i := range wf.Nodes {
+			if n := &wf.Nodes[i]; n.Type == NodeTypeSubAgent {
+				groups[subAgentSlug(wf.Name, n)] = wf.Name
+			}
+		}
+		if err := agents.MergeGroupSidecar(e.agentsDir, groups); err != nil {
+			return plan, fmt.Errorf("record agent groups: %w", err)
+		}
+	}
 	plan.DryRun = false
 	return plan, nil
 }

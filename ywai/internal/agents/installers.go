@@ -429,6 +429,41 @@ func ReadGroupSidecar(agentsDir, agentName string) string {
 	return groups[agentName]
 }
 
+// MergeGroupSidecar adds or overrides group memberships without touching the
+// groups of other agents already recorded in the sidecar. The workflows
+// exporter uses it: each Apply only knows its own workflow's agents, while the
+// sidecar is shared by every installed agent. An empty value removes the
+// agent's entry, and an empty merged map removes the file — mirroring
+// WriteGroupSidecar.
+func MergeGroupSidecar(agentsDir string, groups map[string]string) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(groups))
+	if data, err := os.ReadFile(filepath.Join(agentsDir, GroupSidecarFile)); err == nil {
+		_ = json.Unmarshal(data, &merged)
+	}
+	for name, group := range groups {
+		if group == "" {
+			delete(merged, filepath.Base(name))
+			continue
+		}
+		merged[filepath.Base(name)] = group
+	}
+	path := filepath.Join(agentsDir, GroupSidecarFile)
+	if len(merged) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	data, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
 // PruneUnlistedAgents deletes flat *.md files whose base name is not in
 // profiles. OpenCode v2 discovers every file in the agents dir, so leftovers
 // from old groups or other installers (gentle-orchestrator, goal-*) stay

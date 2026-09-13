@@ -2,11 +2,18 @@ package toolsapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
+	"time"
 
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/engram"
 )
 
@@ -38,6 +45,127 @@ func queryLimit(r *http.Request, def, max int) int {
 // decodeJSONBody is a tiny helper used by the write handlers.
 func decodeJSONBody(r *http.Request, target any) error {
 	return json.NewDecoder(r.Body).Decode(target)
+}
+
+// ─── Engram server lifecycle ────────────────────────────────────────────────
+
+// defaultEngramURL is the engram server address when ENGRAM_URL is unset.
+// It mirrors engram.DefaultClient so the spawned server is the one the
+// client already probes.
+const defaultEngramURL = "http://127.0.0.1:7437"
+
+// engramBaseURL returns the configured engram server URL.
+func engramBaseURL() string {
+	if u := os.Getenv("ENGRAM_URL"); u != "" {
+		return u
+	}
+	return defaultEngramURL
+}
+
+// probeEngramHealth reports whether an engram server answers GET /health at url.
+func probeEngramHealth(ctx context.Context, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/health", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := (&http.Client{Timeout: 500 * time.Millisecond}).Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	return err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+// StartEngram starts the engram server if not already running.
+// It mirrors StartOpencode: reuse a reachable server, else resolve the
+// binary and spawn `engram serve` detached, then poll /health up to ~6s.
+func (h *Handlers) StartEngram(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	url := engramBaseURL()
+
+	// Reuse the configured server when it already answers.
+	if h.engramClient != nil {
+		if st, err := h.engramClient.Status(ctx); err == nil && st.Connected {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status":  "already_running",
+				"message": "engram server is already connected",
+				"url":     url,
+			})
+			return
+		}
+	} else if probeEngramHealth(ctx, url) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "already_running",
+			"message": "reusing running engram server",
+			"url":     url,
+		})
+		return
+	}
+
+	// Resolve the engram binary (PATH, well-known dirs, login-shell which)
+	// so installs outside the ywai process PATH are still found.
+	binPath := agent.FindBinary("engram")
+	if binPath == "" {
+		writeError(w, http.StatusInternalServerError,
+			"engram binary not found. Install engram or start it manually with `engram serve`, then retry.")
+		return
+	}
+
+	// A server may have come up (or been started by hand) while we resolved
+	// the binary; probe once more before spawning a duplicate.
+	if probeEngramHealth(ctx, url) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "already_running",
+			"message": "reusing running engram server",
+			"url":     url,
+		})
+		return
+	}
+
+	// `engram serve` binds its fixed port (127.0.0.1:7437 by default), so it
+	// takes no port flag. Like StartOpencode the child is started detached
+	// (no Stdout pipe, no Wait) so it survives the ywai process.
+	cmd := exec.Command(binPath, "serve")
+	cmd.Env = os.Environ()
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+	setDetached(cmd)
+	if err := cmd.Start(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to start engram (%s): %v", binPath, err))
+		return
+	}
+	log.Printf("engram start: spawned `engram serve` (pid %d)", cmd.Process.Pid)
+
+	// Wait for engram to bind (poll /health up to ~6s). This unblocks the UI:
+	// the button stops spinning only after the server answers.
+	ready := false
+	for i := 0; i < 30; i++ {
+		pctx, pcancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		ok := probeEngramHealth(pctx, url)
+		pcancel()
+		if ok {
+			ready = true
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	if ready {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "started",
+			"message": "engram server started successfully",
+			"pid":     cmd.Process.Pid,
+			"url":     url,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"status":  "starting",
+		"message": "engram server is starting, please wait a moment and try again",
+		"pid":     cmd.Process.Pid,
+		"url":     url,
+	})
 }
 
 // ─── Engram status + observations ───────────────────────────────────────────

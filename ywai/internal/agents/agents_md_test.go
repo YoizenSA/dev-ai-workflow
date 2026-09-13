@@ -26,12 +26,15 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 		"### After compaction",
 		"## Sub-Agents",
 		"### One launch per task",
-		"### Skills: match by trigger, load by id",
+		"### Skills: match by description, load by id",
 		// Artifact writing style. It rides in ### Language on purpose: a style
 		// rule applies while writing anything, so a skill would never load in
 		// time, and a section of its own would break the two-concern scope.
 		"ASD-STE100",
-		"<available_skills>",
+		"case-sensitive ID",
+		"autoinvoke",
+		"`skill` permission",
+		"Supporting files stay unloaded",
 		"### Context protocol",
 		"mem_save",
 		"mem_session_summary",
@@ -80,6 +83,8 @@ func TestWriteAgentsMd_ExcludesNonOwnedSections(t *testing.T) {
 	for _, forbidden := range []string{
 		"## Skills\n",
 		"## Hooks\n",
+		"<available_skills>",
+		"match by trigger",
 		"gentle-ai:engram-protocol",
 		"gentle-ai:sdd-orchestrator",
 		"gentle-ai:persona",

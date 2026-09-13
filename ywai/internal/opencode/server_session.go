@@ -21,7 +21,8 @@ func newServerSessionAPI(baseURL string) *serverSessionAPI {
 	return &serverSessionAPI{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: serverAuthTransport{},
 		},
 	}
 }
@@ -64,9 +65,13 @@ func decodeResponse(resp *http.Response, target interface{}) error {
 // ─── Session CRUD ──────────────────────────────────────────────────────────
 
 func (s *serverSessionAPI) Create(ctx context.Context, opts SessionCreateOpts) (*Session, error) {
-	// Build request body matching the SDK's Session2.create shape. The opencode
-	// server rejects requests that include optional fields as empty strings with
-	// HTTP 400 {"_tag":"BadRequest"}, so only non-empty fields are included.
+	// POST /api/session. The bare /session path serves the web UI and answers
+	// 405 — the v2 routes live under /api (as do prompt/wait/message below).
+	// The server wraps the session in a {data: {...}} envelope. It rejects
+	// requests that include optional fields as empty strings with HTTP 400
+	// {"_tag":"BadRequest"}, so only non-empty fields are included. A model
+	// without a providerID is dropped (the server default applies): the v2
+	// API answers 400 to a provider-less model object.
 	body := map[string]interface{}{}
 	if opts.Title != "" {
 		body["title"] = opts.Title
@@ -83,54 +88,73 @@ func (s *serverSessionAPI) Create(ctx context.Context, opts SessionCreateOpts) (
 	if opts.ParentID != "" {
 		body["parentID"] = opts.ParentID
 	}
-	if opts.Model != nil {
-		body["model"] = map[string]string{
+	if opts.Model != nil && opts.Model.ID != "" && opts.Model.ProviderID != "" {
+		model := map[string]string{
 			"id":         opts.Model.ID,
 			"providerID": opts.Model.ProviderID,
-			"variant":    opts.Model.Variant,
 		}
+		if opts.Model.Variant != "" {
+			model["variant"] = opts.Model.Variant
+		}
+		body["model"] = model
 	}
 
-	resp, err := s.doJSON(ctx, http.MethodPost, "/session", body)
+	resp, err := s.doJSON(ctx, http.MethodPost, "/api/session", body)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	var session Session
-	if err := decodeResponse(resp, &session); err != nil {
+	var wrapped struct {
+		Data Session `json:"data"`
+	}
+	if err := decodeResponse(resp, &wrapped); err != nil {
 		return nil, err
 	}
-	return &session, nil
+	return &wrapped.Data, nil
 }
 
 func (s *serverSessionAPI) Get(ctx context.Context, sessionID string) (*Session, error) {
-	resp, err := s.doJSON(ctx, http.MethodGet, "/session/"+sessionID, nil)
+	resp, err := s.doJSON(ctx, http.MethodGet, "/api/session/"+sessionID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
 	}
 
-	var session Session
-	if err := decodeResponse(resp, &session); err != nil {
+	var wrapped struct {
+		Data Session `json:"data"`
+	}
+	if err := decodeResponse(resp, &wrapped); err != nil {
 		return nil, err
 	}
-	return &session, nil
+	return &wrapped.Data, nil
 }
 
 func (s *serverSessionAPI) Status(ctx context.Context) (*SessionStatusResult, error) {
-	resp, err := s.doJSON(ctx, http.MethodGet, "/session/status", nil)
+	// The v2 API has no dedicated status route (GET /api/session/status is a
+	// 400), so the status is derived from the session list, which answers
+	// 200 {"data": [...]}.
+	resp, err := s.doJSON(ctx, http.MethodGet, "/api/session", nil)
 	if err != nil {
 		return nil, fmt.Errorf("session status: %w", err)
 	}
 
-	var result SessionStatusResult
-	if err := decodeResponse(resp, &result); err != nil {
+	var wrapped struct {
+		Data []Session `json:"data"`
+	}
+	if err := decodeResponse(resp, &wrapped); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	result := &SessionStatusResult{}
+	for _, sess := range wrapped.Data {
+		result.Sessions = append(result.Sessions, SessionStatusEntry{
+			ID:    sess.ID,
+			Title: sess.Title,
+		})
+	}
+	return result, nil
 }
 
 func (s *serverSessionAPI) Delete(ctx context.Context, sessionID string) error {
-	resp, err := s.doJSON(ctx, http.MethodDelete, "/session/"+sessionID, nil)
+	resp, err := s.doJSON(ctx, http.MethodDelete, "/api/session/"+sessionID, nil)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
@@ -169,8 +193,10 @@ func (s *serverSessionAPI) Wait(ctx context.Context, sessionID string) error {
 	// POST /api/session/{sessionID}/wait blocks until the session finishes.
 	// Use a longer timeout for this call since the agent may run for a while.
 	// We rely on the context timeout from the caller (WorkerConfig.Timeout).
+	// The transport carries the server Basic auth (see newServerSessionAPI).
 	waitClient := &http.Client{
-		Timeout: 0, // no client-side timeout; context controls cancellation
+		Timeout:   0, // no client-side timeout; context controls cancellation
+		Transport: serverAuthTransport{},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/api/session/"+sessionID+"/wait", nil)

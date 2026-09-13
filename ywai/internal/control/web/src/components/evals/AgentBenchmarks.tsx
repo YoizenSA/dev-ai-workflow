@@ -97,6 +97,21 @@ export default function AgentBenchmarks({ env = "" }: { env?: string }) {
     }
   }, [env]);
 
+  // Ask the server to cancel a run: the active one gets its context
+  // cancelled; an orphaned "running" record (server restarted mid-run) is
+  // closed out directly.
+  const stopRun = useCallback(
+    async (id: string) => {
+      try {
+        await fetch(`/api/evals/runs/${encodeURIComponent(id)}/stop`, { method: "POST" });
+      } catch {
+        /* the poll reflects the final state */
+      }
+      void loadRuns();
+    },
+    [loadRuns],
+  );
+
   useEffect(() => {
     (async () => {
       try {
@@ -152,6 +167,32 @@ export default function AgentBenchmarks({ env = "" }: { env?: string }) {
   }
 
   const activeRun = runs.find((r) => r.status === "running");
+
+  // Live tail: while a run is in flight, poll what its agent is doing right
+  // now (the opencode session the attempt created).
+  const [live, setLive] = useState<{ active: boolean; runId?: string; model?: string; round?: number; events?: { kind: string; text: string; at: number }[] } | null>(null);
+  useEffect(() => {
+    if (!activeRun) {
+      setLive(null);
+      return;
+    }
+    let alive = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/evals/runs/${encodeURIComponent(activeRun.id)}/live`);
+        const body = await res.json();
+        if (alive) setLive(body);
+      } catch {
+        /* transient: the next tick retries */
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 2500);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [activeRun]);
 
   // Poll only while something is in flight; a finished board does not need refreshing.
   useEffect(() => {
@@ -279,7 +320,12 @@ export default function AgentBenchmarks({ env = "" }: { env?: string }) {
       )}
 
       {runs.map((run) => (
-        <RunCard key={run.id} run={run} />
+        <RunCard
+          key={run.id}
+          run={run}
+          onStop={stopRun}
+          live={live?.active && live.runId === run.id ? live : undefined}
+        />
       ))}
 
       {!runs.length && (
@@ -304,7 +350,15 @@ function formatWeighted(weighted: number): string {
   return `${(weighted * 100).toFixed(weighted >= 0.1 ? 0 : 1)}%`;
 }
 
-function RunCard({ run }: { run: Run }) {
+type LiveTail = {
+  active: boolean;
+  runId?: string;
+  model?: string;
+  round?: number;
+  events?: { kind: string; text: string; at: number }[];
+};
+
+function RunCard({ run, onStop, live }: { run: Run; onStop?: (id: string) => void; live?: LiveTail }) {
   // Rank by correctness first: a model that answers in eight turns while missing half
   // the expected findings is not better than one that grinds to the complete answer.
   const rows = useMemo(
@@ -326,10 +380,33 @@ function RunCard({ run }: { run: Run }) {
           @{run.agent} · {run.rounds} round(s) · {run.models.length} model(s)
           {run.environment ? ` · ${run.environment}` : ""}
         </span>
-        <span className={`badge badge-${run.status === "done" ? "ok" : run.status === "failed" ? "danger" : "warn"}`}>
+        <span className={`badge badge-${run.status === "done" ? "ok" : run.status === "failed" || run.status === "cancelled" || run.status === "interrupted" ? "danger" : "warn"}`}>
           {run.status}
         </span>
+        {run.status === "running" && onStop && (
+          <button className="btn btn-sm" onClick={() => onStop(run.id)}>
+            Stop
+          </button>
+        )}
       </header>
+
+      {live && (
+        <div className="bench-live">
+          <div className="bench-live-head">
+            <span className="bench-live-dot" />
+            live · {live.model} · round {live.round ?? "?"}
+          </div>
+          <pre className="bench-live-tail">
+            {(live.events ?? []).length === 0 && <div className="bench-live-line">waiting for activity…</div>}
+            {(live.events ?? []).map((e, i) => (
+              <div key={`${e.at}-${i}`} className={`bench-live-line is-${e.kind}`}>
+                <span className="bench-live-kind">{e.kind}</span>
+                {e.text || "…"}
+              </div>
+            ))}
+          </pre>
+        </div>
+      )}
 
       {run.error && (
         <div className="alert alert-danger">

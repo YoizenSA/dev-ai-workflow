@@ -134,6 +134,39 @@ func (s *Store) GetRun(id string) (Run, error) {
 	return run, nil
 }
 
+// RecoverInterrupted closes out every persisted "running" run as
+// interrupted. Run records survive a control-server restart by design, but
+// the goroutine driving a run does not — after a restart such a record could
+// never progress again and would sit as "running" in the UI forever. Called
+// once when the store opens. Returns how many runs were recovered.
+func (s *Store) RecoverInterrupted(reason string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	recovered := 0
+	for i := range s.index.Runs {
+		h := s.index.Runs[i]
+		if h.Status != "running" {
+			continue
+		}
+		run, err := readRunFile(s.runPath(h.ID))
+		if err != nil {
+			continue
+		}
+		run.Status = "interrupted"
+		run.Error = reason
+		run.EndedAt = time.Now().UTC()
+		if err := s.writeRunFile(run); err != nil {
+			continue
+		}
+		s.index.Runs[i] = runHeaderOf(run)
+		recovered++
+	}
+	if recovered > 0 {
+		_ = s.persistIndex()
+	}
+	return recovered
+}
+
 // UpsertRun persists run, replacing any earlier run with the same ID, then
 // enforces retention. The index is written after the run file so a crash can
 // leave an orphan file (harmless, re-purged later) but never an index entry

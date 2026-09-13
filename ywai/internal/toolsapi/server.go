@@ -86,6 +86,7 @@ func RegisterRoutes(mux *http.ServeMux, h *Handlers) {
 
 	// Engram memory API
 	mux.HandleFunc("GET /api/engram/status", h.EngramStatus)
+	mux.HandleFunc("POST /api/engram/start", h.StartEngram)
 	mux.HandleFunc("GET /api/engram/observations", h.ListObservations)
 	mux.HandleFunc("GET /api/engram/observations/{id}", h.GetObservation)
 	mux.HandleFunc("PATCH /api/engram/observations/{id}", h.UpdateObservation)

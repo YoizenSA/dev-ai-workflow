@@ -286,6 +286,8 @@
 .agents-group-header {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
 	font-size: 0.72rem;
 	font-weight: 700;
 	text-transform: uppercase;
@@ -294,14 +296,47 @@
 	padding: var(--space-2) var(--space-3) var(--space-1);
 }
 
+.agents-group-delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tools-section:hover .agents-group-delete,
+.tools-section:focus-within .agents-group-delete,
+.agents-group-delete:focus-visible {
+	opacity: 1;
+}
+
+.agents-group-delete:hover {
+	color: var(--danger, #ef4444);
+	background: rgba(239, 68, 68, 0.1);
+	border-color: rgba(239, 68, 68, 0.3);
+}
+
+.agents-group-delete:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
 .agent-item {
 	display: flex;
 	align-items: center;
-	gap: var(--space-3);
+	gap: var(--space-2);
 	width: 100%;
 	text-align: left;
 	background: transparent;
-	padding: var(--space-2) var(--space-3);
+	padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
 	border-radius: var(--radius-md);
 	cursor: pointer;
 	transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -320,6 +355,61 @@
 	color: var(--text);
 	border-color: var(--yz-accent);
 	font-weight: 500;
+}
+
+.agent-item:focus-visible {
+	outline: 2px solid var(--yz-accent);
+	outline-offset: 1px;
+}
+
+.agent-item-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.agent-item-delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.agent-item:hover .agent-item-delete,
+.agent-item.active .agent-item-delete,
+.agent-item:focus-within .agent-item-delete,
+.agent-item-delete:focus-visible {
+	opacity: 1;
+}
+
+.agent-item-delete:hover {
+	color: var(--danger, #ef4444);
+	background: rgba(239, 68, 68, 0.12);
+	border-color: rgba(239, 68, 68, 0.35);
+}
+
+.agent-item-delete:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+@media (hover: none) {
+	.agents-group-delete,
+	.agent-item-delete {
+		opacity: 0.7;
+	}
 }
 
 .agent-item-dot {
@@ -354,6 +444,11 @@
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: var(--space-4);
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	background: var(--background, var(--surface));
+	padding: var(--space-2) 0;
 }
 
 .agent-detail-title {
@@ -1265,6 +1360,11 @@
 .skill-surface { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
 .skill-surface .ss-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .skill-surface .ss-head h3 { font-size: var(--text-lg); }
+.ss-help { margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }
+.ss-help summary { cursor: pointer; color: var(--tint-primary); font-weight: 500; }
+.ss-help summary:hover { text-decoration: underline; }
+.ss-help ul { margin: var(--space-2) 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; line-height: 1.5; }
+.ss-help strong { color: var(--text-soft); font-weight: 600; }
 .skill-surface .ss-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .skill-surface .ss-search { max-width: 20rem; padding-block: 0.4rem; }
 .ss-count {
@@ -1299,6 +1399,7 @@
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); background: var(--surface-soft); font-size: var(--text-sm);
 }
+.ss-plan-kind-help { font-size: var(--text-xs); }
 .ss-link { margin-left: auto; background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: var(--text-xs); color: var(--tint-primary); }
 .ss-link:hover { text-decoration: underline; }
 .ss-plan-row {

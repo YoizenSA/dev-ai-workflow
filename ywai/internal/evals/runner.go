@@ -78,6 +78,11 @@ type Runner struct {
 	DB      *sql.DB
 	Client  *http.Client
 
+	// OnAttemptStart, when set, fires the moment an attempt's session exists —
+	// before the prompt goes out — so a caller can tail what the agent does
+	// live (the benchmark UI uses this for its live panel).
+	OnAttemptStart func(model string, round int, sessionID string)
+
 	// healthy caches a passed ProbeMode so later calls skip the request.
 	healthy bool
 }
@@ -205,6 +210,9 @@ func (r *Runner) runOne(ctx context.Context, task Task, model, provider string, 
 		return a
 	}
 	a.SessionID = sid
+	if r.OnAttemptStart != nil {
+		r.OnAttemptStart(model, round, sid)
+	}
 
 	start := time.Now()
 	resp, err := r.prompt(ctx, sid, task.Agent, model, provider, task.Brief)

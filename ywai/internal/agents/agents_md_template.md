@@ -1,7 +1,3 @@
-# AGENTS.md
-
-ywai-managed instructions. Scope is limited to two concerns: **Engram memory** and **sub-agent strategy**. Persona, SDD, skill catalogs, review hooks, and Graft own their own surfaces — do not add them here.
-
 ## Engram Persistent Memory
 
 Memory is what survives compaction and the end of a session. Nothing else does.
@@ -35,11 +31,11 @@ On a compaction message, `mem_session_summary` with the compacted content **firs
 
 Keep a session-scoped list of the `(phase, task-fingerprint)` pairs you have launched, where the fingerprint is the phase plus the key artifacts named in the instruction. Never launch a pair twice. Duplicate launches race on the same files and produce "File X has been modified since it was last read" — the failure looks like a tooling bug and is not.
 
-### Skills: match by trigger, load by id
+### Skills: match by description, load by id
 
-OpenCode injects `<available_skills>` into every prompt and exposes the `skill` tool, which loads a skill by its id. Match the task against those descriptions and call `skill` directly — there is no registry to resolve and no path to pass.
+At each step OpenCode advertises permitted skills as ID + name + description only, not the full body. Call the `skill` tool with the exact, case-sensitive ID (`{"id": "<skill-id>"}`). The frontmatter `name` is display only — the file path decides the ID. A skill without `description` is never advertised; `metadata.opencode/autoinvoke: false` hides it from the list but you can still load it when the user names it explicitly. Loading enforces the agent's `skill` permission (last match wins): `deny` hides the skill and rejects the load. `ask` advertises the skill but asks before loading it. A load adds the body without frontmatter plus the base directory and up to ten supporting paths. Supporting files stay unloaded until you read them. You may load an unadvertised ID only when the user names it explicitly.
 
-When delegating, name the skill ids the sub-agent should load in its brief. It receives its own `<available_skills>` and loads them the same way.
+When delegating, name the skill ids the child must load and ensure the child agent allows them — the child sees its own advertised list from its own permissions, not yours.
 
 ### Context protocol
 

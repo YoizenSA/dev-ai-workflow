@@ -78,7 +78,7 @@ func fetchLiveModels(baseURL string, client *http.Client) ([]liveModel, error) {
 // the bench would run against. ?env= targets one environment's server;
 // absent means the default resolution.
 func (s *Server) handleEvalModelsLive(w http.ResponseWriter, r *http.Request) {
-	env := resolveEvalEnv(loadEvalEnvironments(), r.URL.Query().Get("env"))
+	env := resolveEvalEnv(effectiveEvalEnvironments(), r.URL.Query().Get("env"))
 	base := evalServerURL(env)
 	models, err := fetchLiveModels(base, nil)
 	if err != nil {

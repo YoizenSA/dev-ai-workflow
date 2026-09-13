@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AgentBenchmarks from "./AgentBenchmarks";
 import BenchHistory from "./BenchHistory";
 import MemoryRecallEval from "./MemoryRecallEval";
 import SessionAnalytics from "./SessionAnalytics";
+import SessionCompare from "./SessionCompare";
 import "./Evals.css";
 
 type EvalKind = "tasks" | "recall" | "sessions" | "history";
+
+type EvalEnvironment = { name: string; serverUrl?: string; dbPath?: string };
 
 function initialKind(): EvalKind {
   // Deep-linkable so a tab is reachable by URL: ?tab=tasks opens Agent Benchmarks
@@ -16,6 +19,19 @@ function initialKind(): EvalKind {
 
 export default function Evals() {
   const [kind, setKindState] = useState<EvalKind>(initialKind);
+  // "" = every environment (local database, unfiltered runs) — the historical
+  // default. Any other value targets that environment's database and filters
+  // runs to it.
+  const [env, setEnv] = useState("");
+  const [environments, setEnvironments] = useState<EvalEnvironment[]>([]);
+  const [compare, setCompare] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/evals/environments")
+      .then((r) => r.json())
+      .then((d) => setEnvironments(d.environments ?? []))
+      .catch(() => setEnvironments([]));
+  }, []);
 
   const setKind = (next: EvalKind) => {
     setKindState(next);
@@ -35,6 +51,41 @@ export default function Evals() {
           </p>
         </div>
       </header>
+
+      {environments.length > 1 && (
+        <div className="evals-env-row">
+          <label className="evals-env-label" htmlFor="evals-env-select">
+            Environment
+          </label>
+          <select
+            id="evals-env-select"
+            className="select evals-env-select"
+            value={env}
+            onChange={(e) => {
+              setEnv(e.target.value);
+              setCompare(false);
+            }}
+            disabled={compare}
+            title={compare ? "Comparison covers every environment" : "Which environment's data to show"}
+          >
+            <option value="">All environments</option>
+            {environments.map((e) => (
+              <option key={e.name} value={e.name}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+          {kind === "sessions" && (
+            <button
+              className={`btn btn-sm${compare ? " btn-primary" : ""}`}
+              onClick={() => setCompare((c) => !c)}
+              title="Side-by-side session analytics for every environment"
+            >
+              {compare ? "Exit comparison" : "Compare environments"}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="tabs evals-tabs">
         <button
@@ -64,13 +115,17 @@ export default function Evals() {
       </div>
 
       {kind === "sessions" ? (
-        <SessionAnalytics />
+        compare ? (
+          <SessionCompare />
+        ) : (
+          <SessionAnalytics env={env} />
+        )
       ) : kind === "recall" ? (
         <MemoryRecallEval />
       ) : kind === "history" ? (
-        <BenchHistory />
+        <BenchHistory env={env} />
       ) : (
-        <AgentBenchmarks />
+        <AgentBenchmarks env={env} />
       )}
     </>
   );

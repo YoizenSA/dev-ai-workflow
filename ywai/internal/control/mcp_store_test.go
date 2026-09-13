@@ -116,7 +116,7 @@ func TestGetFullCatalog_MatchesCanonicalMCPCatalog(t *testing.T) {
 	}
 }
 
-func TestHandleMcpCatalog_IncludesRequiredEnvForGithub(t *testing.T) {
+func TestHandleMcpCatalog_IncludesRequiredEnvForPostgres(t *testing.T) {
 	s := &Server{mux: http.NewServeMux()}
 	s.registerMcpStoreRoutes()
 	req := httptest.NewRequest(http.MethodGet, "/api/mcp/catalog", nil)
@@ -129,29 +129,29 @@ func TestHandleMcpCatalog_IncludesRequiredEnvForGithub(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	var github *McpCatalogItem
+	var postgres *McpCatalogItem
 	for i := range items {
-		if items[i].ID == "github" {
-			github = &items[i]
+		if items[i].ID == "postgres" {
+			postgres = &items[i]
 			break
 		}
 	}
-	if github == nil {
-		t.Fatal("github not in catalog response")
+	if postgres == nil {
+		t.Fatal("postgres not in catalog response")
 	}
-	if len(github.RequiredEnv) == 0 {
-		t.Fatal("github requiredEnv empty — UI would hide credentials form")
+	if len(postgres.RequiredEnv) == 0 {
+		t.Fatal("postgres requiredEnv empty — UI would hide credentials form")
 	}
-	if github.RequiredEnv[0].Name != "GITHUB_PERSONAL_ACCESS_TOKEN" {
-		t.Errorf("requiredEnv[0].Name = %q, want GITHUB_PERSONAL_ACCESS_TOKEN", github.RequiredEnv[0].Name)
+	if postgres.RequiredEnv[0].Name != "DATABASE_URL" {
+		t.Errorf("requiredEnv[0].Name = %q, want DATABASE_URL", postgres.RequiredEnv[0].Name)
 	}
-	if github.Source != "catalog" {
-		t.Errorf("source = %q, want catalog", github.Source)
+	if postgres.Source != "catalog" {
+		t.Errorf("source = %q, want catalog", postgres.Source)
 	}
 }
 
 func TestMcpCatalogStatus_DisabledIsActionable(t *testing.T) {
-	entry := McpCatalogEntry{ID: "jam", Type: "remote", URL: "https://example.test/mcp"}
+	entry := McpCatalogEntry{ID: "example-remote", Type: "remote", URL: "https://example.test/mcp"}
 
 	state, label, message, action := mcpCatalogStatus(entry, true, false, nil)
 
@@ -367,7 +367,7 @@ func TestHandleMcpInstall_NoCredsEntry_OK(t *testing.T) {
 func TestHandleMcpInstall_WithCreds_OK(t *testing.T) {
 	s, _ := newTestMcpServer(t, nil)
 
-	body := `{"id": "github", "target_agent": "opencode", "credentials": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_test"}}`
+	body := `{"id": "postgres", "target_agent": "opencode", "credentials": {"DATABASE_URL": "postgres://user:pass@host:5432/db"}}`
 	w := callPost(s.handleMcpInstall, body)
 
 	if w.Code != http.StatusAccepted {
@@ -388,7 +388,7 @@ func TestHandleMcpInstall_WithCreds_OK(t *testing.T) {
 func TestHandleMcpInstall_MissingRequiredCreds_422(t *testing.T) {
 	s, _ := newTestMcpServer(t, nil)
 
-	body := `{"id": "github", "target_agent": "opencode"}`
+	body := `{"id": "postgres", "target_agent": "opencode"}`
 	w := callPost(s.handleMcpInstall, body)
 
 	if w.Code != http.StatusUnprocessableEntity {
@@ -398,13 +398,13 @@ func TestHandleMcpInstall_MissingRequiredCreds_422(t *testing.T) {
 	required, _ := resp["required"].([]interface{})
 	found := false
 	for _, r := range required {
-		if r == "GITHUB_PERSONAL_ACCESS_TOKEN" {
+		if r == "DATABASE_URL" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("required = %v, want to contain GITHUB_PERSONAL_ACCESS_TOKEN", required)
+		t.Errorf("required = %v, want to contain DATABASE_URL", required)
 	}
 }
 
@@ -416,7 +416,7 @@ func TestHandleMcpInstall_MissingRequiredCreds_422(t *testing.T) {
 func TestHandleMcpInstall_PartialCreds_422(t *testing.T) {
 	s, _ := newTestMcpServer(t, nil)
 
-	body := `{"id": "github", "target_agent": "opencode", "credentials": {}}`
+	body := `{"id": "postgres", "target_agent": "opencode", "credentials": {}}`
 	w := callPost(s.handleMcpInstall, body)
 
 	if w.Code != http.StatusUnprocessableEntity {
@@ -432,7 +432,7 @@ func TestHandleMcpInstall_PartialCreds_422(t *testing.T) {
 func TestHandleMcpInstall_EmptyStringCred_422(t *testing.T) {
 	s, _ := newTestMcpServer(t, nil)
 
-	body := `{"id": "github", "target_agent": "opencode", "credentials": {"GITHUB_PERSONAL_ACCESS_TOKEN": ""}}`
+	body := `{"id": "postgres", "target_agent": "opencode", "credentials": {"DATABASE_URL": ""}}`
 	w := callPost(s.handleMcpInstall, body)
 
 	if w.Code != http.StatusUnprocessableEntity {
@@ -616,7 +616,7 @@ func TestHandleMcpInstall_PassesCredsToInstallFn(t *testing.T) {
 	}
 	s, jobs := newTestMcpServer(t, capturing)
 
-	body := `{"id": "github", "target_agent": "opencode", "credentials": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_capture"}}`
+	body := `{"id": "postgres", "target_agent": "opencode", "credentials": {"DATABASE_URL": "postgres://user:pass@host:5432/db"}}`
 	w := callPost(s.handleMcpInstall, body)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d (body: %s)", w.Code, http.StatusAccepted, w.Body.String())
@@ -636,8 +636,8 @@ func TestHandleMcpInstall_PassesCredsToInstallFn(t *testing.T) {
 	if capturedCreds == nil {
 		t.Fatal("installFn was not invoked within 2s")
 	}
-	if got, want := capturedCreds["GITHUB_PERSONAL_ACCESS_TOKEN"], "ghp_capture"; got != want {
-		t.Errorf("captured GITHUB_PERSONAL_ACCESS_TOKEN = %q, want %q", got, want)
+	if got, want := capturedCreds["DATABASE_URL"], "postgres://user:pass@host:5432/db"; got != want {
+		t.Errorf("captured DATABASE_URL = %q, want %q", got, want)
 	}
 }
 

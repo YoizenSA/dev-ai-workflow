@@ -83,14 +83,6 @@ var catalog = []CatalogEntry{
 		Docs:  "https://learn.microsoft.com",
 	},
 	{
-		ID: "jam", Name: "Jam",
-		Description: "Capture browser bugs, console errors, and network requests",
-		Category:    "testing", Icon: "🐛",
-		Type: "remote", URL: "https://mcp.jam.dev/mcp",
-		Tools: []string{"get_bug", "list_bugs", "create_bug", "search_bugs"},
-		Docs:  "https://jam.dev",
-	},
-	{
 		ID: "meta-devtools", Name: "Meta Developer Tools",
 		Description: "Manage Meta apps, webhooks, compliance, app status, and search developer docs",
 		Category:    "devtools", Icon: "🟦",
@@ -132,28 +124,18 @@ var catalog = []CatalogEntry{
 		Docs:       "https://github.com/microsoft/playwright-mcp",
 	},
 	{
-		ID: "git", Name: "Git",
-		Description: "Read and inspect local git repositories",
-		Category:    "vcs", Icon: "🔧",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-git"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-git",
-		Tools:      []string{"git_status", "git_log", "git_diff", "git_show"},
-		Docs:       "https://github.com/modelcontextprotocol/servers",
-	},
-	{
 		ID: "github", Name: "GitHub",
 		Description: "Read and write GitHub repos, issues, and PRs",
 		Category:    "vcs", Icon: "🐙", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-github",
-		RequiredEnv: []EnvSpec{{
-			Name:        "GITHUB_PERSONAL_ACCESS_TOKEN",
-			Description: "Personal access token with repo, read:user, and read:org scopes",
-			Required:    true,
-			Secret:      true,
-		}},
-		Tools: []string{"create_or_update_file", "search_repositories", "create_issue", "list_issues", "get_file_contents"},
-		Docs:  "https://github.com/modelcontextprotocol/servers",
+		// GitHub's official remote server. The archived npm package
+		// @modelcontextprotocol/server-github this replaced is unmaintained;
+		// the remote is the supported path. Authentication is the standard
+		// MCP OAuth sign-in driven by the agent client, so Install skips the
+		// probe (the endpoint answers 401 until the user signs in).
+		Type: "remote", URL: "https://api.githubcopilot.com/mcp/",
+		ClientAuth: true,
+		Tools:      []string{"get_me", "list_issues", "create_issue", "create_pull_request", "search_repositories", "get_file_contents"},
+		Docs:       "https://github.com/github/github-mcp-server",
 	},
 	{
 		ID: "postgres", Name: "PostgreSQL",
@@ -169,15 +151,6 @@ var catalog = []CatalogEntry{
 		}},
 		Tools: []string{"query", "list_tables", "describe_table", "list_schemas"},
 		Docs:  "https://github.com/modelcontextprotocol/servers",
-	},
-	{
-		ID: "docker", Name: "Docker",
-		Description: "Manage Docker containers, images, and networks",
-		Category:    "devops", Icon: "🐳",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-docker"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-docker",
-		Tools:      []string{"list_containers", "list_images", "create_container", "start_container"},
-		Docs:       "https://github.com/modelcontextprotocol/servers",
 	},
 	{
 		ID: "engram", Name: "Engram",
@@ -196,16 +169,6 @@ var catalog = []CatalogEntry{
 		InstallCmd: "npm i -g @nanonets/graft",
 		Tools:      []string{"graft_find_code", "graft_trace_calls", "graft_find_all", "graft_file_api", "graft_repo_map", "graft_check_freshness"},
 		Docs:       "https://github.com/nanonets/graft",
-	},
-	{
-		ID: "filesystem", Name: "Filesystem",
-		Description: "Read and write files under allowed directories (defaults to current workspace)",
-		Category:    "core", Icon: "📁", Popular: true,
-		// "." is resolved relative to the agent process cwd (usually the project root).
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "."},
-		InstallCmd: "npx -y @modelcontextprotocol/server-filesystem",
-		Tools:      []string{"read_file", "write_file", "list_directory", "search_files", "get_file_info"},
-		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
 	},
 	{
 		ID: "brave-search", Name: "Brave Search",
@@ -262,15 +225,6 @@ var catalog = []CatalogEntry{
 		},
 		Tools: []string{"mysql_query", "list_tables", "describe_table"},
 		Docs:  "https://www.npmjs.com/package/mcp-server-mysql",
-	},
-	{
-		ID: "puppeteer", Name: "Puppeteer",
-		Description: "Browser automation with Puppeteer (navigate, screenshot, click)",
-		Category:    "testing", Icon: "🐶",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-puppeteer"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-puppeteer",
-		Tools:      []string{"puppeteer_navigate", "puppeteer_screenshot", "puppeteer_click", "puppeteer_fill", "puppeteer_evaluate"},
-		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
 	},
 	{
 		ID: "codemod", Name: "Codemod",

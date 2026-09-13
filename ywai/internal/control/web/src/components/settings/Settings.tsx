@@ -711,6 +711,8 @@ function AgentsTab() {
 	const [savingPerms, setSavingPerms] = useState<string | null>(null);
 	const [message, setMessage] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [deletingName, setDeletingName] = useState<string | null>(null);
+	const [deletingGroup, setDeletingGroup] = useState<string | null>(null);
 
 	// Load the agent list + tools on mount. We intentionally do NOT fetch each
 	// agent's full content here — doing so fired one HTTP request per agent and
@@ -898,25 +900,75 @@ function AgentsTab() {
 		}
 	};
 
-	const handleDeleteAgent = async () => {
-		if (!selected) return;
-		if (!confirm(`Delete agent "${selected}"?`)) return;
+	const handleDeleteAgentByName = async (name: string) => {
+		if (!name) return;
+		if (!confirm(`Delete agent "${name}"?`)) return;
+		setDeletingName(name);
 		setSaving(true);
 		try {
-			await configApi.deleteAgent(selected);
-			setAgents((prev) => prev.filter((a) => a.name !== selected));
-			const remaining = agents.filter((a) => a.name !== selected);
-			if (remaining.length > 0) {
-				setSelected(remaining[0].name);
-				setEditContent(remaining[0].content ?? "");
-			} else {
-				setSelected(null);
-				setEditContent("");
+			await configApi.deleteAgent(name);
+			setAgents((prev) => prev.filter((a) => a.name !== name));
+			if (selected === name) {
+				const remaining = agents.filter((a) => a.name !== name);
+				if (remaining.length > 0) {
+					setSelected(remaining[0].name);
+					setEditContent(remaining[0].content ?? "");
+				} else {
+					setSelected(null);
+					setEditContent("");
+				}
 			}
-			setMessage("Agent deleted");
+			setMessage(`Agent "${name}" deleted`);
 		} catch (err) {
 			setMessage(`Error: ${err}`);
 		} finally {
+			setDeletingName(null);
+			setSaving(false);
+		}
+	};
+
+	const handleDeleteAgent = async () => {
+		if (!selected) return;
+		await handleDeleteAgentByName(selected);
+	};
+
+	const handleDeleteGroup = async (team: string, names: string[]) => {
+		if (names.length === 0) return;
+		const displayTeam = team === "other" ? "Other" : team;
+		const preview = names.slice(0, 8).join(", ") + (names.length > 8 ? `, … +${names.length - 8} more` : "");
+		if (!confirm(`Delete ${names.length} agent(s) from "${displayTeam}"?\n${preview}`)) return;
+		setDeletingGroup(team);
+		setSaving(true);
+		try {
+			const results = await Promise.allSettled(names.map((n) => configApi.deleteAgent(n)));
+			const succeeded: string[] = [];
+			const failed: string[] = [];
+			results.forEach((r, i) => {
+				if (r.status === "fulfilled") succeeded.push(names[i]);
+				else failed.push(names[i]);
+			});
+			if (succeeded.length > 0) {
+				setAgents((prev) => prev.filter((a) => !succeeded.includes(a.name)));
+				if (selected && succeeded.includes(selected)) {
+					const remaining = agents.filter((a) => !succeeded.includes(a.name));
+					if (remaining.length > 0) {
+						setSelected(remaining[0].name);
+						setEditContent(remaining[0].content ?? "");
+					} else {
+						setSelected(null);
+						setEditContent("");
+					}
+				}
+			}
+			setMessage(
+				failed.length > 0
+					? `Error: Deleted ${succeeded.length}, failed ${failed.length}: ${failed.join(", ")}`
+					: `Deleted ${succeeded.length} agent(s) from "${team === "other" ? "Other" : team}"`,
+			);
+		} catch (err) {
+			setMessage(`Error: ${err}`);
+		} finally {
+			setDeletingGroup(null);
 			setSaving(false);
 		}
 	};
@@ -1199,24 +1251,73 @@ function AgentsTab() {
 					{sortedTeams.map((team) => {
 						const filtered = filterAgents(grouped[team]);
 						if (filtered.length === 0) return null;
+						const isDeletingGroup = deletingGroup === team;
 						return (
 							<div key={team} className="tools-section">
 								<div className="agents-group-header">
-									{team === "other" ? "Other" : team}
-									<span style={{ marginLeft: "var(--space-2)", opacity: 0.5 }}>
-										({filtered.length})
+									<span>
+										{team === "other" ? "Other" : team}
+										<span style={{ marginLeft: "var(--space-2)", opacity: 0.5 }}>
+											({filtered.length})
+										</span>
 									</span>
-								</div>
-								{filtered.map((agent) => (
 									<button
-										key={agent.name}
-										onClick={() => handleSelectAgent(agent.name)}
-										className={`agent-item ${selected === agent.name ? "active" : ""}`}
+										type="button"
+										className="agents-group-delete"
+										title={`Delete all ${filtered.length} in ${team === "other" ? "Other" : team}`}
+										aria-label={`Delete all ${filtered.length} agents in ${team}`}
+										disabled={saving || isDeletingGroup}
+										onClick={() =>
+											handleDeleteGroup(
+												team,
+												filtered.map((a) => a.name),
+											)
+										}
 									>
-										<span className="agent-item-dot" />
-										{agent.name}
+										<Trash2 size={13} />
+										{isDeletingGroup ? "…" : ""}
 									</button>
-								))}
+								</div>
+								{filtered.map((agent) => {
+									const isDeleting = deletingName === agent.name;
+									const isSelected = selected === agent.name;
+									return (
+										<div
+											key={agent.name}
+											role="button"
+											tabIndex={0}
+											onClick={() => handleSelectAgent(agent.name)}
+											onKeyDown={(e) => {
+												if ((e.target as HTMLElement).closest?.("button")) return;
+												if (e.key === "Enter" || e.key === " ") {
+													e.preventDefault();
+													handleSelectAgent(agent.name);
+												}
+											}}
+											className={`agent-item ${isSelected ? "active" : ""}`}
+											title={agent.name}
+											aria-label={`Select agent ${agent.name}`}
+											aria-current={isSelected || undefined}
+										>
+											<span className="agent-item-dot" />
+											<span className="agent-item-name">{agent.name}</span>
+											<button
+												type="button"
+												className="agent-item-delete"
+												title={`Delete ${agent.name}`}
+												aria-label={`Delete ${agent.name}`}
+												disabled={saving || isDeleting}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleDeleteAgentByName(agent.name);
+												}}
+												onKeyDown={(e) => e.stopPropagation()}
+											>
+												<Trash2 size={14} />
+											</button>
+										</div>
+									);
+								})}
 							</div>
 						);
 					})}
@@ -1239,7 +1340,9 @@ function AgentsTab() {
 								className="btn btn-danger"
 								onClick={handleDeleteAgent}
 								disabled={saving}
+								title={`Delete ${selectedAgent.name}`}
 							>
+								<Trash2 size={14} />
 								Delete
 							</button>
 						</div>

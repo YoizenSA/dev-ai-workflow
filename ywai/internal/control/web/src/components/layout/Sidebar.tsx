@@ -1,10 +1,7 @@
-import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
 	Brain,
 	Boxes,
-	ChevronDown,
-	ChevronRight,
 	Cloud,
 	Heart,
 	LineChart,
@@ -24,7 +21,7 @@ interface SidebarProps {
 	onToggleCollapse?: () => void;
 }
 
-// Core nav (excludes Azure DevOps, rendered after the Beta group).
+// Core nav (Azure DevOps stays last, rendered standalone).
 const NAV_ITEMS = [
 	{
 		path: "/workflows",
@@ -47,6 +44,13 @@ const NAV_ITEMS = [
 		icon: <Boxes size={20} />,
 	},
 	{
+		// /health itself is the server's liveness JSON endpoint, so the
+		// dashboard lives at /status — otherwise the SPA route never renders.
+		path: "/status",
+		label: "Health",
+		icon: <Heart size={20} />,
+	},
+	{
 		path: "/settings",
 		label: "Settings",
 		icon: <Settings size={20} />,
@@ -63,20 +67,9 @@ const NAV_ITEMS = [
 	},
 ];
 
-const BETA_ITEMS = [
-	{
-		// /health itself is the server's liveness JSON endpoint, so the
-		// dashboard lives at /status — otherwise the SPA route never renders.
-		path: "/status",
-		label: "Health",
-		icon: <Heart size={20} />,
-	},
-];
-
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
-	const [betaOpen, setBetaOpen] = useState(false);
 	const location = useLocation();
-	// Core items before ADO; ADO stays after the Beta group.
+	// Core items before ADO; ADO stays last.
 	const coreNav = NAV_ITEMS.slice(0, -1);
 	const adoNav = NAV_ITEMS.slice(-1);
 
@@ -119,36 +112,6 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
 						</Link>
 					);
 				})}
-
-				{/* Beta group (collapsible) */}
-			<div className="nav-group">
-				<button
-					className="nav-group-header"
-					onClick={() => setBetaOpen((v) => !v)}
-					aria-expanded={betaOpen}
-				>
-					{betaOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-					<span className="nav-group-label">Beta</span>
-				</button>
-				{betaOpen && (
-					<div className="nav-group-items">
-						{BETA_ITEMS.map((item) => {
-							const isActive = location.pathname === item.path;
-							return (
-								<Link
-									key={item.path}
-									to={item.path}
-									className={`nav-link${isActive ? " is-active" : ""}`}
-									onClick={onClose}
-								>
-									{item.icon}
-									<span className="nav-label">{item.label}</span>
-								</Link>
-							);
-						})}
-					</div>
-				)}
-			</div>
 
 			{/* ADO standalone */}
 			{adoNav.map((item) => {

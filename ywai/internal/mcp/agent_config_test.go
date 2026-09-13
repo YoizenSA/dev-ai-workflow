@@ -321,27 +321,27 @@ func TestAgentConfig_UnknownTarget(t *testing.T) {
 // ─── BuildEntryShape — opencode ───────────────────────────────────────────
 
 // TestBuildEntryShape_Opencode_Local pins the opencode local entry shape
-// using github as the canonical example. Opencode's format keeps the
+// using postgres as the canonical example. Opencode's format keeps the
 // command as a single argv slice (not split into command+args) and tags
 // the entry with type="local". With creds, the env map must contain the
-// GITHUB_PERSONAL_ACCESS_TOKEN that github's spec requires.
+// DATABASE_URL that postgres's spec requires.
 func TestBuildEntryShape_Opencode_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("opencode", github, creds)
+	got := BuildEntryShape("opencode", postgres, creds)
 
 	// type must be "local" (string).
 	if v, ok := got["type"].(string); !ok || v != "local" {
-		t.Errorf("opencode github shape type = %v (%T), want \"local\" string",
+		t.Errorf("opencode postgres shape type = %v (%T), want \"local\" string",
 			got["type"], got["type"])
 	}
 	// v2: no "enabled" flag (absent = enabled).
 	if v, has := got["enabled"]; has {
-		t.Errorf("opencode github shape enabled = %v, want absent (v2)", v)
+		t.Errorf("opencode postgres shape enabled = %v, want absent (v2)", v)
 	}
 	// command must be a slice with exactly the 3 argv tokens the
 	// catalog pins. We compare via JSON round-trip so the test is
@@ -349,8 +349,8 @@ func TestBuildEntryShape_Opencode_Local(t *testing.T) {
 	// "environment" key (renamed from "env").
 	want := map[string]any{
 		"type":        "local",
-		"command":     []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		"environment": map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"command":     []string{"npx", "-y", "@modelcontextprotocol/server-postgres"},
+		"environment": map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 	}
 	shapeJSONEqual(t, got, want)
 }
@@ -419,43 +419,43 @@ func TestBuildEntryShape_Opencode_CodemodDisabledByDefault(t *testing.T) {
 // (as a slice). The shape does NOT have a "type" field — claude
 // infers transport from the presence of command vs. url.
 func TestBuildEntryShape_Claude_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("claude-code", github, creds)
+	got := BuildEntryShape("claude-code", postgres, creds)
 
 	// command must be a STRING (not a slice). claude's schema
 	// pins this explicitly: exec-style, not argv-style.
 	if v, ok := got["command"].(string); !ok || v != "npx" {
-		t.Errorf("claude github shape command = %v (%T), want \"npx\" string",
+		t.Errorf("claude postgres shape command = %v (%T), want \"npx\" string",
 			got["command"], got["command"])
 	}
 	// args must be a slice with the rest of the argv.
-	wantArgs := []string{"-y", "@modelcontextprotocol/server-github"}
+	wantArgs := []string{"-y", "@modelcontextprotocol/server-postgres"}
 	gotArgs, ok := got["args"]
 	if !ok {
-		t.Errorf("claude github shape args missing, want %v", wantArgs)
+		t.Errorf("claude postgres shape args missing, want %v", wantArgs)
 	} else {
 		gJSON, _ := json.Marshal(gotArgs)
 		wJSON, _ := json.Marshal(wantArgs)
 		if string(gJSON) != string(wJSON) {
-			t.Errorf("claude github shape args = %s, want %s", gJSON, wJSON)
+			t.Errorf("claude postgres shape args = %s, want %s", gJSON, wJSON)
 		}
 	}
 	// env must contain the creds.
 	want := map[string]any{
 		"command": "npx",
 		"args":    wantArgs,
-		"env":     map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"env":     map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 		"enabled": true,
 	}
 	shapeJSONEqual(t, got, want)
 	// type must NOT appear (claude has no "type" tag).
 	if shapeHasKey(got, "type") {
-		t.Errorf("claude github shape has type = %v, want absent (claude infers from command/url)",
+		t.Errorf("claude postgres shape has type = %v, want absent (claude infers from command/url)",
 			got["type"])
 	}
 }
@@ -497,22 +497,22 @@ func TestBuildEntryShape_Claude_Remote(t *testing.T) {
 // immediately — the two formats are not the same by accident, they
 // are the same by historical convention.
 func TestBuildEntryShape_Pi_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("pi", github, creds)
+	got := BuildEntryShape("pi", postgres, creds)
 
 	if v, ok := got["command"].(string); !ok || v != "npx" {
-		t.Errorf("pi github shape command = %v (%T), want \"npx\" string",
+		t.Errorf("pi postgres shape command = %v (%T), want \"npx\" string",
 			got["command"], got["command"])
 	}
 	want := map[string]any{
 		"command": "npx",
-		"args":    []string{"-y", "@modelcontextprotocol/server-github"},
-		"env":     map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"args":    []string{"-y", "@modelcontextprotocol/server-postgres"},
+		"env":     map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 		"enabled": true,
 	}
 	shapeJSONEqual(t, got, want)
@@ -524,28 +524,28 @@ func TestBuildEntryShape_Pi_Local(t *testing.T) {
 // A local entry whose creds map is nil (or empty) must NOT emit an env
 // key — leaving env out is the JSON idiom for "no env vars", and some
 // agent runtimes treat an empty env object as a contract violation
-// (e.g. they require the field to be absent). github is the test
+// (e.g. they require the field to be absent). postgres is the test
 // vehicle because it has an env spec, so the no-creds path is
 // meaningful (not vacuously true).
 func TestBuildEntryShape_NoCreds_OmitsEnv(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
 
-	got := BuildEntryShape("opencode", github, nil)
+	got := BuildEntryShape("opencode", postgres, nil)
 
 	if shapeHasKey(got, "env") {
-		t.Errorf("opencode github shape (no creds) has env = %v, want absent",
+		t.Errorf("opencode postgres shape (no creds) has env = %v, want absent",
 			got["env"])
 	}
 	// Also pin the empty-map variant — both nil and map[string]string{}
 	// should produce the same "no env" outcome. An implementation that
 	// only handles nil but not the empty map would still leak env={}
 	// for the empty-map case, which is the bug this subtest catches.
-	got2 := BuildEntryShape("opencode", github, map[string]string{})
+	got2 := BuildEntryShape("opencode", postgres, map[string]string{})
 	if shapeHasKey(got2, "env") {
-		t.Errorf("opencode github shape (empty creds) has env = %v, want absent",
+		t.Errorf("opencode postgres shape (empty creds) has env = %v, want absent",
 			got2["env"])
 	}
 }
@@ -607,29 +607,29 @@ func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["old-cmd"],"env":{}}}}`
+	initial := `{"mcp":{"postgres":{"type":"local","command":["old-cmd"],"env":{}}}}`
 	writeJSONFile(t, cfgPath, initial)
 
-	github, _ := CatalogByID("github")
-	shape := BuildEntryShape("opencode", github, nil)
+	postgres, _ := CatalogByID("postgres")
+	shape := BuildEntryShape("opencode", postgres, nil)
 
-	if _, err := WriteAgentConfig("opencode", "github", shape); err != nil {
+	if _, err := WriteAgentConfig("opencode", "postgres", shape); err != nil {
 		t.Fatalf("WriteAgentConfig err = %v, want nil", err)
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
 	servers := opencodeFileServers(t, cfg)
-	gh := servers["github"].(map[string]any)
-	cmd, _ := gh["command"].([]any)
+	pg := servers["postgres"].(map[string]any)
+	cmd, _ := pg["command"].([]any)
 	if len(cmd) == 0 {
-		t.Fatalf("github command = %v, want non-empty after overwrite", cmd)
+		t.Fatalf("postgres command = %v, want non-empty after overwrite", cmd)
 	}
 	if cmd[0] == "old-cmd" {
-		t.Errorf("github command[0] = %q, want the new value (old value not overwritten)",
+		t.Errorf("postgres command[0] = %q, want the new value (old value not overwritten)",
 			cmd[0])
 	}
 	if cmd[0] != "npx" {
-		t.Errorf("github command[0] = %q, want \"npx\" (catalog's first argv token)",
+		t.Errorf("postgres command[0] = %q, want \"npx\" (catalog's first argv token)",
 			cmd[0])
 	}
 	// Critical: only ONE github entry, not two. With a map this is
@@ -977,7 +977,7 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 	seed := `{"mcp":{"existing":{"type":"local","command":["echo"]}}}`
 	writeJSONFile(t, cfgPath, seed)
 
-	entries := []string{"github", "git", "playwright", "context7", "engram"}
+	entries := []string{"github", "postgres", "playwright", "context7", "engram"}
 	shapes := make(map[string]map[string]any, len(entries))
 	for _, id := range entries {
 		entry, ok := CatalogByID(id)

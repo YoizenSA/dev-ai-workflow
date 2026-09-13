@@ -1923,3 +1923,43 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 		t.Errorf("unoverridden bucket members must still expand:\n%s", md)
 	}
 }
+
+func TestMergeGroupSidecar(t *testing.T) {
+	dir := t.TempDir()
+
+	// Merging into a missing sidecar creates it.
+	if err := MergeGroupSidecar(dir, map[string]string{"planner-scout": "planning"}); err != nil {
+		t.Fatalf("merge into missing sidecar: %v", err)
+	}
+	if got := ReadGroupSidecar(dir, "planner-scout"); got != "planning" {
+		t.Fatalf("ReadGroupSidecar after create = %q, want planning", got)
+	}
+
+	// A second merge keeps the first entry and adds the new one: each
+	// workflow Apply only knows its own agents, but the sidecar is shared.
+	if err := MergeGroupSidecar(dir, map[string]string{"orchestrator-x": "review-wf"}); err != nil {
+		t.Fatalf("second merge: %v", err)
+	}
+	if got := ReadGroupSidecar(dir, "planner-scout"); got != "planning" {
+		t.Errorf("first entry lost after second merge: %q", got)
+	}
+	if got := ReadGroupSidecar(dir, "orchestrator-x"); got != "review-wf" {
+		t.Errorf("second entry = %q, want review-wf", got)
+	}
+
+	// An empty value removes just that agent's entry.
+	if err := MergeGroupSidecar(dir, map[string]string{"planner-scout": ""}); err != nil {
+		t.Fatalf("removal merge: %v", err)
+	}
+	if got := ReadGroupSidecar(dir, "planner-scout"); got != "" {
+		t.Errorf("removed entry still present: %q", got)
+	}
+
+	// Removing the last entry removes the file (mirrors WriteGroupSidecar).
+	if err := MergeGroupSidecar(dir, map[string]string{"orchestrator-x": ""}); err != nil {
+		t.Fatalf("final removal merge: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, GroupSidecarFile)); !os.IsNotExist(err) {
+		t.Errorf("sidecar stat err = %v, want IsNotExist after last removal", err)
+	}
+}

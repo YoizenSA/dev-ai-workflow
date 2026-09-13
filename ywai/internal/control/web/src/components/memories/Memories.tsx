@@ -119,6 +119,9 @@ export default function Memories() {
 		loading,
 		loadingPrompts,
 		fetchStatus,
+		startEngram,
+		startingEngram,
+		startEngramError,
 		fetchObservations,
 		applyFilters,
 		setFilter,
@@ -365,9 +368,21 @@ export default function Memories() {
 			</header>
 
 			{!connected && (
-				<div className="alert alert-warning">
-					Engram is not available. Initialize it with{' '}
-					<code>engram serve</code>.
+				<div className="alert alert-warning engram-offline-row">
+					<span>
+						Engram is not available. Initialize it with{' '}
+						<code>engram serve</code>.
+					</span>
+					<button
+						className="btn btn-accent btn-sm"
+						onClick={() => void startEngram()}
+						disabled={startingEngram}
+					>
+						{startingEngram ? 'Starting…' : 'Start in background'}
+					</button>
+					{startEngramError && (
+						<span className="engram-start-error">{startEngramError}</span>
+					)}
 				</div>
 			)}
 

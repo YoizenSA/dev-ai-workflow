@@ -152,6 +152,10 @@ func (s *Server) handleSessionAnalytics(w http.ResponseWriter, r *http.Request) 
 	cacheKey := strings.Join([]string{
 		q.ProjectID, q.Worktree,
 		strconv.Itoa(q.Days), strconv.Itoa(q.ToolsLimit), strconv.Itoa(q.SkillsLimit),
+		// Same query, different environment = different database: the env
+		// must be part of the key or switching serves the previous env's
+		// cached analysis.
+		resolveEvalEnv(effectiveEvalEnvironments(), r.URL.Query().Get("env")).DBPath,
 	}, "|")
 
 	forceRefresh := r.URL.Query().Get("refresh") == "1" || r.URL.Query().Get("refresh") == "true"
@@ -172,7 +176,7 @@ func (s *Server) handleSessionAnalytics(w http.ResponseWriter, r *http.Request) 
 
 	// The database comes from ?env= (explicit per-environment path) or falls
 	// back to the historical default (OPENCODE_DB / XDG_DATA_HOME override).
-	env := resolveEvalEnv(loadEvalEnvironments(), r.URL.Query().Get("env"))
+	env := resolveEvalEnv(effectiveEvalEnvironments(), r.URL.Query().Get("env"))
 	result, err := LoadSessionAnalytics(ctx, evalDBPath(env), q)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{

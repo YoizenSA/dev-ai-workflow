@@ -23,6 +23,24 @@ const KIND_LABEL: Record<SkillStandardizeAction["kind"], string> = {
   "delete-empty-dir": "Empty folders",
   "delete-broken-link": "Broken links",
 };
+const KIND_HELP: Record<SkillStandardizeAction["kind"], string> = {
+  "remove-duplicate": "Identical copies. The plan keeps one copy.",
+  "resolve-shadow": "Same name with different content. The plan keeps the top-ranked copy.",
+  "delete-empty-dir": "Folders with no readable SKILL.md. The plan removes empty folders only.",
+  "delete-broken-link": "Links with a missing target. The plan removes the link only.",
+};
+const FILTER_HELP: Record<Filter, string> = {
+  all: "Show every skill name found in the scanned roots.",
+  duplicate: "Show names with 2 or more identical copies. OpenCode loads each copy.",
+  shadowed: "Show names with 2 or more different contents. OpenCode needs unique names.",
+  debris: "Show entries with no readable SKILL.md or with a broken link.",
+};
+const STATUS_HELP: Record<SkillSurfaceSkill["status"], string> = {
+  unique: "One readable copy. No action is needed.",
+  duplicate: "Two or more identical copies. OpenCode loads each copy.",
+  shadowed: "Same name with different content. Keep one copy.",
+  unreadable: "No readable SKILL.md in this entry.",
+};
 const KIND_ORDER: SkillStandardizeAction["kind"][] = ["remove-duplicate", "resolve-shadow", "delete-empty-dir", "delete-broken-link"];
 
 const hasDebris = (s: SkillSurfaceSkill) => s.entries.some((e) => e.broken || !e.hash);
@@ -148,12 +166,44 @@ export default function SkillSurfacePanel() {
       <div className="ss-head">
         <div>
           <h3>Skill surface</h3>
-          <p className="muted">
+          <p
+            className="muted"
+            title="Distinct skill names found in all scanned roots. Shadowed means same name with different content. Duplicated means same name with identical copies. Debris means entries with no readable SKILL.md or with a broken link."
+          >
             {surface.skills.length} skill(s) visible to OpenCode · {counts.shadowed} shadowed · {counts.duplicate} duplicated ·{" "}
             {counts.debris} with debris · project root {surface.projectDir}
           </p>
+          <details className="ss-help">
+            <summary>What do these labels mean?</summary>
+            <ul>
+              <li>
+                <strong>Visible</strong> — distinct skill names found in all scanned roots.
+              </li>
+              <li>
+                <strong>Unique</strong> — one readable copy. No action is needed.
+              </li>
+              <li>
+                <strong>Duplicate</strong> — two or more identical copies. OpenCode loads each copy.
+              </li>
+              <li>
+                <strong>Shadowed</strong> — same name with different content. OpenCode needs unique names, so keep one copy.
+              </li>
+              <li>
+                <strong>Debris</strong> — entries with no readable SKILL.md or with a dangling symlink.
+              </li>
+              <li>
+                <strong>Standardize</strong> — previews cleanup. Nothing is deleted until you apply.
+              </li>
+            </ul>
+          </details>
         </div>
-        <button type="button" className="btn btn-primary btn-sm" onClick={openPlan} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={openPlan}
+          disabled={busy}
+          title="Preview cleanup: remove broken links, empty folders, and extra copies. Nothing is deleted until you apply."
+        >
           Standardize…
         </button>
       </div>
@@ -177,6 +227,7 @@ export default function SkillSurfacePanel() {
               aria-checked={filter === f}
               className={`seg-btn ${filter === f ? "active" : ""}`}
               onClick={() => setFilter(f)}
+              title={FILTER_HELP[f]}
             >
               {FILTER_LABEL[f]} <span className="ss-count">{counts[f]}</span>
             </button>
@@ -206,13 +257,21 @@ export default function SkillSurfacePanel() {
                 <td className="cell-mono">{skill.name}</td>
                 <td>
                   {skill.status === "shadowed" ? (
-                    <span className="pill pill-danger">shadowed</span>
+                    <span className="pill pill-danger" title={STATUS_HELP.shadowed}>
+                      shadowed
+                    </span>
                   ) : skill.status === "duplicate" ? (
-                    <span className="pill ss-pill-dup">duplicate</span>
+                    <span className="pill ss-pill-dup" title={STATUS_HELP.duplicate}>
+                      duplicate
+                    </span>
                   ) : skill.status === "unreadable" ? (
-                    <span className="pill">unreadable</span>
+                    <span className="pill" title={STATUS_HELP.unreadable}>
+                      unreadable
+                    </span>
                   ) : (
-                    <span className="pill pill-accent">unique</span>
+                    <span className="pill pill-accent" title={STATUS_HELP.unique}>
+                      unique
+                    </span>
                   )}
                 </td>
                 <td>
@@ -254,7 +313,11 @@ export default function SkillSurfacePanel() {
         </table>
       </div>
 
-      <p className="muted" style={{ marginTop: "var(--space-2)" }}>
+      <p
+        className="muted"
+        style={{ marginTop: "var(--space-2)" }}
+        title="Each root that was scanned for SKILL.md files. Missing means the folder does not exist."
+      >
         Scanned:{" "}
         {surface.locations
           .map((l) => `${l.label} (${l.found ? l.path : "missing"})`)
@@ -305,8 +368,9 @@ export default function SkillSurfacePanel() {
               const on = actions.filter((a) => picked.has(a.path)).length;
               return (
                 <div key={kind} className="ss-plan-group">
-                  <div className="ss-plan-head">
+                  <div className="ss-plan-head" title={KIND_HELP[kind]}>
                     <strong>{KIND_LABEL[kind]}</strong>
+                    <span className="field-help ss-plan-kind-help">{KIND_HELP[kind]}</span>
                     <span className="ss-count">
                       {on}/{actions.length}
                     </span>

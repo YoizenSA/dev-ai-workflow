@@ -331,3 +331,31 @@ func TestStoreRejectsUnsafeRunIDs(t *testing.T) {
 		t.Errorf("unexpected files after rejected IDs: %v", entries)
 	}
 }
+
+func TestRecoverInterrupted(t *testing.T) {
+	s, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := Run{ID: "run-1", TaskID: "t", Status: "running", StartedAt: time.Now().UTC()}
+	if err := s.UpsertRun(run); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := s.RecoverInterrupted("server restarted"); n != 1 {
+		t.Fatalf("recovered = %d, want 1", n)
+	}
+	got, err := s.GetRun("run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "interrupted" || got.Error != "server restarted" || got.EndedAt.IsZero() {
+		t.Fatalf("run = status %q, error %q, ended %v — want interrupted with reason and end time",
+			got.Status, got.Error, got.EndedAt)
+	}
+
+	// Idempotent: a second pass recovers nothing.
+	if n := s.RecoverInterrupted("again"); n != 0 {
+		t.Fatalf("second pass recovered %d, want 0", n)
+	}
+}

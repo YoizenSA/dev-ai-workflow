@@ -43,9 +43,12 @@ interface MemoriesState {
 	loading: boolean
 	loadingPrompts: boolean
 	error: string | null
+	startingEngram: boolean
+	startEngramError: string | null
 
 	// actions — observations
 	fetchStatus: () => Promise<void>
+	startEngram: () => Promise<boolean>
 	fetchObservations: (limit?: number) => Promise<void>
 	applyFilters: () => Promise<void>
 	setFilter: <K extends keyof MemoryFilters>(key: K, value: MemoryFilters[K]) => void
@@ -155,6 +158,8 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	loading: false,
 	loadingPrompts: false,
 	error: null,
+	startingEngram: false,
+	startEngramError: null,
 
 	fetchStatus: async () => {
 		try {
@@ -162,6 +167,22 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 			set({ engramStatus: status })
 		} catch {
 			set({ engramStatus: { connected: false } })
+		}
+	},
+
+	startEngram: async () => {
+		set({ startingEngram: true, startEngramError: null })
+		try {
+			await memoriesApi.startEngram()
+			// Re-poll so the page reflects the running server at once.
+			await get().fetchStatus()
+			await get().fetchStats()
+			await get().fetchObservations()
+			set({ startingEngram: false })
+			return true
+		} catch (err) {
+			set({ startingEngram: false, startEngramError: String(err) })
+			return false
 		}
 	},
 

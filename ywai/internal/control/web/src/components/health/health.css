@@ -77,10 +77,125 @@
   font-size: 0.85rem;
   color: var(--text-muted, #6b7280);
   flex-wrap: wrap;
+  margin-bottom: var(--space-6, 1.5rem);
 }
 
 .health-meta span {
   display: flex;
   align-items: center;
   gap: var(--space-1, 0.25rem);
+}
+
+/* Environments section */
+.health-envs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.health-envs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 0.75rem);
+}
+
+.health-envs-head h3 {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  color: var(--text, #2d2d2d);
+  margin: 0;
+}
+
+.health-envs-link {
+  font-size: 0.85rem;
+  color: var(--info, #3b82f6);
+  text-decoration: none;
+}
+
+.health-envs-link:hover {
+  text-decoration: underline;
+}
+
+.health-envs-muted {
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.health-envs-error {
+  font-size: 0.85rem;
+  color: var(--danger, #ef4444);
+}
+
+.health-envs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3, 0.75rem);
+}
+
+.health-env-card.is-running {
+  border-color: var(--success-border, rgba(34, 197, 94, 0.4));
+}
+
+.health-env-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+}
+
+.health-env-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted, #9ca3af);
+  flex-shrink: 0;
+}
+
+.health-env-dot.on {
+  background: var(--success, #22c55e);
+}
+
+.health-env-dot.off {
+  background: var(--text-muted, #9ca3af);
+}
+
+.health-env-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-env-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border, #e5e7eb);
+  color: var(--text-muted, #6b7280);
+}
+
+.health-env-badge.on {
+  color: var(--tint-success, #15803d);
+  background: var(--success-soft, rgba(16, 185, 129, 0.16));
+  border-color: var(--success-border, rgba(34, 197, 94, 0.4));
+}
+
+.health-env-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-2, 0.5rem);
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.health-env-meta code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

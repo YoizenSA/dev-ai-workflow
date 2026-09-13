@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
 import { configApi, toolsApi, workflowApi, type McpCatalogItem } from '../../api/client'
-import type { AgentDetail, AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
+import type { AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
 import MultiSelect from './MultiSelect'
+import { useLinkedAgentContent } from './linkedAgent'
 import {
 	TOOL_OPTIONS,
 	DEFAULT_ORCHESTRATOR_TOOLS,
@@ -380,15 +381,12 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 // the current text in as an override.
 function IdentityField({ node, placeholder }: { node: WorkflowNode; placeholder?: string }) {
 	const ref = (node.data.agentRef ?? '').trim()
-	const [linkedText, setLinkedText] = useState('')
+	const { content: linkedText, loading: linkedLoading } = useLinkedAgentContent(ref)
 	const [agents, setAgents] = useState<AgentInfo[]>([])
 
 	useEffect(() => {
-		if (!ref) return
-		configApi
-			.getAgent(ref.split('/').pop() as string)
-			.then((a: AgentDetail) => setLinkedText(a?.content ?? ''))
-			.catch(() => setLinkedText(''))
+		if (ref) return
+		// agents list loads below; nothing to do while linked
 	}, [ref])
 
 	// Attach candidates. Loaded only while detached, since the picker is the one
@@ -419,7 +417,13 @@ function IdentityField({ node, placeholder }: { node: WorkflowNode; placeholder?
 				<span className="field-help">
 					Resolved from the agent at export time — edit the agent to change every workflow that links it.
 				</span>
-				{linkedText ? <pre className="textarea mono readonly">{linkedText}</pre> : null}
+				{linkedLoading ? (
+					<span className="field-help">Loading agent prompt…</span>
+				) : linkedText ? (
+					<pre className="textarea mono readonly">{linkedText}</pre>
+				) : (
+					<span className="field-help">Could not load {ref}.</span>
+				)}
 			</div>
 		)
 	}

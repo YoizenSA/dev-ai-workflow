@@ -19,10 +19,15 @@ import (
 //
 // Canonical IDs (keep in sync with catalog.go). `*` = required secret env.
 //
-//   context7, microsoft-learn, jam, meta-devtools (remote)
-//   chrome-devtools, grafana*, playwright, git, github*, postgres*, mysql*, docker
-//   engram, graft, filesystem
-//   brave-search*, puppeteer, codemod
+//   context7, microsoft-learn, github (remote, client OAuth)
+//   chrome-devtools, grafana*, playwright, postgres*, mysql*
+//   engram, graft, brave-search*, codemod
+//
+// Removed on 2026-09-12 (broken or pointless): git and docker pointed at
+// @modelcontextprotocol packages that do not exist on npm (every install
+// produced a server that could not spawn), puppeteer was archived and
+// duplicated playwright, filesystem duplicated the agent's native tools,
+// jam and meta-devtools were niche SaaS integrations with no fit.
 //
 // Assumptions baked into the tests (anything not pinned here is left to
 // @dev to decide without being locked down):
@@ -68,7 +73,7 @@ var _ = CatalogEntry{}
 // TestCatalog_Len pins the size of the catalog. If a future addition
 // sneaks in without updating this test, it fails.
 func TestCatalog_Len(t *testing.T) {
-	const want = 18
+	const want = 13
 	got := len(Catalog())
 	if got != want {
 		t.Errorf("len(Catalog()) = %d, want %d", got, want)
@@ -81,21 +86,16 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 	want := []string{
 		"context7",
 		"microsoft-learn",
-		"jam",
 		"meta-devtools",
 		"chrome-devtools",
 		"grafana",
 		"playwright",
-		"git",
 		"github",
 		"postgres",
-		"docker",
 		"engram",
 		"graft",
-		"filesystem",
 		"brave-search",
 		"mysql",
-		"puppeteer",
 		"codemod",
 	}
 	if len(want) != len(Catalog()) {
@@ -114,12 +114,17 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 	}
 }
 
-// TestCatalog_ExcludesRemovedIDs pins the removal decision from
-// slice 1: sharptools and kubernetes were dropped from the final 12.
-// If they come back accidentally in a future merge, this test catches
+// TestCatalog_ExcludesRemovedIDs pins the removal decisions: sharptools
+// and kubernetes were dropped in slice 1; the 2026-09 curation removed
+// the npm-404 servers (git, docker), the archived duplicate (puppeteer),
+// the agent-native duplicate (filesystem), and the no-fit jam. If any
+// of them come back accidentally in a future merge, this test catches
 // it before the install UI starts showing them again.
 func TestCatalog_ExcludesRemovedIDs(t *testing.T) {
-	removed := []string{"sharptools", "kubernetes"}
+	removed := []string{
+		"sharptools", "kubernetes",
+		"git", "docker", "puppeteer", "filesystem", "jam",
+	}
 	for _, id := range removed {
 		_, ok := CatalogByID(id)
 		if ok {
@@ -301,34 +306,34 @@ func TestCatalogByID_GoInstall_Engram(t *testing.T) {
 	}
 }
 
-// TestCatalogByID_RequiredEnv_GitHub pins the github entry's single
-// required+secret env var: GITHUB_PERSONAL_ACCESS_TOKEN. The token
-// is a secret, so Secret must be true; it's also required, so
-// Required must be true. The Description must be non-empty so the
-// install UI can show a human-readable label like "Personal access
-// token from github.com/settings/tokens".
-func TestCatalogByID_RequiredEnv_GitHub(t *testing.T) {
+// TestCatalogByID_Remote_GitHub pins the GitHub entry: GitHub's official
+// remote server. Authentication is client-driven (standard MCP OAuth
+// sign-in in the agent), so ClientAuth must be set and ywai-managed OAuth
+// (AuthType) must stay empty; Install skips both its OAuth step and the
+// probe because the endpoint answers 401 until the user signs in. With
+// no ywai-collected credentials, RequiredEnv is empty.
+func TestCatalogByID_Remote_GitHub(t *testing.T) {
 	entry, ok := CatalogByID("github")
 	if !ok {
 		t.Fatal("CatalogByID(github) ok=false, want true")
 	}
-	if len(entry.RequiredEnv) != 1 {
-		t.Fatalf("github.RequiredEnv has %d entries, want 1: %+v",
-			len(entry.RequiredEnv), entry.RequiredEnv)
+	if entry.Type != "remote" {
+		t.Errorf("github.Type = %q, want \"remote\"", entry.Type)
 	}
-	spec := entry.RequiredEnv[0]
-	if spec.Name != "GITHUB_PERSONAL_ACCESS_TOKEN" {
-		t.Errorf("github.RequiredEnv[0].Name = %q, want GITHUB_PERSONAL_ACCESS_TOKEN",
-			spec.Name)
+	if entry.URL != "https://api.githubcopilot.com/mcp/" {
+		t.Errorf("github.URL = %q, want \"https://api.githubcopilot.com/mcp/\"",
+			entry.URL)
 	}
-	if !spec.Required {
-		t.Errorf("github.RequiredEnv[0].Required = false, want true")
+	if !entry.ClientAuth {
+		t.Errorf("github.ClientAuth = false, want true (client drives OAuth)")
 	}
-	if !spec.Secret {
-		t.Errorf("github.RequiredEnv[0].Secret = false, want true (token is a secret)")
+	if entry.AuthType != "" {
+		t.Errorf("github.AuthType = %q, want \"\" (not ywai-managed OAuth)",
+			entry.AuthType)
 	}
-	if spec.Description == "" {
-		t.Errorf("github.RequiredEnv[0].Description is empty, want non-empty")
+	if len(entry.RequiredEnv) != 0 {
+		t.Errorf("github.RequiredEnv has %d entries, want 0 (the client signs in)",
+			len(entry.RequiredEnv))
 	}
 }
 
@@ -405,7 +410,7 @@ func TestCatalogByID_Remote_MetaDevtools(t *testing.T) {
 // entry accidentally gets an InstallCmd, the UI will show a
 // misleading "install" button.
 func TestCatalogByID_SkipInstall_Remote(t *testing.T) {
-	remotes := []string{"context7", "microsoft-learn", "jam", "meta-devtools"}
+	remotes := []string{"context7", "microsoft-learn", "meta-devtools", "github"}
 	for _, id := range remotes {
 		entry, ok := CatalogByID(id)
 		if !ok {

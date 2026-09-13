@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/evals"
 )
 
@@ -123,5 +125,50 @@ func TestEvalEnvironmentsCRUD(t *testing.T) {
 	}
 	if len(saved) != 2 {
 		t.Fatalf("saves = %d, want add + delete", len(saved))
+	}
+}
+
+func TestMergeEvalEnvironments(t *testing.T) {
+	registered := []config.EvalEnvironment{
+		{Name: "local"},
+		{Name: "staging", ServerURL: "http://stage:8080", DBPath: "/tmp/stage.db"},
+	}
+	profiles := []envprofile.Profile{
+		{Name: "dev", Port: 5800},
+		{Name: "staging", Port: 5801}, // collision: registered wins
+		{Name: "qa", Port: 5802},
+	}
+
+	got := mergeEvalEnvironments(registered, profiles)
+
+	if len(got) != 4 {
+		t.Fatalf("len = %d, want 4 (local + staging + dev + qa): %+v", len(got), got)
+	}
+	if got[0].Name != "local" || got[1].Name != "staging" {
+		t.Fatalf("registered entries must keep their order: %+v", got)
+	}
+	if got[1].DBPath != "/tmp/stage.db" {
+		t.Errorf("staging DBPath = %q, want unchanged (collision keeps registered)", got[1].DBPath)
+	}
+	var dev, qa *config.EvalEnvironment
+	for i := range got {
+		switch got[i].Name {
+		case "dev":
+			dev = &got[i]
+		case "qa":
+			qa = &got[i]
+		}
+	}
+	if dev == nil || qa == nil {
+		t.Fatalf("profile environments missing: %+v", got)
+	}
+	if dev.ServerURL != "http://127.0.0.1:5800" {
+		t.Errorf("dev ServerURL = %q, want http://127.0.0.1:5800", dev.ServerURL)
+	}
+	if want := filepath.Join("opencode", "opencode.db"); !strings.Contains(dev.DBPath, want) || !strings.Contains(dev.DBPath, "dev") {
+		t.Errorf("dev DBPath = %q, want the profile's opencode database path", dev.DBPath)
+	}
+	if qa.ServerURL != "http://127.0.0.1:5802" {
+		t.Errorf("qa ServerURL = %q, want http://127.0.0.1:5802", qa.ServerURL)
 	}
 }
