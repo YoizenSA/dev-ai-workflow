@@ -117,6 +117,16 @@ Fuente: `skills.txt` de cada perfil (`ywai/agents/...`). Los ids base (`typescri
 | `designer` | yz-ui, angular |
 | `planning` | codebase-design, decision-mapping (base) |
 | `ask`, `finder`, `orchestrator`, `memory`, `advisor` | Sin allowlist (usan lo general del sistema) |
+| `qa-orchestrator` | Sin allowlist (coordina, no ejecuta) |
+| `qa-analyst` | playwright-e2e-testing |
+| `qa-dev` | typescript (base), playwright-e2e-testing, condition-based-waiting, diagnosing-bugs |
+| `qa-reviewer` | typescript (base), playwright-e2e-testing, condition-based-waiting |
+| `qa-ask` | typescript (base), playwright-e2e-testing |
+| `scenario-runner` | qa-evidence, gherkin-bdd, condition-based-waiting, playwright-e2e-testing, diagnosing-bugs |
+| `test-author` | ado, playwright-e2e-testing |
+| `qa-feedback` | qa-evidence, ado, gherkin-bdd |
+| `planner-draft` | adr-skill, codebase-design |
+| `infra-docs` | diks |
 
 <Aside type="tip">
 El modelo carga un skill **por id**. Si no está en el `skills.txt` del agente, no se anuncia.

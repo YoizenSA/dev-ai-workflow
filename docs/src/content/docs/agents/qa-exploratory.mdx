@@ -13,11 +13,11 @@ El ciclo exploratorio cubre lo que pasa **después** de implementar: resumir qu�
 
 | Agente | Rol | Para qué |
 |---|---|---|
-| **exploratory-orchestrator** | Coordinador | Coordina el ciclo: resume lo entregado, después crea el work item y sus escenarios |
-| **feature-summary** | Analista | Resume la feature y sus casos de uso para QA, desde el código y su diff |
-| **test-author** | QA | Crea el work item de testing exploratorio en ADO y escribe sus escenarios en Gherkin |
-| **verification-orchestrator** | Coordinador | Coordina la verificación: corre los escenarios y archiva el resultado |
-| **qa-feedback** | QA | Registra la corrida en el work item: comentario resumen y un Bug hijo por escenario fallido |
+| **exploratory-orchestrator** | Coordinador | Coordina el ciclo: resume lo entregado, después crea el work item y sus escenarios. Si la feature está rota, frena en vez de escribir escenarios sobre el defecto |
+| **feature-summary** | Analista | Resume desde el código: inputs, flujos, side effects, edge cases. Si ticket y diff discrepan, el diff manda |
+| **test-author** | QA | Work item Task hijo del user story + escenarios Gherkin (skills: `ado`, `playwright-e2e-testing`). Sin parent id en el brief, devuelve en vez de adivinar |
+| **verification-orchestrator** | Coordinador | Delega el run a `@scenario-runner` y el archivado a `@qa-feedback`. Rojo bloquea aunque el review esté limpio |
+| **qa-feedback** | QA | Resumen en el padre + un Bug hijo por escenario fallido, cada uno con evidencia (skills: `qa-evidence`, `ado`). Blocked se reporta como blocked: no es Bug |
 
 ## Flujo
 

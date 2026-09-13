@@ -7,7 +7,11 @@ import { Aside } from '@astrojs/starlight/components';
 
 # Advisor Agent
 
-El advisor es un revisor que observa la sesión de otro agente. Un segundo modelo lee cada turno y, cuando detecta algo concreto, inyecta una nota que el agente principal lee en su turno siguiente. No es un objetivo de delegación: no lo invocás con `@advisor` ni le delegás tareas.
+El advisor es un revisor que observa la sesión de otro agente. Un segundo modelo lee cada turno y, cuando detecta algo concreto, inyecta una nota que el agente principal lee en su turno siguiente. No es un objetivo de delegación: no lo invocás con `@advisor` ni le delegás tareas (`task` denegado).
+
+## Por qué existe como perfil separado
+
+La revisión necesita su propio límite de herramientas: una sesión que revisa no debe heredar los permisos de la sesión revisada, o un pass que solo observa podría editar archivos, correr comandos o spawnear agentes. Por eso el advisor solo puede leer (`read`, `grep`, `glob`) y tiene denegado todo lo demás: edit, write, bash, task, delegate, skill, MCP, memoria.
 
 ## Qué hace
 

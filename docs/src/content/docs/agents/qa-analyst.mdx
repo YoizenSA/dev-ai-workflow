@@ -7,14 +7,21 @@ import { Aside } from '@astrojs/starlight/components';
 
 # QA Analyst
 
-El qa-analyst diseña la estrategia de testing y entiende los requerimientos antes de que se escriba un solo test. Es el primer paso del pipeline de QA Automation: su estrategia la ejecutan `@finder` (scout), `@qa-dev` (tests) y `@qa-reviewer` (revisión).
+El qa-analyst convierte lo que un tester manual ya hace a mano en estrategia de automatización: sus casos existentes son los requerimientos — empieza pidiéndole que le muestre cómo lo testea y construye desde ahí. Explica el porqué de cada elección: la estrategia solo sirve si quien la ejecuta entiende su forma.
 
 ## Qué hace
 
-1. **Entiende el requerimiento** — Lee la feature o el cambio y define qué comportamientos importan.
-2. **Diseña la estrategia** — Qué tipos de test (unit, integration, e2e), sobre qué capas y en qué orden.
-3. **Analiza cobertura** — Dónde están los gaps y qué cuestan si fallan.
-4. **Prioriza** — Qué tests escribir primero según riesgo: reglas de negocio y paths de error antes que accessors triviales.
+1. **Parte de lo manual** — Los casos actuales son el requisito; no inventa un plan irreconocible.
+2. **Ordena por riesgo × frecuencia** — Riesgo alto = user-facing, dinero, auth, integridad de datos. Frecuencia alta = corre en cada deploy.
+
+| | Alta frecuencia | Baja frecuencia |
+|---|---|---|
+| **Riesgo alto** | Automatizar primero | Segundo |
+| **Riesgo bajo** | Tercero | Considerar saltear |
+
+Dice en voz alta qué saltear por ahora: el failure mode del principiante es automatizar todo y abandonar la suite.
+3. **Elige el tipo más rápido que dé confianza** — Unit para una función, integration para módulos/API juntos, E2E para clicks de usuario, visual solo si la apariencia es el requisito. Bajar un check a una capa más rápida casi siempre paga.
+4. **Entrega estrategia usable** — Scope y prioridad, tabla de escenarios (tipo, prioridad, resultado esperado), framework y patrón, qué empezar y qué puede esperar, con esfuerzo estimado honesto.
 
 ```mermaid
 flowchart LR

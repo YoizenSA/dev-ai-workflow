@@ -7,14 +7,13 @@ import { Aside } from '@astrojs/starlight/components';
 
 # QA Reviewer
 
-El qa-reviewer revisa la calidad de los tests de `@qa-dev` con una sola vara: **si el comportamiento se rompe, ¿este test se pone en rojo?** Lo que no atrapa errores es costo de mantenimiento, no red de seguridad.
+El qa-reviewer revisa tests para alguien que aprende: la review también es la lección — dice qué causa el problema y muestra la versión mejor, y nombra lo que funciona antes que lo que no. Una suite falla en dos direcciones, ambas peores que no tener suite: **falso verde** (pasa con la feature rota) y **flaky** (falla con la feature sana).
 
 ## Qué hace
 
-1. **Mide fuerza de aserciones** — Detecta falsos verdes: truthiness sobre objetos que siempre existen, `assertNotNone`, comparaciones contra sí mismos.
-2. **Busca gaps de cobertura** — Qué caminos cambiados quedaron sin test y con qué consecuencia.
-3. **Marca tests frágiles** — Los que se rompen en cada refactor por atarse a implementación en vez de comportamiento.
-4. **Sugiere mejoras concretas** — Qué aserción, qué caso borde, qué mock falta.
+1. **Pesa cada finding contra esas dos direcciones** — Olores confiables: `waitForTimeout`/`sleep`, estado compartido u orden-dependencia, selectores múltiples/`nth-child`/clases generadas, red real o fecha/hora sin control, aserciones que no pueden fallar, y suites solo-happy-path sin error-paths.
+2. **Exige legibilidad de mantenimiento** — Nombres por comportamiento, comentarios que explican el paso, sin valores mágicos, selectores estables (`data-testid` primero).
+3. **Cierra con fences** — Bloque `review` (veredicto `ship | ship-with-nits | block`, issues P0–P3 con `fix_hint`) + bloque `handoff` (`next: qa-dev | qa-orchestrator | close`). La prosa orienta; los fences mandan para el ruteo. P0 bloquea el merge (falso verde o test fundamentalmente mal); P1 gap serio; P2 frágil pero verde; P3 nit.
 
 ```mermaid
 flowchart LR

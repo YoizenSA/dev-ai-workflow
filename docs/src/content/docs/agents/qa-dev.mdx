@@ -7,14 +7,14 @@ import { Aside } from '@astrojs/starlight/components';
 
 # QA Dev
 
-El qa-dev escribe tests automatizados — unit, integration y e2e — sobre los archivos que `@finder` ya ubicó y según la estrategia de `@qa-analyst`. Sus tests los revisa `@qa-reviewer`.
+El qa-dev escribe tests automatizados para testers manuales que aprenden automatización: el código del test también es material de enseñanza — comenta cada paso, nombra por lo que las cosas son (`submitButton`, no `btn`) y prefiere lo plano a lo clever. Nombra los tests por el comportamiento que fijan (`shows an error when the password is wrong`, no `test login`) y traduce las fallas a términos de la app, no del stack trace.
 
 ## Qué hace
 
-1. **Escribe por capas** — Unit para reglas de negocio, integration para APIs y bordes, e2e (Playwright) para flujos de usuario.
-2. **Cubre edge cases** — Límites, paths de error y transiciones, no solo el camino feliz.
-3. **Verifica en verde real** — Corre los tests y reporta resultados; un test que pasa con la feature rota es un bug del test.
-4. **Regression-first en bugfix** — Cada fix viaja con su test de regresión escrito antes del fix.
+1. **Escribe por capas** — Unit para reglas de negocio, integration para APIs y bordes, e2e (Playwright, skill `playwright-e2e-testing`) para flujos de usuario.
+2. **Elige selectors que sobreviven** — En orden, diciendo por qué: `data-testid` → rol + nombre accesible → texto de label → placeholder → clase CSS (último recurso, se rompe con cada restyle).
+3. **Mata flakiness de raíz** — Las fallas intermitentes son races: espera la condición, nunca sleep fijo; cada test arma su estado y limpia; un test que solo pasa después de otro es un falso verde en espera.
+4. **Entrega limpio** — Corre la suite, confirma verde, saca `console.log`/`test.only`/`describe.skip` (un `test.only` suelto apaga todo lo demás en silencio). Si el comportamiento cambió en vez de romperse, pregunta si la expectativa sigue válida antes de reescribir la aserción.
 
 ```mermaid
 flowchart LR

@@ -1,29 +1,33 @@
 ---
 title: Designer Agent
-description: "Diseña UX/UI: audita pantallas, define specs visuales y revisa contra el design system"
+description: "Diseña UX/UI: specs implementables, auditoría contra yz-ui y accesibilidad con semántica"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Designer Agent
 
-El designer es el especialista en UX/UI. Audita interfaces, define especificaciones visuales y revisa pantallas contra el design system y los estándares de accesibilidad. En el pipeline `full` del orchestrator entra en la fase DESIGN, solo cuando hay UI.
+El designer decide cómo debe verse y comportarse una interfaz; `@dev` la construye. Es **read-only**: su salida es un spec que alguien puede implementar sin hacerle preguntas. En el pipeline `full` del orchestrator entra en la fase DESIGN, solo cuando hay UI.
 
 ## Qué hace
 
-1. **Audita pantallas** — Detecta problemas visuales: espaciado, tipografía, color, jerarquía.
-2. **Define specs** — Describe el estado visual esperado para que `@dev` lo implemente.
-3. **Revisa contra el sistema** — Verifica cumplimiento con `yz-ui` y las guías de `angular`.
-4. **Chequea accesibilidad** — Contraste, foco, navegación por teclado, semántica.
+1. **Audita contra lo existente** — Lee los componentes vecinos antes de proponer: una pantalla linda pero inconsistente con las doce de al lado es una regresión. Carga `yz-ui` (design system) y `angular` (estructura).
+2. **Hace findings accionables** — Nombra elemento, valor actual, valor pedido y la regla (token, paso de escala, componente del sistema). Si no puede apuntar a la regla, es preferencia: lo dice y decide el usuario.
+3. **Rankea por bloqueo** — Teclado que no llega, contraste bajo 4.5:1 o error invisible de formulario no son polish: alguien no puede usar el producto. El padding desalineado sí es polish. No reporta ambos al mismo nivel.
+4. **Escribe specs completos** — Estados (default, hover, focus, active, disabled, loading, empty, error), responsive por breakpoint, tokens exactos en vez de hex/píxeles crudos, qué componente existente reusar y la semántica de accesibilidad (rol, nombre accesible, foco, qué anuncia un lector de pantalla). El color nunca es el único portador de significado.
+5. **Revisa con severidad** — En modo revisión reporta por `handoff` con severidad: P0 usuario bloqueado → P3 nit, cada finding anclado a archivo y elemento.
 
 ```mermaid
 flowchart LR
-    A[Diseño o pantalla existente] --> B[Auditar: spacing, type, color]
-    B --> C{¿Cumple yz-ui?}
-    C -->|no| D[Spec visual con correcciones]
-    C -->|sí| E[Check de accesibilidad]
-    D --> F[Handoff a @dev]
-    E --> F
+    A[Diseño o pantalla existente] --> B[Leer vecinos + yz-ui]
+    B --> C{Hallazgo con regla}
+    C -->|no| D[Preferencia: decide el usuario]
+    C -->|sí| E{¿Bloquea a alguien?}
+    E -->|sí| F[P0: teclado, contraste, errores]
+    E -->|no| G[Polish con token exacto]
+    F --> H[Spec o handoff con severidad]
+    G --> H
+    H --> I[Handoff a @dev]
 ```
 
 ## Cuándo usarlo
@@ -38,17 +42,20 @@ flowchart LR
 
 | Tarea | Handler |
 |---|---|
+| Volver control / reportar | `@orchestrator` |
 | Implementar el spec | `@dev` |
-| Componentes y tokens | Skills `yz-ui`, `angular` |
-| Coordinar entrega multi-fase | `@orchestrator` |
+| Ubicar componentes a revisar | `@finder` |
+| Estructura de componentes o estado | `@architect` |
+| Calidad del código implementado | `@reviewer` |
+| Testear la UI resultante | `@qa` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Auditar UI y definir specs | Implementar el código (`@dev`) |
-| Revisar accesibilidad | Decisiones de arquitectura (`@architect`) |
-| Usar `yz-ui` y `angular` | Escribir tests (`@qa`) |
+| Auditar UI y definir specs | Editar templates o estilos (`@dev`) |
+| Revisar accesibilidad con semántica | Decidir arquitectura de estado (`@architect`) |
+| Usar `yz-ui` y `angular` | Revisar calidad de código (`@reviewer`) |
 
 <Aside type="tip">
 En el modo `full`, el orchestrator invoca a `@designer` solo si el pedido toca UI. Para un fix visual puntual, llamalo directo.
