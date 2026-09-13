@@ -1,6 +1,6 @@
 ---
 title: QA Reviewer
-description: "Revisa tests: assertions que muerden, cobertura real y tests frágiles"
+description: "Revisa tests: aserciones significativas, cobertura real y tests frágiles"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -17,7 +17,7 @@ El qa-reviewer revisa tests para alguien que aprende: la review también es la l
 
 ```mermaid
 flowchart LR
-    A[Tests de @qa-dev] --> B{¿La aserción muerde?}
+    A[Tests de @qa-dev] --> B{¿La aserción puede fallar?}
     B -->|no| C[Falso verde: pedir fix]
     B -->|sí| D{¿Cubre los caminos de riesgo?}
     D -->|no| E[Gap con consecuencia + tipo de test]

@@ -100,8 +100,9 @@ ywai skills
 ## Crear un skill personalizado
 
 1. Crear `mi-proyecto/.opencode/skills/mi-skill/SKILL.md`
-2. Agregar `mi-skill` al `skills.txt` del agente que deba usarlo
-3. Reiniciar OpenCode (`opencode2`)
+2. Reiniciar OpenCode (`opencode2`)
+
+El `skills.txt` no aplica en tu proyecto: es la allowlist de los perfiles de agente del **repo de ywai** (`ywai/agents/...`). OpenCode anuncia los skills del proyecto por sí solo. Los agentes sin allowlist (`ask`, `finder`, `orchestrator`...) lo cargan sin nada extra; los que tienen allowlist (p. ej. `dev`) solo ven lo de su lista, y para sumarles uno hay que editar su perfil en el repo de ywai.
 
 ## Skills por agente
 
