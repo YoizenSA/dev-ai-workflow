@@ -12,9 +12,18 @@ import (
 
 // authedProviderSources answers "which providers can actually run a model?".
 // The auth store (opencode2 auth list) covers console/plan logins; opencode.json
-// covers direct-API providers whose key comes from an environment variable.
-// A provider that appears in neither cannot authenticate, so model pickers can
+// covers direct-API providers whose key comes from an environment variable; and
+// opencode2 ships a built-in gateway provider that needs no credential at all.
+// A provider in none of those sets cannot authenticate, so model pickers can
 // hide its models instead of offering runs that always fail.
+
+// credentialFreeProviders lists opencode2 built-in providers that run without
+// any stored credential — the bundled gateway routes them with the install's
+// own identity ("opencode2 run --model opencode/big-pickle" verified OK on an
+// install whose auth store only holds opencode-go). Contrast: "openai/*" is
+// listed by `opencode2 models` but fails without a real OpenAI key, and
+// "opencode-admin/*" answers "Model unavailable" — both stay out.
+var credentialFreeProviders = []string{"opencode"}
 
 // envKeyProviders returns provider ids from the host opencode.json whose
 // apiKey comes from an environment variable ("{env:VAR}") that is set in this

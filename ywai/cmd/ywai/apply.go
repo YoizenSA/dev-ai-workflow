@@ -371,9 +371,11 @@ func applyManaged(o applyOpts) applyResult {
 		steps.next("Copying ywai extra skills")
 		copySkillsForAgents(agents, o.Opts.DryRun)
 		if o.Opts.DryRun {
-			fmt.Println("  Would install /learn-ywai slash command")
+			fmt.Println("  Would install /learn-ywai + skill slash commands")
 		} else if err := plugins.InstallLearnYwaiCommand(plugins.DefaultLearnYwaiCommandDirs()...); err != nil {
 			fmt.Printf("  Warning: failed to install /learn-ywai: %v\n", err)
+		} else if err := plugins.InstallSkillCommands("workflow-retro", plugins.DefaultLearnYwaiCommandDirs()...); err != nil {
+			fmt.Printf("  Warning: failed to install /workflow-retro: %v\n", err)
 		}
 	}
 

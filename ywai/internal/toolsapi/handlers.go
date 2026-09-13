@@ -131,11 +131,12 @@ func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// authedProviders lists providers that hold credentials the CLI can use
-	// (auth store logins plus {env:VAR}-keyed providers). Empty on any failure
-	// so the UI degrades to showing everything. Additive key: existing
-	// consumers ignore it.
+	// (auth store logins, {env:VAR}-keyed providers, and the built-in
+	// credential-free gateway). Empty on any failure so the UI degrades to
+	// showing everything. Additive key: existing consumers ignore it.
 	authed := opencode.AuthedProviders(ctx)
 	authed = append(authed, envKeyProviders()...)
+	authed = append(authed, credentialFreeProviders...)
 	sort.Strings(authed)
 	authed = slices.Compact(authed)
 

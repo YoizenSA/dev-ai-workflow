@@ -56,6 +56,7 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | `ui` | Build + install + start the control UI on port 5768 | To visually test the UI |
 | `watch` | Hot reload: air rebuilds `ywai-dev.exe` + restarts the server on every `.go` change | Go dev loop |
 | `web` | Vite dev server with HMR on port 3000, API proxied to 5768 | Frontend dev loop |
+| `docker-matrix [dry\|net\|nightly]` | Docker lifecycle matrix for install/update/uninstall (default dry; skips cleanly without Docker) | Testing install lifecycle |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
 | `version` | Print the current dev version string | Debug |
 | `help` | Show all available subcommands | Reference |

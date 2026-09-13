@@ -927,19 +927,26 @@
 .wf-chat-title {
 	font-size: var(--text-sm);
 	font-weight: 600;
+	/* The header row also holds the round counter, the model picker and the
+	   close button; the title must never wrap into a column. */
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .wf-chat-count {
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 	margin-left: auto;
+	flex-shrink: 0;
 }
 .wf-chat-header .btn-icon {
 	margin-left: 0;
 }
-/* Compact model picker living in the header. */
-.wf-chat-model {
+/* Compact model picker living in the header. Two-class specificity beats the
+   global `.yd-select { width: 100% }` regardless of bundle order. */
+.wf-chat-header .wf-chat-model {
 	flex: 0 0 auto;
 	width: 150px;
+	min-width: 120px;
 }
 .wf-chat-model .yd-select-trigger {
 	padding-block: 4px;

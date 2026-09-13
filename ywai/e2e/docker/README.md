@@ -90,6 +90,40 @@ Assertions are filesystem-first:
   touches it on every command.
 - the stable `=== Done! ===` output marker (and `=== Failed` must not appear)
 
+## Known gaps this matrix surfaced
+
+The cells found real product behavior. They stay red until the product fixes
+it; this list is the record.
+
+1. **Reinstall is not idempotent: backup spam** (`reinstall-*` cells). Every
+   install writes fresh timestamped copies `~/.ywai/agent-backups/<agent>.md.<nanoseconds>.bak`
+   even when the profile content did not change, so each install or update
+   grows the backup directory. The snapshot excludes that directory (the
+   backed-up profiles themselves stay asserted); the cell still fails if any
+   other file changes.
+
+2. **Reinstall rewrites agent profiles with new permission denies**
+   (`reinstall-opencode2`). Each install appends tool-permission entries
+   (for example `chrome-devtools_*` and `grafana_*` denies) to the agent
+   markdown frontmatter, so `~/.config/opencode/agents/*.md` change content
+   on every identical reinstall. The OpenCode profiles are affected; the
+   Claude Code profiles stay stable.
+
+3. **The install-spawned control server races `version.json`**
+   (`update-swap-opencode2` caught it). Installing for OpenCode starts
+   `ywai serve`; its startup version Refresh can overwrite
+   `~/.ywai/version.json` while the install is touching it, leaving
+   `installed` empty. The update-swap cell settles with one extra ywai
+   command before reading.
+
+4. **`uninstall --yes` leaves ywai-created debris** (`uninstall-clean-both`).
+   Skills, plugins and the `opencode.json` agent keys are removed, but these
+   stay behind: `.config/opencode/agents/.ywai-groups.json`,
+   `delegations.json`, the `planning-*.md` delegation profiles, and the
+   `.claude/agents/core` and `.claude/agents/qa-automation` group
+   directories. Deciding whether these are user data to preserve or debris
+   to remove is a product call (needs-decision).
+
 ## Fault injection example
 
 Cells are just `bash` in a container, so you inject a fault by overriding the

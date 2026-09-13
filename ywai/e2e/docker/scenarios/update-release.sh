@@ -65,8 +65,9 @@ tar -xzf "$tmp/$asset" -C "$tmp"
 assert_file "$tmp/ywai"
 
 echo "-- install release v$prev"
-# /usr/local/bin/ywai is chown ywai in the image so a cell can replace it.
-cp "$tmp/ywai" /usr/local/bin/ywai
+# swap_binary replaces the PATH binary even if a previous run left a process
+# mapped from it.
+swap_binary "$tmp/ywai" "$YWAI_BIN"
 run_ywai install --agent opencode "${INSTALL_FLAGS[@]}"
 rc=$?
 assert_exit_zero "$rc" "v$prev install"

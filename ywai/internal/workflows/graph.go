@@ -69,6 +69,48 @@ func (wf *Workflow) countByType() map[string]int {
 	return m
 }
 
+// nodesTrappedBeforeEnd returns the non-group node ids that are reachable from
+// start but can never reach the end node. Those are what make a cycle
+// dangerous: a run can loop among them forever. Empty when every path drains
+// to end — which makes a review→fix loop provably safe to run.
+func (wf *Workflow) nodesTrappedBeforeEnd() []string {
+	end := wf.findNode(NodeTypeEnd)
+	start := wf.findNode(NodeTypeStart)
+	if end == nil || start == nil {
+		return nil
+	}
+	// Reverse BFS from end: every node that can step its way to the end.
+	rev := make(map[string][]string)
+	for _, c := range wf.dedupConnections() {
+		rev[c.To] = append(rev[c.To], c.From)
+	}
+	canReachEnd := map[string]bool{end.ID: true}
+	queue := []string{end.ID}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, prev := range rev[cur] {
+			if !canReachEnd[prev] {
+				canReachEnd[prev] = true
+				queue = append(queue, prev)
+			}
+		}
+	}
+	reachable := wf.reachableFrom(start.ID)
+	var trapped []string
+	for i := range wf.Nodes {
+		n := &wf.Nodes[i]
+		if n.Type == NodeTypeGroup || n.Type == NodeTypeEnd {
+			continue
+		}
+		if reachable[n.ID] && !canReachEnd[n.ID] {
+			trapped = append(trapped, n.ID)
+		}
+	}
+	sort.Strings(trapped)
+	return trapped
+}
+
 // hasCycle reports whether the workflow graph contains a cycle, via DFS.
 // Operates over the static workflow graph.
 func (wf *Workflow) hasCycle() bool {

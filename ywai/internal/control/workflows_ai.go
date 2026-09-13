@@ -167,6 +167,8 @@ func classifyAIEditError(err error, timedOut bool, model, stderr string) error {
 		return fmt.Errorf("the provider of model '%s' has no balance left. Recharge that account or pick another model (or leave the model on 'default')", model)
 	case strings.Contains(msg, "Model unavailable"), strings.Contains(msg, "ModelUnavailable"):
 		return fmt.Errorf("model '%s' is not available on this account. Pick another model or leave the model on 'default'", model)
+	case strings.Contains(msg, "Incorrect API key"), strings.Contains(msg, "invalid_api_key"):
+		return fmt.Errorf("the stored API key for model '%s' was rejected by the provider. Re-login that provider (opencode2 auth login) or pick another model", model)
 	case strings.Contains(msg, "Invalid model reference"):
 		return fmt.Errorf("'%s' is not a valid model reference. Pick a model from the dropdown (provider/model) or use 'default'", model)
 	default:

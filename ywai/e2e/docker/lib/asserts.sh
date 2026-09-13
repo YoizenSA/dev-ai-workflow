@@ -211,6 +211,19 @@ install_target() {
     assert_not_contains "$RUN_OUT" "=== Failed" "install --agent $t has no failed footer"
 }
 
+# swap_binary SRC DST [STAGE_DIR] replaces the binary at DST with SRC even
+# while a process still runs from it: cp onto a busy executable fails with
+# ETXTBSY (install leaves the control server mapped from the inode), but
+# rename(2) over it is always legal. Same technique selfupdate uses. The
+# stage dir must be writable by the cell user and on DST's filesystem;
+# the default is the image-owned staging dir next to the spare binaries.
+swap_binary() {
+    local src="$1" dst="$2"
+    local stage="${3:-/opt/ywai-e2e/bin}" tmp
+    tmp="$stage/.swap-tmp"
+    cp "$src" "$tmp" && chmod 0755 "$tmp" && mv -f "$tmp" "$dst"
+}
+
 finish() {
     echo "---- [$CELL_NAME] failures: $ASSERT_FAILURES ----"
     if [ "$ASSERT_FAILURES" -gt 0 ]; then

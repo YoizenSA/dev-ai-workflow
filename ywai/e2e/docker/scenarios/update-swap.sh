@@ -28,8 +28,9 @@ assert_file "$old"
 assert_file "$new"
 
 echo "-- install with the old build"
-# /usr/local/bin/ywai is chown ywai in the image so a cell can swap it.
-cp "$old" /usr/local/bin/ywai
+# Both builds live in the cell user's own bin dir (on PATH); swap_binary
+# replaces the PATH binary in place, even with a process mapped from it.
+swap_binary "$old" "$YWAI_BIN"
 for t in $TARGETS; do
     run_ywai install --agent "$t" "${INSTALL_FLAGS[@]}"
     rc=$?
@@ -37,10 +38,17 @@ for t in $TARGETS; do
     assert_contains "$RUN_OUT" "=== Done! ===" "old install --agent $t prints the stable marker"
 done
 assert_targets_installed
+
+# Settle before reading the version file: installing for OpenCode also
+# starts the control server, and that server's startup Refresh races the
+# install's version Touch (a run observed `installed` empty). Every ywai
+# command re-Touches version.json with its own version, so one cheap
+# command makes the state deterministic again.
+run_ywai version >/dev/null 2>&1
 assert_json_field "$(version_file)" .installed "$old_version"
 
 echo "-- swap in the new build and update"
-cp "$new" /usr/local/bin/ywai
+swap_binary "$new" "$YWAI_BIN"
 for t in $TARGETS; do
     run_ywai update --agent "$t"
     rc=$?

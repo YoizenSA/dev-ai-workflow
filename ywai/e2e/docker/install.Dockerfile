@@ -60,10 +60,12 @@ ARG YWAI_VERSION_OLD=0.0.0-e2e-old
 ENV HOME=/home/ywai \
     DEBIAN_FRONTEND=noninteractive \
     YWAI_MODE=${MODE} \
+    YWAI_BIN=/opt/ywai-e2e/bin/ywai \
     YWAI_VERSION_NEW=${YWAI_VERSION} \
     YWAI_VERSION_OLD=${YWAI_VERSION_OLD} \
     YWAI_BIN_NEW=/opt/ywai-e2e/bin/ywai-new \
     YWAI_BIN_OLD=/opt/ywai-e2e/bin/ywai-old
+ENV PATH="/opt/ywai-e2e/bin:${PATH}"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends jq curl ca-certificates tar \
@@ -72,7 +74,7 @@ RUN apt-get update \
  && useradd --uid 10001 --gid 10001 --create-home \
         --home-dir /home/ywai --shell /usr/sbin/nologin ywai
 
-COPY --from=builder /out/ywai /usr/local/bin/ywai
+COPY --from=builder /out/ywai /opt/ywai-e2e/bin/ywai
 COPY --from=builder /out/ywai /opt/ywai-e2e/bin/ywai-new
 COPY --from=builder /out/ywai-old /opt/ywai-e2e/bin/ywai-old
 COPY --from=builder /src/ /src/
@@ -81,11 +83,12 @@ COPY ywai/e2e/docker/fakes/claude.sh /usr/local/bin/claude
 COPY ywai/e2e/docker/lib /opt/ywai-e2e/lib
 COPY ywai/e2e/docker/scenarios /opt/ywai-e2e/scenarios
 
-# update-swap and update-release replace the binary on PATH, so the cell
-# user owns it.
-RUN chmod 0755 /usr/local/bin/ywai /opt/ywai-e2e/bin/ywai-new \
+# The ywai binaries live in the cell user's own dir and PATH points there:
+# update-swap and update-release replace the running binary, which needs
+# write access to the file AND the directory, without touching /usr/local.
+RUN chmod 0755 /opt/ywai-e2e/bin/ywai /opt/ywai-e2e/bin/ywai-new \
         /opt/ywai-e2e/bin/ywai-old /usr/local/bin/opencode2 /usr/local/bin/claude \
- && chown ywai:ywai /usr/local/bin/ywai
+ && chown -R ywai:ywai /opt/ywai-e2e/bin
 
 USER ywai
 WORKDIR /home/ywai

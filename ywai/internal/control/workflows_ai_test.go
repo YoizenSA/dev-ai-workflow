@@ -52,6 +52,13 @@ func TestClassifyAIEditError(t *testing.T) {
 			wantSub: "not available on this account",
 		},
 		{
+			name:    "rejected api key",
+			err:     errors.New("exit status 1"),
+			model:   "openai/gpt-5.4-mini",
+			stderr:  "Error: Incorrect API key provided: thk_live***. You can find your API key at https://platform.openai.com/account/api-keys.",
+			wantSub: "API key",
+		},
+		{
 			name:    "bare model id without provider",
 			err:     errors.New("exit status 1"),
 			model:   "glm-5.3-flash",
