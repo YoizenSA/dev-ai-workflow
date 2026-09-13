@@ -21,6 +21,8 @@ export interface ModelInfo {
 export interface ModelsResponse {
   modelsByProvider: Record<string, ModelInfo[]>
   default: string
+  /** Providers with usable credentials (auth store + {env:VAR} keys). Empty/absent = unknown, show all. */
+  authedProviders?: string[]
 }
 
 export interface AgentsResponse {

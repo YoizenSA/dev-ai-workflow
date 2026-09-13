@@ -5,6 +5,7 @@ import App from "./App";
 import "./bones/registry";
 import "./styles/theme/index.css";
 import "./styles/globals.css";
+import "./styles/tooltip-clamp";
 
 // Global skeleton look — dark UI defaults; light mode uses `color`.
 configureBoneyard({

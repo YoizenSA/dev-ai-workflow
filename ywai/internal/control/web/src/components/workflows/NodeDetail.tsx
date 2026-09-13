@@ -113,6 +113,30 @@ export function useOpencodeModels(): ModelInfo[] {
 	return models
 }
 
+// useAuthedProviders returns the providers that hold usable credentials per
+// the server (auth store logins + {env:VAR}-keyed providers). Empty when the
+// server could not tell — callers must then show every model.
+export function useAuthedProviders(): string[] {
+	const [authed, setAuthed] = useState<string[]>([])
+	useEffect(() => {
+		toolsApi
+			.listModels()
+			.then((r) => setAuthed(r.authedProviders ?? []))
+			.catch(() => undefined)
+	}, [])
+	return authed
+}
+
+// filterAuthedModels narrows a model list to providers with credentials, for
+// AI pickers where a model without credentials always fails. An empty authed
+// list means "unknown" (server without support, auth CLI down) — show
+// everything rather than nothing.
+export function filterAuthedModels(models: ModelInfo[], authed: string[]): ModelInfo[] {
+	if (authed.length === 0) return models
+	const ok = new Set(authed)
+	return models.filter((m) => ok.has(m.provider))
+}
+
 // modelOptions builds the YdSelect option list for the subAgent Model field.
 // Falls back to a small static list while the opencode model list loads.
 function modelOptions(models: ModelInfo[]): SelectOption[] {

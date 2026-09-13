@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Send, AlertTriangle } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { useOpencodeModels } from './NodeDetail'
+import { filterAuthedModels, useAuthedProviders, useOpencodeModels } from './NodeDetail'
 import YdSelect from '../shared/YdSelect'
 
 // RefinementChatPanel is a multi-turn chat for Edit-with-AI. It shows the
@@ -14,7 +14,7 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 	const aiEdit = useWorkflowStore((s) => s.aiEdit)
 	const chatError = useWorkflowStore((s) => s.chatError)
 	const clearChatError = useWorkflowStore((s) => s.clearChatError)
-	const models = useOpencodeModels()
+	const models = filterAuthedModels(useOpencodeModels(), useAuthedProviders())
 
 	const [text, setText] = useState('')
 	const [model, setModel] = useState('')

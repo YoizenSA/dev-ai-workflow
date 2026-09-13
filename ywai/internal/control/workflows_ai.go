@@ -100,7 +100,7 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 	}
 	prompt := buildAIEditPrompt(string(cur), instruction, history)
 
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, aiEditTimeout)
 	defer cancel()
 
 	args := []string{"run"}
@@ -114,7 +114,7 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("opencode run failed: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+		return nil, classifyAIEditError(err, ctx.Err() != nil, model, strings.TrimSpace(stderr.String()))
 	}
 
 	jsonStr := extractJSONObject(string(out))
@@ -142,6 +142,36 @@ func aiEditWorkflow(ctx context.Context, wf *workflows.Workflow, instruction, mo
 		edited.Version = wf.Version
 	}
 	return &edited, nil
+}
+
+// aiEditTimeout caps one AI edit. A real single-instruction edit lands well
+// under a minute; a provider retry loop (unavailable, unpaid, or hung model)
+// can otherwise spin for many minutes, so the cap turns those into a clear
+// error instead of a long "Thinking…" wait in the chat panel.
+const aiEditTimeout = 2 * time.Minute
+
+// classifyAIEditError turns common opencode CLI failures into actionable
+// messages the workflow chat can show as-is. The patterns come from real CLI
+// output: "Insufficient balance or no resource package. Please recharge."
+// (Z.AI with an empty balance), "ModelUnavailableError: Model unavailable: …",
+// and "Invalid model reference: …" (a bare model id without its provider).
+func classifyAIEditError(err error, timedOut bool, model, stderr string) error {
+	msg := stderr
+	if msg == "" {
+		msg = err.Error()
+	}
+	switch {
+	case timedOut:
+		return fmt.Errorf("the model took longer than %s and was stopped. Try a smaller instruction or a faster model (or leave the model on 'default')", aiEditTimeout)
+	case strings.Contains(msg, "Insufficient balance"):
+		return fmt.Errorf("the provider of model '%s' has no balance left. Recharge that account or pick another model (or leave the model on 'default')", model)
+	case strings.Contains(msg, "Model unavailable"), strings.Contains(msg, "ModelUnavailable"):
+		return fmt.Errorf("model '%s' is not available on this account. Pick another model or leave the model on 'default'", model)
+	case strings.Contains(msg, "Invalid model reference"):
+		return fmt.Errorf("'%s' is not a valid model reference. Pick a model from the dropdown (provider/model) or use 'default'", model)
+	default:
+		return fmt.Errorf("opencode run failed: %w (stderr: %s)", err, stderr)
+	}
 }
 
 // buildAIEditPrompt frames the workflow-editing task so opencode returns ONLY a

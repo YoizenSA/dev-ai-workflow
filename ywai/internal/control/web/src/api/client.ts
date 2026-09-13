@@ -86,10 +86,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 		...options,
 	});
 	if (!res.ok) {
-		const body = await res.text().catch(() => res.statusText);
-		throw new Error(`${res.status}: ${body}`);
+		const body = await res.text().catch(() => "");
+		throw new Error(`${res.status}: ${extractError(body) || body || res.statusText}`);
 	}
 	return res.json();
+}
+
+// extractError pulls the "error" field out of a JSON error body ("Backend
+// answers errors as {"error": "..."}") so alerts name the cause, not the JSON.
+// Returns "" for anything else.
+function extractError(body: string): string {
+	try {
+		const data = JSON.parse(body);
+		if (data && typeof data.error === "string") return data.error;
+	} catch {
+		/* not JSON — caller falls back to the raw body */
+	}
+	return "";
 }
 
 // del issues a DELETE and discards the (empty) response body, throwing on

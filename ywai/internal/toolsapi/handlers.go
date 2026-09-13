@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -128,6 +130,15 @@ func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// authedProviders lists providers that hold credentials the CLI can use
+	// (auth store logins plus {env:VAR}-keyed providers). Empty on any failure
+	// so the UI degrades to showing everything. Additive key: existing
+	// consumers ignore it.
+	authed := opencode.AuthedProviders(ctx)
+	authed = append(authed, envKeyProviders()...)
+	sort.Strings(authed)
+	authed = slices.Compact(authed)
+
 	var defaultModel string
 	if len(models) > 0 {
 		defaultModel = models[0].ID
@@ -136,6 +147,7 @@ func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"modelsByProvider": modelsByProvider,
 		"default":          defaultModel,
+		"authedProviders":  authed,
 	})
 }
 
