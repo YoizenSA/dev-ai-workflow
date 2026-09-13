@@ -1,28 +1,45 @@
 ---
 title: QA Ask
-description: Responde preguntas sobre testing
+description: "Preguntas de testing: frameworks, patrones y cómo testearlo"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # QA Ask
 
+El qa-ask responde preguntas de testing: explica frameworks, patrones y mejores prácticas con ejemplos. No escribe suites ni revisa código — para eso están `@qa-dev` y `@qa-reviewer`.
+
 ## Qué hace
 
-Responde preguntas sobre testing — explica frameworks, patrones, y mejores prácticas.
+1. **Explica frameworks** — Cómo testear X con tu stack (Vitest, Playwright…).
+2. **Compara enfoques** — Unit vs integration vs e2e para tu caso concreto.
+3. **Da ejemplos mínimos** — Mocks, fixtures, aserciones que muerden.
+4. **Responde desde evidencia** — Si la pregunta es sobre tu repo, pide scout a `@finder` en vez de adivinar.
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Preguntas | `@qa-ask ¿Cómo mockeo API calls en Vitest?` |
-| Frameworks | `@qa-ask ¿Cuál es la diferencia entre unit e integration?` |
+| Cómo testear algo | `@qa-ask ¿Cómo mockeo API calls en Vitest?` |
+| Frameworks | `@qa-ask ¿Unit o integration para este caso?` |
 | Mejores prácticas | `@qa-ask ¿Cómo testeo error handling?` |
+
+## Routing
+
+| Tarea | Handler |
+|---|---|
+| Escribir la suite | `@qa-dev` |
+| Revisar tests existentes | `@qa-reviewer` |
+| Explorar el repo para responder | `@finder` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Responder preguntas | Escribir tests completos (`@qa-dev`) |
-| Explicar frameworks | Revisar código (`@qa-reviewer`) |
-| Dar ejemplos | Explorar codebase (`@finder`) |
+| Responder y ejemplificar | Escribir tests completos (`@qa-dev`) |
+| Explicar frameworks y patrones | Revisar código (`@qa-reviewer`) |
+| Guiar paso a paso | Ejecutar cambios en el repo |
+
+<Aside type="tip">
+Para aprender testing guiado en vez de una respuesta puntual, el grupo QA Automation tiene flujo con `@qa-orchestrator`.
+</Aside>

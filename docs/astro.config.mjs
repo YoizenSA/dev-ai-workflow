@@ -28,6 +28,7 @@ export default defineConfig({
             { label: 'Arreglar Bug', slug: 'guides/bugfix' },
             { label: 'Code Review', slug: 'guides/review' },
             { label: 'Testing', slug: 'guides/testing' },
+            { label: 'Retro de workflow', slug: 'guides/retro' },
             { label: 'CI/CD', slug: 'guides/cicd' },
             { label: 'Refactoring', slug: 'guides/refactoring' },
             {

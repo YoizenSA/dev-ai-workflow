@@ -1,28 +1,53 @@
 ---
 title: QA Dev
-description: Escribe tests automatizados
+description: "Escribe tests automatizados: unit, integration y e2e que pasan en verde de verdad"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # QA Dev
 
+El qa-dev escribe tests automatizados — unit, integration y e2e — sobre los archivos que `@finder` ya ubicó y según la estrategia de `@qa-analyst`. Sus tests los revisa `@qa-reviewer`.
+
 ## Qué hace
 
-Escribe tests automatizados — unit, integration, y e2e.
+1. **Escribe por capas** — Unit para reglas de negocio, integration para APIs y bordes, e2e (Playwright) para flujos de usuario.
+2. **Cubre edge cases** — Límites, paths de error y transiciones, no solo el camino feliz.
+3. **Verifica en verde real** — Corre los tests y reporta resultados; un test que pasa con la feature rota es un bug del test.
+4. **Regression-first en bugfix** — Cada fix viaja con su test de regresión escrito antes del fix.
+
+```mermaid
+flowchart LR
+    A[Estrategia + archivos de @finder] --> B[Escribir tests por capas]
+    B --> C[Correr y verificar verde real]
+    C -->|rojo| D[Ajustar test o reportar bug]
+    C -->|verde| E["@qa-reviewer revisa"]
+```
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
 | Tests unitarios | `@qa-dev Escribe tests para UserService` |
-| Tests integration | `@qa-dev Tests de integración para la API` |
+| Tests de integración | `@qa-dev Tests de integración para la API` |
 | Tests E2E | `@qa-dev Playwright tests para checkout` |
+
+## Routing
+
+| Tarea | Handler |
+|---|---|
+| Ubicar qué testear | `@finder` |
+| Revisar los tests | `@qa-reviewer` |
+| Patrones de espera sin flaky | Skills `playwright-e2e-testing`, `condition-based-waiting` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Escribir tests | Explorar codebase (`@finder`) |
-| Cubrir edge cases | Revisar su código (`@qa-reviewer`) |
-| Verificar tests pasan | Diseñar estrategia (`@qa-analyst`) |
+| Escribir y correr tests | Explorar el codebase (`@finder`) |
+| Cubrir edge cases y regresiones | Revisar su propio código (`@qa-reviewer`) |
+| Reportar bugs encontrados | Diseñar la estrategia (`@qa-analyst`) |
+
+<Aside type="tip">
+Si el test falla y la feature anda, el bug está en el test: aserciones que no pueden fallar (`assert result`) son cobertura mentirosa.
+</Aside>

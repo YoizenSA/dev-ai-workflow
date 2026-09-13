@@ -84,7 +84,7 @@ flowchart LR
 ### thin
 
 - Prefiere hacerlo él mismo; como mucho **una** delegación `sync` a `@dev`/`@qa`/`@finder`.
-- Requiere ` ```handoff ` en ese hop.
+- Requiere un fence `handoff` en ese hop.
 
 ### full
 
@@ -96,7 +96,7 @@ flowchart LR
 flowchart TD
     O[Orchestrator] --> M{Mode}
     M -->|solo| A[Ejecuta todo: grep+AST; graft/code_search si hay; edita, verifica]
-    M -->|thin| B[Ejecuta directo + máx 1 delegación sync con ```handoff]
+    M -->|thin| B[Ejecuta directo + máx 1 delegación sync con handoff]
     M -->|full| C[todowrite -> SCOUT -> PLAN -> DESIGN -> IMPLEMENT -> TEST -> REVIEW -> DEPLOY]
     A --> D[Local commit OK si pidió; no push sin pedido]
     B --> D
@@ -118,12 +118,12 @@ solo/thin + risk alto todavía necesita verify + review (o ack del usuario). ful
 ```mermaid
 flowchart TD
     D[Orquestador] -->|Necesito| E{¿Qué}
-    E -->|scout| F[@finder]
-    E -->|diseño| G[@architect / @designer]
-    E -->|implementar| H[@dev]
-    E -->|tests| I[@qa]
-    E -->|revisar| J[@reviewer]
-    E -->|deploy| K[@devops]
+    E -->|scout| F["@finder"]
+    E -->|diseño| G["@architect / @designer"]
+    E -->|implementar| H["@dev"]
+    E -->|tests| I["@qa"]
+    E -->|revisar| J["@reviewer"]
+    E -->|deploy| K["@devops"]
     F --> L[handoff]
     G --> L
     H --> L
@@ -135,7 +135,7 @@ flowchart TD
 
 Cada delegación lleva: **Goal · Context · Acceptance · Files · Verification · Return format**. Los subagentes no pueden re-delegar. Para archivos disjuntos: 2–4 en paralelo. Dos reintentos y escalá.
 
-**Contratos tipados** (` ` ```handoff ` / ` ` ```review `) — si tras escribir/testear/revisar falta el fence, la entrega está incompleta y se re-delega una vez. `status=done` solo cuando se cumple la aceptación. Cualquier P0 o `verdict=block` frena el cierre. `verified` son comandos reales + resultados (o `not-requested`/`n/a`).
+**Contratos tipados** (fences `handoff` / `review`) — si tras escribir/testear/revisar falta el fence, la entrega está incompleta y se re-delega una vez. `status=done` solo cuando se cumple la aceptación. Cualquier P0 o `verdict=block` frena el cierre. `verified` son comandos reales + resultados (o `not-requested`/`n/a`).
 
 ## Cuándo usarlo
 

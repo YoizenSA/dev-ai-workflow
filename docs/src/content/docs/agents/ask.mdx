@@ -20,8 +20,8 @@ El ask responde preguntas sobre este codebase desde evidencia. Cita `file:line`.
 ```mermaid
 flowchart LR
     A[Pregunta] --> B{¿Shape}
-    B -->|locate amplio| C[@finder]
-    B -->|entrega multi-paso| D[@orchestrator]
+    B -->|locate amplio| C["@finder"]
+    B -->|entrega multi-paso| D["@orchestrator"]
     B -->|pregunta directa| E[Buscar evidencia en el codebase]
     E --> F[Citar file:line]
     F --> G[Responder lo pedido y detenerse]

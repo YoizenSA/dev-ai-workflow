@@ -53,6 +53,15 @@ flowchart TD
 | CI/CD, deployments | `@devops` |
 | Explorar el codebase durante el planning | `@finder` |
 
+## Subagentes internos
+
+`@planning` no investiga a mano: delega a dos subagentes (`subagent`-only, llegan con `--all-groups`):
+
+| Subagente | Rol |
+|---|---|
+| `planner-scout` | Scout read-only: mapea archivos afectados, patrones, riesgos y complejidad antes del plan |
+| `planner-draft` | Síntesis: convierte los hallazgos del scout en el plan markdown con rutas, pasos y riesgos |
+
 ## Límites
 
 | ✅ Puede | ❌ No puede |
