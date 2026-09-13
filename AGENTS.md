@@ -231,7 +231,7 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 | `ado` | Azure DevOps PRs and work items via the `ado` CLI |
 | `codebase-design` / `diagnosing-bugs` / `improve-codebase-architecture` | Module design, bug diagnosis, architecture review |
 | `adr-skill` / `diks` / `writing-great-skills` | ADRs, infra notes, skill authoring |
-| `ywai` / `learn-ywai` / `teach` / `i-have-adhd` | Operate and learn ywai; output shaping |
+| `learn-ywai` / `teach` / `i-have-adhd` | Operate and learn ywai; output shaping |
 
 Full list with triggers: `docs/src/content/docs/skills/reference.mdx`. Every skill dir needs a `.ywai-extra` marker or `ywai install` skips it and the cleanup pass deletes it.
 

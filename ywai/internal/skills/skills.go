@@ -17,7 +17,9 @@ import (
 var errSkillChanged = errors.New("skill source differs")
 
 const extraSkillMarkerFile = ".ywai-extra"
-const ywaiSkillName = "ywai"
+// learnYwaiSkillName is the skill that carries the official docs tour; when it
+// is copied into an agent, the docs MDX bundle goes with it.
+const learnYwaiSkillName = "learn-ywai"
 
 func CopyTo(agentSkillsDir string) error {
 	return copyFiltered(agentSkillsDir, nil)
@@ -82,7 +84,7 @@ func copyFiltered(agentSkillsDir string, filter []string) error {
 			continue
 		}
 
-		if name == ywaiSkillName {
+		if name == learnYwaiSkillName {
 			if err := bundleLearnYwaiDocs(dst); err != nil {
 				fmt.Printf("  Warning: failed to bundle learn-ywai docs: %v\n", err)
 			}
@@ -392,6 +394,12 @@ func hasYwaiExtraMarker(dir string) bool {
 func bundleLearnYwaiDocs(skillDst string) error {
 	src := findOfficialDocsDir()
 	if src == "" {
+		// No repo checkout next to the binary (a user machine). The copy
+		// seeded from the embedded data is all /learn-ywai gets, and it must
+		// carry references/docs — otherwise the tour cannot read a page.
+		if _, err := os.Stat(filepath.Join(skillDst, "references", "docs")); err != nil {
+			return fmt.Errorf("no docs source found and the skill shipped without references/docs")
+		}
 		return nil
 	}
 	dst := filepath.Join(skillDst, "references", "docs")

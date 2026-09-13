@@ -25,11 +25,11 @@ var (
 
 	envCopyProviders bool
 
-	envBootstrapPresets string
+	envInitPresets string
 )
 
-var envBootstrapCmd = &cobra.Command{
-	Use:   "bootstrap",
+var envInitCmd = &cobra.Command{
+	Use:   "init",
 	Short: "Create and install the default environments (dev, qa, personal) from zero",
 	Long: `Zero-to-configured environments: creates every missing default profile
 with its preset and always runs a full install inside each one (personal is
@@ -37,16 +37,16 @@ bare, so its install is nearly a no-op). Existing profiles are re-installed,
 never deleted. Safe to re-run.
 
 Examples:
-  ywai env bootstrap
-  ywai env bootstrap --presets dev,qa`,
+  ywai env init
+  ywai env init --presets dev,qa`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runEnvBootstrap()
+		return runEnvInit()
 	},
 }
 
-func runEnvBootstrap() error {
+func runEnvInit() error {
 	var presets []string
-	for _, p := range strings.Split(envBootstrapPresets, ",") {
+	for _, p := range strings.Split(envInitPresets, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			presets = append(presets, p)
 		}
@@ -333,8 +333,8 @@ func init() {
 	envCmd.AddCommand(envDoctorCmd)
 	envCmd.AddCommand(envRemoveCmd)
 	envCmd.AddCommand(envCloneCmd)
-	envBootstrapCmd.Flags().StringVar(&envBootstrapPresets, "presets", "", "Comma-separated presets to bootstrap (default: dev,qa,personal)")
-	envCmd.AddCommand(envBootstrapCmd)
+	envInitCmd.Flags().StringVar(&envInitPresets, "presets", "", "Comma-separated presets to initialize (default: dev,qa,personal)")
+	envCmd.AddCommand(envInitCmd)
 	envCreateCmd.Flags().StringVar(&envPreset, "preset", "dev", "Preset to stamp (dev, qa, personal)")
 	envCreateCmd.Flags().BoolVar(&envInit, "init", false, "Seed from the current global opencode config (config files only, never DB/service)")
 	envRemoveCmd.Flags().BoolVar(&envYes, "yes", false, "Confirm deletion")

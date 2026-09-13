@@ -80,13 +80,21 @@ cp -a "$REPO_ROOT/skills/." "$EMBED_DIR/skills/"
 
 # Official Astro MDX lives in the repo docs/ site. Bundle a copy inside
 # learn-ywai so /learn-ywai can teach without the website or a checkout.
+# The tour is blind without these pages, so a missing bundle is a hard error
+# — never ship a binary whose /learn-ywai cannot read a single .mdx.
 DOCS_SRC="$REPO_ROOT/../docs/src/content/docs"
 LEARN_DOCS="$EMBED_DIR/skills/learn-ywai/references/docs"
-if [ -d "$DOCS_SRC" ] && [ -d "$EMBED_DIR/skills/learn-ywai" ]; then
-    mkdir -p "$LEARN_DOCS"
-    cp -a "$DOCS_SRC/." "$LEARN_DOCS/"
-    echo "Bundled official docs into learn-ywai"
+if [ ! -d "$DOCS_SRC" ]; then
+    echo "ERROR: official docs not found at $DOCS_SRC; /learn-ywai would ship blind." >&2
+    exit 1
 fi
+if [ ! -d "$EMBED_DIR/skills/learn-ywai" ]; then
+    echo "ERROR: skill dir $EMBED_DIR/skills/learn-ywai missing; docs have nowhere to go." >&2
+    exit 1
+fi
+mkdir -p "$LEARN_DOCS"
+cp -a "$DOCS_SRC/." "$LEARN_DOCS/"
+echo "Bundled official docs into learn-ywai"
 cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
 cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"

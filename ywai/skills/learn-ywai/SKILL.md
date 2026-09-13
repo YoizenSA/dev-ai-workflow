@@ -1,5 +1,5 @@
 ---
-name: ywai
+name: learn-ywai
 description: "Run and learn ywai: MCP, model profiles, agent groups, doc tours. Trigger: ywai mcp, ywai profile, /learn-ywai."
 ---
 
@@ -68,14 +68,14 @@ The command printed success (`MCP … enabled`, `Active profile: …`, `Group �
 
 Reach for this when the user wants to learn, not mutate.
 
-- **Docs are the teacher.** Read only `references/docs/` inside this skill. Do not invent commands, flags, or agent names, and do not fetch the website.
-- **One page per turn.** Teach that page, then stop. Ask at most one question.
+- **Docs are the teacher.** Read only `references/docs/` inside this skill. Every `.mdx` there is readable — index pages, guides, agent pages, all of them. Do not invent commands, flags, or agent names, and do not fetch the website.
+- **One page per turn.** Teach that page, then stop. Ask at most one question. Read as many extra pages as the topic needs to prepare, but teach one page at a time.
 - **Match the user's language.** The docs are Spanish; reply in the user's language.
-- **Do not start a `teach/` workspace** (no `MISSION.md` / HTML lessons) unless they ask for a long course.
+- **Escalate to `teach` for courses.** When the user asks for a long course, structured lessons, or the tour outgrows chat, load the `teach` skill and build its workspace (`MISSION.md`, HTML lessons). Use the `references/docs/` pages as the source material there too. For a one-off question, stay in chat.
 
 1. Open [references/curriculum.md](references/curriculum.md).
 2. Pick the page: explicit topic, else tour item 1 (or the next unread item if they already started).
-3. Read that file from `references/docs/`.
+3. Read that file from `references/docs/`, plus any page the topic requires (e.g. the named agent page after `agents/index.mdx`).
 4. Teach from that page only:
    - Lead with the outcome (what they can do after this).
    - Show the happy path (commands / `@agent` examples from the page).

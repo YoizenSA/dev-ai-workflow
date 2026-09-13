@@ -11,7 +11,7 @@ Model for all: `meta/muse-spark-1.3-contributor` · timeout 25 min.
 * ✅ QA triage — served by central build/vet/targeted-tests run — DONE
 * ✅ Fase 4 — preset enforcement (bare short-circuit, scoped filters) — LANDED
 * ✅ QA final — full suite 31 ok + CLI smoke clean — DONE
-* ✅ `ywai env bootstrap` — creates + installs dev/qa/personal from zero (personal bare = 0 files, global byte-identical) — DONE
+* ✅ `ywai env init` — creates + installs dev/qa/personal from zero (personal bare = 0 files, global byte-identical) — DONE
 
 ---
 
