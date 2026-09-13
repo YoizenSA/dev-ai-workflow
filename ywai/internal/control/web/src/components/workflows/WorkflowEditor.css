@@ -895,13 +895,16 @@
 }
 
 /* ─── Refinement chat panel (multi-turn Edit-with-AI) ─────────────────── */
+/* Anchored bottom-right like a website chat widget. overflow stays visible so
+   the header model menu (absolute, clamped against the viewport by useAnchored)
+   can escape the panel box; the glass look keeps its rounded corners through
+   the header (top) and input-row (bottom) radii. */
 .wf-chat-panel {
 	position: fixed;
 	right: 16px;
-	top: 80px;
+	bottom: 16px;
 	width: min(420px, 92vw);
-	/* Leave room for the run output panel at the bottom. */
-	max-height: calc(65vh - 96px);
+	max-height: min(65vh, 560px);
 	display: flex;
 	flex-direction: column;
 	background: var(--panel-bg, var(--bg-elevated, #111));
@@ -909,7 +912,7 @@
 	border-radius: var(--radius);
 	box-shadow: var(--shadow-lift);
 	z-index: 51;
-	overflow: hidden;
+	overflow: visible;
 }
 
 .wf-chat-header {
@@ -919,6 +922,7 @@
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--panel-border);
 	background: rgba(var(--yz-primary-1-rgb), 0.08);
+	border-radius: var(--radius) var(--radius) 0 0;
 }
 .wf-chat-title {
 	font-size: var(--text-sm);
@@ -931,6 +935,22 @@
 }
 .wf-chat-header .btn-icon {
 	margin-left: 0;
+}
+/* Compact model picker living in the header. */
+.wf-chat-model {
+	flex: 0 0 auto;
+	width: 150px;
+}
+.wf-chat-model .yd-select-trigger {
+	padding-block: 4px;
+	font-size: var(--text-xs);
+}
+/* Run output panel shares the bottom-right corner; on wide screens the chat
+   parks to its left so both stay usable during a run. */
+@media (min-width: 1100px) {
+	.wf-chat-panel.run-shifted {
+		right: calc(min(520px, 88vw) + 28px);
+	}
 }
 
 .wf-chat-body {
@@ -980,13 +1000,7 @@
 	gap: 6px;
 	padding: 8px 12px;
 	border-top: 1px solid var(--panel-border);
-}
-/* The model picker gets a bounded slice: .yd-select defaults to width:100%,
-   which as a flex item would squeeze the basis-0 instruction box down to a
-   one-character sliver. The textarea takes the rest of the row. */
-.wf-chat-input-row .yd-select {
-	flex: 0 0 auto;
-	width: 150px;
+	border-radius: 0 0 var(--radius) var(--radius);
 }
 .wf-chat-input {
 	flex: 1;

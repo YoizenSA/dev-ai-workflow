@@ -8,7 +8,16 @@ import YdSelect from '../shared/YdSelect'
 // workflow's conversation history (persisted with the workflow) and sends each
 // message through the store's aiEdit, which forwards the recent turns to the
 // backend for conversational context. Replaces the old single-turn modal.
-export default function RefinementChatPanel({ onClose }: { onClose: () => void }) {
+// Anchored bottom-right like a website chat widget; when the run output panel
+// shares the corner (runPanelVisible), the panel parks to its left instead of
+// covering it — while a workflow runs you want both the input and the output.
+export default function RefinementChatPanel({
+	onClose,
+	runPanelVisible = false,
+}: {
+	onClose: () => void
+	runPanelVisible?: boolean
+}) {
 	const current = useWorkflowStore((s) => s.current)
 	const aiEditing = useWorkflowStore((s) => s.aiEditing)
 	const aiEdit = useWorkflowStore((s) => s.aiEdit)
@@ -49,7 +58,10 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 	}
 
 	return (
-		<div className="wf-chat-panel" data-tour="refinement-chat">
+		<div
+			className={`wf-chat-panel${runPanelVisible ? ' run-shifted' : ''}`}
+			data-tour="refinement-chat"
+		>
 			<div className="wf-chat-header">
 				<span className="wf-chat-title">{running ? 'Workflow Chat' : 'Edit with AI'}</span>
 				<span
@@ -59,6 +71,16 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 				>
 					{iterations}/{maxIterations}
 				</span>
+				<YdSelect
+					className="wf-chat-model"
+					options={[
+						{ value: '', label: 'default' },
+						...models.map((m) => ({ value: m.id, label: `${m.provider}/${m.name}` })),
+					]}
+					value={model}
+					onChange={setModel}
+					ariaLabel="Model"
+				/>
 				<button className="btn btn-icon" onClick={onClose} aria-label="Close chat">
 					<X size={14} />
 				</button>
@@ -104,15 +126,6 @@ export default function RefinementChatPanel({ onClose }: { onClose: () => void }
 			)}
 
 			<div className="wf-chat-input-row">
-				<YdSelect
-					options={[
-						{ value: '', label: 'default' },
-						...models.map((m) => ({ value: m.id, label: `${m.provider}/${m.name}` })),
-					]}
-					value={model}
-					onChange={setModel}
-					ariaLabel="Model"
-				/>
 				<textarea
 					className="textarea wf-chat-input"
 					value={text}

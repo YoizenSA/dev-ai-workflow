@@ -1255,7 +1255,10 @@ function WorkflowEditorInner() {
 
 			{/* Refinement chat panel — multi-turn Edit-with-AI. */}
 			{chatOpen && current && (
-				<RefinementChatPanel onClose={() => setChatOpen(false)} />
+				<RefinementChatPanel
+					onClose={() => setChatOpen(false)}
+					runPanelVisible={runPanelOpen && (runOutput.length > 0 || running)}
+				/>
 			)}
 
 			{/* Rename modal */}
