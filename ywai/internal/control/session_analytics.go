@@ -125,9 +125,10 @@ func openOpenCodeDB(path string) (*sql.DB, error) {
 //
 // A sandboxed editor records into its own OpenCode install, so the canonical DB
 // is usually not the only one. Each install is read on its own — a UNION across
-// attached DBs reads the same rows but loses the per-table indexes, and `part`
-// is large enough (hundreds of thousands of JSON blobs, scanned six times) that
-// the difference is seconds versus minutes. Aggregates are combined afterwards.
+// attached DBs reads the same rows but loses the per-table indexes, and the
+// message tables are large enough (thousands of JSON blobs, scanned per query)
+// that the difference is seconds versus minutes. TEMP tables narrow the window
+// once; aggregates are combined afterwards.
 func LoadSessionAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*SessionAnalytics, error) {
 	explicit := dbPath != ""
 	if !explicit {
@@ -190,25 +191,53 @@ func loadOneAnalytics(ctx context.Context, dbPath string, q AnalyticsQuery) (*Se
 		UnusedSkills: []string{},
 	}
 
-	// A freshly created environment database has never run a session:
-	// opencode creates its schema lazily. An explicit empty report beats a
-	// raw SQL error ("no such table: session") for that case.
-	if !hasTable(ctx, db, "session") {
+	// Schema generations: current servers write session_v2/session_message;
+	// pre-v2 installs only have session/part, which freeze once the server
+	// migrates — reading them then silently zeroes the report. Prefer v2
+	// when present, fall back to legacy otherwise.
+	useV2 := hasTable(ctx, db, "session_v2") && hasTable(ctx, db, "session_message")
+	if !useV2 && !hasTable(ctx, db, "session") {
+		// A freshly created environment database has never run a session:
+		// opencode creates its schema lazily. An explicit empty report beats a
+		// raw SQL error ("no such table: session") for that case.
 		out.Insights = []string{"No sessions recorded in this environment yet."}
 		return out, nil
 	}
-
-	where, args := sessionFilter(q)
 
 	// Narrow sessions once; every later query joins this TEMP set.
 	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS sa_sess`); err != nil {
 		return nil, fmt.Errorf("prep temp sessions: %w", err)
 	}
-	createSQL := `
+	var (
+		createSQL string
+		args      []any
+	)
+	if useV2 {
+		var where string
+		where, args = sessionFilterV2(q)
+		createSQL = `
 CREATE TEMP TABLE sa_sess AS
 SELECT
   s.id AS session_id,
   s.project_id AS project_id,
+  COALESCE(s.directory, '') AS directory,
+  COALESCE(NULLIF(s.agent, ''), '(default)') AS agent,
+  COALESCE(s.model, '') AS model,
+  COALESCE(s.cost, 0) AS cost,
+  COALESCE(s.tokens_input, 0) AS tokens_input,
+  COALESCE(s.tokens_output, 0) AS tokens_output
+FROM session_v2 s
+LEFT JOIN project p ON p.id = s.project_id
+WHERE ` + where
+	} else {
+		var where string
+		where, args = sessionFilter(q)
+		createSQL = `
+CREATE TEMP TABLE sa_sess AS
+SELECT
+  s.id AS session_id,
+  s.project_id AS project_id,
+  COALESCE(s.directory, '') AS directory,
   COALESCE(NULLIF(s.agent, ''), '(default)') AS agent,
   COALESCE(s.model, '') AS model,
   COALESCE(s.cost, 0) AS cost,
@@ -217,6 +246,7 @@ SELECT
 FROM session s
 JOIN project p ON p.id = s.project_id
 WHERE ` + where
+	}
 	if _, err := db.ExecContext(ctx, createSQL, args...); err != nil {
 		return nil, fmt.Errorf("create temp sessions: %w", err)
 	}
@@ -227,19 +257,58 @@ WHERE ` + where
 		return nil, fmt.Errorf("index temp sessions project: %w", err)
 	}
 
+	// Normalize tool/skill parts once. v1 stores one part row per tool call
+	// ({type,tool,state.input.name}); v2 stores message rows whose content[]
+	// mixes tool calls ({type,name,state.input.id}). Downstream queries read
+	// only sa_parts, so both generations share them verbatim.
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS sa_parts`); err != nil {
+		return nil, fmt.Errorf("prep temp parts: %w", err)
+	}
+	partsSQL := `
+CREATE TEMP TABLE sa_parts AS
+SELECT
+  pt.session_id AS session_id,
+  json_extract(pt.data, '$.tool') AS tool,
+  CASE WHEN json_extract(pt.data, '$.tool') = 'skill'
+       THEN COALESCE(json_extract(pt.data, '$.state.input.name'), '')
+       ELSE '' END AS skill
+FROM part pt
+JOIN sa_sess ss ON ss.session_id = pt.session_id
+WHERE json_extract(pt.data, '$.type') = 'tool'`
+	if useV2 {
+		partsSQL = `
+CREATE TEMP TABLE sa_parts AS
+SELECT
+  sm.session_id AS session_id,
+  je.value ->> 'name' AS tool,
+  CASE WHEN je.value ->> 'name' = 'skill'
+       THEN COALESCE(json_extract(je.value, '$.state.input.id'),
+                     json_extract(je.value, '$.state.input.name'), '')
+       ELSE '' END AS skill
+FROM session_message sm, json_each(sm.data, '$.content') je
+JOIN sa_sess ss ON ss.session_id = sm.session_id
+WHERE je.value ->> 'type' = 'tool'`
+	}
+	if _, err := db.ExecContext(ctx, partsSQL); err != nil {
+		return nil, fmt.Errorf("create temp parts: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS sa_parts_session ON sa_parts(session_id)`); err != nil {
+		return nil, fmt.Errorf("index temp parts: %w", err)
+	}
+
 	// ── Projects + session KPIs ──────────────────────────────────────
 	projSQL := `
 SELECT
-  p.id,
+  ss.project_id,
   COALESCE(NULLIF(p.name, ''), '') AS name,
-  COALESCE(p.worktree, '') AS worktree,
+  COALESCE(p.worktree, ss.directory, '') AS worktree,
   COUNT(ss.session_id) AS sessions,
   COALESCE(SUM(ss.cost), 0) AS cost,
   COALESCE(SUM(ss.tokens_input), 0) AS tin,
   COALESCE(SUM(ss.tokens_output), 0) AS tout
 FROM sa_sess ss
-JOIN project p ON p.id = ss.project_id
-GROUP BY p.id, p.name, p.worktree
+LEFT JOIN project p ON p.id = ss.project_id
+GROUP BY ss.project_id, name, worktree
 ORDER BY sessions DESC`
 
 	rows, err := db.QueryContext(ctx, projSQL)
@@ -277,18 +346,12 @@ ORDER BY sessions DESC`
 	out.Summary.TokensInput = tin
 	out.Summary.TokensOutput = tout
 
-	// ── Skills (cheap LIKE prefilter + temp join) ────────────────────
+	// ── Skills (sa_parts is already narrowed + indexed) ──────────
 	skillSQL := `
-SELECT
-  COALESCE(json_extract(pt.data, '$.state.input.name'), '') AS skill,
-  COUNT(*) AS cnt,
-  COUNT(DISTINCT pt.session_id) AS sessions
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%"tool":"skill"%'
-  AND json_extract(pt.data, '$.tool') = 'skill'
+SELECT skill, COUNT(*) AS cnt, COUNT(DISTINCT session_id) AS sessions
+FROM sa_parts
+WHERE skill != ''
 GROUP BY skill
-HAVING skill != ''
 ORDER BY cnt DESC
 LIMIT ?`
 	srows, err := db.QueryContext(ctx, skillSQL, q.SkillsLimit)
@@ -314,11 +377,7 @@ LIMIT ?`
 
 	var withSkill int
 	err = db.QueryRowContext(ctx, `
-SELECT COUNT(DISTINCT pt.session_id)
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%"tool":"skill"%'
-  AND json_extract(pt.data, '$.tool') = 'skill'`).Scan(&withSkill)
+SELECT COUNT(DISTINCT session_id) FROM sa_parts WHERE skill != ''`).Scan(&withSkill)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions-with-skill: %w", err)
 	}
@@ -327,10 +386,9 @@ WHERE pt.data LIKE '%"tool":"skill"%'
 	skillMap := map[string]int{}
 	prows, err := db.QueryContext(ctx, `
 SELECT ss.project_id, COUNT(*)
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE pt.data LIKE '%"tool":"skill"%'
-  AND json_extract(pt.data, '$.tool') = 'skill'
+FROM sa_parts sp
+JOIN sa_sess ss ON ss.session_id = sp.session_id
+WHERE sp.skill != ''
 GROUP BY ss.project_id`)
 	if err != nil {
 		return nil, fmt.Errorf("query skill-by-project: %w", err)
@@ -352,14 +410,9 @@ GROUP BY ss.project_id`)
 	// ── Tools (top N) ────────────────────────────────────────────────
 	// Prefer LIKE prefilter on "type":"tool" when present; always validate with json_extract.
 	toolSQL := `
-SELECT
-  COALESCE(json_extract(pt.data, '$.tool'), '') AS tool,
-  COUNT(*) AS cnt,
-  COUNT(DISTINCT pt.session_id) AS sessions
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE json_extract(pt.data, '$.type') = 'tool'
-  AND COALESCE(json_extract(pt.data, '$.tool'), '') != ''
+SELECT tool, COUNT(*) AS cnt, COUNT(DISTINCT session_id) AS sessions
+FROM sa_parts
+WHERE tool IS NOT NULL AND tool != ''
 GROUP BY tool
 ORDER BY cnt DESC
 LIMIT ?`
@@ -384,9 +437,8 @@ LIMIT ?`
 	totalTools := 0
 	tprows, err := db.QueryContext(ctx, `
 SELECT ss.project_id, COUNT(*)
-FROM part pt
-JOIN sa_sess ss ON ss.session_id = pt.session_id
-WHERE json_extract(pt.data, '$.type') = 'tool'
+FROM sa_parts sp
+JOIN sa_sess ss ON ss.session_id = sp.session_id
 GROUP BY ss.project_id`)
 	if err != nil {
 		return nil, fmt.Errorf("query tool-by-project: %w", err)
@@ -686,6 +738,32 @@ func normalizeModelLabel(raw string) string {
 		}
 	}
 	return raw
+}
+
+// sessionFilterV2 is sessionFilter for the session_v2 generation: project
+// rows may be missing, so the worktree match falls back to the session
+// directory and the project id matches either side of the LEFT JOIN.
+func sessionFilterV2(q AnalyticsQuery) (string, []any) {
+	parts := []string{"1=1"}
+	var args []any
+
+	if q.ProjectID != "" {
+		parts = append(parts, "(p.id = ? OR s.project_id = ?)")
+		args = append(args, q.ProjectID, q.ProjectID)
+	}
+	if w := strings.TrimSpace(q.Worktree); w != "" {
+		parts = append(parts, "LOWER(COALESCE(p.worktree, s.directory)) LIKE ?")
+		args = append(args, "%"+strings.ToLower(w)+"%")
+	}
+	if q.Days > 0 {
+		// OpenCode stores time_created as unix ms.
+		cutoff := time.Now().AddDate(0, 0, -q.Days).UnixMilli()
+		parts = append(parts, "s.time_created >= ?")
+		args = append(args, cutoff)
+	}
+	parts = append(parts, "(s.time_archived IS NULL OR s.time_archived = 0)")
+
+	return strings.Join(parts, " AND "), args
 }
 
 // sessionFilter builds a SQL WHERE clause for session+project (aliases s, p).

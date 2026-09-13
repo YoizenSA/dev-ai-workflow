@@ -119,6 +119,78 @@ func TestLoadSessionAnalytics_DaysFilter(t *testing.T) {
 	}
 }
 
+func TestLoadSessionAnalytics_LegacySchemaFallback(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "opencode.db")
+	seedLegacyOpenCodeDB(t, dbPath)
+
+	got, err := LoadSessionAnalytics(context.Background(), dbPath, AnalyticsQuery{
+		Days: 0, ToolsLimit: 10, SkillsLimit: 10,
+	})
+	if err != nil {
+		t.Fatalf("LoadSessionAnalytics: %v", err)
+	}
+	if got.Summary.Sessions != 2 {
+		t.Fatalf("sessions=%d, want 2", got.Summary.Sessions)
+	}
+	if got.Summary.SkillCalls != 3 {
+		t.Fatalf("skillCalls=%d, want 3", got.Summary.SkillCalls)
+	}
+	if len(got.Skills) < 1 || got.Skills[0].Name != "git-commit" || got.Skills[0].Count != 2 {
+		t.Fatalf("top skill=%v, want git-commit x2", got.Skills)
+	}
+}
+
+func seedLegacyOpenCodeDB(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	schema := `
+CREATE TABLE project (
+  id text PRIMARY KEY,
+  worktree text NOT NULL,
+  name text
+);
+CREATE TABLE session (
+  id text PRIMARY KEY,
+  project_id text NOT NULL,
+  directory text NOT NULL,
+  title text NOT NULL,
+  time_created integer NOT NULL,
+  time_updated integer NOT NULL,
+  time_archived integer,
+  agent text,
+  model text,
+  cost real DEFAULT 0 NOT NULL,
+  tokens_input integer DEFAULT 0 NOT NULL,
+  tokens_output integer DEFAULT 0 NOT NULL
+);
+CREATE TABLE part (
+  id text PRIMARY KEY,
+  message_id text NOT NULL,
+  session_id text NOT NULL,
+  data text NOT NULL
+);`
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UnixMilli()
+	mustExec(t, db, `INSERT INTO project (id, worktree, name) VALUES ('proj-a', '/tmp/alpha', 'alpha')`)
+	mustExec(t, db, `INSERT INTO session (id, project_id, directory, title, time_created, time_updated, agent, model, cost, tokens_input, tokens_output) VALUES
+		('s1', 'proj-a', '/tmp/alpha', 'one', ?, ?, 'dev', '{"id":"m"}', 1.0, 10, 5),
+		('s2', 'proj-a', '/tmp/alpha', 'two', ?, ?, 'build', '{"id":"m"}', 0.5, 4, 2)`,
+		now, now, now, now)
+	mustExec(t, db, `INSERT INTO part (id, message_id, session_id, data) VALUES
+		('p1', 'm1', 's1', '{"type":"tool","tool":"skill","state":{"input":{"name":"git-commit"}}}'),
+		('p2', 'm1', 's1', '{"type":"tool","tool":"bash","state":{"input":{}}}'),
+		('p3', 'm2', 's2', '{"type":"tool","tool":"skill","state":{"input":{"name":"tdd"}}}'),
+		('p4', 'm2', 's2', '{"type":"tool","tool":"skill","state":{"input":{"name":"git-commit"}}}')`)
+}
+
 func TestLoadSessionAnalytics_MissingDB(t *testing.T) {
 	_, err := LoadSessionAnalytics(context.Background(), filepath.Join(t.TempDir(), "nope.db"), AnalyticsQuery{})
 	if err == nil {
@@ -163,32 +235,23 @@ CREATE TABLE project (
   time_initialized integer,
   sandboxes text NOT NULL DEFAULT '[]'
 );
-CREATE TABLE session (
+CREATE TABLE session_v2 (
   id text PRIMARY KEY,
   project_id text NOT NULL,
-  parent_id text,
-  slug text NOT NULL,
   directory text NOT NULL,
   title text NOT NULL,
-  version text NOT NULL,
-  time_created integer NOT NULL,
-  time_updated integer NOT NULL,
-  time_archived integer,
   agent text,
   model text,
   cost real DEFAULT 0 NOT NULL,
   tokens_input integer DEFAULT 0 NOT NULL,
   tokens_output integer DEFAULT 0 NOT NULL,
-  tokens_reasoning integer DEFAULT 0 NOT NULL,
-  tokens_cache_read integer DEFAULT 0 NOT NULL,
-  tokens_cache_write integer DEFAULT 0 NOT NULL
-);
-CREATE TABLE part (
-  id text PRIMARY KEY,
-  message_id text NOT NULL,
-  session_id text NOT NULL,
   time_created integer NOT NULL,
   time_updated integer NOT NULL,
+  time_archived integer
+);
+CREATE TABLE session_message (
+  id text PRIMARY KEY,
+  session_id text NOT NULL,
   data text NOT NULL
 );`
 	if _, err := db.Exec(schema); err != nil {
@@ -203,24 +266,20 @@ CREATE TABLE part (
 		('proj-b', '/tmp/beta', 'beta', ?, ?, '[]')`, now, now, old, old)
 
 	modelFlash := `{"id":"deepseek-v4-flash","providerID":"opencode-admin","variant":"default"}`
-	mustExec(t, db, `INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated, agent, model, cost, tokens_input, tokens_output) VALUES
-		('s1', 'proj-a', 's1', '/tmp/alpha', 'one', '1', ?, ?, 'dev', ?, 1.5, 100, 50),
-		('s2', 'proj-a', 's2', '/tmp/alpha', 'two', '1', ?, ?, 'build', ?, 0.5, 40, 20),
-		('s3', 'proj-b', 's3', '/tmp/beta', 'three', '1', ?, ?, '', ?, 2.0, 200, 80)`,
+	mustExec(t, db, `INSERT INTO session_v2 (id, project_id, directory, title, time_created, time_updated, agent, model, cost, tokens_input, tokens_output) VALUES
+		('s1', 'proj-a', '/tmp/alpha', 'one', ?, ?, 'dev', ?, 1.5, 100, 50),
+		('s2', 'proj-a', '/tmp/alpha', 'two', ?, ?, 'build', ?, 0.5, 40, 20),
+		('s3', 'proj-b', '/tmp/beta', 'three', ?, ?, '', ?, 2.0, 200, 80)`,
 		now, now, modelFlash, now, now, modelFlash, old, old, `{"id":"deepseek-v4-flash","providerID":"opencode-admin","variant":"max"}`)
 
-	// skill parts
-	mustExec(t, db, `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES
-		('p1', 'm1', 's1', ?, ?, ?),
-		('p2', 'm1', 's1', ?, ?, ?),
-		('p3', 'm2', 's2', ?, ?, ?),
-		('p4', 'm3', 's3', ?, ?, ?),
-		('p5', 'm3', 's3', ?, ?, ?)`,
-		now, now, `{"type":"tool","tool":"skill","state":{"input":{"name":"git-commit"}}}`,
-		now, now, `{"type":"tool","tool":"bash","state":{"input":{"command":"ls"}}}`,
-		now, now, `{"type":"tool","tool":"skill","state":{"input":{"name":"tdd"}}}`,
-		old, old, `{"type":"tool","tool":"skill","state":{"input":{"name":"git-commit"}}}`,
-		old, old, `{"type":"tool","tool":"read","state":{"input":{"path":"x"}}}`,
+	// v2 message rows: content[] mixes tool calls; skill names ride input.id.
+	mustExec(t, db, `INSERT INTO session_message (id, session_id, data) VALUES
+		('m1', 's1', ?),
+		('m2', 's2', ?),
+		('m3', 's3', ?)`,
+		`{"content":[{"type":"tool","name":"skill","state":{"input":{"id":"git-commit"}}},{"type":"tool","name":"bash","state":{"input":{"command":"ls"}}}]}`,
+		`{"content":[{"type":"tool","name":"skill","state":{"input":{"id":"tdd"}}}]}`,
+		`{"content":[{"type":"tool","name":"skill","state":{"input":{"id":"git-commit"}}},{"type":"tool","name":"read","state":{"input":{"path":"x"}}}]}`,
 	)
 }
 
