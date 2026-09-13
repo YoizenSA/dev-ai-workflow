@@ -1,6 +1,6 @@
 ---
 title: Azure DevOps
-description: Perfiles, PAT y reglas por repo para trabajar con ADO desde ywai
+description: Qué puede y qué no puede hacer la integración ADO — PRs, work items y pipelines vía el CLI `ado`
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -9,27 +9,80 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Qué es
 
-La integración con Azure DevOps: PRs (review, vote, comment) y work items vía el CLI compañero `ado`, con la skill [`ado`](/dev-ai-workflow/skills/reference#ado) para los agentes. La UI en `ywai ui → http://localhost:5768/ado` configura perfiles, PAT y reglas por repo.
+La integración con Azure DevOps tiene tres piezas:
+
+- El **CLI compañero `ado`** — hace todas las operaciones. Instalación: `npm i -g @cioffinahuel/opencode-ado`.
+- La **skill `ado`** — el contrato que siguen los agentes: inspeccionar antes de mutar, nunca inventar IDs, reportar errores textuales.
+- La **UI en `/ado`** — perfiles, PAT y reglas por repo desde el navegador.
+
+## Qué podés hacer
+
+| Área | Leer | Actuar |
+|---|---|---|
+| **Pull requests** | `pr list` · `get` · `threads` · `diff [--hunks]` · `context` · `file` | `vote` (approve / reject / wait / suggestions) · `comment` (anclado a archivo/línea) · `create` · `complete` (squash / rebase / noFastForward / rebaseMerge) · `abandon` · `publish` · `reviewers --add` · `chain` (cadena de PRs desde work items ordenados) |
+| **Work items** | `wi list` · `get` · `types` · `related` · `fields --type` · `query` (WIQL crudo) · `attachments` | `wi update` (cualquier campo, custom incluidos) · `comment` · `link` (idempotente) · `attach` · `create` · `create-child` |
+| **Pipelines** | `pipeline list` · `runs <id>` | `pipeline run` (encolar una corrida) |
+| **Perfiles** | `profile` · `profile list` · `show` | `profile use <name>` |
+
+Extras de conveniencia: el `[repo]` es opcional — el PR se auto-descubre por ID entre todos los perfiles; `wi` acepta el ID numérico o la URL completa del work item.
+
+## Qué NO hace (límites)
+
+| ❌ Límite | Por qué / alternativa |
+|---|---|
+| No hace git: no crea branches ni hace push | `ado pr create` publica un PR **entre branches que ya existen** |
+| `wi create` puede estar bloqueado o restringido | Lo gobierna `[work_item.create]` en `.adoconfig.toml`: `enabled = false` rechaza toda creación, `allowed_types` la acota, `required_fields` exige campos |
+| Nunca se pasa `--field System.AreaPath` | El área va con `--area` en el formato del proyecto (ej. `"ySocial\\Kanban"`) |
+| Crear una User Story sin contexto | El flujo pide Social vs Infra Kanban + Producto + Sponsors; si faltan esos campos custom, Azure DevOps rechaza el create |
+| Descripciones en Markdown | `wi --description` es **HTML de Azure DevOps**; los comentarios sí son Markdown |
+| Editar pipelines | Solo listar, ver runs y encolar; el YAML del pipeline se edita en el repo |
+| Operar sin PAT | Sin PAT válido todo falla con auth error; el PAT **nunca** vive en `opencode.json` |
+
+<Aside type="caution">
+`npx ado` resuelve **otro paquete**, no relacionado. Para probar sin instalar global: `npx @cioffinahuel/opencode-ado init`.
+</Aside>
 
 ## Quick path
 
 ```bash
-ywai ui → /ado → 🪄 Start guided setup
-# org + PAT + primer proyecto en un minuto
+npm i -g @cioffinahuel/opencode-ado   # el binario `ado`
+ado init                              # wizard: org + PAT + perfiles + reglas
+ado show                              # config + estado del PAT
+ado profile                           # perfil activo
+ado wi types                          # confirma auth + acceso al proyecto
 ```
 
-## Perfiles
+O desde la UI: `ywai ui → /ado → 🪄 Start guided setup`.
+
+## Perfiles y PAT
 
 Cada perfil fija org, proyecto y repos. La org es global (la del perfil default); si otro perfil usa otra org, la UI lo marca. Acciones: agregar (proyecto + repos), default, borrar.
 
-## PAT
-
-El Personal Access Token vive en el entorno (`AZURE_DEVOPS_PAT`) o en `~/.azure-devops-cli/pat` (`chmod 600`). La UI muestra de dónde sale y lo guarda por vos.
+El PAT se resuelve en este orden: el `pat` directo del perfil → su `patEnvVar` → `AZURE_DEVOPS_PAT` → `~/.azure-devops-cli/pat` (`chmod 600`). Si ninguno valida, los comandos fallan con auth error.
 
 ## Reglas por repo (`.adoconfig.toml`)
 
-El builder genera el comando que corrés dentro de cada repo para escribir `.adoconfig.toml`: estrategia de chain, rama base, largo máximo, prefijos, tipos de branch permitidos, work item requerido y borrador por defecto.
+`ado config` genera el archivo en la raíz del proyecto. Secciones:
+
+| Sección | Qué gobierna |
+|---|---|
+| `[chain]` | Estrategia (`feature-chain` / `stacked`), rama base, largo máximo, prefijo |
+| `[branch]` | Tipos de branch permitidos, largo del slug, work item ID requerido en el nombre |
+| `[pr]` | Work item requerido, draft por defecto, budget de review |
+| `[work_item]` | `auto_transition`, `target_state` |
+| `[work_item.create]` | Si/se cómo funciona `ado wi create`: `enabled`, `allowed_types`, `required_fields`, `default_state`, `auto_assign`, `require_parent`, `default_type` |
+
+Toda la sección `[work_item.create]` es opcional; para desactivar la creación en un proyecto: `enabled = false`.
+
+## Errores comunes
+
+| Error | Causa | Salida |
+|---|---|---|
+| Missing config | Sin perfil activo o campos ausentes | `ado profile` / `ado init` |
+| Auth | PAT ausente, vencido o rechazado | Re-coré `ado init` o exportá `AZURE_DEVOPS_PAT` |
+| Network | ADO inalcanzable | VPN, proxy, conectividad |
+| Not found | El ID/URL no resuelve a algo visible | Verificá el ID y el perfil activo |
 
 <Aside type="tip">
-Los agentes usan el CLI `ado`, nunca el plugin de OpenCode, para estas operaciones. La skill `ado` define ese contrato.
+Los agentes usan el CLI `ado` —nunca el plugin de OpenCode— siguiendo la skill [`ado`](/dev-ai-workflow/skills/reference#ado): leen el PR/WI antes de votar, comentar o actualizar, y te reportan la salida del CLI textual.
 </Aside>

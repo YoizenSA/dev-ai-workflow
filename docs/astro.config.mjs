@@ -19,7 +19,7 @@ export default defineConfig({
       sidebar: [
         { label: 'Inicio', slug: '' },
         { label: 'Primeros pasos', slug: 'getting-started' },
-        { label: 'Comandos', slug: 'commands' },
+        { label: 'CLI', slug: 'cli' },
         {
           label: 'Guías',
           items: [
@@ -84,7 +84,7 @@ export default defineConfig({
         {
           label: 'Herramientas',
           items: [
-            { label: 'Panel de control', slug: 'kanban' },
+            { label: 'Panel de control', slug: 'panel' },
             { label: 'Environments', slug: 'environments' },
             { label: 'Evals', slug: 'evals' },
             { label: 'Memories', slug: 'memories' },

@@ -12,22 +12,29 @@ Read `references/docs/<path>` next to this file. If it is missing, say so and st
 |---|---|---|
 | 1 | Qué es ywai | `index.mdx` |
 | 2 | Primeros pasos | `getting-started/index.mdx` |
-| 3 | CLI | `commands/index.mdx` |
+| 3 | CLI | `cli/index.mdx` |
 | 4 | Agentes | `agents/index.mdx` |
 | 5 | Skills | `skills/index.mdx` |
 | 6 | Guías | `guides/index.mdx` |
 | 7 | Workflows | `workflows/index.mdx` |
-| 8 | Kanban | `kanban/index.mdx` |
+| 8 | Panel de control | `panel/index.mdx` |
 | 9 | Configuración | `configuration/index.mdx` |
 
 ## Topic shortcuts
 
 | User says | Read first |
 |---|---|
-| install, update, doctor, CLI | `commands/index.mdx` |
+| install, update, doctor, CLI | `cli/index.mdx` |
 | agentes, @dev, orchestrator | `agents/index.mdx` then the named agent MDX |
 | graft, finder | `agents/finder.mdx` |
 | engram, memory | `agents/memory.mdx` |
 | skill | `skills/index.mdx` |
 | feature, bug, review | matching `guides/*.mdx` |
 | workflow, studio | `workflows/studio.mdx` |
+| panel, dashboard, kanban | `panel/index.mdx` |
+| ado, azure devops, pull request, work item | `ado/index.mdx` |
+| memories, memorias | `memories/index.mdx` |
+| evals, benchmarks, session analytics | `evals/index.mdx` |
+| environments, ambientes | `environments/index.mdx` |
+| mcp store, catálogo mcp | `mcp/index.mdx` |
+| settings | `settings/index.mdx` |

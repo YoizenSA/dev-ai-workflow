@@ -46,7 +46,7 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | Subcommand | What it does | When to use |
 |---|---|---|
 | `test` | Run all tests (`go test ./... -v`) | Before every commit |
-| `test-ui` | Run only control-server UI tests (`go test ./internal/kanban/... ./internal/control/... -v`) | After touching UI/server code |
+| `test-ui` | Run only control-server UI tests (`go test ./internal/control/... -v`) | After touching UI/server code |
 | `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
 | `build-full` | Full build WITH embedded skills/agents | Before pushing |
 | `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode |
