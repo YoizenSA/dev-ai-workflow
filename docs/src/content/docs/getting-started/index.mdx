@@ -26,7 +26,7 @@ import { Steps, Card, Aside } from '@astrojs/starlight/components';
    ywai doctor
    ```
 
-4. **Abrir OpenCode (v1 / v2) o Pi y usar**
+4. **Abrir OpenCode 2 (`opencode2`) y usar**
    ```
    /learn-ywai
    ```
@@ -38,7 +38,7 @@ import { Steps, Card, Aside } from '@astrojs/starlight/components';
 </Steps>
 
 <Aside type="tip">
-ywai detecta el host (OpenCode 2 = `opencode2`, OpenCode 1 = `opencode`, Claude Code, Cursor, etc.) y adapta automáticamente el formato de MCPs, permisos y plugins.
+ywai detecta el host (OpenCode 2 = `opencode2`, Claude Code, Cursor, etc.) y adapta automáticamente el formato de MCPs, permisos y plugins. El soporte de OpenCode v1 fue retirado.
 </Aside>
 
 ## Tu primera tarea
@@ -60,17 +60,19 @@ ywai detecta el host (OpenCode 2 = `opencode2`, OpenCode 1 = `opencode`, Claude 
 | **Graft** | Grafo del repo: símbolos, callers, spans. Los agentes lo usan antes de grep | [Finder →](/dev-ai-workflow/agents/finder) |
 | **Engram** | Memoria persistente entre sesiones | [Memory →](/dev-ai-workflow/agents/memory) |
 | **Commands** | Slash commands para flujos completos | [Commands →](/dev-ai-workflow/workflows/commands) |
-| **Kanban** | Tablero visual para monitorear agentes | [Kanban →](/dev-ai-workflow/kanban) |
+| **Environments** | Ambientes opencode2 aislados por rol | [Environments →](/dev-ai-workflow/environments) |
+| **Evals** | Uso real y benchmarks por modelo | [Evals →](/dev-ai-workflow/evals) |
+| **Panel de control** | Workflows, Evals, Settings y más en el navegador | [Panel →](/dev-ai-workflow/kanban) |
 
 ## Comandos esenciales
 
 | Comando | Qué hace |
 |---|---|
-| `ywai install` | Engram, skills, perfiles, plugins/Graft |
+| `ywai install` | Ecosistema, Engram, skills, perfiles, plugins/Graft |
 | `ywai update` | Binario + re-aplica el entorno gestionado |
 | `ywai doctor` | Diagnóstico de solo lectura (Engram, Graft, state) |
 | `ywai skills` | Lista los skills disponibles |
-| `ywai kanban` | Abre el tablero visual |
+| `ywai ui` | Abre el panel de control en el navegador |
 
 ## Siguiente paso
 

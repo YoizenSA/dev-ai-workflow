@@ -1,0 +1,41 @@
+---
+title: MCP Store
+description: Catálogo e instalación de servidores MCP desde la UI o el CLI
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# MCP Store
+
+## Qué es
+
+El catálogo de servidores MCP: ver qué hay, instalar, desinstalar y chequear salud. Dos frentes del mismo estado en `opencode.json` (`mcp.servers.<id>`):
+
+- UI: `ywai ui → http://localhost:5768/mcp-store`
+- CLI: `ywai mcp ...`
+
+## Quick path
+
+```bash
+ywai mcp list              # qué está instalado y on/off
+ywai mcp enable <id>       # prender sin reinstalar
+ywai mcp disable <id>      # apagar (queda `"disabled": true`)
+ywai mcp auth <id>         # OAuth para MCP remotos
+```
+
+```bash
+ywai install --mcp         # Microsoft Learn MCP (opencode)
+ywai install --meta-mcp    # Meta Developer Tools MCP (remoto)
+```
+
+## Instalar desde la UI
+
+Cada tarjeta muestra categoría, descripción, tools y salud (latencia o error con acción sugerida). Instalar pide lo que el servidor necesita: URL (si vive en tu red) o credenciales (`requiredEnv`). El progreso pasa por `pending → installing → probing → done`, y al terminar lista cuántos tools expuso. Desinstalar quita la entrada sin tocar el resto.
+
+## Formato v2
+
+OpenCode 2 anida los servers en `mcp.servers` y apaga con `"disabled": true` (`enabled` se ignora). Detalle en [Configuración](/dev-ai-workflow/configuration). La pestaña **MCP** de [Settings](/dev-ai-workflow/settings) gestiona los ya conectados (endpoints on/off).
+
+<Aside type="tip">
+Después de instalar o actualizar, reiniciá OpenCode una vez para que recargue plugins y MCPs.
+</Aside>

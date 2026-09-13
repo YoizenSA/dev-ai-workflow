@@ -13,24 +13,32 @@ Comandos slash que lanzan un flujo completo de agentes. Los escribís en opencod
 
 ## Commands preinstalados
 
+ywai trae 5 workflows semilla que se instalan como slash commands (más `/learn-ywai`, que es un command plano del host, no un workflow):
+
 | Command | Flujo | Para qué |
 |---|---|---|
-| `/feature-delivery` | planning → architect → dev → qa → reviewer | Features completas |
+| `/ship` | scout → plan → design → implement → test → review → deploy | Entrega completa end-to-end |
+| `/planning` | scout → plan | Investigar y planificar antes de implementar |
 | `/qa-automation` | analyst → finder → dev → reviewer | Testing completo |
+| `/qa-exploratory` | summary → scenarios → verify → feedback | Testing exploratorio post-implementación |
+| `/scenario-verification` | run scenarios → file evidence | Verificar BDD contra la app corriendo |
 | `/learn-ywai` | Lee los docs oficiales (una página por turno) | Aprender ywai |
 
 ## Cómo usarlos
 
 ```
-/feature-delivery Implementar autenticación con JWT
+/ship Implementar autenticación con JWT
 ```
 
 Esto lanza automáticamente:
-1. `@planning` investiga y planifica
-2. `@architect` diseña la solución
-3. `@dev` implementa
-4. `@qa` testea
-5. `@reviewer` revisa
+1. `@finder` scoutea el alcance
+2. `@planning` investiga y planifica
+3. `@architect` diseña la solución
+4. `@designer` define el spec si hay UI
+5. `@dev` implementa
+6. `@qa` testea
+7. `@reviewer` revisa
+8. `@devops` despliega si aplica
 
 ## Crear tus propios commands
 
@@ -63,8 +71,11 @@ Esto lanza automáticamente:
 
 | Situación | Command | Agente directo |
 |---|---|---|
-| Feature completa | `/feature-delivery` | |
+| Entrega completa | `/ship` | |
+| Plan antes de implementar | `/planning` | |
 | Testing completo | `/qa-automation` | |
+| Testing exploratorio | `/qa-exploratory` | |
+| Verificar escenarios BDD | `/scenario-verification` | |
 | Bug simple | | `@dev` |
 | Pregunta rápida | | `@ask` |
 

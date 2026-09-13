@@ -1,0 +1,35 @@
+---
+title: Azure DevOps
+description: Perfiles, PAT y reglas por repo para trabajar con ADO desde ywai
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Azure DevOps
+
+## Qué es
+
+La integración con Azure DevOps: PRs (review, vote, comment) y work items vía el CLI compañero `ado`, con la skill [`ado`](/dev-ai-workflow/skills/reference#ado) para los agentes. La UI en `ywai ui → http://localhost:5768/ado` configura perfiles, PAT y reglas por repo.
+
+## Quick path
+
+```bash
+ywai ui → /ado → 🪄 Start guided setup
+# org + PAT + primer proyecto en un minuto
+```
+
+## Perfiles
+
+Cada perfil fija org, proyecto y repos. La org es global (la del perfil default); si otro perfil usa otra org, la UI lo marca. Acciones: agregar (proyecto + repos), default, borrar.
+
+## PAT
+
+El Personal Access Token vive en el entorno (`AZURE_DEVOPS_PAT`) o en `~/.azure-devops-cli/pat` (`chmod 600`). La UI muestra de dónde sale y lo guarda por vos.
+
+## Reglas por repo (`.adoconfig.toml`)
+
+El builder genera el comando que corrés dentro de cada repo para escribir `.adoconfig.toml`: estrategia de chain, rama base, largo máximo, prefijos, tipos de branch permitidos, work item requerido y borrador por defecto.
+
+<Aside type="tip">
+Los agentes usan el CLI `ado`, nunca el plugin de OpenCode, para estas operaciones. La skill `ado` define ese contrato.
+</Aside>

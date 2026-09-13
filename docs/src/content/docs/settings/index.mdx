@@ -14,8 +14,9 @@ Un panel de configuración visual donde gestionás ywai sin tocar archivos.
 ## Quick path
 
 ```bash
-# 1. Abrir
-ywai kanban
+# 1. Iniciar el servidor y abrir
+ywai serve -b
+ywai ui
 
 # 2. Ir a Settings
 http://localhost:5768/settings
@@ -25,15 +26,14 @@ http://localhost:5768/settings
 
 | Pestaña | Qué configurás |
 |---|---|
-| **General** | Directorio de trabajo, agente predeterminado, modelo de visión y versión de OpenCode (`v1` / `v2` / `autodetect`) |
-| **Agentes** | Perfiles, permisos, allowlist de skills |
+| **General** | Modelos, agente predeterminado, directorio de trabajo, AGENTS.md, SDD, notificaciones push |
+| **Agents** | Perfiles instalados y su configuración |
+| **Orchestrator** | Comportamiento del orchestrator |
+| **Profiles** | Perfiles de modelo (balanced/fast/deep/inherit) |
 | **Skills** | Ver disponibles, activar/desactivar |
-| **Memoria** | Ver observaciones, buscar, limpiar |
 | **MCP** | Servidores conectados, endpoints |
-| **SDD** | Specification-Driven Development |
-| **ADO** | Azure DevOps, PAT tokens |
-| **Git** | Estado del repo, hooks |
-| **Push** | Notificaciones |
+| **Providers** | Proveedores de modelos y auth |
+| **References** | Referencias y material del sistema |
 
 ## Settings UI vs CLI
 

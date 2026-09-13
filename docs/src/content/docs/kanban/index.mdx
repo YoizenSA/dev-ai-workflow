@@ -1,71 +1,63 @@
 ---
-title: Kanban Board
-description: Tablero visual para monitorear agentes en tiempo real
+title: Panel de control
+description: La UI web de ywai en el navegador
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-# Kanban Board
+# Panel de control
 
 ## Qué es
 
-Un tablero visual donde ves qué están haciendo tus agentes en tiempo real.
+La UI web de ywai: un dashboard en el navegador sobre el servidor de control, con Workflow Studio, memorias, evals, ambientes, salud, settings, MCP store y ADO.
 
 ## Quick path
 
 ```bash
-# 1. Abrir
-ywai kanban
+# 1. Iniciar el servidor
+ywai serve -b
 
-# 2. Ver en navegador
+# 2. Abrir en el navegador
+ywai ui
+
+# 3. Ver
 http://localhost:5768
 ```
 
-## Las columnas
+`/` redirige a `/workflows` (Workflow Studio).
 
-```
-Backlog → Ready → In Progress → Review → Done
-```
+## Las rutas
 
-| Columna | Significado |
+| Ruta | Qué hay |
 |---|---|
-| **Backlog** | Tarea creada, no iniciada |
-| **Ready** | Lista para empezar |
-| **In Progress** | Agente trabajando |
-| **Review** | Esperando tu aprobación |
-| **Done** | Completada |
-
-## Qué podés hacer
-
-| Acción | Cómo |
-|---|---|
-| **Ver progreso** | Click en una card |
-| **Responder preguntas** | Click → escribir respuesta |
-| **Redirigir agente** | Click → "Steer" → escribir instrucción |
-| **Detener agente** | Click → "Stop" |
+| `/workflows` | Workflow Studio: diseñar y exportar flujos multi-agente |
+| `/memories` | Memorias de Engram ([Memories →](/dev-ai-workflow/memories)) |
+| `/evals` | Session Analytics + benchmarks ([Evals →](/dev-ai-workflow/evals)) |
+| `/envs` | Ambientes opencode2 aislados ([Environments →](/dev-ai-workflow/environments)) |
+| `/status` | Health del servidor y del ecosistema |
+| `/settings` | Configuración visual ([Settings →](/dev-ai-workflow/settings)) |
+| `/mcp-store` | Catálogo e instalación de MCPs ([MCP Store →](/dev-ai-workflow/mcp)) |
+| `/ado` | Perfiles, PAT y reglas por repo ([Azure DevOps →](/dev-ai-workflow/ado)) |
 
 ## Ejemplo
 
 ```
 Tú: "Implementa auth con JWT"
      ↓
-Orchestrator crea cards:
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ 🟢 architect│  │ 🔵 dev      │  │ 🟡 qa       │
-│ Diseña      │  │ Implementa  │  │ Testea      │
-└─────────────┘  └─────────────┘  └─────────────┘
+/ship ejecuta: scout → plan → design → implement → test → review
      ↓
-En el Kanban ves las cards moverse de izquierda a derecha
+En /evals ves qué agentes, skills y modelos se usaron en la sesión
 ```
 
-## Cuándo usar Kanban
+## Servidor
 
-| Situación | Kanban |
+| Acción | Cómo |
 |---|---|
-| Tarea compleja con múltiples agentes | ✅ |
-| Querés monitorear progreso | ✅ |
-| Tarea simple de un solo agente | No necesitás |
+| Iniciar en fondo | `ywai serve -b` |
+| Otro puerto | `ywai serve -p 8080` |
+| Detener | `ywai stop` |
+| Abrir navegador | `ywai ui` |
 
 <Aside type="tip">
-El Kanban es parte del servidor de control. Cuando ejecutás `ywai kanban`, también tenés acceso a Workflow Studio y Settings.
+El panel es la forma visual de operar ywai. Para automatización y CI/CD, usá los [comandos CLI](/dev-ai-workflow/commands).
 </Aside>

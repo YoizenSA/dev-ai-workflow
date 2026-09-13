@@ -11,50 +11,51 @@ import { Aside } from '@astrojs/starlight/components';
 
 Guías especializadas (`SKILL.md`). OpenCode 2 **anuncia** id + descripción; el body entra cuando el modelo llama la tool `skill`. `skills.txt` del agente es la allowlist.
 
-## Cómo funcionan
+## Dos capas
+
+| Capa | Qué es | Ejemplo |
+|---|---|---|
+| **Base (gentle-ai)** | Skills del ecosistema que `ywai install` trae con `InstallEcosystem` | `typescript`, `playwright`, `react-19`, `dotnet`, `go-testing` |
+| **Extra (ywai)** | 29 skills propias en `ywai/skills/` | `angular`, `yz-ui`, `tdd`, `ado` |
+
+El `skills.txt` de cada agente mezcla ambas capas. Ver la [referencia completa de las extra →](/dev-ai-workflow/skills/reference).
 
 ```
-Tú: "@dev Crea un componente React con Tailwind"
+Tú: "@dev Crea un componente Angular con yz-ui"
      ↓
 OpenCode lista skills permitidos (id + descripción)
      ↓
-El modelo llama skill("react-19") / skill("angular")
+El modelo llama skill("angular") / skill("yz-ui")
      ↓
 Resultado: código que sigue esos patrones
 ```
 
-## Skills incluidos
+## Skills extra incluidos
 
 ### Frontend
 
 | Skill | Tecnología |
 |---|---|
-| `react-19` | React 19, Server Components, hooks modernos |
 | `angular` | Angular, signals, forms, performance |
 | `yz-ui` | Design system de Yoizen |
-
-### Backend
-
-| Skill | Tecnología |
-|---|---|
-| `typescript` | Tipos estrictos, generics, utility types |
-| `dotnet` | ASP.NET Core, Minimal APIs, EF Core |
 
 ### Testing
 
 | Skill | Tecnología |
 |---|---|
-| `playwright` | Tests E2E cross-browser |
-| `go-testing` | Tests en Go, coverage |
-| `testing-expert` | Calidad de tests |
-| `webapp-testing` | Testing web con Playwright |
+| `tdd` | Desarrollo test-first, un vertical slice por vez |
+| `testing-expert` | Calidad de tests, fuerza de aserciones |
+| `playwright-e2e-testing` | Tests E2E cross-browser con Playwright |
+| `condition-based-waiting` | Esperas por condición, anti-flaky |
+| `gherkin-bdd` | Escenarios BDD en Gherkin |
+| `qa-evidence` | Correr escenarios y archivar evidencia |
 
 ### DevOps
 
 | Skill | Tecnología |
 |---|---|
 | `devops` | Azure Pipelines, Helm, K8s |
-| `docker` | Dockerfiles, compose, hardening |
+| `docker` | Dockerfiles, hardening para AKS |
 
 ### Workflow y Git
 
@@ -66,6 +67,8 @@ Resultado: código que sigue esos patrones
 | `bulk-read` | Lectura y resumen eficiente de archivos grandes |
 | `ado` | Azure DevOps PRs y work items vía el CLI `ado` |
 | `ywai` | MCP on/off, profiles y grupos, y `/learn-ywai` para aprender desde los docs |
+| `workflow-retro` | Retro semanal de fricción (trae el command `/workflow-retro`) |
+| `code-review` | Review de diffs por defectos probados |
 
 ### Arquitectura, Diseño y Grilling
 
@@ -77,6 +80,16 @@ Resultado: código que sigue esos patrones
 | `improve-codebase-architecture` | Auditoría de arquitectura con reporte HTML |
 | `grilling` | Entrevista implacable para desafiar decisiones y planes |
 | `grill-with-docs` | Atajo `/grill-with-docs` para grilling generando ADRs y glosario |
+
+### Documentación y Meta
+
+| Skill | Tecnología |
+|---|---|
+| `adr-skill` | ADRs ejecutables para agentes |
+| `diks` | Notas Zettelkasten de infra en el repo Infra |
+| `writing-great-skills` | Principios para escribir skills predecibles |
+| `teach` | Enseñar un tema en este workspace |
+| `i-have-adhd` | Formato de salida para lector con TDAH |
 
 ## Ver skills disponibles
 
@@ -92,13 +105,18 @@ ywai skills
 
 ## Skills por agente
 
+Fuente: `skills.txt` de cada perfil (`ywai/agents/...`). Los ids base (`typescript`, `playwright`, `decision-mapping`) resuelven contra el catálogo de gentle-ai; el resto son las extra de arriba.
+
 | Agente | Skills |
 |---|---|
-| `dev` | typescript, react-19, angular, dotnet, git-commit |
-| `qa` | playwright, go-testing |
-| `architect` | codebase-design |
-| `reviewer` | git-commit |
-| `devops` | devops, docker |
+| `dev` | typescript (base), git-commit, diagnosing-bugs, codebase-design |
+| `qa` | typescript, playwright (base), diagnosing-bugs |
+| `architect` | adr-skill, codebase-design, improve-codebase-architecture |
+| `reviewer` | git-commit, code-review |
+| `devops` | devops, git-commit, docker |
+| `designer` | yz-ui, angular |
+| `planning` | codebase-design, decision-mapping (base) |
+| `ask`, `finder`, `orchestrator`, `memory`, `advisor` | Sin allowlist (usan lo general del sistema) |
 
 <Aside type="tip">
 El modelo carga un skill **por id**. Si no está en el `skills.txt` del agente, no se anuncia.

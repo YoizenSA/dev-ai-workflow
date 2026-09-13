@@ -15,7 +15,7 @@ Un editor visual donde diseñás flujos de trabajo en un canvas y los exportás 
 
 ```bash
 # 1. Abrir
-ywai kanban → http://localhost:5768/workflows
+ywai ui → http://localhost:5768/workflows
 
 # 2. Diseñar
 Arrastrar nodos → Conectar → Configurar
@@ -30,9 +30,12 @@ Click "Export" → Se crea el command en opencode
 |---|---|---|
 | **SubAgent** | Delega a un agente | Dev, QA, Architect |
 | **Prompt** | Instrucción fija | "Usa TypeScript estricto" |
-| **If/Else** | Decisión condicional | "Si hay errores, ir a Dev" |
 | **AskUserQuestion** | Pregunta al usuario | "¿Mergeamos a main?" |
-| **Skill** | Aplica un skill | react-19, angular |
+| **If/Else** | Decisión con dos ramas | "Si hay errores, ir a Dev" |
+| **Switch** | Decisión con N ramas | Ruteo por tipo de cambio |
+| **Skill** | Aplica un skill | angular, git-commit |
+| **MCP** | Llama una herramienta MCP | Servidor + tool + parámetros |
+| **Group** | Agrupa nodos colapsables | Fase "implement" con 3 agentes |
 
 ## Ejemplo
 

@@ -30,6 +30,7 @@ El default de `ywai install` es **core + qa-automation**. El install **borra** d
 |---|---|---|
 | [**orchestrator**](/dev-ai-workflow/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas |
 | [**dev**](/dev-ai-workflow/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
+| [**designer**](/dev-ai-workflow/agents/designer) | Diseñador UX/UI | Specs visuales, auditoría UI, accesibilidad |
 | [**qa**](/dev-ai-workflow/agents/qa) | QA Engineer | Tests, cobertura, validación |
 | [**architect**](/dev-ai-workflow/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
 | [**reviewer**](/dev-ai-workflow/agents/reviewer) | Revisor | Code review, bugs, seguridad |
@@ -38,10 +39,9 @@ El default de `ywai install` es **core + qa-automation**. El install **borra** d
 | [**finder**](/dev-ai-workflow/agents/finder) | Explorador | Buscar archivos, entender estructura (también para QA) |
 | [**planning**](/dev-ai-workflow/agents/planning) | Planificador | Investigar y planificar antes de implementar |
 | [**memory**](/dev-ai-workflow/agents/memory) | Archivista | Memoria persistente entre sesiones |
+| [**advisor**](/dev-ai-workflow/agents/advisor) | Segundo revisor | Revisa cada turno del agente principal (no se invoca directo) |
 
-### Social Refactor (opt-in)
-
-| Agente | Rol | Para qué |
+Subagent-only (los invoca el orchestrator, llegan con `--all-groups`): [**scenario-runner**](/dev-ai-workflow/agents/scenario-runner) (verificación BDD post-review), `planner-scout` + `planner-draft` (exploración y redacción dentro de `@planning`).
 |---|---|---|
 
 ### QA Automation (default, 5 agentes)
@@ -54,12 +54,37 @@ El default de `ywai install` es **core + qa-automation**. El install **borra** d
 | [**qa-reviewer**](/dev-ai-workflow/agents/qa-reviewer) | Revisor | Revisa calidad de tests |
 | [**qa-ask**](/dev-ai-workflow/agents/qa-ask) | Investigador | Responde preguntas de testing |
 
+La exploración dentro de estos flujos la hace `@finder` ([QA Finder](/dev-ai-workflow/agents/qa-finder)).
+
+### QA Exploratory (viene con ywai, sin grupo propio)
+
+| Agente | Rol | Para qué |
+|---|---|---|
+| [**exploratory-orchestrator**](/dev-ai-workflow/agents/qa-exploratory) | Coordinador | Coordina el ciclo exploratorio |
+| **feature-summary** | Analista | Resume la feature desde el código |
+| **test-author** | QA | Work item ADO + escenarios Gherkin |
+| **verification-orchestrator** | Coordinador | Corre los escenarios |
+| **qa-feedback** | QA | Archiva el resultado en ADO |
+
+Detalle: [QA Exploratory](/dev-ai-workflow/agents/qa-exploratory). No están en `groups.json`: el install por defecto no los copia, llegan con `ywai install --all-groups`, y el workflow `/qa-exploratory` los usa end-to-end.
+
+### Experiment (opt-in)
+
+| Agente | Rol | Para qué |
+|---|---|---|
+| `experiment/infra-docs` | Escritor | Mantiene la wiki de Infra como notas DIKS |
+
+```bash
+ywai groups enable experiment
+```
+
 ## Cuándo usar cada agente
 
 | Necesidad | Agente |
 |---|---|
 | Sola pregunta | `@ask` |
 | Necesitás código | `@dev` |
+| Pantalla o spec visual | `@designer` |
 | Necesitás tests | `@qa` |
 | Decisión de diseño | `@architect` |
 | Revisar código | `@reviewer` |

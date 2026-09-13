@@ -1,18 +1,23 @@
 ---
-title: Finder
-description: Explorá el codebase con @finder
+title: QA Finder
+description: "El rol de exploración dentro de los flujos de QA lo cubre @finder"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-# Finder
+# QA Finder
 
-Un scout para el repo: localizar código, tests, y cómo se hace algo acá.
-
-Usá **`@finder`**. Guía: [Finder](/dev-ai-workflow/agents/finder).
+En los flujos de QA no hay un agente `qa-finder` separado: la exploración la hace **`@finder`**. Guía completa: [Finder](/dev-ai-workflow/agents/finder).
 
 | Tarea | Ejemplo |
 |---|---|
 | Buscar tests | `@finder Find all tests related to auth` |
 | Código sin cobertura | `@finder What code has no tests?` |
 | Patrones | `@finder How do we write tests here?` |
+| Qué necesita testing | `@finder ¿Qué archivos no tienen cobertura?` |
+
+En el pipeline de QA Automation el orden es `@qa-analyst` → `@finder` → `@qa-dev` → `@qa-reviewer`.
+
+<Aside type="tip">
+`@finder` es read-only: ubica y resume código con rutas exactas para que `@qa-dev` no re-busque.
+</Aside>

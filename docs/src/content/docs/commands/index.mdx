@@ -7,45 +7,57 @@ import { Card, Aside } from '@astrojs/starlight/components';
 
 # Comandos CLI
 
-ywai instala y actualiza **su propio** entorno: Engram, skills, perfiles, plugins y Graft. No instala ni actualiza gentle-ai.
+ywai instala y gestiona **su propio** entorno: ecosistema gentle-ai, Engram, skills, perfiles, plugins y Graft. Ver [`ywai install --help`](https://github.com/Yoizen/dev-ai-workflow) para los flags completos.
 
 ## Quick reference
 
 | Comando | Qué hace | Cuándo usarlo |
 |---|---|---|
-| `ywai install` | Engram, skills, perfiles, plugins/Graft | Primera vez |
+| `ywai install` | Ecosistema, Engram, skills, perfiles, plugins/Graft | Primera vez |
 | `ywai update` | Binario + re-aplica todo lo que ywai gestiona | Después de una release |
-| `ywai upgrade` | Solo el binario de ywai | Si no querés re-aplicar perfiles |
 | `ywai doctor` | Diagnóstico de solo lectura | Si algo no funciona |
+| `ywai status` | Estado de la instalación y agentes detectados | Verificación rápida |
 | `ywai skills` | Lista skills extra | Ver qué hay instalado |
 | `ywai agents` | Lista agentes detectados | Verificar configuración |
-
-| `ywai kanban` | Abre el tablero visual | Monitorear agentes |
-| `ywai serve` | Inicia servidor como servicio | Servidor always-on |
+| `ywai groups` | Lista grupos de agentes | Ver core / qa-automation / experiment |
+| `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar `experiment` |
+| `ywai groups disable <name>` | Quita esos perfiles (no core) | Apagar un grupo |
+| `ywai ui` | Abre la UI en el navegador | Usar Workflows, Evals, Settings |
+| `ywai serve` | Inicia el servidor de control | Servidor always-on |
+| `ywai stop` | Detiene el servidor de fondo | Apagar el servidor |
 | `ywai mcp list` | Lista MCP en opencode.json | Ver qué está on/off |
 | `ywai mcp enable/disable <id>` | Activa o desactiva un MCP instalado | Sin desinstalar |
-| `ywai config get/set <field>` | Lee o modifica la configuración de usuario | Ej: `tokenbank_url` |
+| `ywai mcp auth <id>` | Autentica un MCP por OAuth | MCP remotos |
+| `ywai config get/set/list <key>` | Lee o modifica la configuración (`~/.ywai/config.yaml`) | Ej: `tokenbank_url` |
 | `ywai profile list` | Lista profiles de modelo (balanced/fast/deep/inherit) | Ver el activo |
 | `ywai profile use <name>` | Cambia profile y aplica modelos | `inherit` no pinea modelos |
-| `ywai groups` | Lista grupos de agentes | Ver core / qa / experiment |
-| `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar qa-exploratory, etc. |
-| `ywai groups disable <name>` | Quita esos perfiles (no core) | Apagar un grupo |
+| `ywai advisor model/off` | Modelo del segundo revisor / apagarlo | Segunda opinión por turno |
+| `ywai eval run` | Uso real de agentes/skills/modelos desde sesiones | Ver qué se usa |
+| `ywai eval bench/compare` | Correr evals contra modelos | Comparar perfiles |
+| `ywai env list/create/start` | Ambientes opencode2 aislados | `dev`, `qa`, `personal` |
+| `ywai dev/qa/personal` | Atajos: entrar al ambiente aislado | Trabajo aislado |
+| `ywai session list/start/stop` | Gestionar sesiones de desarrollo | Sesiones |
+| `ywai tokenbank setup/configure` | Usar el proxy TokenBank | URL + API key |
+| `ywai clean` | Borra artefactos de installs viejos | Limpieza |
+| `ywai uninstall` | Quita lo que ywai instaló en tus agentes | Desinstalar |
 
 ## Detalles
 
 ### `ywai install`
 
-Setup de ywai: Engram, skills extra, perfiles de agentes, plugins (incluye Graft) e init de proyecto. En OpenCode deja **solo** los agentes del grupo activo (borra leftovers en `~/.config/opencode/agents/`). El host es `opencode2`.
+Setup de ywai: ecosistema, Engram, skills extra, perfiles de agentes, plugins (incluye Graft) e init de proyecto. En OpenCode deja **solo** los agentes del grupo activo (borra leftovers en `~/.config/opencode/agents/`). El host es `opencode2`.
 
 ```bash
 ywai install                    # Instalación completa
 ywai install --dry-run          # Ver qué cambiaría
 ywai install --agent opencode   # Solo para un agente
+ywai install --all-groups       # Todos los perfiles en disco
+ywai install --group experiment # Sumar un grupo
 ```
 
-Engram se instala siempre. Los skills, perfiles de agente y plugins también.
+**Default:** `core + qa-automation`. Engram se instala siempre. Los skills, perfiles de agente y plugins también.
 
-**Flags útiles:** `--mcp` (Microsoft Learn MCP), `--ponytail` (plugin YAGNI, activado por defecto; `--ponytail=false` para omitir), `--scope global|workspace`, `--group` / `--all-groups`.
+**Flags útiles:** `--mcp` (Microsoft Learn MCP), `--meta-mcp` (Meta Developer Tools MCP), `--ponytail` (plugin YAGNI, activado por defecto; `--ponytail=false` para omitir), `--group` (repetible) / `--all-groups`.
 
 ### `ywai update`
 
@@ -65,7 +77,8 @@ ywai update --agent opencode
 4. Reinstala perfiles + `AGENTS.md` curado
 5. Re-enlaza Engram
 6. Re-cablea plugins de OpenCode y CLIs compañeras (ado, graft)
-7. Reinicia el control server **solo** si ya estaba corriendo
+7. Re-exporta los workflows instalados al host activo
+8. Reinicia el control server **solo** si ya estaba corriendo
 
 Después, reiniciá OpenCode una vez para que recargue plugins.
 
@@ -84,14 +97,35 @@ ywai doctor
 - Espacio en disco
 - Graft en PATH
 
-### `ywai serve`
-
-Inicia el servidor de control como servicio de fondo.
+### `ywai serve` / `ywai stop` / `ywai ui`
 
 ```bash
-ywai serve           # Iniciar
-ywai serve --stop    # Detener
-ywai serve --status  # Ver estado
+ywai serve               # Iniciar (bloquea la terminal)
+ywai serve -b            # Iniciar en fondo
+ywai serve -p 8080       # Otro puerto (default 5768)
+ywai stop                # Detener el servidor de fondo
+ywai ui                  # Abrir http://localhost:5768 en el navegador
+```
+
+### `ywai eval`
+
+Mide el uso real leyendo la SQLite local de OpenCode (`~/.local/share/opencode/opencode.db`). Mismos datos que la pestaña Evals de la UI.
+
+```bash
+ywai eval run                    # Ranking de agentes/skills/modelos
+ywai eval run --days 7           # Ventana de 7 días
+ywai eval sessions --project <id> --json
+```
+
+### `ywai env`
+
+Cada ambiente es un opencode2 aislado: config, DB, servicio y auth propios bajo `~/.ywai/profiles/<nombre>/`. La instalación global no se toca.
+
+```bash
+ywai env list
+ywai env bootstrap               # Crea dev, qa, personal de cero
+ywai env create qa --preset qa
+ywai dev "run the tests"         # Atajo = ywai env start dev + prompt
 ```
 
 ## Flags comunes
@@ -100,7 +134,6 @@ ywai serve --status  # Ver estado
 |---|---|---|
 | `--agent, -a` | Agente específico | `ywai install --agent opencode` |
 | `--dry-run` | Vista previa | `ywai install --dry-run` |
-| `--cwd` | Directorio de trabajo | `ywai install --cwd /mi/proyecto` |
 | `--beta` | Canal prerelease (solo update) | `ywai update --beta` |
 
 <Aside type="tip">

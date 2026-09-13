@@ -47,6 +47,7 @@ export default defineConfig({
             { label: 'Orchestrator', slug: 'agents/orchestrator' },
             { label: 'Architect', slug: 'agents/architect' },
             { label: 'Dev', slug: 'agents/dev' },
+            { label: 'Designer', slug: 'agents/designer' },
             { label: 'QA', slug: 'agents/qa' },
             { label: 'Reviewer', slug: 'agents/reviewer' },
             { label: 'DevOps', slug: 'agents/devops' },
@@ -54,11 +55,9 @@ export default defineConfig({
             { label: 'Finder', slug: 'agents/finder' },
             { label: 'Planning', slug: 'agents/planning' },
             { label: 'Memory', slug: 'agents/memory' },
-            {
-              label: 'Social Refactor',
-              items: [
-              ],
-            },
+            { label: 'Advisor', slug: 'agents/advisor' },
+            { label: 'Scenario Runner', slug: 'agents/scenario-runner' },
+            { label: 'QA Exploratory', slug: 'agents/qa-exploratory' },
             {
               label: 'QA Automation',
               items: [
@@ -84,7 +83,12 @@ export default defineConfig({
         {
           label: 'Herramientas',
           items: [
-            { label: 'Kanban Board', slug: 'kanban' },
+            { label: 'Panel de control', slug: 'kanban' },
+            { label: 'Environments', slug: 'environments' },
+            { label: 'Evals', slug: 'evals' },
+            { label: 'Memories', slug: 'memories' },
+            { label: 'MCP Store', slug: 'mcp' },
+            { label: 'Azure DevOps', slug: 'ado' },
             { label: 'Skills', slug: 'skills' },
             { label: 'Skills Reference', slug: 'skills/reference' },
             { label: 'Settings UI', slug: 'settings' },
