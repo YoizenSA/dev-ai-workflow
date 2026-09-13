@@ -157,6 +157,138 @@ func TestWorkflowsE2E_Import(t *testing.T) {
 // ─── helpers ───────────────────────────────────────────────────────────────
 
 // storeAt returns a workflows.Store rooted at dir (created lazily on write).
+func TestWorkflowsE2E_Uninstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	mux := http.NewServeMux()
+	srv := &Server{mux: mux}
+	srv.registerWorkflowsRoutes()
+	srv.workflows.store = storeAt(t, filepath.Join(home, ".ywai", "workflows"))
+	srv.workflows.exporter = exporterAt(t, filepath.Join(home, ".config", "opencode"))
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := server.Client()
+
+	// Seed one implemented workflow: design on disk + exported artifacts.
+	body := `{
+		"name": "ship",
+		"version": "1.0.0",
+		"nodes": [
+			{"id":"s","type":"start","name":"s","position":{"x":0,"y":0},"data":{"label":"Start"}},
+			{"id":"b","type":"subAgent","name":"builder","position":{"x":100,"y":0},
+			 "data":{"description":"Builds","prompt":"Build."}},
+			{"id":"e","type":"end","name":"e","position":{"x":200,"y":0},"data":{"label":"End"}}
+		],
+		"connections": [
+			{"from":"s","to":"b","fromPort":"out","toPort":"input"},
+			{"from":"b","to":"e","fromPort":"out","toPort":"in"}
+		]
+	}`
+	if resp := mustDo(t, client, "POST", server.URL+"/api/workflows", body); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if resp := mustDo(t, client, "POST", server.URL+"/api/workflows/ship/export?apply=true", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("export apply: %d %s", resp.StatusCode, readBody(resp))
+	}
+	artifacts := map[string]bool{
+		filepath.Join(home, ".config", "opencode", "commands", "ship.md"):            true,
+		filepath.Join(home, ".config", "opencode", "agents", "ship-orchestrator.md"): true,
+		filepath.Join(home, ".config", "opencode", "agents", "ship-builder.md"):      true,
+	}
+	for path := range artifacts {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("setup: %s should exist: %v", path, err)
+		}
+	}
+
+	// Uninstall removes the artifacts but keeps the design.
+	resp := mustDo(t, client, "DELETE", server.URL+"/api/workflows/ship/export", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("uninstall: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if plan := readBody(resp); !strings.Contains(plan, `"removed":true`) || !strings.Contains(plan, "ship-orchestrator.md") {
+		t.Fatalf("uninstall plan should list removed artifacts:\n%s", plan)
+	}
+	for path := range artifacts {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be gone after uninstall", path)
+		}
+	}
+	if resp = mustDo(t, client, "GET", server.URL+"/api/workflows/ship", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("design must survive uninstall: %d", resp.StatusCode)
+	}
+
+	// Delete with ?unexport=true removes design + implementation in one call.
+	if resp := mustDo(t, client, "POST", server.URL+"/api/workflows/ship/export?apply=true", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("re-export: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if resp = mustDo(t, client, "DELETE", server.URL+"/api/workflows/ship?unexport=true", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete+unexport: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if resp = mustDo(t, client, "GET", server.URL+"/api/workflows/ship", ""); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("deleted workflow should 404: %d", resp.StatusCode)
+	}
+	for path := range artifacts {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be gone after delete+unexport", path)
+		}
+	}
+}
+
+func TestWorkflowsE2E_Orphans(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	mux := http.NewServeMux()
+	srv := &Server{mux: mux}
+	srv.registerWorkflowsRoutes()
+	srv.workflows.store = storeAt(t, filepath.Join(home, ".ywai", "workflows"))
+	srv.workflows.exporter = exporterAt(t, filepath.Join(home, ".config", "opencode"))
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := server.Client()
+
+	// An orphan on disk: workflow-shaped command, no stored workflow, no agents.
+	cmdDir := filepath.Join(home, ".config", "opencode", "commands")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orphanCmd := filepath.Join(cmdDir, "feature-delivery.md")
+	if err := os.WriteFile(orphanCmd, []byte("---\ndescription: old\nagent: feature-delivery-orchestrator\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A host command that must never be reported.
+	hostCmd := filepath.Join(cmdDir, "learn-ywai.md")
+	if err := os.WriteFile(hostCmd, []byte("plain host command\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := mustDo(t, client, "GET", server.URL+"/api/workflows/orphans", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("orphans: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if body := readBody(resp); !strings.Contains(body, "feature-delivery") || strings.Contains(body, "learn-ywai") {
+		t.Fatalf("orphans should list feature-delivery only:\n%s", body)
+	}
+
+	// The generic uninstall endpoint cleans the orphan by name.
+	if resp = mustDo(t, client, "DELETE", server.URL+"/api/workflows/feature-delivery/export", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("uninstall orphan: %d %s", resp.StatusCode, readBody(resp))
+	}
+	if _, err := os.Stat(orphanCmd); !os.IsNotExist(err) {
+		t.Errorf("orphan command should be gone after uninstall")
+	}
+	if _, err := os.Stat(hostCmd); err != nil {
+		t.Errorf("host command must survive: %v", err)
+	}
+	if resp = mustDo(t, client, "GET", server.URL+"/api/workflows/orphans", ""); strings.Contains(readBody(resp), "feature-delivery") {
+		t.Fatalf("orphans should be empty after cleanup: %s", readBody(resp))
+	}
+}
+
 func storeAt(t *testing.T, dir string) *workflows.Store {
 	t.Helper()
 	return workflows.NewStore(dir)

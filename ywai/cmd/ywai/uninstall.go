@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -49,6 +51,10 @@ var uninstallCmd = &cobra.Command{
 	Short: "Remove what ywai installed into your agents",
 	Long: `Reverse a ywai install.
 
+Run it in a terminal and it asks what to remove: global artifacts by group,
+the ~/.ywai data directory, or individual environments. Scripts keep the
+classic flags: --yes runs the whole plan (plus --purge), --dry-run previews it.
+
 Removes, for every detected agent (or just --agent):
 
   - vendored plugins (vision-bridge, background-agents) and their entries
@@ -63,22 +69,27 @@ Left alone:
   - the ywai binary itself — remove it with your package manager, or
     'rm $(which ywai)'
   - gentle-ai and its ecosystem — a separate tool with its own installer
-  - ~/.ywai (config, TokenBank credentials) unless you pass --purge
+  - ~/.ywai (config, TokenBank credentials) unless you pass --purge or pick
+    it in the menu
+  - your global opencode sessions (~/.local/share/opencode) — never touched
   - anything you wrote yourself: unmanaged agents, real skill directories,
     and unrelated config keys are never touched
 
-The plan is printed and confirmed before anything is removed. Use --dry-run to
-see it without confirming, or --yes to skip the prompt in scripts.`,
+When the data directory or an environment goes away, its session database is
+archived under ~/.ywai-removed-sessions (the command asks: keep or delete),
+so removing ywai never costs you your sessions unless you say so.
+Use --discard-sessions to skip the archive in scripts.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		assumeYes, _ := cmd.Flags().GetBool("yes")
 		purge, _ := cmd.Flags().GetBool("purge")
 		profileName, _ := cmd.Flags().GetString("profile")
+		discard, _ := cmd.Flags().GetBool("discard-sessions")
 
 		// Profile scope: stop the environment's own service and delete the
 		// environment only. Global sweeps never run on this path.
 		if strings.TrimSpace(profileName) != "" {
-			return runUninstallProfile(strings.TrimSpace(profileName), dryRun, assumeYes)
+			return runUninstallProfile(strings.TrimSpace(profileName), dryRun, assumeYes, discard)
 		}
 
 		agents := detectAgents(cmd)
@@ -86,54 +97,309 @@ see it without confirming, or --yes to skip the prompt in scripts.`,
 			return fmt.Errorf("no agents detected")
 		}
 
-		plan := buildUninstallPlan(agents, purge)
-		if len(plan) == 0 {
+		envs, err := envprofile.List()
+		if err != nil {
+			envs = nil
+		}
+
+		// Interactive mode builds the plan without the purge steps: there the
+		// data directory is a menu choice, and its steps run when picked.
+		interactive := !dryRun && !assumeYes && isInteractiveTerminal()
+		plan := buildUninstallPlan(agents, purge && !interactive, discard)
+
+		if len(plan) == 0 && (dryRun || !interactive || len(envs) == 0) {
 			fmt.Println("Nothing to uninstall — no ywai artifacts found.")
 			return nil
 		}
-
-		printUninstallPlan(plan)
+		if len(plan) > 0 {
+			printUninstallPlan(plan)
+		}
 
 		if dryRun {
 			fmt.Println("\nDry run — nothing was removed.")
 			return nil
 		}
 
-		if !assumeYes {
-			if !isInteractiveTerminal() {
-				return fmt.Errorf("uninstall needs confirmation: re-run with --yes (or --dry-run to preview)")
-			}
+		if !interactive {
 			if !confirmUninstall(len(plan)) {
 				fmt.Println("Cancelled. Nothing was removed.")
 				return nil
 			}
-		}
-
-		var failed int
-		for _, r := range plan {
-			if err := r.apply(); err != nil {
-				fmt.Printf("  ✗ %s: %v\n", r.label, err)
-				failed++
-				continue
+			done, failed := runRemovals(plan)
+			fmt.Printf("\nRemoved %d of %d items.\n", done, len(plan))
+			if !purge {
+				fmt.Println("Kept ~/.ywai (config + credentials). Pass --purge to remove it too.")
 			}
-			fmt.Printf("  ✓ %s\n", r.label)
+			fmt.Println("The ywai binary is still installed: rm $(which ywai) to finish.")
+			if failed > 0 {
+				return fmt.Errorf("%d item(s) could not be removed", failed)
+			}
+			return nil
 		}
 
-		fmt.Printf("\nRemoved %d of %d items.\n", len(plan)-failed, len(plan))
-		if !purge {
-			fmt.Println("Kept ~/.ywai (config + credentials). Pass --purge to remove it too.")
-		}
-		fmt.Println("The ywai binary is still installed: rm $(which ywai) to finish.")
-
-		if failed > 0 {
-			return fmt.Errorf("%d item(s) could not be removed", failed)
-		}
-		return nil
+		return runInteractiveUninstall(plan, envs, purge, discard)
 	},
 }
 
+// runRemovals executes plan items, printing one line each. It returns how many
+// succeeded and how many failed.
+func runRemovals(plan []removal) (done, failed int) {
+	for _, r := range plan {
+		if err := r.apply(); err != nil {
+			fmt.Printf("  ✗ %s: %v\n", r.label, err)
+			failed++
+			continue
+		}
+		fmt.Printf("  ✓ %s\n", r.label)
+		done++
+	}
+	return done, failed
+}
+
+// selectedRemovals is what the interactive menu resolved to.
+type selectedRemovals struct {
+	cancelled bool
+	kinds     map[removalKind]bool // plan groups picked by kind
+	data      bool                 // the ~/.ywai data directory
+	envs      []envprofile.Profile // environments picked one by one
+}
+
+// runInteractiveUninstall asks what to remove, then removes exactly that.
+// The data-directory choice asks what happens to the environments' session
+// databases before anything is deleted.
+func runInteractiveUninstall(plan []removal, envs []envprofile.Profile, purge, discard bool) error {
+	sel, err := selectRemovalGroups(plan, envs, purge)
+	if err != nil {
+		return err
+	}
+	if sel.cancelled {
+		fmt.Println("Cancelled. Nothing was removed.")
+		return nil
+	}
+
+	// Sessions are precious: before the data directory goes away, ask whether
+	// to keep them (archived) or delete them — unless --discard-sessions or
+	// there is nothing to ask about.
+	if sel.data && !discard && hasAnyEnvSessionDB(envs) {
+		del, ok := askSessionDBFate()
+		if !ok {
+			fmt.Println("Cancelled. Nothing was removed.")
+			return nil
+		}
+		discard = del
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home: %w", err)
+	}
+	archiveBase := filepath.Join(home, removedSessionsDirName)
+
+	var done, failed int
+	if len(sel.kinds) > 0 {
+		var group []removal
+		for _, r := range plan {
+			if sel.kinds[r.kind] {
+				group = append(group, r)
+			}
+		}
+		done, failed = runRemovals(group)
+	}
+	if sel.data {
+		d, f := runRemovals(purgeRemovals(config.DataDir(), archiveBase, discard, envs))
+		done += d
+		failed += f
+	}
+	for _, p := range sel.envs {
+		if err := removeEnvironment(p, archiveBase, discard); err != nil {
+			fmt.Printf("  ✗ environment %q: %v\n", p.Name, err)
+			failed++
+			continue
+		}
+		fmt.Printf("  ✓ environment %q deleted\n", p.Name)
+		done++
+	}
+
+	fmt.Printf("\nRemoved %d item(s).\n", done)
+	if !sel.data {
+		fmt.Println("Kept ~/.ywai (config + credentials, environments).")
+	}
+	fmt.Println("The ywai binary is still installed: rm $(which ywai) to finish.")
+	if failed > 0 {
+		return fmt.Errorf("%d item(s) could not be removed", failed)
+	}
+	return nil
+}
+
+// removalChoice is one line of the interactive menu.
+type removalChoice struct {
+	id    string
+	label string
+	kind  removalKind // valid when this is a plan group
+	data  bool        // the ~/.ywai data directory
+	env   *envprofile.Profile
+}
+
+// buildRemovalMenu turns the plan plus the environments into menu lines,
+// grouped the same way printUninstallPlan groups them.
+func buildRemovalMenu(plan []removal, envs []envprofile.Profile) []removalChoice {
+	groupLabels := map[removalKind]string{
+		kindPlugin:    "vendored plugins and their config entries",
+		kindConfigRef: "ywai entries in agent configs",
+		kindAgent:     "ywai agent profiles",
+		kindSkill:     "ywai skills",
+		kindAutostart: "autostart service, control server",
+	}
+	counts := map[removalKind]int{}
+	for _, r := range plan {
+		if r.kind != kindData {
+			counts[r.kind]++
+		}
+	}
+	var menu []removalChoice
+	for _, k := range []removalKind{kindPlugin, kindConfigRef, kindAgent, kindSkill, kindAutostart} {
+		if counts[k] > 0 {
+			menu = append(menu, removalChoice{
+				id:    string(k),
+				label: fmt.Sprintf("%s (%d item(s))", groupLabels[k], counts[k]),
+				kind:  k,
+			})
+		}
+	}
+	if _, err := os.Stat(config.DataDir()); err == nil {
+		menu = append(menu, removalChoice{
+			id:    "data",
+			label: "ywai data directory ~/.ywai — config, credentials and ALL environments",
+			data:  true,
+		})
+	}
+	for _, p := range envs {
+		p := p
+		menu = append(menu, removalChoice{
+			id:    "env:" + p.Name,
+			label: fmt.Sprintf("environment %q only (preset %s, port %d)", p.Name, p.Preset, p.Port),
+			env:   &p,
+		})
+	}
+	return menu
+}
+
+// selectRemovalGroups shows the menu and reads the user's pick. --purge
+// pre-selects the data group. An empty answer cancels.
+func selectRemovalGroups(plan []removal, envs []envprofile.Profile, purge bool) (selectedRemovals, error) {
+	menu := buildRemovalMenu(plan, envs)
+	fmt.Println("\nWhat should be removed?")
+	fmt.Println("Enter numbers (space or comma separated), 'a' for everything, or press Enter to cancel:")
+	picked := map[string]bool{}
+	if purge {
+		picked["data"] = true
+	}
+	for i, c := range menu {
+		mark := " "
+		if picked[c.id] {
+			mark = "*"
+		}
+		fmt.Printf("  %s %d) %s\n", mark, i+1, c.label)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("\n> ")
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return selectedRemovals{}, fmt.Errorf("read selection: %w", err)
+		}
+		line = strings.TrimSpace(strings.ToLower(line))
+		if line == "" {
+			return selectedRemovals{cancelled: true}, nil
+		}
+		if line == "a" || line == "all" {
+			for _, c := range menu {
+				picked[c.id] = true
+			}
+			break
+		}
+		nums, perr := parseSelection(line, len(menu))
+		if perr != nil {
+			fmt.Printf("  %v — try again\n", perr)
+			continue
+		}
+		picked = map[string]bool{}
+		for _, n := range nums {
+			picked[menu[n-1].id] = true
+		}
+		break
+	}
+
+	sel := selectedRemovals{kinds: map[removalKind]bool{}}
+	for _, c := range menu {
+		if !picked[c.id] {
+			continue
+		}
+		switch {
+		case c.data:
+			sel.data = true
+		case c.env != nil:
+			sel.envs = append(sel.envs, *c.env)
+		default:
+			sel.kinds[c.kind] = true
+		}
+	}
+	return sel, nil
+}
+
+// parseSelection parses "1 3", "1,3" and "1-3" into 1-based menu indices.
+func parseSelection(line string, max int) ([]int, error) {
+	var out []int
+	for _, tok := range strings.Fields(strings.ReplaceAll(line, ",", " ")) {
+		if lo, hi, isRange := strings.Cut(tok, "-"); isRange {
+			a, e1 := strconv.Atoi(lo)
+			b, e2 := strconv.Atoi(hi)
+			if e1 != nil || e2 != nil || a < 1 || b < a || b > max {
+				return nil, fmt.Errorf("invalid range %q", tok)
+			}
+			for n := a; n <= b; n++ {
+				out = append(out, n)
+			}
+			continue
+		}
+		n, err := strconv.Atoi(tok)
+		if err != nil || n < 1 || n > max {
+			return nil, fmt.Errorf("invalid number %q (expected 1-%d)", tok, max)
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("nothing selected")
+	}
+	return out, nil
+}
+
+// askSessionDBFate asks what happens to the environments' session databases
+// when their directory goes away. ok=false means the user cancelled.
+func askSessionDBFate() (delete bool, ok bool) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("\nEnvironment session databases:\n  [k] keep them, archived under ~/%s (default)\n  [d] delete them too\n  [c] cancel\n> ", removedSessionsDirName)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return false, false
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "", "k", "keep":
+			return false, true
+		case "d", "delete":
+			return true, true
+		case "c", "cancel":
+			return false, false
+		default:
+			fmt.Println("  Answer k, d or c.")
+		}
+	}
+}
+
 // buildUninstallPlan resolves every removal without performing any of them.
-func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
+func buildUninstallPlan(agents []agent.Agent, purge, discardSessions bool) []removal {
 	var plan []removal
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -285,14 +551,12 @@ func buildUninstallPlan(agents []agent.Agent, purge bool) []removal {
 	}
 
 	if purge {
-		dir := config.DataDir()
-		if _, err := os.Stat(dir); err == nil {
-			plan = append(plan, removal{
-				kind:  kindData,
-				label: fmt.Sprintf("ywai data directory %s (config + credentials)", dir),
-				apply: func() error { return os.RemoveAll(dir) },
-			})
+		profiles, lerr := envprofile.List()
+		if lerr != nil {
+			profiles = nil
 		}
+		plan = append(plan, purgeRemovals(config.DataDir(),
+			filepath.Join(home, removedSessionsDirName), discardSessions, profiles)...)
 	}
 
 	return plan
@@ -615,22 +879,175 @@ func init() {
 	uninstallCmd.Flags().StringP("agent", "a", "", "Limit removal to one agent (default: all detected)")
 	uninstallCmd.Flags().Bool("dry-run", false, "Show what would be removed without removing it")
 	uninstallCmd.Flags().Bool("yes", false, "Skip the confirmation prompt")
-	uninstallCmd.Flags().Bool("purge", false, "Also remove ~/.ywai (config and TokenBank credentials)")
-	uninstallCmd.Flags().String("profile", "", "Remove only an isolated environment: stop its service and delete it (skips all global removal)")
+	uninstallCmd.Flags().Bool("purge", false, "Also remove ~/.ywai (config, credentials and environments; session databases archived first unless --discard-sessions)")
+	uninstallCmd.Flags().Bool("discard-sessions", false, "Delete environments' session databases instead of archiving them")
+	uninstallCmd.Flags().String("profile", "", "Remove only an isolated environment: stop its service, archive its session database, delete it (skips all global removal)")
 	rootCmd.AddCommand(uninstallCmd)
 }
 
-// runUninstallProfile stops an isolated environment's service and deletes
-// the environment directory. It never touches the global install: no agent
-// configs, no skills, no autostart, no control server, no ~/.ywai purge.
-func runUninstallProfile(name string, dryRun, assumeYes bool) error {
+// removedSessionsDirName is where removed environments' session databases are
+// kept. It lives beside ~/.ywai, never inside it, so --purge cannot take the
+// archive down together with the rest of the data directory.
+const removedSessionsDirName = ".ywai-removed-sessions"
+
+// envSessionDBPath returns an environment's opencode session database path.
+func envSessionDBPath(p envprofile.Profile) string {
+	return filepath.Join(envprofile.Dirs(p)["data"], "opencode", "opencode.db")
+}
+
+// hasAnyEnvSessionDB reports whether any environment still holds a session
+// database — the case that makes the keep-or-delete question worth asking.
+func hasAnyEnvSessionDB(profiles []envprofile.Profile) bool {
+	for _, p := range profiles {
+		if _, err := os.Stat(envSessionDBPath(p)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// anyUnarchivedSessionDB scans the profiles tree directly, manifest or not, so
+// the purge never walks past a session database it cannot name.
+func anyUnarchivedSessionDB() bool {
+	root := envprofile.ProfilesDir()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, e.Name(), "data", "opencode", "opencode.db")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// archiveEnvSessionDBInto moves one environment's session database and its
+// SQLite sidecars into base/<env>-<timestamp>/. No database means nothing to
+// keep ("", nil). A missing sidecar is fine; a failing main database move is
+// an error, and callers must treat it as "do not delete anything".
+func archiveEnvSessionDBInto(base string, p envprofile.Profile) (string, error) {
+	src := envSessionDBPath(p)
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("stat %s: %w", src, err)
+	}
+	stamp := time.Now().Format("20060102-150405")
+	dst := filepath.Join(base, fmt.Sprintf("%s-%s", p.Name, stamp))
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		return "", fmt.Errorf("create archive dir: %w", err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		from := src + suffix
+		if err := os.Rename(from, filepath.Join(dst, "opencode.db"+suffix)); err != nil {
+			if os.IsNotExist(err) && suffix != "" {
+				continue
+			}
+			return "", fmt.Errorf("archive %s: %w", from, err)
+		}
+	}
+	return dst, nil
+}
+
+// purgeRemovals builds the end-of-life steps for the ywai data directory:
+// stop every environment service (Windows holds deleted SQLite files open),
+// archive their session databases unless --discard-sessions, then remove the
+// directory. The archive always precedes the purge, and the purge itself
+// refuses to run while an un-archived session database remains — a failed
+// archive must never turn into lost sessions.
+func purgeRemovals(dataDir, archiveBase string, discardSessions bool, profiles []envprofile.Profile) []removal {
+	var out []removal
+	if len(profiles) > 0 {
+		profiles := profiles
+		out = append(out, removal{
+			kind:  kindAutostart,
+			label: fmt.Sprintf("%d environment service(s) (stopped)", len(profiles)),
+			apply: func() error {
+				for _, p := range profiles {
+					if err := envprofile.Stop(p); err != nil {
+						return fmt.Errorf("stop environment %q: %w", p.Name, err)
+					}
+				}
+				return nil
+			},
+		})
+	}
+	if !discardSessions && len(profiles) > 0 {
+		out = append(out, removal{
+			kind:  kindData,
+			label: fmt.Sprintf("environment session databases (kept under ~/%s)", removedSessionsDirName),
+			apply: func() error {
+				for _, p := range profiles {
+					dst, err := archiveEnvSessionDBInto(archiveBase, p)
+					if err != nil {
+						return err
+					}
+					if dst != "" {
+						fmt.Printf("  ✓ %s sessions → %s\n", p.Name, dst)
+					}
+				}
+				return nil
+			},
+		})
+	}
+	out = append(out, removal{
+		kind:  kindData,
+		label: fmt.Sprintf("ywai data directory %s (config + credentials + environments)", dataDir),
+		apply: func() error {
+			if !discardSessions && anyUnarchivedSessionDB() {
+				return fmt.Errorf("un-archived environment session databases remain — purge aborted to protect them; resolve the archive failure and retry")
+			}
+			return os.RemoveAll(dataDir)
+		},
+	})
+	return out
+}
+
+// removeEnvironment stops an environment's service, keeps (archives) or
+// discards its session database, and deletes the environment directory.
+func removeEnvironment(p envprofile.Profile, archiveBase string, discardSessions bool) error {
+	if err := envprofile.Stop(p); err != nil {
+		return fmt.Errorf("could not stop environment %q: %w", p.Name, err)
+	}
+	if !discardSessions {
+		dst, err := archiveEnvSessionDBInto(archiveBase, p)
+		if err != nil {
+			return fmt.Errorf("session database not archived — deletion aborted: %w", err)
+		}
+		if dst != "" {
+			fmt.Printf("  ✓ session database archived to %s\n", dst)
+		}
+	} else {
+		fmt.Printf("  ! session database deleted (--discard-sessions)\n")
+	}
+	if err := envprofile.Delete(p.Name); err != nil {
+		return fmt.Errorf("could not delete environment %q: %w", p.Name, err)
+	}
+	return nil
+}
+
+// runUninstallProfile removes one isolated environment. It never touches the
+// global install: no agent configs, no skills, no autostart, no control
+// server, no ~/.ywai purge.
+func runUninstallProfile(name string, dryRun, assumeYes, discardSessions bool) error {
 	p, err := envprofile.Get(name)
 	if err != nil {
 		return fmt.Errorf("unknown environment %q: %w", name, err)
 	}
 
 	fmt.Println("=== ywai uninstall ===")
-	fmt.Printf("\nThe following environment will be removed:\n\n  - %s (preset %s, port %d)\n\n", p.Name, p.Preset, p.Port)
+	fmt.Printf("\nThe following environment will be removed:\n\n  - %s (preset %s, port %d)\n", p.Name, p.Preset, p.Port)
+	if discardSessions {
+		fmt.Println("Its session database will be deleted (--discard-sessions).")
+	} else {
+		fmt.Printf("Its session database is kept: archived under ~/%s.\n", removedSessionsDirName)
+	}
+	fmt.Println()
 
 	if dryRun {
 		fmt.Println("Dry run — nothing was removed.")
@@ -648,12 +1065,12 @@ func runUninstallProfile(name string, dryRun, assumeYes bool) error {
 		}
 	}
 
-	if err := envprofile.Stop(p); err != nil {
-		return fmt.Errorf("could not stop environment %q: %w", p.Name, err)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home: %w", err)
 	}
-	fmt.Printf("  ✓ environment %q service stopped\n", p.Name)
-	if err := envprofile.Delete(p.Name); err != nil {
-		return fmt.Errorf("could not delete environment %q: %w", p.Name, err)
+	if err := removeEnvironment(p, filepath.Join(home, removedSessionsDirName), discardSessions); err != nil {
+		return err
 	}
 	fmt.Printf("  ✓ environment %q deleted\n", p.Name)
 	return nil

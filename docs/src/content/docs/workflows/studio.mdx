@@ -52,6 +52,15 @@ Click "Export" → Se crea el command en opencode
 
 Esos `.md` van a `~/.config/opencode/agents/`. Un `ywai install` posterior deja solo el grupo activo: un workflow exportado hay que volver a exportarlo, o guardarlo en `.opencode/agents/` del repo.
 
+## Desinstalar o eliminar
+
+- **Uninstall** (icono de goma, grupo Export): borra el slash command `/nombre` y sus agentes del destino elegido (target + env), sin tocar el diseño. El diseño queda en el Studio para re-exportarlo cuando quieras.
+- **🗑️ Delete**: borra el diseño **y también** la implementación exportada (pide confirmación). Si exportaste a un env o a otro host, seleccioná ese destino antes de usar Uninstall; Delete desinstala del scope activo de la request.
+
+### Huérfanos
+
+Si borraste un workflow **antes** de que existiera Uninstall, su `/command` puede seguir vivo sin diseño detrás. El Studio lo detecta y muestra un banner: *"Implemented without a design: ..."*. El botón **Clean up** los desinstala de una vez. La detección solo marca commands con forma de workflow (`agent: <nombre>-orchestrator`), nunca los commands propios de ywai ni del host.
+
 ## Validación
 
 El sistema verifica:

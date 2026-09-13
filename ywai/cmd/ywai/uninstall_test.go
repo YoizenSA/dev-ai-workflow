@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 )
 
 // uninstall deletes files. Every predicate below decides whether something is
@@ -379,5 +381,201 @@ func TestYwaiProfileFilesIn_IgnoresUnknownAgents(t *testing.T) {
 		if filepath.Base(path) == "my-own-agent.md" || filepath.Base(path) == "notes.txt" {
 			t.Errorf("must not claim %s", path)
 		}
+	}
+}
+
+// --- sessions survive uninstall ---
+
+// makeEnvWithDB creates a real profile (temp profiles root required) holding a
+// fake session database with sidecars, the shape opencode leaves on disk.
+func makeEnvWithDB(t *testing.T, name string) envprofile.Profile {
+	t.Helper()
+	p, err := envprofile.Create(name, "dev")
+	if err != nil {
+		t.Fatalf("create env %s: %v", name, err)
+	}
+	dbDir := filepath.Join(envprofile.Dirs(p)["data"], "opencode")
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"opencode.db", "opencode.db-wal", "opencode.db-shm"} {
+		if err := os.WriteFile(filepath.Join(dbDir, f), []byte("db"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return p
+}
+
+func TestArchiveEnvSessionDBInto_MovesDBAndSidecars(t *testing.T) {
+	envprofile.SetProfilesRootForTest(t.TempDir())
+	p := makeEnvWithDB(t, "dev")
+	base := t.TempDir()
+
+	dst, err := archiveEnvSessionDBInto(base, p)
+	if err != nil || dst == "" {
+		t.Fatalf("archive: dst=%q err=%v", dst, err)
+	}
+	for _, f := range []string{"opencode.db", "opencode.db-wal", "opencode.db-shm"} {
+		if _, err := os.Stat(filepath.Join(dst, f)); err != nil {
+			t.Errorf("%s not archived: %v", f, err)
+		}
+	}
+	if _, err := os.Stat(envSessionDBPath(p)); !os.IsNotExist(err) {
+		t.Error("the original database must be gone after archiving")
+	}
+}
+
+func TestArchiveEnvSessionDBInto_NoDatabaseIsNoOp(t *testing.T) {
+	envprofile.SetProfilesRootForTest(t.TempDir())
+	p, err := envprofile.Create("dev", "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := t.TempDir()
+
+	dst, err := archiveEnvSessionDBInto(base, p)
+	if err != nil || dst != "" {
+		t.Fatalf("an env without a database has nothing to keep, got dst=%q err=%v", dst, err)
+	}
+	if entries, _ := os.ReadDir(base); len(entries) != 0 {
+		t.Errorf("no archive directory should be created, got %v", entries)
+	}
+}
+
+func TestPurgeRemovals_KeepsSessionsThenPurges(t *testing.T) {
+	dataDir := t.TempDir()
+	envprofile.SetProfilesRootForTest(filepath.Join(dataDir, "profiles"))
+	p := makeEnvWithDB(t, "dev")
+	base := t.TempDir()
+
+	removals := purgeRemovals(dataDir, base, false, []envprofile.Profile{p})
+	if len(removals) != 3 {
+		t.Fatalf("want stop, archive and purge steps, got %d", len(removals))
+	}
+	// Order is the guarantee: archive before the directory removal.
+	if removals[1].kind != kindData || removals[2].kind != kindData {
+		t.Fatalf("expected the two data steps last, got %s then %s", removals[1].label, removals[2].label)
+	}
+	for _, r := range removals {
+		if err := r.apply(); err != nil {
+			t.Fatalf("step %q: %v", r.label, err)
+		}
+	}
+
+	hits, err := filepath.Glob(filepath.Join(base, "dev-*", "opencode.db"))
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("archived session db not found: hits=%v err=%v", hits, err)
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("data directory still present after purge: %v", err)
+	}
+}
+
+func TestPurgeRemovals_RefusesPurgeWhenArchiveFails(t *testing.T) {
+	dataDir := t.TempDir()
+	envprofile.SetProfilesRootForTest(filepath.Join(dataDir, "profiles"))
+	p := makeEnvWithDB(t, "qa")
+	// A file where the archive directory must be created makes every move fail.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removals := purgeRemovals(dataDir, blocker, false, []envprofile.Profile{p})
+	if err := removals[0].apply(); err != nil {
+		t.Fatalf("stop step: %v", err)
+	}
+	if err := removals[1].apply(); err == nil {
+		t.Fatal("archive step should have failed")
+	}
+	if err := removals[2].apply(); err == nil {
+		t.Fatal("purge must refuse while sessions are un-archived")
+	}
+	if _, err := os.Stat(envSessionDBPath(p)); err != nil {
+		t.Fatalf("the session database must survive a failed archive: %v", err)
+	}
+}
+
+func TestPurgeRemovals_DiscardDeletesSessions(t *testing.T) {
+	dataDir := t.TempDir()
+	envprofile.SetProfilesRootForTest(filepath.Join(dataDir, "profiles"))
+	p := makeEnvWithDB(t, "dev")
+	base := t.TempDir()
+
+	removals := purgeRemovals(dataDir, base, true, []envprofile.Profile{p})
+	if len(removals) != 2 {
+		t.Fatalf("discard must skip the archive step, got %d steps", len(removals))
+	}
+	for _, r := range removals {
+		if err := r.apply(); err != nil {
+			t.Fatalf("step %q: %v", r.label, err)
+		}
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("data directory still present: %v", err)
+	}
+}
+
+func TestPurgeRemovals_GuardsManifestlessEnvs(t *testing.T) {
+	// A directory without a manifest (crash mid-create, manual tampering) must
+	// still block the purge: the tree scan, not the manifest list, decides.
+	dataDir := t.TempDir()
+	envprofile.SetProfilesRootForTest(filepath.Join(dataDir, "profiles"))
+	orphanDB := filepath.Join(dataDir, "profiles", "orphan", "data", "opencode")
+	if err := os.MkdirAll(orphanDB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(orphanDB, "opencode.db"), []byte("db"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removals := purgeRemovals(dataDir, t.TempDir(), false, nil)
+	if len(removals) != 1 {
+		t.Fatalf("no environments means a single purge step, got %d", len(removals))
+	}
+	if err := removals[0].apply(); err == nil {
+		t.Fatal("purge must refuse while an orphaned session database remains")
+	}
+	if _, err := os.Stat(filepath.Join(orphanDB, "opencode.db")); err != nil {
+		t.Fatalf("orphaned sessions must survive: %v", err)
+	}
+}
+
+func TestParseSelection_NumbersRangesAndErrors(t *testing.T) {
+	nums, err := parseSelection("1 3", 5)
+	if err != nil || len(nums) != 2 || nums[0] != 1 || nums[1] != 3 {
+		t.Fatalf("parseSelection(\"1 3\") = %v, %v", nums, err)
+	}
+	nums, err = parseSelection("2,4", 5)
+	if err != nil || len(nums) != 2 || nums[0] != 2 || nums[1] != 4 {
+		t.Fatalf("parseSelection(\"2,4\") = %v, %v", nums, err)
+	}
+	nums, err = parseSelection("2-4", 5)
+	if err != nil || len(nums) != 3 || nums[0] != 2 || nums[2] != 4 {
+		t.Fatalf("parseSelection(\"2-4\") = %v, %v", nums, err)
+	}
+	for _, bad := range []string{"0", "6", "x", "3-x", ""} {
+		if _, err := parseSelection(bad, 5); err == nil {
+			t.Errorf("parseSelection(%q) must fail", bad)
+		}
+	}
+}
+
+func TestRunUninstallProfile_ArchivesSessionDB(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	envprofile.SetProfilesRootForTest(t.TempDir())
+	makeEnvWithDB(t, "dev")
+
+	if err := runUninstallProfile("dev", false, true, false); err != nil {
+		t.Fatalf("runUninstallProfile: %v", err)
+	}
+	if envprofile.Exists("dev") {
+		t.Error("environment must be gone")
+	}
+	hits, err := filepath.Glob(filepath.Join(home, removedSessionsDirName, "dev-*", "opencode.db"))
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("session database not archived under the home: hits=%v err=%v", hits, err)
 	}
 }

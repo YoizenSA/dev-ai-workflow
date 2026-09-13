@@ -44,6 +44,7 @@ import {
 	Square,
 	Pencil,
 	CornerUpLeft,
+	Eraser,
 } from 'lucide-react'
 import { useWorkflowStore, disconnectEdgeId } from '../../stores/workflowStore'
 import { getConfigProfileScope } from '../../api/client'
@@ -159,6 +160,9 @@ function WorkflowEditorInner() {
 	const renameCurrent = useWorkflowStore((s) => s.renameCurrent)
 	const validateCurrent = useWorkflowStore((s) => s.validateCurrent)
 	const exportCurrent = useWorkflowStore((s) => s.exportCurrent)
+	const uninstallCurrent = useWorkflowStore((s) => s.uninstallCurrent)
+	const uninstallName = useWorkflowStore((s) => s.uninstallName)
+	const orphans = useWorkflowStore((s) => s.orphans)
 	const clearExport = useWorkflowStore((s) => s.clearExport)
 	const clearError = useWorkflowStore((s) => s.clearError)
 	const selectNode = useWorkflowStore((s) => s.selectNode)
@@ -798,6 +802,22 @@ function WorkflowEditorInner() {
 							</button>
 						)
 					})}
+					{/* Uninstall: removes the exported command + agents for the selected
+					    target/env, keeping the design in the Studio. */}
+					<button
+						className="btn btn-icon danger"
+						onClick={() => {
+							if (!current) return
+							const where = `${targetMeta?.label ?? exportTarget}${envExport ? ` (env ${exportEnv})` : ''}`
+							if (!window.confirm(`Uninstall the exported /${current.name} command and its agents from ${where}? The workflow design is kept.`)) return
+							uninstallCurrent(exportTarget, envExport ? exportEnv : '')
+						}}
+						disabled={!current || exporting}
+						data-tip={current ? 'Remove the exported command + agents (keeps the design)' : ''}
+						aria-label="Uninstall exported workflow"
+					>
+						<Eraser />
+					</button>
 				</div>
 
 				<span className="wf-tb-sep" />
@@ -914,12 +934,17 @@ function WorkflowEditorInner() {
 					<Pencil />
 				</button>
 
-				{/* Destructive — isolated */}
+				{/* Destructive — isolated. Deleting also uninstalls the exported
+				    implementation so no orphan /<name> survives. */}
 				<button
 					className="btn btn-icon danger"
-					onClick={() => deleteCurrent()}
+					onClick={() => {
+						if (!current) return
+						if (!window.confirm(`Delete workflow "${current.name}"? This also removes its exported /${current.name} command and agents.`)) return
+						deleteCurrent()
+					}}
 					disabled={!current}
-					data-tip={current ? 'Delete workflow' : ''}
+					data-tip={current ? 'Delete workflow (and its exported files)' : ''}
 					aria-label="Delete workflow"
 				>
 					<Trash2 />
@@ -933,6 +958,29 @@ function WorkflowEditorInner() {
 					<span>{error}</span>
 					<button className="btn btn-icon" onClick={clearError}>
 						<X size={12} />
+					</button>
+				</div>
+			)}
+
+			{/* Orphaned implementations: exported to the host but the design is
+			    gone (deletes made before uninstall existed). One click cleans all. */}
+			{orphans.length > 0 && (
+				<div className="validation-issue warning" data-tour="orphans">
+					<AlertTriangle size={14} />
+					<span>
+						Implemented without a design: <strong>{orphans.join(', ')}</strong>. Their /commands still work against stale agents.
+					</span>
+					<button
+						className="btn btn-sm"
+						onClick={() => {
+							const where = `${targetMeta?.label ?? exportTarget}${envExport ? ` (env ${exportEnv})` : ''}`
+							if (!window.confirm(`Uninstall ${orphans.length} orphaned implementation(s) from ${where}? Files removed: ${orphans.join(', ')}.`)) return
+							orphans.forEach((o) => uninstallName(o, exportTarget, envExport ? exportEnv : ''))
+						}}
+						disabled={exporting}
+						data-tip="Remove the leftover /commands and agents"
+					>
+						<Eraser size={12} /> Clean up
 					</button>
 				</div>
 			)}
@@ -1123,16 +1171,18 @@ function WorkflowEditorInner() {
 				</div>
 			</Modal>
 
-			{/* Export plan modal */}
-			<Modal open={!!exportPlan} onClose={clearExport} title={`Export plan — ${exportPlan?.workflowName ?? ''}`} width="640px">
+			{/* Export plan modal (also reused for uninstall results) */}
+			<Modal open={!!exportPlan} onClose={clearExport} title={`${exportPlan?.removed ? 'Uninstalled' : 'Export plan'} — ${exportPlan?.workflowName ?? ''}`} width="640px">
 				{exportPlan && (
 					<div className="export-plan">
 						<p>
-							{exportPlan.dryRun
-								? `Dry-run preview. These files would be written for ${exportWhere}:`
-								: `✅ Files written to ${exportWhere}. Restart ${targetMeta?.label ?? exportTarget}${envExport ? ` (ywai ${exportEnv})` : ''} to pick them up.`}
+							{exportPlan.removed
+								? `🗑️ Removed ${(exportPlan.files ?? []).length} file${(exportPlan.files ?? []).length === 1 ? '' : 's'} from ${exportWhere}. Restart ${targetMeta?.label ?? exportTarget}${envExport ? ` (ywai ${exportEnv})` : ''} so the change takes effect.`
+								: exportPlan.dryRun
+									? `Dry-run preview. These files would be written for ${exportWhere}:`
+									: `✅ Files written to ${exportWhere}. Restart ${targetMeta?.label ?? exportTarget}${envExport ? ` (ywai ${exportEnv})` : ''} to pick them up.`}
 						</p>
-						{exportPlan.dryRun && exportPlan.estimatedTokens > 0 && (
+						{!exportPlan.removed && exportPlan.dryRun && exportPlan.estimatedTokens > 0 && (
 							<p className="wf-token-hint">
 								Estimated orchestrator prompt size: <strong>≈ {exportPlan.estimatedTokens.toLocaleString()} tokens</strong>
 								{exportPlan.estimatedTokens > 30000 && (
@@ -1148,13 +1198,15 @@ function WorkflowEditorInner() {
 						))}
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
 							<button className="btn" onClick={clearExport}>Close</button>
-							<button
-								className="btn btn-primary"
-								onClick={() => exportCurrent(true, exportTarget, envExport ? exportEnv : '')}
-								disabled={exporting}
-							>
-								<RefreshCw size={14} /> {exportPlan.dryRun ? 'Apply (write files)' : 'Re-export'}
-							</button>
+							{!exportPlan.removed && (
+								<button
+									className="btn btn-primary"
+									onClick={() => exportCurrent(true, exportTarget, envExport ? exportEnv : '')}
+									disabled={exporting}
+								>
+									<RefreshCw size={14} /> {exportPlan.dryRun ? 'Apply (write files)' : 'Re-export'}
+								</button>
+							)}
 						</div>
 					</div>
 				)}

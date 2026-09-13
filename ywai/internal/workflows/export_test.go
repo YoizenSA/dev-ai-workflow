@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
 
 func newExporterWithDirs(commandsDir, agentsDir string) *Exporter {
@@ -528,5 +530,153 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 		if !strings.Contains(agentMD, want) {
 			t.Errorf("exported linked agent missing %q", want)
 		}
+	}
+}
+
+// writeAgentFile drops a minimal agent markdown so Uninstall tests do not need
+// the full Apply pipeline (which pulls embedded sections).
+func writeAgentFile(t *testing.T, dir, base string) string {
+	t.Helper()
+	path := filepath.Join(dir, base+".md")
+	if err := os.WriteFile(path, []byte("---\ndescription: "+base+"\n---\nbody\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", base, err)
+	}
+	return path
+}
+
+func TestUninstallRemovesExportedArtifacts(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	cmd := writeAgentFile(t, commandsDir, "ship")
+	orch := writeAgentFile(t, agentsDir, "ship-orchestrator")
+	scout := writeAgentFile(t, agentsDir, "ship-scout")
+	if err := agents.MergeGroupSidecar(agentsDir, map[string]string{
+		"ship-orchestrator": "ship",
+		"ship-scout":        "ship",
+	}); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+
+	removed, err := e.Uninstall("ship")
+	if err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if len(removed) != 3 {
+		t.Fatalf("removed %d artifacts, want 3: %+v", len(removed), removed)
+	}
+	for _, path := range []string{cmd, orch, scout} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s still exists after uninstall", path)
+		}
+	}
+	if got := agents.ReadGroupSidecar(agentsDir, "ship-orchestrator"); got != "" {
+		t.Errorf("sidecar still lists ship-orchestrator in group %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, agents.GroupSidecarFile)); !os.IsNotExist(err) {
+		t.Errorf("sidecar should be gone once its last entry is removed")
+	}
+}
+
+func TestUninstallProtectsSiblingWorkflow(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	writeAgentFile(t, commandsDir, "ship")
+	writeAgentFile(t, agentsDir, "ship-orchestrator")
+	sibling := writeAgentFile(t, agentsDir, "ship-2-orchestrator")
+	if err := agents.MergeGroupSidecar(agentsDir, map[string]string{
+		"ship-orchestrator":   "ship",
+		"ship-2-orchestrator": "ship-2",
+	}); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+
+	if _, err := e.Uninstall("ship"); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if _, err := os.Stat(sibling); err != nil {
+		t.Errorf("sibling workflow agent ship-2-orchestrator must survive: %v", err)
+	}
+	if got := agents.ReadGroupSidecar(agentsDir, "ship-2-orchestrator"); got != "ship-2" {
+		t.Errorf("sibling sidecar entry = %q, want ship-2", got)
+	}
+}
+
+func TestUninstallPrefixFallbackWithoutSidecar(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	// Non-opencode targets carry no group sidecar, so membership falls back to
+	// the "<name>-" filename prefix.
+	e := newExporterWithDirsForTarget(commandsDir, agentsDir, TargetClaudeCode)
+
+	cmd := writeAgentFile(t, commandsDir, "ship")
+	orch := writeAgentFile(t, agentsDir, "ship-orchestrator")
+	scout := writeAgentFile(t, agentsDir, "ship-scout")
+
+	removed, err := e.Uninstall("ship")
+	if err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if len(removed) != 3 {
+		t.Fatalf("removed %d artifacts, want 3: %+v", len(removed), removed)
+	}
+	for _, path := range []string{cmd, orch, scout} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s still exists after uninstall", path)
+		}
+	}
+}
+
+func TestUninstallUnknownWorkflowIsNoop(t *testing.T) {
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
+	removed, err := e.Uninstall("never-exported")
+	if err != nil {
+		t.Fatalf("Uninstall of unknown workflow: %v", err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("expected no removals, got %+v", removed)
+	}
+	if _, err := e.Uninstall("Bad Name"); err == nil {
+		t.Fatal("expected ErrInvalidName for a name with spaces")
+	}
+}
+
+func TestOrphansDetectsOnlyWorkflowShapedCommands(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	// An orphan: workflow-shaped command with no stored design.
+	writeCommandFile(t, commandsDir, "feature-delivery",
+		"---\ndescription: old\nagent: feature-delivery-orchestrator\n---\nbody\n")
+	// A live workflow's command is never an orphan.
+	writeCommandFile(t, commandsDir, "ship",
+		"---\ndescription: live\nagent: ship-orchestrator\n---\nbody\n")
+	// Host commands without the workflow shape are ignored.
+	writeCommandFile(t, commandsDir, "learn-ywai", "plain host command, no frontmatter\n")
+
+	orphans, err := e.Orphans(map[string]bool{"ship": true})
+	if err != nil {
+		t.Fatalf("Orphans: %v", err)
+	}
+	if len(orphans) != 1 || orphans[0] != "feature-delivery" {
+		t.Fatalf("orphans = %v, want [feature-delivery]", orphans)
+	}
+
+	// Missing commands dir is not an error.
+	empty := newExporterWithDirs(t.TempDir(), t.TempDir())
+	if got, err := empty.Orphans(nil); err != nil || len(got) != 0 {
+		t.Fatalf("Orphans on missing dir = %v, %v; want empty, nil", got, err)
+	}
+}
+
+// writeCommandFile drops a command markdown for Orphans tests.
+func writeCommandFile(t *testing.T, dir, base, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, base+".md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write command %s: %v", base, err)
 	}
 }

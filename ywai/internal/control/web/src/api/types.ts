@@ -631,6 +631,8 @@ export interface WorkflowExportPlan {
 	/** Rough orchestrator prompt size (chars/4 heuristic). 0 when not computed. */
 	estimatedTokens: number;
 	dryRun: boolean;
+	/** True on an uninstall result: `files` are the artifacts that were deleted. */
+	removed?: boolean;
 }
 
 // ─── Slash command options (A1) ────────────────────────────────────────────

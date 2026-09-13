@@ -603,12 +603,33 @@ export const workflowApi = {
 			method: "PUT",
 			body: JSON.stringify(wf),
 		}),
-	delete: (name: string) => del(`/api/workflows/${name}`),
+	// Delete the stored workflow. unexport (default true) also removes the
+	// exported implementation — the /<name> command and its agents — so the
+	// delete leaves no orphans behind.
+	delete: (name: string, unexport = true) =>
+		del(`/api/workflows/${name}${unexport ? '?unexport=true' : ''}`),
 	rename: (oldName: string, newName: string) =>
 		request<Workflow>(`/api/workflows/${oldName}`, {
 			method: "PATCH",
 			body: JSON.stringify({ name: newName }),
 		}),
+
+	// Implemented workflows whose design no longer exists (leftovers of deletes
+	// made before uninstall existed). Clean each with uninstall(name).
+	orphans: () => request<{ orphans: string[] }>("/api/workflows/orphans"),
+
+	// Uninstall the exported artifacts (slash command + agents) for the given
+	// target/env, keeping the stored design. Returns the removed file list.
+	uninstall: (name: string, target = "opencode", profile?: string) => {
+		const params = new URLSearchParams();
+		if (target && target !== "opencode") params.set("target", target);
+		if (profile !== undefined) params.set("profile", profile);
+		const qs = params.toString();
+		return request<WorkflowExportPlan>(
+			`/api/workflows/${name}/export${qs ? `?${qs}` : ""}`,
+			{ method: "DELETE" },
+		);
+	},
 
 	// Import  JSON. Accepts raw JSON or {json, name}.
 	import: (raw: unknown, name?: string) =>

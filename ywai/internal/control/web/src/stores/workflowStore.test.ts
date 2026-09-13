@@ -13,6 +13,8 @@ vi.mock("../api/client", () => ({
 		import: vi.fn(),
 		validate: vi.fn(),
 		export: vi.fn(),
+		uninstall: vi.fn(),
+		orphans: vi.fn(),
 		aiEdit: vi.fn(),
 		run: vi.fn(),
 	},
@@ -29,6 +31,8 @@ const mockApi = workflowApi as unknown as {
 	import: ReturnType<typeof vi.fn>;
 	validate: ReturnType<typeof vi.fn>;
 	export: ReturnType<typeof vi.fn>;
+	uninstall: ReturnType<typeof vi.fn>;
+	orphans: ReturnType<typeof vi.fn>;
 	aiEdit: ReturnType<typeof vi.fn>;
 	run: ReturnType<typeof vi.fn>;
 };
@@ -63,10 +67,12 @@ beforeEach(() => {
 		validation: null,
 		exportPlan: null,
 		exporting: false,
+		orphans: [],
 		selectedNodeId: null,
 		chatError: null,
 		aiEditing: false,
 	});
+	mockApi.orphans.mockResolvedValue({ orphans: [] });
 });
 
 describe("list", () => {
@@ -225,6 +231,45 @@ describe("exportCurrent", () => {
 		// "" means global explicitly (overrides the Settings scope).
 		await useWorkflowStore.getState().exportCurrent(false, "opencode", "");
 		expect(mockApi.export).toHaveBeenLastCalledWith("w", false, "opencode", "");
+	});
+});
+
+describe("uninstallCurrent", () => {
+	it("stores the removed-file plan and passes target/env through", async () => {
+		useWorkflowStore.setState({ current: WORKFLOW });
+		mockApi.uninstall.mockResolvedValue({
+			workflowName: "w",
+			files: [{ path: "/cmd/w.md", kind: "command", name: "w" }],
+			dryRun: false,
+			removed: true,
+		});
+		await useWorkflowStore.getState().uninstallCurrent("opencode", "dev");
+		expect(mockApi.uninstall).toHaveBeenCalledWith("w", "opencode", "dev");
+		const plan = useWorkflowStore.getState().exportPlan;
+		expect(plan?.removed).toBe(true);
+		expect(plan?.files).toHaveLength(1);
+	});
+
+	it("does nothing without a current workflow", async () => {
+		await useWorkflowStore.getState().uninstallCurrent();
+		expect(mockApi.uninstall).not.toHaveBeenCalled();
+	});
+
+	it("uninstallName cleans a named orphan and refreshes the list", async () => {
+		mockApi.uninstall.mockResolvedValue({
+			workflowName: "feature-delivery",
+			files: [],
+			dryRun: false,
+			removed: true,
+		});
+		mockApi.orphans
+			.mockResolvedValueOnce({ orphans: ["feature-delivery"] })
+			.mockResolvedValueOnce({ orphans: [] });
+		await useWorkflowStore.getState().loadOrphans();
+		expect(useWorkflowStore.getState().orphans).toEqual(["feature-delivery"]);
+		await useWorkflowStore.getState().uninstallName("feature-delivery");
+		expect(mockApi.uninstall).toHaveBeenCalledWith("feature-delivery", "opencode", undefined);
+		expect(useWorkflowStore.getState().orphans).toEqual([]);
 	});
 });
 

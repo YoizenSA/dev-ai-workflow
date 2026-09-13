@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,9 @@ type ExportPlan struct {
 	// before exporting.
 	EstimatedTokens int  `json:"estimatedTokens"`
 	DryRun          bool `json:"dryRun"`
+	// Removed marks an uninstall result: Files are the artifacts that were
+	// deleted, not written.
+	Removed bool `json:"removed,omitempty"`
 }
 
 // Export targets. opencode renders agents with opencode permission blocks under
@@ -783,4 +787,130 @@ func (e *Exporter) RemoveCommand(name string) error {
 		return err
 	}
 	return nil
+}
+
+// Uninstall removes the exported artifacts of one workflow: its slash command
+// file and every agent file that belongs to it (orchestrator + sub-agents,
+// which all share the "<name>-" filename prefix). For the opencode target the
+// group sidecar decides membership exactly when it lists this workflow, so
+// uninstalling "ship" never touches a sibling workflow's "ship-2-orchestrator";
+// other targets and legacy exports without sidecar entries fall back to the
+// prefix. Returns the removed artifacts, sorted by path.
+func (e *Exporter) Uninstall(name string) ([]ExportArtifact, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
+
+	var removed []ExportArtifact
+
+	// 1. The slash command (the /<name> entry point).
+	cmdPath := filepath.Join(e.commandsDir, name+".md")
+	if err := os.Remove(cmdPath); err == nil {
+		removed = append(removed, ExportArtifact{Path: cmdPath, Kind: "command", Name: name})
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("remove %s: %w", cmdPath, err)
+	}
+
+	// 2. The agents: <name>-orchestrator plus every <name>-<sub-agent>.
+	entries, err := os.ReadDir(e.agentsDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read agents dir: %w", err)
+	}
+	// The sidecar (opencode only) records which agent belongs to which
+	// workflow. When it lists this workflow, trust only it.
+	groups := e.readAgentGroups()
+	known := false
+	for _, group := range groups {
+		if group == name {
+			known = true
+			break
+		}
+	}
+	prefix := name + "-"
+	var ungroup []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		base := strings.TrimSuffix(entry.Name(), ".md")
+		if !strings.HasPrefix(base, prefix) {
+			continue
+		}
+		if known && groups[base] != name {
+			continue // belongs to a sibling workflow such as <name>-2
+		}
+		path := filepath.Join(e.agentsDir, entry.Name())
+		if err := os.Remove(path); err == nil {
+			removed = append(removed, ExportArtifact{Path: path, Kind: "agent", Name: base})
+			ungroup = append(ungroup, base)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("remove %s: %w", path, err)
+		}
+	}
+
+	// 3. Drop the agents from the group sidecar, so Settings → Agents stops
+	// grouping them under this workflow.
+	if e.target == TargetOpenCode && len(ungroup) > 0 {
+		cleanup := make(map[string]string, len(ungroup))
+		for _, base := range ungroup {
+			cleanup[base] = ""
+		}
+		if err := agents.MergeGroupSidecar(e.agentsDir, cleanup); err != nil {
+			return removed, fmt.Errorf("clean agent groups: %w", err)
+		}
+	}
+
+	sort.Slice(removed, func(i, j int) bool { return removed[i].Path < removed[j].Path })
+	return removed, nil
+}
+
+// readAgentGroups loads the opencode group sidecar, or nil when the file is
+// absent or corrupt.
+func (e *Exporter) readAgentGroups() map[string]string {
+	data, err := os.ReadFile(filepath.Join(e.agentsDir, agents.GroupSidecarFile))
+	if err != nil {
+		return nil
+	}
+	var groups map[string]string
+	if json.Unmarshal(data, &groups) != nil {
+		return nil
+	}
+	return groups
+}
+
+// Orphans reports exported workflows whose design no longer exists: a slash
+// command that still targets its own <name>-orchestrator while no workflow of
+// that name is stored. These are leftovers of deletes made before uninstall
+// existed (or hand-edited hosts); Uninstall removes each one. Commands that do
+// not follow the workflow shape (advisor, learn-ywai, …) are never reported.
+func (e *Exporter) Orphans(existing map[string]bool) ([]string, error) {
+	entries, err := os.ReadDir(e.commandsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read commands dir: %w", err)
+	}
+	var orphans []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".md")
+		if existing[name] {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(e.commandsDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		// Only a command that delegates to its own <name>-orchestrator is a
+		// workflow export; anything else belongs to the host or the user.
+		if !strings.Contains(string(content), "agent: "+name+"-orchestrator") {
+			continue
+		}
+		orphans = append(orphans, name)
+	}
+	sort.Strings(orphans)
+	return orphans, nil
 }

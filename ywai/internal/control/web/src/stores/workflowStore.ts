@@ -149,6 +149,8 @@ interface WorkflowState {
 	validation: WorkflowValidationResult | null
 	exportPlan: WorkflowExportPlan | null
 	exporting: boolean
+	// Implemented workflows whose stored design is gone (orphan exports).
+	orphans: string[]
 
 	// edit with AI
 	aiEditing: boolean
@@ -178,6 +180,13 @@ interface WorkflowState {
 	validateCurrent: () => Promise<void>
 	// profile: "" = global, "<env>" = that environment (see workflowApi.export).
 	exportCurrent: (apply: boolean, target?: string, profile?: string) => Promise<void>
+	// Remove the exported artifacts (command + agents) of one workflow by name —
+	// also how orphans get cleaned. The result lands in `exportPlan`.
+	uninstallName: (name: string, target?: string, profile?: string) => Promise<void>
+	// Same, for the workflow open in the editor.
+	uninstallCurrent: (target?: string, profile?: string) => Promise<void>
+	// Refresh the orphan list (see `orphans`).
+	loadOrphans: () => Promise<void>
 	clearExport: () => void
 	// Apply a natural-language edit via the backend AI endpoint. The result is
 	// loaded into the editor (undoable) and left dirty for the user to Save.
@@ -239,6 +248,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	validation: null,
 	exportPlan: null,
 	exporting: false,
+	orphans: [],
 	aiEditing: false,
 	chatError: null,
 	running: false,
@@ -257,6 +267,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 			set({ summaries: workflows ?? [], loadingList: false })
 		} catch (err) {
 			set({ loadingList: false, error: errMsg(err) })
+		}
+		// Best-effort: implemented workflows whose design is gone. Failure is
+		// non-critical (the banner just keeps its previous content).
+		try {
+			const { orphans } = await workflowApi.orphans()
+			set({ orphans: orphans ?? [] })
+		} catch {
+			// keep previous orphans
 		}
 	},
 
@@ -369,6 +387,34 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 	},
 
 	clearExport: () => set({ exportPlan: null }),
+
+	uninstallName: async (name, target = 'opencode', profile) => {
+		set({ exporting: true, error: null })
+		try {
+			const plan = await workflowApi.uninstall(name, target, profile)
+			set({ exportPlan: plan, exporting: false })
+			await get().loadOrphans()
+		} catch (err) {
+			set({ exporting: false, error: errMsg(err) })
+		}
+	},
+
+	uninstallCurrent: (target, profile) => {
+		const { current } = get()
+		if (!current) return Promise.resolve()
+		return get().uninstallName(current.name, target, profile)
+	},
+
+	// Implemented workflows whose design no longer exists. Refreshed on every
+	// list(); each name can be cleaned with uninstallName.
+	loadOrphans: async () => {
+		try {
+			const { orphans } = await workflowApi.orphans()
+			set({ orphans: orphans ?? [] })
+		} catch {
+			// non-critical: keep the previous list
+		}
+	},
 
 	aiEdit: async (instruction, model) => {
 		const { current } = get()
