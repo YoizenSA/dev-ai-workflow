@@ -126,6 +126,12 @@ Gotchas learned the hard way:
   server the installer restarted, not a hung build.
 - In dev mode `ywai-dev.exe` reads skills from disk; it is the seeded copies
   under `~/.config/opencode/skills/` that lag behind until step 3.
+- Start `watch` DETACHED when an agent does it: a background shell is a child
+  of the agent session, and an opencode server restart cancels it (watch died
+  this way twice). Durable variant, logging to gitignored `ywai/tmp/`:
+  `Start-Process 'C:\Program Files\Git\bin\bash.exe' -ArgumentList './scripts/dev.sh','watch' -WorkingDirectory <ywai-root> -WindowStyle Hidden -RedirectStandardOutput tmp/air-watch.log -RedirectStandardError tmp/air-watch.err`.
+  After a crash+relaunch, TWO `air` processes can coexist and race on the next
+  rebuild — `Get-Process air | Stop-Process -Force` before starting a new one.
 
 ### Notes
 
