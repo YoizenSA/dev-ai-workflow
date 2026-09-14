@@ -1,0 +1,63 @@
+---
+title: Panel de control
+description: La UI web de ywai en el navegador
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+# Panel de control
+
+## Qué es
+
+La UI web de ywai: un dashboard en el navegador sobre el servidor de control, con Workflow Studio, memorias, evals, ambientes, salud, settings, MCP store y ADO.
+
+## Quick path
+
+```bash
+# 1. Iniciar el servidor
+ywai serve -b
+
+# 2. Abrir en el navegador
+ywai ui
+
+# 3. Ver
+http://localhost:5768
+```
+
+`/` redirige a `/workflows` (Workflow Studio).
+
+## Las rutas
+
+| Ruta | Qué hay |
+|---|---|
+| `/workflows` | Workflow Studio: diseñar y exportar flujos multi-agente |
+| `/memories` | Memorias de Engram ([Memories →](/dev-ai-workflow/memories)) |
+| `/evals` | Session Analytics + benchmarks ([Evals →](/dev-ai-workflow/evals)) |
+| `/envs` | Ambientes opencode2 aislados ([Environments →](/dev-ai-workflow/environments)) |
+| `/status` | Health del servidor y del ecosistema |
+| `/settings` | Configuración visual ([Settings →](/dev-ai-workflow/settings)) |
+| `/mcp-store` | Catálogo e instalación de MCPs ([MCP Store →](/dev-ai-workflow/mcp)) |
+| `/ado` | Perfiles, PAT y reglas por repo ([Azure DevOps →](/dev-ai-workflow/ado)) |
+
+## Ejemplo
+
+```
+Tú: "Implementa auth con JWT"
+     ↓
+/ship ejecuta: scout → plan → design → implement → test → review
+     ↓
+En /evals ves qué agentes, skills y modelos se usaron en la sesión
+```
+
+## Servidor
+
+| Acción | Cómo |
+|---|---|
+| Iniciar en fondo | `ywai serve -b` |
+| Otro puerto | `ywai serve -p 8080` |
+| Detener | `ywai stop` |
+| Abrir navegador | `ywai ui` |
+
+<Aside type="tip">
+El panel es la forma visual de operar ywai. Para automatización y CI/CD, usá los [comandos CLI](/dev-ai-workflow/cli).
+</Aside>

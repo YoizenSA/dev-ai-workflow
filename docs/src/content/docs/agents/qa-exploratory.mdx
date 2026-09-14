@@ -1,0 +1,57 @@
+---
+title: QA Exploratory
+description: "Ciclo exploratorio post-implementación: resumir, escribir escenarios y archivar el resultado"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# QA Exploratory
+
+El ciclo exploratorio cubre lo que pasa **después** de implementar: resumir qué se entregó, crear el work item de testing exploratorio con sus escenarios en Gherkin, verificarlos contra la app y archivar el resultado en Azure DevOps. Son 5 agentes que trabajan en cadena, coordinados por dos orchestrators.
+
+## El equipo
+
+| Agente | Rol | Para qué |
+|---|---|---|
+| **exploratory-orchestrator** | Coordinador | Coordina el ciclo: resume lo entregado, después crea el work item y sus escenarios. Si la feature está rota, frena en vez de escribir escenarios sobre el defecto |
+| **feature-summary** | Analista | Resume desde el código: inputs, flujos, side effects, edge cases. Si ticket y diff discrepan, el diff manda |
+| **test-author** | QA | Work item Task hijo del user story + escenarios Gherkin (skills: `ado`, `playwright-e2e-testing`). Sin parent id en el brief, devuelve en vez de adivinar |
+| **verification-orchestrator** | Coordinador | Delega el run a `@scenario-runner` y el archivado a `@qa-feedback`. Rojo bloquea aunque el review esté limpio |
+| **qa-feedback** | QA | Resumen en el padre + un Bug hijo por escenario fallido, cada uno con evidencia (skills: `qa-evidence`, `ado`). Blocked se reporta como blocked: no es Bug |
+
+## Flujo
+
+```mermaid
+flowchart LR
+    A[Feature implementada] --> B[feature-summary: qué se entregó]
+    B --> C[test-author: work item + escenarios Gherkin]
+    C --> D[verification-orchestrator: correr escenarios]
+    D --> E[qa-feedback: resultado en ADO]
+```
+
+1. `exploratory-orchestrator` resume con `feature-summary` qué se entregó.
+2. `test-author` crea el work item exploratorio y escribe los escenarios (`gherkin-bdd`).
+3. `verification-orchestrator` corre los escenarios contra la app (`scenario-runner` a nivel core hace lo mismo en el pipeline ship).
+4. `qa-feedback` archiva: comentario resumen en el padre + un Bug hijo por escenario que falle, cada uno con su evidencia (`qa-evidence`).
+
+## Instalación
+
+Estos agentes **no** tienen grupo propio en `groups.json`: el install por defecto (`core + qa-automation`) no los copia. Llegan con:
+
+```bash
+ywai install --all-groups
+```
+
+El workflow semilla `/qa-exploratory` (ya viene con ywai, ver [Commands](/dev-ai-workflow/workflows/commands)) ejecuta este ciclo end-to-end sin instalar los agentes a mano.
+
+## Cuándo usarlo
+
+| Necesidad | Cómo |
+|---|---|
+| Testing exploratorio completo | `/qa-exploratory` |
+| Resumir una feature para QA | `exploratory-orchestrator` vía el workflow |
+| Verificar escenarios post-review | `/scenario-verification` |
+
+<Aside type="tip">
+Para testing automatizado con estrategia, el grupo es [QA Automation](/dev-ai-workflow/agents/qa-orchestrator). Lo exploratorio es post-implementación y termina en ADO.
+</Aside>

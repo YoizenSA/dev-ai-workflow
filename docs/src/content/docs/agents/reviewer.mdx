@@ -1,15 +1,37 @@
 ---
 title: Reviewer Agent
-description: Code review, bugs, seguridad
+description: "Revisa código con veredicto tipado: ship, ship-with-nits o block"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Reviewer Agent
 
+El reviewer revisa código por correctitud, seguridad, performance y mantenibilidad. Entiende qué intenta hacer el código antes de criticarlo, ancla cada hallazgo a `file:line` y lo acompaña con un fix. Un hallazgo sin falla concreta — inputs o estado que producen el resultado incorrecto — es una preferencia, no un defecto: se omite o se marca como nit.
+
 ## Qué hace
 
-Revisa PRs, encuentra issues, y sugiere mejoras.
+1. **Rankea por costo de ship** — Un agujero de pérdida de datos o de auth pesa más que cualquier cosa cosmética. No bloquea por lo que un formatter o linter arregla; lo menciona como no bloqueante.
+2. **Devuelve un veredicto** — Termina con un bloque fenced `review` para que el orchestrator pueda gatear ship/close: `verdict: ship | ship-with-nits | block`.
+3. **Tipa severidades** — **P0** ship-blocker · **P1** must-fix antes de release · **P2** should fix soon · **P3** nit.
+4. **Cierra con handoff** — También termina con el bloque fenced `handoff` estándar (`next: orchestrator|dev|qa|close`, hallazgos espejados desde issues). Si el texto y el fence discrepan, **gana el fence**.
+5. **Escala bien** — Escala un hallazgo a `@architect` en vez de `@dev` cuando el fix es un cambio de patrón o diseño de API, no de código — el `fix_hint` debe decirlo.
+
+```mermaid
+flowchart TD
+    A[Código a revisar] --> B[Entender qué intenta hacer]
+    B --> C[Buscar fallas concretas por file:line]
+    C --> D{Tiene falla concreta}
+    D -->|no| E[Preferencia o nit, no defecto]
+    D -->|sí| F[Rankear por costo de ship]
+    F --> G{¿Fix de patrón o API}
+    G -->|sí| H[Escalar a @architect]
+    G -->|no| I[Emparejar con fix_hint]
+    E --> J[Escribir bloque review con veredicto]
+    H --> J
+    I --> J
+    J --> K[handoff: next + findings espejados]
+```
 
 ## Cuándo usarlo
 
@@ -17,33 +39,28 @@ Revisa PRs, encuentra issues, y sugiere mejoras.
 |---|---|
 | Code review | `@reviewer Revisa src/auth/` |
 | Seguridad | `@reviewer Busca SQL injection en UserRepository` |
-| Performance | `@reviewer ¿Hay N+1 queries en order list?` |
-| Calidad | `@reviewer ¿El código sigue los patrones del proyecto?` |
+| Auditoría de calidad | `@reviewer Audita la calidad del módulo de pagos` |
+| Review de PR | `@reviewer Revisá el PR #42` |
+| Gate de ship | `@reviewer Veredicto antes de mergear` |
 
-## Niveles de severidad
+## Routing
 
-| Nivel | Significado | Acción |
-|---|---|---|
-| 🔴 CRITICAL | Debe arreglarse | Antes de merge |
-| 🟠 HIGH | Debería arreglarse | Pronto |
-| 🟡 MEDIUM | Mejora recomendada | Opcional |
-| 🟢 LOW | Estilo | Opcional |
-
-## Qué revisa
-
-- **Correctitud:** ¿Hace lo que dice? ¿Edge cases cubiertos?
-- **Seguridad:** Inyección, XSS, CSRF, secretos hardcodeados
-- **Performance:** N+1 queries, operaciones innecesarias
-- **Mantenibilidad:** Legible, sin duplicado, sigue patrones
+| Siguiente paso | Handler |
+|---|---|
+| Explorar el código a revisar | `@finder` |
+| Arreglar issues críticos/bugs | `@dev` |
+| Agregar tests faltantes | `@qa` |
+| Preocupación de arquitectura | `@architect` |
+| Preocupación visual o de accesibilidad | `@designer` |
 
 ## Límites
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Encontrar bugs | Implementar fixes (`@dev`) |
-| Revisar seguridad | Escribir tests (`@qa`) |
-| Sugerir mejoras | Decisiones de arquitectura (`@architect`) |
+| Encontrar bugs y tipar severidad | Modificar código (`@dev`) |
+| Revisar seguridad y performance | Escribir tests (`@qa`) |
+| Emitir veredicto `ship` / `block` | Decisiones de arquitectura (`@architect`) |
 
 <Aside type="tip">
-El reviewer es la última línea de defensa antes de merge. Usalo después de `@dev` y `@qa`.
+El reviewer es la última línea de defensa antes de merge. Usalo después de `@dev` y `@qa`; su veredicto `block` o un P0 frena el cierre.
 </Aside>

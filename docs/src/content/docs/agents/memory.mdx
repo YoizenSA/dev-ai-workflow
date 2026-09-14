@@ -1,40 +1,78 @@
 ---
 title: Memory Agent
-description: Memoria persistente entre sesiones
+description: "Consolida memorias de Engram en un plan JSON para revisión humana; read-only"
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Memory Agent
 
+El memory es un especialista en consolidación de memoria. Recibe el contexto de memoria actual (observaciones + sesiones recientes) y produce **un único** plan de consolidación como objeto JSON. No modifica memorias él mismo — el backend aplica el plan que el usuario aprueba.
+
 ## Qué hace
 
-Gestiona la memoria persistente del proyecto vía **Engram** (`ywai install` lo instala). Guarda decisiones, descubrimientos y contexto entre sesiones.
+1. **Nunca inventa contenido** — Solo reorganiza, resume o marca *observaciones existentes*. Un resumen debe reflejar fielmente las observaciones fuente reales.
+2. **Es conservador con los deletes** — Solo propone borrar una observación cuando es duplicado exacto/casi-duplicado de otra, o demostrablemente obsoleta (superada por una más nueva).
+3. **Explica cada cambio** — Cada item en `updates` / `deletes` / `new_summaries` incluye un `reason` corto.
+4. **Detecta casi-duplicados** — Dos observaciones son casi-duplicadas si describen el mismo hecho con solapamiento semántico > 80%, una es subconjunto de la otra, o difieren solo en redacción, timestamp o detalles menores. **No** son duplicados: mismo tópico con decisiones distintas (evolución), mismo archivo con cambios distintos, hechos relacionados pero complementarios. Ante la duda, conserva ambas y propone un `new_summaries` que las fusione.
+5. **Devuelve JSON solo** — Exactamente un objeto JSON con el schema del AGENT.md, sin prosa antes o después, sin fences de markdown. Omite arrays vacíos; `new_importance` va de 0 a 10 (reusa el de la fuente salvo ajuste justificado).
+
+```mermaid
+flowchart LR
+    A[Contexto de memoria actual] --> B[Analizar observaciones + sesiones]
+    B --> C{¿Casi-duplicado}
+    C -->|sí, >80%| D[Proponer delete o merge]
+    C -->|mismo tópico, decisión distinta| E[Conservar ambas]
+    C -->|duda| F[Conservar + new_summaries que fusione]
+    D --> G[Plan JSON: updates / deletes / new_summaries / digest]
+    E --> G
+    F --> G
+    G --> H[Backend aplica el plan aprobado por el usuario]
+```
 
 ## Cuándo usarlo
 
 | Tarea | Ejemplo |
 |---|---|
-| Buscar decisiones | `@memory ¿Qué decidimos sobre auth?` |
-| Buscar bugs | `@memory ¿Qué bugs arreglamos en pagos?` |
-| Buscar patrones | `@memory ¿Qué patrones usamos para error handling?` |
+| Consolidar memoria | `@memory Consolidá las observaciones de la sesión` |
+| Detectar duplicados | `@memory Buscá observaciones duplicadas sobre auth` |
+| Resumir contexto | `@memory Resumí qué sabe el sistema sobre arquitectura` |
 
-## Tipos de memoria
+## Schema de salida
 
-| Tipo | Qué guarda | Ejemplo |
-|---|---|---|
-| `decision` | Decisiones técnicas | "Elegimos PostgreSQL sobre MongoDB" |
-| `bugfix` | Bugs y soluciones | "Fixed N+1 query en UserList" |
-| `pattern` | Patrones | "Usamos repository pattern" |
-| `config` | Configuración | "JWT expiry = 15min" |
+```json
+{
+  "updates": [
+    {
+      "observation_id": "<id existente>",
+      "reason": "<por qué>",
+      "new_content": "<contenido opcional reescrito>",
+      "new_importance": 0
+    }
+  ],
+  "deletes": [
+    { "observation_id": "<id existente>", "reason": "<duplicate | obsolete | ...>" }
+  ],
+  "new_summaries": [
+    {
+      "type": "summary | topic",
+      "content": "<resumen consolidado conciso>",
+      "importance": 1,
+      "metadata": {}
+    }
+  ],
+  "digest": "<resumen ejecutivo de un párrafo>"
+}
+```
 
-## Cuándo se activa automáticamente
+## Límites
 
-- Al **empezar** sesión: recupera contexto
-- Al **terminar** sesión: guarda resumen
-- Al **tomar** decisión: la registra
-- Al **arreglar** bug: documenta causa y solución
+| ✅ Puede | ❌ No puede |
+|---|---|
+| Leer memorias con herramientas de contexto/búsqueda de engram | Llamar herramientas de escritura de engram (`mem_save`, `mem_update`, `mem_session_*`) |
+| Proponer un plan estructurado | Editar archivos del proyecto |
+| Detectar duplicados y fusiones | Salida distinta del objeto JSON |
 
 <Aside type="tip">
-`@memory` se activa automáticamente. No necesitás invocarlo manualmente para guardar decisiones.
+`@memory` nunca escribe: propone y el backend aplica lo que el usuario aprueba. Pedile consolidación después de sesiones largas para mantener la memoria limpia.
 </Aside>

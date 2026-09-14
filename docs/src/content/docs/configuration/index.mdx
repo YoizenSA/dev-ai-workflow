@@ -7,14 +7,22 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 # Configuración
 
+## Versiones de OpenCode
+
+ywai requiere **OpenCode 2** (`opencode2`); el soporte de v1 fue retirado (ver [ADR-0001](https://github.com/Yoizen/dev-ai-workflow/blob/main/docs/adr/0001-drop-opencode-v1-support.md)). ywai escribe siempre formato v2: MCPs anidados en `mcp.servers.<id>` con `"disabled": true`, array `"plugins": [...]`, config de TUI/CLI en `cli.json`, permisos como lista ordenada de reglas `permissions:`, y delegación nativa de `subagent`.
+
+### Autodetección
+
+La autodetección prefiere `opencode2` si está en `$PATH`; si solo existe el binario `opencode` de v1, `ywai install` falla con un error claro.
+
 ## Estructura
 
-OpenCode 2 lee esto (binario `opencode2`):
+OpenCode 2 usa el directorio global `~/.config/opencode/`:
 
 ```
 ~/.config/opencode/
-├── opencode.json     # agents JSON, MCP (mcp.servers), default_agent
-├── cli.json          # tema, keybinds (antes tui.json)
+├── opencode.json     # agents, MCP (mcp.servers), default_agent
+├── cli.json          # tema, keybinds, plugins CLI
 ├── agents/           # Un .md plano por agente (lo instala ywai)
 ├── skills/           # Skills extra
 └── commands/         # Slash commands
@@ -71,7 +79,7 @@ OpenCode 2 descubre `AGENTS.md` hacia arriba desde el directorio de trabajo.
 mi-proyecto/.opencode/skills/mi-skill/SKILL.md
 ```
 
-o `.agents/skills/mi-skill/SKILL.md`. Reiniciá OpenCode. Para que un agente ywai pueda cargarlo, agregá el id a su `skills.txt`.
+o `.agents/skills/mi-skill/SKILL.md`. Reiniciá OpenCode: OpenCode lo descubre y lo anuncia solo. El `skills.txt` no entra acá — es la allowlist de los perfiles de agente del repo de ywai (`ywai/agents/...`).
 
 ### MCP
 

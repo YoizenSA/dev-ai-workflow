@@ -15,7 +15,24 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, Badge } from '@astrojs/starlight/components';
+import { Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+<Badge text="26 agentes" variant="tip" /> <Badge text="29 skills" variant="tip" /> <Badge text="5 workflows" variant="tip" /> <Badge text="OpenCode 2" variant="note" />
+
+## Cómo encaja
+
+```mermaid
+flowchart LR
+    A[ywai install] --> B[Agentes + Skills]
+    A --> C[Engram + Graft]
+    B --> D[Tu agente AI]
+    C --> D
+    D --> E[Objetivo]
+    E --> F[Orchestrator]
+    F --> G[Especialistas]
+    G --> H[Evals + Retro]
+    H --> E
+```
 
 ## Qué hace ywai
 
@@ -41,15 +58,52 @@ ywai doctor
 @dev Implementa el endpoint de login
 ```
 
+## Elegí tu camino
+
+| Si querés… | Usá | Ver |
+|---|---|---|
+| Escribir código o arreglar un bug | `@dev` | [Dev →](/dev-ai-workflow/agents/dev) |
+| Planificar antes de picar | `@planning` o `/planning` | [Planning →](/dev-ai-workflow/agents/planning) |
+| Entregar una feature completa | `/ship` | [Commands →](/dev-ai-workflow/workflows/commands) |
+| Testear con estrategia | `/qa-automation` | [QA Automation →](/dev-ai-workflow/agents/qa-orchestrator) |
+| Infra, pipelines, deploys | `@devops` o ambiente `devops` | [DevOps →](/dev-ai-workflow/agents/devops) |
+| Responder una pregunta del repo | `@ask` + `@finder` | [Ask →](/dev-ai-workflow/agents/ask) |
+| Detectar fricción repetida | `/workflow-retro` | [Retro →](/dev-ai-workflow/guides/retro) |
+
 ## Qué obtenés
 
-| Qué | Ejemplo |
-|---|---|
-| **Agentes especializados** | `@dev`, `@qa`, `@architect`, `@reviewer`, `@devops`, `@ask` |
-| **Skills preinstalados** | React, Angular, TypeScript, Tailwind, .NET, DevOps |
-| **Commands slash** | `/feature-delivery`, `/social-refactor`, `/qa-automation` |
-| **Kanban visual** | Monitorear progreso de agentes en tiempo real |
-| **Workflow Studio** | Diseñar flujos de trabajo personalizados |
+<CardGrid stagger>
+  <Card title="26 perfiles de agente" icon="users">
+    12 core + QA Automation (5) + QA Exploratory (5) + subagentes y experimentales. Cada uno con trigger, routing y límites.
+
+    [Ver agentes →](/dev-ai-workflow/agents)
+  </Card>
+  <Card title="29 skills extra" icon="puzzle">
+    Angular, yz-ui, TDD, Playwright, ADO, Docker, grilling, ADRs y más, sobre el catálogo base de gentle-ai.
+
+    [Ver skills →](/dev-ai-workflow/skills)
+  </Card>
+  <Card title="5 workflows semilla" icon="rocket">
+    `/ship`, `/planning`, `/qa-automation`, `/qa-exploratory` y `/scenario-verification`, más Studio visual para los tuyos.
+
+    [Ver workflows →](/dev-ai-workflow/workflows)
+  </Card>
+  <Card title="Ambientes aislados" icon="laptop">
+    `dev`, `qa`, `devops`, `code-review` y más: cada uno con su config, DB y modelo. Lo global no se toca.
+
+    [Ver environments →](/dev-ai-workflow/environments)
+  </Card>
+  <Card title="Evals con datos reales" icon="chart">
+    Session Analytics sobre tus sesiones y benchmarks por modelo con compuertas para CI.
+
+    [Ver evals →](/dev-ai-workflow/evals)
+  </Card>
+  <Card title="25 comandos CLI" icon="terminal">
+    `install`, `update`, `doctor`, `env`, `eval`, `mcp`, `session`, `advisor`, `tokenbank` y el panel web.
+
+    [Ver comandos →](/dev-ai-workflow/cli)
+  </Card>
+</CardGrid>
 
 ## Antes vs Después
 
@@ -62,8 +116,15 @@ ywai doctor
 
 ## Siguiente paso
 
-<Card title="Primeros pasos" icon="star">
-Instalación, primera tarea, y conceptos clave.
+<CardGrid stagger>
+  <Card title="Primeros pasos" icon="star">
+    Instalación, primera tarea, y conceptos clave.
 
-[Empezar →](/dev-ai-workflow/getting-started)
-</Card>
+    [Empezar →](/dev-ai-workflow/getting-started)
+  </Card>
+  <Card title="Guías prácticas" icon="pencil">
+    Features, bugs, reviews, testing, CI/CD y retro de workflow.
+
+    [Ver guías →](/dev-ai-workflow/guides)
+  </Card>
+</CardGrid>

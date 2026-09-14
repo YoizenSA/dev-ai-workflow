@@ -1,0 +1,85 @@
+---
+title: Environments
+description: Ambientes opencode2 aislados con presets por rol
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Environments
+
+## Qué son
+
+Cada ambiente es un opencode2 aislado: config, base de datos, servicio de fondo y auth propios bajo `~/.ywai/profiles/<nombre>/`. La instalación global nunca se toca. Sirven para separar roles (dev, qa, personal) o para probar sin contaminar tu setup.
+
+## Quick path
+
+```bash
+# 1. Crear los ambientes por defecto (dev, qa, personal)
+ywai env init
+
+# 2. Entrar a uno
+ywai dev
+
+# 3. O correr una tarea headless
+ywai dev "run the tests" --auto
+
+# 4. Ver la UI de ambientes
+ywai ui → http://localhost:5768/envs
+```
+
+## Presets
+
+| Preset | Para qué | Agente default |
+|---|---|---|
+| `dev` | Desarrollo diario: todo menos QA automation | `orchestrator` |
+| `dev-cheap` | Igual pero barato: modelo flash, agentes core, skills mínimos | `orchestrator` |
+| `qa` | Testing estricto: todo instalado, shell solo-verifica | `qa-orchestrator` |
+| `devops` | Infra y CI/CD: Pipelines, Helm/AKS, Docker, ADO | `devops` |
+| `code-review` | Solo review: sin commit, push ni rewrites | `reviewer` |
+| `personal` | Proyectos propios: ambiente pelado, sin agentes | — |
+
+```bash
+ywai env create qa --preset qa
+ywai env create review --preset code-review
+ywai env create front --preset dev --init   # parte de tu config global (solo archivos, nunca DB)
+```
+
+## Usar un ambiente
+
+Los atajos `ywai dev`, `ywai qa`, `ywai personal` equivalen a `ywai env start <nombre>`:
+
+```bash
+ywai dev                                   # abre el TUI
+ywai dev "task"                            # headless, imprime la respuesta
+ywai dev "task" --model opencode-go/glm-5.3-flash --agent ask --auto
+ywai dev <workflow> "task"                 # corre un workflow exportado
+ywai dev -c                                # continuar la última sesión
+```
+
+Otros flags de opencode2 (`--file`, `--session`, `--title`…) pasan directo. El preset `qa` niega bash destructivo (`git commit`, `git push`, snapshots…) por defecto.
+
+## Gestionar
+
+| Comando | Qué hace |
+|---|---|
+| `ywai env list` | Lista ambientes |
+| `ywai env status <nombre>` | Muestra un ambiente (solo lectura) |
+| `ywai env doctor` | Chequea ambientes (solo lectura) |
+| `ywai env clone <origen> <nuevo>` | Clona config en un ambiente fresco (DB nueva) |
+| `ywai env stop <nombre>` | Detiene su servidor |
+| `ywai env rm <nombre>` | Detiene y borra el ambiente |
+| `ywai install --profile <nombre>` | Instala solo dentro de ese ambiente |
+
+## Cuándo usar cada uno
+
+| Situación | Ambiente |
+|---|---|
+| Trabajo diario | `dev` (o `dev-cheap` para gastar poco) |
+| Testing con red de seguridad | `qa` |
+| Infra, pipelines, clusters | `devops` |
+| Revisar sin riesgo de writes | `code-review` |
+| Probar algo y tirarlo | `personal` + `ywai env rm` |
+
+<Aside type="tip">
+Los ambientes tienen su propia DB: los evals (`ywai eval run`, pestaña Evals) pueden filtrar por ambiente para comparar.
+</Aside>

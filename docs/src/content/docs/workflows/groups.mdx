@@ -21,6 +21,7 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 |---|---|
 | `orchestrator` | Coordinador |
 | `dev` | Implementa código |
+| `designer` | Specs visuales y accesibilidad |
 | `qa` | Escribe tests |
 | `architect` | Decisiones de diseño |
 | `reviewer` | Revisión de código |
@@ -29,20 +30,11 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 | `finder` | Búsqueda |
 | `planning` | Planificación |
 | `memory` | Memoria persistente |
+| `advisor` | Segundo revisor (no se invoca directo) |
+
+Subagent-only, fuera del install por defecto (llegan con `--all-groups`): `scenario-runner` (verificación BDD post-review), `planner-scout` + `planner-draft` (exploración y redacción de `@planning`).
 
 **Para qué:** Desarrollo general.
-
-### Social Refactor
-
-| Agente | Rol |
-|---|---|
-| `migration-orchestrator` | Coordina migración |
-| `migration-planner` | Planifica |
-| `migration-scope` | Clasifica alcance |
-| `migration-validator` | Valida paridad |
-| `migration-validator-focused` | Valida una página |
-
-**Para qué:** Migraciones entre frameworks.
 
 ### QA Automation
 
@@ -54,20 +46,34 @@ Equipos predefinidos de agentes diseñados para trabajar juntos en tareas espec�
 | `qa-reviewer` | Revisa tests |
 | `qa-ask` | Preguntas de testing |
 
-**Para qué:** Testing completo con estrategia.
+La exploración la hace `@finder`. **Para qué:** Testing completo con estrategia.
+
+### QA Exploratory (sin grupo propio)
+
+`exploratory-orchestrator`, `feature-summary`, `test-author`, `verification-orchestrator`, `qa-feedback`. Detalle: [QA Exploratory](/dev-ai-workflow/agents/qa-exploratory). **Para qué:** ciclo exploratorio post-implementación que termina en ADO. Se instalan con `ywai install --all-groups`.
+
+### Experiment (opt-in)
+
+`experiment/infra-docs`: mantiene la wiki de Infra (`Infra/wiki`) como notas DIKS, siempre en español y con la skill `diks` (ella manda si discrepan).
+
+```bash
+ywai groups enable experiment
+```
 
 ## Delegación entre agentes
 
 ```
 Core:
-  orchestrator → [dev, qa, architect, reviewer, devops, ask, finder, planning, memory]
-
-Social Refactor:
-  migration-orchestrator → [migration-planner, migration-scope, migration-validator, dev]
+  orchestrator → [dev, designer, qa, architect, reviewer, devops, ask, finder, planning, memory]
+  (advisor observa, no recibe delegaciones)
 
 QA Automation:
   qa-orchestrator → [qa-analyst, qa-dev, qa-reviewer, qa-ask]
   (exploración: @finder)
+
+QA Exploratory:
+  exploratory-orchestrator → [feature-summary, test-author]
+  verification-orchestrator → [scenario-runner, qa-feedback]
 ```
 
 ## Cuándo usar cada grupo
@@ -76,9 +82,10 @@ QA Automation:
 |---|---|
 | Feature nueva | Core |
 | Bug fix | Core |
-| Migrar framework | Social Refactor |
+| Pantalla o UI | Core (`@designer` + `@dev`) |
 | Testing completo | QA Automation |
+| Testing exploratorio post-implementación | QA Exploratory (`/qa-exploratory`) |
 
 <Aside type="tip">
-Para instalar un grupo extra: `ywai groups enable social-refactor`. El orchestrator no instala grupos solo.
+Los únicos grupos instalables son `core` (siempre), `qa-automation` y `experiment`. Lo demás vive en disco y llega con `ywai install --all-groups`.
 </Aside>

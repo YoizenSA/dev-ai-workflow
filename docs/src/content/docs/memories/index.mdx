@@ -1,0 +1,51 @@
+---
+title: Memories
+description: Explorar, capturar y consolidar la memoria de Engram desde el navegador
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Memories
+
+## Qué es
+
+La UI de Engram en `ywai ui → http://localhost:5768/memories`: explorar, capturar y consolidar observaciones sin tocar la DB. El agente que razona sobre esta memoria es [@memory](/dev-ai-workflow/agents/memory).
+
+## Quick path
+
+```bash
+ywai serve -b
+ywai ui → /memories
+```
+
+Atajo de búsqueda: `Ctrl+K` (`⌘K` en macOS). Filtro por proyecto arriba de la lista.
+
+## Pestañas
+
+| Pestaña | Qué hay |
+|---|---|
+| **Memories** | Observaciones con su tipo, proyecto e importancia; detalle, pin y borrado |
+| **Sessions** | Sesiones recientes y su contexto |
+| **Topics** | Observaciones agrupadas por `topic_key`, con candidatos a consolidación |
+| **Timeline** | Eventos por día: qué aprendió el sistema y cuándo |
+| **Prompts** | Prompts guardados de usuario |
+| **Empty** | Sesiones vacías para limpiar |
+| **Context** | Contexto actual tal como lo ve un agente |
+
+## Capturar y consolidar
+
+| Acción | Cómo |
+|---|---|
+| Guardar una observación | Botón `+ Capture` |
+| Consolidar un topic | Botón `Consolidate` en el topic (o el general) |
+| Revisar el plan | El modal muestra updates / deletes / `new_summaries` con su `reason` |
+
+Consolidar pide un plan a `@memory` (solo reorganiza lo existente, nunca inventa) y el backend aplica lo que aprobás. Pedilo después de sesiones largas para mantener la memoria limpia.
+
+## Tipos de observación
+
+`pattern`, `observation`, `decision`, `architecture`, `bugfix`, `discovery`, `preference`, `config`, `summary`, `topic`. Cada tipo tiene su color en la lista y el timeline.
+
+<Aside type="tip">
+La memoria sobrevive a la compactación y al fin de la sesión. Si algo costó descubrirlo, capturalo acá antes de cerrar.
+</Aside>

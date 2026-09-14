@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 
 export default defineConfig({
   site: 'https://YoizenSA.github.io',
@@ -9,12 +10,16 @@ export default defineConfig({
     root: { label: 'Español', lang: 'es' },
   },
   integrations: [
+    mermaid({
+      theme: 'neutral',
+      autoTheme: true,
+    }),
     starlight({
       title: 'ywai — Documentación',
       sidebar: [
         { label: 'Inicio', slug: '' },
         { label: 'Primeros pasos', slug: 'getting-started' },
-        { label: 'Comandos', slug: 'commands' },
+        { label: 'CLI', slug: 'cli' },
         {
           label: 'Guías',
           items: [
@@ -22,8 +27,8 @@ export default defineConfig({
             { label: 'Implementar Feature', slug: 'guides/feature' },
             { label: 'Arreglar Bug', slug: 'guides/bugfix' },
             { label: 'Code Review', slug: 'guides/review' },
-            { label: 'Migración', slug: 'guides/migration' },
             { label: 'Testing', slug: 'guides/testing' },
+            { label: 'Retro de workflow', slug: 'guides/retro' },
             { label: 'CI/CD', slug: 'guides/cicd' },
             { label: 'Refactoring', slug: 'guides/refactoring' },
             {
@@ -43,6 +48,7 @@ export default defineConfig({
             { label: 'Orchestrator', slug: 'agents/orchestrator' },
             { label: 'Architect', slug: 'agents/architect' },
             { label: 'Dev', slug: 'agents/dev' },
+            { label: 'Designer', slug: 'agents/designer' },
             { label: 'QA', slug: 'agents/qa' },
             { label: 'Reviewer', slug: 'agents/reviewer' },
             { label: 'DevOps', slug: 'agents/devops' },
@@ -50,16 +56,9 @@ export default defineConfig({
             { label: 'Finder', slug: 'agents/finder' },
             { label: 'Planning', slug: 'agents/planning' },
             { label: 'Memory', slug: 'agents/memory' },
-            {
-              label: 'Social Refactor',
-              items: [
-                { label: 'Migration Orchestrator', slug: 'agents/migration-orchestrator' },
-                { label: 'Migration Planner', slug: 'agents/migration-planner' },
-                { label: 'Migration Scope', slug: 'agents/migration-scope' },
-                { label: 'Migration Validator', slug: 'agents/migration-validator' },
-                { label: 'Validator Focused', slug: 'agents/migration-validator-focused' },
-              ],
-            },
+            { label: 'Advisor', slug: 'agents/advisor' },
+            { label: 'Scenario Runner', slug: 'agents/scenario-runner' },
+            { label: 'QA Exploratory', slug: 'agents/qa-exploratory' },
             {
               label: 'QA Automation',
               items: [
@@ -85,7 +84,12 @@ export default defineConfig({
         {
           label: 'Herramientas',
           items: [
-            { label: 'Kanban Board', slug: 'kanban' },
+            { label: 'Panel de control', slug: 'panel' },
+            { label: 'Environments', slug: 'environments' },
+            { label: 'Evals', slug: 'evals' },
+            { label: 'Memories', slug: 'memories' },
+            { label: 'MCP Store', slug: 'mcp' },
+            { label: 'Azure DevOps', slug: 'ado' },
             { label: 'Skills', slug: 'skills' },
             { label: 'Skills Reference', slug: 'skills/reference' },
             { label: 'Settings UI', slug: 'settings' },

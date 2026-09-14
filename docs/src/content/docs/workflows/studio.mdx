@@ -15,7 +15,7 @@ Un editor visual donde diseñás flujos de trabajo en un canvas y los exportás 
 
 ```bash
 # 1. Abrir
-ywai kanban → http://localhost:5768/workflows
+ywai ui → http://localhost:5768/workflows
 
 # 2. Diseñar
 Arrastrar nodos → Conectar → Configurar
@@ -30,9 +30,12 @@ Click "Export" → Se crea el command en opencode
 |---|---|---|
 | **SubAgent** | Delega a un agente | Dev, QA, Architect |
 | **Prompt** | Instrucción fija | "Usa TypeScript estricto" |
-| **If/Else** | Decisión condicional | "Si hay errores, ir a Dev" |
 | **AskUserQuestion** | Pregunta al usuario | "¿Mergeamos a main?" |
-| **Skill** | Aplica un skill | react-19, tailwind-4 |
+| **If/Else** | Decisión con dos ramas | "Si hay errores, ir a Dev" |
+| **Switch** | Decisión con N ramas | Ruteo por tipo de cambio |
+| **Skill** | Aplica un skill | angular, git-commit |
+| **MCP** | Llama una herramienta MCP | Servidor + tool + parámetros |
+| **Group** | Agrupa nodos colapsables | Fase "implement" con 3 agentes |
 
 ## Ejemplo
 
@@ -41,6 +44,10 @@ Click "Export" → Se crea el command en opencode
                                           ├─ Sí → [Reviewer] → [End]
                                           └─ No → [Dev] → [QA]
 ```
+
+## Editar con IA
+
+El panel de chat del Studio reescribe el workflow con una instrucción en lenguaje natural ("agregá un gate de review después de QA"), en varias vueltas si hace falta. La IA solo puede usar los tipos de nodo válidos y devuelve el JSON completo para validar antes de aplicarlo.
 
 ## Qué se exporta
 
@@ -51,6 +58,15 @@ Click "Export" → Se crea el command en opencode
 | Nodos SubAgent | Agents (`nombre-agente.md`) |
 
 Esos `.md` van a `~/.config/opencode/agents/`. Un `ywai install` posterior deja solo el grupo activo: un workflow exportado hay que volver a exportarlo, o guardarlo en `.opencode/agents/` del repo.
+
+## Desinstalar o eliminar
+
+- **Uninstall** (icono de goma, grupo Export): borra el slash command `/nombre` y sus agentes del destino elegido (target + env), sin tocar el diseño. El diseño queda en el Studio para re-exportarlo cuando quieras.
+- **🗑️ Delete**: borra el diseño **y también** la implementación exportada (pide confirmación). Si exportaste a un env o a otro host, seleccioná ese destino antes de usar Uninstall; Delete desinstala del scope activo de la request.
+
+### Huérfanos
+
+Si borraste un workflow **antes** de que existiera Uninstall, su `/command` puede seguir vivo sin diseño detrás. El Studio lo detecta y muestra un banner: *"Implemented without a design: ..."*. El botón **Clean up** los desinstala de una vez. La detección solo marca commands con forma de workflow (`agent: <nombre>-orchestrator`), nunca los commands propios de ywai ni del host.
 
 ## Validación
 

@@ -25,7 +25,7 @@ Studio (diseñas) → JSON (guardas) → Commands (exportas) → Groups (agentes
 
 ```bash
 # 1. Abrir Studio
-ywai kanban → http://localhost:5768/workflows
+ywai ui → http://localhost:5768/workflows
 
 # 2. Diseñar flujo
 Arrastrar nodos → Conectar → Configurar
@@ -41,9 +41,11 @@ Click "Export" → Se crea /feature-mi-flujo
 
 | Command | Flujo | Para qué |
 |---|---|---|
-| `/feature-delivery` | planning → architect → dev → qa → reviewer | Features completas |
-| `/social-refactor` | scope → planner → dev → validator | Migraciones |
+| `/ship` | scout → plan → design → implement → test → review → deploy | Entregas completas |
+| `/planning` | scout → plan | Planificar antes de implementar |
 | `/qa-automation` | analyst → finder → dev → reviewer | Testing completo |
+| `/qa-exploratory` | summary → scenarios → verify → feedback | Testing exploratorio |
+| `/scenario-verification` | run scenarios → file evidence | Verificación BDD |
 
 ## Cuándo usar cada componente
 

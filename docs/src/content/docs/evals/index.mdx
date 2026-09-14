@@ -1,0 +1,66 @@
+---
+title: Evals
+description: Medir el uso real y correr benchmarks de agentes por modelo
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Evals
+
+## Qué son
+
+Dos herramientas distintas bajo el mismo techo:
+
+| Herramienta | Qué mide | Fuente |
+|---|---|---|
+| **Session Analytics** | Qué agentes, skills, modelos y tools usás de verdad | SQLite local de OpenCode |
+| **Agent Benchmarks** | Cómo rinde cada modelo en tareas de eval | Corridas headless contra el servidor OpenCode |
+
+UI: `ywai ui → http://localhost:5768/evals`. CLI: `ywai eval ...`.
+
+## Session Analytics
+
+No es un harness sintético: rankea lo que tus agentes hacen en sesiones reales.
+
+```bash
+ywai eval run                         # ranking, últimos 30 días
+ywai eval run --days 7                # ventana de 7 días
+ywai eval run --days 0                # todo el historial
+ywai eval run --worktree dev-ai-workflow --top 20
+ywai eval sessions --project <id> --json
+```
+
+Filtra por proyecto, worktree y ambiente. Ideal para la [retro de workflow](/dev-ai-workflow/guides/retro): decisiones con datos, no con sensaciones.
+
+## Agent Benchmarks
+
+Corre una tarea de eval contra uno o varios modelos y decide si pasa:
+
+```bash
+# Una tarea, un modelo
+ywai eval bench --task find-session-deletes --model anthropic/claude-sonnet-4-5
+
+# Varios modelos, 3 rondas, con baseline y compuerta de regresión
+ywai eval bench --task find-session-deletes --model m1,m2 --rounds 3 \
+  --min-score 0.8 --require-hard --baseline-run latest --max-regression 0.05
+```
+
+Códigos de salida: `0` pasa, `1` no pasa la compuerta, `2` falla el harness (sin servidor, tarea desconocida, servidor ocupado). Habla directo con el servidor OpenCode (`OPENCODE_URL`, default `localhost:4096`); el control server no necesita estar corriendo.
+
+```bash
+# Comparar perfiles lado a lado (cada uno con su server y DB: los baselines no se mezclan)
+ywai eval compare --profiles dev,qa --task find-session-deletes --model anthropic/claude-sonnet-4-5
+```
+
+## Pestañas de la UI
+
+| Pestaña (`/evals?tab=`) | Qué hay |
+|---|---|
+| `sessions` | Session Analytics por ambiente |
+| `tasks` | Agent Benchmarks y su historial |
+| `recall` | Memory Recall: qué tan bien recupera la memoria |
+| `history` | Historial de corridas y diffs entre runs |
+
+<Aside type="tip">
+Corre `ywai eval bench` en CI para frenar un cambio de modelo que degrade: `--baseline-run latest --max-regression 0.05` y el exit code hace el resto.
+</Aside>
