@@ -16,6 +16,7 @@ import (
 var publishedSlots = map[string]bool{
 	"app":                     true,
 	"home.footer":             true,
+	"home.footer.status":      true,
 	"prompt.footer":           true,
 	"prompt.footer.file":      true,
 	"prompt.footer.location":  true,

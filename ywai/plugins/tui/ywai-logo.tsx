@@ -9,11 +9,6 @@ import { join } from "node:path"
 
 const id = "ywai-logo"
 
-type TuiTheme = {
-  textMuted: string
-  accent: string
-}
-
 // Canonical ywai wordmark — kept in sync with internal/tui/tui.go logoLines.
 const wordmark = [
   "██╗   ██╗██╗    ██╗ █████╗ ██╗",
@@ -24,7 +19,8 @@ const wordmark = [
   "   ╚═╝    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝",
 ]
 
-const compactArt = "✦ ywai ✦"
+const mediumMark = "◆  Ywai  ◆"
+const compactArt = "✦ Ywai ✦"
 
 // Brand palette from the ywai icon (icon.svg): orange, blue, purple.
 type RGB = [number, number, number]
@@ -54,7 +50,6 @@ const gradient = (p: number): RGB => {
   return mix(brand[i % n], brand[(i + 1) % n], seg - i)
 }
 
-// Easter eggs unlocked by clicking the logo.
 const eggs = [
   { at: 3, text: "you found me 🎉" },
   { at: 7, text: "yoizen ai · keep clicking…" },
@@ -68,9 +63,6 @@ const taglineFor = (clicks: number): string | null => {
   return unlocked
 }
 
-// ywai writes ~/.ywai/version.json (see internal/versionfile). Read it once at
-// startup so the logo can show the installed version and flag updates. Best
-// effort: if ywai was never installed or the file is missing, show nothing.
 type VersionInfo = { installed?: string; latest?: string; updateAvailable?: boolean }
 
 const readVersionInfo = (): VersionInfo => {
@@ -82,84 +74,181 @@ const readVersionInfo = (): VersionInfo => {
   }
 }
 
-// Normalize a tag (GitHub prepends "v") for display.
 const tag = (v?: string) => (v ? (v.startsWith("v") ? v : `v${v}`) : "")
 
-const Logo = (props: { theme: TuiTheme }) => {
-  const dim = useTerminalDimensions()
-  const [clicks, setClicks] = createSignal(0)
-  const [phase, setPhase] = createSignal(0)
-  const [flash, setFlash] = createSignal(0) // remaining click-flash frames
+// v2 ResolvedTheme is nested (theme.text.subdued, theme.text.feedback.*).
+// Older hosts passed flat keys. Prefer v2; fall back so a missing token
+// never paints the default (white) fg.
+const themeMuted = (theme) => theme?.text?.subdued ?? theme?.textMuted ?? theme?.text?.default
+const themeAccent = (theme) =>
+  theme?.text?.feedback?.info?.default ?? theme?.accent ?? theme?.text?.action?.primary?.default ?? theme?.text?.default
+const themeWarning = (theme) =>
+  theme?.text?.feedback?.warning?.default ?? theme?.text?.status?.unread ?? themeAccent(theme)
 
-  // Animation loop. ~14fps keeps a home screen lively without burning CPU.
+const aboutMessage = (info: VersionInfo) => {
+  const installed = info.installed ? `installed ${tag(info.installed)}` : "installed version unknown"
+  if (info.updateAvailable) return `${installed}\n↑ ${tag(info.latest)} available — run \`ywai update\``
+  return info.installed ? `${installed}\nup to date` : installed
+}
+
+const showAbout = (ctx) => {
+  const message = aboutMessage(readVersionInfo())
+  if (ctx.ui?.dialog?.alert) {
+    void ctx.ui.dialog.alert({ title: "ywai", message })
+    return
+  }
+  ctx.ui?.toast?.show?.({ title: "ywai", message, variant: "info" })
+}
+
+const GlyphRow = (props: { line: string; row: number; rows: number; phase: number; flash: number }) => (
+  <box flexDirection="row">
+    <Index each={props.line.split("")}>
+      {(ch, i) => {
+        const base = gradient(i / Math.max(props.line.length - 1, 1) + props.row * 0.12 - props.phase)
+        const color =
+          props.flash > 0 ? rgba(mix(base, [255, 255, 255], (props.flash / 10) * 0.8)) : rgba(base)
+        return <text fg={color}>{ch()}</text>
+      }}
+    </Index>
+  </box>
+)
+
+const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
+  const dim = useTerminalDimensions()
+  const [phase, setPhase] = createSignal(0)
+  const [flash, setFlash] = createSignal(0)
+
   const timer = setInterval(() => {
     setFlash((f) => (f > 0 ? f - 1 : 0))
     setPhase((p) => p + (flash() > 0 ? 0.05 : 0.012))
   }, 70)
   onCleanup(() => clearInterval(timer))
 
-  const big = createMemo(() => {
+  const size = createMemo(() => {
     const t = dim()
-    return t.height >= wordmark.length + 6 && t.width >= 64
+    if (t.height >= wordmark.length + 6 && t.width >= 64) return "full"
+    if (t.width >= 28) return "medium"
+    return "compact"
   })
 
-  const tagline = createMemo(() => taglineFor(clicks()))
-  const version = readVersionInfo()
-
-  // Color for wordmark row `row` of `rows`: a vertical gradient sweep. During a
-  // click flash each row brightens toward white for a satisfying burst.
-  const rowColor = (row: number, rows: number) => {
-    const base = gradient(row / rows - phase())
-    if (flash() > 0) {
-      const glow = flash() / 10 // 1 → 0 over the flash
-      return rgba(mix(base, [255, 255, 255], glow * 0.8))
-    }
-    return rgba(base)
-  }
-
-  const full = () => (
-    <Index each={wordmark}>
-      {(line, row) => <text fg={rowColor(row, wordmark.length)}>{line()}</text>}
-    </Index>
-  )
-
-  const compact = () => <text fg={rowColor(0, 1)}>{compactArt}</text>
+  const tagline = createMemo(() => taglineFor(props.clicks()))
+  const mark = createMemo(() => {
+    if (size() === "full") return wordmark
+    if (size() === "medium") return [mediumMark]
+    return [compactArt]
+  })
 
   return (
     <box
       flexDirection="column"
       alignItems="center"
       onMouseDown={() => {
-        setClicks((n) => n + 1)
+        props.bump()
         setFlash(10)
       }}
     >
-      {big() ? full() : compact()}
-      {version.installed ? (
-        <text fg={props.theme.textMuted}>{`ywai ${tag(version.installed)}`}</text>
-      ) : null}
-      {version.updateAvailable ? (
-        <text fg={props.theme.accent}>{`↑ ${tag(version.latest)} available — run \`ywai update\``}</text>
-      ) : null}
-      {tagline() ? <text fg={props.theme.accent}>{tagline()}</text> : null}
+      <Index each={mark()}>
+        {(line, row) => (
+          <GlyphRow line={line()} row={row} rows={mark().length} phase={phase()} flash={flash()} />
+        )}
+      </Index>
+      {tagline() ? <text fg={themeAccent(props.ctx.theme)}>{tagline()}</text> : null}
     </box>
   )
 }
 
-// OpenCode2 beta uses the v2 TUI module contract: `{ id, setup }`.
-//
-// The claim targets `home.footer`, which is a slot the host actually
-// publishes. The previous target, `home.logo`, is not in the slot tree of any
-// shipped build — the host publishes home.footer, prompt.footer[.file
-// |.location|.status], session.composer.top, session.panel and
-// sidebar.{content,context,footer[.location],mcp} — and a claim on a path the
-// host does not publish is discarded, so the logo never rendered and said
-// nothing about why.
-const setup = (ctx: { theme: TuiTheme; ui: { slot: (claim: unknown) => unknown } }) => {
-  ctx.ui.slot({
-    prepend: "home.footer",
-    render: () => <Logo theme={ctx.theme} />,
+const VersionChip = (props: { ctx: any }) => {
+  const [info, setInfo] = createSignal(readVersionInfo())
+  const poll = setInterval(() => setInfo(readVersionInfo()), 30_000)
+  onCleanup(() => clearInterval(poll))
+
+  const label = createMemo(() => {
+    const v = info()
+    if (!v.installed && !v.updateAvailable) return ""
+    if (v.updateAvailable) return `ywai ↑ ${tag(v.latest)}`
+    return `ywai ${tag(v.installed)}`
   })
+
+  return label() ? (
+    <text
+      fg={info().updateAvailable ? themeWarning(props.ctx.theme) : themeMuted(props.ctx.theme)}
+      onMouseDown={() => {
+        if (info().updateAvailable) {
+          props.ctx.ui?.toast?.show?.({
+            title: "ywai update",
+            message: `run \`ywai update\`  (${tag(info().installed)} → ${tag(info().latest)})`,
+            variant: "info",
+          })
+          return
+        }
+        showAbout(props.ctx)
+      }}
+    >
+      {label()}
+    </text>
+  ) : null
+}
+
+const Commands = (props: { ctx: any }) => {
+  props.ctx.keymap?.layer?.(() => ({
+    mode: "global",
+    commands: [
+      {
+        id: "ywai.about",
+        title: "ywai version",
+        group: "ywai",
+        palette: true,
+        slash: { name: "ywai" },
+        run: () => showAbout(props.ctx),
+      },
+    ],
+  }))
+  return null
+}
+
+// OpenCode v2 TUI contract: `{ id, setup }`. SlotMap (packages/plugin/src/tui/context.ts)
+// has no home.logo — a claim on an unpublished path is discarded in silence.
+// Wordmark sits `before` home.footer (sibling above the footer, not inside it);
+// version lives in home.footer.status (after health, before the host version).
+const setup = (ctx) => {
+  let clicks = () => 0
+  let bump = () => {}
+  try {
+    const [store, update] = ctx.storage.store("ywai-logo-eggs", { initial: { clicks: 0 } })
+    clicks = () => store.clicks
+    bump = () => {
+      void update((draft) => {
+        draft.clicks += 1
+      })
+    }
+  } catch {
+    const [n, setN] = createSignal(0)
+    clicks = n
+    bump = () => setN((c) => c + 1)
+  }
+
+  const unsubs = [
+    ctx.ui.slot({
+      before: "home.footer",
+      render: () => <Logo ctx={ctx} clicks={clicks} bump={bump} />,
+    }),
+    ctx.ui.slot({
+      append: "home.footer.status",
+      render: () => <VersionChip ctx={ctx} />,
+    }),
+    ctx.ui.slot({
+      append: "app",
+      render: () => <Commands ctx={ctx} />,
+    }),
+  ]
+
+  return () => {
+    for (const u of unsubs) {
+      try {
+        u?.()
+      } catch {}
+    }
+  }
 }
 
 const plugin = { id, setup }
