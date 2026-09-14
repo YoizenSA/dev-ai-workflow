@@ -112,6 +112,49 @@ func (s *Store) Load(name string) (*Workflow, error) {
 	return s.readLocked(name)
 }
 
+// Raw returns the workflow's JSON bytes without parsing. Handlers use this —
+// not config paths — so tests can re-point the store at a temp dir.
+func (s *Store) Raw(name string) ([]byte, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return os.ReadFile(s.pathLocked(name))
+}
+
+// Backup copies the current workflow JSON into <baseDir>/backups/ with a
+// timestamp suffix and returns the backup path. A missing workflow is not an
+// error: it just yields no backup (empty path). The backups dir is skipped by
+// List, which ignores directories.
+func (s *Store) Backup(name string) (string, error) {
+	if err := ValidateName(name); err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	raw, err := os.ReadFile(s.pathLocked(name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	dir := filepath.Join(s.baseDir, "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	dst := filepath.Join(dir, fmt.Sprintf("%s-%d.json", name, time.Now().Unix()))
+	if err := os.WriteFile(dst, raw, 0o644); err != nil {
+		return "", err
+	}
+	return dst, nil
+}
+
 // Create persists a new workflow. Fails if one with the same name exists.
 // ID and timestamps are set if empty.
 func (s *Store) Create(wf *Workflow) error {

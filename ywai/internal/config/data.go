@@ -133,6 +133,34 @@ func SeedWorkflowsFromEmbedded() error {
 	})
 }
 
+// SeedWorkflowJSON returns the bundled seed workflow JSON for name: the
+// embedded FS when built with it, else a source checkout (ywai/workflows/).
+// ok=false when no seed is available (non-embedded binary without source);
+// callers treat that as "nothing to compare against".
+func SeedWorkflowJSON(name string) ([]byte, bool) {
+	if name == "" || name != filepath.Base(name) {
+		return nil, false
+	}
+	if fn := getEmbeddedWorkflowsFS; fn != nil {
+		if fsys := fn(); fsys != nil {
+			if data, err := fs.ReadFile(fsys, name+".json"); err == nil {
+				return data, true
+			}
+		}
+	}
+	dir := WorkflowsSourceDir()
+	// findSourceDir falls back to the data dir itself; comparing a workflow
+	// with itself is always "in sync", so skip that case.
+	if dir == "" || dir == DataWorkflowsDir() {
+		return nil, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name+".json"))
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
 // GetEmbeddedDefaults reads the defaults.jsonc from embedded FS.
 func GetEmbeddedDefaults() ([]byte, error) {
 	if fn := getEmbeddedDefaultsFS; fn != nil {

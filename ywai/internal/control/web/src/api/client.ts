@@ -608,6 +608,13 @@ export const workflowApi = {
 	// delete leaves no orphans behind.
 	delete: (name: string, unexport = true) =>
 		del(`/api/workflows/${name}${unexport ? '?unexport=true' : ''}`),
+	// Overwrite the stored design with the bundled seed (the server backs up
+	// the current design first). The seed pass never overwrites existing
+	// installs, so this is how seed evolution reaches them.
+	applySeed: (name: string) =>
+		request<Workflow>(`/api/workflows/${name}/seed-apply`, {
+			method: "POST",
+		}),
 	rename: (oldName: string, newName: string) =>
 		request<Workflow>(`/api/workflows/${oldName}`, {
 			method: "PATCH",

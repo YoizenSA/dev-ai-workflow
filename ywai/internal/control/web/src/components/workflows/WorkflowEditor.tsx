@@ -158,6 +158,7 @@ function WorkflowEditorInner() {
 	const saveCurrent = useWorkflowStore((s) => s.saveCurrent)
 	const deleteCurrent = useWorkflowStore((s) => s.deleteCurrent)
 	const renameCurrent = useWorkflowStore((s) => s.renameCurrent)
+	const applySeed = useWorkflowStore((s) => s.applySeed)
 	const validateCurrent = useWorkflowStore((s) => s.validateCurrent)
 	const exportCurrent = useWorkflowStore((s) => s.exportCurrent)
 	const uninstallCurrent = useWorkflowStore((s) => s.uninstallCurrent)
@@ -197,6 +198,9 @@ function WorkflowEditorInner() {
 	const aiModels = useOpencodeModels()
 	const [exportTarget, setExportTarget] = useState('opencode')
 	const targetMeta = EXPORT_TARGETS.find((t) => t.value === exportTarget)
+	// Seed drift for the workflow open in the editor (undefined when no
+	// bundled seed is available to compare against).
+	const seedDiff = summaries.find((s) => s.name === current?.name)?.seed
 	// Export destination: '' = global install, '<env>' = that environment.
 	// Defaults to the Settings scope so behavior matches what used to happen
 	// implicitly — but now it is visible and changeable here.
@@ -642,7 +646,7 @@ function WorkflowEditorInner() {
 							className="workflow-select"
 							options={summaries.map((s) => ({
 								value: s.name,
-								label: `${s.name} (${s.nodeCount} nodes)`,
+								label: `${s.name} (${s.nodeCount} nodes)${s.seed && !s.seed.inSync ? ' ⬆' : ''}`,
 							}))}
 							value={selectedName}
 							onChange={(v) => onSelect(v)}
@@ -650,6 +654,28 @@ function WorkflowEditorInner() {
 							ariaLabel="Select workflow"
 						/>
 					</div>
+
+				{/* Seed update: the bundled workflow evolved and this copy is
+				    behind. Applying replaces the design (server keeps a backup).
+				    Re-export afterwards so the /command picks the new design. */}
+				{current && seedDiff && !seedDiff.inSync && (
+					<button
+						className="btn btn-icon"
+						aria-label="Update from seed"
+						data-tip={`Bundled seed changed${seedDiff.updatedAt ? ` (${seedDiff.updatedAt.slice(0, 10)})` : ''} — update this copy`}
+						onClick={async () => {
+							const delta = [
+								seedDiff.addedNodes?.length ? `+ ${seedDiff.addedNodes.join(', ')}` : '',
+								seedDiff.removedNodes?.length ? `− ${seedDiff.removedNodes.join(', ')}` : '',
+								seedDiff.changedNodes?.length ? `~ ${seedDiff.changedNodes.join(', ')}` : '',
+							].filter(Boolean).join('\n')
+							if (!window.confirm(`Replace "${current.name}" with the bundled seed?\n\n${delta}\n\nYour current design is backed up first. Re-export afterwards to refresh /${current.name}.`)) return
+							await applySeed(current.name)
+						}}
+					>
+						<RefreshCw size={16} />
+					</button>
+				)}
 
 				{parentName && (
 					<button

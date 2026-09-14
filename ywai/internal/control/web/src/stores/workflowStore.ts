@@ -174,6 +174,9 @@ interface WorkflowState {
 	createNew: (name: string, description?: string) => Promise<void>
 	saveCurrent: () => Promise<void>
 	deleteCurrent: () => Promise<void>
+	// Overwrite the stored design with the bundled seed (the server backs up
+	// the current design first). Reloads the list and the applied workflow.
+	applySeed: (name: string) => Promise<void>
 	// Rename the current workflow (renames the on-disk file + patches id/name).
 	renameCurrent: (newName: string) => Promise<void>
 	importRaw: (raw: unknown, name?: string) => Promise<void>
@@ -332,6 +335,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 		try {
 			await workflowApi.delete(current.name)
 			set({ current: null, dirty: false, selectedNodeId: null, validation: null, exportPlan: null })
+			await get().list()
+		} catch (err) {
+			set({ error: errMsg(err) })
+		}
+	},
+
+	applySeed: async (name) => {
+		try {
+			const wf = await workflowApi.applySeed(name)
+			set({ current: normalizeWorkflow(wf), dirty: false, selectedNodeId: null, validation: null, past: [], future: [] })
 			await get().list()
 		} catch (err) {
 			set({ error: errMsg(err) })

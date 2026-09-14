@@ -599,12 +599,24 @@ export interface Workflow {
 	updatedAt: string;
 }
 
+export interface WorkflowSeedDiff {
+	inSync: boolean;
+	/** The bundled seed's version/updatedAt, for display. */
+	version?: string;
+	updatedAt?: string;
+	addedNodes?: string[];
+	removedNodes?: string[];
+	changedNodes?: string[];
+}
+
 export interface WorkflowSummary {
 	name: string;
 	description: string;
 	version: string;
 	nodeCount: number;
 	updatedAt: string;
+	/** Drift against the bundled seed; absent when no seed is available. */
+	seed?: WorkflowSeedDiff;
 }
 
 export interface WorkflowValidationIssue {

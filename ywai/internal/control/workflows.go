@@ -58,6 +58,12 @@ func (s *Server) registerWorkflowsRoutes() {
 	s.mux.HandleFunc("POST /api/workflows/{name}/export", api.handleExport)
 	s.mux.HandleFunc("DELETE /api/workflows/{name}/export", api.handleUnexport)
 
+	// Reset the stored design to the bundled seed. The seed pass never
+	// overwrites existing installs, so this is the explicit escape hatch that
+	// lets seed evolution (new nodes, changed gates) reach them. The current
+	// design is backed up to <data>/workflows/backups/ first.
+	s.mux.HandleFunc("POST /api/workflows/{name}/seed-apply", api.handleSeedApply)
+
 	// Edit with AI (opencode CLI).
 	s.mux.HandleFunc("POST /api/workflows/{name}/ai-edit", api.handleAIEdit)
 
@@ -98,7 +104,68 @@ func (a *workflowsAPI) handleList(w http.ResponseWriter, r *http.Request) {
 	if summaries == nil {
 		summaries = []workflows.Summary{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"workflows": summaries})
+	rows := make([]workflowListItem, 0, len(summaries))
+	for _, s := range summaries {
+		rows = append(rows, workflowListItem{Summary: s, Seed: seedDiffFor(a.store, s.Name)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"workflows": rows})
+}
+
+// workflowListItem is a list row: the store summary plus seed-drift info. Seed
+// is nil when no bundled seed is available (non-embedded binary without
+// source) — the frontend hides the update affordance then.
+type workflowListItem struct {
+	workflows.Summary
+	Seed *workflows.SeedDiff `json:"seed,omitempty"`
+}
+
+// seedDiffFor compares the installed workflow with its bundled seed. nil means
+// "no comparison possible", not "in sync". The local copy is read through the
+// injected store so tests can re-point it.
+func seedDiffFor(store *workflows.Store, name string) *workflows.SeedDiff {
+	seed, ok := config.SeedWorkflowJSON(name)
+	if !ok {
+		return nil
+	}
+	local, err := store.Raw(name)
+	if err != nil {
+		return nil
+	}
+	d := workflows.DiffSeed(local, seed)
+	return &d
+}
+
+// handleSeedApply overwrites the stored workflow with its bundled seed — the
+// explicit "reset to canonical" that the seed pass never does for existing
+// installs (config.SeedWorkflowsFrom skips existing files). The current design
+// is backed up to <data>/workflows/backups/ first.
+func (a *workflowsAPI) handleSeedApply(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := workflows.ValidateName(name); err != nil {
+		writeWorkflowsError(w, http.StatusBadRequest, err)
+		return
+	}
+	seed, ok := config.SeedWorkflowJSON(name)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no bundled seed for workflow " + name})
+		return
+	}
+	var wf workflows.Workflow
+	if err := json.Unmarshal(seed, &wf); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if _, err := a.store.Backup(name); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// Identity stays in lockstep with the filename the way the store expects.
+	wf.ID, wf.Name = name, name
+	if err := a.store.Save(&wf); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, &wf)
 }
 
 func (a *workflowsAPI) handleGet(w http.ResponseWriter, r *http.Request) {
