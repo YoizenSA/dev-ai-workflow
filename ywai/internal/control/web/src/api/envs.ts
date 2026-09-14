@@ -38,6 +38,12 @@ export interface EnvCopiedProviders {
   note?: string
 }
 
+export interface EnvCopiedAdo {
+  profiles: string[] | null
+  // True when the global default profile was adopted (the env had none).
+  defaultProfile?: boolean
+}
+
 export interface EnvDoctorCheck {
   name: string
   ok: boolean
@@ -97,13 +103,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const envsApi = {
   list: () => request<EnvListResponse>('/api/envs'),
   create: (name: string, preset?: string, copyProviders?: boolean) =>
-    request<{ profile: EnvProfile; copied?: EnvCopiedProviders; copy_error?: string }>(`/api/envs`, {
+    request<{ profile: EnvProfile; copied?: EnvCopiedProviders; copy_error?: string; copied_ado?: EnvCopiedAdo; copy_ado_error?: string }>(`/api/envs`, {
       method: 'POST',
       body: JSON.stringify({ name, preset, copy_providers: copyProviders }),
     }),
   // Merge the global providers + credentials into an existing env.
   importProviders: (name: string) =>
     request<{ name: string; copied: EnvCopiedProviders }>(`/api/envs/${encodeURIComponent(name)}/import-providers`, {
+      method: 'POST',
+    }),
+  // Merge the global `ado` CLI profiles into an existing env.
+  importAdo: (name: string) =>
+    request<{ name: string; copied_ado: EnvCopiedAdo }>(`/api/envs/${encodeURIComponent(name)}/import-ado`, {
       method: 'POST',
     }),
   updatePreset: (name: string, preset: string) =>
