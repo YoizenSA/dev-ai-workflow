@@ -3,8 +3,17 @@
  *
  * v2 renamed or re-shaped several server events:
  * - `session.idle` became `session.status` with `status.type: "idle"`;
+ * - on 2.0 the run lifecycle moved again, to
+ *   `session.execution.{started,succeeded,failed,interrupted}`, and
+ *   `session.status` stopped appearing on the bus altogether;
  * - `message.updated` no longer exists; token telemetry moved to
  *   `session.usage.updated` / `session.step.ended`.
+ *
+ * Both idle spellings are kept: the host decides which it emits, and a build
+ * that still sends `session.status` must keep working. Missing the 2.0
+ * spelling is not a cosmetic gap — nothing synthesizes `session.idle`, the
+ * manager never schedules a completion check, and every delegation hangs in
+ * `running` until its 900s timeout fires.
  *
  * mapV2EventToV1 is additive synthesis only: the raw event always comes first,
  * unmodified. Synthesized v1-shape events follow.
@@ -54,10 +63,31 @@ export function usageToMessageUpdated(props: Record<string, any>): PluginEvent |
 	}
 }
 
+/**
+ * 2.0 run-lifecycle events that mean "this session stopped running".
+ *
+ * All three synthesize idle, not just `succeeded`: `handleSessionIdle` only
+ * schedules a completion check and the manager reconciles the real outcome
+ * afterwards, so finalizing on a failure or an interrupt is strictly better
+ * than leaving the delegation to time out.
+ */
+const EXECUTION_TERMINAL_TYPES = new Set([
+	"session.execution.succeeded",
+	"session.execution.failed",
+	"session.execution.interrupted",
+])
+
 export function mapV2EventToV1(event: PluginEvent): PluginEvent[] {
 	const out: PluginEvent[] = [event]
 	const type = typeof event.type === "string" ? event.type : ""
 	const props = propsOf(event)
+
+	if (EXECUTION_TERMINAL_TYPES.has(type)) {
+		if (typeof props.sessionID === "string" && props.sessionID !== "") {
+			out.push({ type: "session.idle", properties: { sessionID: props.sessionID } })
+		}
+		return out
+	}
 
 	if (type === "session.status") {
 		const status = props.status

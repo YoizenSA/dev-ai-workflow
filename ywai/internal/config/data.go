@@ -38,6 +38,10 @@ const AdvisorBundleName = "advisor.js"
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
 
+// BackgroundAgentsNotifyBundleName is the filename of the background-agents
+// notification TUI sidecar (plain .tsx source, no build step), like the logo.
+const BackgroundAgentsNotifyBundleName = "background-agents-notify.tsx"
+
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
@@ -706,6 +710,31 @@ func TuiLogoBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("ywai TUI logo plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// BackgroundAgentsNotifyBundlePath resolves the sidecar source, same order as
+// TuiLogoBundlePath: source checkout, seeded copy, embedded FS on demand.
+func BackgroundAgentsNotifyBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/tui/background-agents-notify.tsx
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", BackgroundAgentsNotifyBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), "tui", BackgroundAgentsNotifyBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("background-agents notify sidecar not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

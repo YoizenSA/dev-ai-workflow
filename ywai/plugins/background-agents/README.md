@@ -66,6 +66,26 @@ Completion is delivered via `<task-notification>` — there is no need to poll.
 
 Notifications are split by audience: the model receives the `<task-notification>` XML as a hidden synthetic part (the TUI does not render it), while the human gets a TUI toast. The chat stays clean and the supervisor still receives full machine-readable context.
 
+### Human channel: native attention via the notify sidecar
+
+On OpenCode v2 the server plugin cannot toast by itself (the v1 client's
+`tui.showToast` is a no-op behind the v2 facade), and the built-in
+`opencode.notifications` plugin plays the `subagent_done` sound for child
+sessions but shows no OS notification for subagents. The human half therefore
+lives in a TUI sidecar, `ywai/plugins/tui/background-agents-notify.tsx`,
+installed by `ywai install` as the `background-agents-notify` plugin:
+
+1. On setup the server plugin registers a `ywai-background-agents` RPC with a
+   single `delegation_terminal` event (`src/plugin/terminal-events.ts`) and
+   emits one payload per terminal delegation plus one per all-complete batch.
+   Hosts without plugin RPC simply skip this; the model channel is unaffected.
+2. The sidecar subscribes and calls the native attention API
+   (`context.attention.notify`): OS notification when the terminal is
+   unfocused, native toast always. It emits **no sound** on purpose — the
+   built-in plugin already owns the `subagent_done`/`error` sounds, so nothing
+   plays twice. All of it honors the user's `cli.json` attention config
+   (enabled flag, volume, sound packs).
+
 ## Installation
 
 ywai vendors this plugin: `ywai install` copies the bundle into the OpenCode

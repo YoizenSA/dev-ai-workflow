@@ -33,10 +33,11 @@ import * as path from "node:path"
 import { formatDelegationContext } from "./context"
 import { createJsonErrorRecoveryHook } from "./json-error-recovery"
 import { createToolLoopGuardHook } from "./tool-loop-guard"
-import { DelegationManager } from "./delegation-manager"
+import { DelegationManager, describeUnknownError } from "./delegation-manager"
 import { createLogger } from "./logger"
 import { getProjectId } from "./primitives/get-project-id"
 import { DELEGATION_RULES } from "./rules"
+import { TERMINAL_EVENT_NAME, TERMINAL_RPC_ID, tryRegisterTerminalRpc } from "./terminal-events"
 import {
 	createSubagent,
 	createSubagentStatus,
@@ -223,6 +224,29 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 	// No nativeSteer on v2: steering rides the facade's prompt(delivery:"steer").
 	const manager = new DelegationManager(client, baseDir, log, {})
 
+	// Human channel: tui.showToast is a no-op on v2, so terminal delegations
+	// are silent for the human. When the host supports plugin RPC, terminal
+	// events flow to the notify sidecar (OS notification + toast). The
+	// model-facing <task-notification> path below is untouched.
+	const terminalRpc = await tryRegisterTerminalRpc(ctx)
+	if (terminalRpc) {
+		manager.setTerminalEventSink((event) => {
+			// Never throws into the model-facing path, but a rejected emit is a
+			// real failure (schema rejection, closed registration) — log it
+			// instead of swallowing it, or the human channel dies silently.
+			terminalRpc.events.emit(TERMINAL_EVENT_NAME, event).catch((error) => {
+				void manager.debugLog(`terminal RPC emit failed: ${error instanceof Error ? error.message : String(error)}`)
+			})
+		})
+		await manager.debugLog(
+			`terminal RPC registered: human notifications emit '${TERMINAL_EVENT_NAME}' on '${TERMINAL_RPC_ID}'`,
+		)
+	} else {
+		await manager.debugLog(
+			"terminal RPC unavailable on this host; human notifications fall back to native attention sounds",
+		)
+	}
+
 	await manager.debugLog("background-agents v2 setup initialized")
 
 	// Re-adopt delegations orphaned by a previous process exit (fire-and-forget).
@@ -342,10 +366,18 @@ export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | unde
 					}
 				}
 			}
-		} catch {
-			// Stream ended or errored; the manager's polling fallbacks cover the gap.
+		} catch (error) {
+			// Logged rather than swallowed: a bare catch here made a dead
+			// subscription indistinguishable from a quiet one. Note this stream
+			// carries config events only (catalog/agent/command/plugin updates),
+			// never session lifecycle — completion is detected by session.wait
+			// in the manager, not here.
+			await manager.debugLog(`event loop ended: ${describeUnknownError(error)}`)
 		}
 	})()
 
-	return () => controller.abort()
+	return () => {
+		controller.abort()
+		void Promise.resolve(terminalRpc?.dispose?.()).catch(() => {})
+	}
 }

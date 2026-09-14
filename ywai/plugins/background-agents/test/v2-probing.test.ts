@@ -69,6 +69,71 @@ describe("probeV2Capabilities", () => {
 		expect(agentsRes.data).toEqual([])
 	})
 
+	test("promptAsync routes noReply through synthetic, not a visible prompt", async () => {
+		// The parent-notification path uses promptAsync, which used to flatten
+		// parts to text and always steer-prompt them. That renders the
+		// notification as an ordinary user turn, which is how raw
+		// <task-notification> XML ended up in the human's transcript. The
+		// routing existed in `prompt` and had simply never been mirrored here.
+		const synthetics: any[] = []
+		const prompts: any[] = []
+		const ctx: any = {
+			session: {
+				synthetic: async (args: any) => {
+					synthetics.push(args)
+				},
+				prompt: async (args: any) => {
+					prompts.push(args)
+				},
+			},
+		}
+
+		const client = createV1ShapedClient(ctx)
+		await client.session.promptAsync({
+			path: { id: "ses_1" },
+			body: { noReply: true, parts: [{ type: "text", text: "delegation done" }] },
+		})
+
+		expect(synthetics.length).toBe(1)
+		expect(synthetics[0]).toMatchObject({ sessionID: "ses_1", text: "delegation done" })
+		expect(prompts.length).toBe(0)
+	})
+
+	test("promptAsync treats a synthetic-marked part as synthetic too", async () => {
+		const synthetics: any[] = []
+		const ctx: any = {
+			session: {
+				synthetic: async (args: any) => {
+					synthetics.push(args)
+				},
+				prompt: async () => {},
+			},
+		}
+
+		const client = createV1ShapedClient(ctx)
+		await client.session.promptAsync({
+			path: { id: "ses_1" },
+			body: { parts: [{ type: "text", text: "note", synthetic: true }] },
+		})
+
+		expect(synthetics.length).toBe(1)
+		expect(synthetics[0].text).toBe("note")
+	})
+
+	test("promptAsync still steers when the host has no synthetic", async () => {
+		const prompts: any[] = []
+		const ctx: any = { session: { prompt: async (args: any) => prompts.push(args) } }
+
+		const client = createV1ShapedClient(ctx)
+		await client.session.promptAsync({
+			path: { id: "ses_1" },
+			body: { noReply: true, parts: [{ type: "text", text: "note" }] },
+		})
+
+		expect(prompts.length).toBe(1)
+		expect(prompts[0].delivery).toBe("steer")
+	})
+
 	test("noReply falls back to steer prompt when synthetic is unavailable", async () => {
 		const prompts: any[] = []
 		const steerOnlyCtx: any = {

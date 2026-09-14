@@ -61,6 +61,45 @@ describe("session.status idle synthesis", () => {
 	})
 })
 
+describe("session.execution idle synthesis (opencode 2.0)", () => {
+	// These are the events a live 2.0 server actually puts on the bus when a
+	// child session stops; `session.status` never appears. Missing them left
+	// every delegation running until its 900s timeout, which hung
+	// subagent_read and meant a terminal notification only ever fired late.
+	for (const type of [
+		"session.execution.succeeded",
+		"session.execution.failed",
+		"session.execution.interrupted",
+	]) {
+		test(`${type} synthesizes a v1 session.idle event`, () => {
+			const raw = { type, data: { sessionID: "ses_1" } }
+			const out = mapV2EventToV1(raw)
+			expect(out.length).toBe(2)
+			expect(out[0]).toBe(raw)
+			expect(out[1].type).toBe("session.idle")
+			expect((out[1].properties as any).sessionID).toBe("ses_1")
+		})
+	}
+
+	test("session.execution.started stays running — it is not a terminal event", () => {
+		const raw = { type: "session.execution.started", data: { sessionID: "ses_1" } }
+		const out = mapV2EventToV1(raw)
+		expect(out.length).toBe(1)
+	})
+
+	test("a missing or empty sessionID synthesizes nothing", () => {
+		expect(mapV2EventToV1({ type: "session.execution.succeeded", data: {} }).length).toBe(1)
+		expect(mapV2EventToV1({ type: "session.execution.succeeded", data: { sessionID: "" } }).length).toBe(1)
+	})
+
+	test("reads from the v1 properties envelope too", () => {
+		const raw = { type: "session.execution.succeeded", properties: { sessionID: "ses_2" } }
+		const out = mapV2EventToV1(raw)
+		expect(out.length).toBe(2)
+		expect((out[1].properties as any).sessionID).toBe("ses_2")
+	})
+})
+
 describe("usage telemetry synthesis", () => {
 	test("session.usage.updated synthesizes a v1 message.updated heartbeat", () => {
 		const raw = { type: "session.usage.updated", data: usageProps }

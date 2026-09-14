@@ -48,14 +48,17 @@ type Manifest struct {
 // here but absent from the manifest simply never installs.
 var manifestExecutors = map[string]func(agentName, configPath string) error{
 	"background-agents": func(_ string, configPath string) error { return InstallBackgroundAgents(configPath) },
-	"vision-bridge":     func(_ string, configPath string) error { return InstallVisionBridge(configPath) },
-	"advisor":           installAdvisorEntry,
-	"tui-logo":          func(_ string, configPath string) error { return InstallTuiLogo(configPath) },
-	"chrome-devtools":   func(agentName, configPath string) error { return InstallChromeDevToolsMCP(configPath, agentName) },
-	"grafana":           func(agentName, configPath string) error { return InstallGrafanaMCP(configPath, agentName) },
-	"microsoft-learn":   func(agentName, configPath string) error { return InstallMicrosoftLearnMCP(configPath, agentName) },
-	"meta-devtools":     func(agentName, configPath string) error { return InstallMetaDevToolsMCP(configPath, agentName) },
-	"ponytail":          InstallPonytail,
+	"background-agents-notify": func(_ string, configPath string) error {
+		return InstallBackgroundAgentsNotify(configPath)
+	},
+	"vision-bridge":   func(_ string, configPath string) error { return InstallVisionBridge(configPath) },
+	"advisor":         installAdvisorEntry,
+	"tui-logo":        func(_ string, configPath string) error { return InstallTuiLogo(configPath) },
+	"chrome-devtools": func(agentName, configPath string) error { return InstallChromeDevToolsMCP(configPath, agentName) },
+	"grafana":         func(agentName, configPath string) error { return InstallGrafanaMCP(configPath, agentName) },
+	"microsoft-learn": func(agentName, configPath string) error { return InstallMicrosoftLearnMCP(configPath, agentName) },
+	"meta-devtools":   func(agentName, configPath string) error { return InstallMetaDevToolsMCP(configPath, agentName) },
+	"ponytail":        InstallPonytail,
 }
 
 // installAdvisorEntry vendors the advisor plugin plus the /advisor command,

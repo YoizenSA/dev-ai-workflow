@@ -1,5 +1,6 @@
 import type { Message, Part } from "@opencode-ai/sdk"
 import type { generateMetadata } from "./metadata"
+import type { TerminalEventSink } from "./terminal-events"
 
 interface SessionMessageItem {
 	info: Message
@@ -258,6 +259,8 @@ interface DelegationManagerOptions {
 	idGenerator?: () => string
 	metadataGenerator?: typeof generateMetadata
 	nativeSteer?: NativeSteerFn
+	/** Fire-and-forget sink for human-facing terminal events (RPC on v2, recorder in tests). */
+	terminalEventSink?: TerminalEventSink
 }
 
 function isTerminalStatus(status: DelegationStatus): status is DelegationTerminalStatus {

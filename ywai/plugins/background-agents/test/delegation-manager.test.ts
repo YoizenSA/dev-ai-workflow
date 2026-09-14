@@ -925,6 +925,26 @@ describe("native delegation (v2 launch)", () => {
 		expect(manager.isDelegationChild("ses_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")).toBe(true)
 	})
 
+	test("keeps the whole session id, suffix included, not just its hex prefix", async () => {
+		const { manager } = await setup()
+		// A real id from a live v2 host: a hex-looking prefix followed by a
+		// mixed-case suffix. Every other test in this file uses an all-hex id,
+		// which let a hex-only pattern look correct while truncating every real
+		// id to `ses_f5fb4d72fffe` — an id the server answers with
+		// Session.NotFoundError. Supervision then targeted a session that did
+		// not exist, so wait, transcript reads and status all failed and the
+		// delegation could only ever end by timing out.
+		const realID = "ses_f5fb4d72fffeyaVsLoaNqTJTTk"
+		const delegation = await manager.delegateNative(
+			delegateInput() as never,
+			// Trailing period on purpose: the id must stop at the boundary.
+			async () => ({ content: `Launched ${realID}.` }),
+		)
+
+		expect(delegation.sessionID).toBe(realID)
+		expect(manager.isDelegationChild(realID)).toBe(true)
+	})
+
 	test("rejects when the native result carries no child session id", async () => {
 		const { manager } = await setup()
 		await expect(

@@ -190,8 +190,9 @@ func ScopedPreset() (Profile, map[string]any, error) {
 
 // mcpServerManifestIDs are the plugin-manifest entry ids that install an MCP
 // server (mirrors internal/plugins/manifest.go + mcp.go). Plugin entries
-// (background-agents, vision-bridge, advisor, tui-logo, ponytail) always
-// install; only these ids are filtered by the preset mcp[] allowlist.
+// (background-agents, background-agents-notify, vision-bridge, advisor,
+// tui-logo, ponytail) always install; only these ids are filtered by the
+// preset mcp[] allowlist.
 var mcpServerManifestIDs = map[string]bool{
 	"chrome-devtools": true,
 	"grafana":         true,

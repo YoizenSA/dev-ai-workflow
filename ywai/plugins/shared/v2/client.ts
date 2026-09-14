@@ -79,6 +79,27 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 			return { data: undefined }
 		},
 
+		/**
+		 * Block until the session's agent loop goes idle.
+		 *
+		 * This is the completion signal for natively launched delegations: v2
+		 * gives plugins an event stream carrying config events only, and
+		 * `status` above is a stub, so nothing else reports that a child
+		 * finished.
+		 *
+		 * Throws when the host lacks it instead of resolving. A silent resolve
+		 * would tell the caller a still-running child had finished, which is
+		 * worse than the timeout it would be replacing.
+		 */
+		async wait(input: { path: { id: string } }): Promise<{ data: undefined }> {
+			if (!caps.sessionWait || !ctx.session.wait) {
+				shimLog("session.wait not supported on this host", { id: input?.path?.id })
+				throw new Error("session.wait is not supported on this host")
+			}
+			await ctx.session.wait({ sessionID: input.path.id })
+			return { data: undefined }
+		},
+
 		async get(input: { path: { id: string } }): Promise<{ data: any }> {
 			if (caps.sessionGet && ctx.session.get) {
 				return { data: unwrap(await ctx.session.get({ sessionID: input.path.id })) }
@@ -113,7 +134,11 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 
 		async promptAsync(input: {
 			path: { id: string }
-			body?: { agent?: string; parts?: Array<{ type: string; text?: string }> }
+			body?: {
+				agent?: string
+				noReply?: boolean
+				parts?: Array<{ type: string; text?: string; synthetic?: boolean }>
+			}
 		}): Promise<{ data: undefined }> {
 			const text = (input.body?.parts ?? [])
 				.filter((part) => part.type === "text")
@@ -126,6 +151,24 @@ export function createV1ShapedClient(ctx: V2PluginContext): any {
 					shimLog("session.switchAgent not supported", { agent: input.body.agent })
 				}
 			}
+
+			// Same noReply routing as `prompt` below. Without it this method
+			// flattened parts to text and sent them as an ordinary steer prompt,
+			// so every parent notification landed in the transcript as a visible
+			// user turn — the raw <task-notification> XML the human sees. The
+			// host models synthetic input as its own message type, which is what
+			// keeps it available to the model without rendering as a user turn.
+			const wantsSynthetic =
+				input.body?.noReply === true ||
+				(input.body?.parts ?? []).some((part) => part.synthetic === true)
+			if (wantsSynthetic && caps.sessionSynthetic && ctx.session.synthetic) {
+				await ctx.session.synthetic({
+					sessionID: input.path.id,
+					text,
+				})
+				return { data: undefined }
+			}
+
 			if (caps.sessionPrompt && ctx.session.prompt) {
 				await ctx.session.prompt({
 					sessionID: input.path.id,

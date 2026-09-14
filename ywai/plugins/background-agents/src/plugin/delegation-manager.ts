@@ -40,6 +40,7 @@ import type {
 	ParentNotificationState,
 	SessionMessageItem,
 } from "./types"
+import type { BackgroundAgentsTerminalEvent, TerminalEventSink } from "./terminal-events"
 
 /**
  * A tool part's error is a string on v1 but an object on v2, so reading it as
@@ -60,7 +61,17 @@ export function errorText(error: unknown): string {
 	return String(error ?? "unknown error")
 }
 
-const SESSION_ID_PATTERN = /ses_[a-f0-9][a-f0-9-]{7,}/
+/**
+ * Session ids are `ses_` followed by a hex-looking prefix AND a mixed-case
+ * alphanumeric suffix, e.g. `ses_f5fb4d72fffeyaVsLoaNqTJTTk`.
+ *
+ * A hex-only character class stops at the end of the prefix and yields
+ * `ses_f5fb4d72fffe`, an id the server answers with Session.NotFoundError.
+ * Every supervision call this plugin makes then targets a session that does
+ * not exist — wait, transcript reads and status all fail silently — so the
+ * delegation only ever ends by timing out.
+ */
+const SESSION_ID_PATTERN = /ses_[A-Za-z0-9_-]{8,}/
 
 /**
  * Pull the child session id out of a native `subagent` tool result. The result
@@ -92,6 +103,40 @@ function extractSessionId(result: unknown): string | undefined {
 	return scan(result, 0)
 }
 
+/**
+ * Render an unknown rejection in full.
+ *
+ * v2 context calls reject with Effect-style tagged objects, not Error
+ * instances, and their `message` is empty. The usual
+ * `error instanceof Error ? error.message : String(error)` formatting turns
+ * those into a blank line, which is how a failing call looked identical to a
+ * successful one in the debug log.
+ */
+export function describeUnknownError(error: unknown): string {
+	try {
+		const e = error as Record<string, any> | null | undefined
+		if (e === null || e === undefined) return String(error)
+		const fields = [
+			e.constructor?.name,
+			e.name,
+			e._tag,
+			e.status !== undefined ? `status=${e.status}` : undefined,
+			e.message,
+			e.cause !== undefined ? `cause=${String(e.cause)}` : undefined,
+		].filter((value) => typeof value === "string" && value !== "")
+		let dump = ""
+		try {
+			dump = JSON.stringify(e, Object.getOwnPropertyNames(Object(e))).slice(0, 400)
+		} catch {
+			dump = ""
+		}
+		const described = [...fields, dump].filter(Boolean).join(" | ")
+		return described === "" ? `<empty ${typeof error}>` : described
+	} catch {
+		return String(error)
+	}
+}
+
 class DelegationManager {
 	private delegations: Map<string, DelegationRecord> = new Map()
 	private delegationsBySession: Map<string, string> = new Map()
@@ -120,6 +165,8 @@ class DelegationManager {
 	private pendingByParent: Map<string, Set<string>> = new Map()
 	private parentNotificationState: Map<string, ParentNotificationState> = new Map()
 	private pendingNotifications: Map<string, string[]> = new Map()
+	// Fire-and-forget sink for human-facing terminal events; absent = no sidecar.
+	private terminalEventSink?: TerminalEventSink
 
 	constructor(
 		client: OpencodeClient,
@@ -139,6 +186,7 @@ class DelegationManager {
 		this.idGenerator = options.idGenerator ?? generateReadableId
 		this.metadataGenerator = options.metadataGenerator ?? generateMetadata
 		this.nativeSteer = options.nativeSteer
+		this.terminalEventSink = options.terminalEventSink
 		this.startWatchdog()
 	}
 
@@ -1033,6 +1081,7 @@ class DelegationManager {
 		state.allCompleteNotificationCount += 1
 		state.allCompleteNotifiedCycle = cycle
 		state.allCompleteNotifiedCycleToken = cycleToken
+		this.emitTerminalEvent({ kind: "all-complete", parentSessionID, cycle })
 
 		void this.showToast("All delegations complete.", "success")
 
@@ -1057,6 +1106,20 @@ class DelegationManager {
 		} catch {
 			// No TUI attached; nothing to do.
 		}
+	}
+
+	/** Attach the human-channel sink (RPC on v2; recorder in tests). */
+	setTerminalEventSink(sink: TerminalEventSink | undefined): void {
+		this.terminalEventSink = sink
+	}
+
+	/** Fan out to the human channel; never throws or awaits. */
+	private emitTerminalEvent(event: BackgroundAgentsTerminalEvent): void {
+		const sink = this.terminalEventSink
+		if (!sink) return
+		try {
+			sink(event)
+		} catch {}
 	}
 
 	private queuePendingNotification(parentSessionID: string, notification: string): void {
@@ -1422,6 +1485,17 @@ class DelegationManager {
 			)
 
 			this.markNotified(delegation.id)
+			this.emitTerminalEvent({
+				kind: "terminal",
+				delegationID: delegation.id,
+				agent: delegation.agent,
+				status: delegation.status,
+				sessionID: delegation.sessionID,
+				parentSessionID: delegation.parentSessionID,
+				remaining: remainingCount,
+				...(delegation.title ? { title: delegation.title } : {}),
+				...(delegation.error ? { error: delegation.error } : {}),
+			})
 
 			const toastVariant =
 				delegation.status === "complete"
@@ -1665,6 +1739,14 @@ class DelegationManager {
 		this.markStarted(delegation.id)
 		this.persistState(delegation.id)
 
+		// The native launch covers dispatch only, so something has to watch for
+		// the child finishing. Nothing else does on v2: the plugin event bus
+		// carries config events only (no session.*), and the v1-shaped
+		// session.status is a stub returning undefined, which makes both the
+		// idle path and the watchdog reconcile dead ends. Without this the only
+		// thing that ever settled a delegation was its 900s timeout.
+		void this.watchNativeCompletion(delegation.id, sessionID)
+
 		// Human-facing dispatch signal, same contract as the legacy path.
 		void this.showToast(
 			`Delegation started: ${delegation.id} → ${input.agent}${
@@ -1757,6 +1839,36 @@ class DelegationManager {
 	 * debounced completion; a native steer delivered in the window re-busies the session
 	 * and the steer handler cancels the pending completion.
 	 */
+	/**
+	 * Wait for a natively launched child to go idle, then settle the delegation.
+	 *
+	 * `session.wait` is documented host-side as "wait for a session agent loop
+	 * to become idle" and is the only completion signal this host still offers
+	 * the plugin. Failures degrade to the existing timeout rather than
+	 * finalizing on a guess: a wait that never resolves is indistinguishable
+	 * from a child that is still working.
+	 */
+	private async watchNativeCompletion(id: string, sessionID: string): Promise<void> {
+		const startedAt = Date.now()
+		try {
+			await this.debugLog(`watchNativeCompletion: waiting on session ${sessionID} for ${id}`)
+			await this.client.session.wait({ path: { id: sessionID } })
+		} catch (error) {
+			// Described field by field on purpose: v2 ctx rejections are not
+			// Error instances and carry an empty `message`, so the usual
+			// `error.message` formatting renders them as a blank line.
+			await this.debugLog(
+				`watchNativeCompletion: wait failed for ${id} after ${Date.now() - startedAt}ms: ${describeUnknownError(error)}`,
+			)
+			return
+		}
+
+		const delegation = this.delegations.get(id)
+		if (!delegation || isTerminalStatus(delegation.status)) return
+		await this.debugLog(`watchNativeCompletion: ${id} went idle; scheduling completion`)
+		this.scheduleComplete(id)
+	}
+
 	async handleSessionIdle(sessionID: string): Promise<void> {
 		const delegation = this.findBySession(sessionID)
 		if (!delegation || isTerminalStatus(delegation.status)) return

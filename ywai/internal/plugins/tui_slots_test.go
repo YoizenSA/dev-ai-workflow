@@ -33,6 +33,11 @@ var publishedSlots = map[string]bool{
 // Placement keys a claim may use to name its target slot.
 var slotClaimRe = regexp.MustCompile(`(?m)^\s*(replace|prepend|append|before|after):\s*"([^"]+)"`)
 
+// headlessMarker exempts event-only plugins from the slot requirement; the
+// marker must name the mechanism it uses (e.g. attention.notify) so the
+// exemption cannot hide a dead plugin.
+const headlessMarker = "headless-tui-plugin:"
+
 func TestTuiPluginsClaimPublishedSlots(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -56,6 +61,20 @@ func TestTuiPluginsClaimPublishedSlots(t *testing.T) {
 		}
 		claims := slotClaimRe.FindAllStringSubmatch(string(data), -1)
 		if len(claims) == 0 {
+			if idx := strings.Index(string(data), headlessMarker); idx >= 0 {
+				declared := string(data)[idx+len(headlessMarker):]
+				if nl := strings.Index(declared, "\n"); nl >= 0 {
+					declared = declared[:nl]
+				}
+				// Exemption only covers the attention channel today.
+				if strings.Contains(declared, "attention.notify") &&
+					strings.Contains(string(data), "attention.notify") {
+					checked++
+					continue
+				}
+				t.Errorf("%s: headless exemption does not name a present mechanism: %q", e.Name(), strings.TrimSpace(declared))
+				continue
+			}
 			t.Errorf("%s: no slot claim found; the plugin renders nowhere", e.Name())
 			continue
 		}

@@ -44,7 +44,7 @@ func TestLoadManifest_EmbeddedDefault(t *testing.T) {
 		ids = append(ids, e.ID)
 	}
 	want := []string{
-		"background-agents", "vision-bridge", "advisor", "tui-logo",
+		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo",
 		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail",
 	}
 	if len(ids) != len(want) {
