@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "ywai-advisor",
+      "devDependencies": {
+        "@opencode-ai/plugin": "^1.17.4",
+      },
       "peerDependencies": {
         "@opencode-ai/plugin": "*",
       },

@@ -10,5 +10,8 @@
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.17.4"
   }
 }

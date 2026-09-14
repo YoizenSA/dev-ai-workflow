@@ -45,6 +45,11 @@ if command -v bun >/dev/null 2>&1; then
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
     echo "Building advisor plugin (bun bundle)…"
+    # Advisor imports `tool` as a value from @opencode-ai/plugin. A type-only
+    # import (vision-bridge) can bundle without node_modules; this cannot.
+    # bun install here is what background-agents already does — CI checkouts
+    # have no plugins/advisor/node_modules.
+    bun install --cwd "$AD_DIR"
     # No --external: envs copy this bundle into config dirs without
     # node_modules, where a bare @opencode-ai/plugin import fails to load.
     # plugins/advisor/test/bundle.test.ts pins that the dist is self-contained.
