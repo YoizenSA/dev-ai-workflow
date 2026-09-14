@@ -100,24 +100,12 @@ const showAbout = (ctx) => {
   ctx.ui?.toast?.show?.({ title: "ywai", message, variant: "info" })
 }
 
-const GlyphRow = (props: { line: string; row: number; rows: number; phase: number; flash: number }) => (
-  <box flexDirection="row">
-    <Index each={props.line.split("")}>
-      {(ch, i) => {
-        const base = gradient(i / Math.max(props.line.length - 1, 1) + props.row * 0.12 - props.phase)
-        const color =
-          props.flash > 0 ? rgba(mix(base, [255, 255, 255], (props.flash / 10) * 0.8)) : rgba(base)
-        return <text fg={color}>{ch()}</text>
-      }}
-    </Index>
-  </box>
-)
-
 const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   const dim = useTerminalDimensions()
   const [phase, setPhase] = createSignal(0)
   const [flash, setFlash] = createSignal(0)
 
+  // Animation loop. ~14fps keeps a home screen lively without burning CPU.
   const timer = setInterval(() => {
     setFlash((f) => (f > 0 ? f - 1 : 0))
     setPhase((p) => p + (flash() > 0 ? 0.05 : 0.012))
@@ -132,11 +120,25 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   })
 
   const tagline = createMemo(() => taglineFor(props.clicks()))
+  const [version, setVersion] = createSignal(readVersionInfo())
+  const versionPoll = setInterval(() => setVersion(readVersionInfo()), 30_000)
+  onCleanup(() => clearInterval(versionPoll))
   const mark = createMemo(() => {
     if (size() === "full") return wordmark
     if (size() === "medium") return [mediumMark]
     return [compactArt]
   })
+
+  // Color for wordmark row `row` of `rows`: a vertical gradient sweep. During a
+  // click flash each row brightens toward white for a satisfying burst.
+  const rowColor = (row: number, rows: number) => {
+    const base = gradient(row / rows - phase())
+    if (flash() > 0) {
+      const glow = flash() / 10 // 1 → 0 over the flash
+      return rgba(mix(base, [255, 255, 255], glow * 0.8))
+    }
+    return rgba(base)
+  }
 
   return (
     <box
@@ -148,10 +150,14 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
       }}
     >
       <Index each={mark()}>
-        {(line, row) => (
-          <GlyphRow line={line()} row={row} rows={mark().length} phase={phase()} flash={flash()} />
-        )}
+        {(line, row) => <text fg={rowColor(row, mark().length)}>{line()}</text>}
       </Index>
+      {version().installed ? (
+        <text fg={themeMuted(props.ctx.theme)}>{`ywai ${tag(version().installed)}`}</text>
+      ) : null}
+      {version().updateAvailable ? (
+        <text fg={themeWarning(props.ctx.theme)}>{`↑ ${tag(version().latest)} available — run \`ywai update\``}</text>
+      ) : null}
       {tagline() ? <text fg={themeAccent(props.ctx.theme)}>{tagline()}</text> : null}
     </box>
   )
