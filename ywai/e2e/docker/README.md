@@ -158,9 +158,10 @@ output; `assert_home_unchanged` prints a unified diff of the snapshots.
 
 ## CI
 
-- `.github/workflows/docker-matrix.yml`: nightly cron plus manual dispatch.
-  One job per cell, `fail-fast: false`, 45-minute cap per job.
-- `.github/workflows/release.yml`: the `docker-e2e` gate job runs the 3 dry
-  cells (embedded binary, networkless) before GoReleaser publishes.
+- `.github/workflows/docker-matrix.yml`: optional. Nightly cron plus manual
+  dispatch (`dry` | `net` | `nightly`). One job per cell, `fail-fast: false`,
+  45-minute cap per job. Does not gate tag publishes.
+- `.github/workflows/release.yml`: lint + Go tests, then GoReleaser. The
+  Docker matrix is not a release gate.
 
 Design rationale: `docs/adr/0002-docker-matrix-lifecycle-tests.md`.

@@ -44,8 +44,8 @@ confirmation), and the OpenCode binary must resolve as `opencode2`
    network is never tested — self-update would silently fetch the public
    release.
 6. CI: nightly full matrix (13 cells, `fail-fast: false`) plus manual
-   dispatch; the release workflow gains an offline gate (the three dry cells,
-   embedded binary) that must pass before GoReleaser publishes.
+   dispatch. The Docker matrix is optional and does not gate tag publishes;
+   `release.yml` waits only on lint + Go tests before GoReleaser.
 7. Non-goals: Windows containers (GoReleaser covers the build; the install
    path is bash), real agent CLIs (they need API keys), systemd-enabled
    images, and per-PR runs.
@@ -57,7 +57,8 @@ confirmation), and the OpenCode binary must resolve as `opencode2`
 - A new bash harness lives next to the Go tests and needs maintenance.
 - Nightly cells that touch GitHub releases can flake on API rate limits;
   the release-path cell retries and fails with a clear message.
-- The release pipeline gains a few minutes of gate time before publishing.
+- A red Docker cell no longer blocks a tag publish; catch regressions on
+  the nightly/manual workflow instead.
 - Follow-ups: unify warning semantics (some failures print "Warning:" and
   exit 0 while recorded warnings exit 1), and consider an env escape hatch
   to skip self-update in tests.

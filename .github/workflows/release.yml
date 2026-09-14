@@ -1,7 +1,8 @@
 name: Release
 
-# ONLY tags. Single pipeline for publish: parallel gates + GoReleaser.
-# Does not run CI workflow (CI is PR-only).
+# ONLY tags. Single pipeline for publish: lint + test, then GoReleaser.
+# Docker lifecycle matrix is optional (docker-matrix.yml). Does not run
+# CI workflow (CI is PR-only).
 on:
   push:
     tags:
@@ -70,25 +71,13 @@ jobs:
       - name: Test e2e
         run: go test ./e2e/ -count=1 -timeout 25m
 
-  # Offline lifecycle gate: the dry profile runs install --dry-run for every
-  # agent shape in a networkless, toolless container with an embedded binary.
-  # It proves a fresh machine can preview an install before anything publishes.
-  docker-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    defaults:
-      run:
-        working-directory: ywai
-    steps:
-      - uses: actions/checkout@v5
+  # Docker lifecycle matrix is optional: nightly cron + manual dispatch in
+  # docker-matrix.yml. It must not block a tag publish.
 
-      - name: Offline dry-run matrix (embedded binary, networkless)
-        run: bash e2e/docker/run-matrix.sh --profile dry
-
-  # ── Publish (needs all gates) ──────────────────────────────────────────
+  # ── Publish (needs lint + test) ────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
-    needs: [lint, test, docker-e2e]
+    needs: [lint, test]
     steps:
       - uses: actions/checkout@v5
         with:
