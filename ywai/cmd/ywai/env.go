@@ -82,6 +82,13 @@ func runEnvInit() error {
 	}
 	failed := 0
 	for _, p := range ready {
+		// Seed `ado init` profiles into the env before installing: the scoped
+		// apply builds a fresh opencode.json that would otherwise leave `ado`
+		// without profiles inside the env. Same gating as providers (personal
+		// and other bare presets get nothing); failures only warn.
+		if spec, _ := envprofile.Preset(p.Preset); envprofile.PresetCopyProviders(spec) {
+			reportCopiedAdo(p)
+		}
 		fmt.Printf("\n=== Installing into environment %q ===\n", p.Name)
 		r := applyManagedScoped(applyOpts{
 			Mode:            applyInstall,
@@ -175,6 +182,7 @@ var envCreateCmd = &cobra.Command{
 		}
 		if copyProviders {
 			reportCopiedProviders(p)
+			reportCopiedAdo(p)
 		}
 		fmt.Printf("Created environment %q (preset %s, port %d)\n", p.Name, p.Preset, p.Port)
 		fmt.Printf("Start it: ywai %s\n", p.Name)
@@ -368,6 +376,27 @@ func init() {
 				},
 			})
 		}
+	}
+}
+
+// reportCopiedAdo seeds a new env with the global `ado` CLI profiles and
+// prints what was copied. A failure only warns: the env is already created
+// and `ado init` can be re-run by hand.
+func reportCopiedAdo(p envprofile.Profile) {
+	copied, err := envprofile.CopyAdoConfig(p)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: could not copy ado config: %v\n", err)
+		return
+	}
+	switch {
+	case len(copied.Profiles) == 0 && !copied.DefaultProfile:
+		fmt.Println("  No ado profiles to copy (global ado.json missing or already in sync)")
+	default:
+		fmt.Printf("  Copied ado profiles [%s]", strings.Join(copied.Profiles, ", "))
+		if copied.DefaultProfile {
+			fmt.Print(" + default")
+		}
+		fmt.Println()
 	}
 }
 

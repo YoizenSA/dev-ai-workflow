@@ -149,6 +149,12 @@ func (s *Server) handleEnvCreate(w http.ResponseWriter, r *http.Request) {
 			resp["copied"] = copied
 			restartEnvServiceForLogins(p, copied)
 		}
+		// Seed `ado init` profiles too (env wins on conflicts); warn-only.
+		if adopted, aerr := envprofile.CopyAdoConfig(p); aerr != nil {
+			resp["copy_ado_error"] = aerr.Error()
+		} else {
+			resp["copied_ado"] = adopted
+		}
 	}
 	writeJSON(w, http.StatusCreated, resp)
 }
