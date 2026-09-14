@@ -50,17 +50,50 @@ const gradient = (p: number): RGB => {
   return mix(brand[i % n], brand[(i + 1) % n], seg - i)
 }
 
-const eggs = [
+type Egg = { at: number; text: string; toast?: string }
+
+// Click ladder. Toasts fire only on the click that lands on `at` (not on load,
+// so a persisted gentleman does not dump the whole campaign at startup).
+const eggs: Egg[] = [
   { at: 3, text: "you found me 🎉" },
   { at: 7, text: "yoizen ai · keep clicking…" },
-  { at: 12, text: "ok ok, you really like clicking" },
-  { at: 21, text: "✦ certified ywai gentleman ✦" },
+  { at: 13, text: "that's not a skill" },
+  { at: 21, text: "✦ certified ywai gentleman ✦", toast: "title unlocked" },
+  { at: 34, text: "ponytail: YAGNI. you: click.", toast: "ponytail disapproves" },
+  { at: 42, text: "42 clicks. the answer was ywai.", toast: "don't panic" },
+  { at: 64, text: "your orchestrator filed a complaint", toast: "delegation refused" },
+  { at: 89, text: "i-have-adhd wants this loop back", toast: "focus check" },
+  { at: 100, text: "certified clicker. go ship.", toast: "achievement: stop" },
 ]
 
+const encore = [
+  "the logo is a button now. you made it one.",
+  "ywai update won't fix this",
+  "delegate this urge to a subagent",
+  "gentleman-programming would never",
+  "one more for the workflow retro",
+  "still not a skill",
+]
+
+const lastEgg = eggs[eggs.length - 1]
+
+const eggFor = (clicks: number): Egg | null => {
+  let found: Egg | null = null
+  for (const egg of eggs) if (clicks >= egg.at) found = egg
+  return found
+}
+
 const taglineFor = (clicks: number): string | null => {
-  let unlocked: string | null = null
-  for (const egg of eggs) if (clicks >= egg.at) unlocked = egg.text
-  return unlocked
+  if (clicks < eggs[0].at) return null
+  if (clicks >= lastEgg.at) return encore[(clicks - lastEgg.at) % encore.length]
+  return eggFor(clicks)?.text ?? null
+}
+
+const speedFor = (clicks: number) => {
+  if (clicks >= 100) return 3.2
+  if (clicks >= 42) return 2.2
+  if (clicks >= 21) return 1.4
+  return 1
 }
 
 type VersionInfo = { installed?: string; latest?: string; updateAvailable?: boolean }
@@ -106,9 +139,11 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   const [flash, setFlash] = createSignal(0)
 
   // Animation loop. ~14fps keeps a home screen lively without burning CPU.
+  // Milestones speed the sweep up; the click flash still outruns the idle step.
   const timer = setInterval(() => {
     setFlash((f) => (f > 0 ? f - 1 : 0))
-    setPhase((p) => p + (flash() > 0 ? 0.05 : 0.012))
+    const step = 0.012 * speedFor(props.clicks())
+    setPhase((p) => p + (flash() > 0 ? Math.max(0.05, step) : step))
   }, 70)
   onCleanup(() => clearInterval(timer))
 
@@ -145,8 +180,17 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
       flexDirection="column"
       alignItems="center"
       onMouseDown={() => {
+        const next = props.clicks() + 1
+        const hit = eggs.find((e) => e.at === next)
+        if (hit) {
+          props.ctx.ui?.toast?.show?.({
+            title: hit.toast ?? "ywai",
+            message: hit.text,
+            variant: "success",
+          })
+        }
         props.bump()
-        setFlash(10)
+        setFlash(hit ? 16 : 10)
       }}
     >
       <Index each={mark()}>
