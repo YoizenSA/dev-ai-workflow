@@ -61,6 +61,15 @@ func TestPresetGetters(t *testing.T) {
 	if deny := PresetDenyBash(spec); len(deny) != 2 {
 		t.Errorf("PresetDenyBash(dev) = %v", deny)
 	}
+	if only := DenyBashOnlyAgents("orchestrator"); len(only) != 2 || only[0] != "dev" || only[1] != "qa-dev" {
+		t.Errorf("DenyBashOnlyAgents(orchestrator) = %v, want [dev qa-dev]", only)
+	}
+	if only := DenyBashOnlyAgents("qa-orchestrator"); only != nil {
+		t.Errorf("DenyBashOnlyAgents(qa-orchestrator) = %v, want nil (verify-only lane stays locked)", only)
+	}
+	if only := DenyBashOnlyAgents("reviewer"); only != nil {
+		t.Errorf("DenyBashOnlyAgents(reviewer) = %v, want nil", only)
+	}
 	if got := PresetDefaultAgent(spec); got != "orchestrator" {
 		t.Errorf("PresetDefaultAgent(dev) = %q", got)
 	}
@@ -101,7 +110,7 @@ func TestAppendDenyBashToAgents(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	n, err := AppendDenyBashToAgents(dir, []string{"git commit*", "git push*"})
+	n, err := AppendDenyBashToAgents(dir, []string{"git commit*", "git push*"}, nil)
 	if err != nil {
 		t.Fatalf("AppendDenyBashToAgents: %v", err)
 	}
@@ -115,7 +124,7 @@ func TestAppendDenyBashToAgents(t *testing.T) {
 		}
 	}
 	// Idempotent: second run changes nothing.
-	n, err = AppendDenyBashToAgents(dir, []string{"git commit*"})
+	n, err = AppendDenyBashToAgents(dir, []string{"git commit*"}, nil)
 	if err != nil || n != 0 {
 		t.Errorf("second run = (%d, %v), want (0, nil)", n, err)
 	}
@@ -127,7 +136,7 @@ func TestAppendDenyBashNoPermissions(t *testing.T) {
 	if err := os.WriteFile(path, []byte("---\ndescription: x\nmode: all\n---\n\nBody.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	n, err := AppendDenyBashToAgents(dir, []string{"git commit*"})
+	n, err := AppendDenyBashToAgents(dir, []string{"git commit*"}, nil)
 	if err != nil || n != 0 {
 		t.Errorf("no-permissions file = (%d, %v), want (0, nil)", n, err)
 	}

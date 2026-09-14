@@ -83,12 +83,58 @@ func TestAppendDenyBashToAgentsHealsFiles(t *testing.T) {
 	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	n, err := AppendDenyBashToAgents(dir, []string{"git push*"})
+	n, err := AppendDenyBashToAgents(dir, []string{"git push*"}, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v, want 1 healed file", n, err)
 	}
 	data, _ := os.ReadFile(path)
 	if got := linesAfterKey(t, string(data), "model"); len(got) != 0 {
 		t.Fatalf("file not healed:\n%s", data)
+	}
+}
+
+// Daily-dev lanes lock only the code executors. Specialists that an older
+// ywai locked (orchestrator, ask, devops, …) get the pack stripped; @dev
+// and @qa-dev keep it.
+func TestAppendDenyBashOnlyExecutorsAndHeals(t *testing.T) {
+	dir := t.TempDir()
+	locked := "---\nmode: all\npermissions:\n  - action: shell\n    resource: \"*\"\n    effect: allow\n  - action: shell\n    resource: \"git commit*\"\n    effect: deny\n  - action: shell\n    resource: \"git push*\"\n    effect: deny\n---\nPrompt.\n"
+	clean := "---\nmode: primary\npermissions:\n  - action: shell\n    resource: \"*\"\n    effect: allow\n---\nPrompt.\n"
+	for name, body := range map[string]string{
+		"orchestrator.md": locked,
+		"ask.md":          locked,
+		"devops.md":       locked,
+		"dev.md":          clean,
+		"qa-dev.md":       clean,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := AppendDenyBashToAgents(dir, []string{"git commit*", "git push*"}, DenyBashOnlyAgents("orchestrator"))
+	if err != nil {
+		t.Fatalf("AppendDenyBashToAgents: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("changed = %d, want 5 (strip 3 specialists + append 2 executors)", n)
+	}
+
+	for _, name := range []string{"orchestrator.md", "ask.md", "devops.md"} {
+		got, _ := os.ReadFile(filepath.Join(dir, name))
+		if strings.Contains(string(got), `resource: "git commit*"`) || strings.Contains(string(got), `resource: "git push*"`) {
+			t.Fatalf("%s still denied commit/push:\n%s", name, got)
+		}
+		if !strings.Contains(string(got), `resource: "*"`) {
+			t.Fatalf("%s lost shell allow:\n%s", name, got)
+		}
+	}
+	for _, name := range []string{"dev.md", "qa-dev.md"} {
+		got, _ := os.ReadFile(filepath.Join(dir, name))
+		for _, p := range []string{"git commit*", "git push*"} {
+			if !strings.Contains(string(got), p) {
+				t.Errorf("%s missing %q after append", name, p)
+			}
+		}
 	}
 }

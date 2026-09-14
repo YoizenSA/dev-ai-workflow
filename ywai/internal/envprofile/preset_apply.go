@@ -154,6 +154,19 @@ func PresetMCPIDs(spec map[string]any) []string { return stringList(spec, "mcp")
 // profile's agent rules, or nil when unset.
 func PresetDenyBash(spec map[string]any) []string { return stringList(spec, "deny_bash") }
 
+// DenyBashOnlyAgents is the agent files that receive the preset's shell-deny
+// pack on daily-dev lanes. Empty means apply to every agent (qa / code-review
+// are verify/review-only). Daily-dev defaults to the orchestrator, so only
+// the code executors stay locked: @dev / @qa-dev. Everyone else — including
+// the orchestrator, devops, infra-docs, and workflow sub-agents — can commit
+// when asked. Matches noCommitAgents in the agents package.
+func DenyBashOnlyAgents(defaultAgent string) []string {
+	if strings.TrimSpace(defaultAgent) == "orchestrator" {
+		return []string{"dev", "qa-dev"}
+	}
+	return nil
+}
+
 // PresetDefaultAgent returns the preset default_agent, or "" when unset.
 func PresetDefaultAgent(spec map[string]any) string { return stringField(spec, "default_agent") }
 
@@ -221,14 +234,17 @@ func ShouldInstallMCP(serverID string, allow []string) bool {
 }
 
 // AppendDenyBashToAgents appends shell-deny rules (action shell, effect deny)
-// for patterns to every flat *.md agent file in agentsDir. Patterns already
-// present in a file's frontmatter are skipped per file. It returns how many
-// files changed.
+// for patterns to agent files in agentsDir. Patterns already present in a
+// file's frontmatter are skipped per file. If only is non-empty, those names
+// (without .md) receive the pack and every other file has the patterns
+// stripped, so a re-apply heals specialists that an older ywai locked. An
+// empty only applies the pack to every file. It returns how many files
+// changed.
 //
 // agentsDir must be the profile's agents dir (already sandbox-resolved by the
 // caller); nothing outside it is read or written, so the global install is
 // never touched. Last-match-wins makes appended denies override allows above.
-func AppendDenyBashToAgents(agentsDir string, patterns []string) (int, error) {
+func AppendDenyBashToAgents(agentsDir string, patterns, only []string) (int, error) {
 	var want []string
 	for _, p := range patterns {
 		if p = strings.TrimSpace(p); p != "" {
@@ -238,6 +254,13 @@ func AppendDenyBashToAgents(agentsDir string, patterns []string) (int, error) {
 	if len(want) == 0 {
 		return 0, nil
 	}
+	onlySet := map[string]bool{}
+	for _, s := range only {
+		if s = strings.TrimSpace(s); s != "" {
+			onlySet[s] = true
+		}
+	}
+	restrict := len(onlySet) > 0
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -255,7 +278,14 @@ func AppendDenyBashToAgents(agentsDir string, patterns []string) (int, error) {
 		if err != nil {
 			continue
 		}
-		updated, ok := appendShellDenies(string(data), want)
+		name := strings.TrimSuffix(e.Name(), ".md")
+		var updated string
+		var ok bool
+		if restrict && !onlySet[name] {
+			updated, ok = stripShellDenies(string(data), want)
+		} else {
+			updated, ok = appendShellDenies(string(data), want)
+		}
 		if !ok || updated == string(data) {
 			continue
 		}
@@ -388,4 +418,48 @@ func yamlQuote(s string) string {
 		return fmt.Sprintf("%q", s)
 	}
 	return s
+}
+
+// stripShellDenies removes shell-deny rules whose resource matches patterns.
+// Used to heal an orchestrator that an older apply locked with the lane pack.
+// ok is false when the file has no frontmatter to edit.
+func stripShellDenies(content string, patterns []string) (string, bool) {
+	if !strings.HasPrefix(strings.TrimLeft(content, "\ufeff"), "---") {
+		return content, false
+	}
+	want := map[string]bool{}
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		want[p] = true
+		want[strings.Trim(yamlQuote(p), `"'`)] = true
+	}
+	if len(want) == 0 {
+		return content, true
+	}
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); {
+		if i+2 < len(lines) && strings.TrimSpace(lines[i]) == "- action: shell" {
+			res := shellResourceValue(lines[i+1])
+			if want[res] && strings.TrimSpace(lines[i+2]) == "effect: deny" {
+				i += 3
+				continue
+			}
+		}
+		out = append(out, lines[i])
+		i++
+	}
+	return strings.Join(out, "\n"), true
+}
+
+func shellResourceValue(line string) string {
+	t := strings.TrimSpace(line)
+	const prefix = "resource:"
+	if !strings.HasPrefix(t, prefix) {
+		return ""
+	}
+	return strings.Trim(strings.TrimSpace(t[len(prefix):]), `"'`)
 }

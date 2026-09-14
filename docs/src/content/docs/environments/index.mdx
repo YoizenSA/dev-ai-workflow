@@ -56,7 +56,7 @@ ywai dev <workflow> "task"                 # corre un workflow exportado
 ywai dev -c                                # continuar la última sesión
 ```
 
-Otros flags de opencode2 (`--file`, `--session`, `--title`…) pasan directo. El preset `qa` niega bash destructivo (`git commit`, `git push`, snapshots…) por defecto.
+Otros flags de opencode2 (`--file`, `--session`, `--title`…) pasan directo. El preset `qa` niega bash destructivo (`git commit`, `git push`, snapshots…) por defecto. El preset `dev` niega `git commit`/`git push` solo en `@dev` y `@qa-dev`; el resto de agentes (orchestrator, devops, ask, workflows…) puede commitear si lo pedís.
 
 ## Gestionar
 
