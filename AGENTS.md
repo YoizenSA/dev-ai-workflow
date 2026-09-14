@@ -100,6 +100,33 @@ The dev server (`ywai-dev.exe`, no embedded tag) serves the web UI from
 (`web`), frontend edits are live without refresh (`/api` and `/ws` proxy to
 5768). One-time setup: `go install github.com/air-verse/air@latest`.
 
+**Rebuild + re-seed after editing skills/agents (Windows dev machine) — the
+sequence that works, in this order:**
+```bash
+# 1. Stop the watcher (air) first: it holds handles over ywai/cmd/ywai/embedded_data
+#    and prepare-embedded.sh dies with "Device or resource busy".
+# 2. Rebuild the binary with the new embedded data. Call Git Bash explicitly:
+#    plain `bash` here is WSL and feeds /mnt/d/... paths to Windows npm (ENOENT).
+cd ywai && '/c/Program Files/Git/bin/bash.exe' scripts/dev.sh install
+# 3. Re-seed: dev.sh install only replaces the binary; agents read SEEDED COPIES in
+#    ~/.config/opencode/skills/. --agent is required non-interactively; the agent id
+#    is `opencode` even though the binary is opencode2.exe (`opencode2` is NOT valid).
+ywai install --agent opencode
+# 4. Verify the seed instead of trusting the exit:
+grep -c "<pre>" ~/.config/opencode/skills/ado/SKILL.md   # grep whatever you changed
+# 5. Hot reload back on (air rebuilds ywai-dev.exe; serve kills whoever holds 5768).
+'/c/Program Files/Git/bin/bash.exe' scripts/dev.sh watch
+```
+
+Gotchas learned the hard way:
+
+- The install can take >10 min through an agent tool pipe and report a false
+  timeout — check the outcome (binary version, seeded files), not the exit code.
+- A `ywai.exe serve --no-update` process alive after install is the control
+  server the installer restarted, not a hung build.
+- In dev mode `ywai-dev.exe` reads skills from disk; it is the seeded copies
+  under `~/.config/opencode/skills/` that lag behind until step 3.
+
 ### Notes
 
 - The script auto-detects the project root (looks for `go.mod` with module `github.com/Yoizen/dev-ai-workflow/ywai`), so you can run it from any subdirectory
