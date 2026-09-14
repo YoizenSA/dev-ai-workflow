@@ -17,24 +17,24 @@ func TestParseAuthedProviders(t *testing.T) {
 			want: []string{"opencode-go", "meta"},
 		},
 		{
-			name:  "provider without connections is skipped",
-			in:    `[{"id":"tokenharbor","name":"Token Harbor","connections":[]},{"id":"zai","name":"Z.AI","connections":[{"id":"c"}]}]`,
-			want:  []string{"zai"},
+			name: "provider without connections is skipped",
+			in:   `[{"id":"tokenharbor","name":"Token Harbor","connections":[]},{"id":"zai","name":"Z.AI","connections":[{"id":"c"}]}]`,
+			want: []string{"zai"},
 		},
 		{
-			name:  "empty id is skipped",
-			in:    `[{"name":"no-id","connections":[{"id":"c"}]}]`,
-			want:  []string{},
+			name: "empty id is skipped",
+			in:   `[{"name":"no-id","connections":[{"id":"c"}]}]`,
+			want: []string{},
 		},
 		{
-			name:  "not json yields nil so callers degrade to no filtering",
-			in:    `ERROR: service unreachable`,
-			want:  nil,
+			name: "not json yields nil so callers degrade to no filtering",
+			in:   `ERROR: service unreachable`,
+			want: nil,
 		},
 		{
-			name:  "empty list",
-			in:    `[]`,
-			want:  []string{},
+			name: "empty list",
+			in:   `[]`,
+			want: []string{},
 		},
 	}
 	for _, c := range cases {

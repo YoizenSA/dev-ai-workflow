@@ -168,33 +168,6 @@ func downloadFile(url, dest string) error {
 	return err
 }
 
-func runCommand(name string, args ...string) error {
-	bin := findBinary(name)
-	if bin == "" {
-		return fmt.Errorf("%s not found", name)
-	}
-
-	if runtime.GOOS == "windows" && (strings.HasSuffix(bin, ".ps1") || strings.HasSuffix(bin, ".cmd")) {
-		if strings.HasSuffix(bin, ".ps1") {
-			fullArgs := append([]string{"-ExecutionPolicy", "Bypass", "-File", bin}, args...)
-			cmd := exec.Command("powershell", fullArgs...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
-		}
-		fullArgs := append([]string{"/c", bin}, args...)
-		cmd := exec.Command("cmd", fullArgs...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
-
-	cmd := exec.Command(bin, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 var (
 	fetchLatestEngram   = latestEngramRelease
 	downloadReleaseFile = downloadFile

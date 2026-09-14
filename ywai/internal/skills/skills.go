@@ -17,6 +17,7 @@ import (
 var errSkillChanged = errors.New("skill source differs")
 
 const extraSkillMarkerFile = ".ywai-extra"
+
 // learnYwaiSkillName is the skill that carries the official docs tour; when it
 // is copied into an agent, the docs MDX bundle goes with it.
 const learnYwaiSkillName = "learn-ywai"

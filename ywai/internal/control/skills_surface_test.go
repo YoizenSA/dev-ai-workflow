@@ -310,7 +310,7 @@ func TestHandleSkillSurfaceStandardize(t *testing.T) {
 
 	// Execute: claude shadow goes, opencode shadow stays, hollow goes,
 	// identical copies stay.
-	code, body = standardize("0")
+	code, _ = standardize("0")
 	if code != http.StatusOK {
 		t.Fatalf("execute = %d, want 200", code)
 	}

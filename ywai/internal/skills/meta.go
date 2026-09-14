@@ -8,8 +8,8 @@ import (
 
 // SkillMeta describes one ywai extra skill for pickers (web Envs editor).
 type SkillMeta struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 	// Tags come from the "tags:" line of the skill's .ywai-extra marker.
 	// The first tag is the skill's category.
 	Tags []string `json:"tags"`

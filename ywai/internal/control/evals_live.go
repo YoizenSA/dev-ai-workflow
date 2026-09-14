@@ -60,10 +60,8 @@ type LiveEvent struct {
 // panel instead of erroring.
 func (s *Server) handleEvalRunLive(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	benchLiveMu.Lock()
-	live := benchLiveCurrent
-	benchLiveMu.Unlock()
-	if live == nil || live.RunID != id {
+	live := getBenchLive(id)
+	if live == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"active": false})
 		return
 	}
@@ -110,9 +108,9 @@ func tailSessionEvents(ctx context.Context, baseURL, sessionID string, limit int
 
 	var parsed struct {
 		Data []struct {
-			Type     string `json:"type"`
-			Text     string `json:"text"`
-			Time     struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+			Time struct {
 				Created int64 `json:"created"`
 			} `json:"time"`
 			Content []struct {

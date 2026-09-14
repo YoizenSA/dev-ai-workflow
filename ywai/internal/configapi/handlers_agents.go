@@ -1651,39 +1651,3 @@ func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) s
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
-
-// replacePermissionScalar sets a 2-space-indented scalar inside the frontmatter
-// permission: block (e.g. "  edit: deny"). No-op when the key is absent, so
-// user tweaks outside the two flipped keys survive.
-func replacePermissionScalar(content, key, value string) string {
-	fm, body := parseFrontmatter(content)
-	if fm == "" {
-		return content
-	}
-	lines := strings.Split(fm, "\n")
-	replaced := false
-	inPerm := false
-	prefix := "  " + key + ":"
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "permission:" {
-			inPerm = true
-			continue
-		}
-		if !inPerm {
-			continue
-		}
-		if line != trimmed { // indented → inside the block
-			if strings.HasPrefix(line, prefix) {
-				lines[i] = fmt.Sprintf("  %s: %s", key, value)
-				replaced = true
-			}
-			continue
-		}
-		inPerm = false // unindented → block ended
-	}
-	if !replaced {
-		return content
-	}
-	return "---\n" + strings.Join(lines, "\n") + "\n---\n\n" + body
-}

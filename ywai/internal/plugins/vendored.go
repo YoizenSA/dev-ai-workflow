@@ -10,23 +10,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// installVendoredV1 stages a plugin bundle under the ywai-owned ywai-plugins
-// dir and points the config at it by absolute path. It is the shared OpenCode
-// v1 half of every vendored plugin install; callers only pass their bundle.
-func installVendoredV1(configPath, bundleSrc, bundleName string) error {
-	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
-	}
-
-	destJS := filepath.Join(destDir, bundleName)
-	if err := copyFile(bundleSrc, destJS); err != nil {
-		return fmt.Errorf("copy %s bundle: %w", bundleName, err)
-	}
-
-	return patchOpenCodePluginPath(configPath, destJS)
-}
-
 // installVendorPluginV2 vendors a plugin bundle into ~/.config/opencode/plugins/
 // where OpenCode v2 auto-discovers plain .js files without needing an entry in
 // the plugins array (which only accepts directories in v2). Any stale explicit
@@ -76,34 +59,6 @@ func sweepFlavorMarkers(configPath string) error {
 		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove stale flavor marker: %w", err)
 		}
-	}
-	return nil
-}
-
-// patchOpenCodePluginPath appends pluginJSPath to the config "plugins" array
-// idempotently (shared by every v1 vendored plugin install).
-func patchOpenCodePluginPath(configPath, pluginJSPath string) error {
-	root := map[string]any{}
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
-	}
-
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	plugins := openCodePlugins(root)
-	if !containsPluginPath(plugins, pluginJSPath) {
-		plugins = append(plugins, pluginJSPath)
-	}
-	writePlugins(root, plugins)
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
 	}
 	return nil
 }

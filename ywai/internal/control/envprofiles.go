@@ -86,7 +86,7 @@ func (s *Server) handleEnvList(w http.ResponseWriter, r *http.Request) {
 		"custom_presets":      customPresetNames(),
 		// Default of the "copy global providers" check per preset.
 		"preset_copy_providers": copyDefaults,
-		"catalog":             envCatalog(),
+		"catalog":               envCatalog(),
 	})
 }
 
