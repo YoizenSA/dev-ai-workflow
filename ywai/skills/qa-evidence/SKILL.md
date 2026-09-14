@@ -61,7 +61,7 @@ If nothing is containerised and there is no aggregator, say where the logs actua
 
 Results belong on the ticket, not only in the chat. Use the `ado` skill.
 
-**Every run gets a comment on the parent work item**: the verdict line per scenario, the run id, and where the evidence lives. Markdown for comments, HTML for fields — the `ado` skill's templates reference has the rule.
+**Every run gets a comment on the parent work item**: the verdict line per scenario, the run id, and where the evidence lives. Work item comments are HTML — a Markdown summary goes wrapped in `<pre>...</pre>` so the line breaks survive. The `ado` skill's templates reference has the rule.
 
 ```sh
 ado wi comment <parent-id> --comment "<run summary>"

@@ -34,7 +34,7 @@ Extras de conveniencia: el `[repo]` es opcional — el PR se auto-descubre por I
 | `wi create` puede estar bloqueado o restringido | Lo gobierna `[work_item.create]` en `.adoconfig.toml`: `enabled = false` rechaza toda creación, `allowed_types` la acota, `required_fields` exige campos |
 | Nunca se pasa `--field System.AreaPath` | El área va con `--area` en el formato del proyecto (ej. `"ySocial\\Kanban"`) |
 | Crear una User Story sin contexto | El flujo pide Social vs Infra Kanban + Producto + Sponsors; si faltan esos campos custom, Azure DevOps rechaza el create |
-| Descripciones en Markdown | `wi --description` es **HTML de Azure DevOps**; los comentarios sí son Markdown |
+| Markdown pelado en comentarios | Campos y comentarios de WI son **HTML de Azure DevOps**; el Markdown solo sobrevive envuelto en `<pre>` (pelado, colapsa: se pierden los saltos de línea) |
 | Editar pipelines | Solo listar, ver runs y encolar; el YAML del pipeline se edita en el repo |
 | Operar sin PAT | Sin PAT válido todo falla con auth error; el PAT **nunca** vive en `opencode.json` |
 

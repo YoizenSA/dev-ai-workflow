@@ -42,8 +42,17 @@ Drafting templates for work item bodies. For the commands that create them, see
     pipe tables. ADO stores rich-text fields as HTML and does not render Markdown
     (it is an opt-in migration per org, so HTML is the safe default).
   - Escape literal `<`, `>`, `&` as entities when they are content, not tags.
-- **Comments** (`ado wi comment`, `ado wi update --comment`): write **Markdown**.
-  The comments API renders it.
+- **Comments** (`ado wi comment`, `ado wi update --comment`): a work item
+  comment renders as HTML, not Markdown. Bare Markdown **collapses** — single
+  newlines vanish and tables/lists flatten into one line (verified: a 20-line
+  run report posted as Markdown kept zero line breaks).
+  - Short plain comment: write simple HTML — same tags as `--description`.
+  - Comment carrying Markdown content (run report, table, code, logs): wrap
+    the raw Markdown in `<pre>...</pre>`. This is the only form that preserves
+    both the line breaks and the Markdown verbatim; it renders as a
+    preformatted block the reader copies as-is (verified: 20 line breaks and a
+    60-pipe table survived intact inside `<pre>`).
+  - Never post bare Markdown in a work item comment.
 - The `ado` CLI passes values through verbatim — it converts nothing.
 - There are no flags for repro steps, acceptance criteria, or severity. They go
   inside `--description`. Only pass flags that `commands.md` lists.
