@@ -30,6 +30,16 @@ type CopiedAdo struct {
 	DefaultProfile bool `json:"defaultProfile,omitempty"`
 }
 
+// PresetCopyAdo reports the preset's default for copying the global `ado`
+// CLI profiles into a new env (preset key copy_ado_config). Independent of
+// copy_global_providers: an env may need `ado` without providers and vice
+// versa. Absent means false (personal and user presets without the key get
+// no ado copy).
+func PresetCopyAdo(spec map[string]any) bool {
+	v, _ := spec["copy_ado_config"].(bool)
+	return v
+}
+
 // CopyAdoConfig merges the global ado.json profiles into the env's ado.json.
 func CopyAdoConfig(p Profile) (CopiedAdo, error) {
 	var out CopiedAdo

@@ -162,8 +162,9 @@ export default function Envs() {
       setCopyTouched(false)
       if (res.copy_error) setError(`Env created, but copying providers failed: ${res.copy_error}`)
       else if (copyProviders) setNotice(`${nameTrim}: ${copiedSummary(res.copied)}`)
+      // Ado follows the preset's own copy_ado_config, independent of the providers checkbox.
       if (res.copy_ado_error) setError(`Env created, but copying ado profiles failed: ${res.copy_ado_error}`)
-      else if (copyProviders && (res.copied_ado?.profiles?.length || res.copied_ado?.defaultProfile)) {
+      else if (res.copied_ado?.profiles?.length || res.copied_ado?.defaultProfile) {
         setNotice(`${nameTrim}: ${adoptedAdoSummary(res.copied_ado)}`)
       }
     })

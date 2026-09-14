@@ -84,9 +84,9 @@ func runEnvInit() error {
 	for _, p := range ready {
 		// Seed `ado init` profiles into the env before installing: the scoped
 		// apply builds a fresh opencode.json that would otherwise leave `ado`
-		// without profiles inside the env. Same gating as providers (personal
-		// and other bare presets get nothing); failures only warn.
-		if spec, _ := envprofile.Preset(p.Preset); envprofile.PresetCopyProviders(spec) {
+		// without profiles inside the env. Gated by the preset's own
+		// copy_ado_config (independent of providers); failures only warn.
+		if spec, _ := envprofile.Preset(p.Preset); envprofile.PresetCopyAdo(spec) {
 			reportCopiedAdo(p)
 		}
 		fmt.Printf("\n=== Installing into environment %q ===\n", p.Name)
@@ -182,6 +182,9 @@ var envCreateCmd = &cobra.Command{
 		}
 		if copyProviders {
 			reportCopiedProviders(p)
+		}
+		// Ado profiles follow their own preset key, independent of providers.
+		if spec, _ := envprofile.Preset(preset); envprofile.PresetCopyAdo(spec) {
 			reportCopiedAdo(p)
 		}
 		fmt.Printf("Created environment %q (preset %s, port %d)\n", p.Name, p.Preset, p.Port)

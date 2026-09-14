@@ -150,6 +150,9 @@ func (s *Server) handleEnvCreate(w http.ResponseWriter, r *http.Request) {
 			resp["copied"] = copied
 			restartEnvServiceForLogins(p, copied)
 		}
+	}
+	// Ado profiles follow their own preset key, independent of providers.
+	if spec, err := envprofile.Preset(p.Preset); err == nil && envprofile.PresetCopyAdo(spec) {
 		// Seed `ado init` profiles too (env wins on conflicts); warn-only.
 		if adopted, aerr := envprofile.CopyAdoConfig(p); aerr != nil {
 			resp["copy_ado_error"] = aerr.Error()
