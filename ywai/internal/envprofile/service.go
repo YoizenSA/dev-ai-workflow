@@ -187,14 +187,16 @@ func Stop(p Profile) error {
 	}
 	pid := 0
 	if err == nil {
-		if v, perr := strconv.Atoi(strings.TrimSpace(string(raw))); perr == nil {
+		if v, perr := strconv.Atoi(strings.TrimSpace(string(raw))); perr == nil && v > 0 {
 			pid = v
 		} else {
-			// Unparseable pid file can never name a live server.
+			// Unparseable or non-positive pid file can never name a live
+			// server (PID -1 on unix names a process group — never signal
+			// it). Drop the garbage so later reads see "no server".
 			_ = os.Remove(PidFile(p))
 		}
 	}
-	if pid != 0 {
+	if pid > 0 {
 		if proc, ferr := os.FindProcess(pid); ferr == nil {
 			_ = proc.Kill()
 		}
@@ -241,8 +243,12 @@ func Status(p Profile) (bool, error) {
 }
 
 // PidAlive reports whether pid is a live process (unix signal 0; on Windows
-// any existing pid handle counts, so callers prefer Status).
+// any existing pid handle counts, so callers prefer Status). Non-positive
+// pids are never alive: signal 0 on PID -1/0 addresses a process group.
 func PidAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return false

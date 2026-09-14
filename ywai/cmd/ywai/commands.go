@@ -160,7 +160,9 @@ func killPIDs(pids []int) error {
 
 // readStopPIDFile reads the first valid PID from a PID file. Accepts a file
 // with multiple PIDs (returns the first) but fails when no numeric PID is
-// present at all, so garbage is never mistaken for PID 0.
+// present at all, so garbage is never mistaken for PID 0. Non-positive PIDs
+// (0, -1, ...) are rejected too: PID -1 on unix names every process the
+// caller may signal, so it must never reach a kill call.
 func readStopPIDFile(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -169,6 +171,9 @@ func readStopPIDFile(path string) (int, error) {
 	pids := parsePIDs(string(data))
 	if len(pids) == 0 {
 		return 0, fmt.Errorf("invalid PID in %s: no numeric PID found", path)
+	}
+	if pids[0] <= 0 {
+		return 0, fmt.Errorf("invalid PID in %s: non-positive PID %d", path, pids[0])
 	}
 	return pids[0], nil
 }
