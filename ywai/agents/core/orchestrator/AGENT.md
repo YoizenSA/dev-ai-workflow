@@ -28,6 +28,7 @@ Default: installed policy `default_mode` (thin unless overridden). Never default
 | Signal | Mode |
 |---|---|
 | Q&A, no code | **solo** or one hop `@ask` |
+| Idea or change to think through visually, no code yet | **solo** + `visual-thinking` canvas |
 | One file / mechanical / clear | **solo** |
 | Clear "do X", few files | **thin** |
 | Multi-phase, UI design, "ship" / "orchestrate" | **full** |
