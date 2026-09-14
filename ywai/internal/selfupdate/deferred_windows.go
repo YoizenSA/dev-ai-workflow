@@ -17,6 +17,15 @@ import (
 // exit, swaps the files, re-launches ywai, and cleans up. The batch script
 // is launched detached and this function returns the new version so the
 // caller can exit immediately.
+// detachedCmdArgs builds the cmd.exe invocation that launches the update
+// script detached from this process. The empty title argument stops start
+// from treating the script path as a window title, and /B keeps the script
+// in the same console instead of opening a new window. Pure so a test can
+// assert the exact argv.
+func detachedCmdArgs(batPath string) (name string, args []string) {
+	return "cmd", []string{"/C", "start", "", "/B", batPath}
+}
+
 func deferredReplace(newBinary, exePath, version string) (string, error) {
 	newPath := exePath + ".new"
 	srcFile, err := os.Open(newBinary)
@@ -62,7 +71,8 @@ del "%%~f0" >NUL
 		return "", fmt.Errorf("write update batch script: %w", err)
 	}
 
-	cmd := exec.Command("cmd", "/C", "start", "/B", batPath)
+	name, args := detachedCmdArgs(batPath)
+	cmd := exec.Command(name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x00000008, // DETACHED_PROCESS

@@ -13,11 +13,16 @@ import (
 // setTestHomeDir redirects the user home directory for the duration of the
 // test. os.UserHomeDir() reads HOME on unix and USERPROFILE on Windows, so
 // both must be set for these tests to resolve config paths under the temp
-// dir on every CI runner.
+// dir on every CI runner. OPENCODE_CONFIG_DIR and XDG_CONFIG_HOME are cleared
+// because the OpenCode config resolvers honor them over HOME, and a real host
+// value would redirect writes outside the temp dir (and into the user's live
+// config).
 func setTestHomeDir(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 }
 
 // TestGetAgentGraph builds a fake ~/.config/opencode layout under a temp HOME
@@ -28,39 +33,35 @@ func TestGetAgentGraph(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
 
-	// opencode.json: a primary orchestrator with a dense task allow/deny map
+	// opencode.json: a primary orchestrator with a dense delegation graph
 	// (mirrors the gentle-orchestrator shape), a subagent "dev", and an "ask"
-	// delegation to a reviewer subagent.
+	// delegation to a reviewer subagent. Entries live under the legacy
+	// `agent` key with subagent rules as `permissions` — the graph must read
+	// both spellings (migration) and the v2 rule shape.
 	config := `{
   "agent": {
     "orchestrator": {
       "mode": "primary",
       "description": "coordinates sub-agents",
-      "permission": {
-        "*": "deny",
-        "question": "allow",
-        "task": {
-          "*": "deny",
-          "dev": "allow",
-          "reviewer": "ask"
-        }
-      }
+      "permissions": [
+        {"action": "question", "resource": "*", "effect": "allow"},
+        {"action": "subagent", "resource": "*", "effect": "deny"},
+        {"action": "subagent", "resource": "dev", "effect": "allow"},
+        {"action": "subagent", "resource": "reviewer", "effect": "ask"}
+      ]
     },
     "dev": {
       "mode": "subagent",
       "description": "writes code",
-      "permission": {
-        "*": "deny",
-        "read": "allow",
-        "edit": "allow",
-        "task": "deny"
-      }
+      "permissions": [
+        {"action": "subagent", "resource": "*", "effect": "deny"}
+      ]
     },
     "reviewer": {
       "mode": "subagent",
-      "permission": {
-        "read": "allow"
-      }
+      "permissions": [
+        {"action": "read", "resource": "*", "effect": "allow"}
+      ]
     }
   }
 }`
@@ -148,9 +149,9 @@ func TestGetAgentGraph_GhostTarget(t *testing.T) {
   "agent": {
     "orch": {
       "mode": "primary",
-      "permission": {
-        "task": { "missing-sub": "allow" }
-      }
+      "permissions": [
+        {"action": "subagent", "resource": "missing-sub", "effect": "allow"}
+      ]
     }
   }
 }`

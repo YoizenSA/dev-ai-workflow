@@ -12,8 +12,8 @@ import (
 
 func TestServerSession_Create(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/session" {
-			t.Errorf("expected POST /session, got %s %s", r.Method, r.URL.Path)
+		if r.Method != http.MethodPost || r.URL.Path != "/api/session" {
+			t.Errorf("expected POST /api/session, got %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
@@ -29,8 +29,10 @@ func TestServerSession_Create(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":    "sess-123",
-			"title": body["title"],
+			"data": map[string]interface{}{
+				"id":    "sess-123",
+				"title": body["title"],
+			},
 		})
 	}))
 	defer srv.Close()
@@ -55,16 +57,24 @@ func TestServerSession_Create(t *testing.T) {
 // SessionModel().
 func TestServerSession_Create_ModelObject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/session" {
+			t.Errorf("expected POST /api/session, got %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		// This is the shape opencode 1.17.9 emits (mirrored from a live probe).
+		// This is the shape opencode 1.17.9 emits (mirrored from a live probe),
+		// wrapped in the v2 {data: {...}} envelope.
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":    "sess-obj",
-			"title": "probe",
-			"agent": "memory",
-			"model": map[string]interface{}{
-				"id":         "deepseek-v4-flash",
-				"providerID": "fireworks-ai",
-				"variant":    "",
+			"data": map[string]interface{}{
+				"id":    "sess-obj",
+				"title": "probe",
+				"agent": "memory",
+				"model": map[string]interface{}{
+					"id":         "deepseek-v4-flash",
+					"providerID": "fireworks-ai",
+					"variant":    "",
+				},
 			},
 		})
 	}))
@@ -127,7 +137,9 @@ func TestServerSession_Create_OmitsEmptyFields(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"id": "sess-omit"})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{"id": "sess-omit"},
+		})
 	}))
 	defer srv.Close()
 
@@ -144,6 +156,177 @@ func TestServerSession_Create_OmitsEmptyFields(t *testing.T) {
 	}
 	if session.ID != "sess-omit" {
 		t.Errorf("expected session ID 'sess-omit', got %q", session.ID)
+	}
+}
+
+// TestServerSession_Create_ModelShape verifies the model object shape: variant
+// is only sent when non-empty (older servers 400 on ""), and a model without
+// a providerID is dropped entirely (the v2 API 400s on a provider-less model;
+// the server default then applies).
+func TestServerSession_Create_ModelShape(t *testing.T) {
+	cases := []struct {
+		name      string
+		model     *ModelInput
+		wantModel map[string]interface{} // nil means the model key must be absent
+	}{
+		{
+			name:      "provider and id, no variant",
+			model:     &ModelInput{ID: "muse-spark-1.3-contributor", ProviderID: "meta"},
+			wantModel: map[string]interface{}{"id": "muse-spark-1.3-contributor", "providerID": "meta"},
+		},
+		{
+			name:      "with variant",
+			model:     &ModelInput{ID: "m", ProviderID: "p", Variant: "default"},
+			wantModel: map[string]interface{}{"id": "m", "providerID": "p", "variant": "default"},
+		},
+		{
+			name:      "bare id without provider is dropped",
+			model:     &ModelInput{ID: "bare-model"},
+			wantModel: nil,
+		},
+		{
+			name:      "nil model is dropped",
+			model:     nil,
+			wantModel: nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/api/session" {
+					t.Errorf("expected POST /api/session, got %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				var body map[string]interface{}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatalf("decode body: %v", err)
+				}
+				got, present := body["model"]
+				if c.wantModel == nil {
+					if present {
+						t.Errorf("model must be omitted, got %v", got)
+					}
+				} else {
+					gotMap, ok := got.(map[string]interface{})
+					if !ok {
+						t.Fatalf("expected model object, got %v", got)
+					}
+					for k, want := range c.wantModel {
+						if gotMap[k] != want {
+							t.Errorf("model[%q]: want %q, got %v", k, want, gotMap[k])
+						}
+					}
+					if _, present := gotMap["variant"]; present && c.wantModel["variant"] == nil {
+						t.Errorf("empty variant must be omitted, got %v", gotMap["variant"])
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"data": map[string]interface{}{"id": "sess-m"},
+				})
+			}))
+			defer srv.Close()
+
+			api := newServerSessionAPI(srv.URL)
+			session, err := api.Create(context.Background(), SessionCreateOpts{Title: "t", Model: c.model})
+			if err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			if session.ID != "sess-m" {
+				t.Errorf("expected session ID 'sess-m', got %q", session.ID)
+			}
+		})
+	}
+}
+
+// TestServerSession_SendsBasicAuth pins the auth wiring: the session client
+// must attach the server Basic credentials (env first, then the persisted ywai
+// auth file). Without them the v2 API answers 401 on every /api/session route
+// — the bare /session path 405s before auth is even checked, which is exactly
+// how the Consolidate Memories 405 masked the missing credentials.
+func TestServerSession_SendsBasicAuth(t *testing.T) {
+	t.Setenv("OPENCODE_SERVER_USERNAME", "opencode")
+	t.Setenv("OPENCODE_SERVER_PASSWORD", "test-password")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != "opencode" || pass != "test-password" {
+			t.Errorf("missing or wrong Basic auth (user=%q ok=%v)", user, ok)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{"id": "sess-auth"},
+		})
+	}))
+	defer srv.Close()
+
+	api := newServerSessionAPI(srv.URL)
+	session, err := api.Create(context.Background(), SessionCreateOpts{Title: "t"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if session.ID != "sess-auth" {
+		t.Errorf("expected session ID 'sess-auth', got %q", session.ID)
+	}
+}
+
+// ─── Get / Status ──────────────────────────────────────────────────────────
+
+func TestServerSession_Get(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/session/sess-123" {
+			t.Errorf("expected GET /api/session/sess-123, got %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{"id": "sess-123", "title": "probe"},
+		})
+	}))
+	defer srv.Close()
+
+	api := newServerSessionAPI(srv.URL)
+	session, err := api.Get(context.Background(), "sess-123")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if session.ID != "sess-123" {
+		t.Errorf("expected session ID 'sess-123', got %q", session.ID)
+	}
+}
+
+func TestServerSession_Status(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The v2 API has no /api/session/status route — status is derived
+		// from the session list.
+		if r.Method != http.MethodGet || r.URL.Path != "/api/session" {
+			t.Errorf("expected GET /api/session, got %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"id": "sess-1", "title": "one"},
+				{"id": "sess-2", "title": "two"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	api := newServerSessionAPI(srv.URL)
+	result, err := api.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(result.Sessions))
+	}
+	if result.Sessions[0].ID != "sess-1" || result.Sessions[1].ID != "sess-2" {
+		t.Errorf("unexpected sessions: %+v", result.Sessions)
 	}
 }
 
@@ -265,8 +448,8 @@ func TestServerSession_Messages(t *testing.T) {
 
 func TestServerSession_Delete(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/session/sess-123" {
-			t.Errorf("expected DELETE /session/sess-123, got %s %s", r.Method, r.URL.Path)
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/session/sess-123" {
+			t.Errorf("expected DELETE /api/session/sess-123, got %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
@@ -362,41 +545,6 @@ func TestServerSession_Wait_ContextCancelled(t *testing.T) {
 	}
 }
 
-// ─── Local Session Stub ────────────────────────────────────────────────────
-
-func TestLocalSessionAPI_AllMethodsError(t *testing.T) {
-	api := &localSessionAPI{}
-	ctx := context.Background()
-
-	if _, err := api.Create(ctx, SessionCreateOpts{}); err == nil {
-		t.Error("Create should error")
-	}
-	if _, err := api.Get(ctx, "x"); err == nil {
-		t.Error("Get should error")
-	}
-	if _, err := api.Status(ctx); err == nil {
-		t.Error("Status should error")
-	}
-	if _, err := api.Prompt(ctx, "x", PromptInput{}); err == nil {
-		t.Error("Prompt should error")
-	}
-	if err := api.Wait(ctx, "x"); err == nil {
-		t.Error("Wait should error")
-	}
-	if _, err := api.Messages(ctx, "x"); err == nil {
-		t.Error("Messages should error")
-	}
-	if err := api.Delete(ctx, "x"); err == nil {
-		t.Error("Delete should error")
-	}
-	if _, err := api.ListQuestions(ctx); err == nil {
-		t.Error("ListQuestions should error")
-	}
-	if err := api.ReplyQuestion(ctx, "x", "a"); err == nil {
-		t.Error("ReplyQuestion should error")
-	}
-}
-
 // ─── ServerClient.Sessions() ───────────────────────────────────────────────
 
 func TestServerClient_Sessions_ReturnsAPI(t *testing.T) {
@@ -412,15 +560,13 @@ func TestServerClient_Sessions_ReturnsAPI(t *testing.T) {
 	}
 }
 
-func TestLocalClient_Sessions_ReturnsStub(t *testing.T) {
+// TestLocalClient_Sessions_ReturnsNil pins the LocalClient contract: without a
+// server there is no session API, and consumers nil-check instead of calling
+// methods that could never succeed.
+func TestLocalClient_Sessions_ReturnsNil(t *testing.T) {
 	c := NewLocalClient()
-	sa := c.Sessions()
-	if sa == nil {
-		t.Fatal("Sessions() should not return nil")
-	}
-	// The stub should return ErrSessionsUnavailable for all calls
-	if err := sa.Wait(context.Background(), "x"); err == nil {
-		t.Error("local Sessions().Wait() should error")
+	if sa := c.Sessions(); sa != nil {
+		t.Fatal("Sessions() should return nil for the local client")
 	}
 }
 

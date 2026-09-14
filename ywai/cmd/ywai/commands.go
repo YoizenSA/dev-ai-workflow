@@ -22,7 +22,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/control"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/cli"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -104,19 +103,25 @@ func killPort(port int) error {
 		}
 	}
 
-	// Fallback: Windows netstat -ano (findstr filters to lines with the port)
-	cmd = exec.Command("cmd", "/C",
-		fmt.Sprintf("netstat -ano | findstr :%d", port))
+	// Fallback: Windows netstat -ano. Only a socket LISTENING on the local
+	// address/port counts: matching any column would also hit connections
+	// whose REMOTE port happens to be this one, killing unrelated PIDs.
+	cmd = exec.Command("cmd", "/C", "netstat", "-ano")
 	out, err = cmd.Output()
 	if err == nil {
-		// netstat -ano output: "  TCP    0.0.0.0:5768    0.0.0.0:0    LISTENING    1234"
-		// The PID is the last whitespace-separated field on each line.
+		suffix := fmt.Sprintf(":%d", port)
 		for _, line := range strings.Split(string(out), "\n") {
 			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				if pids := parsePIDs(fields[len(fields)-1]); len(pids) > 0 {
-					return killPIDs(pids)
-				}
+			if len(fields) < 5 {
+				continue
+			}
+			if !strings.HasSuffix(fields[1], suffix) || fields[3] != "LISTENING" {
+				continue
+			}
+			// netstat output: "  TCP    0.0.0.0:5768    0.0.0.0:0    LISTENING    1234"
+			// The PID is the last whitespace-separated field on the line.
+			if pids := parsePIDs(fields[len(fields)-1]); len(pids) > 0 {
+				return killPIDs(pids)
 			}
 		}
 	}
@@ -262,27 +267,17 @@ var stopCmd = &cobra.Command{
 // It resolves the opencode binary via agent.FindBinary (so binaries installed
 // via nvm/asdf/etc. — not in the raw process PATH — are still found), and
 // probes with opencode.ProbeServer (GET /status requiring 200) instead of a
-// bare /health ping, so another server (e.g. Kilo Code) on the same port does
+// bare /health ping, so another server on the same port does
 // not produce a false "already running" positive.
 //
 // If the default port (4096, or the one in OPENCODE_URL) is already taken by a
 // non-opencode process, it walks up to find a free port and starts opencode
 // there, exporting the chosen URL via OPENCODE_URL so the rest of ywai
-// (chat proxy, missions) all point at the same instance.
+// (chat proxy, tools API) all point at the same instance.
 func startOpencodeServe() {
 	url := os.Getenv("OPENCODE_URL")
 	explicitURL := url != ""
-	if url == "" {
-		url = "http://127.0.0.1:4096"
-	}
-
-	// Determine the starting port from the URL (default 4096).
-	startPort := 4096
-	if _, p, err := net.SplitHostPort(strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")); err == nil && p != "" {
-		if n, err := strconv.Atoi(p); err == nil {
-			startPort = n
-		}
-	}
+	startPort := opencode.StartPortFromURL(url)
 
 	// An explicit URL is an operator choice. For the default port, however,
 	// reuse a healthy ywai-started server on a later port before spawning a new
@@ -294,32 +289,29 @@ func startOpencodeServe() {
 		if ok, _ := opencode.ProbeServer(ctx, url); ok {
 			return
 		}
-	} else {
-		for candidatePort := startPort; candidatePort < startPort+50; candidatePort++ {
-			candidateURL := fmt.Sprintf("http://127.0.0.1:%d", candidatePort)
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-			ok, _ := opencode.ProbeServer(ctx, candidateURL)
-			cancel()
-			if ok {
-				os.Setenv("OPENCODE_URL", candidateURL)
-				fmt.Printf("opencode server ready on %s\n", candidateURL)
-				return
-			}
-		}
+	} else if found, ok := opencode.FindRunningURL(context.Background(), startPort, 50, nil); ok {
+		os.Setenv("OPENCODE_URL", found)
+		fmt.Printf("opencode server ready on %s\n", found)
+		return
 	}
 
-	// Resolve OpenCode 2 (opencode2). No v1 `opencode` fallback.
-	binPath := agent.FindBinary("opencode2")
+	// Resolve the OpenCode 2 binary; the retired v1 `opencode` CLI is never
+	// started (docs/adr/0001-drop-opencode-v1-support.md).
+	binPath, binName := agent.FindOpenCode()
 	if binPath == "" {
+		if err := agent.GateOpenCodeV2(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v.\n", err)
+			return
+		}
 		fmt.Fprintln(os.Stderr, "Warning: opencode2 binary not found (looked in PATH, "+
-			"~/.opencode2/bin, ~/.local/bin, and login-shell which). "+
+			"~/.opencode/bin, ~/.local/bin, and login-shell which). "+
 			"Install OpenCode 2 or set OPENCODE_URL to point at a running server.")
 		return
 	}
 
 	// Find a free port. If the default (startPort) is open, use it; otherwise
 	// walk up to 50 ports looking for one that binds. This handles the case
-	// where another server (Kilo Code, etc.) occupies the default opencode port.
+	// where another server occupies the default opencode port.
 	port := serverutil.FindFreePort(startPort)
 	if port != startPort {
 		fmt.Fprintf(os.Stderr, "Warning: port %d is busy; using %d instead.\n", startPort, port)
@@ -332,24 +324,28 @@ func startOpencodeServe() {
 		return
 	}
 	cmd := exec.Command(binPath, "serve", "--port", strconv.Itoa(port))
-	// OpenCode v2 protects every `serve` instance with Basic Auth. Generate a
-	// private credential for the ywai-managed child and retain it in this
-	// process so readiness checks and the chat proxy authenticate correctly.
+	// OpenCode v2 protects every `serve` instance with Basic Auth; a v1 child
+	// ignores the header, which is harmless. Generate a private credential for
+	// the ywai-managed child and retain it in this process so readiness checks
+	// authenticate correctly.
 	cmd.Env = openCodeChildEnv(os.Environ(), password)
 	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not start opencode serve (%s): %v\n", binPath, err)
+		fmt.Fprintf(os.Stderr, "Warning: could not start %s serve (%s): %v\n", binName, binPath, err)
 		return
 	}
 	_ = os.Setenv("OPENCODE_SERVER_PASSWORD", password)
 	_ = os.Setenv("OPENCODE_SERVER_USERNAME", "opencode")
+	// Persist so detached processes (evals runner, mission workers)
+	// can reach the child server even when they did not inherit the env.
+	_ = opencode.SaveServerAuth("opencode", password)
 	// Export the chosen URL so detectOpenCodeURL (and every other consumer of
 	// OPENCODE_URL in this process) proxies to the instance we just started.
 	os.Setenv("OPENCODE_URL", chosenURL)
-	fmt.Printf("opencode server starting on %s (PID %d)\n", chosenURL, cmd.Process.Pid)
+	fmt.Printf("opencode server starting on %s (PID %d, via %s)\n", chosenURL, cmd.Process.Pid, binName)
 
-	// Wait briefly for opencode to bind its port, so the control server's chat
-	// route registration (which runs right after) sees it. Poll /status up to
+	// Wait briefly for opencode to bind its port so the control server (which
+	// starts right after) finds it reachable. Poll /status up to
 	// ~5s; opencode usually binds in under a second.
 	for i := 0; i < 25; i++ {
 		pctx, pcancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -361,7 +357,7 @@ func startOpencodeServe() {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s — chat may need a moment.\n", chosenURL)
+	fmt.Fprintf(os.Stderr, "Warning: opencode was started but did not become reachable on %s within 5s.\n", chosenURL)
 }
 
 // openCodeChildEnv removes inherited server credentials before starting the
@@ -399,6 +395,7 @@ var installCmd = &cobra.Command{
 		mcpFlag, _ := cmd.Flags().GetBool("mcp")
 		ponytailFlag, _ := cmd.Flags().GetBool("ponytail")
 		autostartFlag, _ := cmd.Flags().GetBool("autostart")
+		profileFlag, _ := cmd.Flags().GetString("profile")
 
 		agents := detectAgents(cmd)
 		if agents == nil {
@@ -406,6 +403,7 @@ var installCmd = &cobra.Command{
 		}
 
 		var installMCP bool
+		var installMetaMCP bool
 		var installPonytail bool
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
@@ -434,6 +432,7 @@ var installCmd = &cobra.Command{
 				agentFlag = result.Agent
 			}
 			installMCP = result.MCP
+			installMetaMCP = result.MetaMCP
 			installPonytail = result.Ponytail
 			overwriteAgents = result.OverwriteAgents
 			groupFilter = result.GroupFilter
@@ -441,6 +440,7 @@ var installCmd = &cobra.Command{
 			ranTUI = true
 		} else {
 			installMCP = mcpFlag
+			installMetaMCP = getBoolFlag(cmd, "meta-mcp")
 			installPonytail = ponytailFlag
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
@@ -463,7 +463,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag)
+		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag, profileFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -502,6 +502,7 @@ After update, restart OpenCode once so it reloads plugins.`,
 		beta, _ := cmd.Flags().GetBool("beta")
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		profileFlag, _ := cmd.Flags().GetString("profile")
 
 		if beta {
 			fmt.Println("=== ywai update (beta channel) ===")
@@ -542,35 +543,26 @@ After update, restart OpenCode once so it reloads plugins.`,
 			fmt.Println("  No cached plugins to clear.")
 		}
 
-		// CodeGraph was retired in favour of Graft. Sweep the leftover global
-		// npm CLI and this repo's index so they stop shadowing Graft.
-		cwd, _ := os.Getwd()
-		if removed, err := plugins.RemoveRetiredCLIs(cwd, dryRun); err != nil {
-			fmt.Printf("  Warning: %v\n", err)
-		} else if len(removed) > 0 {
-			fmt.Println("\n[cleanup] Removing retired CodeGraph CLI/index...")
-			verb := "✓ removed"
-			if dryRun {
-				verb = "Would remove"
-			}
-			fmt.Printf("  %s: %s\n", verb, strings.Join(removed, ", "))
-		}
-
-		result := applyManaged(applyOpts{
+		result := applyManagedScoped(applyOpts{
 			Mode: applyUpdate,
+			// Profile scope applies only inside the environment's sandbox.
+			Profile: profileFlag,
 			Opts: gentlai.InstallOptions{
 				AgentName: agentFlag,
 				DryRun:    dryRun,
 			},
 			OverwriteAgents:       true,
-			SkipGentleAIBinary:    true,
 			RestartServeIfRunning: true,
 		})
-		// Re-apply TokenBank last: applyManaged rewrites agent configs, so
-		// re-running the same work as `ywai tokenbank configure` here refreshes
-		// the model list and restores the proxy wiring instead of leaving it
-		// clobbered. Soft failure — a down TokenBank must not fail the update.
-		reapplyTokenBank(dryRun)
+		// The global post-passes stay global: skip them for profile scope.
+		if strings.TrimSpace(profileFlag) == "" {
+			// Re-apply TokenBank last: applyManaged rewrites agent configs, so
+			// re-running the same work as `ywai tokenbank configure` here refreshes
+			// the model list and restores the proxy wiring instead of leaving it
+			// clobbered. Soft failure — a down TokenBank must not fail the update.
+			reapplyTokenBank(dryRun)
+			mirrorOpenCodeToOrca(dryRun)
+		}
 
 		// Surface binary-phase soft failures into the summary when we only printed them.
 		result.printFooter(applyUpdate)
@@ -663,21 +655,6 @@ type configField struct {
 }
 
 var configFields = map[string]configField{
-	"default_scope": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultScope },
-		Set: func(c *config.UserConfig, v string) error { c.DefaultScope = v; return nil },
-	},
-	"default_tui": {
-		Get: func(c *config.UserConfig) interface{} { return c.DefaultTUI },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.DefaultTUI = b
-			return nil
-		},
-	},
 	"default_mcp": {
 		Get: func(c *config.UserConfig) interface{} { return c.DefaultMCP },
 		Set: func(c *config.UserConfig, v string) error {
@@ -689,26 +666,6 @@ var configFields = map[string]configField{
 			return nil
 		},
 	},
-	"colored_output": {
-		Get: func(c *config.UserConfig) interface{} {
-			if c.ColoredOutput != nil {
-				return *c.ColoredOutput
-			}
-			return nil
-		},
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.ColoredOutput = &b
-			return nil
-		},
-	},
-	"log_level": {
-		Get: func(c *config.UserConfig) interface{} { return c.LogLevel },
-		Set: func(c *config.UserConfig, v string) error { c.LogLevel = v; return nil },
-	},
 	"agents": {
 		Get: func(c *config.UserConfig) interface{} { return c.Agents },
 		Set: func(c *config.UserConfig, v string) error {
@@ -719,50 +676,6 @@ var configFields = map[string]configField{
 				}
 			}
 			c.Agents = agents
-			return nil
-		},
-	},
-	"server.port": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Port },
-		Set: func(c *config.UserConfig, v string) error {
-			port, err := strconv.Atoi(v)
-			if err != nil {
-				return fmt.Errorf("port must be a number")
-			}
-			c.Server.Port = port
-			return nil
-		},
-	},
-	"server.background": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Background },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.Background = b
-			return nil
-		},
-	},
-	"server.mcp": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.MCP },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.MCP = b
-			return nil
-		},
-	},
-	"server.autostart": {
-		Get: func(c *config.UserConfig) interface{} { return c.Server.Autostart },
-		Set: func(c *config.UserConfig, v string) error {
-			b, err := parseBool(v)
-			if err != nil {
-				return err
-			}
-			c.Server.Autostart = b
 			return nil
 		},
 	},
@@ -876,7 +789,7 @@ var configResetCmd = &cobra.Command{
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show ywai installation status",
-	Long:  "Display information about ywai, optional gentle-ai, and detected agents",
+	Long:  "Display information about ywai and detected agents",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("=== ywai Status ===")
 
@@ -888,14 +801,6 @@ var statusCmd = &cobra.Command{
 
 		// Data directory
 		fmt.Printf("Data dir: %s\n", config.DataDir())
-
-		// Optional gentle-ai status; ywai does not manage it.
-		fmt.Println("\n=== Optional: gentle-ai ===")
-		if gentlai.IsInstalled() {
-			fmt.Println("Status: Installed (optional, unmanaged by ywai)")
-		} else {
-			fmt.Println("Status: Not installed (optional, unmanaged by ywai)")
-		}
 
 		// Detected agents
 		fmt.Println("\n=== Detected Agents ===")
@@ -1050,11 +955,11 @@ var groupsDisableCmd = &cobra.Command{
 	},
 }
 
-// serveCmd starts the control ywai server (config API + Missions).
+// serveCmd starts the control ywai server (config API + tool API).
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the control ywai server",
-	Long:  "Start the control ywai server (config API + Missions) on a single port.",
+	Long:  "Start the control ywai server (config API + tool API) on a single port.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port, _ := cmd.Flags().GetInt("port")
 		background, _ := cmd.Flags().GetBool("background")
@@ -1117,9 +1022,8 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
-		// Auto-start opencode serve BEFORE the control server, so that when the
-		// control server registers its chat routes (which probe for opencode),
-		// opencode is already binding its port.
+		// Auto-start opencode serve BEFORE the control server, so opencode is
+		// already binding its port when the control server starts.
 		startOpencodeServe()
 
 		// Start control server
@@ -1414,6 +1318,7 @@ var tokenbankConfigureCmd = &cobra.Command{
 			}
 		}
 
+		mirrorOpenCodeToOrca(false)
 		fmt.Println("\nDone! Restart your agents to pick up the new configuration.")
 		return nil
 	},
@@ -1435,15 +1340,13 @@ func configureAutostart() error {
 }
 
 func init() {
-	cli.RegisterCommands(rootCmd)
-
 	serveCmd.Flags().IntP("port", "p", 5768, "Port for control server")
 	serveCmd.Flags().BoolP("background", "b", false, "Run in background (detach from terminal)")
 	serveCmd.Flags().Bool("no-update", false, "Skip auto-update before starting")
 
 	stopCmd.Flags().IntP("port", "p", 5768, "Port to stop (fallback if no PID file)")
 
-	uiCmd.Flags().IntP("port", "p", configapi.DefaultUIPort, "Port for the ywai UI server")
+	uiCmd.Flags().IntP("port", "p", control.DefaultPort, "Port for the ywai UI server")
 
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(stopCmd)
@@ -1453,16 +1356,19 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
+	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
-	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group social-refactor)")
+	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
+	installCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 
 	rootCmd.AddCommand(installCmd)
 
 	updateCmd.Flags().Bool("beta", false, "Upgrade to the newest prerelease (beta) instead of stable latest")
 	updateCmd.Flags().StringP("agent", "a", "", "Limit re-apply to one agent (default: all detected)")
 	updateCmd.Flags().Bool("dry-run", false, "Preview changes without applying")
+	updateCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(agentsCmd)
 	rootCmd.AddCommand(skillsCmd)

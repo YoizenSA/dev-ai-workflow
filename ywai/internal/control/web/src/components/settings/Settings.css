@@ -5,8 +5,7 @@
 
 /* --- Page layout --- */
 .settings-page {
-	max-width: 1400px;
-	margin: 0 auto;
+	/* Full width like every other page — no centered max-width column. */
 	padding: var(--space-6) var(--space-4);
 	/* Stable width across tabs so switching never shifts the layout. */
 	width: 100%;
@@ -52,13 +51,62 @@
 }
 
 .settings-page .tab.active {
-	color: var(--text);
-	background: color-mix(in srgb, var(--yz-accent) 18%, transparent);
+	color: var(--nav-active-text);
+	background: rgba(var(--yz-primary-1-rgb), 0.22);
+	box-shadow: inset 0 0 0 1px rgba(var(--info-rgb), 0.35);
 	font-weight: 600;
 }
 
 .settings-page .tab.active::after {
 	display: none;
+}
+
+/* --- Scope picker + banner (edit global vs one env) --- */
+.settings-page .scope-picker {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0 var(--space-2);
+	white-space: nowrap;
+}
+.settings-page .scope-picker-label {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+.settings-page .scope-picker select {
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--panel-border);
+	background: var(--surface);
+	color: var(--text);
+}
+.scope-banner {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	margin-bottom: var(--space-4);
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius-md);
+	border: 1px solid var(--yz-accent);
+	background: color-mix(in srgb, var(--yz-accent) 14%, transparent);
+}
+.scope-banner strong {
+	white-space: nowrap;
+}
+.scope-banner span {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	flex: 1 1 auto;
+	min-width: 16rem;
+}
+.scope-banner code {
+	font-family: monospace;
+	font-size: 0.8em;
+}
+.scope-banner button {
+	white-space: nowrap;
 }
 
 /* --- Section cards --- */
@@ -238,6 +286,8 @@
 .agents-group-header {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
 	font-size: 0.72rem;
 	font-weight: 700;
 	text-transform: uppercase;
@@ -246,14 +296,47 @@
 	padding: var(--space-2) var(--space-3) var(--space-1);
 }
 
+.agents-group-delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tools-section:hover .agents-group-delete,
+.tools-section:focus-within .agents-group-delete,
+.agents-group-delete:focus-visible {
+	opacity: 1;
+}
+
+.agents-group-delete:hover {
+	color: var(--danger, #ef4444);
+	background: rgba(239, 68, 68, 0.1);
+	border-color: rgba(239, 68, 68, 0.3);
+}
+
+.agents-group-delete:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
 .agent-item {
 	display: flex;
 	align-items: center;
-	gap: var(--space-3);
+	gap: var(--space-2);
 	width: 100%;
 	text-align: left;
 	background: transparent;
-	padding: var(--space-2) var(--space-3);
+	padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
 	border-radius: var(--radius-md);
 	cursor: pointer;
 	transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -272,6 +355,61 @@
 	color: var(--text);
 	border-color: var(--yz-accent);
 	font-weight: 500;
+}
+
+.agent-item:focus-visible {
+	outline: 2px solid var(--yz-accent);
+	outline-offset: 1px;
+}
+
+.agent-item-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.agent-item-delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.agent-item:hover .agent-item-delete,
+.agent-item.active .agent-item-delete,
+.agent-item:focus-within .agent-item-delete,
+.agent-item-delete:focus-visible {
+	opacity: 1;
+}
+
+.agent-item-delete:hover {
+	color: var(--danger, #ef4444);
+	background: rgba(239, 68, 68, 0.12);
+	border-color: rgba(239, 68, 68, 0.35);
+}
+
+.agent-item-delete:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+@media (hover: none) {
+	.agents-group-delete,
+	.agent-item-delete {
+		opacity: 0.7;
+	}
 }
 
 .agent-item-dot {
@@ -306,6 +444,11 @@
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: var(--space-4);
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	background: var(--background, var(--surface));
+	padding: var(--space-2) 0;
 }
 
 .agent-detail-title {
@@ -977,6 +1120,15 @@
 	position: relative;
 	z-index: 20;
 }
+
+/* Every combobox card sharing z-index 20 made DOM order the tiebreaker, so a
+   later card painted over an open dropdown: Quick set's list was unusable
+   because OMP modelRoles sits below it. Lift only the card whose dropdown is
+   actually open, so it clears its siblings without permanently outranking
+   them. */
+.settings-section:has(.model-combobox-open) {
+	z-index: 60;
+}
 .profiles-omp-thinking {
 	display: flex;
 	align-items: center;
@@ -1032,8 +1184,9 @@
 }
 
 .profiles-subtab.active {
-	color: var(--text);
-	background: color-mix(in srgb, var(--yz-accent) 18%, transparent);
+	color: var(--nav-active-text);
+	background: rgba(var(--yz-primary-1-rgb), 0.22);
+	box-shadow: inset 0 0 0 1px rgba(var(--info-rgb), 0.35);
 	font-weight: 600;
 }
 
@@ -1182,3 +1335,79 @@
 		flex-direction: column;
 	}
 }
+
+/* Endpoint editor for a remote MCP whose URL is per-network (Grafana ships
+   blank, so the field has to be reachable from Settings). */
+.mcp-url-row {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	margin-top: var(--space-1);
+}
+
+.mcp-url-row .input {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--font-mono, monospace);
+	font-size: var(--text-sm, 0.85rem);
+}
+
+.mcp-command-desc.error {
+	color: var(--color-danger, #d33);
+}
+
+/* ---- Skill surface panel ---- */
+.skill-surface { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.skill-surface .ss-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.skill-surface .ss-head h3 { font-size: var(--text-lg); }
+.ss-help { margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }
+.ss-help summary { cursor: pointer; color: var(--tint-primary); font-weight: 500; }
+.ss-help summary:hover { text-decoration: underline; }
+.ss-help ul { margin: var(--space-2) 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; line-height: 1.5; }
+.ss-help strong { color: var(--text-soft); font-weight: 600; }
+.skill-surface .ss-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.skill-surface .ss-search { max-width: 20rem; padding-block: 0.4rem; }
+.ss-count {
+  display: inline-block; margin-left: 0.25rem; padding: 0 0.4rem; border-radius: 999px;
+  font-family: var(--font-mono); font-size: var(--text-2xs); background: var(--surface-hover); color: var(--text-muted);
+}
+.seg-btn.active .ss-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.ss-pill-dup { background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning-border); }
+.ss-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ss-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.55rem; border-radius: 999px;
+  border: 1px solid var(--panel-border); background: var(--surface-soft);
+  font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-soft);
+}
+.ss-chip.is-debris { border-style: dashed; color: var(--text-muted); }
+.ss-chip-del {
+  display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; padding: 0;
+  border: none; border-radius: 50%; background: transparent; color: var(--text-muted);
+  font-size: 0.85rem; line-height: 1; cursor: pointer;
+}
+.ss-chip-del:hover { background: var(--danger-soft); color: var(--tint-danger); }
+.ss-opt {
+  display: flex; align-items: flex-start; gap: var(--space-3); cursor: pointer;
+  padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-soft); border: 1px solid var(--panel-border);
+}
+.ss-opt input { margin-top: 0.2rem; accent-color: var(--yz-primary-1); }
+.ss-opt > span { display: flex; flex-direction: column; gap: 0.15rem; }
+.ss-plan { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); max-height: 55vh; overflow: auto; }
+.ss-plan-group { border: 1px solid var(--panel-border); border-radius: var(--radius-md); overflow: hidden; }
+.ss-plan-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); background: var(--surface-soft); font-size: var(--text-sm);
+}
+.ss-plan-kind-help { font-size: var(--text-xs); }
+.ss-link { margin-left: auto; background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: var(--text-xs); color: var(--tint-primary); }
+.ss-link:hover { text-decoration: underline; }
+.ss-plan-row {
+  display: grid; grid-template-columns: auto minmax(8rem, 12rem) minmax(0, 1fr); gap: 0.2rem var(--space-3); align-items: baseline;
+  padding: var(--space-2) var(--space-3); border-top: 1px solid var(--panel-border); cursor: pointer; font-size: var(--text-sm);
+}
+.ss-plan-row:hover { background: var(--surface-hover); }
+.ss-plan-row input { accent-color: var(--yz-primary-1); }
+.ss-plan-name { overflow: hidden; text-overflow: ellipsis; }
+.ss-plan-path { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-plan-detail { grid-column: 3; font-size: var(--text-xs); color: var(--text-muted); }

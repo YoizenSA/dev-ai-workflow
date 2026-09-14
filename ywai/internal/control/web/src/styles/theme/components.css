@@ -292,9 +292,11 @@
    Nota: el contenedor con overflow (p.ej. .table-wrap) recorta el tooltip;
    si la tabla ya no scrollea, poné overflow: visible en ese wrapper. */
 [data-tip] { position: relative; }
+/* --tip-shift: written by styles/tooltip-clamp.ts on hover so a tooltip that
+   would spill past a viewport edge slides back into view. */
 [data-tip]:hover::after {
   content: attr(data-tip);
-  position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(calc(-50% + var(--tip-shift, 0px)));
   background: linear-gradient(160deg, rgba(var(--surf-1-rgb),0.98), rgba(var(--surf-2-rgb),0.98));
   color: var(--text-soft); border: 1px solid var(--panel-border-strong);
   border-radius: 8px; padding: 0.4rem 0.7rem;
@@ -305,7 +307,7 @@
 }
 [data-tip]:hover::before {
   content: ""; position: absolute; bottom: calc(100% + 5px); left: 50%;
-  transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px;
+  transform: translateX(calc(-50% + var(--tip-shift, 0px))) rotate(45deg); width: 8px; height: 8px;
   background: rgba(var(--surf-10-rgb),0.98);
   border-right: 1px solid var(--panel-border-strong); border-bottom: 1px solid var(--panel-border-strong);
   pointer-events: none; z-index: calc(var(--z-dropdown) + 1);

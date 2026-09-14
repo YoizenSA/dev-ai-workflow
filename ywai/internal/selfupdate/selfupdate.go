@@ -3,6 +3,7 @@ package selfupdate
 import (
 	"archive/tar"
 	"archive/zip"
+	"cmp"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -108,34 +110,73 @@ func LatestPrereleaseVersion() (string, error) {
 	return tag, nil
 }
 
-// pickLatestPrerelease returns the first release in list that is a beta channel
-// candidate. list is assumed newest-first (GitHub default).
+// pickLatestPrerelease returns the highest-versioned beta channel candidate.
+// The list order cannot be trusted: the API sorts tag names as text, so
+// beta.9 comes before beta.11 and taking the first one pinned every beta
+// install at beta.9.
 func pickLatestPrerelease(releases []releaseInfo) (tag string, ok bool) {
 	for _, r := range releases {
-		if r.TagName == "" {
+		if r.TagName == "" || !(r.Prerelease || IsPrerelease(r.TagName)) {
 			continue
 		}
-		if r.Prerelease || isPrereleaseTag(r.TagName) {
-			return r.TagName, true
+		if !ok || compareVersions(r.TagName, tag) > 0 {
+			tag, ok = r.TagName, true
 		}
 	}
-	return "", false
+	return tag, ok
 }
 
-// isPrereleaseTag reports whether a tag looks like a beta/rc/pre channel even
-// if the GitHub "prerelease" flag was not set.
-// IsPrerelease reports whether a version string is a prerelease (beta, rc,
-// alpha, pre). Callers use it to keep a binary on the channel it came from:
-// a beta build must auto-update to the next beta, never sideways into stable.
-// `ywai serve` used to call Run (stable) unconditionally, so every server
-// start silently downgraded a beta install back to the latest stable release —
-// and since serve restarts on every `ywai update`, a beta could never stick.
+// compareVersions orders semver tags (leading v optional) by semver
+// precedence: numeric identifiers compare as numbers, a release outranks its
+// prereleases, and a longer prerelease wins a tie on its shared prefix.
+func compareVersions(a, b string) int {
+	coreA, preA, _ := strings.Cut(strings.TrimPrefix(a, "v"), "-")
+	coreB, preB, _ := strings.Cut(strings.TrimPrefix(b, "v"), "-")
+	if c := compareIdents(strings.Split(coreA, "."), strings.Split(coreB, ".")); c != 0 {
+		return c
+	}
+	switch {
+	case preA == preB:
+		return 0
+	case preA == "":
+		return 1
+	case preB == "":
+		return -1
+	}
+	return compareIdents(strings.Split(preA, "."), strings.Split(preB, "."))
+}
+
+func compareIdents(a, b []string) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		na, errA := strconv.Atoi(a[i])
+		nb, errB := strconv.Atoi(b[i])
+		switch {
+		case errA == nil && errB == nil:
+			if c := cmp.Compare(na, nb); c != 0 {
+				return c
+			}
+		case errA == nil: // numeric identifiers rank below alphanumeric ones
+			return -1
+		case errB == nil:
+			return 1
+		default:
+			if c := strings.Compare(a[i], b[i]); c != 0 {
+				return c
+			}
+		}
+	}
+	return cmp.Compare(len(a), len(b))
+}
+
+// IsPrerelease reports whether a version or tag looks like a prerelease
+// (beta, rc, alpha, pre) even if the GitHub "prerelease" flag was not set.
+// Callers use it to keep a binary on the channel it came from: a beta build
+// must auto-update to the next beta, never sideways into stable. `ywai serve`
+// used to call Run (stable) unconditionally, so every server start silently
+// downgraded a beta install back to the latest stable release — and since
+// serve restarts on every `ywai update`, a beta could never stick.
 func IsPrerelease(version string) bool {
-	return isPrereleaseTag(version)
-}
-
-func isPrereleaseTag(tag string) bool {
-	t := strings.ToLower(strings.TrimPrefix(tag, "v"))
+	t := strings.ToLower(strings.TrimPrefix(version, "v"))
 	// semver pre-release segment starts after the first '-'
 	i := strings.IndexByte(t, '-')
 	if i < 0 {

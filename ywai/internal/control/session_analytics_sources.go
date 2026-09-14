@@ -24,8 +24,7 @@ var openCodeDBGlobs = []string{
 var analyticsRequiredColumns = map[string][]string{
 	"session": {
 		"id", "project_id", "parent_id", "time_created", "agent", "model", "cost",
-		"tokens_input", "tokens_output", "tokens_reasoning",
-		"tokens_cache_read", "tokens_cache_write", "time_archived",
+		"tokens_input", "tokens_output", "time_archived",
 	},
 	"project": {"id", "name", "worktree"},
 	"part":    {"id", "session_id", "data"},
@@ -139,42 +138,46 @@ func mergeAnalytics(dst, src *SessionAnalytics, q AnalyticsQuery) {
 	d.TotalCost += s.TotalCost
 	d.TokensInput += s.TokensInput
 	d.TokensOutput += s.TokensOutput
-	d.TokensReasoning += s.TokensReasoning
-	d.TokensCacheRead += s.TokensCacheRead
-	d.TokensCacheWrite += s.TokensCacheWrite
 	d.SessionsWithSkill += s.SessionsWithSkill
-	d.ChildSessions += s.ChildSessions
 	d.RootSessions += s.RootSessions
-
-	e := &dst.Engram
-	e.Sessions += src.Engram.Sessions
-	e.WriteOnly += src.Engram.WriteOnly
-	e.WithSummary += src.Engram.WithSummary
-	e.Saves += src.Engram.Saves
-	e.Searches += src.Engram.Searches
-	e.Updates += src.Engram.Updates
-	// Coverage is a ratio over the combined session count; enrichAnalytics recomputes it.
 
 	dst.DBPath += " + " + src.DBPath
 	dst.Projects = mergeProjectStats(dst.Projects, src.Projects)
-	dst.Activity = mergeActivity(dst.Activity, src.Activity)
 	dst.Agents = mergeNamed(dst.Agents, src.Agents, 0)
 	dst.Models = mergeNamed(dst.Models, src.Models, 0)
-	dst.ToolCategories = mergeNamed(dst.ToolCategories, src.ToolCategories, 0)
 	dst.Skills = mergeNamed(dst.Skills, src.Skills, q.SkillsLimit)
 	dst.Tools = mergeNamed(dst.Tools, src.Tools, q.ToolsLimit)
 
 	d.Projects = len(dst.Projects)
 	d.DistinctSkills = len(dst.Skills)
-	// Recomputed by enrichAnalytics, which only fills DelegationCalls when unset.
+	// Recomputed by enrichAnalytics from the merged tools list.
 	d.DelegationCalls = 0
 
 	applyShares(dst.Agents, d.Sessions)
 	applyShares(dst.Models, d.Sessions)
 	applyShares(dst.Skills, d.SkillCalls)
 	applyShares(dst.Tools, d.ToolCalls)
-	applyShares(dst.ToolCategories, d.ToolCalls)
 	enrichAnalytics(dst)
+}
+
+// mergeBy merges lists of T keyed by key, folding duplicate keys into the
+// first occurrence with add. Shared by every analytics merge below; the
+// caller owns ordering (and any limit) after the fold.
+func mergeBy[T any, K comparable](lists [][]T, key func(T) K, add func(dst *T, src T)) []T {
+	idx := make(map[K]int)
+	out := make([]T, 0)
+	for _, list := range lists {
+		for _, it := range list {
+			k := key(it)
+			if i, ok := idx[k]; ok {
+				add(&out[i], it)
+				continue
+			}
+			idx[k] = len(out)
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // mergeNamed adds counts per name and re-ranks. limit <= 0 keeps every entry.
@@ -183,22 +186,17 @@ func mergeAnalytics(dst, src *SessionAnalytics, q AnalyticsQuery) {
 // cut in every install lands lower than its true total. Widening the per-install
 // limit would trade a real cost on the large DB for a rounding error in the tail.
 func mergeNamed(dst, src []SessionNamedCount, limit int) []SessionNamedCount {
-	idx := make(map[string]int, len(dst)+len(src))
-	out := make([]SessionNamedCount, 0, len(dst)+len(src))
-	for _, list := range [][]SessionNamedCount{dst, src} {
-		for _, it := range list {
-			if i, ok := idx[it.Name]; ok {
-				out[i].Count += it.Count
-				out[i].Sessions += it.Sessions
-				out[i].Cost += it.Cost
-				out[i].TokensIn += it.TokensIn
-				out[i].TokensOut += it.TokensOut
-				continue
-			}
-			idx[it.Name] = len(out)
-			out = append(out, it)
-		}
-	}
+	out := mergeBy(
+		[][]SessionNamedCount{dst, src},
+		func(it SessionNamedCount) string { return it.Name },
+		func(d *SessionNamedCount, s SessionNamedCount) {
+			d.Count += s.Count
+			d.Sessions += s.Sessions
+			d.Cost += s.Cost
+			d.TokensIn += s.TokensIn
+			d.TokensOut += s.TokensOut
+		},
+	)
 	sortNamedByCount(out)
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
@@ -207,45 +205,23 @@ func mergeNamed(dst, src []SessionNamedCount, limit int) []SessionNamedCount {
 }
 
 func mergeProjectStats(dst, src []SessionProjectStat) []SessionProjectStat {
-	idx := make(map[string]int, len(dst)+len(src))
-	out := make([]SessionProjectStat, 0, len(dst)+len(src))
-	for _, list := range [][]SessionProjectStat{dst, src} {
-		for _, it := range list {
-			if i, ok := idx[it.ID]; ok {
-				out[i].Sessions += it.Sessions
-				out[i].SkillCalls += it.SkillCalls
-				out[i].ToolCalls += it.ToolCalls
-				out[i].Cost += it.Cost
-				out[i].TokensIn += it.TokensIn
-				out[i].TokensOut += it.TokensOut
-				continue
-			}
-			idx[it.ID] = len(out)
-			out = append(out, it)
-		}
-	}
+	out := mergeBy(
+		[][]SessionProjectStat{dst, src},
+		func(it SessionProjectStat) string { return it.ID },
+		func(d *SessionProjectStat, s SessionProjectStat) {
+			d.Sessions += s.Sessions
+			d.SkillCalls += s.SkillCalls
+			d.ToolCalls += s.ToolCalls
+			d.Cost += s.Cost
+			d.TokensIn += s.TokensIn
+			d.TokensOut += s.TokensOut
+		},
+	)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Sessions != out[j].Sessions {
 			return out[i].Sessions > out[j].Sessions
 		}
 		return out[i].ID < out[j].ID
 	})
-	return out
-}
-
-func mergeActivity(dst, src []SessionDayCount) []SessionDayCount {
-	idx := make(map[string]int, len(dst)+len(src))
-	out := make([]SessionDayCount, 0, len(dst)+len(src))
-	for _, list := range [][]SessionDayCount{dst, src} {
-		for _, it := range list {
-			if i, ok := idx[it.Day]; ok {
-				out[i].Sessions += it.Sessions
-				continue
-			}
-			idx[it.Day] = len(out)
-			out = append(out, it)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })
 	return out
 }

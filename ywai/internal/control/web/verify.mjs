@@ -5,8 +5,8 @@ import puppeteer from 'puppeteer';
   const page = await browser.newPage();
   page.setViewport({ width: 1200, height: 900 });
   
-  console.log('Navigating to http://localhost:5768/missions...');
-  await page.goto('http://localhost:5768/missions', { waitUntil: 'networkidle2', timeout: 10000 });
+  console.log('Navigating to http://localhost:5768/workflows...');
+  await page.goto('http://localhost:5768/workflows', { waitUntil: 'networkidle2', timeout: 10000 });
   
   // Wait for the Missions page to load
   await page.waitForTimeout(2000);

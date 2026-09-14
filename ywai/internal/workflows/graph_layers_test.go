@@ -62,8 +62,8 @@ func TestExecutionLayersGroupsIndependentNodes(t *testing.T) {
 	}
 }
 
-// A cycle used to make topoOrder fail, which sent buildSteps to declaration
-// order — so a node could be instructed before the node feeding it.
+// A cycle used to make topological ordering fail, which sent buildSteps to
+// declaration order — so a node could be instructed before the node feeding it.
 func TestBuildStepsOrdersCyclicGraphsByDependency(t *testing.T) {
 	wf := diamondWorkflow()
 	// Declare the reviewer BEFORE the work it reviews, so declaration order and

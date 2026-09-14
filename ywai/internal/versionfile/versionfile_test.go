@@ -24,8 +24,15 @@ func TestComputeUpdate(t *testing.T) {
 	}
 }
 
+func isolateDataDir(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir reads USERPROFILE
+}
+
 func TestRefreshThrottlesNetworkCheck(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // DataDir() resolves under HOME
+	isolateDataDir(t)
 
 	calls := 0
 	orig := latestFn
@@ -56,7 +63,7 @@ func TestRefreshThrottlesNetworkCheck(t *testing.T) {
 }
 
 func TestTouchDoesNotCallNetwork(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateDataDir(t)
 
 	orig := latestFn
 	latestFn = func() (string, error) {

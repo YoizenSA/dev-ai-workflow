@@ -4,6 +4,19 @@
 	gap: var(--space-5);
 }
 
+/* Offline banner with the start action: text left, button right. */
+.engram-offline-row {
+	align-items: center;
+	flex-wrap: wrap;
+}
+.engram-offline-row .btn {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+.engram-start-error {
+	flex-basis: 100%;
+}
+
 .memories-section {
 	display: flex;
 	flex-direction: column;

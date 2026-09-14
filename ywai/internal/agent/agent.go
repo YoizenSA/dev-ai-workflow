@@ -23,10 +23,17 @@ var KnownAgents = []struct {
 	SkillsPath func() string
 }{
 	{
-		Name:   "opencode",
-		Binary: "opencode2", // OpenCode 2 CLI; v1 `opencode` is not used.
+		Name: "opencode",
+		// Placeholder: Detect resolves this entry through FindOpenCode so the
+		// OpenCode 2 binary wins.
+		Binary: "opencode2",
 		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".config", "opencode", "skills")
+			// Sandbox-aware: under YWAI_PROFILE (or ?profile= scope) this
+			// resolves inside the environment (OPENCODE_CONFIG_DIR), so a
+			// scoped install writes skills to the profile instead of leaking
+			// them to the global ~/.config/opencode/skills. Globally it
+			// falls back to the same path as before.
+			return config.OpenCodeSkillsDir()
 		},
 	},
 	{
@@ -75,13 +82,6 @@ var KnownAgents = []struct {
 		Binary: "codex",
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".codex", "skills")
-		},
-	},
-	{
-		Name:   "kilocode",
-		Binary: "kilo",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".config", "kilo", "skills")
 		},
 	},
 	{
@@ -182,6 +182,9 @@ func FindBinary(name string) string {
 	home := homeDir()
 	wellKnownDirs := []string{
 		filepath.Join(home, "."+name, "bin"),
+		// The opencode2 install lands in ~/.opencode/bin (no "2" in the dir
+		// name), so probing "opencode2" must also look there.
+		filepath.Join(home, ".opencode", "bin"),
 		filepath.Join(home, ".local", "bin"),
 	}
 	for _, dir := range wellKnownDirs {
@@ -198,6 +201,46 @@ func FindBinary(name string) string {
 		return p
 	}
 	return ""
+}
+
+// FindOpenCode resolves the OpenCode 2 CLI binary (opencode2). OpenCode v1 is
+// withdrawn (docs/adr/0001-drop-opencode-v1-support.md) and is never resolved;
+// a machine that only carries the v1 binary gets the withdrawal notice from
+// GateOpenCodeV2 at install/apply time. Returns the resolved path and the
+// binary name, or "" when opencode2 is not found.
+func FindOpenCode() (string, string) {
+	if p := FindBinary("opencode2"); p != "" {
+		return p, "opencode2"
+	}
+	return "", ""
+}
+
+// OpenCodeBinaryName is the binary name of the active OpenCode host. It falls
+// back to opencode2 when the binary is not installed, so callers that only
+// need a name (config writers, install summaries) never get "".
+func OpenCodeBinaryName() string {
+	if _, name := FindOpenCode(); name != "" {
+		return name
+	}
+	return "opencode2"
+}
+
+// GateOpenCodeV2 is the OpenCode 2 minimum-version gate for install/apply.
+// It returns an error when the only OpenCode binary installed is the retired
+// v1 `opencode` CLI: ywai writes v2-shaped config, which v1 rejects, so the
+// run must stop with the withdrawal notice instead of silently breaking the
+// user's config. A machine with neither binary passes — callers report their
+// own not-found error.
+func GateOpenCodeV2() error {
+	if FindBinary("opencode2") != "" {
+		return nil
+	}
+	if FindBinary("opencode") != "" {
+		return fmt.Errorf("ywai requires OpenCode 2 (the opencode2 binary): the installed 'opencode' is the " +
+			"retired v1 CLI, which ywai no longer supports (docs/adr/0001-drop-opencode-v1-support.md). " +
+			"Install OpenCode 2 and run this command again")
+	}
+	return nil
 }
 
 func whichViaShell(name string) string {
@@ -240,6 +283,9 @@ func Detect() []Agent {
 		}
 
 		path := FindBinary(ka.Binary)
+		if ka.Name == "opencode" {
+			path, _ = FindOpenCode()
+		}
 		if path == "" {
 			// Fallback: detect by config dir even if binary not in PATH
 			if detectByConfigDir(ka.Name, ka.SkillsPath()) {
@@ -305,7 +351,7 @@ func FindByName(name string) (*Agent, error) {
 }
 
 // SettingsPaths returns the config file paths for agents that have JSON settings.
-// OpenCode and Kilo Code prefer .jsonc when it exists, falling back to .json.
+// OpenCode prefers .jsonc when it exists, falling back to .json.
 // Used by plugins and other install steps.
 func SettingsPaths() map[string]string {
 	home, err := os.UserHomeDir()
@@ -316,7 +362,6 @@ func SettingsPaths() map[string]string {
 	return map[string]string{
 		"opencode":    config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode"),
 		"claude-code": pathIfExists(filepath.Join(home, ".claude", "settings.json")),
-		"kilocode":    config.FindJSONCPath(filepath.Join(home, ".config", "kilo"), "opencode"),
 		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
 		"gemini-cli":  pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 		"pi":          pathIfExists(filepath.Join(home, ".pi", "agent", "mcp.json")),
@@ -337,7 +382,7 @@ func AvailableNames() []string {
 	return []string{
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
-		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
+		"kimi", "qwen-code", "antigravity", "kiro-ide",
 		"openclaw", "trae-ide", "pi", "omp",
 	}
 }
@@ -346,9 +391,9 @@ func AvailableNames() []string {
 // profiles (see install switch in cmd/ywai/root.go). Detection may find more
 // binaries on PATH; install UI and default install target only these.
 //
-// cursor and kilocode were dropped: nobody here runs them, and carrying an
+// cursor was dropped: nobody here runs it, and carrying an
 // install path costs a branch in every host switch. Uninstall still knows how
-// to clean them so an older install can be removed.
+// to clean it so an older install can be removed.
 var ProfileInstallHosts = []string{
 	"opencode",
 	"claude-code",

@@ -82,6 +82,10 @@
 	border: 1px solid var(--panel-border);
 	border-radius: var(--radius);
 	font-size: var(--text-sm);
+	/* Many node kinds: scroll inside the column instead of stretching the
+	   page beyond the viewport. */
+	overflow-y: auto;
+	min-height: 0;
 }
 
 .workflow-palette h4 {
@@ -221,6 +225,11 @@
 	color: var(--text-muted);
 }
 
+.wf-node-icon,
+.wf-node-type {
+	flex: none;
+}
+
 .wf-node-type {
 	font-size: 10px;
 	font-weight: 700;
@@ -230,6 +239,13 @@
 
 .wf-badge {
 	margin-left: auto;
+	/* Long section lists (handoff, context-gathering, ...) used to wrap inside
+	   the meta row, growing the header and pushing the node body down/out of
+	   the card. Shrink and ellipsize instead; the full text is in the title. */
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-size: 9px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
@@ -347,6 +363,19 @@
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--text-muted);
+	/* It is a <button> (collapse toggle) — strip the UA chrome. */
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.wf-group-title:hover {
+	color: var(--text);
+}
+
+/* Collapsed: the box shrinks to its title chip and reads as a solid node. */
+.wf-group.is-collapsed {
+	border-style: solid;
+	background: var(--surface);
 }
 
 /* type accents */
@@ -866,13 +895,16 @@
 }
 
 /* ─── Refinement chat panel (multi-turn Edit-with-AI) ─────────────────── */
+/* Anchored bottom-right like a website chat widget. overflow stays visible so
+   the header model menu (absolute, clamped against the viewport by useAnchored)
+   can escape the panel box; the glass look keeps its rounded corners through
+   the header (top) and input-row (bottom) radii. */
 .wf-chat-panel {
 	position: fixed;
 	right: 16px;
-	top: 80px;
+	bottom: 16px;
 	width: min(420px, 92vw);
-	/* Leave room for the run output panel at the bottom. */
-	max-height: calc(65vh - 96px);
+	max-height: min(65vh, 560px);
 	display: flex;
 	flex-direction: column;
 	background: var(--panel-bg, var(--bg-elevated, #111));
@@ -880,7 +912,7 @@
 	border-radius: var(--radius);
 	box-shadow: var(--shadow-lift);
 	z-index: 51;
-	overflow: hidden;
+	overflow: visible;
 }
 
 .wf-chat-header {
@@ -890,18 +922,42 @@
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--panel-border);
 	background: rgba(var(--yz-primary-1-rgb), 0.08);
+	border-radius: var(--radius) var(--radius) 0 0;
 }
 .wf-chat-title {
 	font-size: var(--text-sm);
 	font-weight: 600;
+	/* The header row also holds the round counter, the model picker and the
+	   close button; the title must never wrap into a column. */
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .wf-chat-count {
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 	margin-left: auto;
+	flex-shrink: 0;
 }
 .wf-chat-header .btn-icon {
 	margin-left: 0;
+}
+/* Compact model picker living in the header. Two-class specificity beats the
+   global `.yd-select { width: 100% }` regardless of bundle order. */
+.wf-chat-header .wf-chat-model {
+	flex: 0 0 auto;
+	width: 150px;
+	min-width: 120px;
+}
+.wf-chat-model .yd-select-trigger {
+	padding-block: 4px;
+	font-size: var(--text-xs);
+}
+/* Run output panel shares the bottom-right corner; on wide screens the chat
+   parks to its left so both stay usable during a run. */
+@media (min-width: 1100px) {
+	.wf-chat-panel.run-shifted {
+		right: calc(min(520px, 88vw) + 28px);
+	}
 }
 
 .wf-chat-body {
@@ -951,9 +1007,11 @@
 	gap: 6px;
 	padding: 8px 12px;
 	border-top: 1px solid var(--panel-border);
+	border-radius: 0 0 var(--radius) var(--radius);
 }
 .wf-chat-input {
 	flex: 1;
+	min-width: 0;
 	min-height: 38px;
 	resize: none;
 }
@@ -1196,3 +1254,36 @@
 	color: var(--yz-accent);
 	font-size: 12px;
 }
+
+/* ---- Block/edge deletion ---- */
+.wf-node .wf-node-del {
+  margin-left: auto; width: 18px; height: 18px; flex-shrink: 0;
+  display: inline-grid; place-items: center; padding: 0;
+  border-radius: 5px; border: 1px solid transparent; background: transparent;
+  color: var(--text-muted); font-size: 14px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity var(--t-fast) ease, background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.wf-node:hover .wf-node-del, .wf-node.is-selected .wf-node-del { opacity: 1; }
+.wf-node .wf-node-del:hover { color: var(--tint-danger); background: var(--danger-soft); border-color: var(--danger-border); }
+.wf-node .wf-node-del:focus-visible { opacity: 1; }
+
+.react-flow__edge.is-edge-selected .react-flow__edge-path { stroke: var(--danger) !important; stroke-width: 2.5px !important; }
+
+.wf-canvas-hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.35rem 0.75rem; border-radius: 999px;
+  background: var(--surface-strong); border: 1px solid var(--panel-border-strong);
+  color: var(--text-soft); font-size: var(--text-xs); box-shadow: var(--shadow-glass); pointer-events: auto;
+}
+.wf-canvas-hint kbd {
+  font-family: var(--font-mono); font-size: var(--text-2xs);
+  padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid var(--panel-border-strong); background: var(--surface-soft);
+}
+.wf-canvas-hint button {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: var(--tint-danger);
+}
+.wf-canvas-hint button:hover { text-decoration: underline; }
+
+/* ---- Export destination ---- */
+.wf-export-env { width: auto; min-width: 7.5rem; padding-block: 0.3rem; font-size: var(--text-sm); }

@@ -1,0 +1,126 @@
+# =============================================================================
+# Docker lifecycle matrix for ywai.
+#
+# Profiles:
+#   dry     offline dry-run cells (tier A image, network_mode: none);
+#           this is the release-gate profile and the local default
+#   net     online install / reinstall / update-swap / uninstall cells
+#           (tier B image, MODE=plain)
+#   nightly net cells plus the real release N-1 -> N update cell
+#
+# Cells never publish ports and the control server never autostarts
+# (every real install runs with --autostart=false).
+# Build context is the repository root (three levels up from this file).
+# =============================================================================
+name: ywai-docker-matrix
+
+x-dry-build: &dry-build
+  context: ../../..
+  dockerfile: ywai/e2e/docker/dryrun.Dockerfile
+
+x-install-build: &install-build
+  context: ../../..
+  dockerfile: ywai/e2e/docker/install.Dockerfile
+  args:
+    MODE: plain
+
+services:
+  # --- dry: offline release-gate cells (embedded binary, networkless) -------
+  dry-opencode2:
+    build: *dry-build
+    profiles: [dry]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/dryrun.sh"]
+    environment:
+      CELL_AGENT: opencode2
+
+  dry-claude:
+    build: *dry-build
+    profiles: [dry]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/dryrun.sh"]
+    environment:
+      CELL_AGENT: claude
+
+  dry-both:
+    build: *dry-build
+    profiles: [dry]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/dryrun.sh"]
+    environment:
+      CELL_AGENT: both
+
+  # --- net: nightly lifecycle cells (real installs, MODE=plain) -------------
+  fresh-opencode2:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/fresh.sh"]
+    environment:
+      CELL_AGENT: opencode2
+
+  fresh-claude:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/fresh.sh"]
+    environment:
+      CELL_AGENT: claude
+
+  fresh-both:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/fresh.sh"]
+    environment:
+      CELL_AGENT: both
+
+  reinstall-opencode2:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/reinstall.sh"]
+    environment:
+      CELL_AGENT: opencode2
+
+  reinstall-claude:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/reinstall.sh"]
+    environment:
+      CELL_AGENT: claude
+
+  update-swap-opencode2:
+    build: *install-build
+    profiles: [net, nightly]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/update-swap.sh"]
+    environment:
+      CELL_AGENT: opencode2
+
+  update-swap-claude:
+    build: *install-build
+    profiles: [net, nightly]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/update-swap.sh"]
+    environment:
+      CELL_AGENT: claude
+
+  update-swap-both:
+    build: *install-build
+    profiles: [net, nightly]
+    network_mode: none
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/update-swap.sh"]
+    environment:
+      CELL_AGENT: both
+
+  uninstall-clean-both:
+    build: *install-build
+    profiles: [net, nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/uninstall-clean.sh"]
+    environment:
+      CELL_AGENT: both
+
+  # --- nightly only: real release N-1 -> N ----------------------------------
+  update-release-opencode2:
+    build: *install-build
+    profiles: [nightly]
+    entrypoint: ["bash", "/opt/ywai-e2e/scenarios/update-release.sh"]
+    environment:
+      CELL_AGENT: opencode2

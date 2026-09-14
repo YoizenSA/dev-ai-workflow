@@ -1,0 +1,12 @@
+{
+  "name": "unanswered-empty",
+  "taskId": "golden-mixed",
+  "response": "",
+  "expected": {
+    "hits": [],
+    "missed": ["config.load", "retryLoop", "graceful shutdown"],
+    "total": 3,
+    "gotHard": false,
+    "answered": false
+  }
+}

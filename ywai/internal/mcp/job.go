@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 )
 
@@ -88,15 +87,21 @@ func (e *JobInProgressError) Unwrap() error {
 	return ErrJobInProgress
 }
 
-// WithInstallFn temporarily replaces the package installFn and restores
-// it on test cleanup. Intended for tests in other packages that need to
-// stub the install pipeline; the in-package withInstallFn in job_test.go
-// uses the defer-restore pattern instead.
-func WithInstallFn(t *testing.T, fn func(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]string, error)) {
-	t.Helper()
+// WithInstallFn replaces the package installFn and returns a restore
+// function that puts the original back. Keeping testing out of the
+// signature lets production code import this package without pulling
+// the test framework. Intended for tests in other packages that need
+// to stub the install pipeline:
+//
+//	restore := mcp.WithInstallFn(fake)
+//	defer restore()
+//
+// The in-package withInstallFn in job_test.go uses the defer-restore
+// pattern over setInstallFn instead.
+func WithInstallFn(fn func(ctx context.Context, entry CatalogEntry, opts InstallOptions) ([]string, error)) (restore func()) {
 	orig := loadInstallFn()
 	setInstallFn(fn)
-	t.Cleanup(func() { setInstallFn(orig) })
+	return func() { setInstallFn(orig) }
 }
 
 type Broadcaster interface {
@@ -132,20 +137,18 @@ func (j *Job) Snapshot() State {
 }
 
 type JobManager struct {
-	hub       Broadcaster
-	mu        sync.Mutex
-	jobs      map[string]*Job
-	byKey     map[string]string
-	seq       atomic.Uint64
-	retention time.Duration
+	hub   Broadcaster
+	mu    sync.Mutex
+	jobs  map[string]*Job
+	byKey map[string]string
+	seq   atomic.Uint64
 }
 
 func NewJobManager(hub Broadcaster) *JobManager {
 	return &JobManager{
-		hub:       hub,
-		jobs:      map[string]*Job{},
-		byKey:     map[string]string{},
-		retention: 1 * time.Hour,
+		hub:   hub,
+		jobs:  map[string]*Job{},
+		byKey: map[string]string{},
 	}
 }
 
@@ -211,46 +214,6 @@ func (m *JobManager) Get(id string) (*Job, bool) {
 	defer m.mu.Unlock()
 	j, ok := m.jobs[id]
 	return j, ok
-}
-
-// List returns a snapshot of every tracked job. Order is unspecified.
-func (m *JobManager) List() []*Job {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]*Job, 0, len(m.jobs))
-	for _, j := range m.jobs {
-		out = append(out, j)
-	}
-	return out
-}
-
-// gc drops terminal jobs whose UpdatedAt is older than the retention
-// window and prunes byKey entries that no longer point at a live job.
-// Returns the number of jobs removed.
-func (m *JobManager) gc() int {
-	cutoff := time.Now().Add(-m.retention)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for id, j := range m.jobs {
-		j.mu.RLock()
-		terminal := j.State == StateDone || j.State == StateFailed
-		old := j.UpdatedAt.Before(cutoff)
-		j.mu.RUnlock()
-		if terminal && old {
-			delete(m.jobs, id)
-			n++
-		}
-	}
-	// Sweep byKey for any entry pointing at a job we just removed (or
-	// that was removed by some other path). Keeps the conflict map
-	// honest so a fresh Start after GC isn't blocked by a stale key.
-	for key, jid := range m.byKey {
-		if _, ok := m.jobs[jid]; !ok {
-			delete(m.byKey, key)
-		}
-	}
-	return n
 }
 
 // runJob executes the install pipeline under the given context, routing

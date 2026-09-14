@@ -1,0 +1,13 @@
+{
+  "name": "explicit-weight-heavy-only",
+  "taskId": "golden-weights",
+  "response": "the ratelimiter sits in front of every request path and sheds the excess load first.",
+  "expected": {
+    "hits": ["rateLimiter"],
+    "missed": ["exponential backoff", "jitter"],
+    "total": 3,
+    "gotHard": true,
+    "answered": true,
+    "weighted": 0.5555555555555556
+  }
+}

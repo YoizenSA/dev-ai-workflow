@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Maximize2 } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { configApi, missionsApi, workflowApi, type McpCatalogItem } from '../../api/client'
-import type { AgentDetail, AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
+import { configApi, toolsApi, workflowApi, type McpCatalogItem } from '../../api/client'
+import type { AgentInfo, ModelInfo, Workflow, WorkflowNode, WorkflowNodeData } from '../../api/types'
 import YdSelect, { type SelectOption } from '../shared/YdSelect'
 import MultiSelect from './MultiSelect'
+import { useLinkedAgentContent } from './linkedAgent'
 import {
 	TOOL_OPTIONS,
 	DEFAULT_ORCHESTRATOR_TOOLS,
@@ -13,9 +14,6 @@ import {
 	csvToSet,
 	setToCsv,
 } from './toolCatalog'
-
-// Shared cache so every node editor reuses one opencode model fetch.
-let modelCache: ModelInfo[] | null = null
 
 // Caches for the skill + MCP catalogs, fetched once and reused across editors.
 let skillCache: { name: string; description: string }[] | null = null
@@ -102,19 +100,41 @@ export function useMcpServers(): { id: string; enabled: boolean }[] {
 	return servers
 }
 
+// No module cache here: client.ts already dedupes + TTL-caches listModels,
+// so a second cache would only freeze stale data for the tab's lifetime.
 export function useOpencodeModels(): ModelInfo[] {
-	const [models, setModels] = useState<ModelInfo[]>(modelCache ?? [])
+	const [models, setModels] = useState<ModelInfo[]>([])
 	useEffect(() => {
-		if (modelCache) return
-		missionsApi
+		toolsApi
 			.listModels()
-			.then((r) => {
-				modelCache = Object.values(r.modelsByProvider ?? {}).flat()
-				setModels(modelCache)
-			})
+			.then((r) => setModels(Object.values(r.modelsByProvider ?? {}).flat()))
 			.catch(() => undefined)
 	}, [])
 	return models
+}
+
+// useAuthedProviders returns the providers that hold usable credentials per
+// the server (auth store logins + {env:VAR}-keyed providers). Empty when the
+// server could not tell — callers must then show every model.
+export function useAuthedProviders(): string[] {
+	const [authed, setAuthed] = useState<string[]>([])
+	useEffect(() => {
+		toolsApi
+			.listModels()
+			.then((r) => setAuthed(r.authedProviders ?? []))
+			.catch(() => undefined)
+	}, [])
+	return authed
+}
+
+// filterAuthedModels narrows a model list to providers with credentials, for
+// AI pickers where a model without credentials always fails. An empty authed
+// list means "unknown" (server without support, auth CLI down) — show
+// everything rather than nothing.
+export function filterAuthedModels(models: ModelInfo[], authed: string[]): ModelInfo[] {
+	if (authed.length === 0) return models
+	const ok = new Set(authed)
+	return models.filter((m) => ok.has(m.provider))
 }
 
 // modelOptions builds the YdSelect option list for the subAgent Model field.
@@ -385,15 +405,12 @@ function StartFields({ node, models }: { node: WorkflowNode; models: ModelInfo[]
 // the current text in as an override.
 function IdentityField({ node, placeholder }: { node: WorkflowNode; placeholder?: string }) {
 	const ref = (node.data.agentRef ?? '').trim()
-	const [linkedText, setLinkedText] = useState('')
+	const { content: linkedText, loading: linkedLoading } = useLinkedAgentContent(ref)
 	const [agents, setAgents] = useState<AgentInfo[]>([])
 
 	useEffect(() => {
-		if (!ref) return
-		configApi
-			.getAgent(ref.split('/').pop() as string)
-			.then((a: AgentDetail) => setLinkedText(a?.content ?? ''))
-			.catch(() => setLinkedText(''))
+		if (ref) return
+		// agents list loads below; nothing to do while linked
 	}, [ref])
 
 	// Attach candidates. Loaded only while detached, since the picker is the one
@@ -424,7 +441,13 @@ function IdentityField({ node, placeholder }: { node: WorkflowNode; placeholder?
 				<span className="field-help">
 					Resolved from the agent at export time — edit the agent to change every workflow that links it.
 				</span>
-				{linkedText ? <pre className="textarea mono readonly">{linkedText}</pre> : null}
+				{linkedLoading ? (
+					<span className="field-help">Loading agent prompt…</span>
+				) : linkedText ? (
+					<pre className="textarea mono readonly">{linkedText}</pre>
+				) : (
+					<span className="field-help">Could not load {ref}.</span>
+				)}
 			</div>
 		)
 	}
@@ -532,7 +555,7 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 					<label className="field-label" htmlFor="wf-mode">Visibility</label>
 					<YdSelect
 						options={[
-							{ value: 'subagent', label: 'subagent (only via task)' },
+							{ value: 'subagent', label: 'subagent (only via delegate)' },
 							{ value: 'all', label: 'all (selectable)' },
 							{ value: 'primary', label: 'primary (default)' },
 						]}

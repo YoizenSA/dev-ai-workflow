@@ -25,7 +25,7 @@
       "agent": "dev",
       "model": "opencode-go/kimi-k2.7-code",
       "fallbacks": ["opencode-go/mimo-v2.5-pro"],
-      "skills": ["frontend-worker", "angular/core", "angular/architecture", "angular/forms", "tailwind-4", "yz-ui"]
+      "skills": ["frontend-worker", "angular/core", "angular/architecture", "angular/forms", "yz-ui"]
     },
     "backend": {
       "agent": "dev",

@@ -3,6 +3,7 @@ package plugins
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -25,7 +26,7 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 			"plugin": []any{"some-other-plugin"},
 		})
 
-		if err := InstallPonytail("kilocode", path); err != nil {
+		if err := InstallPonytail("opencode", path); err != nil {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
@@ -84,7 +85,6 @@ func TestInstallPonytail_UnsupportedAgent(t *testing.T) {
 func TestSupportsPonytail(t *testing.T) {
 	cases := map[string]bool{
 		"opencode":    true,
-		"kilocode":    true,
 		"claude-code": true,
 		"cursor":      false,
 		"pi":          false,
@@ -99,10 +99,18 @@ func TestSupportsPonytail(t *testing.T) {
 func TestInstallPonytail_Claude(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "calls.log")
-	// Fake claude: record full argv after the binary name.
-	script := filepath.Join(dir, "claude")
-	content := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\n"
-	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+	// Fake claude: record full argv after the binary name. On Windows the
+	// fake must be a .bat (shebang scripts cannot exec there), and cmd
+	// needs the log path inside the quoted redirect target.
+	var scriptPath, content string
+	if runtime.GOOS == "windows" {
+		scriptPath = filepath.Join(dir, "claude.bat")
+		content = "@echo %* >> \"" + logPath + "\"\r\n"
+	} else {
+		scriptPath = filepath.Join(dir, "claude")
+		content = "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\n"
+	}
+	if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

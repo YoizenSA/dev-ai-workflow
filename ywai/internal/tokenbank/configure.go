@@ -6,25 +6,40 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"gopkg.in/yaml.v3"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // ---------------------------------------------------------------------------
 // OpenCode
 // ---------------------------------------------------------------------------
 
-// OpenCode config path.
+// OpenCodeConfigPath is the user-level opencode.json TokenBank configure
+// writes. It honors XDG_CONFIG_HOME. Isolated hosts (Orca) set
+// OPENCODE_CONFIG_DIR for their own OpenCode process; that must not steal the
+// user's catalog, so this resolver ignores it.
 func OpenCodeConfigPath() string {
-	return filepath.Join(config.OpenCodeConfigDir(), "opencode.json")
+	return filepath.Join(config.OpenCodeUserConfigDir(), "opencode.json")
+}
+
+func openCodeConfigPaths() []string {
+	primary := OpenCodeConfigPath()
+	paths := []string{primary}
+	if dir := strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_DIR")); dir != "" {
+		extra := filepath.Join(dir, "opencode.json")
+		if extra != primary {
+			paths = append(paths, extra)
+		}
+	}
+	return paths
 }
 
 // ConfigureOpenCode merges the tokenbank provider into opencode.json.
 func ConfigureOpenCode(baseURL, apiKey string) error {
-	configPath := OpenCodeConfigPath()
-
 	// Fetch config from API
 	resp, err := FetchConfig(baseURL, apiKey, "opencode")
 	if err != nil {
@@ -37,36 +52,145 @@ func ConfigureOpenCode(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing opencode config: %w", err)
 	}
 
-	// Fetch models and inject context limits
+	// The opencode.json section is always the v2 `providers` shape; TokenBank
+	// serves the v1 `provider` payload, so prune it in that shape and
+	// translate afterwards.
 	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
-		injectModelLimits(newConfig, modelsResp.Models)
+		injectModelLimits(newConfig, modelsResp.Models, "provider")
 	} else {
 		fmt.Printf("  ⚠ Warning: could not fetch model limits: %v\n", err)
 	}
+	sectionKey := "providers"
+	toV2Providers(newConfig)
 
-	// Read existing config
-	existing, err := ReadJSONFile(configPath)
-	if err != nil {
-		return err
+	var lastPath string
+	for _, configPath := range openCodeConfigPaths() {
+		existing, err := ReadJSONFile(configPath)
+		if err != nil {
+			return err
+		}
+
+		// Deep merge, then let the (GET-pruned) API provider own the slot so
+		// models dropped upstream are removed instead of lingering. The v1
+		// copy older runs wrote under `provider` is dropped; other v1
+		// providers are the user's.
+		merged := DeepMerge(existing, newConfig)
+		replaceOwnedProvider(merged, newConfig, sectionKey, "opencode-admin")
+		if v1, ok := merged["provider"].(map[string]interface{}); ok {
+			delete(v1, "opencode-admin")
+			if len(v1) == 0 {
+				delete(merged, "provider")
+			}
+		}
+
+		if err := WriteJSONFile(configPath, merged); err != nil {
+			return err
+		}
+		lastPath = configPath
+		fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
 	}
 
-	// Deep merge
-	merged := DeepMerge(existing, newConfig)
-
-	// Write
-	if err := WriteJSONFile(configPath, merged); err != nil {
-		return err
+	if lastPath != "" {
+		fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	}
-
-	fmt.Printf("  ✓ OpenCode configured: %s\n", configPath)
-	fmt.Printf("    Provider: opencode-admin → %s/v1\n", resp.Origin)
 	return nil
+}
+
+// replaceOwnedProvider makes the API response authoritative for the one
+// provider ywai owns. DeepMerge only ever adds and overwrites keys, so a model
+// the API stopped returning would survive in the local config forever and keep
+// being offered by the agent long after TokenBank dropped it. Everything
+// outside providerKey — other providers, and the user's own settings — is left
+// exactly as the merge produced it.
+func replaceOwnedProvider(merged, fresh map[string]interface{}, sectionKey, providerKey string) {
+	freshSection, ok := fresh[sectionKey].(map[string]interface{})
+	if !ok {
+		return
+	}
+	freshProvider, ok := freshSection[providerKey].(map[string]interface{})
+	if !ok {
+		return
+	}
+	mergedSection, ok := merged[sectionKey].(map[string]interface{})
+	if !ok {
+		mergedSection = map[string]interface{}{}
+		merged[sectionKey] = mergedSection
+	}
+	mergedSection[providerKey] = freshProvider
+}
+
+// toV2Providers moves the v1 `provider` section into v2 `providers`. v2
+// ignores npm (the session fails with "Unsupported package"), reads settings
+// instead of options, and drops a model whose variants are a map.
+// ponytail: v1 model flags (tool_call, modalities, ...) stay; v2 tolerates
+// them. capabilities carries the part v2 actually reads.
+func toV2Providers(config map[string]interface{}) {
+	v1, _ := config["provider"].(map[string]interface{})
+	delete(config, "provider")
+	if len(v1) == 0 {
+		return
+	}
+	v2, _ := config["providers"].(map[string]interface{})
+	if v2 == nil {
+		v2 = map[string]interface{}{}
+		config["providers"] = v2
+	}
+	for id, raw := range v1 {
+		p, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if npm, _ := p["npm"].(string); strings.HasPrefix(npm, "@ai-sdk/") {
+			p["package"] = "@opencode/ai/providers/" + strings.TrimPrefix(npm, "@ai-sdk/")
+			delete(p, "npm")
+		}
+		if opts, ok := p["options"]; ok {
+			p["settings"] = opts
+			delete(p, "options")
+		}
+		models, _ := p["models"].(map[string]interface{})
+		for _, rawModel := range models {
+			if m, ok := rawModel.(map[string]interface{}); ok {
+				toV2Model(m)
+			}
+		}
+		v2[id] = p
+	}
+}
+
+func toV2Model(m map[string]interface{}) {
+	if variants, ok := m["variants"].(map[string]interface{}); ok {
+		ids := make([]string, 0, len(variants))
+		for id := range variants {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		list := make([]interface{}, 0, len(ids))
+		for _, id := range ids {
+			list = append(list, map[string]interface{}{"id": id, "settings": variants[id]})
+		}
+		m["variants"] = list
+	}
+	caps := map[string]interface{}{}
+	if tools, ok := m["tool_call"].(bool); ok {
+		caps["tools"] = tools
+	}
+	if mods, ok := m["modalities"].(map[string]interface{}); ok {
+		for _, k := range []string{"input", "output"} {
+			if v, ok := mods[k]; ok && v != nil {
+				caps[k] = v
+			}
+		}
+	}
+	if len(caps) > 0 {
+		m["capabilities"] = caps
+	}
 }
 
 // injectModelLimits inyecta limit.context y limit.output en cada modelo
 // del provider opencode-admin dentro del config map.
-func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
-	provider, _ := config["provider"].(map[string]interface{})
+func injectModelLimits(config map[string]interface{}, models []ModelInfo, sectionKey string) {
+	provider, _ := config[sectionKey].(map[string]interface{})
 	if provider == nil {
 		return
 	}
@@ -77,6 +201,22 @@ func injectModelLimits(config map[string]interface{}, models []ModelInfo) {
 	modelsSection, _ := admin["models"].(map[string]interface{})
 	if modelsSection == nil {
 		return
+	}
+
+	// GET /v1/models is the catalog. An empty fetch is a fail-safe:
+	// never wipe the local list because the API returned nothing.
+	if len(models) > 0 {
+		allowed := make(map[string]struct{}, len(models))
+		for _, m := range models {
+			if m.ID != "" {
+				allowed[m.ID] = struct{}{}
+			}
+		}
+		for id := range modelsSection {
+			if _, ok := allowed[id]; !ok {
+				delete(modelsSection, id)
+			}
+		}
 	}
 
 	for _, m := range models {
@@ -178,14 +318,20 @@ func ConfigurePi(baseURL, apiKey string) error {
 		return fmt.Errorf("parsing pi config: %w", err)
 	}
 
+	if modelsResp, err := FetchModels(baseURL, apiKey); err == nil {
+		prunePiModels(newConfig, modelsResp.Models)
+	}
+
 	// Read existing config
 	existing, err := ReadJSONFile(configPath)
 	if err != nil {
 		return err
 	}
 
-	// Deep merge (merges providers.tokenbank-proxy)
+	// Deep merge, then let the API response own providers.tokenbank-proxy
+	// outright so models dropped upstream are removed instead of lingering.
 	merged := DeepMerge(existing, newConfig)
+	replaceOwnedProvider(merged, newConfig, "providers", OmpProviderID)
 
 	// Write
 	if err := WriteJSONFile(configPath, merged); err != nil {
@@ -195,6 +341,36 @@ func ConfigurePi(baseURL, apiKey string) error {
 	fmt.Printf("  ✓ Pi configured: %s\n", configPath)
 	fmt.Printf("    Provider: tokenbank-proxy → %s/v1\n", resp.Origin)
 	return nil
+}
+
+func prunePiModels(config map[string]interface{}, catalog []ModelInfo) {
+	if len(catalog) == 0 {
+		return
+	}
+	allowed := make(map[string]struct{}, len(catalog))
+	for _, m := range catalog {
+		if m.ID != "" {
+			allowed[m.ID] = struct{}{}
+		}
+	}
+	providers, _ := config["providers"].(map[string]interface{})
+	proxy, _ := providers[OmpProviderID].(map[string]interface{})
+	if proxy == nil {
+		return
+	}
+	raw, _ := proxy["models"].([]interface{})
+	kept := make([]interface{}, 0, len(catalog))
+	for _, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := m["id"].(string)
+		if _, ok := allowed[id]; ok {
+			kept = append(kept, item)
+		}
+	}
+	proxy["models"] = kept
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +389,7 @@ func OmpConfigPath() string {
 // ConfigureOmp merges the TokenBank OpenAI-compatible proxy into OMP's models.yml.
 //
 // TokenBank does not need a dedicated "omp" setup target: we build a valid
-// openai-completions provider from GET /api/setup/models + credentials.
+// openai-completions provider from GET /v1/models + credentials.
 // Existing providers in models.yml are preserved; tokenbank-proxy is replaced.
 func ConfigureOmp(baseURL, apiKey string) error {
 	configPath := OmpConfigPath()
@@ -448,6 +624,7 @@ func ConfigureCopilot(baseURL, apiKey string) error {
 
 		// Find and replace existing Token Bank entry, or append
 		newEntriesMap := makeEntryMap(newEntries)
+		ownedVendors := entryVendors(newEntries)
 		merged := make([]interface{}, 0, len(existing)+len(newEntries))
 
 		// Track which new entries we've added
@@ -464,6 +641,13 @@ func ConfigureCopilot(baseURL, apiKey string) error {
 				if replacement, exists := newEntriesMap[key]; exists {
 					merged = append(merged, replacement)
 					added[key] = true
+					continue
+				}
+				// A model under a vendor the API manages that the API no longer
+				// returns was retired upstream: drop it instead of leaving a
+				// dead model in the picker. Entries under any other vendor are
+				// the user's own and are never touched.
+				if ownedVendors[vendor] {
 					continue
 				}
 			}
@@ -515,6 +699,22 @@ func injectThinkingFields(entries []interface{}) []interface{} {
 		}
 	}
 	return entries
+}
+
+// entryVendors returns the set of vendors the API response manages. Only
+// entries under these vendors are ywai's to prune.
+func entryVendors(entries []interface{}) map[string]bool {
+	out := make(map[string]bool)
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if vendor, _ := entryMap["vendor"].(string); vendor != "" {
+			out[vendor] = true
+		}
+	}
+	return out
 }
 
 // makeEntryMap converts a slice of entries to a map keyed by "vendor/name".

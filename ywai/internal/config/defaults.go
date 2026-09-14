@@ -11,6 +11,7 @@ import (
 // TUIDefaults represents the default values for the TUI installation.
 type TUIDefaults struct {
 	MCP       bool     `json:"mcp"`
+	MetaMCP   bool     `json:"meta_mcp"`
 	Ponytail  bool     `json:"ponytail"`
 	Autostart bool     `json:"autostart"`
 	Groups    []string `json:"groups"`

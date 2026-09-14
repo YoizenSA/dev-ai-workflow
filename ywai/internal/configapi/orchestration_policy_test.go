@@ -1,6 +1,8 @@
 package configapi
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,19 +12,19 @@ import (
 )
 
 // opencodeOrchestratorMD is the shape InstallOpenCodeMarkdown writes for the
-// orchestrator: a v2 permissions rule array with edit/shell allowed, plus a
-// body.
+// orchestrator: an ordered permissions rule list with edit/shell allowed,
+// plus a body.
 const opencodeOrchestratorMD = `---
 description: Technical lead
 mode: all
 permissions:
-  - action: shell
+  - action: read
     resource: "*"
     effect: allow
   - action: edit
     resource: "*"
     effect: allow
-  - action: read
+  - action: shell
     resource: "*"
     effect: allow
 ---
@@ -31,6 +33,11 @@ permissions:
 
 Triage body.
 `
+
+// v2Rule asserts one full v2 rule block inside rendered frontmatter.
+func v2Rule(action, resource, effect string) string {
+	return fmt.Sprintf("  - action: %s\n    resource: %s\n    effect: %s", action, resource, effect)
+}
 
 // TestApplyOrchestrationPolicy_DeepDeniesSoloWriteAndInjectsSection verifies
 // the profile-driven orchestration policy materializes into the installed
@@ -66,15 +73,12 @@ func TestApplyOrchestrationPolicy_DeepDeniesSoloWriteAndInjectsSection(t *testin
 	}
 	content := string(got)
 
-	for _, want := range []string{
-		"action: edit\n    resource: \"*\"\n    effect: deny",
-		"action: shell\n    resource: \"*\"\n    effect: deny",
-	} {
-		if !strings.Contains(content, want) {
-			t.Errorf("expected %q in permission rules, got:\n%s", want, content)
+	for _, rule := range []string{v2Rule("edit", `"*"`, "deny"), v2Rule("shell", `"*"`, "deny")} {
+		if !strings.Contains(content, rule) {
+			t.Errorf("expected rule %q after deep activation, got:\n%s", rule, content)
 		}
 	}
-	if !strings.Contains(content, "action: read\n    resource: \"*\"\n    effect: allow") {
+	if !strings.Contains(content, v2Rule("read", `"*"`, "allow")) {
 		t.Error("read must stay allow when solo-write is denied")
 	}
 	if !strings.Contains(content, "**default_mode**: full") || !strings.Contains(content, "**allow_solo_write**: false") {
@@ -97,16 +101,13 @@ func TestApplyOrchestrationPolicy_DeepDeniesSoloWriteAndInjectsSection(t *testin
 		t.Fatal(err)
 	}
 	content2 := string(got2)
-	for _, want := range []string{
-		"action: edit\n    resource: \"*\"\n    effect: allow",
-		"action: shell\n    resource: \"*\"\n    effect: allow",
-	} {
-		if !strings.Contains(content2, want) {
-			t.Errorf("expected %q restored after solo-write profile, got:\n%s", want, content2)
+	for _, rule := range []string{v2Rule("edit", `"*"`, "allow"), v2Rule("shell", `"*"`, "allow")} {
+		if !strings.Contains(content2, rule) {
+			t.Errorf("expected restored rule %q after solo-write profile, got:\n%s", rule, content2)
 		}
 	}
-	if strings.Contains(content2, "action: shell\n    resource: \"*\"\n    effect: deny") {
-		t.Error("the shell deny must not survive a solo-write profile")
+	if strings.Contains(content2, v2Rule("edit", `"*"`, "deny")) || strings.Contains(content2, v2Rule("shell", `"*"`, "deny")) {
+		t.Error("broad edit/shell denies must not survive a solo-write profile")
 	}
 	if !strings.Contains(content2, "**default_mode**: solo") {
 		t.Errorf("expected solo policy section, got:\n%s", content2)
@@ -299,13 +300,14 @@ defaultThinkingLevel: auto
 	}
 }
 
-// TestApplyOrchestrationPolicy_FlipsOpenCodeJSON mirrors the edit/write/bash
-// flip into the legacy opencode.json agent entry so the two sources of truth
-// cannot disagree after a deep activation.
-func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
+// TestApplyOrchestrationPolicy_MigratesLegacyPermissionMap is the migration
+// test for the agent section key: a v1-shaped opencode.json (`agent` key, flat
+// `permission` map, nested task object) read through the kept readers is
+// rewritten in the v2 interpretation — merged under `agents`, permissions as
+// the ordered rule array, delegation preserved as subagent rules.
+func TestApplyOrchestrationPolicy_MigratesLegacyPermissionMap(t *testing.T) {
 	home := t.TempDir()
 	setTestHomeDir(t, home)
-
 	configDir := filepath.Join(home, ".config", "opencode")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -313,12 +315,12 @@ func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
 	ocJSON := `{
   "agent": {
     "orchestrator": {
-      "mode": "primary",
+      "model": "opencode-admin/kept",
       "permission": {
         "read": "allow",
         "edit": "allow",
-        "write": "allow",
-        "bash": "allow"
+        "bash": "allow",
+        "task": {"*": "deny", "finder": "allow"}
       }
     }
   }
@@ -326,34 +328,137 @@ func TestApplyOrchestrationPolicy_FlipsOpenCodeJSON(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configDir, "opencode.json"), []byte(ocJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	false_ := false
 	deep := userconfig.OrchestrationPolicy{DefaultMode: "full", AllowSoloWrite: &false_}
 	if !applyOrchestrationPolicy(deep) {
-		t.Fatal("expected policy apply to flip opencode.json")
+		t.Fatal("expected policy apply to migrate and flip opencode.json")
 	}
-
 	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(data)
 	if strings.Contains(got, `"permission"`) {
-		t.Errorf("must not write v1 permission map to opencode.json, got:\n%s", got)
+		t.Fatalf("legacy permission map must be rewritten as a permissions array, got:\n%s", got)
 	}
-	if !strings.Contains(got, `"permissions"`) {
-		t.Fatalf("expected v2 permissions array in opencode.json, got:\n%s", got)
+	var cfg struct {
+		Agent  map[string]json.RawMessage `json:"agent"`
+		Agents map[string]json.RawMessage `json:"agents"`
 	}
-	for _, want := range []string{
-		`"action": "edit"`,
-		`"action": "shell"`,
-		`"action": "read"`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %s in v2 rules, got:\n%s", want, got)
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Agent) != 0 {
+		t.Fatalf("legacy agent key must be gone after migration, got:\n%s", got)
+	}
+	var orch struct {
+		Model       string `json:"model"`
+		Permissions []struct {
+			Action   string `json:"action"`
+			Resource string `json:"resource"`
+			Effect   string `json:"effect"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(cfg.Agents["orchestrator"], &orch); err != nil {
+		t.Fatal(err)
+	}
+	if orch.Model != "opencode-admin/kept" {
+		t.Errorf("model lost during migration: %q", orch.Model)
+	}
+	effectByAction := map[string]string{}
+	for _, r := range orch.Permissions {
+		if r.Resource == "*" {
+			if _, dup := effectByAction[r.Action]; !dup {
+				effectByAction[r.Action] = r.Effect
+			}
+		}
+		if r.Action == "subagent" && r.Resource == "finder" && r.Effect != "allow" {
+			t.Errorf("delegation to finder must survive migration as an allow rule: %+v", r)
 		}
 	}
-	if !strings.Contains(got, `"effect": "deny"`) {
-		t.Errorf("expected edit/shell deny after deep activation, got:\n%s", got)
+	for action, want := range map[string]string{"edit": "deny", "shell": "deny", "read": "allow"} {
+		if effectByAction[action] != want {
+			t.Errorf("migrated %s rule = %q, want %q", action, effectByAction[action], want)
+		}
+	}
+	if _, hasWildcard := effectByAction["subagent"]; !hasWildcard {
+		t.Errorf("subagent catch-all rule missing after migration:\n%s", got)
+	}
+}
+
+// TestApplyOrchestrationPolicy_KeepsV2PermissionsArray pins the v2 branch of
+// applyOrchestrationPolicyToOpenCodeJSON: the ordered `permissions` rule array
+// is the native v2 shape, so a deep activation must flip effects inside the
+// array instead of downgrading it to the legacy v1 `permission` map. The v1
+// `agent` key must stay absent.
+func TestApplyOrchestrationPolicy_KeepsV2PermissionsArray(t *testing.T) {
+	home := t.TempDir()
+	setTestHomeDir(t, home)
+	configDir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ocJSON := `{
+  "agents": {
+    "orchestrator": {
+      "mode": "primary",
+      "system": "Lead.",
+      "permissions": [
+        {"action": "read", "resource": "*", "effect": "allow"},
+        {"action": "edit", "resource": "*", "effect": "allow"},
+        {"action": "shell", "resource": "*", "effect": "allow"},
+        {"action": "subagent", "resource": "finder", "effect": "allow"}
+      ]
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "opencode.json"), []byte(ocJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	false_ := false
+	deep := userconfig.OrchestrationPolicy{DefaultMode: "full", AllowSoloWrite: &false_}
+	if !applyOrchestrationPolicy(deep) {
+		t.Fatal("expected policy apply to flip the v2 permissions array")
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, `"permissions"`) {
+		t.Fatalf("v2 shape must keep the permissions array, got:\n%s", got)
+	}
+	if strings.Contains(got, `"permission":`) {
+		t.Fatalf("v2 shape must not keep the v1 permission map, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"agents"`) {
+		t.Fatalf("v2 shape must use the agents key, got:\n%s", got)
+	}
+	var cfg struct {
+		Agents map[string]struct {
+			Permissions []struct {
+				Action   string `json:"action"`
+				Effect   string `json:"effect"`
+				Resource string `json:"resource"`
+			} `json:"permissions"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	perms := cfg.Agents["orchestrator"].Permissions
+	effects := map[string]string{}
+	for _, r := range perms {
+		if r.Resource == "*" {
+			effects[r.Action] = r.Effect
+		}
+	}
+	for _, action := range []string{"edit", "shell"} {
+		if effects[action] != "deny" {
+			t.Errorf("permissions[%s] = %q, want deny after deep activation (rules=%+v)", action, effects[action], perms)
+		}
+	}
+	if effects["read"] != "allow" {
+		t.Errorf("permissions[read] = %q, want allow (rules=%+v)", effects["read"], perms)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ var (
 
 // BackgroundAgentsBundleName is the filename of the bundled opencode
 // background-agents plugin, both in the embedded FS and once seeded to disk.
-const BackgroundAgentsBundleName = "background-agents-v2.js"
+const BackgroundAgentsBundleName = "background-agents.js"
 
 // VisionBridgeBundleName is the filename of the vision-bridge opencode plugin
 // that auto-routes images through TokenBank vision for text-only models.
@@ -36,6 +37,10 @@ const AdvisorBundleName = "advisor.js"
 // TuiLogoBundleName is the filename of the ywai TUI logo plugin, both in the
 // embedded FS (under plugins/tui/) and once seeded/installed to disk.
 const TuiLogoBundleName = "ywai-logo.tsx"
+
+// BackgroundAgentsNotifyBundleName is the filename of the background-agents
+// notification TUI sidecar (plain .tsx source, no build step), like the logo.
+const BackgroundAgentsNotifyBundleName = "background-agents-notify.tsx"
 
 func EnsureDataDir() error {
 	fsMutex.Lock()
@@ -113,6 +118,9 @@ func SeedWorkflowsFromEmbedded() error {
 		return fmt.Errorf("no embedded workflows data available")
 	}
 	dstDir := DataWorkflowsDir()
+	if err := migrateRenamedWorkflows(dstDir); err != nil {
+		return err
+	}
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
 			return nil
@@ -127,6 +135,34 @@ func SeedWorkflowsFromEmbedded() error {
 		}
 		return os.WriteFile(dstPath, data, 0o644)
 	})
+}
+
+// SeedWorkflowJSON returns the bundled seed workflow JSON for name: the
+// embedded FS when built with it, else a source checkout (ywai/workflows/).
+// ok=false when no seed is available (non-embedded binary without source);
+// callers treat that as "nothing to compare against".
+func SeedWorkflowJSON(name string) ([]byte, bool) {
+	if name == "" || name != filepath.Base(name) {
+		return nil, false
+	}
+	if fn := getEmbeddedWorkflowsFS; fn != nil {
+		if fsys := fn(); fsys != nil {
+			if data, err := fs.ReadFile(fsys, name+".json"); err == nil {
+				return data, true
+			}
+		}
+	}
+	dir := WorkflowsSourceDir()
+	// findSourceDir falls back to the data dir itself; comparing a workflow
+	// with itself is always "in sync", so skip that case.
+	if dir == "" || dir == DataWorkflowsDir() {
+		return nil, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name+".json"))
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }
 
 // GetEmbeddedDefaults reads the defaults.jsonc from embedded FS.
@@ -176,14 +212,19 @@ func SeedAgentsFrom(repoRoot string) error {
 
 // SeedWorkflowsFrom copies the bundled seed workflows (ywai/workflows/*.json)
 // into the user's data dir. Existing workflows are not fully replaced (layout
-// and custom nodes survive), but agentRef links from the seed are re-applied so
-// install/update re-attaches real agents like core/orchestrator on goal's start.
+// and custom nodes survive), but agentRef, prompt, and tools from the seed are
+// re-applied on matching node ids so install/update refreshes retired tool
+// names (codegraph → graft) and task prompts. A final pass rewrites leftover
+// CodeGraph / dropped-v2 tokens in every installed workflow JSON.
 func SeedWorkflowsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
 		return err
 	}
 	srcDir := WorkflowsSourceDir()
 	dstDir := DataWorkflowsDir()
+	if err := migrateRenamedWorkflows(dstDir); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return err
@@ -207,7 +248,7 @@ func SeedWorkflowsFrom(repoRoot string) error {
 			return fmt.Errorf("failed to write %s: %w", dstPath, err)
 		}
 	}
-	return nil
+	return migrateInstalledWorkflows(dstDir)
 }
 
 // seed workflow JSON shapes (only the fields we repair).
@@ -224,6 +265,8 @@ type seedNode struct {
 type seedNodeData struct {
 	AgentRef        string `json:"agentRef,omitempty"`
 	AgentDefinition string `json:"agentDefinition,omitempty"`
+	Prompt          string `json:"prompt,omitempty"`
+	Tools           string `json:"tools,omitempty"`
 }
 
 // reconcileSeedWorkflowAgentLinks re-applies agentRef links from a seed workflow
@@ -305,6 +348,20 @@ func reconcileSeedWorkflowAgentLinks(dstPath string, seedJSON []byte) error {
 			delete(data, "agentDefinition")
 			changed = true
 		}
+		if p := strings.TrimSpace(sn.Data.Prompt); p != "" {
+			got, _ := data["prompt"].(string)
+			if got != p {
+				data["prompt"] = p
+				changed = true
+			}
+		}
+		if tools := strings.TrimSpace(sn.Data.Tools); tools != "" {
+			got, _ := data["tools"].(string)
+			if got != tools {
+				data["tools"] = tools
+				changed = true
+			}
+		}
 		nodes[i] = nm
 	}
 	if !changed {
@@ -317,6 +374,132 @@ func reconcileSeedWorkflowAgentLinks(dstPath string, seedJSON []byte) error {
 	}
 	out = append(out, '\n')
 	return os.WriteFile(dstPath, out, 0o644)
+}
+
+var retiredCodegraph = regexp.MustCompile(`(?i)codegraph(_[A-Za-z0-9*]+)?`)
+
+func migrateInstalledWorkflows(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out, changed, err := migrateRetiredWorkflowVocab(raw)
+		if err != nil {
+			return fmt.Errorf("migrate %s: %w", entry.Name(), err)
+		}
+		if !changed {
+			continue
+		}
+		if err := os.WriteFile(path, out, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+// migrateRetiredWorkflowVocab rewrites leftover CodeGraph / dropped-v2 tool
+// names in a workflow JSON so installed copies keep working after the Graft
+// migration. Layout and custom nodes stay; only tools/prompt strings change.
+func migrateRetiredWorkflowVocab(raw []byte) ([]byte, bool, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, false, err
+	}
+	changed := false
+	nodes, _ := doc["nodes"].([]any)
+	for i, rawNode := range nodes {
+		nm, ok := rawNode.(map[string]any)
+		if !ok {
+			continue
+		}
+		data, _ := nm["data"].(map[string]any)
+		if data == nil {
+			continue
+		}
+		if s, ok := data["tools"].(string); ok {
+			if next, ok := rewriteRetiredToolsCSV(s); ok {
+				data["tools"] = next
+				changed = true
+			}
+		}
+		for _, key := range []string{"prompt", "agentDefinition", "agentDescription", "description"} {
+			s, ok := data[key].(string)
+			if !ok {
+				continue
+			}
+			if next, ok := rewriteRetiredProse(s); ok {
+				data[key] = next
+				changed = true
+			}
+		}
+		nodes[i] = nm
+	}
+	if !changed {
+		return raw, false, nil
+	}
+	doc["nodes"] = nodes
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, false, err
+	}
+	out = append(out, '\n')
+	return out, true, nil
+}
+
+func rewriteRetiredToolsCSV(csv string) (string, bool) {
+	var out []string
+	seen := map[string]bool{}
+	for _, tok := range strings.Split(csv, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		lower := strings.ToLower(tok)
+		switch {
+		case lower == "lsp" || lower == "ast_grep" || lower == "code_search":
+			continue
+		case lower == "codegraph" || strings.HasPrefix(lower, "codegraph_"):
+			tok = "graft_*"
+		}
+		if seen[tok] {
+			continue
+		}
+		seen[tok] = true
+		out = append(out, tok)
+	}
+	next := strings.Join(out, ", ")
+	return next, next != csv
+}
+
+func rewriteRetiredProse(s string) (string, bool) {
+	next := retiredCodegraph.ReplaceAllStringFunc(s, func(m string) string {
+		lower := strings.ToLower(m)
+		switch lower {
+		case "codegraph_explore", "codegraph_search":
+			return "graft_find_code"
+		case "codegraph_context":
+			return "graft_file_api"
+		case "codegraph_trace":
+			return "graft_trace_calls"
+		}
+		if strings.Contains(lower, "_") {
+			return "graft_*"
+		}
+		return "graft"
+	})
+	return next, next != s
 }
 
 func SeedAgentsFromEmbedded() error {
@@ -411,13 +594,13 @@ func SeedPluginsFromEmbedded() error {
 }
 
 // BackgroundAgentsBundlePath resolves the path to the bundled background-agents
-// plugin JS. It prefers the source checkout (ywai/plugins/background-agents-v2/
+// plugin JS. It prefers the source checkout (ywai/plugins/background-agents/
 // dist/), falls back to the seeded copy under DataPluginsDir, and seeds from the
 // embedded FS on demand. Returns an error when no bundle exists (e.g. a source
 // build where `bun` was unavailable at prepare-embedded time).
 func BackgroundAgentsBundlePath() (string, error) {
-	// 1. Source checkout: ywai/plugins/background-agents-v2/dist/background-agents-v2.js
-	srcBundle := filepath.Join(PluginsSourceDir(), "background-agents-v2", "dist", BackgroundAgentsBundleName)
+	// 1. Source checkout: ywai/plugins/background-agents/dist/background-agents.js
+	srcBundle := filepath.Join(PluginsSourceDir(), "background-agents", "dist", BackgroundAgentsBundleName)
 	if _, err := os.Stat(srcBundle); err == nil {
 		return srcBundle, nil
 	}
@@ -529,6 +712,31 @@ func TuiLogoBundlePath() (string, error) {
 	return "", fmt.Errorf("ywai TUI logo plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
+// BackgroundAgentsNotifyBundlePath resolves the sidecar source, same order as
+// TuiLogoBundlePath: source checkout, seeded copy, embedded FS on demand.
+func BackgroundAgentsNotifyBundlePath() (string, error) {
+	// 1. Source checkout: ywai/plugins/tui/background-agents-notify.tsx
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", BackgroundAgentsNotifyBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	// 2. Already seeded to the data dir.
+	seeded := filepath.Join(DataPluginsDir(), "tui", BackgroundAgentsNotifyBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	// 3. Seed from embedded FS, then re-check.
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("background-agents notify sidecar not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -599,4 +807,53 @@ func copyDirRecursive(src, dst string) error {
 
 		return os.WriteFile(dstPath, data, 0o644)
 	})
+}
+
+// RenamedWorkflows maps a retired seed workflow's file name to its replacement.
+//
+// Seeding copies seed files by base name and never deletes, so a rename would
+// otherwise leave the retired workflow live forever: the user ends up with both
+// files, both slash commands, and two sets of exported sub-agents.
+var RenamedWorkflows = map[string]string{"goal": "ship"}
+
+// migrateRenamedWorkflows moves retired workflow files in the data dir to their
+// replacement name, patching the id/name inside so file, id and name stay in
+// lockstep the way the store expects. A user copy carrying custom nodes or
+// layout survives the move; the seed pass then reconciles it. When the
+// replacement already exists the retired file is simply dropped.
+func migrateRenamedWorkflows(dstDir string) error {
+	for old, replacement := range RenamedWorkflows {
+		oldPath := filepath.Join(dstDir, old+".json")
+		if _, err := os.Stat(oldPath); err != nil {
+			continue
+		}
+		newPath := filepath.Join(dstDir, replacement+".json")
+		if _, err := os.Stat(newPath); err == nil {
+			if err := os.Remove(oldPath); err != nil {
+				return fmt.Errorf("remove retired workflow %s: %w", old, err)
+			}
+			continue
+		}
+		data, err := os.ReadFile(oldPath)
+		if err != nil {
+			return fmt.Errorf("read retired workflow %s: %w", old, err)
+		}
+		var wf map[string]any
+		if err := json.Unmarshal(data, &wf); err != nil {
+			return fmt.Errorf("parse retired workflow %s: %w", old, err)
+		}
+		wf["id"] = replacement
+		wf["name"] = replacement
+		out, err := json.MarshalIndent(wf, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode renamed workflow %s: %w", replacement, err)
+		}
+		if err := os.WriteFile(newPath, append(out, '\n'), 0o644); err != nil {
+			return fmt.Errorf("write renamed workflow %s: %w", replacement, err)
+		}
+		if err := os.Remove(oldPath); err != nil {
+			return fmt.Errorf("remove retired workflow %s: %w", old, err)
+		}
+	}
+	return nil
 }

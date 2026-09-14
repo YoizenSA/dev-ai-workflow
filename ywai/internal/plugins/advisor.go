@@ -1,10 +1,6 @@
 package plugins
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
@@ -24,15 +20,5 @@ func InstallAdvisor(configPath string) error {
 }
 
 func installAdvisorWithBundle(configPath, bundleSrc string) error {
-	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
-	}
-
-	destJS := filepath.Join(destDir, config.AdvisorBundleName)
-	if err := copyFile(bundleSrc, destJS); err != nil {
-		return fmt.Errorf("copy advisor bundle: %w", err)
-	}
-
-	return patchOpenCodePluginPath(configPath, destJS)
+	return installVendorPluginV2(configPath, bundleSrc, config.AdvisorBundleName)
 }

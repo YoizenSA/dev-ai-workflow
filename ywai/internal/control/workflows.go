@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/workflows"
 )
 
@@ -42,15 +43,26 @@ func (s *Server) registerWorkflowsRoutes() {
 
 	s.mux.HandleFunc("POST /api/workflows/import", api.handleImport)
 
+	// Exported workflows whose design no longer exists (leftovers of deletes
+	// made before uninstall existed). Cleanup reuses DELETE /{name}/export.
+	s.mux.HandleFunc("GET /api/workflows/orphans", api.handleOrphans)
+
 	// Per-workflow CRUD.
 	s.mux.HandleFunc("GET /api/workflows/{name}", api.handleGet)
 	s.mux.HandleFunc("PUT /api/workflows/{name}", api.handleSave)
 	s.mux.HandleFunc("PATCH /api/workflows/{name}", api.handleRename)
 	s.mux.HandleFunc("DELETE /api/workflows/{name}", api.handleDelete)
 
-	// Validate + export.
+	// Validate + export (+ uninstall of the exported artifacts).
 	s.mux.HandleFunc("POST /api/workflows/{name}/validate", api.handleValidate)
 	s.mux.HandleFunc("POST /api/workflows/{name}/export", api.handleExport)
+	s.mux.HandleFunc("DELETE /api/workflows/{name}/export", api.handleUnexport)
+
+	// Reset the stored design to the bundled seed. The seed pass never
+	// overwrites existing installs, so this is the explicit escape hatch that
+	// lets seed evolution (new nodes, changed gates) reach them. The current
+	// design is backed up to <data>/workflows/backups/ first.
+	s.mux.HandleFunc("POST /api/workflows/{name}/seed-apply", api.handleSeedApply)
 
 	// Edit with AI (opencode CLI).
 	s.mux.HandleFunc("POST /api/workflows/{name}/ai-edit", api.handleAIEdit)
@@ -92,7 +104,68 @@ func (a *workflowsAPI) handleList(w http.ResponseWriter, r *http.Request) {
 	if summaries == nil {
 		summaries = []workflows.Summary{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"workflows": summaries})
+	rows := make([]workflowListItem, 0, len(summaries))
+	for _, s := range summaries {
+		rows = append(rows, workflowListItem{Summary: s, Seed: seedDiffFor(a.store, s.Name)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"workflows": rows})
+}
+
+// workflowListItem is a list row: the store summary plus seed-drift info. Seed
+// is nil when no bundled seed is available (non-embedded binary without
+// source) — the frontend hides the update affordance then.
+type workflowListItem struct {
+	workflows.Summary
+	Seed *workflows.SeedDiff `json:"seed,omitempty"`
+}
+
+// seedDiffFor compares the installed workflow with its bundled seed. nil means
+// "no comparison possible", not "in sync". The local copy is read through the
+// injected store so tests can re-point it.
+func seedDiffFor(store *workflows.Store, name string) *workflows.SeedDiff {
+	seed, ok := config.SeedWorkflowJSON(name)
+	if !ok {
+		return nil
+	}
+	local, err := store.Raw(name)
+	if err != nil {
+		return nil
+	}
+	d := workflows.DiffSeed(local, seed)
+	return &d
+}
+
+// handleSeedApply overwrites the stored workflow with its bundled seed — the
+// explicit "reset to canonical" that the seed pass never does for existing
+// installs (config.SeedWorkflowsFrom skips existing files). The current design
+// is backed up to <data>/workflows/backups/ first.
+func (a *workflowsAPI) handleSeedApply(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := workflows.ValidateName(name); err != nil {
+		writeWorkflowsError(w, http.StatusBadRequest, err)
+		return
+	}
+	seed, ok := config.SeedWorkflowJSON(name)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no bundled seed for workflow " + name})
+		return
+	}
+	var wf workflows.Workflow
+	if err := json.Unmarshal(seed, &wf); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if _, err := a.store.Backup(name); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// Identity stays in lockstep with the filename the way the store expects.
+	wf.ID, wf.Name = name, name
+	if err := a.store.Save(&wf); err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, &wf)
 }
 
 func (a *workflowsAPI) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +211,16 @@ func (a *workflowsAPI) handleSave(w http.ResponseWriter, r *http.Request) {
 
 func (a *workflowsAPI) handleDelete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
+	// ?unexport=true also removes the exported implementation (slash command +
+	// agents), so deleting a workflow leaves no orphan /<name> behind. The
+	// uninstall runs first: if it fails, nothing is deleted and the user can
+	// retry with the design still on disk.
+	if r.URL.Query().Get("unexport") == "true" {
+		if _, err := a.requestExporter(r).Uninstall(name); err != nil {
+			writeWorkflowsError(w, statusForWorkflowError(err), err)
+			return
+		}
+	}
 	if err := a.store.Delete(name); err != nil {
 		writeWorkflowsError(w, statusForWorkflowError(err), err)
 		return
@@ -233,10 +316,10 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Target dialect: opencode (default) or claude-code, via ?target=.
-	exporter := a.exporter
-	if t := r.URL.Query().Get("target"); t != "" && t != workflows.TargetOpenCode {
-		exporter = workflows.NewExporterForTarget(t)
-	}
+	// Under ?profile= scope the cached exporter still points at the global
+	// config dirs (resolved at startup), so build a fresh one inside the
+	// sandbox: OpenCodeCommandsDir/AgentsDir then resolve to the profile.
+	exporter := a.requestExporter(r)
 
 	// Dry-run preview unless ?apply=true.
 	if r.URL.Query().Get("apply") != "true" {
@@ -265,6 +348,66 @@ func (a *workflowsAPI) handleExport(w http.ResponseWriter, r *http.Request) {
 	exportSubFlows(a.store, exporter, wf, plan, exported)
 
 	writeJSON(w, http.StatusOK, plan)
+}
+
+// handleOrphans lists implemented workflows whose stored design is gone, for
+// the request's target/scope. Each name can be cleaned with
+// DELETE /api/workflows/{name}/export.
+func (a *workflowsAPI) handleOrphans(w http.ResponseWriter, r *http.Request) {
+	list, err := a.store.List()
+	if err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	existing := make(map[string]bool, len(list))
+	for _, s := range list {
+		existing[s.Name] = true
+	}
+	orphans, err := a.requestExporter(r).Orphans(existing)
+	if err != nil {
+		writeWorkflowsError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if orphans == nil {
+		orphans = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"orphans": orphans})
+}
+
+// handleUnexport removes a workflow's exported artifacts (slash command +
+// agents) without touching the stored design. Resolves target/profile scope
+// exactly like handleExport, so "uninstall from where I exported to" uses the
+// same selectors the UI already shows.
+func (a *workflowsAPI) handleUnexport(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	removed, err := a.requestExporter(r).Uninstall(name)
+	if err != nil {
+		writeWorkflowsError(w, statusForWorkflowError(err), err)
+		return
+	}
+	if removed == nil {
+		removed = []workflows.ExportArtifact{}
+	}
+	writeJSON(w, http.StatusOK, workflows.ExportPlan{
+		WorkflowName: name,
+		Files:        removed,
+		DryRun:       false,
+		Removed:      true,
+	})
+}
+
+// requestExporter resolves the exporter for one request: the cached one by
+// default, a fresh (scope-resolving) one inside a profile sandbox, or one for
+// an explicit ?target= dialect.
+func (a *workflowsAPI) requestExporter(r *http.Request) *workflows.Exporter {
+	exporter := a.exporter
+	if envprofile.InProfileScope() {
+		exporter = workflows.NewExporter()
+	}
+	if t := r.URL.Query().Get("target"); t != "" && t != workflows.TargetOpenCode {
+		exporter = workflows.NewExporterForTarget(t)
+	}
+	return exporter
 }
 
 // previewSubFlows is the dry-run counterpart of exportSubFlows: it plans (but

@@ -22,6 +22,7 @@ package plugins
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -51,7 +52,7 @@ func TestWriteGraftMCPEntry_OpenCodeShape(t *testing.T) {
 	assertOpenCodeGraftShape(t, path)
 }
 
-func TestWriteGraftMCPEntry_NestsUnderServersAndLiftsSiblings(t *testing.T) {
+func TestWriteGraftMCPEntry_FlattensServersAndKeepsSiblings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "opencode.json")
 	legacy := `{"mcp":{"timeout":15000,"context7":{"type":"remote","url":"https://x"},"graft":{"command":"graft","args":["mcp"]}}}`
 	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
@@ -70,9 +71,6 @@ func TestWriteGraftMCPEntry_NestsUnderServersAndLiftsSiblings(t *testing.T) {
 	mcpMap := root["mcp"].(map[string]any)
 	if mcpMap["timeout"] != float64(15000) && mcpMap["timeout"] != 15000 {
 		t.Fatalf("timeout not preserved: %#v", mcpMap["timeout"])
-	}
-	if _, ok := mcpMap["context7"]; ok {
-		t.Fatal("context7 must be lifted into mcp.servers")
 	}
 	servers := mcpMap["servers"].(map[string]any)
 	if _, ok := servers["context7"].(map[string]any); !ok {
@@ -104,9 +102,6 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 	if mcpMap == nil {
 		t.Fatal("missing mcp")
 	}
-	if _, flat := mcpMap["graft"].(map[string]any); flat {
-		t.Fatal("graft must not be a sibling of mcp.servers")
-	}
 	servers, ok := mcpMap["servers"].(map[string]any)
 	if !ok {
 		t.Fatalf("mcp.servers missing: %v", mcpMap)
@@ -115,9 +110,8 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 	if got["type"] != "local" {
 		t.Errorf("type = %#v, want local", got["type"])
 	}
-	// v2: servers are enabled by default; an "enabled" flag must not be written.
 	if _, has := got["enabled"]; has {
-		t.Errorf("enabled = %#v, want absent (v2: absent = enabled)", got["enabled"])
+		t.Errorf("enabled = %#v, want absent (v2 uses disabled)", got["enabled"])
 	}
 	cmd, ok := got["command"].([]any)
 	if !ok {
@@ -135,8 +129,16 @@ func TestPlugins_GraftSurfacePresent(t *testing.T) {
 	t.Log("InstallGraftCLI and WireGraftMCP are exported by internal/plugins")
 
 	dir := t.TempDir()
-	fake := filepath.Join(dir, "graft")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho graft 0.1.0\n"), 0o755); err != nil {
+	// graftVersionFromBinary execs the binary, so on Windows it must have an
+	// extension LookPath/cmd can run — a shebang script is not launchable there.
+	name := "graft"
+	body := "#!/bin/sh\necho graft 0.1.0\n"
+	if runtime.GOOS == "windows" {
+		name += ".bat"
+		body = "@echo graft 0.1.0\r\n"
+	}
+	fake := filepath.Join(dir, name)
+	if err := os.WriteFile(fake, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got, err := graftVersionFromBinary(fake)

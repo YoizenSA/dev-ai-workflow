@@ -7,7 +7,7 @@ import "testing"
 // back under the profile — otherwise every node runs at the session model and
 // switching profiles changes nothing for workflows.
 func TestNodeModelFallsBackToLinkedAgentProfile(t *testing.T) {
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	e.profileModels = map[string]string{"dev": "cheap/flash", "reviewer": "pricey/pro"}
 
 	cases := []struct {
@@ -57,7 +57,7 @@ func TestNodeModelFallsBackToLinkedAgentProfile(t *testing.T) {
 
 // The START node is the orchestrator, so it resolves through the same path.
 func TestOrchestratorModelResolvesThroughStartLink(t *testing.T) {
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	e.profileModels = map[string]string{"orchestrator": "pricey/pro"}
 
 	wf := &Workflow{

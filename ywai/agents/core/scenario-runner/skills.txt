@@ -1,0 +1,5 @@
+qa-evidence
+gherkin-bdd
+condition-based-waiting
+playwright-e2e-testing
+diagnosing-bugs

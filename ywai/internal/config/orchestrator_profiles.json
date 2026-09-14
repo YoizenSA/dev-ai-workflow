@@ -8,7 +8,12 @@
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "on_ship",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
         "advisor": "opencode-admin/deepseek-v4-pro",
@@ -53,21 +58,6 @@
         "memory": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
-        "migration-orchestrator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-validator-focused": {
-          "model": "opencode-admin/glm-5.2"
-        },
         "orchestrator": {
           "model": "opencode-admin/deepseek-v4-pro"
         },
@@ -108,101 +98,91 @@
     },
     "fast": {
       "display_name": "Fast",
-      "description": "Speed/cost-optimized — flash model for every agent",
+      "description": "Speed/cost-optimized - flash-vision model for every agent",
       "orchestration": {
         "default_mode": "solo",
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "never",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
-        "slow": "opencode-admin/deepseek-v4-flash",
-        "task": "opencode-admin/deepseek-v4-flash",
-        "vision": "opencode-admin/deepseek-v4-flash"
+        "slow": "opencode-admin/deepseek-v4-flash-vision-exp",
+        "task": "opencode-admin/deepseek-v4-flash-vision-exp",
+        "vision": "opencode-admin/deepseek-v4-flash-vision-exp"
       },
       "omp_thinking_level": "low",
       "agents": {
         "advisor": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "architect": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "ask": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "designer": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "dev": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "devops": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "exploratory-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "feature-summary": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "finder": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "memory": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/deepseek-v4-flash"
-        },
-        "migration-validator-focused": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "orchestrator": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "planner-draft": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "planner-scout": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "planning": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa-analyst": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa-ask": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa-dev": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa-orchestrator": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "qa-reviewer": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "reviewer": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         },
         "test-author": {
-          "model": "opencode-admin/deepseek-v4-flash"
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
         }
       }
     },
@@ -214,7 +194,12 @@
         "allow_solo_write": false,
         "max_hops_before_escalate": 2,
         "require_review": "always",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_model_roles": {
         "slow": "opencode-admin/grok-4.5",
@@ -253,21 +238,6 @@
         "memory": {
           "model": "opencode-admin/deepseek-v4-flash"
         },
-        "migration-orchestrator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-planner": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-scope": {
-          "model": "opencode-admin/minimax-m3"
-        },
-        "migration-validator": {
-          "model": "opencode-admin/glm-5.2"
-        },
-        "migration-validator-focused": {
-          "model": "opencode-admin/glm-5.2"
-        },
         "orchestrator": {
           "model": "opencode-admin/grok-4.5"
         },
@@ -306,6 +276,102 @@
         }
       }
     },
+    "standard": {
+      "display_name": "Standard",
+      "description": "Cheap-first - glm-5.3-flash everywhere; kimi-k3 for architect/designer, deepseek-v4-flash-vision-exp for finder and review",
+      "orchestration": {
+        "default_mode": "thin",
+        "allow_solo_write": true,
+        "max_hops_before_escalate": 1,
+        "require_review": "on_ship",
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
+      },
+      "omp_model_roles": {
+        "advisor": "opencode-admin/glm-5.3-flash",
+        "commit": "opencode-admin/glm-5.3-flash",
+        "default": "opencode-admin/glm-5.3-flash",
+        "designer": "opencode-admin/kimi-k3",
+        "plan": "opencode-admin/glm-5.3-flash",
+        "slow": "opencode-admin/deepseek-v4-flash-vision-exp",
+        "smol": "opencode-admin/glm-5.3-flash",
+        "task": "opencode-admin/glm-5.3-flash",
+        "vision": "opencode-go/gpt-5.6-luna"
+      },
+      "omp_thinking_level": "auto",
+      "agents": {
+        "advisor": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "architect": {
+          "model": "opencode-admin/kimi-k3"
+        },
+        "ask": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "designer": {
+          "model": "opencode-admin/kimi-k3"
+        },
+        "dev": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "devops": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "exploratory-orchestrator": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "feature-summary": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "finder": {
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
+        },
+        "memory": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "orchestrator": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "planner-draft": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "planner-scout": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "planning": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "qa": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "qa-analyst": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "qa-ask": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "qa-dev": {
+          "model": "opencode-admin/glm-5.3-flash"
+        },
+        "qa-orchestrator": {
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
+        },
+        "qa-reviewer": {
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
+        },
+        "reviewer": {
+          "model": "opencode-admin/deepseek-v4-flash-vision-exp"
+        },
+        "test-author": {
+          "model": "opencode-admin/glm-5.3-flash"
+        }
+      }
+    },
     "inherit": {
       "display_name": "Inherit",
       "description": "No pinned models — agents inherit the session/lead model",
@@ -314,7 +380,12 @@
         "allow_solo_write": true,
         "max_hops_before_escalate": 1,
         "require_review": "on_ship",
-        "escalate_on": ["multi_file_deps", "ui_design", "ship", "user_says_orchestrate"]
+        "escalate_on": [
+          "multi_file_deps",
+          "ui_design",
+          "ship",
+          "user_says_orchestrate"
+        ]
       },
       "omp_thinking_level": "auto",
       "agents": {
@@ -328,11 +399,6 @@
         "feature-summary": {},
         "finder": {},
         "memory": {},
-        "migration-orchestrator": {},
-        "migration-planner": {},
-        "migration-scope": {},
-        "migration-validator": {},
-        "migration-validator-focused": {},
         "orchestrator": {},
         "planner-draft": {},
         "planner-scout": {},

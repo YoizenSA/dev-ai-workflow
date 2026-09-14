@@ -4,11 +4,24 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
+// newLocalClientWithPaths creates a LocalClient with explicit paths so unit
+// tests control the data source via temp config files instead of the real
+// opencode config dir. Test-only counterpart of NewLocalClient (which sets
+// useCLI=true); tests set useCLI=false so 'opencode models' is never run.
+func newLocalClientWithPaths(configPath, agentsDir string) *LocalClient {
+	return &LocalClient{
+		opencodeConfig: configPath,
+		agentsDir:      agentsDir,
+		useCLI:         false, // tests control the source via the config file
+	}
+}
+
 func TestLocalClient_Status_NotFound(t *testing.T) {
-	c := NewLocalClientWithPaths("/nonexistent/opencode.json", "/nonexistent/agents")
+	c := newLocalClientWithPaths("/nonexistent/opencode.json", "/nonexistent/agents")
 	ctx := context.Background()
 	status, err := c.Status(ctx)
 	if err != nil {
@@ -26,7 +39,7 @@ func TestLocalClient_Status_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	status, err := c.Status(ctx)
 	if err != nil {
@@ -42,7 +55,7 @@ func TestLocalClient_Status_Found(t *testing.T) {
 
 func TestLocalClient_ListAgents_Empty(t *testing.T) {
 	dir := t.TempDir()
-	c := NewLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
+	c := newLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -71,7 +84,7 @@ func TestLocalClient_ListAgents_FromConfig(t *testing.T) {
 	}
 
 	// Use a non-existent agents dir to prove the config is the source, not files.
-	c := NewLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	c := newLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -106,7 +119,7 @@ func TestLocalClient_ListAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
+	c := newLocalClientWithPaths(filepath.Join(dir, "opencode.json"), dir)
 	ctx := context.Background()
 	agents, err := c.ListAgents(ctx)
 	if err != nil {
@@ -132,7 +145,7 @@ func TestLocalClient_ListModels_Empty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -167,7 +180,7 @@ func TestLocalClient_ListModels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -203,7 +216,7 @@ func TestLocalClient_ListModels_NoProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, dir)
+	c := newLocalClientWithPaths(configPath, dir)
 	ctx := context.Background()
 	models, err := c.ListModels(ctx)
 	if err != nil {
@@ -211,6 +224,88 @@ func TestLocalClient_ListModels_NoProviders(t *testing.T) {
 	}
 	if len(models) != 1 || models[0].ID != "gpt-4" {
 		t.Fatalf("Expected exactly 1 model 'gpt-4', got %v", modelIDs(models))
+	}
+}
+
+// TestLocalClient_ListAgents_V2FromConfig verifies the v2 `agents` map is the
+// primary source of agent names.
+func TestLocalClient_ListAgents_V2FromConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	config := `{
+		"agents": {
+			"orchestrator": {"system": "lead"},
+			"dev": {"system": "coder"}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := newLocalClientWithPaths(configPath, filepath.Join(dir, "no-such-agents-dir"))
+	ctx := context.Background()
+	agents, err := c.ListAgents(ctx)
+	if err != nil {
+		t.Fatalf("ListAgents() should not error: %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("Expected 2 agents from v2 config, got %d: %v", len(agents), agentIDs(agents))
+	}
+	got := make(map[string]bool)
+	for _, a := range agents {
+		got[a.ID] = true
+	}
+	for _, id := range []string{"orchestrator", "dev"} {
+		if !got[id] {
+			t.Errorf("expected v2 agent %q missing from %v", id, agentIDs(agents))
+		}
+	}
+}
+
+// TestLocalClient_ListModels_V2Providers verifies models are read from the v2
+// `providers` map, and that `providers` wins over a leftover v1 `provider`.
+func TestLocalClient_ListModels_V2Providers(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	config := `{
+		"model": "gpt-4",
+		"providers": {
+			"opencode-admin": {
+				"models": {
+					"deepseek-v4-pro": {},
+					"deepseek-v4-flash": {}
+				}
+			}
+		},
+		"provider": {
+			"legacy": {
+				"models": {
+					"old-model": {}
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := newLocalClientWithPaths(configPath, dir)
+	ctx := context.Background()
+	models, err := c.ListModels(ctx)
+	if err != nil {
+		t.Fatalf("ListModels() should not error: %v", err)
+	}
+	modelSet := make(map[string]bool)
+	for _, m := range models {
+		modelSet[m.ID] = true
+	}
+	for _, id := range []string{"gpt-4", "opencode-admin/deepseek-v4-pro", "opencode-admin/deepseek-v4-flash"} {
+		if !modelSet[id] {
+			t.Errorf("expected v2 model %q missing from %v", id, modelIDs(models))
+		}
+	}
+	if modelSet["legacy/old-model"] {
+		t.Errorf("v1 provider models must not be listed when v2 providers exist, got %v", modelIDs(models))
 	}
 }
 
@@ -280,15 +375,27 @@ func TestOpencodeEnv_CorrectsSnapXDG(t *testing.T) {
 
 func TestResolveOpencodeBin_PrefersOpenCode2(t *testing.T) {
 	dir := t.TempDir()
-	v1 := filepath.Join(dir, "opencode")
-	v2 := filepath.Join(dir, "opencode2")
-	if err := os.WriteFile(v1, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	home := t.TempDir()
+	// On Windows exec.LookPath only resolves executables with an extension
+	// (PATHEXT), so the fakes must be named accordingly there.
+	exeName := func(base string) string {
+		if runtime.GOOS == "windows" {
+			return base + ".bat"
+		}
+		return base
 	}
-	if err := os.WriteFile(v2, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
+	v1 := filepath.Join(dir, exeName("opencode"))
+	v2 := filepath.Join(dir, exeName("opencode2"))
+	for _, path := range []string{v1, v2} {
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir)
+	// USERPROFILE is what homeDir()/well-known-dir probes read on Windows;
+	// without pinning it a really installed opencode2.exe leaks in.
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	got := resolveOpencodeBin()
 	if got != v2 {

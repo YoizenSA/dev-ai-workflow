@@ -49,8 +49,9 @@ func NewStore(baseDir string) *Store {
 	return &Store{baseDir: baseDir}
 }
 
-// List returns metadata for every persisted workflow, sorted by name. Only the
-// top-level fields are read; node graphs are skipped to keep listings light.
+// List returns metadata for every persisted workflow, sorted by name. Each
+// file is parsed in full because NodeCount needs the node list; connections
+// and node payloads are discarded after the count.
 func (s *Store) List() ([]Summary, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -109,6 +110,49 @@ func (s *Store) Load(name string) (*Workflow, error) {
 	defer s.mu.RUnlock()
 
 	return s.readLocked(name)
+}
+
+// Raw returns the workflow's JSON bytes without parsing. Handlers use this —
+// not config paths — so tests can re-point the store at a temp dir.
+func (s *Store) Raw(name string) ([]byte, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return os.ReadFile(s.pathLocked(name))
+}
+
+// Backup copies the current workflow JSON into <baseDir>/backups/ with a
+// timestamp suffix and returns the backup path. A missing workflow is not an
+// error: it just yields no backup (empty path). The backups dir is skipped by
+// List, which ignores directories.
+func (s *Store) Backup(name string) (string, error) {
+	if err := ValidateName(name); err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	raw, err := os.ReadFile(s.pathLocked(name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	dir := filepath.Join(s.baseDir, "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	dst := filepath.Join(dir, fmt.Sprintf("%s-%d.json", name, time.Now().Unix()))
+	if err := os.WriteFile(dst, raw, 0o644); err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 // Create persists a new workflow. Fails if one with the same name exists.
@@ -246,17 +290,26 @@ func normalize(wf *Workflow) *Workflow {
 }
 
 // atomicWrite writes data to a temp file then renames it atomically (POSIX
-// rename guarantee): a crash mid-write leaves the original intact.
+// rename guarantee): a crash mid-write leaves the original intact. The temp
+// file is removed on every exit path where we still own it; the flag skips
+// the removal after a successful rename, so a concurrent writer's fresh temp
+// file under the same deterministic name is never deleted.
 func atomicWrite(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmpFile := filepath.Join(dir, "."+filepath.Base(path)+".tmp")
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpFile)
+		}
+	}()
 	if err := os.WriteFile(tmpFile, data, 0o644); err != nil {
 		return fmt.Errorf("write temp file: %w", err)
 	}
 	if err := os.Rename(tmpFile, path); err != nil {
-		_ = os.Remove(tmpFile)
 		return fmt.Errorf("rename temp file: %w", err)
 	}
+	renamed = true
 	return nil
 }
 

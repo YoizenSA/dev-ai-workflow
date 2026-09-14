@@ -1,23 +1,24 @@
 import type {
-	Mission,
-	PlanMission,
-	Project,
-	GitInfo,
 	AgentInfo,
 	AgentDetail,
 	AgentGraph,
 	DelegationRulesResp,
 	SkillInfo,
+	SkillSurface,
+	SkillStandardizeResult,
 	MCPServer,
 	ProviderInfo,
 	OpenCodeConfig,
 	ToolsResponse,
 	ModelsResponse,
 	AgentsResponse,
-	FeatureLogsResponse,
 	BrowseFSResponse,
 	UserConfig,
 	RoleDefaults,
+	AdoCliStatus,
+	AdoConfig,
+	AdoPatStatus,
+	AdoProfile,
 	EngramObservation,
 	EngramSession,
 	EngramPrompt,
@@ -42,32 +43,90 @@ import type {
 
 const BASE = "";
 
+// Profile scope for the Settings surface. When set to an env name, every
+// request to the scopable surface (/api/config/* and /api/agents-md) carries
+// ?profile=<env> and the server answers from that environment's config
+// instead of the global one. Persisted so Envs can deep-link with scope.
+const SCOPE_KEY = "ywai-settings-scope";
+
+function readScope(): string | null {
+  try {
+    const v = window.localStorage.getItem(SCOPE_KEY);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getConfigProfileScope(): string | null {
+  return readScope();
+}
+
+export function setConfigProfileScope(name: string | null): void {
+  try {
+    const v = name && name.trim() ? name.trim() : "";
+    if (v) window.localStorage.setItem(SCOPE_KEY, v);
+    else window.localStorage.removeItem(SCOPE_KEY);
+  } catch {
+    // Storage unavailable (private mode): scope still applies below per call.
+  }
+}
+
+function scopedPath(path: string): string {
+  const scope = readScope();
+  if (!scope) return path;
+  if (!path.startsWith("/api/config/") && path !== "/api/agents-md" && !path.startsWith("/api/workflows")) return path;
+  if (/[?&]profile=/.test(path)) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(scope)}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	const res = await fetch(`${BASE}${scopedPath(path)}`, {
 		headers: { "Content-Type": "application/json" },
 		...options,
 	});
 	if (!res.ok) {
-		const body = await res.text().catch(() => res.statusText);
-		throw new Error(`${res.status}: ${body}`);
+		const body = await res.text().catch(() => "");
+		throw new Error(`${res.status}: ${extractError(body) || body || res.statusText}`);
 	}
 	return res.json();
 }
 
-// requestText fetches a plain-text response (e.g. mission artifacts like
-// REPORT.md, architecture.md). Returns empty string on 404 so callers can
-// treat "not generated yet" uniformly.
-async function requestText(
-	path: string,
-	options?: RequestInit,
-): Promise<string> {
-	const res = await fetch(`${BASE}${path}`, options);
-	if (!res.ok) {
-		if (res.status === 404) return "";
-		const body = await res.text().catch(() => res.statusText);
-		throw new Error(`${res.status}: ${body}`);
+// extractError pulls the "error" field out of a JSON error body ("Backend
+// answers errors as {"error": "..."}") so alerts name the cause, not the JSON.
+// Returns "" for anything else.
+function extractError(body: string): string {
+	try {
+		const data = JSON.parse(body);
+		if (data && typeof data.error === "string") return data.error;
+	} catch {
+		/* not JSON — caller falls back to the raw body */
 	}
-	return res.text();
+	return "";
+}
+
+// del issues a DELETE and discards the (empty) response body, throwing on
+// non-2xx. The backend answers errors as {"error": "..."} — surface that
+// message after the status so alerts name the cause, not just the code.
+async function del(path: string): Promise<void> {
+	const res = await fetch(`${BASE}${scopedPath(path)}`, { method: "DELETE" });
+	if (!res.ok) throw new Error(`${res.status}: ${await errorMessage(res)}`);
+}
+
+async function errorMessage(res: Response): Promise<string> {
+	try {
+		const data = await res.json();
+		if (data && typeof data.error === "string" && data.error) return data.error;
+	} catch {
+		/* not JSON — fall through to text below */
+	}
+	try {
+		const text = await res.text();
+		if (text) return text;
+	} catch {
+		/* unreadable body — fall through to status text */
+	}
+	return res.statusText;
 }
 
 // ─── Models client cache ───────────────────────────────────────────────────
@@ -95,8 +154,8 @@ function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
 		return modelsClientInflight;
 	}
 	const path = force
-		? "/missions/api/opencode/models?refresh=1"
-		: "/missions/api/opencode/models";
+		? "/api/opencode/models?refresh=1"
+		: "/api/opencode/models";
 	const p = request<ModelsResponse>(path)
 		.then((data) => {
 			modelsClientCache = { at: Date.now(), data };
@@ -113,115 +172,42 @@ function listModelsCached(opts?: { force?: boolean }): Promise<ModelsResponse> {
 	return p;
 }
 
-// ─── Missions API ──────────────────────────────────────────────────────────
+// —— Tools API ——
+// Shared opencode/fs/refine endpoints. Served by internal/toolsapi, registered
+// on the control server's mux under the flat /api/ prefix.
 
-export const missionsApi = {
-	// Missions
-	listMissions: () =>
-		request<{ missions: Mission[] }>("/missions/api/missions").then(
-			(r) => r.missions,
-		),
-	getMission: (id: string) => request<Mission>(`/missions/api/missions/${id}`),
-	generatePlan: (data: {
-		goal: string;
-		project?: string;
-		model?: string;
-		agent?: string;
-	}) =>
-		request<{ plan: PlanMission }>("/missions/api/missions", {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
-
-	approvePlan: (plan: PlanMission) =>
-		request<{ mission: Mission }>("/missions/api/missions/approve", {
-			method: "POST",
-			body: JSON.stringify({ plan }),
-		}),
-	runMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/run`, { method: "POST" }),
-	autoMission: (data: {
-		goal: string;
-		project?: string;
-		model?: string;
-		agent?: string;
-		autoApprove?: boolean;
-	}) =>
-		request<{ status: string; missionId: string }>(
-			"/missions/api/missions/auto",
-			{ method: "POST", body: JSON.stringify(data) },
-		),
-	pauseMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/pause`, { method: "POST" }),
-	resumeMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/resume`, { method: "POST" }),
-	cancelMission: (id: string) =>
-		request<void>(`/missions/api/missions/${id}/cancel`, { method: "POST" }),
-	deleteMission: (id: string) =>
-		request<{ status: string; id: string }>(`/missions/api/missions/${id}`, {
-			method: "DELETE",
-		}),
-
-	// Mission artifacts (plain text): architecture, report, services, etc.
-	// Returns empty string when the artifact hasn't been generated yet.
-	getMissionArtifact: (id: string, type: string) =>
-		requestText(`/missions/api/missions/${id}/artifacts/${type}`),
-
-	// Projects
-	listProjects: () =>
-		request<{ projects: Project[] }>("/missions/api/projects").then(
-			(r) => r.projects,
-		),
-	createProject: (name: string, path: string) =>
-		request<{ project: Project }>("/missions/api/projects", {
-			method: "POST",
-			body: JSON.stringify({ name, path }),
-		}).then((r) => r.project),
-	deleteProject: (name: string) =>
-		fetch(`${BASE}/missions/api/projects/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
-
-	// Git introspection for a project's repo.
-	getProjectGitInfo: (name: string) =>
-		request<GitInfo>(`/missions/api/projects/${name}/git-info`),
-	initProjectGit: (name: string) =>
-		request<{ status: string; git: GitInfo }>(
-			`/missions/api/projects/${name}/init-git`,
-			{ method: "POST" },
-		),
-	getFeatureLogs: (missionId: string, featureId: string) =>
-		request<FeatureLogsResponse>(
-			`/missions/api/missions/${missionId}/features/${featureId}/logs`,
-		),
-
+export const toolsApi = {
 	// Models & Agents
 	// Client-side singleflight + TTL. Use force:true on Settings entry to kick
 	// a server-side background revalidate while still returning cache fast.
 	listModels: (opts?: { force?: boolean }) => listModelsCached(opts),
-	listAgents: () => request<AgentsResponse>("/missions/api/opencode/agents"),
+	listAgents: () => request<AgentsResponse>("/api/opencode/agents"),
 	startOpencode: () =>
 		request<{ status: string; message: string; pid?: number }>(
-			"/missions/api/opencode/start",
+			"/api/opencode/start",
 			{ method: "POST" },
 		),
+	opencodeStatus: () =>
+		request<{
+			connected: boolean;
+			source?: string;
+			error?: string;
+		}>("/api/opencode/status"),
 
 	// File system browser
 	browseFS: (path?: string) =>
 		request<BrowseFSResponse>(
-			`/missions/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+			`/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
 		),
 	createFolder: (parentPath: string, name: string) =>
-		request<{ path: string }>("/missions/api/fs/mkdir", {
+		request<{ path: string }>("/api/fs/mkdir", {
 			method: "POST",
 			body: JSON.stringify({ parentPath, name }),
 		}),
 
 	// AI refinement
 	refineGoal: (goal: string, context?: string, model?: string) =>
-		request<{ refined: string }>("/missions/api/refine", {
+		request<{ refined: string }>("/api/refine", {
 			method: "POST",
 			body: JSON.stringify({ goal, context, model }),
 		}),
@@ -304,12 +290,7 @@ export const configApi = {
 			body: JSON.stringify({ content }),
 		}),
 
-	deleteAgent: (name: string) =>
-		fetch(`${BASE}/api/config/agents/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteAgent: (name: string) => del(`/api/config/agents/${name}`),
 
 	// Skills
 	listSkills: () => request<SkillInfo[]>("/api/config/skills"),
@@ -325,24 +306,33 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify({ content }),
 		}),
-	deleteSkill: (name: string) =>
-		fetch(`${BASE}/api/config/skills/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteSkill: (name: string) => del(`/api/config/skills/${name}`),
+	listSkillSurface: (projectDir?: string) =>
+		request<SkillSurface>(`/api/config/skills/surface${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	deleteSurfaceSkill: (path: string, projectDir?: string) =>
+		del(`/api/config/skills/surface?path=${encodeURIComponent(path)}${projectDir ? `&project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	// Plan (dryRun) or apply the skill surface normalization. dedupe also drops
+	// byte-identical copies; paths limits an apply to those planned actions.
+	standardizeSkillSurface: (opts: { dryRun: boolean; dedupe?: boolean; paths?: string[]; projectDir?: string }) => {
+		const q = new URLSearchParams({ dry_run: opts.dryRun ? "1" : "0" });
+		if (opts.dedupe) q.set("dedupe", "1");
+		if (opts.projectDir) q.set("project_dir", opts.projectDir);
+		return request<SkillStandardizeResult>(`/api/config/skills/surface/standardize?${q}`, {
+			method: "POST",
+			body: opts.paths ? JSON.stringify({ paths: opts.paths }) : undefined,
+		});
+	},
 
 	// MCP Servers
 	listMCP: () => request<MCPServer[]>("/api/config/mcp"),
-	updateMCP: (name: string, data: Partial<MCPServer>) =>
+	// url is optional and only meaningful for a remote server: an entry whose
+	// endpoint is per-network (Grafana) ships blank and is filled in here.
+	updateMCP: (name: string, data: { enabled: boolean; url?: string }) =>
 		request<void>(`/api/config/mcp/${name}`, {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteMCP: (name: string) =>
-		fetch(`${BASE}/api/config/mcp/${name}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	deleteMCP: (name: string) => del(`/api/config/mcp/${name}`),
 
 	// Providers
 	listProviders: () =>
@@ -352,12 +342,7 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteProvider: (name: string) =>
-		fetch(`${BASE}/api/config/providers/${name}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteProvider: (name: string) => del(`/api/config/providers/${name}`),
 
 	// Tools. Pass refresh=true to bypass the server cache and force a fresh
 	// rediscovery (used by the resync button after adding a plugin/MCP).
@@ -413,6 +398,34 @@ export const configApi = {
 			method: "PUT",
 			body: JSON.stringify({ content }),
 		}),
+
+	// Azure DevOps integration (routes in internal/control/ado_config.go).
+	// Every mutating endpoint answers with the updated config, so callers
+	// re-render from data.config.
+	getAdoConfig: () => request<AdoConfig>("/api/ado/config"),
+	getAdoCliStatus: () => request<AdoCliStatus>("/api/ado/cli-status"),
+	getAdoPatStatus: () => request<AdoPatStatus>("/api/ado/pat-status"),
+	saveAdoProfile: (name: string, profile: AdoProfile) =>
+		request<{ config: AdoConfig }>("/api/ado/profile", {
+			method: "POST",
+			body: JSON.stringify({ name, profile }),
+		}),
+	deleteAdoProfile: (name: string) =>
+		request<{ config: AdoConfig }>("/api/ado/profile", {
+			method: "DELETE",
+			body: JSON.stringify({ name }),
+		}),
+	saveAdoConfig: (config: AdoConfig) =>
+		request<{ config: AdoConfig }>("/api/ado/config", {
+			method: "POST",
+			body: JSON.stringify(config),
+		}),
+	saveAdoPat: (pat: string) =>
+		request<void>("/api/ado/pat", {
+			method: "POST",
+			body: JSON.stringify({ pat }),
+		}),
+	updateAdoCli: () => request<AdoCliStatus>("/api/ado/cli-update", { method: "POST" }),
 };
 
 // ─── Orchestrator Profiles API ────────────────────────────────────────────────
@@ -438,10 +451,7 @@ export const profilesApi = {
 			method: "PUT",
 			body: JSON.stringify(profile),
 		}),
-	delete: (name: string) =>
-		fetch(`${BASE}/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	delete: (name: string) => del(`/api/profiles/${encodeURIComponent(name)}`),
 	activate: (name: string) =>
 		request<{ active: string }>(`/api/profiles/activate/${encodeURIComponent(name)}`, { method: "POST" }),
 };
@@ -450,15 +460,20 @@ export const profilesApi = {
 
 export const memoriesApi = {
 	// Engram status
-	status: () => request<EngramStatus>("/missions/api/engram/status"),
+	status: () => request<EngramStatus>("/api/engram/status"),
+	startEngram: () =>
+		request<{ status: string; message: string; pid?: number; url?: string }>(
+			"/api/engram/start",
+			{ method: "POST" },
+		),
 
 	// Observations
 	listObservations: (limit = 50) =>
 		request<{ observations: EngramObservation[] }>(
-			`/missions/api/engram/observations?limit=${limit}`,
+			`/api/engram/observations?limit=${limit}`,
 		).then((r) => r.observations ?? []),
 	getObservation: (id: string) =>
-		request<EngramObservation>(`/missions/api/engram/observations/${id}`),
+		request<EngramObservation>(`/api/engram/observations/${id}`),
 	updateObservation: (
 		id: string,
 		data: {
@@ -470,16 +485,11 @@ export const memoriesApi = {
 			topic_key?: string;
 		},
 	) =>
-		request<EngramObservation>(`/missions/api/engram/observations/${id}`, {
+		request<EngramObservation>(`/api/engram/observations/${id}`, {
 			method: "PATCH",
 			body: JSON.stringify(data),
 		}),
-	deleteObservation: (id: string) =>
-		fetch(`/missions/api/engram/observations/${id}`, {
-			method: "DELETE",
-		}).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
-		}),
+	deleteObservation: (id: string) => del(`/api/engram/observations/${id}`),
 	save: (data: {
 		type: string;
 		content: string;
@@ -487,7 +497,7 @@ export const memoriesApi = {
 		scope?: string;
 		project?: string;
 	}) =>
-		request<EngramObservation>("/missions/api/engram/save", {
+		request<EngramObservation>("/api/engram/save", {
 			method: "POST",
 			body: JSON.stringify(data),
 		}),
@@ -495,38 +505,28 @@ export const memoriesApi = {
 	// Search / stats / sessions / timeline / context
 	search: (q: string, limit = 50, type?: string) =>
 		request<{ observations: EngramObservation[] }>(
-			`/missions/api/engram/search?q=${encodeURIComponent(q)}&limit=${limit}${
+			`/api/engram/search?q=${encodeURIComponent(q)}&limit=${limit}${
 				type ? `&type=${encodeURIComponent(type)}` : ""
 			}`,
 		).then((r) => r.observations ?? []),
-	stats: () => request<EngramStats>("/missions/api/engram/stats"),
+	stats: () => request<EngramStats>("/api/engram/stats"),
 	listSessions: (limit = 50) =>
 		request<{ sessions: EngramSession[] }>(
-			`/missions/api/engram/sessions?limit=${limit}`,
+			`/api/engram/sessions?limit=${limit}`,
 		).then((r) => r.sessions ?? []),
-	deleteSession: (id: string) =>
-		fetch(`/missions/api/engram/sessions/${id}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deleteSession: (id: string) => del(`/api/engram/sessions/${id}`),
 	listPrompts: (limit = 100) =>
 		request<{ prompts: EngramPrompt[] }>(
-			`/missions/api/engram/prompts?limit=${limit}`,
+			`/api/engram/prompts?limit=${limit}`,
 		).then((r) => r.prompts ?? []),
-	deletePrompt: (id: string) =>
-		fetch(`/missions/api/engram/prompts/${id}`, { method: "DELETE" }).then(
-			(r) => {
-				if (!r.ok) throw new Error(`${r.status}`);
-			},
-		),
+	deletePrompt: (id: string) => del(`/api/engram/prompts/${id}`),
 	exportAll: async (): Promise<Blob> => {
-		const res = await fetch("/missions/api/engram/export");
+		const res = await fetch("/api/engram/export");
 		if (!res.ok) throw new Error(`${res.status}`);
 		return res.blob();
 	},
 	importData: async (file: File): Promise<EngramImportResult> => {
-		const res = await fetch("/missions/api/engram/import", {
+		const res = await fetch("/api/engram/import", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: file,
@@ -535,28 +535,28 @@ export const memoriesApi = {
 		return res.json();
 	},
 	mergeProjects: (source: string, target: string) =>
-		request<EngramMergeResult>("/missions/api/engram/projects/merge", {
+		request<EngramMergeResult>("/api/engram/projects/merge", {
 			method: "POST",
 			body: JSON.stringify({ source, target }),
 		}),
 
 	runRecallEval: (req: MemoryEvalRequest = {}) =>
-		request<MemoryEvalResult>("/missions/api/engram/memory-evals", {
+		request<MemoryEvalResult>("/api/engram/memory-evals", {
 			method: "POST",
 			body: JSON.stringify(req),
 		}),
 	timeline: (observationId?: string, limit = 50) =>
 		request<{ events: EngramTimelineEvent[] }>(
-			`/missions/api/engram/timeline?limit=${limit}${observationId ? `&observation_id=${encodeURIComponent(observationId)}` : ""}`,
+			`/api/engram/timeline?limit=${limit}${observationId ? `&observation_id=${encodeURIComponent(observationId)}` : ""}`,
 		).then((r) => r.events ?? []),
 	context: (q?: string, limit = 100) =>
 		request<EngramContextResult>(
-			`/missions/api/engram/context?limit=${limit}${
+			`/api/engram/context?limit=${limit}${
 				q ? `&q=${encodeURIComponent(q)}` : ""
 			}`,
 		),
 	saveContext: (text: string) =>
-		request<EngramContextResult>("/missions/api/engram/context", {
+		request<EngramContextResult>("/api/engram/context", {
 			method: "PUT",
 			body: JSON.stringify({ context: text }),
 		}),
@@ -569,19 +569,19 @@ export const memoriesApi = {
 		project?: string;
 	}) =>
 		request<{ run_id: string; status: string }>(
-			"/missions/api/engram/consolidations",
+			"/api/engram/consolidations",
 			{ method: "POST", body: JSON.stringify(data) },
 		),
 	getConsolidation: (id: string) =>
-		request<ConsolidationRun>(`/missions/api/engram/consolidations/${id}`),
+		request<ConsolidationRun>(`/api/engram/consolidations/${id}`),
 	applyConsolidation: (id: string, sel: ApplySelection) =>
 		request<{ status: string }>(
-			`/missions/api/engram/consolidations/${id}/apply`,
+			`/api/engram/consolidations/${id}/apply`,
 			{ method: "POST", body: JSON.stringify(sel) },
 		),
 	discardConsolidation: (id: string) =>
 		request<{ status: string }>(
-			`/missions/api/engram/consolidations/${id}/discard`,
+			`/api/engram/consolidations/${id}/discard`,
 			{ method: "POST" },
 		),
 };
@@ -603,15 +603,40 @@ export const workflowApi = {
 			method: "PUT",
 			body: JSON.stringify(wf),
 		}),
-	delete: (name: string) =>
-		fetch(`${BASE}/api/workflows/${name}`, { method: "DELETE" }).then((r) => {
-			if (!r.ok) throw new Error(`${r.status}`);
+	// Delete the stored workflow. unexport (default true) also removes the
+	// exported implementation — the /<name> command and its agents — so the
+	// delete leaves no orphans behind.
+	delete: (name: string, unexport = true) =>
+		del(`/api/workflows/${name}${unexport ? '?unexport=true' : ''}`),
+	// Overwrite the stored design with the bundled seed (the server backs up
+	// the current design first). The seed pass never overwrites existing
+	// installs, so this is how seed evolution reaches them.
+	applySeed: (name: string) =>
+		request<Workflow>(`/api/workflows/${name}/seed-apply`, {
+			method: "POST",
 		}),
 	rename: (oldName: string, newName: string) =>
 		request<Workflow>(`/api/workflows/${oldName}`, {
 			method: "PATCH",
 			body: JSON.stringify({ name: newName }),
 		}),
+
+	// Implemented workflows whose design no longer exists (leftovers of deletes
+	// made before uninstall existed). Clean each with uninstall(name).
+	orphans: () => request<{ orphans: string[] }>("/api/workflows/orphans"),
+
+	// Uninstall the exported artifacts (slash command + agents) for the given
+	// target/env, keeping the stored design. Returns the removed file list.
+	uninstall: (name: string, target = "opencode", profile?: string) => {
+		const params = new URLSearchParams();
+		if (target && target !== "opencode") params.set("target", target);
+		if (profile !== undefined) params.set("profile", profile);
+		const qs = params.toString();
+		return request<WorkflowExportPlan>(
+			`/api/workflows/${name}/export${qs ? `?${qs}` : ""}`,
+			{ method: "DELETE" },
+		);
+	},
 
 	// Import  JSON. Accepts raw JSON or {json, name}.
 	import: (raw: unknown, name?: string) =>
@@ -629,10 +654,14 @@ export const workflowApi = {
 
 	// Export. Dry-run (preview the file plan) by default; pass apply:true to
 	// actually write the opencode artifacts to ~/.config/opencode.
-	export: (name: string, apply = false, target = "opencode") => {
+	// profile: undefined = the shared Settings scope (withScope), "" = global
+	// explicitly (an empty profile= also stops withScope from adding one),
+	// "<env>" = write into that environment's opencode config.
+	export: (name: string, apply = false, target = "opencode", profile?: string) => {
 		const params = new URLSearchParams();
 		if (apply) params.set("apply", "true");
 		if (target && target !== "opencode") params.set("target", target);
+		if (profile !== undefined) params.set("profile", profile);
 		const qs = params.toString();
 		return request<WorkflowExportPlan>(
 			`/api/workflows/${name}/export${qs ? `?${qs}` : ""}`,
@@ -733,7 +762,7 @@ export interface McpHealthResponse {
 }
 
 
-// ─── Team / Chat API ──────────────────────────────────────────────────────
+// ─── Team API ─────────────────────────────────────────────────────────────
 
 export const teamApi = {
 	steerTeammate: (memberId: string, message: string) =>

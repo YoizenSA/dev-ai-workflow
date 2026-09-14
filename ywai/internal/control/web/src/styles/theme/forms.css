@@ -3,11 +3,13 @@
    ============================================================ */
 .field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .field-label {
-  font-size: 0.74rem; font-weight: 600; color: var(--text-muted);
-  letter-spacing: 0.02em; text-transform: uppercase;
+  font-size: 0.74rem; font-weight: 650; color: var(--text-soft);
+  letter-spacing: 0.04em; text-transform: uppercase;
 }
-.field-help { font-size: 0.74rem; color: var(--text-faint); }
+.field-help { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
 .field-help.error { color: var(--danger); }
+/* Legacy alias used across settings panels — same look as .field-help. */
+.field-hint { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
 
 /* "Type <name> to confirm" instruction: a legible sentence, NOT the uppercase
    tenuous field-label (which flattens the embedded name chip to the same grey).
@@ -101,6 +103,9 @@ textarea::-webkit-resizer { background: transparent; }
   gap: 0;
   border-bottom: 2px solid var(--panel-border);
   padding-bottom: 0;
+  /* Wrap on narrow viewports: a hidden-scrollbar overflow hides the last
+     tabs with no hint they exist. */
+  flex-wrap: wrap;
   overflow-x: auto;
   scrollbar-width: none;
 }

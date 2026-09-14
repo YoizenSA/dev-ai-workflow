@@ -79,7 +79,7 @@ interface SessionAnalyticsData {
   models?: NamedCount[];
 }
 
-const DAY_OPTIONS = [
+export const DAY_OPTIONS = [
   { value: 7, label: "7 days" },
   { value: 30, label: "30 days" },
   { value: 90, label: "90 days" },
@@ -185,7 +185,7 @@ function ActivityChart({ days }: { days: DayCount[] }) {
   );
 }
 
-export default function SessionAnalytics({ autoRun = true }: { autoRun?: boolean }) {
+export default function SessionAnalytics({ autoRun = true, env = "" }: { autoRun?: boolean; env?: string }) {
   const [days, setDays] = useState(30);
   const [projectId, setProjectId] = useState("");
   const [data, setData] = useState<SessionAnalyticsData | null>(null);
@@ -204,6 +204,7 @@ export default function SessionAnalytics({ autoRun = true }: { autoRun?: boolean
         const params = new URLSearchParams();
         params.set("days", String(days));
         if (projectId) params.set("projectId", projectId);
+        if (env) params.set("env", env);
         // Force-regenerate only when the user clicks Run evaluation.
         if (opts?.refresh) {
           params.set("refresh", "1");
@@ -226,7 +227,7 @@ export default function SessionAnalytics({ autoRun = true }: { autoRun?: boolean
         setLoading(false);
       }
     },
-    [days, projectId],
+    [days, projectId, env],
   );
 
   // Auto-load on mount / filter change (cached ok). Button always force-refreshes.
@@ -234,7 +235,7 @@ export default function SessionAnalytics({ autoRun = true }: { autoRun?: boolean
     if (!autoRun && !hasRun) return;
     void fetchData({ refresh: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, projectId, autoRun]);
+  }, [days, projectId, autoRun, env]);
 
   const [allProjects, setAllProjects] = useState<ProjectStat[]>([]);
   useEffect(() => {

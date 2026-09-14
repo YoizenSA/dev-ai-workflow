@@ -46,7 +46,7 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | Subcommand | What it does | When to use |
 |---|---|---|
 | `test` | Run all tests (`go test ./... -v`) | Before every commit |
-| `test-ui` | Run only control-server UI tests (`go test ./internal/kanban/... ./internal/control/... -v`) | After touching UI/server code |
+| `test-ui` | Run only control-server UI tests (`go test ./internal/control/... -v`) | After touching UI/server code |
 | `build` | Quick build WITHOUT embedded data | Fast iteration during dev |
 | `build-full` | Full build WITH embedded skills/agents | Before pushing |
 | `install` | Build-full + install to `$GOPATH/bin/ywai` | To test with opencode |
@@ -54,6 +54,9 @@ The `dev.sh` script wraps all local build/test workflows so you don't have to re
 | `hooks` | Install git hooks so lint fails locally | Once per clone |
 | `check` | Full pipeline: lint → test → build-full → verify → install | **Before pushing to main** |
 | `ui` | Build + install + start the control UI on port 5768 | To visually test the UI |
+| `watch` | Hot reload: air rebuilds `ywai-dev.exe` + restarts the server on every `.go` change | Go dev loop |
+| `web` | Vite dev server with HMR on port 3000, API proxied to 5768 | Frontend dev loop |
+| `docker-matrix [dry\|net\|nightly]` | Docker lifecycle matrix for install/update/uninstall (default dry; skips cleanly without Docker) | Testing install lifecycle |
 | `mcp-test` | Build + install + send test JSON-RPC to MCP daemon | After changing MCP protocol |
 | `version` | Print the current dev version string | Debug |
 | `help` | Show all available subcommands | Reference |
@@ -86,6 +89,50 @@ cd ywai && bash scripts/dev.sh ui
 # Opens http://localhost:5768
 ```
 
+**Hot reload dev loop (exe + web):**
+```bash
+cd ywai && bash scripts/dev.sh watch   # terminal 1: rebuilds + restarts the server on .go changes
+cd ywai && bash scripts/dev.sh web     # terminal 2: vite HMR on http://localhost:3000
+```
+The dev server (`ywai-dev.exe`, no embedded tag) serves the web UI from
+`internal/control/web/dist`, so frontend edits need only a browser refresh;
+`.go` edits are what trigger rebuild+restart. With the vite dev server
+(`web`), frontend edits are live without refresh (`/api` and `/ws` proxy to
+5768). One-time setup: `go install github.com/air-verse/air@latest`.
+
+**Rebuild + re-seed after editing skills/agents (Windows dev machine) — the
+sequence that works, in this order:**
+```bash
+# 1. Stop the watcher (air) first: it holds handles over ywai/cmd/ywai/embedded_data
+#    and prepare-embedded.sh dies with "Device or resource busy".
+# 2. Rebuild the binary with the new embedded data. Call Git Bash explicitly:
+#    plain `bash` here is WSL and feeds /mnt/d/... paths to Windows npm (ENOENT).
+cd ywai && '/c/Program Files/Git/bin/bash.exe' scripts/dev.sh install
+# 3. Re-seed: dev.sh install only replaces the binary; agents read SEEDED COPIES in
+#    ~/.config/opencode/skills/. --agent is required non-interactively; the agent id
+#    is `opencode` even though the binary is opencode2.exe (`opencode2` is NOT valid).
+ywai install --agent opencode
+# 4. Verify the seed instead of trusting the exit:
+grep -c "<pre>" ~/.config/opencode/skills/ado/SKILL.md   # grep whatever you changed
+# 5. Hot reload back on (air rebuilds ywai-dev.exe; serve kills whoever holds 5768).
+'/c/Program Files/Git/bin/bash.exe' scripts/dev.sh watch
+```
+
+Gotchas learned the hard way:
+
+- The install can take >10 min through an agent tool pipe and report a false
+  timeout — check the outcome (binary version, seeded files), not the exit code.
+- A `ywai.exe serve --no-update` process alive after install is the control
+  server the installer restarted, not a hung build.
+- In dev mode `ywai-dev.exe` reads skills from disk; it is the seeded copies
+  under `~/.config/opencode/skills/` that lag behind until step 3.
+- Start `watch` DETACHED when an agent does it: a background shell is a child
+  of the agent session, and an opencode server restart cancels it (watch died
+  this way twice). Durable variant, logging to gitignored `ywai/tmp/`:
+  `Start-Process 'C:\Program Files\Git\bin\bash.exe' -ArgumentList './scripts/dev.sh','watch' -WorkingDirectory <ywai-root> -WindowStyle Hidden -RedirectStandardOutput tmp/air-watch.log -RedirectStandardError tmp/air-watch.err`.
+  After a crash+relaunch, TWO `air` processes can coexist and race on the next
+  rebuild — `Get-Process air | Stop-Process -Force` before starting a new one.
+
 ### Notes
 
 - The script auto-detects the project root (looks for `go.mod` with module `github.com/Yoizen/dev-ai-workflow/ywai`), so you can run it from any subdirectory
@@ -111,7 +158,7 @@ cd ywai && bash scripts/dev.sh ui
 | `--agent, -a` | Specific agent (auto-detects if omitted) |
 | `--dry-run` | Preview changes without applying |
 | `--mcp` | Install Microsoft Learn MCP (for opencode) |
-| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode/kilocode plugin array + Claude Code marketplace; default on (`--ponytail=false` to skip) |
+| `--ponytail` | Install ponytail (YAGNI / minimal-code): OpenCode plugin array + Claude Code marketplace; default on (`--ponytail=false` to skip) |
 
 ---
 
@@ -125,7 +172,6 @@ cd ywai && bash scripts/dev.sh ui
 | Gemini CLI | `gemini-cli` | Binary in PATH |
 | VS Code Copilot | `vscode-copilot` | Binary in PATH |
 | Codex | `codex` | Binary in PATH |
-| Kilo Code | `kilocode` | Binary in PATH |
 | Kimi Code | `kimi` | Binary in PATH |
 | Qwen Code | `qwen-code` | Binary in PATH |
 | Antigravity | `antigravity` | Config dir `~/.gemini/antigravity/` |
@@ -166,7 +212,6 @@ ywai/
 │   ├── git-commit/
 │   ├── playwright/
 │   ├── react-19/
-│   ├── tailwind-4/
 │   ├── typescript/
 │   └── yz-ui/
 ├── go.mod
@@ -209,19 +254,19 @@ A visual multi-agent workflow editor that designs workflows on a React Flow canv
 
 ## Available Skills
 
-| Skill | Technology |
+| Skill | Domain |
 |:---|:---|
-| `typescript` | TypeScript |
-| `react-19` | React 19 |
-| `tailwind-4` | Tailwind CSS 4 |
-| `biome` | Biome (linter/formatter) |
-| `angular/*` | Angular (core, forms, performance, architecture) |
-| `dotnet` | .NET / C# |
-| `devops` | Azure Pipelines, Helm charts, Kubernetes |
-| `playwright` | E2E testing (browser APIs, frameworks, CI/CD) |
-| `git-commit` | Conventional commits |
-| `ywai` | Agents enable/disable MCP, switch profiles, enable groups |
-| `work-ledger` | Long-horizon task ledger (gate, seams, ship, resume) |
+| `angular` / `yz-ui` | Frontend: Angular, Yoizen design system |
+| `tdd` / `testing-expert` / `playwright-e2e-testing` / `condition-based-waiting` | Testing: TDD loop, test quality, E2E, anti-flaky |
+| `devops` / `docker` | Azure Pipelines, Helm, Kubernetes, Dockerfiles |
+| `git-commit` | Commits and branching |
+| `delegate-opencode2` | Delegate a bounded task to the local `opencode2` CLI, then verify it |
+| `ado` | Azure DevOps PRs and work items via the `ado` CLI |
+| `codebase-design` / `diagnosing-bugs` / `improve-codebase-architecture` | Module design, bug diagnosis, architecture review |
+| `adr-skill` / `diks` / `writing-great-skills` | ADRs, infra notes, skill authoring |
+| `learn-ywai` / `teach` / `i-have-adhd` | Operate and learn ywai; output shaping |
+
+Full list with triggers: `docs/src/content/docs/skills/reference.mdx`. Every skill dir needs a `.ywai-extra` marker or `ywai install` skips it and the cleanup pass deletes it.
 
 ---
 

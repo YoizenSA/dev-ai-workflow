@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	mcppkg "github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
 
 // mcpConfigKey returns the top-level key for MCP servers based on agent format.
@@ -33,7 +34,7 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 
 	var removed []string
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcp)
+		servers := mcppkg.CollectOpenCodeServers(mcp)
 		for _, id := range config.RetiredMCPServers {
 			if _, exists := servers[id]; exists {
 				delete(servers, id)
@@ -43,7 +44,7 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 		if len(removed) == 0 {
 			return nil, nil
 		}
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	} else {
 		for _, id := range config.RetiredMCPServers {
 			if _, exists := mcp[id]; exists {
@@ -63,50 +64,112 @@ func RemoveRetiredMCPs(configPath, agentName string) ([]string, error) {
 	return removed, nil
 }
 
-// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's config file.
-func InstallMicrosoftLearnMCP(configPath, agentName string) error {
+// installMCPEntry merges one server definition into the agent's config,
+// writing the shape that format reads. buildEntry receives the config key
+// ("mcpServers" for claude-code/pi, "mcp" for opencode) so one server can
+// carry a per-format transport. An existing entry always wins: a user's own
+// settings are never overwritten by a re-install.
+func installMCPEntry(configPath, agentName, id string, buildEntry func(configKey string) map[string]any) error {
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
 
 	key := mcpConfigKey(agentName)
+	entry := buildEntry(key)
+	mcp, _ := root[key].(map[string]any)
+	if mcp == nil {
+		mcp = map[string]any{}
+	}
 
 	if key == "mcpServers" {
-		// Claude Code / pi format
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
-			root[key] = mcp
+		if _, exists := mcp[id]; !exists {
+			mcp[id] = entry
 		}
-		if _, exists := mcp["microsoft-learn"]; !exists {
-			mcp["microsoft-learn"] = map[string]any{
-				"command": "npx",
-				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
-			}
-			root[key] = mcp
-		}
+		root[key] = mcp
 	} else {
-		// OpenCode v2: mcp.servers.<id> (type/url; no "enabled").
-		mcp, _ := root[key].(map[string]any)
-		if mcp == nil {
-			mcp = map[string]any{}
+		servers := mcppkg.CollectOpenCodeServers(mcp)
+		if _, exists := servers[id]; !exists {
+			servers[id] = entry
 		}
-		servers := collectOpenCodeServers(mcp)
-		if _, exists := servers["microsoft-learn"]; !exists {
-			servers["microsoft-learn"] = map[string]any{
-				"type": "remote",
-				"url":  "https://learn.microsoft.com/api/mcp",
-			}
-		}
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	}
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
-
 	return nil
+}
+
+// remoteEntry builds a remote-server entry in the spelling each config format
+// reads: claude-code/pi say "http", opencode says "remote". Disabled writes
+// the format's own off flag so an endpoint-less entry is never probed.
+func remoteEntry(configKey, url string, disabled bool) map[string]any {
+	if configKey == "mcpServers" {
+		entry := map[string]any{"type": "http", "url": url}
+		if disabled {
+			entry["disabled"] = true
+		}
+		return entry
+	}
+	entry := map[string]any{"type": "remote", "url": url}
+	if disabled {
+		entry["enabled"] = false
+	}
+	return entry
+}
+
+// catalogEntry fetches a catalog entry by id. An unknown id is an installer
+// bug, not a user problem, so it errors instead of silently writing nothing.
+func catalogEntry(id string) (mcppkg.CatalogEntry, error) {
+	entry, ok := mcppkg.CatalogByID(id)
+	if !ok {
+		return mcppkg.CatalogEntry{}, fmt.Errorf("unknown MCP catalog id %q", id)
+	}
+	return entry, nil
+}
+
+// argvAny copies a string argv into []any, the type JSON configs round-trip.
+func argvAny(argv []string) []any {
+	out := make([]any, len(argv))
+	for i, s := range argv {
+		out[i] = s
+	}
+	return out
+}
+
+// InstallMetaDevToolsMCP adds Meta Developer Tools (manage Meta apps, webhooks,
+// compliance, app status, developer docs) to the agent's config. The endpoint
+// is catalog data; authentication is the client's OAuth sign-in, not something
+// ywai can do — the endpoint answers 401 until the user signs in from their
+// agent, which is expected.
+func InstallMetaDevToolsMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("meta-devtools")
+	if err != nil {
+		return err
+	}
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		return remoteEntry(configKey, entry.URL, false)
+	})
+}
+
+// InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's
+// config file. The endpoint is catalog data; claude-code/pi run the npm stdio
+// server instead of the remote one.
+func InstallMicrosoftLearnMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("microsoft-learn")
+	if err != nil {
+		return err
+	}
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		if configKey == "mcpServers" {
+			return map[string]any{
+				"command": "npx",
+				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
+			}
+		}
+		return remoteEntry(configKey, entry.URL, false)
+	})
 }
 
 // RemoveVisionMCP removes the legacy mcp-vision MCP server entry from the
@@ -124,12 +187,12 @@ func RemoveVisionMCP(configPath, agentName string) error {
 		return nil
 	}
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcp)
+		servers := mcppkg.CollectOpenCodeServers(mcp)
 		if _, exists := servers["mcp-vision"]; !exists {
 			return nil
 		}
 		delete(servers, "mcp-vision")
-		root[key] = nestOpenCodeMCP(mcp, servers)
+		root[key] = mcppkg.WriteOpenCodeMCP(mcp, servers)
 	} else {
 		if _, exists := mcp["mcp-vision"]; !exists {
 			return nil
@@ -144,65 +207,45 @@ func RemoveVisionMCP(configPath, agentName string) error {
 	return nil
 }
 
-func openCodeReservedMCPKey(k string) bool {
-	return k == "servers" || k == "timeout"
-}
-
-func collectOpenCodeServers(mcp map[string]any) map[string]any {
-	out := map[string]any{}
-	if mcp == nil {
-		return out
+// InstallChromeDevToolsMCP registers the Chrome DevTools MCP server in the
+// agent's config, leaving an existing entry untouched.
+//
+// It ships by default rather than behind a flag because the scenario-runner
+// agent needs a browser to run a UI scenario at all: without it the agent
+// installs fine and then cannot do the one thing it exists for.
+func InstallChromeDevToolsMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("chrome-devtools")
+	if err != nil {
+		return err
 	}
-	if nested, ok := mcp["servers"].(map[string]any); ok {
-		for k, v := range nested {
-			out[k] = v
-		}
-	}
-	for k, v := range mcp {
-		if openCodeReservedMCPKey(k) {
-			continue
-		}
-		if _, ok := v.(map[string]any); ok {
-			if _, exists := out[k]; !exists {
-				out[k] = v
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		if configKey == "mcpServers" {
+			// Claude Code / pi split the argv into command + args.
+			return map[string]any{
+				"command": entry.Command[0],
+				"args":    argvAny(entry.Command[1:]),
 			}
 		}
-	}
-	return out
+		// OpenCode: mcp.servers.<id> with type "local" and a full argv.
+		return map[string]any{"type": "local", "command": argvAny(entry.Command)}
+	})
 }
 
-func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	clean := map[string]any{}
-	for id, raw := range servers {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			clean[id] = raw
-			continue
-		}
-		next := make(map[string]any, len(entry))
-		for k, v := range entry {
-			next[k] = v
-		}
-		if enabled, ok := next["enabled"].(bool); ok {
-			delete(next, "enabled")
-			if !enabled {
-				next["disabled"] = true
-			}
-		}
-		clean[id] = next
+// InstallGrafanaMCP registers the Grafana MCP server, disabled and with no
+// endpoint.
+//
+// A Grafana MCP lives on the user's own network, so ywai has no URL to write
+// and shipping one in a public repo is out of the question. Installing it blank
+// but disabled is what makes it visible in Settings, where the URL is filled in
+// and the server switched on — a catalog entry nobody installs is a server
+// nobody discovers. Disabled matters: an enabled entry with no URL is a server
+// the agent tries and fails to reach on every start.
+func InstallGrafanaMCP(configPath, agentName string) error {
+	entry, err := catalogEntry("grafana")
+	if err != nil {
+		return err
 	}
-	out := map[string]any{"servers": clean}
-	if mcp == nil {
-		return out
-	}
-	for k, v := range mcp {
-		if k == "servers" {
-			continue
-		}
-		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-			continue
-		}
-		out[k] = v
-	}
-	return out
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		return remoteEntry(configKey, entry.URL, true)
+	})
 }

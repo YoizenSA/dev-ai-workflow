@@ -1,0 +1,13 @@
+{
+  "name": "hard-missed-soft-hits",
+  "taskId": "golden-mixed",
+  "response": "config.load and shutdown are both visible, while the retry machinery never appears in this trace.",
+  "expected": {
+    "hits": ["config.load", "graceful shutdown"],
+    "missed": ["retryLoop"],
+    "total": 3,
+    "gotHard": false,
+    "answered": true,
+    "weighted": 0.5
+  }
+}

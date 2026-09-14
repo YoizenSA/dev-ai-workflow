@@ -93,13 +93,13 @@ graph TD
 - TDD/review follow **risk policy** (and user/project strict TDD), not file count.
 - Fan-out: multiple `@dev` only for disjoint workstreams.
 - Subagents end with a compact JSON `handoff` fence (`verified` after write/test work).
-- **`@dev`:** no `git commit`/`push` (OpenCode). In **solo**, orchestrator may local-commit; no push unless the user asks.
+- **`@dev`:** `git commit`/`push` only when the user asks. In **solo**, orchestrator may local-commit; no push unless the user asks.
 - In **full**, orchestrator does not edit product code — writes go through subagents.
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
 The orchestrator uses a **capability model** with per-platform adapters. On OpenCode
-v2 it delegates via `delegate` (`mode: "sync"` or async default) and supervises
-with `delegation_*`. `delegate` is the runtime delegation tool
+v2 it delegates via `delegate` (returns an ID immediately) and supervises
+with `delegation_*`. There is no `mode` argument; wait for `<task-notification>` then `delegation_read` when the next step needs the result. `delegate` is the runtime delegation tool
 (permission action `subagent` still gates who may be launched). It asks decisions
 with `question` and tracks plans with `todowrite`. On Claude Code it uses
 `Agent`/`Task` and `TaskCreate`/`Update`. On PI.dev it uses host subagent tools.
@@ -175,7 +175,6 @@ Skills to link when this agent is active (one per line):
 ```
 typescript
 react-19
-tailwind-4
 ```
 
 ## Usage with ywai

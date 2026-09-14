@@ -4,8 +4,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_DIR="$REPO_ROOT/internal/control/web"
 EMBED_DIR="$REPO_ROOT/cmd/ywai/embedded_data"
-BA_DIR="$REPO_ROOT/plugins/background-agents-v2"
-BA_BUNDLE="$BA_DIR/dist/background-agents-v2.js"
+BA_DIR="$REPO_ROOT/plugins/background-agents"
+BA_BUNDLE="$BA_DIR/dist/background-agents.js"
 VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
@@ -38,20 +38,23 @@ if ! command -v bun >/dev/null 2>&1; then
 fi
 if command -v bun >/dev/null 2>&1; then
     echo "Building background-agents plugin (bun bundle)…"
-    # --frozen-lockfile: CI runs a different bun than most devs, and a plain
-    # install rewrites bun.lock. That leaves the tree dirty and GoReleaser
-    # refuses to release ("git is in a dirty state"), which is what broke the
-    # v8.24.0-beta.1 release.
-    bun install --frozen-lockfile --cwd "$BA_DIR"
-    bun build "$BA_DIR/src/index.ts" \
+    bun install --cwd "$BA_DIR"
+    bun build "$BA_DIR/src/plugin/background-agents.ts" \
         --outfile "$BA_BUNDLE" --target node
     echo "Building vision-bridge plugin (bun bundle)…"
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
     echo "Building advisor plugin (bun bundle)…"
+    # Advisor imports `tool` as a value from @opencode-ai/plugin. A type-only
+    # import (vision-bridge) can bundle without node_modules; this cannot.
+    # bun install here is what background-agents already does — CI checkouts
+    # have no plugins/advisor/node_modules.
+    bun install --cwd "$AD_DIR"
+    # No --external: envs copy this bundle into config dirs without
+    # node_modules, where a bare @opencode-ai/plugin import fails to load.
+    # plugins/advisor/test/bundle.test.ts pins that the dist is self-contained.
     bun build "$AD_DIR/src/index.ts" \
-        --outfile "$AD_BUNDLE" --target node \
-        --external zod --external @opencode-ai/plugin
+        --outfile "$AD_BUNDLE" --target node
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then
@@ -67,7 +70,7 @@ elif [ -f "$BA_BUNDLE" ]; then
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
     echo "       The background-agents plugin is required; refusing to ship a release without it." >&2
-    echo "       Install bun (https://bun.sh) or commit plugins/background-agents-v2/dist/background-agents-v2.js." >&2
+    echo "       Install bun (https://bun.sh) or commit plugins/background-agents/dist/background-agents.js." >&2
     exit 1
 fi
 
@@ -82,18 +85,26 @@ cp -a "$REPO_ROOT/skills/." "$EMBED_DIR/skills/"
 
 # Official Astro MDX lives in the repo docs/ site. Bundle a copy inside
 # learn-ywai so /learn-ywai can teach without the website or a checkout.
+# The tour is blind without these pages, so a missing bundle is a hard error
+# — never ship a binary whose /learn-ywai cannot read a single .mdx.
 DOCS_SRC="$REPO_ROOT/../docs/src/content/docs"
 LEARN_DOCS="$EMBED_DIR/skills/learn-ywai/references/docs"
-if [ -d "$DOCS_SRC" ] && [ -d "$EMBED_DIR/skills/learn-ywai" ]; then
-    mkdir -p "$LEARN_DOCS"
-    cp -a "$DOCS_SRC/." "$LEARN_DOCS/"
-    echo "Bundled official docs into learn-ywai"
+if [ ! -d "$DOCS_SRC" ]; then
+    echo "ERROR: official docs not found at $DOCS_SRC; /learn-ywai would ship blind." >&2
+    exit 1
 fi
+if [ ! -d "$EMBED_DIR/skills/learn-ywai" ]; then
+    echo "ERROR: skill dir $EMBED_DIR/skills/learn-ywai missing; docs have nowhere to go." >&2
+    exit 1
+fi
+mkdir -p "$LEARN_DOCS"
+cp -a "$DOCS_SRC/." "$LEARN_DOCS/"
+echo "Bundled official docs into learn-ywai"
 cp -a "$REPO_ROOT/agents/." "$EMBED_DIR/agents/"
 cp -a "$REPO_ROOT/workflows/." "$EMBED_DIR/workflows/"
 cp -a "$WEB_DIR/dist/." "$EMBED_DIR/ui/"
 if [ -f "$BA_BUNDLE" ]; then
-    cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents-v2.js"
+    cp -a "$BA_BUNDLE" "$EMBED_DIR/plugins/background-agents.js"
 fi
 if [ -f "$AD_BUNDLE" ]; then
     cp -a "$AD_BUNDLE" "$EMBED_DIR/plugins/advisor.js"

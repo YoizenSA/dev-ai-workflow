@@ -15,11 +15,11 @@
   // Install Microsoft Learn MCP (for opencode)
   "mcp": false,
 
-  // Install ponytail plugin (opencode/kilocode): YAGNI / minimal-code mode
+  // Install ponytail plugin (opencode): YAGNI / minimal-code mode
   "ponytail": true,
 
   // Agent groups to install (besides core, which is always included)
   // Add group names here to install them by default.
-  // Example: ["social-refactor", "experiment"]
+  // Example: ["qa-automation", "experiment"]
   "groups": []
 }

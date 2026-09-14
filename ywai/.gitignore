@@ -1,3 +1,10 @@
 # Build artifacts
 bin/
 embedded_data/
+ywai
+ywai.exe
+ywai-dev.exe
+ywai-new.exe
+
+# air hot-reload scratch dir
+tmp/

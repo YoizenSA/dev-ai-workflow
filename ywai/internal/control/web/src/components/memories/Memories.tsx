@@ -16,6 +16,9 @@ import ConsolidationModal from './ConsolidationModal'
 import SettingsModal from './SettingsModal'
 import './Memories.css'
 
+// The search shortcut hint must match the platform: ⌘K on macOS, Ctrl+K elsewhere.
+const SEARCH_HINT = /Mac/i.test(navigator.platform) ? '⌘K' : 'Ctrl+K'
+
 type SubTab =
 	| 'memories'
 	| 'sessions'
@@ -116,6 +119,9 @@ export default function Memories() {
 		loading,
 		loadingPrompts,
 		fetchStatus,
+		startEngram,
+		startingEngram,
+		startEngramError,
 		fetchObservations,
 		applyFilters,
 		setFilter,
@@ -133,7 +139,7 @@ export default function Memories() {
 	const handleWSMessage = useCallback((msg: WSMessage) => {
 		useMemoriesStore.getState().handleWSMessage(msg)
 	}, [])
-	useWebSocket('/missions/engram/ws', handleWSMessage)
+	useWebSocket('/api/engram/ws', handleWSMessage)
 
 	// Initial load + tab-driven loads
 	useEffect(() => {
@@ -362,9 +368,21 @@ export default function Memories() {
 			</header>
 
 			{!connected && (
-				<div className="alert alert-warning">
-					Engram is not available. Initialize it with{' '}
-					<code>engram serve</code>.
+				<div className="alert alert-warning engram-offline-row">
+					<span>
+						Engram is not available. Initialize it with{' '}
+						<code>engram serve</code>.
+					</span>
+					<button
+						className="btn btn-accent btn-sm"
+						onClick={() => void startEngram()}
+						disabled={startingEngram}
+					>
+						{startingEngram ? 'Starting…' : 'Start in background'}
+					</button>
+					{startEngramError && (
+						<span className="engram-start-error">{startEngramError}</span>
+					)}
 				</div>
 			)}
 
@@ -425,7 +443,7 @@ export default function Memories() {
 					<input
 						ref={searchInputRef}
 						className="input memories-search"
-						placeholder="search memories…  (⌘K)"
+						placeholder={`search memories…  (${SEARCH_HINT})`}
 							value={filters.query}
 							onChange={(e) => setFilter('query', e.target.value)}
 							onKeyDown={(e) => {

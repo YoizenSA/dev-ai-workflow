@@ -15,7 +15,7 @@ import (
 type runRecord struct {
 	Workflow  string    `json:"workflow"`
 	RunID     string    `json:"runId"`
-	Status    string    `json:"status"` // running | done | error | cancelled
+	Status    string    `json:"status"` // running | done | error
 	ExitCode  int       `json:"exitCode,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	StartedAt time.Time `json:"startedAt"`

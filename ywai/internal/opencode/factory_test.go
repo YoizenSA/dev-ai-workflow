@@ -16,8 +16,8 @@ func TestDefaultClient_ServerFirst(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		// Return agents for ListAgents
-		if r.URL.Path == "/agent" {
+		// Return agents for ListAgents (v2 serves them under /api/agent)
+		if r.URL.Path == "/api/agent" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "server-agent"},
@@ -145,7 +145,7 @@ func TestFactory_WorksWithLocalConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := NewLocalClientWithPaths(configPath, agentsDir)
+	c := newLocalClientWithPaths(configPath, agentsDir)
 	ctx := context.Background()
 
 	models, err := c.ListModels(ctx)

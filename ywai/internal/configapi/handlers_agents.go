@@ -13,6 +13,7 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	userconfig "github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 )
 
 // GET /api/config/agents
@@ -33,11 +34,8 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		data, readErr := os.ReadFile(configPath)
 		if readErr == nil {
-			var cfg struct {
-				Agent map[string]json.RawMessage `json:"agent"`
-			}
-			if json.Unmarshal(data, &cfg) == nil && cfg.Agent != nil {
-				for name, raw := range cfg.Agent {
+			if agentMap, ok := lookupAgentMap(data); ok {
+				for name, raw := range agentMap {
 					var a struct {
 						Mode string `json:"mode"`
 					}
@@ -92,11 +90,8 @@ func collectAgentNames() map[string]bool {
 
 	if configPath, err := opencodeConfigPath(); err == nil {
 		if data, err := os.ReadFile(configPath); err == nil {
-			var cfg struct {
-				Agent map[string]json.RawMessage `json:"agent"`
-			}
-			if json.Unmarshal(data, &cfg) == nil {
-				for name := range cfg.Agent {
+			if agentMap, ok := lookupAgentMap(data); ok {
+				for name := range agentMap {
 					names[name] = true
 				}
 			}
@@ -202,7 +197,7 @@ func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The permission: block is owned by PutAgentPermissions, not this handler.
+	// The permissions block is owned by PutAgentPermissions, not this handler.
 	// Re-apply the on-disk permissions onto the incoming content so a stale
 	// frontmatter coming from the client cannot overwrite toggles made via the
 	// permissions API in between load and save.
@@ -211,7 +206,7 @@ func (h *Handlers) PutAgent(w http.ResponseWriter, r *http.Request) {
 		fm, _ := parseFrontmatter(string(existing))
 		currentPerms := extractPermissionsFromFrontmatter(fm)
 		if len(currentPerms) > 0 {
-			finalContent = updatePermissionsInFrontmatter(body.Content, currentPerms)
+			finalContent = updatePermissionsInFrontmatter(body.Content, name, currentPerms)
 		}
 	}
 
@@ -449,7 +444,7 @@ func (h *Handlers) PutAgentPermissions(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		updated := updatePermissionsInFrontmatter(string(mdContent), body)
+		updated := updatePermissionsInFrontmatter(string(mdContent), name, body)
 		_ = agents.WriteAgentBackup(mdPath, mdContent)
 		if err := os.WriteFile(mdPath, []byte(updated), 0644); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -638,7 +633,14 @@ func ApplyAgentModel(name, model string) bool {
 }
 
 // agentMarkdownSearchDirs returns host dirs where ywai writes agent .md files.
+// Under profile scope (YWAI_PROFILE set by the env sandbox or the ?profile=
+// middleware) only the profile agents dir is returned: a scoped model apply
+// must never rewrite the global install. Callers outside scope keep the
+// historical multi-host behavior.
 func agentMarkdownSearchDirs() []string {
+	if envprofile.InProfileScope() {
+		return []string{userconfig.OpenCodeAgentsDir()}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
@@ -663,9 +665,14 @@ func applyAgentModel(name, model string) bool {
 		if data, err := os.ReadFile(path); err == nil {
 			var config map[string]json.RawMessage
 			if json.Unmarshal(data, &config) == nil {
-				var agents map[string]json.RawMessage
-				if agentRaw, ok := config["agent"]; ok && json.Unmarshal(agentRaw, &agents) == nil {
-					if existingRaw, exists := agents[name]; exists {
+				// The `agents` key is canonical; a migration-era `agent` key is
+				// deleted on write so the two never coexist.
+				//
+				// A missing or empty agent map is not a stop condition: the
+				// agent may live only as host markdown. Fall through so the
+				// markdown loop runs.
+				if agentMap, ok := lookupAgentMapFromRoot(config); ok {
+					if existingRaw, exists := agentMap[name]; exists {
 						var agentCfg map[string]json.RawMessage
 						if json.Unmarshal(existingRaw, &agentCfg) == nil {
 							if model == "" {
@@ -675,9 +682,10 @@ func applyAgentModel(name, model string) bool {
 								agentCfg["model"] = modelJSON
 							}
 							agentJSON, _ := json.Marshal(agentCfg)
-							agents[name] = agentJSON
-							agentsJSON, _ := json.Marshal(agents)
-							config["agent"] = agentsJSON
+							agentMap[name] = agentJSON
+							agentsJSON, _ := json.Marshal(agentMap)
+							config["agents"] = agentsJSON
+							delete(config, "agent")
 							pretty, _ := json.MarshalIndent(config, "", "  ")
 							_ = os.WriteFile(path+".bak", data, 0644)
 							if os.WriteFile(path, pretty, 0644) == nil {
@@ -892,7 +900,7 @@ only when **allow_solo_write** is true; full never edits product code itself.
 // applyOrchestrationPolicy writes the active profile's orchestration policy
 // into the installed orchestrator agent on every host: a generated policy
 // section in the body, plus the edit/write permission flip (opencode
-// permission: block; pi/omp/claude tools: list). Returns true if any host was
+// permissions: rules; pi/omp/claude tools: list). Returns true if any host was
 // updated.
 func applyOrchestrationPolicy(policy userconfig.OrchestrationPolicy) bool {
 	found := false
@@ -936,42 +944,25 @@ func upsertPolicySection(content, section string) string {
 }
 
 // applySoloWritePermissions flips the orchestrator's write surface on the
-// installed markdown: the v2 rules' broad edit/shell entries (and the pi/omp/
-// claude tools: list). The flip is symmetric — a deny→allow cycle restores
-// edit and shell to the allow posture with the guardrail denials intact.
-// Verify allowlist patterns are dropped on deny (they would keep granting
-// shell under a broad deny) and are not reconstructed on re-allow.
+// installed markdown: the opencode `permissions:` rules (edit/write/shell) and
+// the pi/omp/claude tools: list. The flip is symmetric — a deny→allow cycle
+// restores edit/write and shell to the baseline posture.
 func applySoloWritePermissions(content string, allow bool) string {
-	fm, _ := parseFrontmatter(content)
-	if fm == "" {
-		return content
-	}
-	rules, hasRules := agents.ParsePermissionRulesYAML(fm)
-	if !hasRules {
-		// pi/omp/claude-style file: no v2 rules block, sync the tools list.
-		return syncToolsList(content, allow)
-	}
-	effect := "deny"
+	val := "deny"
 	if allow {
-		effect = "allow"
+		val = "allow"
 	}
-	var out []agents.PermissionRule
-	broadEdit, broadShell := false, false
-	for _, r := range rules {
-		switch {
-		case r.Action == "edit" && r.Resource == "*" && !broadEdit:
-			r.Effect = effect
-			broadEdit = true
-		case r.Action == "shell" && r.Resource == "*" && !broadShell:
-			r.Effect = effect
-			broadShell = true
-		case r.Action == "shell" && !allow && r.Effect == "allow":
-			// Verify-posture allowlist: dead weight under a broad deny.
-			continue
+	if fm, _ := parseFrontmatter(content); fm != "" {
+		if perms := extractPermissionsFromFrontmatter(fm); len(perms) > 0 {
+			for _, key := range []string{"edit", "write", "bash"} {
+				if _, ok := perms[key]; ok {
+					perms[key] = val
+				}
+			}
+			content = updatePermissionsInFrontmatter(content, "orchestrator", perms)
 		}
-		out = append(out, r)
 	}
-	return replacePermissionsBlock(content, out)
+	return syncToolsList(content, allow)
 }
 
 // syncToolsList makes a pi/omp/claude-style "tools:" frontmatter list match the
@@ -1051,9 +1042,10 @@ func syncToolsList(content string, allow bool) string {
 }
 
 // applyOrchestrationPolicyToOpenCodeJSON mirrors the edit/shell flip into the
-// opencode.json agent.orchestrator entry when it exists (markdown-only installs
-// have no such entry). Always writes a v2 `permissions` rule array. A leftover
-// v1 `permission` map is converted at this boundary and not written back.
+// opencode.json orchestrator entry when it exists (markdown-only installs have
+// no such entry). The permission form follows the active flavor: v2 writes the
+// ordered `permissions` array under `agents.orchestrator`, v1 the flat
+// `permission` map under `agent.orchestrator`.
 func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	path, err := opencodeConfigPath()
 	if err != nil {
@@ -1067,11 +1059,12 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 	if json.Unmarshal(data, &config) != nil {
 		return false
 	}
-	var agentsMap map[string]json.RawMessage
-	if raw, ok := config["agent"]; !ok || json.Unmarshal(raw, &agentsMap) != nil {
+	var agentMap map[string]json.RawMessage
+	agentMap, ok := lookupAgentMapFromRoot(config)
+	if !ok {
 		return false
 	}
-	orchestratorRaw, ok := agentsMap["orchestrator"]
+	orchestratorRaw, ok := agentMap["orchestrator"]
 	if !ok {
 		return false
 	}
@@ -1084,6 +1077,9 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 		effect = "allow"
 	}
 
+	// The read side of the read-modify-write: rules (the native shape) win,
+	// and a migration-era `permission` map is converted so an old entry is
+	// flipped in place instead of silently skipped.
 	var rules []agents.PermissionRule
 	if rulesRaw, ok := agentCfg["permissions"]; ok {
 		if json.Unmarshal(rulesRaw, &rules) != nil {
@@ -1142,14 +1138,18 @@ func applyOrchestrationPolicyToOpenCodeJSON(allow bool) bool {
 		}
 		out = append(out, r)
 	}
-	updated, _ := json.Marshal(out)
+	// The v2 write keeps the ordered `permissions` rule array opencode
+	// enforces; a migration-era `permission` map is deleted so it cannot fall
+	// back to a legacy decode.
+	updated, _ := json.Marshal(agents.RulesToJSONShape(out))
 	agentCfg["permissions"] = updated
 	delete(agentCfg, "permission")
 
 	agentJSON, _ := json.Marshal(agentCfg)
-	agentsMap["orchestrator"] = agentJSON
-	agentsJSON, _ := json.Marshal(agentsMap)
-	config["agent"] = agentsJSON
+	agentMap["orchestrator"] = agentJSON
+	agentsJSON, _ := json.Marshal(agentMap)
+	config["agents"] = agentsJSON
+	delete(config, "agent")
 	pretty, _ := json.MarshalIndent(config, "", "  ")
 	_ = os.WriteFile(path+".bak", data, 0644)
 	return os.WriteFile(path, pretty, 0644) == nil
@@ -1337,22 +1337,54 @@ type agentGraphResp struct {
 	Edges []agentGraphEdge `json:"edges"`
 }
 
-// lookupAgentField returns the raw JSON value of agent.<name>.<key> from
-// opencode.json config bytes, or nil if any level is missing.
-func lookupAgentField(configData []byte, name, key string) json.RawMessage {
+// lookupAgentMap returns the agent name → raw entry map from config bytes.
+// The canonical `agents` key wins; a migration-era `agent` key fills the gaps.
+// ok is false when neither key holds a non-empty map.
+func lookupAgentMap(configData []byte) (map[string]json.RawMessage, bool) {
 	var config map[string]json.RawMessage
 	if json.Unmarshal(configData, &config) != nil {
-		return nil
+		return nil, false
 	}
-	agentRaw, ok := config["agent"]
+	return lookupAgentMapFromRoot(config)
+}
+
+// lookupAgentMapFromRoot is lookupAgentMap for an already-parsed root. This is
+// migration machinery: the returned map merges both spellings so an entry
+// stored only under the legacy `agent` key (v1-era ywai installs) survives a
+// write. The canonical `agents` key wins per agent, and the legacy key fills
+// the gaps. The caller writes the merged map under `agents` and deletes the
+// legacy one, so the merged view never loses data.
+func lookupAgentMapFromRoot(config map[string]json.RawMessage) (map[string]json.RawMessage, bool) {
+	primary, legacy := "agents", "agent"
+	merged := map[string]json.RawMessage{}
+	for _, key := range []string{legacy, primary} {
+		raw, ok := config[key]
+		if !ok {
+			continue
+		}
+		var entries map[string]json.RawMessage
+		if json.Unmarshal(raw, &entries) != nil {
+			continue
+		}
+		for name, entry := range entries {
+			merged[name] = entry
+		}
+	}
+	if len(merged) == 0 {
+		return nil, false
+	}
+	return merged, true
+}
+
+// lookupAgentField returns the raw JSON value of agents.<name>.<key> from
+// opencode.json config bytes, or nil if any level is missing. The merged
+// lookup covers migration-era entries stored under the legacy `agent` key.
+func lookupAgentField(configData []byte, name, key string) json.RawMessage {
+	agentMap, ok := lookupAgentMap(configData)
 	if !ok {
 		return nil
 	}
-	var agents map[string]json.RawMessage
-	if json.Unmarshal(agentRaw, &agents) != nil {
-		return nil
-	}
-	agentData, ok := agents[name]
+	agentData, ok := agentMap[name]
 	if !ok {
 		return nil
 	}
@@ -1363,24 +1395,15 @@ func lookupAgentField(configData []byte, name, key string) json.RawMessage {
 	return agent[key]
 }
 
-// lookupAgentTaskMap returns the delegation map for agent.<name> from
-// opencode.json: v2 subagent rules (agent.<name>.permissions) first, the
-// legacy v1 permission.task map/scalar as fallback. ok is false when neither
-// form is present.
+// lookupAgentTaskMap returns the delegation map for agents.<name> from
+// opencode.json: subagent rules from the ordered `permissions` array. ok is
+// false when no subagent rules are present.
 func lookupAgentTaskMap(configData []byte, name string) (map[string]string, bool) {
-	var config map[string]json.RawMessage
-	if json.Unmarshal(configData, &config) != nil {
-		return nil, false
-	}
-	agentRaw, ok := config["agent"]
+	agentMap, ok := lookupAgentMap(configData)
 	if !ok {
 		return nil, false
 	}
-	var agentsMap map[string]json.RawMessage
-	if json.Unmarshal(agentRaw, &agentsMap) != nil {
-		return nil, false
-	}
-	agentData, ok := agentsMap[name]
+	agentData, ok := agentMap[name]
 	if !ok {
 		return nil, false
 	}
@@ -1405,27 +1428,6 @@ func lookupAgentTaskMap(configData []byte, name string) (map[string]string, bool
 				return out, true
 			}
 		}
-	}
-	// Legacy v1: permission.task object or scalar.
-	permRaw, ok := agent["permission"]
-	if !ok {
-		return nil, false
-	}
-	var perm map[string]json.RawMessage
-	if json.Unmarshal(permRaw, &perm) != nil {
-		return nil, false
-	}
-	taskRaw, ok := perm["task"]
-	if !ok {
-		return nil, false
-	}
-	var asMap map[string]string
-	if json.Unmarshal(taskRaw, &asMap) == nil {
-		return asMap, true
-	}
-	var asStr string
-	if json.Unmarshal(taskRaw, &asStr) == nil && asStr != "" {
-		return map[string]string{"*": asStr}, true
 	}
 	return nil, false
 }
@@ -1596,7 +1598,7 @@ func (h *Handlers) PutDelegationRules(w http.ResponseWriter, r *http.Request) {
 	if mdPath := readAgentMarkdownPath(name); mdPath != "" {
 		if mdContent, err := os.ReadFile(mdPath); err == nil {
 			rendered := renderRulesMarkdown(body.Rules, body.Triggers)
-			updated := replaceLocalMarkdownSection(string(mdContent), "Delegation Rules", "###", rendered, true)
+			updated := replaceMarkdownSection(string(mdContent), "Delegation Rules", "###", rendered, true)
 			if updated != string(mdContent) {
 				_ = agents.WriteAgentBackup(mdPath, mdContent)
 				_ = os.WriteFile(mdPath, []byte(updated), 0o644)
@@ -1648,12 +1650,4 @@ func renderRulesMarkdown(rules []delegationRule, triggers []delegationTrigger) s
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
-}
-
-// replaceLocalMarkdownSection replaces the body content under a heading. Local
-// copy (the configapi package already has extractMarkdownSection/replaceMarkdownSection
-// in frontmatter.go; this is that same helper, kept here to avoid duplication
-// confusion — it delegates to the frontmatter.go implementation).
-func replaceLocalMarkdownSection(content, headerText, headingPrefix, newContent string, includeSubsections bool) string {
-	return replaceMarkdownSection(content, headerText, headingPrefix, newContent, includeSubsections)
 }

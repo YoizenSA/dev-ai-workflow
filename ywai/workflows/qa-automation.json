@@ -99,7 +99,7 @@
         "description": "QA analyst agent for test strategy and requirements understanding. Trigger: Test strategy, requirements analysis, \"understand tests\", \"plan automation\".",
         "agentRef": "qa-automation/qa-analyst",
         "prompt": "Understand the testing requirements and design the test strategy: scope, scenarios, prioritization, and test types. Deliver the strategy so @qa-dev can implement it.\n\nSkills available (use the `skill` tool): playwright-e2e-testing.",
-        "tools": "read, glob, grep, lsp, code_search, task, question, skill, memory, intercom, mcp",
+        "tools": "read, glob, grep, graft_*, context7_*, question, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff-qa,context-gathering"
@@ -118,8 +118,8 @@
         "name": "finder",
         "description": "Core codebase explorer with QA scout mode. Trigger: Explore codebase, find test areas, coverage gaps.",
         "agentRef": "core/finder",
-        "prompt": "QA scout: explore the codebase and report what needs testing — affected files, existing tests, coverage gaps, selectors (data-testid), external mocks, and patterns for @qa-dev. Read-only.\n\nSkills available (use the `skill` tool): playwright-e2e-testing.",
-        "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, intercom, mcp",
+        "prompt": "QA scout: explore the codebase. When `graft` / `code_search` are available, use them for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep. Report what needs testing — affected files, existing tests, coverage gaps, selectors (data-testid), external mocks, and patterns for @qa-dev. Read-only.\n\nSkills available (use the `skill` tool): playwright-e2e-testing.",
+        "tools": "read, glob, grep, graft_*, context7_*, skill, memory",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -139,7 +139,7 @@
         "description": "QA developer agent for writing automated tests. Trigger: Write tests, \"create test\", \"add test\", automation implementation.",
         "agentRef": "qa-automation/qa-dev",
         "prompt": "Write automated tests following the strategy. Use stable selectors, comment each step for a learner, and run the suite green before handing off.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing, condition-based-waiting, diagnosing-bugs, tdd.",
-        "tools": "read, edit, write, bash, glob, grep, lsp, ast_grep, websearch, code_search, task, question, skill, memory, intercom, mcp",
+        "tools": "read, edit, write, bash, glob, grep, graft_*, context7_*, websearch, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff-qa,context-gathering"
@@ -159,7 +159,7 @@
         "description": "QA reviewer agent for test code review and quality feedback. Trigger: Review tests, \"check test quality\", test code feedback.",
         "agentRef": "qa-automation/qa-reviewer",
         "prompt": "Review the test code: readability, reliability, coverage, and flaky-test patterns. Classify findings by severity and show how to fix them.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing, condition-based-waiting.",
-        "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, intercom, mcp",
+        "tools": "read, glob, grep, graft_*, context7_*, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff-qa,context-gathering"
@@ -191,7 +191,7 @@
         "description": "QA knowledge agent for answering testing questions. Trigger: Testing questions, \"what is\", \"how to\", framework explanations.",
         "agentRef": "qa-automation/qa-ask",
         "prompt": "Answer the testing question clearly for a manual tester learning automation. Use analogies and short code examples. Escalate multi-step requests to @qa-orchestrator.\n\nSkills available (use the `skill` tool): typescript, playwright-e2e-testing.",
-        "tools": "read, glob, grep, lsp, websearch, webfetch, code_search, task, question, skill, memory, intercom, mcp",
+        "tools": "read, glob, grep, graft_*, context7_*, websearch, webfetch, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff-qa,context-gathering"

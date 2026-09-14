@@ -3,20 +3,9 @@ package plugins
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
-
-// backgroundAgentsPermissions are the opencode permission keys the
-// background-agents plugin needs. "delegate" launches an async sub-agent;
-// "delegation_*" globs the supervisor/retrieval tools (read, list, status,
-// peek, steer, stop). Set at the top-level config so the primary agent can use
-// them; per-agent frontmatter still governs sub-agents (see installers.go).
-var backgroundAgentsPermissions = map[string]string{
-	"delegate":     "allow",
-	"delegation_*": "allow",
-}
 
 // ywaiPluginsSubdir is a ywai-owned directory under the opencode config dir
 // where vendored plugin bundles live. It deliberately avoids opencode's own
@@ -25,63 +14,15 @@ var backgroundAgentsPermissions = map[string]string{
 // of being double-loaded by directory discovery.
 const ywaiPluginsSubdir = "ywai-plugins"
 
-// RemoveBackgroundAgents removes the legacy custom delegation plugin. OpenCode
-// v2 provides its own foreground/background `subagent` tool, so retaining the
-// shim shadows the native runtime and leaves sync calls waiting on obsolete
-// event semantics.
-func RemoveBackgroundAgents(configPath string) error {
-	var root map[string]any
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
-	} else if os.IsNotExist(err) {
-		return nil
-	} else {
-		return fmt.Errorf("stat %s: %w", configPath, err)
-	}
+// InstallBackgroundAgents vendors the background-agents plugin bundle into the
+// location OpenCode 2 scans by itself. The plugin is v2-only: it is the
+// supervision layer on top of v2's built-in `subagent` tool (notifications,
+// steer/stop, watchdog, crash recovery, artifacts) and no longer carries the
+// v1 host surface. FlavorMarkerName remains only so installs can sweep the
+// marker files the old v1+v2 dual plugin wrote beside its bundles; the
+// v2-only plugin never reads them.
+const FlavorMarkerName = "ywai-opencode-flavor.json"
 
-	plugins := v2Plugins(root)
-	kept := make([]any, 0, len(plugins))
-	for _, plugin := range plugins {
-		path := ""
-		if value, ok := plugin.(string); ok {
-			path = value
-		} else if value, ok := plugin.(map[string]any); ok {
-			path, _ = value["package"].(string)
-		}
-		if filepath.Base(path) != config.BackgroundAgentsBundleName {
-			kept = append(kept, plugin)
-		}
-	}
-	writePlugins(root, kept)
-
-	rules, _ := root["permissions"].([]any)
-	keptRules := make([]any, 0, len(rules))
-	for _, raw := range rules {
-		if rule, ok := raw.(map[string]any); ok {
-			if action, _ := rule["action"].(string); action == "delegate" || action == "delegation_*" {
-				continue
-			}
-		}
-		keptRules = append(keptRules, raw)
-	}
-	root["permissions"] = keptRules
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, config.BackgroundAgentsBundleName)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove legacy background-agents bundle: %w", err)
-	}
-	return nil
-}
-
-// InstallBackgroundAgents vendors the background-agents plugin bundle next to
-// the given opencode config and wires it into the config (plugin array +
-// delegation permissions). configPath is the path to opencode.json(c).
 func InstallBackgroundAgents(configPath string) error {
 	bundle, err := config.BackgroundAgentsBundlePath()
 	if err != nil {
@@ -94,74 +35,40 @@ func InstallBackgroundAgents(configPath string) error {
 // ywai-plugins dir alongside configPath and patches the config to reference it.
 // Split out from InstallBackgroundAgents so the copy + patch glue is unit
 // testable without resolving the real embedded/source bundle.
+// AutoDiscoveredPluginsSubdir is the directory opencode scans for plugins on
+// its own. v2 rejects an absolute path to a .js file in the config array —
+// "configured plugin path must be a directory" — so on v2 the bundle has to be
+// discovered from here instead of being pointed at. It is exported so
+// cmd/ywai's uninstall removes from the same directory this package installs
+// into.
+const AutoDiscoveredPluginsSubdir = "plugins"
+
+// autoDiscoveredPluginsSubdir is the in-package spelling used by the sibling
+// installers; keep both names pointed at one value.
+const autoDiscoveredPluginsSubdir = AutoDiscoveredPluginsSubdir
+
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
-	destDir := filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("create plugins dir %s: %w", destDir, err)
-	}
-
-	destJS := filepath.Join(destDir, config.BackgroundAgentsBundleName)
-	if err := copyFile(bundleSrc, destJS); err != nil {
-		return fmt.Errorf("copy plugin bundle: %w", err)
-	}
-
-	return patchOpenCodeBackgroundAgents(configPath, destJS)
+	return installBackgroundAgentsV2(configPath, bundleSrc)
 }
 
-// patchOpenCodeBackgroundAgents adds pluginJSPath to the config's v2 "plugins"
-// array (idempotently) and merges the delegation allow rules into the
-// top-level v2 "permissions" array, preserving existing rules. A leftover v1
-// "permission" map is deleted entirely. It is safe to call repeatedly.
-func patchOpenCodeBackgroundAgents(configPath, pluginJSPath string) error {
-	var root map[string]any
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
+// installBackgroundAgentsV2 vendors the bundle into the directory OpenCode
+// scans by itself and leaves the config array alone.
+//
+// v2 accepts only directories as explicit plugin paths, so the v1 arrangement —
+// a .js under ywai-plugins/ referenced by absolute path — is dropped with a
+// warning and the plugin never loads. Auto-discovery takes plain .js files, so
+// the bundle simply lives where OpenCode already looks. Any stale explicit
+// entry is removed, otherwise the warning keeps firing on every start.
+func installBackgroundAgentsV2(configPath, bundleSrc string) error {
+	// The v1-era dual plugin wrote a flavor marker beside its bundles; the
+	// v2-only plugin never reads it, so sweep stale copies on every install.
+	if err := sweepFlavorMarkers(configPath); err != nil {
+		return err
 	}
 
-	// Ensure parent dir exists (config may not have been created yet).
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	plugins := v2Plugins(root)
-	if !containsPluginPath(plugins, pluginJSPath) {
-		plugins = append(plugins, pluginJSPath)
-	}
-	writePlugins(root, plugins)
-
-	// Top-level v2 permissions array — append one allow rule per action when
-	// the config does not already carry a rule for it.
-	rules, _ := root["permissions"].([]any)
-	covered := map[string]bool{}
-	for _, raw := range rules {
-		if r, ok := raw.(map[string]any); ok {
-			if action, ok := r["action"].(string); ok {
-				covered[action] = true
-			}
-		}
-	}
-	for action := range backgroundAgentsPermissions {
-		if covered[action] {
-			continue
-		}
-		rules = append(rules, map[string]any{
-			"action":   action,
-			"resource": "*",
-			"effect":   "allow",
-		})
-	}
-	root["permissions"] = rules
-
-	delete(root, "permission")
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-	return nil
+	// Drop the v1-shaped entry and the copy it pointed at, so the bundle is
+	// discovered once rather than also being pointed at and rejected.
+	return installVendorPluginV2(configPath, bundleSrc, config.BackgroundAgentsBundleName)
 }
 
 // containsPluginPath reports whether the plugin array already references path.
@@ -179,16 +86,21 @@ func containsPluginPath(plugins []any, path string) bool {
 	return false
 }
 
-// v2Plugins returns the OpenCode v2 "plugins" array. If only a legacy "plugin"
-// key exists, those entries are migrated. The legacy key is always deleted.
-func v2Plugins(root map[string]any) []any {
+// openCodePlugins returns the OpenCode v1 "plugin" array. If only a v2
+// "plugins" key exists, those entries are migrated. The v2 key is always
+// deleted so the file never carries both.
+func openCodePlugins(root map[string]any) []any {
 	var out []any
-	if raw, ok := root["plugins"]; ok {
+	if raw, ok := root["plugin"]; ok {
 		out = pluginsToSlice(raw)
-	} else if raw, ok := root["plugin"]; ok {
+	} else if raw, ok := root["plugins"]; ok {
 		out = pluginsToSlice(raw)
 	}
+	// Both spellings are cleared here; writePlugins puts back the one the
+	// active flavor reads. Leaving the other behind would strand a second,
+	// stale plugin list in the file.
 	delete(root, "plugin")
+	delete(root, "plugins")
 	if out == nil {
 		return []any{}
 	}
@@ -209,9 +121,18 @@ func pluginsToSlice(raw any) []any {
 	}
 }
 
+// writePlugins stores the plugin list under the key the active OpenCode reads:
+// v1 uses "plugin", v2 renamed it to "plugins". Only one is written, so the
+// other never lingers as a stale second list. Every opencode.json and cli.json
+// plugin edit funnels through here — see openCodePlugins for the read side,
+// which accepts either spelling so a flavor switch keeps existing entries.
+// TODO(decision): tui_logo_test.go and plugin_array_flavor_test.go currently
+// assert opposite key conventions; the surviving key for opencode2-only
+// builds is an open call for the drop-v1 batch owner.
 func writePlugins(root map[string]any, plugins []any) {
-	delete(root, "plugin")
-	root["plugins"] = plugins
+	key, stale := "plugins", "plugin"
+	delete(root, stale)
+	root[key] = plugins
 }
 
 // copyFile copies src to dst, truncating dst if it exists.

@@ -160,6 +160,8 @@ func DiscoverStdio(ctx context.Context, command []string, env map[string]string)
 // DiscoverHTTP POSTs a tools/list JSON-RPC request to a remote MCP endpoint
 // and returns the discovered tool names. The caller controls the timeout
 // via ctx; a 6s safety cap is layered on top via http.Client.Timeout.
+// headers carries extra HTTP headers (e.g. an Authorization bearer token
+// for authenticated endpoints); nil means no extra headers.
 //
 // HTTP transport does not implement the MCP initialize handshake in this
 // probe — the existing configapi probe did not either, and the discovery
@@ -170,7 +172,7 @@ func DiscoverStdio(ctx context.Context, command []string, env map[string]string)
 //
 // An empty tool list is not an error: the endpoint responded validly, the
 // probe just found nothing. Returns ([]string{}, nil).
-func DiscoverHTTP(ctx context.Context, url string) ([]string, error) {
+func DiscoverHTTP(ctx context.Context, url string, headers map[string]string) ([]string, error) {
 	reqBody := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -185,6 +187,9 @@ func DiscoverHTTP(ctx context.Context, url string) ([]string, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

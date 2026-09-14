@@ -16,6 +16,7 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - Run every operation through the `ado` CLI (`ado <group> <sub>`). One command per action.
 - Inspect before mutating: read PR/WI state before `vote`, `comment`, `update`, `create`, `chain`.
 - Never invent IDs, repos, or branch names — discover them with a read command first.
+- Work item creation defaults (unless the user says otherwise): always `--type "User Story"`; assignee resolved at runtime from `ado wi list` (`@<name>` column) — never hardcode; ALWAYS ask Social vs Infra Kanban first (Social → `--profile ysocial --area "ySocial\Kanban"`; Infra → `--area "Infra\\Infra Kanban"`); always ask Producto + Sponsors and pass `--field Custom.USProducto=<v>` and `--field Custom.Sponsors=<v>` (the template rejects the create without them); never `--field System.AreaPath`; `--description` is Azure DevOps HTML, and work item comments render as HTML too — wrap Markdown content in `<pre>` (see `references/templates.md`).
 - `[repo]` is optional; omit it to auto-discover a PR by ID. `--profile <name>` overrides the active profile.
 
 ## Decision Gates
@@ -42,8 +43,9 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - `references/commands.md` — full command list, flags, examples, error handling.
 - `references/workflows.md` — task playbooks: code review a PR, create/update
   work items, create a PR or chain, find pending work.
-- `references/templates.md` — work item body templates per type, and the HTML
-  (fields) vs Markdown (comments) formatting rule. Read before drafting one.
+- `references/templates.md` — work item body templates per type, and the
+  formatting rules: fields and comments are HTML; Markdown survives only inside
+  `<pre>`. Read before drafting one.
 - `references/setup.md` — install, `ado init`, profiles/PAT, and `.adoconfig.toml`
   rules (including whether `ado wi create` is enabled, allowed types, required fields).
 

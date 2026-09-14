@@ -1,0 +1,167 @@
+/* BenchHistory — run history table + per-model trend sparklines (yz-ui tokens) */
+
+.bench-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.bh-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.bh-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.bh-field > span {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.bh-note {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.bh-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+}
+
+.bh-panel h3 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.bh-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tint-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bh-expand:hover span {
+  text-decoration: underline;
+}
+
+.bh-models {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bh-detail-cell {
+  background: var(--surface-soft);
+}
+
+/* Status pill — the shared .badge-* classes carry no styling, so the history
+table ships its own token-based pill. */
+.bh-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.bh-status-done {
+  background: var(--success-soft);
+  color: var(--tint-success);
+}
+
+.bh-status-failed {
+  background: var(--danger-soft);
+  color: var(--tint-danger);
+}
+
+.bh-status-running {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+/* TrendChart sparklines — one polyline per model, colored per row index. */
+.trend-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trend-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 240px) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.trend-model {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-svg {
+  display: block;
+}
+
+.trend-line {
+  fill: none;
+  stroke: var(--tint-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-last {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-empty {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.trend-color-1 .trend-line {
+  stroke: var(--tint-success);
+}
+
+.trend-color-2 .trend-line {
+  stroke: var(--tint-purple);
+}
+
+.trend-color-3 .trend-line {
+  stroke: var(--tint-accent);
+}
+
+.trend-color-4 .trend-line {
+  stroke: var(--tint-info);
+}
+
+.trend-color-5 .trend-line {
+  stroke: var(--tint-danger);
+}

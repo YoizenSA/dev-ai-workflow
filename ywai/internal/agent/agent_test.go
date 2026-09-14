@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestAvailableNames_ContainsAllKnownAgents(t *testing.T) {
 	expected := []string{
 		"opencode", "claude-code", "cursor", "windsurf",
 		"gemini-cli", "vscode-copilot", "codex",
-		"kilocode", "kimi", "qwen-code", "antigravity", "kiro-ide",
+		"kimi", "qwen-code", "antigravity", "kiro-ide",
 		"openclaw", "trae-ide", "pi", "omp",
 	}
 
@@ -224,7 +225,7 @@ func TestSettingsPaths_ReturnsMap(t *testing.T) {
 		t.Fatal("SettingsPaths() returned nil")
 	}
 
-	expected := []string{"opencode", "kilocode", "windsurf", "gemini-cli", "pi"}
+	expected := []string{"opencode", "windsurf", "gemini-cli", "pi"}
 	for _, name := range expected {
 		if _, ok := paths[name]; !ok {
 			t.Fatalf("SettingsPaths() missing %q", name)
@@ -237,6 +238,7 @@ func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "") // CI runners export it; it outranks HOME
 
 	// Without any file, should fall back to .json
 	paths := SettingsPaths()
@@ -325,5 +327,123 @@ func TestFindByName_ReturnsErrorForUnknownAgent(t *testing.T) {
 	_, err := FindByName("nonexistent-agent")
 	if err == nil {
 		t.Fatal("expected error for unknown agent")
+	}
+}
+
+// ─── FindOpenCode ──────────────────────────────────────────────────────────
+
+// fakeBinName returns the file name a fake executable must have so
+// exec.LookPath resolves it: on Windows the extension is required (PATHEXT),
+// on POSIX a shebang script with the exact name is enough.
+func fakeBinName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".bat"
+	}
+	return name
+}
+
+// writeFakeBin materializes a fake executable in dir. The content is never
+// executed by these tests — LookPath only checks existence — but each GOOS
+// gets the file shape it can actually resolve.
+func writeFakeBin(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, fakeBinName(name))
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestFindOpenCode_ResolvesOpencode2(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	writeFakeBin(t, dir, "opencode2")
+	// HOME + USERPROFILE override keeps real well-known dirs (~/.opencode/bin)
+	// out of the resolution so the test exercises PATH injection only.
+	// USERPROFILE matters on Windows, where os.UserHomeDir reads it, not HOME.
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", dir)
+
+	path, bin := FindOpenCode()
+	if bin != "opencode2" {
+		t.Fatalf("FindOpenCode bin = %q, want opencode2 (the only supported host)", bin)
+	}
+	if filepath.Base(path) != fakeBinName("opencode2") {
+		t.Fatalf("FindOpenCode path = %q, want an opencode2 binary", path)
+	}
+}
+
+// GateOpenCodeV2 is the ADR-0001 minimum-version gate: a machine with only the
+// retired v1 `opencode` binary must get the withdrawal notice, not silent v2
+// config writes.
+func TestGateOpenCodeV2_ErrorsOnV1Only(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	writeFakeBin(t, dir, "opencode")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", dir)
+
+	err := GateOpenCodeV2()
+	if err == nil {
+		t.Fatal("v1-only machine must be gated with an error")
+	}
+	for _, want := range []string{"OpenCode 2", "opencode2", "0001-drop-opencode-v1-support"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("gate error must mention %q, got: %v", want, err)
+		}
+	}
+}
+
+func TestGateOpenCodeV2_PassesOnV2(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	writeFakeBin(t, dir, "opencode2")
+	writeFakeBin(t, dir, "opencode")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", dir)
+
+	if err := GateOpenCodeV2(); err != nil {
+		t.Fatalf("GateOpenCodeV2() = %v, want nil when opencode2 is installed", err)
+	}
+}
+
+func TestGateOpenCodeV2_NoBinaryPasses(t *testing.T) {
+	// Neither binary installed: not a gate error — the caller reports its own
+	// not-found error.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+
+	if err := GateOpenCodeV2(); err != nil {
+		t.Fatalf("GateOpenCodeV2() = %v, want nil when neither binary exists", err)
+	}
+}
+
+func TestOpenCodeBinaryNameNeverEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
+	t.Setenv("PATH", t.TempDir()) // binary not installed
+	if got := OpenCodeBinaryName(); got == "" {
+		t.Error("callers that only need a name must never get an empty string")
+	}
+	_ = os.Getenv("PATH")
+}
+
+func TestFindOpenCode_Missing(t *testing.T) {
+	// Neutralize PATH, HOME and USERPROFILE so neither PATH lookup nor the
+	// well-known install dirs can see a really installed binary on any GOOS.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+
+	path, bin := FindOpenCode()
+	if path != "" || bin != "" {
+		t.Fatalf("FindOpenCode() = (%q, %q), want empty when neither binary exists", path, bin)
 	}
 }

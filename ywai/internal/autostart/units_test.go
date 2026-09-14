@@ -27,7 +27,7 @@ func TestSystemdUnitRunsInForeground(t *testing.T) {
 }
 
 func TestLaunchdPlistRunsInForeground(t *testing.T) {
-	plist := launchdPlistContent("/usr/local/bin/ywai")
+	plist := launchdPlistContent("/usr/local/bin/ywai", "/Users/ywai/Library/Logs")
 
 	if strings.Contains(plist, "--background") {
 		t.Error("launchd plist must not fork: KeepAlive + a forking process is a relaunch loop")
@@ -37,12 +37,30 @@ func TestLaunchdPlistRunsInForeground(t *testing.T) {
 	}
 }
 
+// The agent's stdout/stderr must not land in /tmp: the system may clean it
+// and other local users can read it. configureLaunchd passes the user's
+// ~/Library/Logs, and the plist template must use it verbatim.
+func TestLaunchdPlistLogsGoToUserLogDir(t *testing.T) {
+	const logsDir = "/Users/ywai/Library/Logs"
+	plist := launchdPlistContent("/usr/local/bin/ywai", logsDir)
+
+	if !strings.Contains(plist, logsDir+"/ywai-server.log") {
+		t.Errorf("plist must send stdout to %s/ywai-server.log:\n%s", logsDir, plist)
+	}
+	if !strings.Contains(plist, logsDir+"/ywai-server-error.log") {
+		t.Errorf("plist must send stderr to %s/ywai-server-error.log:\n%s", logsDir, plist)
+	}
+	if strings.Contains(plist, "/tmp/ywai") {
+		t.Error("plist must not write agent logs to /tmp")
+	}
+}
+
 func TestUnitsEmbedTheResolvedBinaryPath(t *testing.T) {
 	const bin = "/opt/custom/ywai"
 	if !strings.Contains(systemdUnitContent(bin), bin) {
 		t.Error("systemd unit lost the binary path")
 	}
-	if !strings.Contains(launchdPlistContent(bin), bin) {
+	if !strings.Contains(launchdPlistContent(bin, "/Users/ywai/Library/Logs"), bin) {
 		t.Error("launchd plist lost the binary path")
 	}
 }

@@ -17,10 +17,20 @@ import (
 var errSkillChanged = errors.New("skill source differs")
 
 const extraSkillMarkerFile = ".ywai-extra"
+
+// learnYwaiSkillName is the skill that carries the official docs tour; when it
+// is copied into an agent, the docs MDX bundle goes with it.
 const learnYwaiSkillName = "learn-ywai"
 
 func CopyTo(agentSkillsDir string) error {
 	return copyFiltered(agentSkillsDir, nil)
+}
+
+// CopyFiltered copies only the listed extra skills. An empty filter copies
+// everything (same as CopyTo). Used by profile-scoped apply to enforce the
+// preset skills[] allowlist without deleting anything unlisted.
+func CopyFiltered(agentSkillsDir string, filter []string) error {
+	return copyFiltered(agentSkillsDir, filter)
 }
 
 func copyFiltered(agentSkillsDir string, filter []string) error {
@@ -385,6 +395,12 @@ func hasYwaiExtraMarker(dir string) bool {
 func bundleLearnYwaiDocs(skillDst string) error {
 	src := findOfficialDocsDir()
 	if src == "" {
+		// No repo checkout next to the binary (a user machine). The copy
+		// seeded from the embedded data is all /learn-ywai gets, and it must
+		// carry references/docs — otherwise the tour cannot read a page.
+		if _, err := os.Stat(filepath.Join(skillDst, "references", "docs")); err != nil {
+			return fmt.Errorf("no docs source found and the skill shipped without references/docs")
+		}
 		return nil
 	}
 	dst := filepath.Join(skillDst, "references", "docs")
@@ -587,4 +603,12 @@ func CountSddAssets(agentSkillsDir string) int {
 		}
 	}
 	return count
+}
+
+// PruneYwaiSkills removes every ywai-installed skill from agentSkillsDir and
+// returns their names. Used when a host stops being a copy target — opencode
+// reads ~/.claude/skills directly, so its own copy is dead weight once Claude
+// Code is installed. Foreign skills have no marker and are left alone.
+func PruneYwaiSkills(agentSkillsDir string) []string {
+	return pruneRetiredSkills(agentSkillsDir, nil)
 }

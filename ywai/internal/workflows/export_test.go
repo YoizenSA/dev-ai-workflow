@@ -6,7 +6,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 )
+
+func newExporterWithDirs(commandsDir, agentsDir string) *Exporter {
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: TargetOpenCode}
+}
+
+// newExporterWithDirsForTarget is newExporterWithDirs for an explicit target
+// dialect (see Target* constants).
+func newExporterWithDirsForTarget(commandsDir, agentsDir, target string) *Exporter {
+	return &Exporter{commandsDir: commandsDir, agentsDir: agentsDir, target: target}
+}
 
 // exportFixture builds a small but representative workflow exercising the main
 // node types.
@@ -53,12 +65,18 @@ func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
 		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
 	}
+	if strings.Contains(body, `mode: "sync"`) || strings.Contains(body, `mode="sync"`) {
+		t.Fatalf("orchestrator body must not invent a delegate mode argument:\n%s", body)
+	}
+	if !strings.Contains(body, "delegation_read") {
+		t.Fatalf("orchestrator body must tell the model to read the result after notification:\n%s", body)
+	}
 }
 
 func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	plan, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -87,12 +105,12 @@ func TestPlanGeneratesExpectedArtifacts(t *testing.T) {
 }
 
 // TestOrchestratorHasTaskPermission verifies the generated orchestrator agent
-// markdown includes v2 subagent rules with deny-all and an allow entry for
-// each subAgent node.
+// markdown includes subagent rules with deny-all and an allow entry for each
+// subAgent node.
 func TestOrchestratorHasTaskPermission(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	_, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -108,22 +126,18 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 	if !strings.Contains(orch, "permissions:") {
 		t.Errorf("orchestrator missing permissions block:\n%s", orch)
 	}
-	if !strings.Contains(orch, "action: subagent") {
-		t.Errorf("orchestrator missing subagent rules:\n%s", orch)
+	if !strings.Contains(orch, "- action: subagent\n    resource: \"*\"\n    effect: deny") {
+		t.Errorf("orchestrator missing subagent deny-all rule:\n%s", orch)
 	}
-	if !strings.Contains(orch, `resource: "*"`) {
-		t.Errorf("orchestrator subagent rules missing deny-all:\n%s", orch)
+	if !strings.Contains(orch, "- action: subagent\n    resource: daily-task-news-briefing\n    effect: allow") {
+		t.Errorf("orchestrator missing subagent allow rule for the workflow sub-agent:\n%s", orch)
 	}
-	if !strings.Contains(orch, "resource: daily-task-news-briefing") {
-		t.Errorf("orchestrator subagent rules missing allow entry:\n%s", orch)
-	}
-	assertOpenCodeV2Frontmatter(t, orch)
 }
 
 func TestApplyWritesFilesToDisk(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(commandsDir, agentsDir)
+	e := newExporterWithDirs(commandsDir, agentsDir)
 
 	plan, err := e.Apply(exportFixture())
 	if err != nil {
@@ -149,8 +163,10 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(content), "agent: daily-task-orchestrator") {
 		t.Errorf("command should reference orchestrator agent:\n%s", content)
 	}
-	if strings.Contains(string(content), "subtask") {
-		t.Errorf("subtask is a v2 no-op and must not be emitted:\n%s", content)
+	// `subtask` was always a no-op in the command frontmatter and is no longer
+	// emitted; `agent:` is what actually routes the command.
+	if strings.Contains(string(content), "subtask:") {
+		t.Errorf("command should not emit the no-op subtask key:\n%s", content)
 	}
 	if !strings.Contains(string(content), "$ARGUMENTS") {
 		t.Errorf("command should pass $ARGUMENTS:\n%s", content)
@@ -171,10 +187,9 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(orch), "Execution steps") {
 		t.Errorf("orchestrator should have execution steps:\n%s", orch)
 	}
-	if !strings.Contains(string(orch), "action: subagent") {
-		t.Errorf("orchestrator should whitelist children via subagent rules:\n%s", orch)
+	if !strings.Contains(string(orch), "task") {
+		t.Errorf("orchestrator should mention the task tool:\n%s", orch)
 	}
-	assertOpenCodeV2Frontmatter(t, string(orch))
 
 	// The sub-agent must exist and reference its task.
 	subPath := filepath.Join(agentsDir, "daily-task-news-briefing.md")
@@ -188,7 +203,6 @@ func TestApplyWritesFilesToDisk(t *testing.T) {
 	if !strings.Contains(string(sub), "Find today's top tech news.") {
 		t.Errorf("sub-agent should carry its task prompt:\n%s", sub)
 	}
-	assertOpenCodeV2Frontmatter(t, string(sub))
 }
 
 func TestSubAgentSlugUniqueAndSafe(t *testing.T) {
@@ -304,7 +318,7 @@ func TestExportClaudeCodeTarget(t *testing.T) {
 	wf := exportFixture()
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+	e := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 
 	plan, files, err := e.Plan(wf)
 	if err != nil {
@@ -345,7 +359,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		wf := exportFixture()
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirs(cmdDir, agentsDir)
+		e := newExporterWithDirs(cmdDir, agentsDir)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -375,7 +389,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		wf := exportFixture()
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+		e := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -410,7 +424,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		}
 		cmdDir := t.TempDir()
 		agentsDir := t.TempDir()
-		e := NewExporterWithDirs(cmdDir, agentsDir)
+		e := newExporterWithDirs(cmdDir, agentsDir)
 
 		_, files, err := e.Plan(wf)
 		if err != nil {
@@ -443,31 +457,6 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 			t.Errorf("empty sections must default to [handoff], got %v", got)
 		}
 	})
-}
-
-// assertOpenCodeV2Frontmatter fails if generated agent markdown still carries
-// a v1 permission map (permission:/task:/bash: keys) instead of the v2
-// permissions rule array (action: subagent|shell|edit).
-func assertOpenCodeV2Frontmatter(t *testing.T, md string) {
-	t.Helper()
-	end := strings.Index(md[3:], "\n---")
-	if !strings.HasPrefix(md, "---\n") || end < 0 {
-		t.Fatalf("missing YAML frontmatter:\n%s", md)
-	}
-	fm := md[:end+3]
-	if strings.Contains(fm, "\npermission:") || strings.HasPrefix(fm, "permission:") {
-		t.Errorf("v1 permission: map must not appear in generated frontmatter:\n%s", fm)
-	}
-	for _, banned := range []string{"\n  task:", "\n  bash:", "\n  \"task\":", "\n  \"bash\":"} {
-		if strings.Contains(fm, banned) {
-			t.Errorf("v1 key %q must not appear in generated frontmatter:\n%s", strings.TrimSpace(banned), fm)
-		}
-	}
-	for _, want := range []string{"permissions:", "action: subagent", "action: shell", "action: edit"} {
-		if !strings.Contains(fm, want) {
-			t.Errorf("generated frontmatter missing %q:\n%s", want, fm)
-		}
-	}
 }
 
 func keys(m map[string]string) []string {
@@ -523,7 +512,7 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 		},
 		Connections: []Connection{{From: "s", To: "a"}},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -541,5 +530,153 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 		if !strings.Contains(agentMD, want) {
 			t.Errorf("exported linked agent missing %q", want)
 		}
+	}
+}
+
+// writeAgentFile drops a minimal agent markdown so Uninstall tests do not need
+// the full Apply pipeline (which pulls embedded sections).
+func writeAgentFile(t *testing.T, dir, base string) string {
+	t.Helper()
+	path := filepath.Join(dir, base+".md")
+	if err := os.WriteFile(path, []byte("---\ndescription: "+base+"\n---\nbody\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", base, err)
+	}
+	return path
+}
+
+func TestUninstallRemovesExportedArtifacts(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	cmd := writeAgentFile(t, commandsDir, "ship")
+	orch := writeAgentFile(t, agentsDir, "ship-orchestrator")
+	scout := writeAgentFile(t, agentsDir, "ship-scout")
+	if err := agents.MergeGroupSidecar(agentsDir, map[string]string{
+		"ship-orchestrator": "ship",
+		"ship-scout":        "ship",
+	}); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+
+	removed, err := e.Uninstall("ship")
+	if err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if len(removed) != 3 {
+		t.Fatalf("removed %d artifacts, want 3: %+v", len(removed), removed)
+	}
+	for _, path := range []string{cmd, orch, scout} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s still exists after uninstall", path)
+		}
+	}
+	if got := agents.ReadGroupSidecar(agentsDir, "ship-orchestrator"); got != "" {
+		t.Errorf("sidecar still lists ship-orchestrator in group %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, agents.GroupSidecarFile)); !os.IsNotExist(err) {
+		t.Errorf("sidecar should be gone once its last entry is removed")
+	}
+}
+
+func TestUninstallProtectsSiblingWorkflow(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	writeAgentFile(t, commandsDir, "ship")
+	writeAgentFile(t, agentsDir, "ship-orchestrator")
+	sibling := writeAgentFile(t, agentsDir, "ship-2-orchestrator")
+	if err := agents.MergeGroupSidecar(agentsDir, map[string]string{
+		"ship-orchestrator":   "ship",
+		"ship-2-orchestrator": "ship-2",
+	}); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+
+	if _, err := e.Uninstall("ship"); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if _, err := os.Stat(sibling); err != nil {
+		t.Errorf("sibling workflow agent ship-2-orchestrator must survive: %v", err)
+	}
+	if got := agents.ReadGroupSidecar(agentsDir, "ship-2-orchestrator"); got != "ship-2" {
+		t.Errorf("sibling sidecar entry = %q, want ship-2", got)
+	}
+}
+
+func TestUninstallPrefixFallbackWithoutSidecar(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	// Non-opencode targets carry no group sidecar, so membership falls back to
+	// the "<name>-" filename prefix.
+	e := newExporterWithDirsForTarget(commandsDir, agentsDir, TargetClaudeCode)
+
+	cmd := writeAgentFile(t, commandsDir, "ship")
+	orch := writeAgentFile(t, agentsDir, "ship-orchestrator")
+	scout := writeAgentFile(t, agentsDir, "ship-scout")
+
+	removed, err := e.Uninstall("ship")
+	if err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if len(removed) != 3 {
+		t.Fatalf("removed %d artifacts, want 3: %+v", len(removed), removed)
+	}
+	for _, path := range []string{cmd, orch, scout} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s still exists after uninstall", path)
+		}
+	}
+}
+
+func TestUninstallUnknownWorkflowIsNoop(t *testing.T) {
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
+	removed, err := e.Uninstall("never-exported")
+	if err != nil {
+		t.Fatalf("Uninstall of unknown workflow: %v", err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("expected no removals, got %+v", removed)
+	}
+	if _, err := e.Uninstall("Bad Name"); err == nil {
+		t.Fatal("expected ErrInvalidName for a name with spaces")
+	}
+}
+
+func TestOrphansDetectsOnlyWorkflowShapedCommands(t *testing.T) {
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	// An orphan: workflow-shaped command with no stored design.
+	writeCommandFile(t, commandsDir, "feature-delivery",
+		"---\ndescription: old\nagent: feature-delivery-orchestrator\n---\nbody\n")
+	// A live workflow's command is never an orphan.
+	writeCommandFile(t, commandsDir, "ship",
+		"---\ndescription: live\nagent: ship-orchestrator\n---\nbody\n")
+	// Host commands without the workflow shape are ignored.
+	writeCommandFile(t, commandsDir, "learn-ywai", "plain host command, no frontmatter\n")
+
+	orphans, err := e.Orphans(map[string]bool{"ship": true})
+	if err != nil {
+		t.Fatalf("Orphans: %v", err)
+	}
+	if len(orphans) != 1 || orphans[0] != "feature-delivery" {
+		t.Fatalf("orphans = %v, want [feature-delivery]", orphans)
+	}
+
+	// Missing commands dir is not an error.
+	empty := newExporterWithDirs(t.TempDir(), t.TempDir())
+	if got, err := empty.Orphans(nil); err != nil || len(got) != 0 {
+		t.Fatalf("Orphans on missing dir = %v, %v; want empty, nil", got, err)
+	}
+}
+
+// writeCommandFile drops a command markdown for Orphans tests.
+func writeCommandFile(t *testing.T, dir, base, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, base+".md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write command %s: %v", base, err)
 	}
 }

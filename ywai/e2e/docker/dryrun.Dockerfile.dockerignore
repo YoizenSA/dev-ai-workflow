@@ -1,0 +1,14 @@
+# BuildKit per-Dockerfile ignore file for dryrun.Dockerfile.
+# Patterns are relative to the build context (repository root).
+# `**/` prefixes matter: an unanchored pattern only matches at the root.
+.git
+**/node_modules
+**/dist
+**/*.exe
+**/*.exe~
+**/*.log
+adr
+graft
+docs/public
+ywai/cmd/ywai/embedded_data
+ywai/e2e/docker/*.Dockerfile.dockerignore

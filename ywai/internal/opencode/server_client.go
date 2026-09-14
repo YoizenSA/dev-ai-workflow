@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -62,24 +63,34 @@ type providerResponse struct {
 	Connected []string          `json:"connected"`
 }
 
-// rawProviderV2 is the shape from GET /api/provider.
-type rawProviderV2 struct {
+// rawModelV2 is one entry from GET /api/model (OpenCode v2). Provider
+// listings live at GET /api/provider and must not be treated as models.
+type rawModelV2 struct {
 	ID         string `json:"id"`
+	ModelID    string `json:"modelID"`
 	ProviderID string `json:"providerID"`
 	Name       string `json:"name"`
-	API        string `json:"api"`
 }
 
-type providerV2Response struct {
+type modelV2Response struct {
 	Location json.RawMessage `json:"location"`
-	Data     []rawProviderV2 `json:"data"`
+	Data     []rawModelV2    `json:"data"`
+}
+
+// apiPath prefixes a route with /api. OpenCode 2 serves its web UI from the
+// bare paths, so GET /agent there returns the SPA's HTML shell with a 200 —
+// the JSON decode fails on a response that looks healthy. The real routes
+// moved under /api and are Basic-auth gated, which the client's
+// serverAuthTransport already supplies.
+func (c *ServerClient) apiPath(route string) string {
+	return "/api" + route
 }
 
 // ─── Client interface implementation ───────────────────────────────────────
 
 // ListAgents fetches agents from the opencode server.
 func (c *ServerClient) ListAgents(ctx context.Context) ([]AgentInfo, error) {
-	url := c.baseURL + "/agent"
+	url := c.baseURL + c.apiPath("/agent")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("opencode server: create request: %w", err)
@@ -131,25 +142,20 @@ func (c *ServerClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 				return models, nil
 			}
 		} else {
-			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to HTTP /api/provider (free models may be missing)", err)
+			log.Printf("opencode: 'opencode models' CLI failed (%v); falling back to HTTP /api/model", err)
 		}
 	}
 
 	models, err := c.listModelsV2(ctx)
-	if err == nil {
+	if err == nil && len(models) > 0 {
 		return models, nil
 	}
 
-	models, err = c.listModelsV1(ctx)
-	if err == nil {
-		return models, nil
-	}
-
-	return nil, fmt.Errorf("opencode server: all endpoints failed: %v", err)
+	return nil, fmt.Errorf("opencode server: no models at /api/model: %v", err)
 }
 
 func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
-	url := c.baseURL + "/api/provider"
+	url := c.baseURL + "/api/model"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -165,77 +171,44 @@ func (c *ServerClient) listModelsV2(ctx context.Context) ([]ModelInfo, error) {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var env providerV2Response
+	var env modelV2Response
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		return nil, err
 	}
 
 	seen := make(map[string]bool)
 	models := make([]ModelInfo, 0, len(env.Data))
-	for _, p := range env.Data {
-		id := p.ID
-		if id == "" {
-			id = p.ProviderID
+	for _, m := range env.Data {
+		if m.ProviderID == "" {
+			continue
 		}
-		if id == "" || seen[id] {
+		bare := m.ID
+		if bare == "" {
+			bare = m.ModelID
+		}
+		if bare == "" {
+			continue
+		}
+		id := bare
+		if !strings.Contains(bare, "/") {
+			id = m.ProviderID + "/" + bare
+		}
+		if seen[id] {
 			continue
 		}
 		seen[id] = true
+		name := m.Name
+		if name == "" {
+			name = bare
+		}
 		models = append(models, ModelInfo{
 			ID:       id,
-			Provider: p.ProviderID,
-			Name:     p.Name,
+			Provider: m.ProviderID,
+			Name:     name,
 		})
 	}
-	return models, nil
-}
-
-func (c *ServerClient) listModelsV1(ctx context.Context) ([]ModelInfo, error) {
-	url := c.baseURL + "/provider"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	var provResp providerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&provResp); err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
-	models := make([]ModelInfo, 0)
-	for _, p := range provResp.All {
-		// Iterate over models within each provider
-		for modelID, modelData := range p.Models {
-			modelMap, ok := modelData.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			modelName := modelID
-			if name, ok := modelMap["name"].(string); ok && name != "" {
-				modelName = name
-			}
-			modelKey := p.ID + "/" + modelID
-			if modelKey == "" || seen[modelKey] {
-				continue
-			}
-			seen[modelKey] = true
-			models = append(models, ModelInfo{
-				ID:       modelKey,
-				Provider: p.ID,
-				Name:     modelName,
-			})
-		}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models in /api/model")
 	}
 	return models, nil
 }
@@ -284,7 +257,7 @@ func (c *ServerClient) Status(ctx context.Context) (ClientStatus, error) {
 
 // getConnectedProviders fetches the list of connected providers from /provider endpoint.
 func (c *ServerClient) getConnectedProviders(ctx context.Context) []string {
-	url := c.baseURL + "/provider"
+	url := c.baseURL + c.apiPath("/provider")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil

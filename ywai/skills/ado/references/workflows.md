@@ -5,15 +5,33 @@ steps come before mutating steps. See `commands.md` for full flag reference.
 
 ## Code review a PR
 
-1. `ado pr context <prId>` — one call: metadata, commits, changed files, threads.
-2. For files that need a closer look: `ado pr file --path <file> <prId>` (use `--start`/`--end` for large files).
-3. Leave findings as anchored comments: `ado pr comment <prId> --comment "<finding>" --file <path> --line <n>`.
-4. Vote once at the end: `ado pr vote <prId> <approve|suggestions|wait|reject> [--comment "<summary>"]`.
+1. `ado pr context <prId>` — one call: metadata, linked work items, commits, changed files, threads.
+2. `ado pr diff <prId> --hunks` — the actual unified diff. Review the hunks, not the file list.
+3. Resolve the ticket and read it: `ado wi get <id>`. If `pr context` lists no linked work
+   item, look for an ID in the branch name, title or description (`AB#1234`, `#1234`,
+   `bugfix/1234_...`, a `_workitems/edit/<id>` link); if none is found, ask the user and
+   stop. Without the ticket you cannot check the PR against its intended scope.
+   `ado wi attachments <id>` when the ticket references screenshots.
+4. For files that need a closer look: `ado pr file --path <file> <prId>` (use `--start`/`--end` for large files).
+5. Read `ado pr threads <prId>` before writing, so you don't repeat existing feedback.
+6. Print the review and ask for confirmation before posting anything. Dry run is the default.
+7. Post findings as anchored comments: `ado pr comment <prId> --comment "<finding>" --file <path> --line <n>`.
+8. Vote once at the end: `ado pr vote <prId> <approve|suggestions|wait|reject> [--comment "<summary>"]`.
+
+Review output contract:
+- One finding = one line: **what — where (`file:line`) — why**. No summary of the PR, no greetings.
+- Split blocking defects from non-blocking suggestions; only real defects block.
+- Report only what this diff introduces or worsens. Pre-existing problems are at most one suggestion.
+- Budget: 12 findings max. Over budget, keep the most severe and close with `(+N minor findings omitted)`.
+- Close with the QA angle: what a tester should exercise, one line each. Post it to the
+  ticket with `ado wi comment <wiId> --comment "<pre>qa block</pre>"` when the user asks
+  (work item comments are HTML — bare Markdown collapses).
 
 Guidelines:
 - Comment BEFORE voting — a vote with unexplained rejection is useless to the author.
 - `suggestions` = approved with non-blocking notes; `wait` = author must respond; `reject` = blocking defect.
-- If threads already exist, read them (`ado pr threads <prId>`) so you don't repeat resolved feedback.
+- PR comments are Markdown (the PR UI renders it). Work item comments are HTML:
+  bare Markdown collapses — wrap Markdown content in `<pre>` (see `templates.md`).
 
 ## Answer / follow up on PR threads
 
@@ -24,10 +42,17 @@ Guidelines:
 
 1. Check the project rules first: read `[work_item.create]` in `.adoconfig.toml` (enabled? allowed types? required fields?).
 2. Unsure about valid types: `ado wi types` — names differ per process (`User Story` vs `Product Backlog Item` vs `Requirement`).
-3. Draft the body with `templates.md` — `--description` is HTML, comments are Markdown.
-4. Create: `ado wi create --title "<t>" --type <Type> [--description "<d>"] [--priority <n>] [--parent <id>]`.
-5. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
-6. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+3. Draft the body with `templates.md` — fields are HTML, and work item comments
+   render as HTML too (Markdown only inside `<pre>`).
+4. Resolve the assignee: `ado wi list` → read the `@<name>` column (that is the authenticated user). Never hardcode a name.
+5. Ask and lock the kanban: **Social Kanban** or **Infra Kanban**? (Always ask.)
+   - Social Kanban → `--profile ysocial` + `--area "ySocial\Kanban"`
+   - Infra Kanban → `--area "Infra\Infra Kanban"`
+6. Ask **Producto** (`ySocial` | `yFlow` | `yWhatsApp` | `yMobile` | `interno` | `yIA`) and **Sponsors** (`Dev Area` | `Implementacion` | `Producto` | `Soporte`). Both fields are required by the project template — pass `--field "Custom.USProducto=<v>"` and `--field "Custom.Sponsors=<v>"`.
+7. Create (defaults from the create contract unless the user says otherwise):
+   `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" --field "Custom.USProducto=<producto>" --field "Custom.Sponsors=<sponsor>" [--description "<d>"] [--priority <n>] [--parent <id>]`
+8. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
+9. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
 
 Confirm with the user before creating when the request is ambiguous, the item is
 high-impact (Feature/Epic), or no type was specified.

@@ -7,6 +7,10 @@
 # Shell scripts always use LF
 *.sh text eol=lf
 
+# Container files always use LF (CRLF breaks RUN shell lines in Dockerfiles)
+*.Dockerfile text eol=lf
+Dockerfile text eol=lf
+
 # PowerShell scripts can use CRLF
 *.ps1 text eol=crlf
 

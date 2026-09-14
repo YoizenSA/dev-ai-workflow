@@ -52,7 +52,7 @@ Si OpenCode no arranca (`ConfigInvalidError` en `mcp.graft`): el update reescrib
 2. Reiniciá OpenCode (obligatorio — plugins + limpieza MCP)
 3. `ywai doctor`
 
-Opcional: pedile al agent que use el profile `inherit` (skill `ywai`) si querés que los agentes sigan el modelo de la sesión.
+Opcional: pedile al agent que use el profile `inherit` (skill `learn-ywai`) si querés que los agentes sigan el modelo de la sesión.
 
 `inherit` = sin modelos fijos. `balanced` ahora usa **DeepSeek** (`deepseek-v4-pro` / `deepseek-v4-flash`) en lugar de Grok/Minimax.
 

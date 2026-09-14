@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import Modal from '../shared/Modal'
-import ModelCombobox from '../missions/ModelCombobox'
+import ModelCombobox from '../shared/ModelCombobox'
 import SearchSelect from '../shared/SearchSelect'
 import { useMemoriesStore } from '../../stores/memoriesStore'
-import { missionsApi } from '../../api/client'
+import { toolsApi } from '../../api/client'
 import ConsolidationPlanReview from './ConsolidationPlanReview'
 import type { ModelInfo } from '../../api/types'
 
@@ -33,14 +33,20 @@ export default function ConsolidationModal({ open, onClose, initialScope }: Prop
 
 	const consolidation = useMemoriesStore((s) => s.consolidation)
 	const startConsolidation = useMemoriesStore((s) => s.startConsolidation)
-	const projects = useMemoriesStore((s) => s.stats?.projects ?? [])
+	// Select the raw stats object (stable ref) and derive the array outside the
+	// selector: `s.stats?.projects ?? []` returns a NEW [] every snapshot while
+	// stats is null, which React 19's useSyncExternalStore rejects as an
+	// uncached getSnapshot result → "Maximum update depth exceeded" (#185) that
+	// crashes the whole /memories page.
+	const stats = useMemoriesStore((s) => s.stats)
+	const projects = stats?.projects ?? []
 
 	const loadOptions = useCallback(async () => {
 		setLoading(true)
 		try {
 			const [modelsRes, agentsRes] = await Promise.all([
-				missionsApi.listModels().catch(() => null),
-				missionsApi.listAgents().catch(() => null),
+				toolsApi.listModels().catch(() => null),
+				toolsApi.listAgents().catch(() => null),
 			])
 			if (modelsRes) {
 				const all = Object.values(modelsRes.modelsByProvider).flat() as ModelInfo[]

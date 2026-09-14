@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Visual Thinking — {{topic}}</title>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+/* ywai / yz-ui tokens (subset of palette.css) — components use var(--*) only */
+:root{
+  --yz-primary-1:#1a66ff; --yz-primary-2:#4a3abf; --yz-accent:#fd6421; --yz-yellow:#fdbd27;
+  --yz-dark:#14171f; --yz-dark-soft:#1d2029; --yz-light:#fff;
+  --surface:rgba(30,35,48,.8); --surface-strong:rgba(22,26,38,.95);
+  --surface-soft:rgba(255,255,255,.05); --surface-hover:rgba(255,255,255,.08);
+  --panel-border:rgba(148,163,184,.24); --panel-border-strong:rgba(148,163,184,.42);
+  --text:#f5f7fc; --text-soft:#d3d9e8; --text-muted:#a4acc2; --text-faint:#8e97ae;
+  --success:#34d399; --success-soft:rgba(16,185,129,.16); --success-border:rgba(52,211,153,.4);
+  --danger:#f87171; --danger-soft:rgba(220,38,38,.16); --danger-border:rgba(248,113,113,.42);
+  --warning:#fbbf24; --warning-soft:rgba(253,189,39,.15); --warning-border:rgba(251,191,36,.42);
+  --info:#60a5fa; --info-soft:rgba(26,102,255,.16); --info-border:rgba(96,165,250,.42);
+  --tint-primary:#79a9ff; --tint-purple:#c4b5fd; --tint-accent:#fdba74; --tint-success:#6ee7b7; --tint-danger:#fca5a5;
+  --radius-sm:.55rem; --radius-md:.85rem; --radius-lg:1.15rem;
+  --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.25rem; --space-6:1.5rem; --space-8:2rem;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-md:.9375rem; --text-lg:1.0625rem; --text-xl:1.3125rem; --text-2xl:1.625rem; --text-3xl:2rem;
+  --font-sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+  --grad-full:linear-gradient(90deg,#1a66ff 0%,#4a3abf 55%,#fd6421 100%);
+  --grad-text:linear-gradient(95deg,#6ea3ff 0%,#b3a6ff 46%,#ff9e6b 100%);
+  --btn-primary-bg:linear-gradient(135deg,#2f57c8,#3f31a0);
+  --shadow-glass:0 24px 60px rgba(5,9,20,.55);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --yz-dark:#e7ebf3; --yz-dark-soft:#dfe4ee;
+  --text:#1a1f2e; --text-soft:#3b4458; --text-muted:#5a6377; --text-faint:#6b7488;
+  --surface:rgba(255,255,255,.86); --surface-strong:rgba(255,255,255,.96);
+  --panel-border:rgba(71,85,105,.2); --panel-border-strong:rgba(71,85,105,.34);
+  --tint-primary:#1d4ed8; --tint-purple:#6d28d9; --tint-accent:#c2410c; --tint-success:#047857; --tint-danger:#b91c1c;
+  --grad-text:var(--grad-full);
+  --shadow-glass:0 1px 3px rgba(15,23,42,.07),0 10px 28px rgba(15,23,42,.1);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);color:var(--text);
+  background:var(--yz-dark);
+  background-image:radial-gradient(900px 480px at 12% -6%,rgba(26,102,255,.2),transparent 60%),
+    radial-gradient(760px 420px at 88% 4%,rgba(253,100,33,.14),transparent 60%),
+    radial-gradient(820px 520px at 55% 110%,rgba(74,58,191,.18),transparent 60%);}
+body::before{content:"";position:fixed;inset:0;pointer-events:none}
+.wrap{max-width:1080px;margin:0 auto;padding:var(--space-6) var(--space-5) var(--space-8)}
+.grad-bar{height:6px;border-radius:999px;background:var(--grad-full);margin-bottom:var(--space-5)}
+header.top{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:flex-end;justify-content:space-between;margin-bottom:var(--space-5)}
+h1{font-size:var(--text-2xl);margin:0;letter-spacing:-.01em}
+h1 .grad{background:var(--grad-text);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--text-muted);font-size:var(--text-sm);margin:.35rem 0 0}
+.sub code{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-soft)}
+.toolbar{display:flex;gap:var(--space-2);flex-wrap:wrap}
+button{font:inherit;font-size:var(--text-sm);color:var(--text);background:var(--surface-soft);
+  border:1px solid var(--panel-border);border-radius:999px;padding:.5rem .95rem;cursor:pointer}
+button:hover{background:var(--surface-hover)}
+button.primary{background:var(--btn-primary-bg);border-color:transparent;color:#fff}
+button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(26,102,255,.42)}
+section{margin-bottom:var(--space-5)}
+h2{font-size:var(--text-lg);margin:0 0 var(--space-3)}
+h4{margin:0 0 var(--space-2);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint)}
+.card{background:var(--surface);border:1px solid var(--panel-border);border-radius:var(--radius-md);
+  padding:var(--space-4);box-shadow:var(--shadow-glass);margin-bottom:var(--space-3);break-inside:avoid}
+.card h3{margin:0 0 .4rem;font-size:var(--text-md)}
+.row{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;margin-bottom:.5rem}
+.badge{font-size:var(--text-xs);border-radius:999px;padding:.2rem .7rem;border:1px solid var(--panel-border-strong)}
+.badge.good{background:var(--success-soft);border-color:var(--success-border);color:var(--tint-success)}
+.badge.warn{background:var(--warning-soft);border-color:var(--warning-border);color:var(--warning)}
+.badge.bad{background:var(--danger-soft);border-color:var(--danger-border);color:var(--tint-danger)}
+.badge.open{border-style:dashed;border-color:var(--warning-border);color:var(--warning)}
+ul{margin:.4rem 0 .2rem;padding-left:1.1rem;color:var(--text-soft)}
+li{margin:.2rem 0}
+.kv{font-size:var(--text-sm);color:var(--text-soft)}
+.kv b{color:var(--text)}
+.mono{font-family:var(--font-mono);font-size:var(--text-xs)}
+/* diagrams */
+.diagram-box{background:var(--surface-strong);border:1px solid var(--panel-border);
+  border-radius:var(--radius-sm);padding:var(--space-3);overflow-x:auto}
+pre.diagram{margin:0}
+.diagram-box svg{max-width:100%;height:auto;display:block;margin:0 auto}
+/* before / after */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
+@media(max-width:720px){.duo{grid-template-columns:1fr}}
+.side{border-radius:var(--radius-sm);padding:var(--space-3);background:var(--surface-strong);
+  border:1px solid var(--panel-border);border-left:3px solid var(--panel-border-strong)}
+.side.now{border-left-color:var(--danger)}
+.side.next{border-left-color:var(--success)}
+/* options */
+.option{border-left:3px solid var(--panel-border-strong)}
+.option.rec{border-left-color:var(--success)}
+/* code sketch */
+pre.code{margin:0;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.55;
+  color:var(--text-soft);white-space:pre;overflow-x:auto}
+pre.code b{color:var(--text);font-weight:600}
+pre.code i{color:var(--text-faint);font-style:italic}
+footer{color:var(--text-faint);font-size:var(--text-xs);margin-top:var(--space-6)}
+@media print{
+  .toolbar{display:none!important}
+  body{background:#fff;background-image:none}
+  .wrap{max-width:none;padding:0}
+  .card,.diagram-box,.side{box-shadow:none;break-inside:avoid}
+  @page{margin:12mm}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="report">
+  <div class="grad-bar"></div>
+  <header class="top">
+    <div>
+      <h1>Visual Thinking <span class="grad" id="meta-topic">{{topic}}</span></h1>
+      <p class="sub">Generado <code id="meta-date">{{date}}</code> · Estado <code id="meta-status">{{status}}</code></p>
+    </div>
+    <div class="toolbar">
+      <button id="btn-theme" type="button" title="Alternar tema">Tema claro/oscuro</button>
+      <button id="btn-pdf" type="button" class="primary" title="Guardar como PDF">Exportar PDF</button>
+      <button id="btn-png" type="button" title="Guardar como imagen PNG">Exportar PNG</button>
+    </div>
+  </header>
+
+  <main id="canvas">
+    <!-- Fill with 2-5 blocks picked from references/diagrams.md:
+         idea-map | before-after | options | decision-tree | sequence | code-sketch -->
+  </main>
+
+  <footer>Generado por la skill <span class="mono">visual-thinking</span> · tokens ywai/yz-ui · PDF vía impresión, PNG vía html2canvas · Mermaid requiere red.</footer>
+</div>
+
+<script>
+/* Theme, PDF and PNG work offline. Mermaid rendering lives in the module script
+   below; if the CDN is unreachable the canvas still reads as text. */
+(function(){
+  var root=document.documentElement;
+  var saved=null; try{saved=localStorage.getItem("vt-theme");}catch(e){}
+  if(saved==="light"||saved==="dark"){root.setAttribute("data-theme",saved);}
+  document.getElementById("btn-theme").addEventListener("click",function(){
+    var next=root.getAttribute("data-theme")==="light"?"dark":"light";
+    root.setAttribute("data-theme",next);
+    try{localStorage.setItem("vt-theme",next);}catch(e){}
+    window.dispatchEvent(new CustomEvent("vt-theme"));
+  });
+  document.getElementById("btn-pdf").addEventListener("click",function(){window.print();});
+  document.getElementById("btn-png").addEventListener("click",function(){
+    var node=document.getElementById("report");
+    function download(url){
+      var a=document.createElement("a");a.href=url;
+      a.download="visual-thinking-"+new Date().toISOString().slice(0,10)+".png";
+      document.body.appendChild(a);a.click();a.remove();
+    }
+    if(typeof html2canvas==="undefined"){alert("PNG necesita red (CDN html2canvas). Usa Exportar PDF.");return;}
+    html2canvas(node,{backgroundColor:null,scale:2}).then(function(canvas){
+      download(canvas.toDataURL("image/png"));
+    }).catch(function(err){alert("No se pudo generar el PNG: "+err);});
+  });
+})();
+</script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  var MERMAID_THEME={dark:"dark",light:"neutral"};
+  var currentTheme=function(){
+    return document.documentElement.getAttribute("data-theme")==="light"?"light":"dark";
+  };
+  var pres=Array.from(document.querySelectorAll("pre.diagram"));
+  pres.forEach(function(p){p.dataset.source=p.textContent;});
+
+  async function renderDiagrams(){
+    mermaid.initialize({startOnLoad:false,theme:MERMAID_THEME[currentTheme()],securityLevel:"loose"});
+    try{await mermaid.run({nodes:pres,suppressErrors:true});}
+    catch(e){/* one bad diagram must not kill the canvas */}
+  }
+  window.addEventListener("vt-theme",function(){
+    pres.forEach(function(p){
+      p.removeAttribute("data-processed");
+      p.textContent=p.dataset.source;
+    });
+    renderDiagrams();
+  });
+  renderDiagrams();
+</script>
+</body>
+</html>

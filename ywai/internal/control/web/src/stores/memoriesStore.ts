@@ -43,9 +43,12 @@ interface MemoriesState {
 	loading: boolean
 	loadingPrompts: boolean
 	error: string | null
+	startingEngram: boolean
+	startEngramError: string | null
 
 	// actions — observations
 	fetchStatus: () => Promise<void>
+	startEngram: () => Promise<boolean>
 	fetchObservations: (limit?: number) => Promise<void>
 	applyFilters: () => Promise<void>
 	setFilter: <K extends keyof MemoryFilters>(key: K, value: MemoryFilters[K]) => void
@@ -155,6 +158,8 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	loading: false,
 	loadingPrompts: false,
 	error: null,
+	startingEngram: false,
+	startEngramError: null,
 
 	fetchStatus: async () => {
 		try {
@@ -162,6 +167,22 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 			set({ engramStatus: status })
 		} catch {
 			set({ engramStatus: { connected: false } })
+		}
+	},
+
+	startEngram: async () => {
+		set({ startingEngram: true, startEngramError: null })
+		try {
+			await memoriesApi.startEngram()
+			// Re-poll so the page reflects the running server at once.
+			await get().fetchStatus()
+			await get().fetchStats()
+			await get().fetchObservations()
+			set({ startingEngram: false })
+			return true
+		} catch (err) {
+			set({ startingEngram: false, startEngramError: String(err) })
+			return false
 		}
 	},
 
@@ -219,13 +240,17 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deleteObservation: async (id) => {
-		await memoriesApi.deleteObservation(id)
-		set((s) => ({
-			observations: s.observations.filter((o) => String(o.id) !== id),
-			selectedObservation:
-				String(s.selectedObservation?.id) === id ? null : s.selectedObservation,
-		}))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deleteObservation(id)
+			set((s) => ({
+				observations: s.observations.filter((o) => String(o.id) !== id),
+				selectedObservation:
+					String(s.selectedObservation?.id) === id ? null : s.selectedObservation,
+			}))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchStats: async () => {
@@ -245,9 +270,13 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deleteSession: async (id) => {
-		await memoriesApi.deleteSession(id)
-		set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deleteSession(id)
+			set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchPrompts: async (limit = 100) => {
@@ -260,9 +289,13 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
 	},
 
 	deletePrompt: async (id) => {
-		await memoriesApi.deletePrompt(id)
-		set((s) => ({ prompts: s.prompts.filter((p) => String(p.id) !== id) }))
-		await get().fetchStats()
+		try {
+			await memoriesApi.deletePrompt(id)
+			set((s) => ({ prompts: s.prompts.filter((p) => String(p.id) !== id) }))
+			await get().fetchStats()
+		} catch (err) {
+			set({ error: String(err) })
+		}
 	},
 
 	fetchTimeline: async (observationId?: string) => {

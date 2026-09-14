@@ -1,18 +1,16 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
@@ -27,7 +25,7 @@ var version = "dev"
 var rootCmd = &cobra.Command{
 	Use:   "ywai",
 	Short: "One command to set up your AI dev environment",
-	Long:  "ywai wraps gentle-ai and adds extra skills, project templates, and one-command install.",
+	Long:  "ywai installs and manages your AI dev environment: engram, agent profiles, extra skills, and project tooling.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Lightweight read-only commands must not seed skills/agents/workflows
 		// (and must not print "no embedded data" noise).
@@ -118,7 +116,7 @@ func skipDataSeeding(cmd *cobra.Command) bool {
 	// Direct leaves / parents we always skip.
 	skip := map[string]bool{
 		"eval": true, "completion": true, "help": true,
-		"version": true, "stop": true, "ui": true, "ledger": true,
+		"version": true, "stop": true, "ui": true, "env": true,
 	}
 	for _, n := range names {
 		if skip[n] {
@@ -180,6 +178,14 @@ func installEcosystem(agents []agent.Agent, dryRun bool, opts gentlai.InstallOpt
 		fmt.Printf("  Warning: failed to install Engram: %v\n", err)
 	}
 
+	// Bare preset (profile scope only): the shared Engram binary stays
+	// installed, but nothing is wired into the profile — no plugin files,
+	// no MCP sections, no tui.json entries.
+	if spec := scopedPresetSpec(); spec != nil && envprofile.IsBareSpec(spec) {
+		fmt.Println("  Skipping Engram MCP wiring for bare preset.")
+		return
+	}
+
 	hosts := engramMCPHostNames(agents)
 	if len(hosts) == 0 {
 		return
@@ -217,18 +223,78 @@ func summarizeAgents(dryRun bool, what string, names []string) {
 
 func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	var done []string
+	// Preset enforcement (profile scope only): copy only preset skills[].
+	// Empty = keep current (copy all). Never deletes unlisted skills.
+	spec := scopedPresetSpec()
+	if envprofile.PresetNone(spec, "skills") {
+		fmt.Println("  Preset skills: none (env override) — skipping ywai extra skills")
+		return
+	}
+	skillAllow := envprofile.PresetSkills(spec)
+	if len(skillAllow) > 0 {
+		fmt.Printf("  Preset skills filter: %s\n", strings.Join(skillAllow, ", "))
+	}
 	for _, a := range agents {
+		if skip, reason := skipSkillCopy(a, agents); skip {
+			if !dryRun {
+				if removed := skills.PruneYwaiSkills(a.SkillsDir); len(removed) > 0 {
+					fmt.Printf("  [%s] removed %d duplicate skill(s): %s\n", a.Name, len(removed), reason)
+				}
+			}
+			continue
+		}
 		if dryRun {
 			done = append(done, a.Name)
 			continue
 		}
-		if err := skills.CopyTo(a.SkillsDir); err != nil {
-			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
+		var copyErr error
+		if len(skillAllow) > 0 {
+			copyErr = skills.CopyFiltered(a.SkillsDir, skillAllow)
+		} else {
+			copyErr = skills.CopyTo(a.SkillsDir)
+		}
+		if copyErr != nil {
+			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, copyErr)
 			continue
 		}
 		done = append(done, a.Name)
 	}
 	summarizeAgents(dryRun, "ywai extra skills", done)
+}
+
+// scopedPresetSpec returns the active profile's preset spec, or nil when
+// global or when the profile/preset cannot be read (fail open to current
+// behavior). Callers treat nil as "no filter".
+func scopedPresetSpec() map[string]any {
+	if !envprofile.InProfileScope() {
+		return nil
+	}
+	_, spec, err := envprofile.ScopedPreset()
+	if err != nil {
+		return nil
+	}
+	return spec
+}
+
+// skipSkillCopy reports whether a host already sees the skills through another
+// host's directory, so copying them again only duplicates the catalog it loads.
+//
+// opencode reads ~/.agents/skills, ~/.claude/skills and its own dir (verified
+// in the 1.18.29 binary), so with Claude Code installed its copy adds a second
+// entry for every skill and nothing else.
+//
+// ponytail: one rule for the one overlap that exists today; generalize into a
+// table if another host starts reading a sibling's directory.
+func skipSkillCopy(a agent.Agent, all []agent.Agent) (bool, string) {
+	if a.Name != "opencode" {
+		return false, ""
+	}
+	for _, other := range all {
+		if other.Name == "claude-code" {
+			return true, "opencode reads ~/.claude/skills"
+		}
+	}
+	return false, ""
 }
 
 func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
@@ -239,11 +305,13 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool) applyResult {
-	return applyManaged(applyOpts{
+func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
+	return applyManagedScoped(applyOpts{
 		Mode:            applyInstall,
+		Profile:         profile,
 		Opts:            opts,
 		InstallMCP:      installMCP,
+		InstallMetaMCP:  installMetaMCP,
 		InstallPonytail: installPonytail,
 		GroupFilter:     groupFilter,
 		OverwriteAgents: overwriteAgents,
@@ -252,6 +320,15 @@ func executeInstall(opts gentlai.InstallOptions, installMCP, installPonytail boo
 }
 
 func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofiles.GroupFilter, overwriteAgents bool) {
+	// Preset enforcement (profile scope only): the preset stamped in the
+	// manifest filters agent groups. Empty/missing = no filter, keep the
+	// caller's default. Global behavior is bit-identical.
+	if spec := scopedPresetSpec(); spec != nil {
+		if groups := envprofile.PresetGroups(spec); len(groups) > 0 {
+			fmt.Printf("  Preset groups filter: %s\n", strings.Join(groups, ", "))
+			filter = agentprofiles.GroupFilter{Groups: groups}
+		}
+	}
 	// Read agent profiles: prefer source dir (has latest groups.json when running
 	// from source checkout), fall back to seeded data dir.
 	sourceDir := config.AgentsSourceDir()
@@ -287,30 +364,12 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 
 	if dryRun {
 		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
-		fmt.Println("  Would sweep retired skill-registry / .atl artifacts")
 		return
 	}
 
 	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	if removed := agentprofiles.SweepRetiredSkillRegistry(home, cwd); len(removed) > 0 {
-		fmt.Printf("  Removed %d retired skill-registry/.atl artifact(s)\n", len(removed))
-	}
 
 	for _, a := range agents {
-		// Sweep the SDD assets `gentle-ai sync` used to write into every host.
-		// ywai stopped shipping SDD, but dropping it from the install only stops
-		// new writes: hosts keep the old assets until something removes them.
-		// The Settings UI has a button for this, which means it only ever runs
-		// on the one machine whose owner opens that panel.
-		if a.SkillsDir != "" {
-			if removed, err := skills.RemoveSddAssets(a.SkillsDir); err != nil {
-				fmt.Printf("  [%s] Warning: SDD cleanup: %v\n", a.Name, err)
-			} else if len(removed) > 0 {
-				fmt.Printf("  [%s] Removed %d retired SDD asset(s)\n", a.Name, len(removed))
-			}
-		}
-
 		switch a.Name {
 		case "opencode":
 			configPath := ""
@@ -323,11 +382,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			}
 			agentsDir := config.OpenCodeAgentsDir()
 
-			// Migrate existing agents from JSON to markdown
-			if err := agentprofiles.MigrateOpenCodeAgents(configPath, agentsDir); err != nil {
-				fmt.Printf("  [%s] Warning: migration failed: %v\n", a.Name, err)
-			}
-
 			// Install agents as markdown ONLY (no JSON fallback).
 			// OpenCodeAgentsDir may resolve to a host-managed location (Orca's
 			// shared hooks dir). opencode itself always reads ~/.config/opencode/
@@ -335,11 +389,17 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// patched in place by the delegation/permission rewriters, so its
 			// prompt body went stale while its frontmatter kept being updated.
 			// Write the full markdown to both.
+			//
+			// Profile scope (YWAI_PROFILE set by the env sandbox): agentsDir
+			// already points inside the profile, so write there only. The
+			// canonical copy is global state and stays untouched.
 			targets := []string{agentsDir}
-			if home, err := os.UserHomeDir(); err == nil {
-				canonical := filepath.Join(home, ".config", "opencode", "agents")
-				if canonical != agentsDir {
-					targets = append(targets, canonical)
+			if os.Getenv("YWAI_PROFILE") == "" {
+				if home, err := os.UserHomeDir(); err == nil {
+					canonical := filepath.Join(home, ".config", "opencode", "agents")
+					if canonical != agentsDir {
+						targets = append(targets, canonical)
+					}
 				}
 			}
 			for _, target := range targets {
@@ -356,18 +416,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// the delegation filter sees only valid installed agents.
 			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
 
-			// Remove agents retired from ywai (e.g. qa-finder) still installed
-			// from a previous release.
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
-
-			// Same for retired config artifacts (the pre-v2 skill registry):
-			// dropping them from the source is not enough, they keep running on
-			// hosts until an install or update sweeps them.
-			if removed := agentprofiles.RemoveRetiredConfigArtifacts(filepath.Dir(agentsDir)); len(removed) > 0 {
-				fmt.Printf("  [%s] Removed retired artifacts: %s\n", a.Name, strings.Join(removed, ", "))
-			}
-
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json + agent markdown as v2 subagent
 			// triggers are rendered into each agent's markdown prompt body.
@@ -383,8 +431,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		case "claude-code":
 			agentsDir := filepath.Join(home, ".claude", "agents")
 			_ = agentprofiles.InstallClaude(agentsDir, profiles)
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
 
 		case "vscode-copilot":
 			promptsDir := agentprofiles.VSCodePromptsDir()
@@ -399,8 +445,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			} else {
 				fmt.Printf("  [%s] Agent profiles installed\n", a.Name)
 			}
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
 			teamProfilesDir := filepath.Join(home, ".pi", "agent")
 			if err := agentprofiles.InstallPiTeamProfiles(teamProfilesDir, profiles, overwriteAgents); err != nil {
 				fmt.Printf("  [%s] Warning: teammate profiles: %v\n", a.Name, err)
@@ -416,52 +460,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 				fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
 			} else {
 				fmt.Printf("  [%s] Core agent profiles installed → %s\n", a.Name, agentsDir)
-			}
-			agentprofiles.RemoveRetiredAgents(agentsDir)
-			agentprofiles.RemoveAgentBackups(agentsDir)
-
-			// Auto-install PI.dev plugins required for orchestrator
-			if piBin, err := exec.LookPath("pi"); err == nil {
-				piPlugins := []string{
-					"@spences10/pi-team-mode",
-					"@spences10/pi-mcp",
-					"@spences10/pi-skills",
-					"@spences10/pi-skill-importer",
-					"@spences10/pi-child-env",
-					"@spences10/pi-lsp",
-					"@spences10/pi-redact",
-					"@spences10/pi-nopeek",
-				}
-
-				for _, plugin := range piPlugins {
-					fmt.Printf("  [%s] Installing %s...\n", a.Name, plugin)
-
-					if dryRun {
-						fmt.Printf("  [%s] Would install %s\n", a.Name, plugin)
-						continue
-					}
-
-					// ponytail: 2m timeout + closed stdin so a hung/interactive
-					// pi install can't block the whole update forever.
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-					cmd := exec.CommandContext(ctx, piBin, "install", "npm:"+plugin, "--no-approve")
-					cmd.Stdin = nil
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-
-					if err := cmd.Run(); err != nil {
-						if ctx.Err() == context.DeadlineExceeded {
-							fmt.Printf("  [%s] Warning: %s install timed out after 2m — skipping\n", a.Name, plugin)
-						} else {
-							fmt.Printf("  [%s] Warning: %s install failed: %v\n", a.Name, plugin, err)
-						}
-					} else {
-						fmt.Printf("  [%s] %s installed\n", a.Name, plugin)
-					}
-					cancel()
-				}
-			} else {
-				fmt.Printf("  [%s] Note: pi binary not found — install PI.dev first: npm install -g @pi-apps/pi\n", a.Name)
 			}
 		}
 	}
@@ -570,24 +568,55 @@ func reseedData() {
 			fmt.Println("  Agent profiles re-seeded from embedded.")
 		}
 	}
+
+	// Reseed plugin bundles. The resolvers in config/data.go only seed when the
+	// bundle is missing, so an upgrade used to keep serving the copy the first
+	// install wrote — e.g. the v1 background-agents bundle survived the v2 port
+	// and opencode v2 refused to load it.
+	if err := config.SeedPluginsFromEmbedded(); err != nil {
+		// Not fatal — a source checkout resolves bundles from plugins/*/dist.
+	} else {
+		fmt.Println("  Plugin bundles re-seeded from embedded.")
+	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installPonytail bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 	var done []string
 
-	// The third-party statusline plugin does not support OpenCode v2. Remove
-	// legacy entries during installs so it cannot be reloaded accidentally.
-	if !dryRun {
-		if err := plugins.RemoveSubAgentStatusline(); err != nil {
-			fmt.Printf("  Warning: failed to remove retired sub-agent-statusline plugin: %v\n", err)
-		}
-	} else {
-		fmt.Println("  Would remove retired sub-agent-statusline TUI plugin")
+	// sub-agent-statusline shows delegation activity in the sidebar and footer.
+	// The published npm package's peer range excludes OpenCode 2, so the
+	// vendored port is installed per-agent below by InstallSubagentStatusline.
+	// The install used to strip the v1 entry from tui.json on every run, which
+	// quietly undid the entry Engram's own installer had just written.
+
+	// Resolve the install policy once: the ~/.ywai/plugins.json override when
+	// valid, the embedded manifest otherwise. Warnings surface a bad override.
+	mf, manifestWarnings := plugins.LoadManifest()
+	for _, w := range manifestWarnings {
+		fmt.Printf("  Warning: %v\n", w)
+	}
+	flags := map[string]bool{"mcp": installMCP, "meta-mcp": installMetaMCP, "ponytail": installPonytail}
+
+	// Preset enforcement (profile scope only): install only preset mcp[]
+	// servers. Empty = keep current. Never uninstalls extra servers, only
+	// skips installing unlisted ones. Plugins always install.
+	mcpSpec := scopedPresetSpec()
+	mcpAllow := envprofile.PresetMCPIDs(mcpSpec)
+	// mcpNone: an env override emptied the list — skip every filterable server.
+	mcpNone := envprofile.PresetNone(mcpSpec, "mcp")
+	skipMCP := func(id string) bool {
+		return mcpNone || (len(mcpAllow) > 0 && !envprofile.ShouldInstallMCP(id, mcpAllow))
+	}
+	if mcpNone {
+		fmt.Println("  Preset MCP filter: none (env override)")
+	} else if len(mcpAllow) > 0 {
+		fmt.Printf("  Preset MCP filter: %s\n", strings.Join(mcpAllow, ", "))
 	}
 
 	for _, a := range agents {
-		// Install MCP for agents that support it
+		// Plugin/MCP handling covers the config formats ywai writes entries
+		// for: opencode-style JSON and the claude-code/pi mcpServers shape.
 		if a.Name != "opencode" && a.Name != "claude-code" && a.Name != "pi" && a.Name != "omp" {
 			continue
 		}
@@ -597,10 +626,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] No config path found, skipping plugins\n", a.Name)
 			continue
 		}
-
-		// background-agents is an opencode plugin (delegate/delegation_* async
-		// tools); it only applies to opencode-format configs (opencode/kilocode).
-		supportsOpenCodePlugins := a.Name == "opencode" || a.Name == "kilocode"
 
 		if dryRun {
 			done = append(done, a.Name)
@@ -620,62 +645,39 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			fmt.Printf("  [%s] Warning: failed to remove mcp-vision MCP: %v\n", a.Name, err)
 		}
 
-		// OpenCode v2 owns foreground/background delegation through its native
-		// subagent tool. Remove the retired shim so it cannot shadow that tool.
-		if supportsOpenCodePlugins {
-			if err := plugins.RemoveBackgroundAgents(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove legacy background-agents plugin: %v\n", a.Name, err)
-			}
-
-			// vision-bridge: auto-route attached images through TokenBank vision
-			// when the active model cannot accept image input (e.g. deepseek-v4-flash).
-			if err := plugins.InstallVisionBridge(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install vision-bridge plugin: %v\n", a.Name, err)
-			}
-
-			// advisor: a second model reviews each turn and injects notes the
-			// agent can weigh. Inert until advisor_enabled + advisor_model are
-			// set, so installing the bundle costs nothing by itself.
-			if err := plugins.InstallAdvisor(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install advisor plugin: %v\n", a.Name, err)
-			} else if a.Name == "opencode" {
-				// The /advisor command only works where the plugin's tools are
-				// registered, so it ships with the plugin and only for opencode.
-				if err := plugins.InstallAdvisorCommand(config.OpenCodeCommandsDir()); err != nil {
-					fmt.Printf("  [%s] Warning: failed to install /advisor command: %v\n", a.Name, err)
+		// What installs is policy, not code: the manifest (~/.ywai/plugins.json
+		// override, embedded default otherwise) decides per id, agent, flag and
+		// flavor. Executor wiring lives in internal/plugins/manifest.go.
+		// Preset enforcement: skip MCP servers outside the preset allowlist
+		// (existing entries are left alone, never removed).
+		mfForAgent := mf
+		if mcpNone || len(mcpAllow) > 0 {
+			var keep []plugins.ManifestEntry
+			for _, e := range mf.Install {
+				if envprofile.IsMCPServerManifestID(e.ID) && skipMCP(e.ID) {
+					fmt.Printf("  [%s] Skipped %s: not in preset mcp list\n", a.Name, e.ID)
+					continue
 				}
+				keep = append(keep, e)
 			}
-
-			// ywai TUI logo (home_logo slot, click easter eggs) — auto-discovered
-			// from tui-plugins/, so no config patching is needed.
-			if err := plugins.InstallTuiLogo(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ywai TUI logo: %v\n", a.Name, err)
+			mfForAgent = plugins.Manifest{Install: keep}
+		}
+		for _, r := range plugins.RunManifest(mfForAgent, a.Name, configPath, flags) {
+			switch {
+			case r.Skipped != "":
+				fmt.Printf("  [%s] Skipped %s: %s\n", a.Name, r.ID, r.Skipped)
+			case r.Err != nil:
+				fmt.Printf("  [%s] Warning: failed to install %s: %v\n", a.Name, r.ID, r.Err)
 			}
 		}
 
-		// Install Microsoft Learn MCP if requested
-		if installMCP {
-			if err := plugins.InstallMicrosoftLearnMCP(configPath, a.Name); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install Microsoft Learn MCP: %v\n", a.Name, err)
-			}
-		}
-
-		// Install Ponytail through Claude's marketplace when requested. For
-		// OpenCode-compatible agents, remove the incompatible legacy npm plugin.
-		if installPonytail && plugins.SupportsPonytail(a.Name) {
-			if err := plugins.InstallPonytail(a.Name, configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to install ponytail: %v\n", a.Name, err)
-			} else if a.Name == "claude-code" {
-				fmt.Printf("  [%s] Installed ponytail via Claude marketplace (%s)\n", a.Name, plugins.PonytailClaudePluginID)
-			} else {
-				fmt.Printf("  [%s] Removed incompatible ponytail OpenCode plugin\n", a.Name)
-			}
-		}
-
-		if a.Name == "opencode" {
-			if err := plugins.RemoveBrokenLegacyOpenCodePlugins(configPath); err != nil {
-				fmt.Printf("  [%s] Warning: failed to remove broken legacy plugins: %v\n", a.Name, err)
-			}
+		// Orca deploys a status plugin into the config dir ywai manages, and on
+		// v2 it fails to load. Repair it here so the status bar is not dead
+		// until Orca ships its own fix; re-applied because Orca redeploys it.
+		if patched, err := plugins.RepairOrcaStatusPluginV2(configPath); err != nil {
+			fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
+		} else if patched {
+			fmt.Printf("  [%s] Repaired Orca status plugin for OpenCode v2\n", a.Name)
 		}
 
 		// Remove leftover Azure DevOps plugin entries from older installs. ywai
@@ -725,43 +727,26 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 
 		// Wire the graft MCP server into the agent config natively
 		// (`graft mcp` entry written by ywai, not `graft init`), so no
-		// instruction files are rewritten unexpectedly.
-		fmt.Println("  Wiring Graft MCP into agent configs...")
-		if err := plugins.WireGraftMCP(); err != nil {
-			fmt.Printf("  Warning: %v\n", err)
+		// instruction files are rewritten unexpectedly. Preset enforcement:
+		// skip when graft is outside the preset mcp[] allowlist; an existing
+		// entry is left alone, never removed.
+		if skipMCP("graft") {
+			fmt.Println("  Skipped graft MCP wiring: not in preset mcp list")
 		} else {
-			fmt.Println("  ✓ graft MCP wired")
+			fmt.Println("  Wiring Graft MCP into agent configs...")
+			if err := plugins.WireGraftMCP(); err != nil {
+				fmt.Printf("  Warning: %v\n", err)
+			} else {
+				fmt.Println("  ✓ graft MCP wired")
+			}
 		}
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
 		fmt.Println("  Would install Graft CLI (`graft`)")
-		fmt.Println("  Would wire Graft MCP into opencode")
-	}
-}
-
-func removeQuotaForAgents(agents []agent.Agent, dryRun bool) {
-	agentSettingsPaths := agent.SettingsPaths()
-
-	for _, a := range agents {
-		// Only remove quota for opencode
-		if a.Name != "opencode" && a.Name != "kilocode" && a.Name != "claude-code" {
-			continue
-		}
-
-		configPath, ok := agentSettingsPaths[a.Name]
-		if !ok || configPath == "" {
-			continue
-		}
-
-		if dryRun {
-			fmt.Printf("  [%s] Would remove opencode-quota plugin\n", a.Name)
-			continue
-		}
-
-		if err := plugins.RemoveQuota(configPath); err != nil {
-			fmt.Printf("  [%s] Warning: failed to remove opencode-quota: %v\n", a.Name, err)
+		if skipMCP("graft") {
+			fmt.Println("  Would skip graft MCP wiring: not in preset mcp list")
 		} else {
-			fmt.Printf("  [%s] Removed opencode-quota plugin\n", a.Name)
+			fmt.Println("  Would wire Graft MCP into opencode")
 		}
 	}
 }
@@ -779,48 +764,50 @@ var managedDefaultAgents = map[string]bool{
 	"plan":                true,
 	"orchestrator":        true,
 	"gentle-orchestrator": true,
+	"qa":                  true,
+	"qa-orchestrator":     true,
 }
 
 func isManagedDefaultAgent(name string) bool {
 	return managedDefaultAgents[strings.TrimSpace(name)]
 }
 
+// openCodeRootForWrite reads the active OpenCode config (JSONC-safe) and
+// returns the parsed root, its path, and whether the file already exists. A
+// missing file yields an empty root so the caller can create it.
+func openCodeRootForWrite() (map[string]any, string, bool, error) {
+	configDir := config.OpenCodeConfigDir()
+	path := config.FindJSONCPath(configDir, "opencode")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{}, path, false, nil
+		}
+		return nil, "", false, fmt.Errorf("reading opencode config: %w", err)
+	}
+	cfg, err := config.ReadJSONC(path)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("reading opencode config: %w", err)
+	}
+	return cfg, path, true, nil
+}
+
+// writeOpenCodeRoot writes the merged root back to the config path, creating
+// the directory when needed. JSONC comments are not preserved: the file is
+// rewritten as plain JSON.
+func writeOpenCodeRoot(path string, cfg map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating opencode config dir: %w", err)
+	}
+	if err := config.WriteJSONC(path, cfg); err != nil {
+		return fmt.Errorf("writing opencode config: %w", err)
+	}
+	return nil
+}
+
 func setDefaultAgent(agentName string, dryRun bool) error {
-	home, err := os.UserHomeDir()
+	cfg, path, existed, err := openCodeRootForWrite()
 	if err != nil {
 		return err
-	}
-	configDir := filepath.Join(home, ".config", "opencode")
-	path := config.FindJSONCPath(configDir, "opencode")
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("reading opencode config: %w", err)
-		}
-		// Config file does not exist — create it with default_agent.
-		if err := os.MkdirAll(configDir, 0o755); err != nil {
-			return fmt.Errorf("creating opencode config dir: %w", err)
-		}
-		cfg := map[string]any{"default_agent": agentName}
-		updated, mErr := json.MarshalIndent(cfg, "", "\t")
-		if mErr != nil {
-			return mErr
-		}
-		if dryRun {
-			fmt.Printf("  Would set default_agent to %q\n", agentName)
-			return nil
-		}
-		if wErr := os.WriteFile(path, append(updated, '\n'), 0o644); wErr != nil {
-			return fmt.Errorf("writing opencode config: %w", wErr)
-		}
-		fmt.Printf("  Created opencode config with default_agent=%q\n", agentName)
-		return nil
-	}
-
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parsing opencode.json: %w", err)
 	}
 
 	// Only claim the default when it is still one nobody deliberately picked:
@@ -840,19 +827,144 @@ func setDefaultAgent(agentName string, dryRun bool) error {
 	}
 
 	cfg["default_agent"] = agentName
-	updated, err := json.MarshalIndent(cfg, "", "\t")
-	if err != nil {
-		return err
-	}
 
 	if dryRun {
 		fmt.Printf("  Would set default_agent to %q\n", agentName)
 		return nil
 	}
-
-	if err := os.WriteFile(path, updated, 0o644); err != nil {
-		return fmt.Errorf("writing opencode.json: %w", err)
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
 	}
-	fmt.Printf("  default_agent set to %q\n", agentName)
+	if existed {
+		fmt.Printf("  default_agent set to %q\n", agentName)
+	} else {
+		fmt.Printf("  Created opencode config with default_agent=%q\n", agentName)
+	}
 	return nil
+}
+
+// setDefaultAgentForced writes the root `default_agent` unconditionally
+// (profile preset scope only): the preset is the choice, so a previous
+// preset's agent never survives a preset switch. Global applies keep using
+// setDefaultAgent, which never overwrites a user pick.
+func setDefaultAgentForced(agentName string, dryRun bool) error {
+	agentName = strings.TrimSpace(agentName)
+	if agentName == "" {
+		return nil
+	}
+	cfg, path, _, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+	if cur, _ := cfg["default_agent"].(string); cur == agentName {
+		fmt.Printf("  default_agent already %q\n", agentName)
+		return nil
+	}
+	cfg["default_agent"] = agentName
+	if dryRun {
+		fmt.Printf("  Would set default_agent to %q (preset)\n", agentName)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	fmt.Printf("  default_agent set to %q (preset)\n", agentName)
+	return nil
+}
+
+// setDefaultModel writes the root `model` key (the default model for a new
+// session) when the key is absent or empty. A value the user already set is
+// left untouched: it is their choice, and overwriting it would change what
+// every new session runs.
+func setDefaultModel(model string, dryRun bool) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+
+	cfg, path, existed, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+
+	if cur, ok := cfg["model"]; ok {
+		s, isString := cur.(string)
+		if !isString || strings.TrimSpace(s) != "" {
+			fmt.Printf("  model already set — leaving it\n")
+			return nil
+		}
+	}
+
+	cfg["model"] = model
+
+	if dryRun {
+		fmt.Printf("  Would set model to %q\n", model)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	if existed {
+		fmt.Printf("  model set to %q\n", model)
+	} else {
+		fmt.Printf("  Created opencode config with model=%q\n", model)
+	}
+	return nil
+}
+
+// setDefaultModelForced writes the root `model` key unconditionally (profile
+// preset scope only): the preset is the choice, so an older preset value or a
+// stale default never survives a reinstall. Global applies keep using
+// setDefaultModel, which never overwrites a user pick.
+func setDefaultModelForced(model string, dryRun bool) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	cfg, path, existed, err := openCodeRootForWrite()
+	if err != nil {
+		return err
+	}
+	if cur, ok := cfg["model"]; ok {
+		if s, isString := cur.(string); isString && strings.TrimSpace(s) == model {
+			fmt.Printf("  model already set — leaving it\n")
+			return nil
+		}
+	}
+	cfg["model"] = model
+	if dryRun {
+		fmt.Printf("  Would set model to %q\n", model)
+		return nil
+	}
+	if err := writeOpenCodeRoot(path, cfg); err != nil {
+		return err
+	}
+	if existed {
+		fmt.Printf("  model set to %q\n", model)
+	} else {
+		fmt.Printf("  Created opencode config with model=%q\n", model)
+	}
+	return nil
+}
+
+// defaultRootModel returns the model ywai writes to the root `model` key: the
+// active orchestrator profile's `orchestrator` role model, with the shipped
+// `balanced` profile as fallback. A `#variant` suffix is stripped because the
+// root key carries a plain provider/model while a variant belongs on an agent.
+func defaultRootModel() string {
+	if cfg, err := config.LoadConfig(); err == nil {
+		if m := strings.TrimSpace(cfg.GetOrchestratorAgentModel("orchestrator")); m != "" {
+			return stripModelVariant(m)
+		}
+	}
+	seeded := config.DefaultOrchestratorModelProfiles()[config.DefaultOrchestratorModelProfileName]
+	return stripModelVariant(seeded.Agents["orchestrator"].Model)
+}
+
+func stripModelVariant(model string) string {
+	model = strings.TrimSpace(model)
+	if i := strings.IndexByte(model, '#'); i >= 0 {
+		return strings.TrimSpace(model[:i])
+	}
+	return model
 }

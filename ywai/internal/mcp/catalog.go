@@ -15,8 +15,8 @@ package mcp
 //   - For remote entries: URL is the HTTP(S) endpoint, Command is empty,
 //     and InstallCmd is empty (there is nothing to install).
 //   - RequiredEnv lists credentials / connection strings the install UI
-//     must collect. Secret=true entries are redacted from log output by
-//     RedactMessage.
+//     must collect. Secret=true entries are counted as secrets by
+//     MergeEnv.
 //   - Tools is a scout-estimated list of tool names. The runtime re-probes
 //     via DiscoverStdio / DiscoverHTTP and replaces this with the real one;
 //     Tools is the fallback for offline / pre-install display.
@@ -36,6 +36,11 @@ type CatalogEntry struct {
 	Tools       []string
 	Docs        string
 
+	// URLRequired marks a remote entry whose endpoint is per-deployment: the
+	// catalog ships no URL and the install UI must collect one. Installing
+	// without it would write an entry that can never connect.
+	URLRequired bool
+
 	// DefaultDisabled: OpenCode v2 treats a missing enabled flag as on.
 	// Set this so install writes enabled:false instead of omitting it.
 	DefaultDisabled bool
@@ -48,6 +53,15 @@ type CatalogEntry struct {
 	Scopes           []string
 	AuthorizationURL string
 	TokenURL         string
+
+	// ClientAuth marks a remote entry whose authentication is run by the
+	// agent client itself (standard MCP OAuth sign-in flow in the client),
+	// not by ywai. ywai cannot obtain a token for these servers (no
+	// client_id / no local PKCE flow), so Install skips both its OAuth
+	// step and the probe (the endpoint answers 401 until the client signs
+	// in). The tools list is the static fallback; the client discovers the
+	// real tool set at runtime.
+	ClientAuth bool
 }
 
 // catalog is the package-private backing slice. Callers must not mutate it.
@@ -69,21 +83,36 @@ var catalog = []CatalogEntry{
 		Docs:  "https://learn.microsoft.com",
 	},
 	{
-		ID: "jam", Name: "Jam",
-		Description: "Capture browser bugs, console errors, and network requests",
-		Category:    "testing", Icon: "🐛",
-		Type: "remote", URL: "https://mcp.jam.dev/mcp",
-		Tools: []string{"get_bug", "list_bugs", "create_bug", "search_bugs"},
-		Docs:  "https://jam.dev",
+		ID: "meta-devtools", Name: "Meta Developer Tools",
+		Description: "Manage Meta apps, webhooks, compliance, app status, and search developer docs",
+		Category:    "devtools", Icon: "🟦",
+		Type: "remote", URL: "https://mcp.facebook.com/devtools",
+		ClientAuth: true,
+		Tools:      []string{"devtools_discovery", "devtools_app_list", "devtools_app", "devtools_webhook_manage", "devtools_webhook_test", "devtools_api_changelog"},
+		Docs:       "https://developers.facebook.com/documentation/mcp/devtools-mcp",
 	},
 	{
 		ID: "chrome-devtools", Name: "Chrome DevTools",
 		Description: "Drive a real Chrome browser: navigate, click, screenshot, evaluate",
 		Category:    "testing", Icon: "🧪", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "@anthropic-ai/chrome-devtools-mcp"},
-		InstallCmd: "npx -y @anthropic-ai/chrome-devtools-mcp",
-		Tools:      []string{"navigate", "screenshot", "click", "evaluate"},
-		Docs:       "https://github.com/anthropics/chrome-devtools-mcp",
+		// Google's server, published unscoped. The scoped @anthropic-ai/ name
+		// this used to point at does not exist on npm, so every install of it
+		// produced a server that failed to spawn.
+		Type: "local", Command: []string{"npx", "-y", "chrome-devtools-mcp@latest"},
+		InstallCmd: "npx -y chrome-devtools-mcp@latest",
+		Tools:      []string{"navigate_page", "click", "fill_form", "wait_for", "take_snapshot", "take_screenshot", "evaluate_script", "list_console_messages", "list_network_requests"},
+		Docs:       "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+	},
+	{
+		ID: "grafana", Name: "Grafana",
+		Description: "Query Loki logs, Prometheus metrics and dashboards from your Grafana",
+		Category:    "observability", Icon: "📈", Popular: true,
+		// No URL: a Grafana MCP lives on your own network, so there is no
+		// default worth shipping and a real hostname has no business in a
+		// public repo. URLRequired makes the install UI ask for it.
+		Type: "remote", URLRequired: true,
+		Tools: []string{"query_loki_logs", "query_prometheus", "list_datasources", "search_dashboards", "get_panel_image"},
+		Docs:  "https://github.com/grafana/mcp-grafana",
 	},
 	{
 		ID: "playwright", Name: "Playwright",
@@ -95,28 +124,18 @@ var catalog = []CatalogEntry{
 		Docs:       "https://github.com/microsoft/playwright-mcp",
 	},
 	{
-		ID: "git", Name: "Git",
-		Description: "Read and inspect local git repositories",
-		Category:    "vcs", Icon: "🔧",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-git"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-git",
-		Tools:      []string{"git_status", "git_log", "git_diff", "git_show"},
-		Docs:       "https://github.com/modelcontextprotocol/servers",
-	},
-	{
 		ID: "github", Name: "GitHub",
 		Description: "Read and write GitHub repos, issues, and PRs",
 		Category:    "vcs", Icon: "🐙", Popular: true,
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-github",
-		RequiredEnv: []EnvSpec{{
-			Name:        "GITHUB_PERSONAL_ACCESS_TOKEN",
-			Description: "Personal access token with repo, read:user, and read:org scopes",
-			Required:    true,
-			Secret:      true,
-		}},
-		Tools: []string{"create_or_update_file", "search_repositories", "create_issue", "list_issues", "get_file_contents"},
-		Docs:  "https://github.com/modelcontextprotocol/servers",
+		// GitHub's official remote server. The archived npm package
+		// @modelcontextprotocol/server-github this replaced is unmaintained;
+		// the remote is the supported path. Authentication is the standard
+		// MCP OAuth sign-in driven by the agent client, so Install skips the
+		// probe (the endpoint answers 401 until the user signs in).
+		Type: "remote", URL: "https://api.githubcopilot.com/mcp/",
+		ClientAuth: true,
+		Tools:      []string{"get_me", "list_issues", "create_issue", "create_pull_request", "search_repositories", "get_file_contents"},
+		Docs:       "https://github.com/github/github-mcp-server",
 	},
 	{
 		ID: "postgres", Name: "PostgreSQL",
@@ -132,15 +151,6 @@ var catalog = []CatalogEntry{
 		}},
 		Tools: []string{"query", "list_tables", "describe_table", "list_schemas"},
 		Docs:  "https://github.com/modelcontextprotocol/servers",
-	},
-	{
-		ID: "docker", Name: "Docker",
-		Description: "Manage Docker containers, images, and networks",
-		Category:    "devops", Icon: "🐳",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-docker"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-docker",
-		Tools:      []string{"list_containers", "list_images", "create_container", "start_container"},
-		Docs:       "https://github.com/modelcontextprotocol/servers",
 	},
 	{
 		ID: "engram", Name: "Engram",
@@ -159,16 +169,6 @@ var catalog = []CatalogEntry{
 		InstallCmd: "npm i -g @nanonets/graft",
 		Tools:      []string{"graft_find_code", "graft_trace_calls", "graft_find_all", "graft_file_api", "graft_repo_map", "graft_check_freshness"},
 		Docs:       "https://github.com/nanonets/graft",
-	},
-	{
-		ID: "filesystem", Name: "Filesystem",
-		Description: "Read and write files under allowed directories (defaults to current workspace)",
-		Category:    "core", Icon: "📁", Popular: true,
-		// "." is resolved relative to the agent process cwd (usually the project root).
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "."},
-		InstallCmd: "npx -y @modelcontextprotocol/server-filesystem",
-		Tools:      []string{"read_file", "write_file", "list_directory", "search_files", "get_file_info"},
-		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
 	},
 	{
 		ID: "brave-search", Name: "Brave Search",
@@ -225,15 +225,6 @@ var catalog = []CatalogEntry{
 		},
 		Tools: []string{"mysql_query", "list_tables", "describe_table"},
 		Docs:  "https://www.npmjs.com/package/mcp-server-mysql",
-	},
-	{
-		ID: "puppeteer", Name: "Puppeteer",
-		Description: "Browser automation with Puppeteer (navigate, screenshot, click)",
-		Category:    "testing", Icon: "🐶",
-		Type: "local", Command: []string{"npx", "-y", "@modelcontextprotocol/server-puppeteer"},
-		InstallCmd: "npx -y @modelcontextprotocol/server-puppeteer",
-		Tools:      []string{"puppeteer_navigate", "puppeteer_screenshot", "puppeteer_click", "puppeteer_fill", "puppeteer_evaluate"},
-		Docs:       "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
 	},
 	{
 		ID: "codemod", Name: "Codemod",

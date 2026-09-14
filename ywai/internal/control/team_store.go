@@ -9,7 +9,6 @@ type TeamStore struct {
 	mu      sync.RWMutex
 	members map[string]TeamMember
 	tasks   map[string]TeamTask
-	steers  map[string][]string // memberID -> steer messages
 }
 
 // NewTeamStore creates a new TeamStore.
@@ -17,7 +16,6 @@ func NewTeamStore() *TeamStore {
 	return &TeamStore{
 		members: make(map[string]TeamMember),
 		tasks:   make(map[string]TeamTask),
-		steers:  make(map[string][]string),
 	}
 }
 
@@ -70,10 +68,4 @@ func (s *TeamStore) Tasks() []TeamTask {
 		list = append(list, t)
 	}
 	return list
-}
-
-func (s *TeamStore) RecordSteer(memberID, message string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.steers[memberID] = append(s.steers[memberID], message)
 }

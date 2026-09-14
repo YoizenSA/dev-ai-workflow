@@ -6,119 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 )
-
-// InstallOpenCode injects agent profiles into opencode.json (or opencode.jsonc).
-// If the file does not exist, it is created with an empty agent section.
-func InstallOpenCode(configPath string, profiles map[string]AgentProfile) error {
-	root := map[string]any{}
-
-	if _, err := os.Stat(configPath); err == nil {
-		var readErr error
-		root, readErr = config.ReadJSONC(configPath)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", configPath, readErr)
-		}
-	}
-
-	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
-	}
-
-	_, hadLegacyAgent := root["agent"]
-	agents := openCodeJSONAgents(root)
-	root["agents"] = agents
-	delete(root, "agent")
-
-	installed := 0
-	for name, profile := range profiles {
-		if existing, exists := agents[name]; exists {
-			// Migrate agents that were injected with frontmatter in the prompt (old bug).
-			existingMap, ok := existing.(map[string]any)
-			if !ok {
-				continue
-			}
-			existingPrompt := openCodeJSONSystem(existingMap)
-			if !strings.HasPrefix(existingPrompt, "---") {
-				continue
-			}
-			agents[name] = openCodeV2JSONEntry(name, profile)
-			installed++
-			continue
-		}
-
-		agents[name] = openCodeV2JSONEntry(name, profile)
-		installed++
-	}
-
-	if installed == 0 && !hadLegacyAgent {
-		return nil
-	}
-
-	if err := config.WriteJSONC(configPath, root); err != nil {
-		return fmt.Errorf("write %s: %w", configPath, err)
-	}
-
-	fmt.Printf("  Installed %d agent profiles\n", installed)
-	return nil
-}
-
-// openCodeJSONAgents returns the v2 agents map, folding leftover v1 `agent`
-// entries into v2 shape and never leaving both keys in the file.
-func openCodeJSONAgents(root map[string]any) map[string]any {
-	agents := map[string]any{}
-	if raw, ok := root["agents"].(map[string]any); ok {
-		for name, entry := range raw {
-			if m, ok := entry.(map[string]any); ok {
-				agents[name] = normalizeOpenCodeJSONAgent(name, m)
-			} else {
-				agents[name] = entry
-			}
-		}
-	}
-	if raw, ok := root["agent"].(map[string]any); ok {
-		for name, entry := range raw {
-			if _, exists := agents[name]; exists {
-				continue
-			}
-			if m, ok := entry.(map[string]any); ok {
-				agents[name] = normalizeOpenCodeJSONAgent(name, m)
-			} else {
-				agents[name] = entry
-			}
-		}
-	}
-	return agents
-}
-
-func normalizeOpenCodeJSONAgent(name string, m map[string]any) map[string]any {
-	return openCodeV2JSONEntry(name, mapToAgentProfile(name, m))
-}
-
-func openCodeV2JSONEntry(name string, profile AgentProfile) map[string]any {
-	return map[string]any{
-		"mode":        profile.Mode,
-		"description": profile.Description,
-		"system":      profile.Prompt,
-		"permissions": RulesToJSONShape(ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)),
-	}
-}
-
-func openCodeJSONSystem(m map[string]any) string {
-	if s, ok := m["system"].(string); ok && s != "" {
-		return s
-	}
-	if s, ok := m["prompt"].(string); ok {
-		return s
-	}
-	return ""
-}
 
 // InstallClaude writes agent .md files to ~/.claude/agents/.
 func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
@@ -160,10 +55,31 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	return nil
 }
 
-// piToolsString renders the enabled tools from a parsed profile as a
-// lowercase comma-separated list of PI.dev-style tool names, in stable order.
-func piToolsString(perms map[string]string) string {
-	order := []struct{ oc, pi string }{
+// toolsMapping is one ordered entry of a host tool table: the opencode
+// permission key and the host's display name for it.
+type toolsMapping struct {
+	oc   string
+	host string
+}
+
+// toolsString renders the enabled tools from a parsed profile as a
+// comma-separated list of host tool names, in table order.
+func toolsString(perms map[string]string, table []toolsMapping, fallback string) string {
+	var names []string
+	for _, t := range table {
+		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
+			names = append(names, t.host)
+		}
+	}
+	if len(names) == 0 {
+		return fallback
+	}
+	return strings.Join(names, ", ")
+}
+
+var (
+	// piToolsTable orders PI.dev tool names (lowercase).
+	piToolsTable = []toolsMapping{
 		{"read", "read"},
 		{"edit", "edit"},
 		{"write", "write"},
@@ -174,16 +90,50 @@ func piToolsString(perms map[string]string) string {
 		{"websearch", "websearch"},
 	}
 
-	var names []string
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			names = append(names, t.pi)
-		}
+	// ompToolsTable maps opencode permission keys to OMP tool names.
+	ompToolsTable = []toolsMapping{
+		{"read", "read"},
+		{"edit", "edit"},
+		{"write", "write"},
+		{"bash", "bash"},
+		{"glob", "glob"},
+		{"grep", "grep"},
+		{"websearch", "web_search"},
+		{"task", "task"},
+		{"todowrite", "todo"},
+		{"question", "ask"},
 	}
-	if len(names) == 0 {
-		return "read, glob, grep"
+
+	// claudeToolsTable maps opencode tool names to Claude display names.
+	claudeToolsTable = []toolsMapping{
+		{"read", "Read"},
+		{"edit", "Edit"},
+		{"write", "Write"},
+		{"bash", "Bash"},
+		{"glob", "Glob"},
+		{"grep", "Grep"},
+		{"lsp", "LSP"},
+		{"ast_grep", "ASTGrep"},
+		{"websearch", "WebSearch"},
+		{"code_search", "CodeSearch"},
 	}
-	return strings.Join(names, ", ")
+)
+
+// piToolsString renders the enabled tools from a parsed profile as a
+// lowercase comma-separated list of PI.dev-style tool names, in stable order.
+func piToolsString(perms map[string]string) string {
+	return toolsString(perms, piToolsTable, "read, glob, grep")
+}
+
+// ompToolsString maps ywai permissions to OMP tool names (lowercase, comma-separated).
+func ompToolsString(perms map[string]string) string {
+	return toolsString(perms, ompToolsTable, "read, glob, grep")
+}
+
+// claudeToolsString renders the enabled tools from a parsed profile as a
+// comma-separated list of Claude-style tool names, in a stable order.
+func claudeToolsString(perms map[string]string) string {
+	return toolsString(perms, claudeToolsTable, "Read, Glob, Grep")
 }
 
 // InstallPi writes agent .md files to ~/.pi/agent/agents/.
@@ -198,13 +148,6 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 // Migration/social groups are skipped — use OpenCode for those catalogs.
 func InstallOmp(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
 	return installPiStyleAgents(agentsDir, FilterOmpInstallProfiles(profiles), overwrite, ompToolsString, true)
-}
-
-// FilterCoreAgentProfiles keeps agents from the core group (or known core base
-// names when Group is unset). Keys are flattened to the OpenCode/OMP id
-// (filepath.Base).
-func FilterCoreAgentProfiles(profiles map[string]AgentProfile) map[string]AgentProfile {
-	return filterProfilesByGroups(profiles, map[string]bool{"core": true}, coreAgentBases())
 }
 
 // FilterOmpInstallProfiles keeps core + qa-automation groups for OMP installs.
@@ -298,36 +241,6 @@ func installPiStyleAgents(
 	return nil
 }
 
-// ompToolsString maps ywai permissions to OMP tool names (lowercase, comma-separated).
-func ompToolsString(perms map[string]string) string {
-	order := []struct{ oc, omp string }{
-		{"read", "read"},
-		{"edit", "edit"},
-		{"write", "write"},
-		{"bash", "bash"},
-		{"glob", "glob"},
-		{"grep", "grep"},
-		{"websearch", "web_search"},
-		{"task", "task"},
-		{"todowrite", "todo"},
-		{"question", "ask"},
-	}
-	var names []string
-	seen := map[string]bool{}
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			if !seen[t.omp] {
-				names = append(names, t.omp)
-				seen[t.omp] = true
-			}
-		}
-	}
-	if len(names) == 0 {
-		return "read, glob, grep"
-	}
-	return strings.Join(names, ", ")
-}
-
 // InstallVSCode writes agent profiles as .instructions.md files to VS Code Copilot prompts dir.
 // VS Code Copilot reads *.instructions.md files from the User/prompts/ directory.
 // Users activate them from Copilot Chat with @workspace or participant selection.
@@ -369,35 +282,6 @@ func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
 		fmt.Printf("  Installed %d agent profiles to %s\n", installed, promptsDir)
 	}
 	return nil
-}
-
-// claudeToolsString renders the enabled tools from a parsed profile as a
-// comma-separated list of Claude-style tool names, in a stable order.
-func claudeToolsString(perms map[string]string) string {
-	// Ordered opencode tool name -> Claude display name.
-	order := []struct{ oc, claude string }{
-		{"read", "Read"},
-		{"edit", "Edit"},
-		{"write", "Write"},
-		{"bash", "Bash"},
-		{"glob", "Glob"},
-		{"grep", "Grep"},
-		{"lsp", "LSP"},
-		{"ast_grep", "ASTGrep"},
-		{"websearch", "WebSearch"},
-		{"code_search", "CodeSearch"},
-	}
-
-	var names []string
-	for _, t := range order {
-		if v, ok := perms[t.oc]; ok && toolStringEnabled(t.oc, v) {
-			names = append(names, t.claude)
-		}
-	}
-	if len(names) == 0 {
-		return "Read, Glob, Grep"
-	}
-	return strings.Join(names, ", ")
 }
 
 // toolStringEnabled reports whether a flat host tool string (Claude/PI) should
@@ -492,7 +376,6 @@ func InstallOpenCodeMarkdown(agentsDir string, profiles map[string]AgentProfile,
 	// the file path, so a nested copy (e.g. core/orchestrator.md) registers as
 	// "core/orchestrator" and shadows the canonical flat "orchestrator" id.
 	removeLegacyGroupDirs(agentsDir)
-	RemoveAgentBackups(agentsDir)
 	PruneUnlistedAgents(agentsDir, profiles)
 
 	if err := WriteGroupSidecar(agentsDir, profiles); err != nil {
@@ -546,6 +429,41 @@ func ReadGroupSidecar(agentsDir, agentName string) string {
 	return groups[agentName]
 }
 
+// MergeGroupSidecar adds or overrides group memberships without touching the
+// groups of other agents already recorded in the sidecar. The workflows
+// exporter uses it: each Apply only knows its own workflow's agents, while the
+// sidecar is shared by every installed agent. An empty value removes the
+// agent's entry, and an empty merged map removes the file — mirroring
+// WriteGroupSidecar.
+func MergeGroupSidecar(agentsDir string, groups map[string]string) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(groups))
+	if data, err := os.ReadFile(filepath.Join(agentsDir, GroupSidecarFile)); err == nil {
+		_ = json.Unmarshal(data, &merged)
+	}
+	for name, group := range groups {
+		if group == "" {
+			delete(merged, filepath.Base(name))
+			continue
+		}
+		merged[filepath.Base(name)] = group
+	}
+	path := filepath.Join(agentsDir, GroupSidecarFile)
+	if len(merged) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	data, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
 // PruneUnlistedAgents deletes flat *.md files whose base name is not in
 // profiles. OpenCode v2 discovers every file in the agents dir, so leftovers
 // from old groups or other installers (gentle-orchestrator, goal-*) stay
@@ -581,9 +499,9 @@ func PruneUnlistedAgents(agentsDir string, keep map[string]AgentProfile) int {
 // removeLegacyGroupDirs deletes every subdirectory under the agents dir. The
 // flat layout is the only valid one (opencode registers nested files under a
 // path-derived id that shadows the flat id), so any subdirectory — whether it
-// came from a current group profile or an orphaned legacy install whose profile
-// no longer exists — is removed wholesale. Top-level flat .md files are left
-// untouched.
+// came from a current group profile or an orphaned install left by a
+// migration-era grouped layout — is removed wholesale. Top-level flat .md
+// files are left untouched.
 func removeLegacyGroupDirs(agentsDir string) {
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
@@ -602,168 +520,10 @@ func removeLegacyGroupDirs(agentsDir string) {
 	}
 }
 
-// retiredConfigPaths are artifacts ywai used to write into a host's config
-// directory and has since dropped, relative to that directory. They are swept
-// on every install and update so a retired mechanism does not keep running
-// from an old release.
-//
-// `.atl/` and `skills/skill-registry` held the pre-v2 skill registry: a
-// generated index of SKILL.md paths for orchestrators to hand to sub-agents.
-// OpenCode v2 injects <available_skills> and loads skills by id, so the
-// registry survived only as a stale index pointing at files that no longer
-// exist — worse than no index, since an agent follows the dead path, fails,
-// and continues degraded.
-var retiredConfigPaths = []string{
-	".atl",
-	filepath.Join("skills", "skill-registry"),
-}
-
-// retiredSkillDirNames are host skill folders that rewrite .atl/ on every run.
-// OpenCode v2 injects skills natively; these directories must not come back.
-var retiredSkillDirNames = []string{"skill-registry"}
-
-func wellKnownSkillRoots(home string) []string {
-	if home == "" {
-		return nil
-	}
-	return []string{
-		filepath.Join(home, ".claude", "skills"),
-		filepath.Join(home, ".agents", "skills"),
-		filepath.Join(home, ".config", "agents", "skills"),
-		filepath.Join(home, ".config", "opencode", "skills"),
-		filepath.Join(home, ".kimi", "skills"),
-		filepath.Join(home, ".openclaw", "skills"),
-		filepath.Join(home, ".pi", "agent", "skills"),
-		filepath.Join(home, ".cursor", "skills"),
-		filepath.Join(home, ".codex", "skills"),
-		filepath.Join(home, ".gemini", "skills"),
-		filepath.Join(home, ".copilot", "skills"),
-		filepath.Join(home, ".codeium", "windsurf", "skills"),
-	}
-}
-
-func removeExisting(path string) bool {
-	if path == "" {
-		return false
-	}
-	if _, err := os.Lstat(path); err != nil {
-		return false
-	}
-	if err := os.RemoveAll(path); err != nil {
-		fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
-		return false
-	}
-	return true
-}
-
-func removeAtlDirs(root string) []string {
-	if root == "" {
-		return nil
-	}
-	var removed []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if name == ".git" || name == "node_modules" || name == "vendor" {
-			return filepath.SkipDir
-		}
-		if name == ".atl" {
-			if removeExisting(path) {
-				removed = append(removed, path)
-			}
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	return removed
-}
-
-// SweepRetiredSkillRegistry deletes skill-registry installs under well-known
-// host skill roots and every `.atl` directory under repoRoot. Missing paths
-// are skipped. The sweep is idempotent.
-func SweepRetiredSkillRegistry(home, repoRoot string) []string {
-	var removed []string
-	for _, root := range wellKnownSkillRoots(home) {
-		for _, name := range retiredSkillDirNames {
-			p := filepath.Join(root, name)
-			if removeExisting(p) {
-				removed = append(removed, p)
-			}
-		}
-		if p := filepath.Join(root, ".atl"); removeExisting(p) {
-			removed = append(removed, p)
-		}
-	}
-	for _, dir := range []string{
-		filepath.Join(home, ".config", "opencode"),
-		filepath.Join(home, ".claude"),
-		filepath.Join(home, ".ywai"),
-	} {
-		p := filepath.Join(dir, ".atl")
-		if removeExisting(p) {
-			removed = append(removed, p)
-		}
-	}
-	removed = append(removed, removeAtlDirs(repoRoot)...)
-	return removed
-}
-
-// RemoveRetiredConfigArtifacts deletes retiredConfigPaths from configDir and
-// returns the relative paths it removed. Missing paths are not an error: the
-// sweep runs on every install and is a no-op once the host is clean.
-func RemoveRetiredConfigArtifacts(configDir string) []string {
-	if configDir == "" {
-		return nil
-	}
-	var removed []string
-	for _, rel := range retiredConfigPaths {
-		path := filepath.Join(configDir, rel)
-		if _, err := os.Lstat(path); err != nil {
-			continue
-		}
-		if err := os.RemoveAll(path); err != nil {
-			fmt.Printf("  Warning: failed to remove retired artifact %s: %v\n", path, err)
-			continue
-		}
-		removed = append(removed, rel)
-	}
-	return removed
-}
-
-// retiredAgentBases are agents removed from ywai that may still be installed
-// on a user's hosts from a previous release. The install sweeps them so stale
-// files don't keep showing up as runnable agents after an upgrade.
-var retiredAgentBases = []string{"qa-finder"}
-
-// RemoveRetiredAgents deletes installed agent markdown for retired bases from
-// agentsDir. Returns the number of files removed.
-func RemoveRetiredAgents(agentsDir string) int {
-	removed := 0
-	for _, base := range retiredAgentBases {
-		if err := os.Remove(filepath.Join(agentsDir, base+".md")); err == nil {
-			removed++
-		}
-	}
-	return removed
-}
-
-// agentBackupRootFn is the directory OpenCode/Claude/Cursor/PI/OMP never scan.
+// agentBackupRootFn is the snapshot root. It is a var so tests can redirect it.
 // Hosts only read their own agents/ folders; ~/.ywai/agent-backups stays private.
 var agentBackupRootFn = func() string {
 	return filepath.Join(config.DataDir(), "agent-backups")
-}
-
-// SetAgentBackupRootForTest redirects the stash directory. Restores the previous
-// resolver when the returned function is called.
-func SetAgentBackupRootForTest(dir string) func() {
-	prev := agentBackupRootFn
-	agentBackupRootFn = func() string { return dir }
-	return func() { agentBackupRootFn = prev }
 }
 
 // WriteAgentBackup stores a pre-overwrite snapshot under ~/.ywai/agent-backups,
@@ -786,49 +546,6 @@ func backupDestPath(name string) (string, error) {
 		dest = filepath.Join(root, fmt.Sprintf("%s.%d.bak", strings.TrimSuffix(name, ".bak"), time.Now().UnixNano()))
 	}
 	return dest, nil
-}
-
-// RemoveAgentBackups moves leftover *.bak files out of a host agents directory
-// into ~/.ywai/agent-backups so they are not enumerated as agents.
-func RemoveAgentBackups(agentsDir string) int {
-	entries, err := os.ReadDir(agentsDir)
-	if err != nil {
-		return 0
-	}
-	moved := 0
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".bak") {
-			continue
-		}
-		src := filepath.Join(agentsDir, name)
-		dest, err := backupDestPath(name)
-		if err != nil {
-			fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
-			continue
-		}
-		if err := os.Rename(src, dest); err != nil {
-			// Cross-device: copy then remove.
-			data, readErr := os.ReadFile(src)
-			if readErr != nil {
-				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, err)
-				continue
-			}
-			if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
-				fmt.Printf("  Warning: failed to stash agent backup %s: %v\n", name, writeErr)
-				continue
-			}
-			if rmErr := os.Remove(src); rmErr != nil {
-				fmt.Printf("  Warning: backup copied but source remains %s: %v\n", name, rmErr)
-				continue
-			}
-		}
-		moved++
-	}
-	return moved
 }
 
 // RemoveAgentsWithoutDescription deletes every flat .md in agentsDir whose
@@ -886,6 +603,7 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 var ywaiBucketPatterns = map[string][]string{
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
+	"graft":    {"graft_*"},
 	"mcp":      {"graft_*", "context7_*"},
 	// "delegate" launches an async sub-agent (background-agents plugin); the
 	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
@@ -958,57 +676,6 @@ var verifyBashAllowPatterns = []string{
 	"ruff check*",
 	"mypy *",
 	"mypy*",
-}
-
-// BashPermissionBlockLines is the v1 renderer kept only for the kilocode (v1
-// fork) JSON install path. OpenCode v2 agents get shell rules via
-// RulesFromPermissionMap instead.
-func BashPermissionBlockLines(val, baseName string) []string {
-	if val == "deny" {
-		return []string{"  bash: deny"}
-	}
-	lines := []string{"  bash:"}
-	if val == "verify" {
-		lines = append(lines, fmt.Sprintf("    %q: deny", "*"))
-		for _, pattern := range verifyBashAllowPatterns {
-			lines = append(lines, fmt.Sprintf("    %q: allow", pattern))
-		}
-	} else {
-		lines = append(lines, fmt.Sprintf("    %q: %s", "*", val))
-	}
-	for _, pattern := range falseGreenBashPatterns {
-		lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
-	}
-	if noCommitAgents[baseName] && val != "verify" {
-		for _, pattern := range noCommitBashDenyPatterns {
-			lines = append(lines, fmt.Sprintf("    %q: deny", pattern))
-		}
-	}
-	return lines
-}
-
-// noCommitBashDenyPatterns block commit/push for code executors. Review-then-
-// commit: edits land via the executor; release actions stay with the
-// coordinator/user after review. OpenCode is the enforcement authority; Claude
-// and PI do not get nested bash rules.
-var noCommitBashDenyPatterns = []string{
-	"git commit*",
-	"git push*",
-	"git * commit*",
-	"git * push*",
-	"env git commit*",
-	"env git push*",
-	"git.exe commit*",
-	"git.exe push*",
-	"git.exe * commit*",
-	"git.exe * push*",
-}
-
-// noCommitAgents may edit code but must not commit or push. devops is excluded
-// on purpose: deploy flows legitimately push.
-var noCommitAgents = map[string]bool{
-	"dev":    true,
-	"qa-dev": true,
 }
 
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
@@ -1086,37 +753,23 @@ func ConfiguredMCPServers() []string {
 	if err != nil {
 		return nil
 	}
-	set := map[string]bool{}
-	// v1 layout: servers directly under "mcp" (skip reserved v2 keys).
-	if raw, ok := root["mcp"].(map[string]any); ok {
-		for name := range raw {
-			if name == "servers" || name == "timeout" {
-				continue
-			}
-			if strings.TrimSpace(name) != "" {
-				set[name] = true
-			}
-		}
-	}
-	// v2 layout: servers nested under mcp.servers.
-	if mcp, ok := root["mcp"].(map[string]any); ok {
-		if servers, ok := mcp["servers"].(map[string]any); ok {
-			for name := range servers {
-				if strings.TrimSpace(name) != "" {
-					set[name] = true
-				}
-			}
-		}
-	}
-	if len(set) == 0 {
+	section, ok := root["mcp"].(map[string]any)
+	if !ok {
 		return nil
 	}
-	servers := make([]string, 0, len(set))
-	for name := range set {
-		servers = append(servers, name)
+	// CollectOpenCodeServers is the shared reader for both layouts (v1 flat
+	// and v2 mcp.servers); mcp keeps the single implementation the plugins
+	// and the control server also use, so they cannot drift apart again.
+	servers := mcp.CollectOpenCodeServers(section)
+	if len(servers) == 0 {
+		return nil
 	}
-	sort.Strings(servers)
-	return servers
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // dedicatedBucketPrefixes are MCP servers that already have their own bucket,
@@ -1181,19 +834,16 @@ func BuildOpenCodeMarkdown(name string, profile AgentProfile) string {
 	b.WriteString("---\n")
 	b.WriteString(fmt.Sprintf("description: %s\n", yamlScalar(description)))
 	b.WriteString(fmt.Sprintf("mode: %s\n", profile.Mode))
-	// Group membership deliberately does NOT go here. opencode v2 accepts a
-	// fixed key set in agent frontmatter (model, variant, request, system,
-	// description, mode, hidden, color, steps, disabled, permissions). Any
-	// other key makes config/plugin/agent.ts take the legacy v1 decode path,
-	// whose schema knows `permission` (a map) and silently drops our v2
-	// `permissions` rule array. Group lives in GroupSidecarFile instead.
+	// Group membership stays out of the frontmatter and lives in
+	// GroupSidecarFile. An unknown frontmatter key is what makes opencode fall
+	// back to the legacy decode path, so keeping the sidecar leaves the file
+	// readable as a plain agent file.
 
-	// Permissions as the v2 ordered rule array (see permissions_v2.go). Omitted
-	// native actions default to deny, so only the explicitly allowed surface is
-	// exposed; coarse buckets (memory, intercom, mcp) expand to the wildcard
-	// action names that actually gate the underlying tools.
-	rules := ApplySkillAllowlist(RulesFromPermissionMap(filepath.Base(name), profile.Permission), profile.Skills)
-	for _, line := range RenderPermissionRulesYAML(rules) {
+	// ywai's coarse buckets (ado, memory, intercom, mcp) expand to
+	// opencode-native wildcard patterns so the deny/allow is enforced rather
+	// than silently dropped. The ordered `permissions:` list is the schema
+	// OpenCode 2 enforces: the last matching rule wins.
+	for _, line := range RenderPermissionRulesYAML(RulesFromPermissionMap(name, profile.Permission)) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("---\n\n")
@@ -1299,7 +949,6 @@ func InstallPiTeamProfiles(agentsDir string, profiles map[string]AgentProfile, o
 
 		permTools := convertPermissionsToPiTools(profile.Permission)
 		tools = append(tools, permTools...)
-		sort.Strings(tools)
 		tools = uniqueSortedStrings(tools)
 
 		tp := TeammateProfile{
@@ -1328,29 +977,22 @@ func InstallPiTeamProfiles(agentsDir string, profiles map[string]AgentProfile, o
 	return nil
 }
 
-// uniqueSortedStrings deduplicates a sorted string slice in place.
+// uniqueSortedStrings sorts s in place and removes adjacent duplicates.
 func uniqueSortedStrings(s []string) []string {
-	if len(s) < 2 {
-		return s
-	}
-	result := make([]string, 0, len(s))
-	for i, v := range s {
-		if i == 0 || v != s[i-1] {
-			result = append(result, v)
-		}
-	}
-	return result
+	slices.Sort(s)
+	return slices.Compact(s)
 }
 
-// legacyAgentFrontmatterKeys are keys ywai used to emit that opencode v2 does
-// not accept in agent frontmatter. Any of them makes config/plugin/agent.ts
-// classify the file as legacy v1 and decode it with a schema that knows
-// `permission` (a map) instead of the v2 `permissions` rule array — so the
-// agent silently loses its permissions.
+// legacyAgentFrontmatterKeys are keys migration-era installs emitted that
+// opencode does not accept in agent frontmatter. Any of them makes
+// config/plugin/agent.ts classify the file as legacy and decode it with a
+// schema that knows `permission` (a map) instead of the `permissions` rule
+// array — so the agent silently loses its permissions.
 var legacyAgentFrontmatterKeys = []string{"group:"}
 
 // StripLegacyAgentKeys removes those keys from every flat agent file in
-// agentsDir. Several writers assemble these files by preserving existing
+// agentsDir. This is the migration sweep that converts v1-era files on first
+// contact. Several writers assemble these files by preserving existing
 // frontmatter lines, so a key written once survives every later rewrite; this
 // sweep runs last and is idempotent. Returns how many files it changed.
 func StripLegacyAgentKeys(agentsDir string) int {

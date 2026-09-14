@@ -22,7 +22,7 @@ export default function Layout({ children }: LayoutProps) {
 	};
 
 	// The dashboard nav follows the user's saved collapse preference on every
-	// route, including /chat — the user can expand/collapse it freely there too.
+	// route — the user can expand/collapse it freely there too.
 	const effectiveCollapsed = collapsed;
 
 	return (
@@ -31,7 +31,7 @@ export default function Layout({ children }: LayoutProps) {
 				open={sidebarOpen}
 				onClose={() => setSidebarOpen(false)}
 				collapsed={effectiveCollapsed}
-				// The collapse toggle is available on every route, including /chat.
+				// The collapse toggle is available on every route.
 				onToggleCollapse={toggleCollapse}
 			/>
 

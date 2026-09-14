@@ -31,31 +31,6 @@ type githubRelease struct {
 	TagName string `json:"tag_name"`
 }
 
-func IsInstalled() bool {
-	return findBinary(config.GentleAIBin) != ""
-}
-
-// Install installs gentle-ai only when it is missing. Upgrading an existing
-// install is `ywai update`'s job (it calls Upgrade explicitly), so `ywai
-// install` never moves a working gentle-ai version underneath the user.
-// Install no longer provisions the gentle-ai binary. The gentle-ai binary is
-// optional for ywai: engram is installed through ywai's own release path
-// (InstallEngram) and skills/profiles/plugins are applied by the ywai
-// pipeline. This is the slice-1 decoupling contract: ywai install must never
-// install gentle-ai.
-func Install() error {
-	if IsInstalled() {
-		if version := CurrentVersion(); version != "" {
-			fmt.Printf("gentle-ai already installed (%s) — ywai does not manage it.\n", version)
-		} else {
-			fmt.Println("gentle-ai already installed — ywai does not manage it.")
-		}
-		return nil
-	}
-	fmt.Println("gentle-ai is not installed; ywai no longer installs it.")
-	return nil
-}
-
 // InstallEngram installs the engram binary through ywai's own manual release
 // path (installEngramReleaseBinary) and returns the directory it was
 // installed into. It never invokes the gentle-ai binary. Slice 1 contract:
@@ -83,55 +58,6 @@ func InstallEcosystem(opts InstallOptions) error {
 		return fmt.Errorf("failed to install engram: %w", err)
 	}
 	fmt.Printf("  Engram ready in %s\n", installDir)
-	UpgradeEngram()
-	return nil
-}
-
-func UpgradeEngram() {
-	engram := findBinary("engram")
-	if engram == "" {
-		return
-	}
-
-	fmt.Println("Checking for engram updates...")
-	cmd := exec.Command(engram, "version")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return
-	}
-
-	if strings.Contains(string(output), "Update available") {
-		fmt.Println("Updating engram...")
-		if runtime.GOOS == "windows" {
-			engramExe := engram
-			if strings.HasSuffix(engram, ".ps1") || strings.HasSuffix(engram, ".cmd") {
-				return
-			}
-			oldPath := engramExe + ".bak"
-			_ = os.Rename(engramExe, oldPath)
-			if err := runCommand("go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"); err != nil {
-				fmt.Printf("  Warning: engram update failed: %v\n", err)
-				_ = os.Rename(oldPath, engramExe)
-			} else {
-				_ = os.Remove(oldPath)
-				fmt.Println("  engram updated successfully.")
-			}
-		} else {
-			if err := runCommand("go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"); err != nil {
-				fmt.Printf("  Warning: engram update failed: %v\n", err)
-			} else {
-				fmt.Println("  engram updated successfully.")
-			}
-		}
-	}
-}
-
-// Upgrade no longer shells out to the gentle-ai binary. Slice 1 contract:
-// `ywai update` must not run `gentle-ai upgrade`. It preserves only the
-// ywai/engram-owned behavior — refreshing the engram binary when an update
-// is available.
-func Upgrade() error {
-	UpgradeEngram()
 	return nil
 }
 
@@ -156,16 +82,8 @@ func Doctor() error {
 		}
 	}
 
-	// gentle-ai is optional for ywai; report, never fail.
-	if _, err := exec.LookPath(config.GentleAIBin); err == nil {
-		fmt.Println("  [ok]  gentle-ai               found (optional)")
-	} else {
-		fmt.Println("  [info] gentle-ai               not found (optional; ywai does not require it)")
-	}
-
 	return nil
 }
-
 func findBinary(name string) string {
 	if path, err := exec.LookPath(name); err == nil {
 		return path
@@ -178,15 +96,6 @@ func findBinary(name string) string {
 		}
 	}
 	return ""
-}
-
-func CurrentVersion() string {
-	return ""
-}
-
-func parseVersion(output string) string {
-	match := versionPattern.FindString(output)
-	return normalizeVersion(match)
 }
 
 func normalizeVersion(version string) string {
@@ -257,33 +166,6 @@ func downloadFile(url, dest string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	return err
-}
-
-func runCommand(name string, args ...string) error {
-	bin := findBinary(name)
-	if bin == "" {
-		return fmt.Errorf("%s not found", name)
-	}
-
-	if runtime.GOOS == "windows" && (strings.HasSuffix(bin, ".ps1") || strings.HasSuffix(bin, ".cmd")) {
-		if strings.HasSuffix(bin, ".ps1") {
-			fullArgs := append([]string{"-ExecutionPolicy", "Bypass", "-File", bin}, args...)
-			cmd := exec.Command("powershell", fullArgs...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
-		}
-		fullArgs := append([]string{"/c", bin}, args...)
-		cmd := exec.Command("cmd", fullArgs...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
-
-	cmd := exec.Command(bin, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 var (

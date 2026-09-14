@@ -12,10 +12,9 @@ package mcp
 //	undefined: EntryTargetPath
 //	undefined: BuildEntryShape
 //	undefined: WriteAgentConfig
-//	undefined: RemoveAgentConfig
 //	undefined: ReadAgentConfig
 //
-// All five symbols are pinned by the tests in this file. @dev's job is to
+// All four symbols are pinned by the tests in this file. @dev's job is to
 // add the implementation that makes them compile and pass.
 //
 // Target / format reference (per the slice 3 brief):
@@ -52,8 +51,6 @@ package mcp
 //     fresh install with no prior config must not be a special case.
 //   - ReadAgentConfig on malformed JSON returns an error (no silent
 //     fallback to {}; that would mask real corruption).
-//   - RemoveAgentConfig is idempotent: removing an entry that does not
-//     exist is a no-op, not an error.
 //
 // Tests use stdlib only and follow the conventions of the existing
 // *_test.go files in this package (per-test sections separated by
@@ -122,25 +119,37 @@ func sortedKeys(m map[string]any) []string {
 
 // parseJSONFile reads a file and decodes it as JSON (not JSONC — we use
 // plain JSON in the test fixtures). Returns the decoded value.
+// opencodeFileServers extracts the MCP server map from a written opencode
+// config file. ADR-0001 dropped opencode v1: the writer targets the v2
+// layout where servers nest under mcp.servers, so that nesting is the
+// contract this helper asserts.
 func opencodeFileServers(t *testing.T, cfg map[string]any) map[string]any {
 	t.Helper()
 	mcp, ok := cfg["mcp"].(map[string]any)
 	if !ok {
 		t.Fatalf("cfg[mcp] = %v (%T), want map", cfg["mcp"], cfg["mcp"])
 	}
-	servers, ok := mcp["servers"].(map[string]any)
+	nested, ok := mcp["servers"].(map[string]any)
 	if !ok {
-		t.Fatalf("mcp.servers missing after write: %v", mcp)
+		t.Fatalf("mcp.servers nesting missing (v2 layout per ADR-0001): %v", mcp)
 	}
-	for k, v := range mcp {
-		if k == "servers" || k == "timeout" {
+	if len(nested) == 0 {
+		t.Fatalf("no mcp servers after write: %v", mcp)
+	}
+	return nested
+}
+
+// withoutV1Enabled drops the `enabled` key the v1 writer adds to every server
+// entry, so a shape comparison stays about torn writes rather than that key.
+func withoutV1Enabled(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if k == "enabled" {
 			continue
 		}
-		if _, isObj := v.(map[string]any); isObj {
-			t.Fatalf("server id %q must not sit beside mcp.servers", k)
-		}
+		out[k] = v
 	}
-	return servers
+	return out
 }
 
 func parseJSONFile(t *testing.T, path string) map[string]any {
@@ -286,26 +295,20 @@ func TestEntryTargetPath_Unknown(t *testing.T) {
 	}
 }
 
-// TestAgentConfig_UnknownTarget pins the error pass-through: all three
-// public functions (Write/Read/Remove) must surface an error (not a
-// panic, not a silent empty path) when given a target outside the
-// three supported agents. The error originates in EntryTargetPath; the
-// pass-through path lives at lines 102-104 / 126-128 / 160-162 of
-// agent_config.go. TestEntryTargetPath_Unknown exercises the producer
-// (EntryTargetPath) directly but does not reach those pass-through
-// blocks — this test does.
+// TestAgentConfig_UnknownTarget pins the error pass-through: the public
+// functions (Write/Read) must surface an error (not a panic, not a
+// silent empty path) when given a target outside the three supported
+// agents. The error originates in EntryTargetPath; the pass-through
+// path lives at lines 102-104 / 126-128 of agent_config.go.
+// TestEntryTargetPath_Unknown exercises the producer (EntryTargetPath)
+// directly but does not reach those pass-through blocks — this test does.
 //
-// Subtests cover all three functions in one test, mirroring the
-// existing single-function test naming style.
+// Subtests cover both functions in one test, mirroring the existing
+// single-function test naming style.
 func TestAgentConfig_UnknownTarget(t *testing.T) {
 	t.Run("WriteAgentConfig", func(t *testing.T) {
 		if _, err := WriteAgentConfig("vim", "id", map[string]any{"x": 1}); err == nil {
 			t.Errorf("WriteAgentConfig(vim) err = nil, want error")
-		}
-	})
-	t.Run("RemoveAgentConfig", func(t *testing.T) {
-		if err := RemoveAgentConfig("vim", "id"); err == nil {
-			t.Errorf("RemoveAgentConfig(vim) err = nil, want error")
 		}
 	})
 	t.Run("ReadAgentConfig", func(t *testing.T) {
@@ -318,27 +321,27 @@ func TestAgentConfig_UnknownTarget(t *testing.T) {
 // ─── BuildEntryShape — opencode ───────────────────────────────────────────
 
 // TestBuildEntryShape_Opencode_Local pins the opencode local entry shape
-// using github as the canonical example. Opencode's format keeps the
+// using postgres as the canonical example. Opencode's format keeps the
 // command as a single argv slice (not split into command+args) and tags
 // the entry with type="local". With creds, the env map must contain the
-// GITHUB_PERSONAL_ACCESS_TOKEN that github's spec requires.
+// DATABASE_URL that postgres's spec requires.
 func TestBuildEntryShape_Opencode_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("opencode", github, creds)
+	got := BuildEntryShape("opencode", postgres, creds)
 
 	// type must be "local" (string).
 	if v, ok := got["type"].(string); !ok || v != "local" {
-		t.Errorf("opencode github shape type = %v (%T), want \"local\" string",
+		t.Errorf("opencode postgres shape type = %v (%T), want \"local\" string",
 			got["type"], got["type"])
 	}
 	// v2: no "enabled" flag (absent = enabled).
 	if v, has := got["enabled"]; has {
-		t.Errorf("opencode github shape enabled = %v, want absent (v2)", v)
+		t.Errorf("opencode postgres shape enabled = %v, want absent (v2)", v)
 	}
 	// command must be a slice with exactly the 3 argv tokens the
 	// catalog pins. We compare via JSON round-trip so the test is
@@ -346,8 +349,8 @@ func TestBuildEntryShape_Opencode_Local(t *testing.T) {
 	// "environment" key (renamed from "env").
 	want := map[string]any{
 		"type":        "local",
-		"command":     []string{"npx", "-y", "@modelcontextprotocol/server-github"},
-		"environment": map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"command":     []string{"npx", "-y", "@modelcontextprotocol/server-postgres"},
+		"environment": map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 	}
 	shapeJSONEqual(t, got, want)
 }
@@ -416,43 +419,43 @@ func TestBuildEntryShape_Opencode_CodemodDisabledByDefault(t *testing.T) {
 // (as a slice). The shape does NOT have a "type" field — claude
 // infers transport from the presence of command vs. url.
 func TestBuildEntryShape_Claude_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("claude-code", github, creds)
+	got := BuildEntryShape("claude-code", postgres, creds)
 
 	// command must be a STRING (not a slice). claude's schema
 	// pins this explicitly: exec-style, not argv-style.
 	if v, ok := got["command"].(string); !ok || v != "npx" {
-		t.Errorf("claude github shape command = %v (%T), want \"npx\" string",
+		t.Errorf("claude postgres shape command = %v (%T), want \"npx\" string",
 			got["command"], got["command"])
 	}
 	// args must be a slice with the rest of the argv.
-	wantArgs := []string{"-y", "@modelcontextprotocol/server-github"}
+	wantArgs := []string{"-y", "@modelcontextprotocol/server-postgres"}
 	gotArgs, ok := got["args"]
 	if !ok {
-		t.Errorf("claude github shape args missing, want %v", wantArgs)
+		t.Errorf("claude postgres shape args missing, want %v", wantArgs)
 	} else {
 		gJSON, _ := json.Marshal(gotArgs)
 		wJSON, _ := json.Marshal(wantArgs)
 		if string(gJSON) != string(wJSON) {
-			t.Errorf("claude github shape args = %s, want %s", gJSON, wJSON)
+			t.Errorf("claude postgres shape args = %s, want %s", gJSON, wJSON)
 		}
 	}
 	// env must contain the creds.
 	want := map[string]any{
 		"command": "npx",
 		"args":    wantArgs,
-		"env":     map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"env":     map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 		"enabled": true,
 	}
 	shapeJSONEqual(t, got, want)
 	// type must NOT appear (claude has no "type" tag).
 	if shapeHasKey(got, "type") {
-		t.Errorf("claude github shape has type = %v, want absent (claude infers from command/url)",
+		t.Errorf("claude postgres shape has type = %v, want absent (claude infers from command/url)",
 			got["type"])
 	}
 }
@@ -494,22 +497,22 @@ func TestBuildEntryShape_Claude_Remote(t *testing.T) {
 // immediately — the two formats are not the same by accident, they
 // are the same by historical convention.
 func TestBuildEntryShape_Pi_Local(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
-	creds := map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"}
+	creds := map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"}
 
-	got := BuildEntryShape("pi", github, creds)
+	got := BuildEntryShape("pi", postgres, creds)
 
 	if v, ok := got["command"].(string); !ok || v != "npx" {
-		t.Errorf("pi github shape command = %v (%T), want \"npx\" string",
+		t.Errorf("pi postgres shape command = %v (%T), want \"npx\" string",
 			got["command"], got["command"])
 	}
 	want := map[string]any{
 		"command": "npx",
-		"args":    []string{"-y", "@modelcontextprotocol/server-github"},
-		"env":     map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": "xxx"},
+		"args":    []string{"-y", "@modelcontextprotocol/server-postgres"},
+		"env":     map[string]string{"DATABASE_URL": "postgres://user:pass@host:5432/db"},
 		"enabled": true,
 	}
 	shapeJSONEqual(t, got, want)
@@ -521,28 +524,28 @@ func TestBuildEntryShape_Pi_Local(t *testing.T) {
 // A local entry whose creds map is nil (or empty) must NOT emit an env
 // key — leaving env out is the JSON idiom for "no env vars", and some
 // agent runtimes treat an empty env object as a contract violation
-// (e.g. they require the field to be absent). github is the test
+// (e.g. they require the field to be absent). postgres is the test
 // vehicle because it has an env spec, so the no-creds path is
 // meaningful (not vacuously true).
 func TestBuildEntryShape_NoCreds_OmitsEnv(t *testing.T) {
-	github, ok := CatalogByID("github")
+	postgres, ok := CatalogByID("postgres")
 	if !ok {
-		t.Fatal("CatalogByID(github) ok=false, want true (catalog regression)")
+		t.Fatal("CatalogByID(postgres) ok=false, want true (catalog regression)")
 	}
 
-	got := BuildEntryShape("opencode", github, nil)
+	got := BuildEntryShape("opencode", postgres, nil)
 
 	if shapeHasKey(got, "env") {
-		t.Errorf("opencode github shape (no creds) has env = %v, want absent",
+		t.Errorf("opencode postgres shape (no creds) has env = %v, want absent",
 			got["env"])
 	}
 	// Also pin the empty-map variant — both nil and map[string]string{}
 	// should produce the same "no env" outcome. An implementation that
 	// only handles nil but not the empty map would still leak env={}
 	// for the empty-map case, which is the bug this subtest catches.
-	got2 := BuildEntryShape("opencode", github, map[string]string{})
+	got2 := BuildEntryShape("opencode", postgres, map[string]string{})
 	if shapeHasKey(got2, "env") {
-		t.Errorf("opencode github shape (empty creds) has env = %v, want absent",
+		t.Errorf("opencode postgres shape (empty creds) has env = %v, want absent",
 			got2["env"])
 	}
 }
@@ -604,29 +607,29 @@ func TestWriteAgentConfig_Opencode_Overwrites(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["old-cmd"],"env":{}}}}`
+	initial := `{"mcp":{"postgres":{"type":"local","command":["old-cmd"],"env":{}}}}`
 	writeJSONFile(t, cfgPath, initial)
 
-	github, _ := CatalogByID("github")
-	shape := BuildEntryShape("opencode", github, nil)
+	postgres, _ := CatalogByID("postgres")
+	shape := BuildEntryShape("opencode", postgres, nil)
 
-	if _, err := WriteAgentConfig("opencode", "github", shape); err != nil {
+	if _, err := WriteAgentConfig("opencode", "postgres", shape); err != nil {
 		t.Fatalf("WriteAgentConfig err = %v, want nil", err)
 	}
 
 	cfg := parseJSONFile(t, cfgPath)
 	servers := opencodeFileServers(t, cfg)
-	gh := servers["github"].(map[string]any)
-	cmd, _ := gh["command"].([]any)
+	pg := servers["postgres"].(map[string]any)
+	cmd, _ := pg["command"].([]any)
 	if len(cmd) == 0 {
-		t.Fatalf("github command = %v, want non-empty after overwrite", cmd)
+		t.Fatalf("postgres command = %v, want non-empty after overwrite", cmd)
 	}
 	if cmd[0] == "old-cmd" {
-		t.Errorf("github command[0] = %q, want the new value (old value not overwritten)",
+		t.Errorf("postgres command[0] = %q, want the new value (old value not overwritten)",
 			cmd[0])
 	}
 	if cmd[0] != "npx" {
-		t.Errorf("github command[0] = %q, want \"npx\" (catalog's first argv token)",
+		t.Errorf("postgres command[0] = %q, want \"npx\" (catalog's first argv token)",
 			cmd[0])
 	}
 	// Critical: only ONE github entry, not two. With a map this is
@@ -847,8 +850,9 @@ func TestWriteAgentConfig_Atomic(t *testing.T) {
 	// fail. (JSON round-trip of []any vs []string is the same JSON,
 	// so this equality is well-defined.)
 	matched := false
+	ghBare := withoutV1Enabled(gh)
 	for _, s := range shapes {
-		if reflect.DeepEqual(gh, s) {
+		if reflect.DeepEqual(ghBare, s) {
 			matched = true
 			break
 		}
@@ -945,106 +949,6 @@ func TestReadAgentConfig_MalformedJSONC(t *testing.T) {
 	}
 }
 
-// ─── RemoveAgentConfig ────────────────────────────────────────────────────
-
-// TestRemoveAgentConfig_Opencode pins the basic remove path: write
-// two entries, remove one, the other must remain. The mcp section
-// must end with exactly one entry.
-func TestRemoveAgentConfig_Opencode(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]},"git":{"type":"local","command":["y"]}}}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "github"); err != nil {
-		t.Fatalf("RemoveAgentConfig(opencode, github) err = %v, want nil", err)
-	}
-
-	cfg := parseJSONFile(t, cfgPath)
-	servers := opencodeFileServers(t, cfg)
-	if len(servers) != 1 {
-		t.Errorf("mcp.servers has %d entries, want 1: keys = %v", len(servers), sortedKeys(servers))
-	}
-	if _, has := servers["github"]; has {
-		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
-	}
-	if _, has := servers["git"]; !has {
-		t.Errorf("mcp.servers lost 'git' during remove; servers = %v", servers)
-	}
-}
-
-// TestRemoveAgentConfig_NonExistent pins the idempotent remove
-// contract: removing an entry that is not in the file is a no-op,
-// not an error. The install UI may issue removes based on stale
-// state; a non-existent entry must not surface as a user-visible
-// error.
-func TestRemoveAgentConfig_NonExistent(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]}}}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "never-installed"); err != nil {
-		t.Errorf("RemoveAgentConfig on missing entry err = %v, want nil (idempotent)", err)
-	}
-
-	// The existing entry must NOT have been touched.
-	cfg := parseJSONFile(t, cfgPath)
-	mcp := cfg["mcp"].(map[string]any)
-	if _, has := mcp["github"]; !has {
-		if servers, ok := mcp["servers"].(map[string]any); !ok {
-			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
-		} else if _, has := servers["github"]; !has {
-			t.Errorf("github entry lost during idempotent remove; mcp = %v", mcp)
-		}
-	}
-}
-
-// TestRemoveAgentConfig_PreservesSiblings pins the read-modify-write
-// symmetry: removing one entry must not affect other entries, must
-// not affect other top-level keys in the file, and must keep the
-// file syntactically valid. This is the uninstall-all-except-one
-// path; a buggy implementation that rebuilds the file from scratch
-// would silently drop other top-level keys (e.g. "$schema",
-// "theme", plugin config).
-func TestRemoveAgentConfig_PreservesSiblings(t *testing.T) {
-	home := t.TempDir()
-	setTestHomeDir(t, home)
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
-	initial := `{"mcp":{"github":{"type":"local","command":["x"]},"git":{"type":"local","command":["y"]},"context7":{"type":"remote","url":"https://mcp.context7.com/mcp"}},"otherKey":"keep-me","$schema":"https://example.com/schema.json"}`
-	writeJSONFile(t, cfgPath, initial)
-
-	if err := RemoveAgentConfig("opencode", "github"); err != nil {
-		t.Fatalf("RemoveAgentConfig err = %v, want nil", err)
-	}
-
-	cfg := parseJSONFile(t, cfgPath)
-	servers := opencodeFileServers(t, cfg)
-	if _, has := servers["github"]; has {
-		t.Errorf("mcp.servers still has 'github' after remove; servers = %v", servers)
-	}
-	for _, want := range []string{"git", "context7"} {
-		if _, has := servers[want]; !has {
-			t.Errorf("mcp.servers lost sibling %q during remove; servers = %v", want, servers)
-		}
-	}
-	// top-level keys intact
-	if other, _ := cfg["otherKey"].(string); other != "keep-me" {
-		t.Errorf("top-level otherKey = %q, want \"keep-me\" (must survive remove)", other)
-	}
-	if schema, _ := cfg["$schema"].(string); schema != "https://example.com/schema.json" {
-		t.Errorf("top-level $schema = %q, want preserved (must survive remove)", schema)
-	}
-}
-
 // ─── Concurrencia ─────────────────────────────────────────────────────────
 
 // TestConcurrentWrites_Opencode pins the parallel-install path: 5
@@ -1073,7 +977,7 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 	seed := `{"mcp":{"existing":{"type":"local","command":["echo"]}}}`
 	writeJSONFile(t, cfgPath, seed)
 
-	entries := []string{"github", "git", "playwright", "context7", "engram"}
+	entries := []string{"github", "postgres", "playwright", "context7", "engram"}
 	shapes := make(map[string]map[string]any, len(entries))
 	for _, id := range entries {
 		entry, ok := CatalogByID(id)
@@ -1121,7 +1025,7 @@ func TestConcurrentWrites_Opencode(t *testing.T) {
 		// JSON-roundtrip comparison to handle []string vs []any
 		// for the command field, exactly like the BuildEntryShape
 		// tests above.
-		gJSON, _ := json.Marshal(got)
+		gJSON, _ := json.Marshal(withoutV1Enabled(got))
 		wJSON, _ := json.Marshal(want)
 		if string(gJSON) != string(wJSON) {
 			t.Errorf("mcp[%q] JSON = %s, want %s (torn write?)",

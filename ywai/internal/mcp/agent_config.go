@@ -7,9 +7,12 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -28,10 +31,11 @@ func EntryTargetPath(target string) (string, error) {
 		if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
 			return config.FindJSONCPath(dir, "opencode"), nil
 		}
+		base := filepath.Join(home, ".config", "opencode")
 		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, "opencode", "opencode.json"), nil
+			base = filepath.Join(xdg, "opencode")
 		}
-		return filepath.Join(home, ".config", "opencode", "opencode.json"), nil
+		return config.FindJSONCPath(base, "opencode"), nil
 	case "pi":
 		return filepath.Join(home, ".pi", "agent", "mcp.json"), nil
 	case "omp":
@@ -139,48 +143,6 @@ func WriteAgentConfig(target string, entryID string, shape map[string]any) (stri
 	return path, nil
 }
 
-// RemoveAgentConfig deletes entryID from the target's config. Removing an
-// entry that does not exist (or a file that does not exist) is a no-op.
-func RemoveAgentConfig(target string, entryID string) error {
-	path, err := EntryTargetPath(target)
-	if err != nil {
-		return err
-	}
-	mu := lockFor(target)
-	mu.Lock()
-	defer mu.Unlock()
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil
-	}
-	root, err := readRoot(path)
-	if err != nil {
-		return err
-	}
-	key, err := topLevelKey(target)
-	if err != nil {
-		return err
-	}
-	section, ok := root[key].(map[string]any)
-	if !ok {
-		return nil
-	}
-	if target == "opencode" {
-		servers := collectOpenCodeServers(section)
-		if _, exists := servers[entryID]; !exists {
-			return nil
-		}
-		delete(servers, entryID)
-		root[key] = nestOpenCodeMCP(section, servers)
-		return writeRootAtomic(path, root)
-	}
-	if _, exists := section[entryID]; !exists {
-		return nil
-	}
-	delete(section, entryID)
-	return writeRootAtomic(path, root)
-}
-
 // ReadAgentConfig returns the target's mcp/mcpServers section. A missing
 // file yields an empty (non-nil) map and no error; malformed JSON yields
 // an error so the UI can surface corruption.
@@ -199,13 +161,13 @@ func ReadAgentConfig(target string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	mu.Unlock()
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
 	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
+	root, err := config.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if root == nil {
@@ -220,7 +182,7 @@ func ReadAgentConfig(target string) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	if target == "opencode" {
-		return collectOpenCodeServers(section), nil
+		return CollectOpenCodeServers(section), nil
 	}
 	return section, nil
 }
@@ -235,13 +197,13 @@ func lockFor(target string) *sync.Mutex {
 func readRoot(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
 	}
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
+	root, err := config.ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if root == nil {
@@ -260,9 +222,9 @@ func putEntry(root map[string]any, target, entryID string, shape map[string]any)
 		section = map[string]any{}
 	}
 	if target == "opencode" {
-		servers := collectOpenCodeServers(section)
+		servers := CollectOpenCodeServers(section)
 		servers[entryID] = shape
-		root[key] = nestOpenCodeMCP(section, servers)
+		root[key] = WriteOpenCodeMCP(section, servers)
 		return nil
 	}
 	section[entryID] = shape
@@ -274,7 +236,11 @@ func openCodeReservedMCPKey(k string) bool {
 	return k == "servers" || k == "timeout"
 }
 
-func collectOpenCodeServers(mcp map[string]any) map[string]any {
+// CollectOpenCodeServers reads every MCP server out of an opencode "mcp"
+// section, accepting both the v1 flat layout and the v2 mcp.servers nesting.
+// Exported as the single implementation: plugins and control kept private
+// copies that drifted apart, which is how the v1 layout regression got in.
+func CollectOpenCodeServers(mcp map[string]any) map[string]any {
 	out := map[string]any{}
 	if mcp == nil {
 		return out
@@ -297,44 +263,61 @@ func collectOpenCodeServers(mcp map[string]any) map[string]any {
 	return out
 }
 
+// WriteOpenCodeMCP stores servers in the shape OpenCode 2 reads: nested under
+// mcp.servers, treating an absent flag as enabled, turning one off with
+// "disabled".
+func WriteOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
+	return nestOpenCodeMCP(mcp, servers)
+}
+
+// nestOpenCodeMCP writes the v2 shape: every server under mcp.servers, keyed by
+// id, with "enabled" translated to its v2 spelling.
 func nestOpenCodeMCP(mcp map[string]any, servers map[string]any) map[string]any {
-	clean := map[string]any{}
+	out := map[string]any{}
+	for k, v := range mcp {
+		if k == "servers" {
+			continue
+		}
+		// A flat server entry belongs under servers now, not beside it.
+		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
+			continue
+		}
+		out[k] = v
+	}
+	nested := make(map[string]any, len(servers))
 	for id, raw := range servers {
 		entry, ok := raw.(map[string]any)
 		if !ok {
-			clean[id] = raw
+			nested[id] = raw
 			continue
 		}
 		next := make(map[string]any, len(entry))
 		for k, v := range entry {
 			next[k] = v
 		}
-		if enabled, ok := next["enabled"].(bool); ok {
+		// v1 wrote "enabled"; v2 only understands "disabled".
+		if e, ok := next["enabled"].(bool); ok {
 			delete(next, "enabled")
-			if !enabled {
+			if !e {
 				next["disabled"] = true
+			} else {
+				delete(next, "disabled")
 			}
 		}
-		clean[id] = next
-	}
-	out := map[string]any{"servers": clean}
-	if mcp == nil {
-		return out
-	}
-	for k, v := range mcp {
-		if k == "servers" {
-			continue
+		if d, ok := next["disabled"].(bool); ok && !d {
+			delete(next, "disabled")
 		}
-		if _, isObj := v.(map[string]any); isObj && !openCodeReservedMCPKey(k) {
-			continue
-		}
-		out[k] = v
+		nested[id] = next
 	}
+	out["servers"] = nested
 	return out
 }
 
 // writeRootAtomic serializes root as indented JSON, writes to a sibling
 // .tmp file, forces mode 0o600 (umask-independent), and renames into place.
+// The tmp file is removed on every exit path where we still own it; the flag
+// skips the removal after a successful rename, so a concurrent writer's fresh
+// tmp under the same deterministic name is never deleted.
 func writeRootAtomic(path string, root map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
@@ -345,6 +328,12 @@ func writeRootAtomic(path string, root map[string]any) error {
 	}
 	data = append(data, '\n')
 	tmp := path + ".tmp"
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmp)
+		}
+	}()
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}
@@ -355,5 +344,6 @@ func writeRootAtomic(path string, root map[string]any) error {
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("rename %s -> %s: %w", tmp, path, err)
 	}
+	renamed = true
 	return nil
 }

@@ -141,7 +141,6 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
-	writeSkill(t, repoSkillsDir, "judgment-day", false)
 
 	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
 	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
@@ -158,7 +157,7 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	if IsLinkOrJunction(filepath.Join(agentSkillsDir, "yz-ui")) {
 		t.Fatal("yz-ui should be a real directory, not a link/junction")
 	}
-	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
+	for _, name := range []string{"sdd-init", "skill-creator"} {
 		if _, err := os.Lstat(filepath.Join(agentSkillsDir, name)); !os.IsNotExist(err) {
 			t.Fatalf("%s should not be copied by ywai; err=%v", name, err)
 		}
@@ -207,6 +206,51 @@ func TestCopyToBundlesLearnYwaiDocs(t *testing.T) {
 	}
 }
 
+// TestCopyToKeepsSeededLearnYwaiDocs covers a user machine: no repo checkout
+// next to the binary, so the docs bundled into the seeded skill are the only
+// source. CopyTo must keep them — /learn-ywai reads every .mdx from there.
+func TestCopyToKeepsSeededLearnYwaiDocs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+
+	repoSkillsDir := filepath.Join(repo, "skills")
+	writeSkill(t, repoSkillsDir, "learn-ywai", true)
+
+	seeded := filepath.Join(repoSkillsDir, "learn-ywai", "references", "docs", "agents", "index.mdx")
+	if err := os.MkdirAll(filepath.Dir(seeded), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(seeded, []byte("# Agentes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
+	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyTo(agentSkillsDir); err != nil {
+		t.Fatalf("CopyTo: %v", err)
+	}
+
+	got := filepath.Join(agentSkillsDir, "learn-ywai", "references", "docs", "agents", "index.mdx")
+	data, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatalf("seeded doc missing after copy: %v", err)
+	}
+	if string(data) != "# Agentes\n" {
+		t.Fatalf("seeded doc = %q", data)
+	}
+}
+
 func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -224,7 +268,6 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
-	writeSkill(t, repoSkillsDir, "judgment-day", false)
 
 	got, err := ListAvailable()
 	if err != nil {
@@ -234,7 +277,7 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	if !slices.Contains(got, "yz-ui") {
 		t.Fatalf("ListAvailable() = %v, want yz-ui", got)
 	}
-	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
+	for _, name := range []string{"sdd-init", "skill-creator"} {
 		if slices.Contains(got, name) {
 			t.Fatalf("ListAvailable() = %v, must not include non-ywai extra %s", got, name)
 		}
@@ -508,44 +551,6 @@ func TestPruneRetiredSkills_LeavesSymlinksAlone(t *testing.T) {
 func TestPruneRetiredSkills_MissingDirIsNoOp(t *testing.T) {
 	if removed := pruneRetiredSkills(filepath.Join(t.TempDir(), "absent"), map[string]bool{}); removed != nil {
 		t.Errorf("removed = %v, want nil", removed)
-	}
-}
-
-func TestWorkLedgerSkillLayout(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	dir := filepath.Join(filepath.Dir(thisFile), "..", "..", "skills", "work-ledger")
-	required := []string{
-		"SKILL.md",
-		extraSkillMarkerFile,
-		"modules/gate.md",
-		"modules/ledger.md",
-		"modules/seams.md",
-		"modules/ship.md",
-		"modules/resume.md",
-	}
-	for _, rel := range required {
-		path := filepath.Join(dir, rel)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("work-ledger missing %s: %v", rel, err)
-		}
-		if strings.TrimSpace(string(data)) == "" {
-			t.Fatalf("work-ledger %s is empty", rel)
-		}
-	}
-	body, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(body)
-	if !strings.Contains(text, "name: work-ledger") {
-		t.Fatal("SKILL.md must declare name: work-ledger")
-	}
-	if !strings.Contains(text, "description:") {
-		t.Fatal("SKILL.md must have a description")
 	}
 }
 

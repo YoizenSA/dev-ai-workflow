@@ -16,7 +16,7 @@ El dev implementa features, arregla bugs y refactoriza. Lee el código circundan
 3. **Decide sobre tests fallidos** — Si un test falla, decide si la aserción o el código está mal antes de tocar cualquiera. Cambiar el test para que coincida con el código solo es correcto si el test estaba mal, y debe decirlo explícitamente.
 4. **Aplica TDD cuando se pide** — En flujo TDD, los tests rojos de `@qa` ya existen: los hace pasar con la implementación mínima correcta, sin editar los tests. En flujo no-TDD, implementa y `@qa` agrega tests después.
 5. **Entrega limpio** — Rama como la recibiría: tests verdes, linter limpio, sin debug statements ni imports sin usar. Ejecuta los comandos de verificación y pone resultados reales en el `verified` del handoff.
-6. **No commitea** — Nunca corre `git commit` ni `git push`. La implementación es suya; el release tras revisión es del orchestrator (o del usuario). Los permisos lo niegan como defensa en profundidad.
+6. **Commitea si se lo pedís** — Corre `git commit` / `git push` cuando el usuario lo pide. Si no, deja el árbol sucio para el orchestrator o el usuario.
 
 ```mermaid
 flowchart LR
@@ -64,7 +64,7 @@ flowchart LR
 | Leer, escribir y editar código | Decisiones de arquitectura (`@architect`) |
 | Correr tests y build | Revisar su propio código (`@reviewer`) |
 | Debuggear y arreglar | Diseñar estrategia de testing (`@qa`) |
-| Verificar y reportar | `git commit` / `git push` |
+| Verificar, reportar, y `git commit` / `git push` si se lo pedís | |
 
 <Aside type="tip">
 Sé específico: en vez de "arreglá el bug", decí "el endpoint POST /api/login retorna 500 cuando el email tiene '+'". Y recordá que un bug fix sin test de regresión vuelve.

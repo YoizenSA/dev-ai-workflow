@@ -16,6 +16,9 @@ const listModelsDeferred = deferred<{
 }>();
 
 vi.mock("../../api/client", () => ({
+	// Settings reads/writes the env scope picker on mount.
+	getConfigProfileScope: () => null,
+	setConfigProfileScope: vi.fn(),
 	configApi: {
 		getConfig: vi.fn().mockResolvedValue({
 			model: "opencode/gpt-4.1",
@@ -36,7 +39,7 @@ vi.mock("../../api/client", () => ({
 		updateConfig: vi.fn(),
 		updateUserConfig: vi.fn(),
 	},
-	missionsApi: {
+	toolsApi: {
 		// Intentionally never resolves until the test releases it — proves the
 		// General form does not wait on the slow opencode models CLI.
 		listModels: vi.fn(() => listModelsDeferred.promise),

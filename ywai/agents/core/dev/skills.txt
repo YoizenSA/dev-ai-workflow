@@ -1,5 +1,4 @@
 typescript
-tailwind-4
 git-commit
 diagnosing-bugs
 codebase-design

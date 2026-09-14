@@ -3,19 +3,63 @@
 Drafting templates for work item bodies. For the commands that create them, see
 `workflows.md` → "Create a work item".
 
+## Default create contract (apply unless the user says otherwise)
+
+**First question, always: ¿Social Kanban o Infra Kanban?** Then collect the rest.
+
+- **Type:** always `User Story`. No guessing from intent — if the user wants a
+  Bug/Task/Feature they say so explicitly.
+- **Assignee:** resolve at runtime — never hardcode a name. Run `ado wi list`
+  (it lists items assigned to the authenticated user, `@Me` in the WIQL) and
+  read the `@<name>` column; pass that name as `--assigned "<name>"`.
+- **Kanban type (always ask):**
+  - **Social Kanban** → `--profile ysocial` + `--area "ySocial\\Kanban"`
+  - **Infra Kanban** → `--area "Infra\\Infra Kanban"` (use the project/profile
+    that owns that area; if the active profile rejects it, ask the user which
+    profile to switch to)
+- **Producto (always ask):** `--field "Custom.USProducto=<v>"` — values:
+  `ySocial`, `yFlow`, `yWhatsApp`, `yMobile`, `interno`, `yIA`.
+  Infra work is usually `interno`.
+- **Sponsors (always ask):** `--field "Custom.Sponsors=<v>"` — values:
+  `Dev Area`, `Implementacion`, `Producto`, `Soporte`.
+- **Template rules (verified):** ADO rejects the create (`TF401320`) when
+  `Custom.USProducto` or `Custom.Sponsors` are missing — always pass both on
+  every `User Story` create.
+- **Area:** never `--field System.AreaPath` — always the `--area` shortcut
+  (validates against the process). No `--area` means project root.
+- **State:** do not pass `--state` unless the user asked; let the process default apply.
+- **Parent:** only when the user names one (or `ado wi create-child`).
+
 ## Field formats (read this first)
 
 - **`description`** and everything inside it (repro steps, acceptance criteria,
-  DoD): write **HTML** — `<p>`, `<ul>`, `<ol>`, `<li>`, `<strong>`, `<em>`.
-  Azure DevOps stores rich-text fields as HTML; Markdown for work item fields is
-  an opt-in migration per organization, so HTML is the safe default.
-- **Comments** (`ado wi comment`, `ado wi update --comment`): write **Markdown**.
-  The comments API renders it.
+  DoD): write valid **Azure DevOps rich-text HTML** — NOT Markdown.
+  - Allowed tags only: `<p>`, `<br/>`, `<strong>`/`<b>`, `<em>`/`<i>`, `<ul>`,
+    `<ol>`, `<li>`, `<h1>`–`<h3>`, `<a href>`. No `<script>`, no CSS, no Markdown.
+  - One paragraph per block: `<p>...</p>`. Lists: `<ul>`/`<ol>` with `<li>`.
+    Emphasis: `<strong>`. Line break: `<br/>`.
+  - Forbidden in `--description`: `**bold**`, `# heading`, `- item`, backticks,
+    pipe tables. ADO stores rich-text fields as HTML and does not render Markdown
+    (it is an opt-in migration per org, so HTML is the safe default).
+  - Escape literal `<`, `>`, `&` as entities when they are content, not tags.
+- **Comments** (`ado wi comment`, `ado wi update --comment`): a work item
+  comment renders as HTML, not Markdown. Bare Markdown **collapses** — single
+  newlines vanish and tables/lists flatten into one line (verified: a 20-line
+  run report posted as Markdown kept zero line breaks).
+  - Short plain comment: write simple HTML — same tags as `--description`.
+  - Comment carrying Markdown content (run report, table, code, logs): wrap
+    the raw Markdown in `<pre>...</pre>`. This is the only form that preserves
+    both the line breaks and the Markdown verbatim; it renders as a
+    preformatted block the reader copies as-is (verified: 20 line breaks and a
+    60-pipe table survived intact inside `<pre>`).
+  - Never post bare Markdown in a work item comment.
 - The `ado` CLI passes values through verbatim — it converts nothing.
 - There are no flags for repro steps, acceptance criteria, or severity. They go
   inside `--description`. Only pass flags that `commands.md` lists.
 
 ## Choosing a type
+
+Default is **User Story**. Only deviate when the user explicitly says so.
 
 Map the request to an intent, then resolve the real type name with `ado wi types` —
 type names differ per process (Agile has `User Story`, Scrum has `Product Backlog
@@ -126,9 +170,13 @@ Break a Feature down into children with `ado wi create-child --parent <id>`.
 
 | Field | Rule |
 | --- | --- |
-| `--title` | Required. Max 256 characters. |
-| `--description` | HTML. |
+| `--title` | Required. Max 256 characters. Plain text, no HTML. |
+| `--description` | Azure DevOps HTML only (see "Field formats"); goes inside `--description`. |
+| `--type` | Default `User Story` (see "Default create contract"). |
+| `--assigned` | Resolved at runtime from `ado wi list` (`@<name>` column) — never hardcoded; use "user named someone else" only when told. |
+| `--area` | Social Kanban → `--profile ysocial` + `--area "ySocial\\Kanban"`; Infra Kanban → `--area "Infra\\Infra Kanban"`. Never `--field System.AreaPath`. |
+| `Custom.USProducto` | Required (`--field "Custom.USProducto=<v>"`): `ySocial`, `yFlow`, `yWhatsApp`, `yMobile`, `interno`, `yIA`. |
+| `Custom.Sponsors` | Required (`--field "Custom.Sponsors=<v>"`): `Dev Area`, `Implementacion`, `Producto`, `Soporte`. |
 | `--priority` | 1 (highest) to 4 (lowest). |
 | `--tags` | Semicolon-separated (`a;b`). Only tags the user asked for. |
-| `--assigned` | Only when the user named a person. |
 | `--state` | Only when the user asked for a specific state; otherwise let the process default apply. |

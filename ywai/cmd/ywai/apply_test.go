@@ -1,6 +1,8 @@
 package main
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestPlanManaged_AlwaysDoesTheYwaiManagedWork(t *testing.T) {
 	t.Parallel()
@@ -12,6 +14,9 @@ func TestPlanManaged_AlwaysDoesTheYwaiManagedWork(t *testing.T) {
 		}
 		if !p.InstallProfiles || !p.WriteAgentsMd || !p.InstallPlugins {
 			t.Fatalf("mode=%v must keep ywai managed work: %+v", mode, p)
+		}
+		if !p.SetDefaultAgent || !p.SetDefaultModel {
+			t.Fatalf("mode=%v must set default_agent and default model: %+v", mode, p)
 		}
 	}
 }

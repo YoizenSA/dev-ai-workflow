@@ -9,7 +9,7 @@ import (
 )
 
 // opencode resolves npm plugins once and caches the install under
-// ~/.cache/opencode/packages/<spec>/ (Kilo: ~/.cache/kilo/packages/). The
+// ~/.cache/opencode/packages/<spec>/. The
 // cached copy is reused verbatim on later starts — Npm.add returns the cached
 // node_modules/<name> without re-resolving @latest — so an old resolved
 // version sticks even after ywai re-writes the config to "latest". These

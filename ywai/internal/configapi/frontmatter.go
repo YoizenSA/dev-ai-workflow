@@ -15,7 +15,7 @@ import (
 //
 // Agents may live either directly under dir (e.g. dir/gentle-orchestrator.md)
 // or inside a group subdirectory (e.g. dir/core/architect.md,
-// dir/social-refactor/migration-orchestrator.md). ListAgents already scans
+// dir/qa-automation/qa-analyst.md). ListAgents already scans
 // both layouts when listing; this helper mirrors that so the single-agent
 // handlers (GetAgent, PutAgent, DeleteAgent, permissions) resolve the same
 // file the list presented — otherwise selecting a nested agent returns 404.
@@ -262,41 +262,41 @@ func extractModeFromFrontmatter(fm string) string {
 	return ""
 }
 
-// updatePermissionsInFrontmatter replaces the permissions block (v2 rule
-// array, or legacy permission:/tools: maps) with a fresh v2 array rendered
-// from the given internal permission map. The subagent (delegation) rules are
-// preserved: the map carried by this endpoint is tool permissions only. If no
-// block exists, one is added. Returns the updated full markdown content.
-func updatePermissionsInFrontmatter(content string, perms map[string]string) string {
-	fm, _ := parseFrontmatter(content)
-
-	// Preserve the delegation graph: swap tool rules, keep subagent rules.
-	var subagentRules []agents.PermissionRule
-	if fm != "" {
-		if existing, ok := agents.ParsePermissionRulesYAML(fm); ok {
-			for _, r := range existing {
-				if r.Action == "subagent" {
-					subagentRules = append(subagentRules, r)
-				}
-			}
+// updatePermissionsInFrontmatter replaces the permission block with a fresh
+// v2 `permissions:` rule list rendered from the given internal permission map.
+// The delegation (task) block is preserved: the map carried by this endpoint is
+// tool permissions only. If no block exists, one is added. Returns the updated
+// full markdown content. name is the flat agent id (write-scope/no-commit
+// lookups).
+func updatePermissionsInFrontmatter(content, name string, perms map[string]string) string {
+	// Preserve the delegation graph: swap tool permissions, keep the task map.
+	merged := map[string]string{}
+	for k, v := range perms {
+		merged[k] = v
+	}
+	updated := replacePermissionsBlock(content, name, merged)
+	if task, ok := agents.ReadTaskPermission(content); ok && len(task) > 0 {
+		if injected, ok := agents.InjectTaskPermission(updated, task); ok {
+			return injected
 		}
 	}
-	rules := append(agents.RulesFromPermissionMap("", perms), subagentRules...)
-	return replacePermissionsBlock(content, rules)
+	return updated
 }
 
-// replacePermissionsBlock swaps the frontmatter permissions block (v2 rule
-// array, dropping any legacy permission:/tools: maps) for a freshly rendered
-// one, leaving every other frontmatter key untouched. Content without
-// frontmatter gets a minimal frontmatter with the block added.
-func replacePermissionsBlock(content string, rules []agents.PermissionRule) string {
+// replacePermissionsBlock swaps the frontmatter permission block (dropping the
+// native permissions: list and any migration-era permission:/tools: maps) for
+// a freshly rendered v2 rules list, leaving every other frontmatter key
+// untouched. Content without frontmatter gets a minimal frontmatter with the
+// block added. name is the flat agent id used by the rules renderer.
+func replacePermissionsBlock(content, name string, perms map[string]string) string {
 	fm, body := parseFrontmatter(content)
 
 	var b strings.Builder
 	b.WriteString("---\n")
 	if fm != "" {
 		// Rebuild the frontmatter keeping every key except the permission-
-		// bearing blocks (v2 permissions: array + v1 permission:/tools: maps).
+		// bearing blocks (the permissions: list plus migration-era
+		// permission:/tools: maps).
 		// Block children are indented lines that follow their header until the
 		// next top-level key; other indented lines (e.g. description block
 		// scalars) belong to kept keys and must survive.
@@ -305,9 +305,8 @@ func replacePermissionsBlock(content string, rules []agents.PermissionRule) stri
 			indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 			trimmed := strings.TrimSpace(line)
 			if !indented && trimmed != "" {
-				// `group:` is not a valid opencode v2 agent key; keeping it
-				// sends the file down the legacy v1 decode path, which drops
-				// the v2 permissions array. Group lives in the sidecar.
+				// Group membership lives in the sidecar, not the frontmatter,
+				// so the same file stays readable by both opencode majors.
 				if strings.HasPrefix(trimmed, "group:") {
 					inDropped = false
 					continue
@@ -330,8 +329,9 @@ func replacePermissionsBlock(content string, rules []agents.PermissionRule) stri
 	} else {
 		b.WriteString("description: agent\n")
 	}
-	for _, line := range agents.RenderPermissionRulesYAML(rules) {
-		b.WriteString(line + "\n")
+	for _, line := range agents.RenderPermissionRulesYAML(agents.RulesFromPermissionMap(name, perms)) {
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
 	b.WriteString("---\n\n")
 	b.WriteString(body)
@@ -396,22 +396,6 @@ func setScalarFrontmatterField(content, key, value string) string {
 	return "---\n" + newFM + "\n---\n\n" + body
 }
 
-// sortedPermissionKeys returns ValidPermissionKeys as a sorted slice for error messages.
-func sortedPermissionKeys() []string {
-	keys := make([]string, 0, len(ValidPermissionKeys))
-	for k := range ValidPermissionKeys {
-		keys = append(keys, k)
-	}
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[j] < keys[i] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
-	return keys
-}
-
 // --- Markdown body section helpers (operate on the prompt body, NOT frontmatter) ---
 //
 // These let the delegation-rules endpoint read/write a specific "### Header"
@@ -442,70 +426,6 @@ func headingText(line string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimSpace(line)[level:])
-}
-
-// extractMarkdownSection returns the body text under the first heading whose
-// title equals headerText (compared case-insensitively, ignoring the leading
-// "### " markers). The returned content is the section body WITHOUT the heading
-// line and WITHOUT nested sub-sections: it stops at the next heading of equal
-// or higher level. The boolean reports whether the heading was found.
-//
-// Example: for body
-//
-//	### Delegation Rules
-//	core principle ...
-//	| Action | Inline | Delegate |
-//	#### Mandatory Triggers
-//	...
-//	### Cost
-//
-// extractMarkdownSection(body, "Delegation Rules", false) returns the lines
-// between "### Delegation Rules" and "#### Mandatory Triggers" (the table),
-// because a "####" is a higher numeric level (shallower depth) ... wait:
-// includeSubsections=false stops at the NEXT heading of equal-or-HIGHER level
-// (same or fewer '#'). "####" has more '#', so it is a sub-section and is NOT
-// a stop boundary when includeSubsections is false only in the "equal-or-fewer"
-// sense — see the implementation: stop when nextLevel>0 && nextLevel<=level.
-//
-// Concretely:
-//   - includeSubsections=false returns only the direct content (stops at any
-//     heading with level <= the section's level, i.e. same-or-shallower).
-//   - includeSubsections=true returns the direct content PLUS nested headings
-//     (stops only at headings of the same-or-shallower level as the section).
-func extractMarkdownSection(body, headerText string, includeSubsections bool) (string, bool) {
-	target := strings.ToLower(strings.TrimSpace(headerText))
-	level := 0
-	startLine := -1
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		if headingLevel(line) == 0 {
-			continue
-		}
-		if strings.ToLower(headingText(line)) == target {
-			level = headingLevel(line)
-			startLine = i + 1
-			break
-		}
-	}
-	if startLine < 0 {
-		return "", false
-	}
-
-	var out []string
-	for _, line := range lines[startLine:] {
-		lvl := headingLevel(line)
-		if lvl > 0 && lvl <= level {
-			// A heading at the same level or shallower ends the section.
-			break
-		}
-		if !includeSubsections && lvl > level {
-			// Caller asked for direct content only — a nested heading is a stop
-			// boundary for the *direct* slice.
-			break
-		}
-		out = append(out, line)
-	}
-	return strings.TrimRight(strings.Join(out, "\n"), "\n"), true
 }
 
 // replaceMarkdownSection replaces the body content under the heading

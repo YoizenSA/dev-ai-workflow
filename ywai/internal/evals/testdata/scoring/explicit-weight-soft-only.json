@@ -1,0 +1,13 @@
+{
+  "name": "explicit-weight-soft-only",
+  "taskId": "golden-weights",
+  "response": "backoff doubles after each failure until the request finally succeeds on its own.",
+  "expected": {
+    "hits": ["exponential backoff"],
+    "missed": ["rateLimiter", "jitter"],
+    "total": 3,
+    "gotHard": false,
+    "answered": true,
+    "weighted": 0.3333333333333333
+  }
+}

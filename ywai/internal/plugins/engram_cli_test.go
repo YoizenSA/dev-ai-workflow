@@ -49,8 +49,44 @@ func TestWireEngramMCP_WritesDetectedHosts(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(setups, []string{"opencode", "pi"}) {
-		t.Fatalf("engram setup calls = %v, want [opencode pi]", setups)
+	// opencode is MCP-only: its setup drops a plugin opencode2 rejects.
+	if !slices.Equal(setups, []string{"pi"}) {
+		t.Fatalf("engram setup calls = %v, want [pi]", setups)
+	}
+}
+
+func TestWireEngramMCP_RemovesLegacyOpencodePlugin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	putFakeEngramOnPATH(t)
+
+	pluginsDir := filepath.Join(home, ".config", "opencode", "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(pluginsDir, "engram.ts")
+	if err := os.WriteFile(legacy, []byte("/**\n * Engram — OpenCode plugin adapter\n */\nexport const Engram: Plugin = async () => ({})\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WireEngramMCP([]string{"opencode"}); err != nil {
+		t.Fatalf("WireEngramMCP: %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Errorf("legacy engram.ts still present (err=%v)", err)
+	}
+
+	// A user's own file with the same name is not the adapter: keep it.
+	if err := os.WriteFile(legacy, []byte("export default { id: 'mine' }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WireEngramMCP([]string{"opencode"}); err != nil {
+		t.Fatalf("WireEngramMCP: %v", err)
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		t.Errorf("non-adapter engram.ts was removed: %v", err)
 	}
 }
 
@@ -86,7 +122,7 @@ func TestWireEngramMCP_SkipsUnsupportedHosts(t *testing.T) {
 	runEngramSetup = func(string) error { t.Fatal("setup must not run"); return nil }
 	t.Cleanup(func() { runEngramSetup = orig })
 
-	if err := WireEngramMCP([]string{"cursor", "kilocode"}); err == nil {
+	if err := WireEngramMCP([]string{"cursor", "windsurf"}); err == nil {
 		t.Fatal("WireEngramMCP() err = nil, want error when no supported host")
 	}
 }
@@ -112,6 +148,19 @@ func putFakeEngramOnPATH(t *testing.T) {
 }
 
 func entryShapeEqual(got, want map[string]any) bool {
+	// The opencode v1 writer adds `enabled` where BuildEntryShape does not
+	// carry one; drop it only in that case, so hosts whose shape legitimately
+	// includes `enabled` are still compared on it.
+	_, wantHasEnabled := want["enabled"]
+	if _, has := got["enabled"]; has && !wantHasEnabled {
+		trimmed := make(map[string]any, len(got)-1)
+		for k, v := range got {
+			if k != "enabled" {
+				trimmed[k] = v
+			}
+		}
+		got = trimmed
+	}
 	if len(got) != len(want) {
 		return false
 	}

@@ -60,8 +60,8 @@
         "name": "planner-scout",
         "description": "Read-only codebase scout for planning. Maps affected files, patterns, risks, and complexity before any plan is drafted.",
         "agentRef": "planning/planner-scout",
-        "prompt": "Explore the codebase for the planning request: affected files, existing patterns, risks, dependencies, and complexity estimate. Return a structured Scout Report. Read-only.",
-        "tools": "read, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, mcp",
+        "prompt": "Scout the codebase. When `graft` / `code_search` are available, use them for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep, then ranged reads. Report affected files as `path:lines`, existing patterns, risks, dependencies, and complexity (low|medium|high). Read-only.",
+        "tools": "read, glob, grep, graft_*, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "handoff,context-gathering"
@@ -105,7 +105,7 @@
         "description": "Plan synthesis agent. Turns scout findings into a concise, actionable markdown plan with file paths, steps, and risks.",
         "agentRef": "planning/planner-draft",
         "prompt": "Synthesize the Scout Report into a concise, actionable plan: goal, approach, changes (with full file paths), ordered steps, and risks. Mermaid diagram only if it clarifies. No emojis. Proportional to complexity. Then PERSIST the plan to `.plans/<slug>.md` in the repo root (create the directory if needed) and report the path back to the orchestrator. You may ONLY write under `.plans/` — nowhere else.",
-        "tools": "read, write, glob, grep, lsp, ast_grep, code_search, task, question, skill, memory, mcp",
+        "tools": "read, write, glob, grep, graft_*, skill, memory, mcp",
         "model": "inherit",
         "mode": "subagent",
         "sections": "context-gathering"

@@ -141,11 +141,11 @@ func TestInstallHelpShowsGroupFlags(t *testing.T) {
 func TestInstallDryRunWithGroup(t *testing.T) {
 	withFakeAgent(t)
 	bin := buildBinary(t)
-	out := runYwai(t, bin, "install", "--dry-run", "--group", "social-refactor")
+	out := runYwai(t, bin, "install", "--dry-run", "--group", "qa-automation")
 
 	// Should not crash with FATAL errors
 	if strings.Contains(out, "FATAL") {
-		t.Errorf("install --dry-run --group social-refactor should not produce FATAL errors, got: %s", out)
+		t.Errorf("install --dry-run --group qa-automation should not produce FATAL errors, got: %s", out)
 	}
 	// Should complete the dry-run flow
 	if !strings.Contains(out, "=== Done! ===") {

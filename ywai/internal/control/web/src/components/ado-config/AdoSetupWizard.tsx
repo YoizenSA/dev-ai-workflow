@@ -1,27 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { mergeRepos, parseRepoNames } from "./repoNames";
+import { configApi } from "../../api/client";
+import type { AdoConfig, AdoPatStatus, AdoProfile } from "../../api/types";
 import { Check } from "lucide-react";
 import Modal from "../shared/Modal";
 import { buildToml, buildTomlCommand, defaultToml, type TomlConfig } from "./tomlBuilder";
 
-// ─── Types (mirror AdoConfig.tsx + the Go structs in ado_config.go) ──────
-
-interface AdoProfile {
-	org: string;
-	project: string;
-	patEnvVar: string;
-	repos: string[];
-	default?: boolean;
-}
-
-interface AdoConfig {
-	defaultProfile: string;
-	profiles: Record<string, AdoProfile>;
-}
-
-interface PatStatus {
-	hasPat: boolean;
-	source: "env" | "file" | "none";
-}
+// ─── Types live in api/types.ts (mirror the Go structs in ado_config.go) ──
 
 // A profile being edited inside the wizard (before it is named/committed).
 interface DraftProfile {
@@ -74,7 +59,7 @@ interface Props {
 	initialOrg: string;
 	initialProfiles: AdoConfig["profiles"];
 	initialDefault: string;
-	patStatus: PatStatus | null;
+	patStatus: AdoPatStatus | null;
 	onMessage: (msg: { text: string; type: "success" | "error" }) => void;
 }
 
@@ -148,10 +133,8 @@ export default function AdoSetupWizard({
 	const addRepo = (i: number) => {
 		const raw = (repoInputs[i] ?? "").trim();
 		if (!raw) return;
-		// Allow comma-separated paste.
-		const names = raw.split(",").map((x) => x.trim()).filter(Boolean);
-		const valid = names.filter((n) => /^[a-zA-Z0-9._-]+$/.test(n));
-		if (valid.length !== names.length) {
+		const { valid, rejected } = parseRepoNames(raw);
+		if (rejected.length > 0) {
 			onMessage({ text: "Repo names may only contain letters, numbers, dots, hyphens, underscores", type: "error" });
 		}
 		setDraft(i, { repos: [...new Set([...s_profiles(i), ...valid])] });
@@ -193,15 +176,7 @@ export default function AdoSetupWizard({
 		try {
 			// 1. Save PAT if one was entered.
 			if (!state.skipPat && state.pat.trim()) {
-				const res = await fetch("/api/ado/pat", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ pat: state.pat.trim() }),
-				});
-				if (!res.ok) {
-					const d = await res.json().catch(() => ({}));
-					throw new Error(d.error || "Failed to save PAT");
-				}
+				await configApi.saveAdoPat(state.pat.trim());
 			}
 
 			// 2. Build the config with the shared org + patEnvVar.
@@ -215,22 +190,19 @@ export default function AdoSetupWizard({
 					org: state.org.trim(),
 					project: p.project.trim(),
 					patEnvVar: "AZURE_DEVOPS_PAT",
-					repos: p.repos,
+					// A name typed but never committed with Enter is still the
+					// user's intent; without this the profile saves with no repos.
+					repos: mergeRepos(p.repos, repoInputs[i] ?? ""),
 					...(isDefault ? { default: true } : {}),
 				};
 			});
 
 			const cfg: AdoConfig = { defaultProfile, profiles };
-			const res = await fetch("/api/ado/config", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(cfg),
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || "Failed to save config");
-
+			const data = await configApi.saveAdoConfig(cfg);
 			onApplied(data.config);
 			onMessage({ text: "Azure DevOps configuration applied", type: "success" });
+			// Success — drop the PAT from state so the secret does not linger.
+			update({ pat: "" });
 			onClose();
 		} catch (e) {
 			onMessage({ text: (e as Error).message, type: "error" });
@@ -396,6 +368,7 @@ source ~/.zshrc`}</code></pre>
 									value={repoInputs[i] ?? ""}
 									onChange={(e) => setRepoInputs((r) => ({ ...r, [i]: e.target.value }))}
 									onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addRepo(i); } }}
+									onBlur={() => addRepo(i)}
 									placeholder="repo name + Enter (or comma-separated)"
 								/>
 							</div>
@@ -486,7 +459,8 @@ source ~/.zshrc`}</code></pre>
 		const profileSummary = state.profiles.map((p, i) => ({
 			name: slugifyProject(p.project),
 			project: p.project,
-			repos: p.repos,
+			// Show what will actually be saved, pending tag input included.
+			repos: mergeRepos(p.repos, repoInputs[i] ?? ""),
 			default: i === state.defaultIndex,
 		}));
 		return (

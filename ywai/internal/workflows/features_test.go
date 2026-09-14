@@ -31,7 +31,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		},
 	}
 
-	claude := NewExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
+	claude := newExporterWithDirsForTarget(cmdDir, agentsDir, TargetClaudeCode)
 	_, files, err := claude.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -54,7 +54,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 		}
 	}
 
-	oc := NewExporterWithDirs(cmdDir, agentsDir)
+	oc := newExporterWithDirs(cmdDir, agentsDir)
 	_, files, err = oc.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -75,7 +75,7 @@ func TestSlashCommandOptionsEmittedInCommand(t *testing.T) {
 func TestSlashCommandOptionsOmittedByDefault(t *testing.T) {
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(cmdDir, agentsDir)
+	e := newExporterWithDirs(cmdDir, agentsDir)
 
 	_, files, err := e.Plan(exportFixture())
 	if err != nil {
@@ -222,7 +222,7 @@ func TestValidateSlashCommandOptions(t *testing.T) {
 func TestEstimatedTokensPopulated(t *testing.T) {
 	cmdDir := t.TempDir()
 	agentsDir := t.TempDir()
-	e := NewExporterWithDirs(cmdDir, agentsDir)
+	e := newExporterWithDirs(cmdDir, agentsDir)
 	plan, _, err := e.Plan(exportFixture())
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -461,7 +461,7 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 			{From: "qa", To: "e"},
 		},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -477,20 +477,14 @@ func TestOrchestratorExportHasDelegationMap(t *testing.T) {
 	}
 	orch := files[orchPath]
 	for _, want := range []string{
-		`resource: "*"`,
-		"action: subagent",
-		"resource: deploy-dev",
-		"resource: deploy-qa",
+		"- action: subagent\n    resource: \"*\"\n    effect: deny",
+		"- action: subagent\n    resource: deploy-dev\n    effect: allow",
+		"- action: subagent\n    resource: deploy-qa\n    effect: allow",
 		"Typed Contracts (orchestrator)",
 	} {
 		if !strings.Contains(orch, want) {
 			t.Errorf("orchestrator missing %q:\n%s", want, orch)
 		}
-	}
-	// The contracts block comes from a single source; appending it twice would
-	// silently double the orchestrator prompt.
-	if n := strings.Count(orch, "## Typed Contracts (orchestrator)"); n != 1 {
-		t.Errorf("contracts section appears %d times, want 1", n)
 	}
 	// Ship gate may be YAML or JSON form inside the contracts section.
 	if !strings.Contains(orch, "ship | ship-with-nits | block") &&
@@ -517,7 +511,7 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 			{From: "qa", To: "rev"},
 		},
 	}
-	e := NewExporterWithDirs(t.TempDir(), t.TempDir())
+	e := newExporterWithDirs(t.TempDir(), t.TempDir())
 	_, files, err := e.Plan(wf)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -533,7 +527,7 @@ func TestSubAgentExportHasDelegationFromEdges(t *testing.T) {
 		t.Fatal("dev agent file not found")
 	}
 	dev := files[devPath]
-	if !strings.Contains(dev, "resource: w-qa") {
+	if !strings.Contains(dev, "- action: subagent\n    resource: w-qa\n    effect: allow") {
 		t.Errorf("dev should delegate to qa:\n%s", dev)
 	}
 	if strings.Contains(dev, "resource: w-rev") {

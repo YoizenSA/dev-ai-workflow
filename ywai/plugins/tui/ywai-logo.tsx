@@ -9,11 +9,6 @@ import { join } from "node:path"
 
 const id = "ywai-logo"
 
-type TuiTheme = {
-  textMuted: string
-  accent: string
-}
-
 // Canonical ywai wordmark — kept in sync with internal/tui/tui.go logoLines.
 const wordmark = [
   "██╗   ██╗██╗    ██╗ █████╗ ██╗",
@@ -24,7 +19,8 @@ const wordmark = [
   "   ╚═╝    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝",
 ]
 
-const compactArt = "✦ ywai ✦"
+const mediumMark = "◆  Ywai  ◆"
+const compactArt = "✦ Ywai ✦"
 
 // Brand palette from the ywai icon (icon.svg): orange, blue, purple.
 type RGB = [number, number, number]
@@ -54,23 +50,52 @@ const gradient = (p: number): RGB => {
   return mix(brand[i % n], brand[(i + 1) % n], seg - i)
 }
 
-// Easter eggs unlocked by clicking the logo.
-const eggs = [
+type Egg = { at: number; text: string; toast?: string }
+
+// Click ladder. Toasts fire only on the click that lands on `at` (not on load,
+// so a persisted gentleman does not dump the whole campaign at startup).
+const eggs: Egg[] = [
   { at: 3, text: "you found me 🎉" },
   { at: 7, text: "yoizen ai · keep clicking…" },
-  { at: 12, text: "ok ok, you really like clicking" },
-  { at: 21, text: "✦ certified ywai gentleman ✦" },
+  { at: 13, text: "that's not a skill" },
+  { at: 21, text: "✦ certified ywai gentleman ✦", toast: "title unlocked" },
+  { at: 34, text: "ponytail: YAGNI. you: click.", toast: "ponytail disapproves" },
+  { at: 42, text: "42 clicks. the answer was ywai.", toast: "don't panic" },
+  { at: 64, text: "your orchestrator filed a complaint", toast: "delegation refused" },
+  { at: 89, text: "i-have-adhd wants this loop back", toast: "focus check" },
+  { at: 100, text: "certified clicker. go ship.", toast: "achievement: stop" },
 ]
 
-const taglineFor = (clicks: number): string | null => {
-  let unlocked: string | null = null
-  for (const egg of eggs) if (clicks >= egg.at) unlocked = egg.text
-  return unlocked
+const encore = [
+  "the logo is a button now. you made it one.",
+  "ywai update won't fix this",
+  "delegate this urge to a subagent",
+  "gentleman-programming would never",
+  "one more for the workflow retro",
+  "still not a skill",
+]
+
+const lastEgg = eggs[eggs.length - 1]
+
+const eggFor = (clicks: number): Egg | null => {
+  let found: Egg | null = null
+  for (const egg of eggs) if (clicks >= egg.at) found = egg
+  return found
 }
 
-// ywai writes ~/.ywai/version.json (see internal/versionfile). Read it once at
-// startup so the logo can show the installed version and flag updates. Best
-// effort: if ywai was never installed or the file is missing, show nothing.
+const taglineFor = (clicks: number): string | null => {
+  if (clicks < eggs[0].at) return null
+  if (clicks >= lastEgg.at) return encore[(clicks - lastEgg.at) % encore.length]
+  return eggFor(clicks)?.text ?? null
+}
+
+const speedFor = (clicks: number) => {
+  if (clicks >= 100) return 3.2
+  if (clicks >= 42) return 2.2
+  if (clicks >= 21) return 1.4
+  return 1
+}
+
 type VersionInfo = { installed?: string; latest?: string; updateAvailable?: boolean }
 
 const readVersionInfo = (): VersionInfo => {
@@ -82,29 +107,62 @@ const readVersionInfo = (): VersionInfo => {
   }
 }
 
-// Normalize a tag (GitHub prepends "v") for display.
 const tag = (v?: string) => (v ? (v.startsWith("v") ? v : `v${v}`) : "")
 
-const Logo = (props: { theme: TuiTheme }) => {
+// v2 ResolvedTheme is nested (theme.text.subdued, theme.text.feedback.*).
+// Older hosts passed flat keys. Prefer v2; fall back so a missing token
+// never paints the default (white) fg.
+const themeMuted = (theme) => theme?.text?.subdued ?? theme?.textMuted ?? theme?.text?.default
+const themeAccent = (theme) =>
+  theme?.text?.feedback?.info?.default ?? theme?.accent ?? theme?.text?.action?.primary?.default ?? theme?.text?.default
+const themeWarning = (theme) =>
+  theme?.text?.feedback?.warning?.default ?? theme?.text?.status?.unread ?? themeAccent(theme)
+
+const aboutMessage = (info: VersionInfo) => {
+  const installed = info.installed ? `installed ${tag(info.installed)}` : "installed version unknown"
+  if (info.updateAvailable) return `${installed}\n↑ ${tag(info.latest)} available — run \`ywai update\``
+  return info.installed ? `${installed}\nup to date` : installed
+}
+
+const showAbout = (ctx) => {
+  const message = aboutMessage(readVersionInfo())
+  if (ctx.ui?.dialog?.alert) {
+    void ctx.ui.dialog.alert({ title: "ywai", message })
+    return
+  }
+  ctx.ui?.toast?.show?.({ title: "ywai", message, variant: "info" })
+}
+
+const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   const dim = useTerminalDimensions()
-  const [clicks, setClicks] = createSignal(0)
   const [phase, setPhase] = createSignal(0)
-  const [flash, setFlash] = createSignal(0) // remaining click-flash frames
+  const [flash, setFlash] = createSignal(0)
 
   // Animation loop. ~14fps keeps a home screen lively without burning CPU.
+  // Milestones speed the sweep up; the click flash still outruns the idle step.
   const timer = setInterval(() => {
     setFlash((f) => (f > 0 ? f - 1 : 0))
-    setPhase((p) => p + (flash() > 0 ? 0.05 : 0.012))
+    const step = 0.012 * speedFor(props.clicks())
+    setPhase((p) => p + (flash() > 0 ? Math.max(0.05, step) : step))
   }, 70)
   onCleanup(() => clearInterval(timer))
 
-  const big = createMemo(() => {
+  const size = createMemo(() => {
     const t = dim()
-    return t.height >= wordmark.length + 6 && t.width >= 64
+    if (t.height >= wordmark.length + 6 && t.width >= 64) return "full"
+    if (t.width >= 28) return "medium"
+    return "compact"
   })
 
-  const tagline = createMemo(() => taglineFor(clicks()))
-  const version = readVersionInfo()
+  const tagline = createMemo(() => taglineFor(props.clicks()))
+  const [version, setVersion] = createSignal(readVersionInfo())
+  const versionPoll = setInterval(() => setVersion(readVersionInfo()), 30_000)
+  onCleanup(() => clearInterval(versionPoll))
+  const mark = createMemo(() => {
+    if (size() === "full") return wordmark
+    if (size() === "medium") return [mediumMark]
+    return [compactArt]
+  })
 
   // Color for wordmark row `row` of `rows`: a vertical gradient sweep. During a
   // click flash each row brightens toward white for a satisfying burst.
@@ -117,41 +175,130 @@ const Logo = (props: { theme: TuiTheme }) => {
     return rgba(base)
   }
 
-  const full = () => (
-    <Index each={wordmark}>
-      {(line, row) => <text fg={rowColor(row, wordmark.length)}>{line()}</text>}
-    </Index>
-  )
-
-  const compact = () => <text fg={rowColor(0, 1)}>{compactArt}</text>
-
   return (
     <box
       flexDirection="column"
       alignItems="center"
       onMouseDown={() => {
-        setClicks((n) => n + 1)
-        setFlash(10)
+        const next = props.clicks() + 1
+        const hit = eggs.find((e) => e.at === next)
+        if (hit) {
+          props.ctx.ui?.toast?.show?.({
+            title: hit.toast ?? "ywai",
+            message: hit.text,
+            variant: "success",
+          })
+        }
+        props.bump()
+        setFlash(hit ? 16 : 10)
       }}
     >
-      {big() ? full() : compact()}
-      {version.installed ? (
-        <text fg={props.theme.textMuted}>{`ywai ${tag(version.installed)}`}</text>
+      <Index each={mark()}>
+        {(line, row) => <text fg={rowColor(row, mark().length)}>{line()}</text>}
+      </Index>
+      {version().installed ? (
+        <text fg={themeMuted(props.ctx.theme)}>{`ywai ${tag(version().installed)}`}</text>
       ) : null}
-      {version.updateAvailable ? (
-        <text fg={props.theme.accent}>{`↑ ${tag(version.latest)} available — run \`ywai update\``}</text>
+      {version().updateAvailable ? (
+        <text fg={themeWarning(props.ctx.theme)}>{`↑ ${tag(version().latest)} available — run \`ywai update\``}</text>
       ) : null}
-      {tagline() ? <text fg={props.theme.accent}>{tagline()}</text> : null}
+      {tagline() ? <text fg={themeAccent(props.ctx.theme)}>{tagline()}</text> : null}
     </box>
   )
 }
 
-// OpenCode2 beta uses the v2 TUI module contract: `{ id, setup }`.
-const setup = (ctx: { theme: TuiTheme; ui: { slot: (claim: unknown) => unknown } }) => {
-  ctx.ui.slot({
-    replace: "home.logo",
-    render: () => <Logo theme={ctx.theme} />,
+const VersionChip = (props: { ctx: any }) => {
+  const [info, setInfo] = createSignal(readVersionInfo())
+  const poll = setInterval(() => setInfo(readVersionInfo()), 30_000)
+  onCleanup(() => clearInterval(poll))
+
+  const label = createMemo(() => {
+    const v = info()
+    if (!v.installed && !v.updateAvailable) return ""
+    if (v.updateAvailable) return `ywai ↑ ${tag(v.latest)}`
+    return `ywai ${tag(v.installed)}`
   })
+
+  return label() ? (
+    <text
+      fg={info().updateAvailable ? themeWarning(props.ctx.theme) : themeMuted(props.ctx.theme)}
+      onMouseDown={() => {
+        if (info().updateAvailable) {
+          props.ctx.ui?.toast?.show?.({
+            title: "ywai update",
+            message: `run \`ywai update\`  (${tag(info().installed)} → ${tag(info().latest)})`,
+            variant: "info",
+          })
+          return
+        }
+        showAbout(props.ctx)
+      }}
+    >
+      {label()}
+    </text>
+  ) : null
+}
+
+const Commands = (props: { ctx: any }) => {
+  props.ctx.keymap?.layer?.(() => ({
+    mode: "global",
+    commands: [
+      {
+        id: "ywai.about",
+        title: "ywai version",
+        group: "ywai",
+        palette: true,
+        slash: { name: "ywai" },
+        run: () => showAbout(props.ctx),
+      },
+    ],
+  }))
+  return null
+}
+
+// OpenCode v2 TUI contract: `{ id, setup }`. SlotMap (packages/plugin/src/tui/context.ts)
+// has no home.logo — a claim on an unpublished path is discarded in silence.
+// Wordmark sits `before` home.footer (sibling above the footer, not inside it);
+// version lives in home.footer.status (after health, before the host version).
+const setup = (ctx) => {
+  let clicks = () => 0
+  let bump = () => {}
+  try {
+    const [store, update] = ctx.storage.store("ywai-logo-eggs", { initial: { clicks: 0 } })
+    clicks = () => store.clicks
+    bump = () => {
+      void update((draft) => {
+        draft.clicks += 1
+      })
+    }
+  } catch {
+    const [n, setN] = createSignal(0)
+    clicks = n
+    bump = () => setN((c) => c + 1)
+  }
+
+  const unsubs = [
+    ctx.ui.slot({
+      before: "home.footer",
+      render: () => <Logo ctx={ctx} clicks={clicks} bump={bump} />,
+    }),
+    ctx.ui.slot({
+      append: "home.footer.status",
+      render: () => <VersionChip ctx={ctx} />,
+    }),
+    ctx.ui.slot({
+      append: "app",
+      render: () => <Commands ctx={ctx} />,
+    }),
+  ]
+
+  return () => {
+    for (const u of unsubs) {
+      try {
+        u?.()
+      } catch {}
+    }
+  }
 }
 
 const plugin = { id, setup }

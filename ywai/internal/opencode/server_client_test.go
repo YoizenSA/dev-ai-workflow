@@ -11,8 +11,9 @@ import (
 // ─── Agent endpoint test ───────────────────────────────────────────────────
 
 func TestServerClient_ListAgents(t *testing.T) {
+	// v2 serves agents under /api/agent; the bare /agent path is the SPA shell.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/agent" {
+		if r.URL.Path != "/api/agent" {
 			http.NotFound(w, r)
 			return
 		}
@@ -67,73 +68,19 @@ func TestServerClient_ListAgents_ServerError(t *testing.T) {
 	}
 }
 
-// ─── Provider endpoint (v1) test ───────────────────────────────────────────
-
-func TestServerClient_ListModels_V1(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/provider" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		resp := map[string]interface{}{
-			"all": []map[string]interface{}{
-				{
-					"name": "OpenAI",
-					"id":   "openai",
-					"type": "openai",
-					"models": map[string]interface{}{
-						"gpt-4": map[string]interface{}{
-							"id":   "gpt-4",
-							"name": "GPT-4",
-						},
-					},
-				},
-				{
-					"name": "Anthropic",
-					"id":   "anthropic",
-					"type": "anthropic",
-					"models": map[string]interface{}{
-						"claude-3": map[string]interface{}{
-							"id":   "claude-3",
-							"name": "Claude 3",
-						},
-					},
-				},
-			},
-			"default":   map[string]string{},
-			"connected": []string{},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer srv.Close()
-
-	c := NewServerClient(srv.URL)
-	c.useCLI = false
-	ctx := context.Background()
-	models, err := c.ListModels(ctx)
-	if err != nil {
-		t.Fatalf("ListModels() failed: %v", err)
-	}
-
-	if len(models) != 2 {
-		t.Fatalf("Expected 2 models, got %d", len(models))
-	}
-}
-
-// ─── Provider V2 endpoint test ─────────────────────────────────────────────
+// ─── Model endpoint (v2) test ──────────────────────────────────────────────
 
 func TestServerClient_ListModels_V2(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/provider" {
+		if r.URL.Path != "/api/model" {
 			http.NotFound(w, r)
 			return
 		}
 		resp := map[string]interface{}{
 			"location": map[string]string{},
 			"data": []map[string]interface{}{
-				{"id": "openai/gpt-4", "providerID": "openai", "name": "GPT-4", "api": "chat"},
-				{"id": "anthropic/claude-3", "providerID": "anthropic", "name": "Claude 3", "api": "chat"},
+				{"id": "gpt-4", "modelID": "gpt-4", "providerID": "openai", "name": "GPT-4"},
+				{"id": "claude-3", "modelID": "claude-3", "providerID": "anthropic", "name": "Claude 3"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -151,6 +98,15 @@ func TestServerClient_ListModels_V2(t *testing.T) {
 
 	if len(models) != 2 {
 		t.Fatalf("Expected 2 models, got %d", len(models))
+	}
+	want := map[string]string{
+		"openai/gpt-4":       "openai",
+		"anthropic/claude-3": "anthropic",
+	}
+	for _, m := range models {
+		if want[m.ID] != m.Provider {
+			t.Errorf("model %+v is not a provider/model id", m)
+		}
 	}
 }
 

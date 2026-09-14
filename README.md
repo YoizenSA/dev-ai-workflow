@@ -93,7 +93,7 @@ Available configuration options:
 
 ## Control UI
 
-`ywai serve` unifica Missions, Workflows y la configuración de agentes en un solo servidor web con una SPA (React + Vite). Incluye autostart vía systemd/launchd y health checks.
+`ywai serve` unifica Workflows y la configuración de agentes en un solo servidor web con una SPA (React + Vite). Incluye autostart vía systemd/launchd y health checks.
 
 ### Quick start
 
@@ -124,8 +124,8 @@ ywai install --autostart
 
 | Endpoint | Description |
 |----------|-------------|
-| `http://localhost:5768/` | Missions — track missions and their features |
-| `http://localhost:5768/missions/` | Missions dashboard — plan and monitor multi-feature projects |
+| `http://localhost:5768/` | Redirects to the Workflows dashboard |
+| `http://localhost:5768/workflows/` | Workflow Studio — design and run agent workflows |
 | `http://localhost:5768/health` | Health check endpoint |
 | `http://localhost:5768/memories/` | Engram memory management — search, edit, consolidate, timeline |
 
@@ -142,52 +142,14 @@ Check status: `ywai config get server.autostart`
 ### Deprecated
 
 - `ywai daemon` → use `ywai serve` instead
-- `ywai missions serve` → use `ywai serve` instead (everything is served on the same port)
-
----
-
-## Missions
-
-`ywai missions` — Multi-agent orchestration system for large, multi-feature projects. Breaks complex work into milestones and features, delegates each feature to an `opencode` worker agent, and validates results against expected behaviors.
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `ywai missions start` | Start interactive mission planning |
-| `ywai missions start --file plan.json` | Start mission from a JSON plan file |
-| `ywai missions list` | List all missions |
-| `ywai missions show <id>` | Show detailed mission information |
-| `ywai missions resume <id>` | Resume a paused mission |
-| `ywai missions cancel <id>` | Cancel a mission |
-
-### Architecture
-
-- **Package**: `ywai/internal/missions/` — self-contained module with CLI, TUI, and Web UI surfaces
-- **State Machine**: Missions and features follow strict FSM transitions (`fsm.go`) — `planning → active → paused / completed / failed / validating`
-- **Persistence**: JSON files stored at `~/.local/share/ywai/missions/{id}/` with atomic writes for crash safety
-- **Worker Agent**: Uses `opencode` as the worker agent for feature implementation. Each feature gets a dedicated temp directory with its spec, mission context, and handoff format
-- **Validation Pipeline**: Per-milestone validation runs structural scrutiny, automated user testing, and generates fix features for blocking issues
-- **Dashboard**: Embedded Web UI (`internal/missions/web/ui/`) with WebSocket real-time updates, CRUD operations, and live feature log streaming
-- **Plan File**: Missions can be bootstrapped from a `plan.json` file (see `PlanMission` schema in `models.go`)
-
-### State Lifecycle
-
-```
-planning ──► active ──► paused ──► active
-                  ├──► completed
-                  ├──► failed ──► planning
-                  └──► validating ──► completed / failed
-                                    └──► active (re-enter after fixes)
-```
 
 ---
 
 ## Supported Agents
 
-**Detected** (16) — ywai finds these and copies its extra skills into them:
+**Detected** (15) — ywai finds these and copies its extra skills into them:
 
-opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kilocode, kimi, qwen-code, antigravity, kiro-ide, openclaw, trae-ide, pi, omp
+opencode, claude-code, cursor, windsurf, gemini-cli, vscode-copilot, codex, kimi, antigravity, pi, omp
 
 **Agent profiles installed** (5) — these get the full ywai agent set:
 
@@ -201,7 +163,6 @@ opencode, claude-code, vscode-copilot, pi, omp
 |:---|:---|
 | `typescript` | TypeScript strict patterns |
 | `react-19` | React 19 + React Compiler |
-| `tailwind-4` | Tailwind CSS 4 |
 | `biome` | Biome linter/formatter |
 | `angular/*` | Angular (core, forms, performance, architecture) |
 | `dotnet` | .NET 9 / ASP.NET Core |

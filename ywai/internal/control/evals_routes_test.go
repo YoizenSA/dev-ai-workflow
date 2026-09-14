@@ -37,6 +37,10 @@ func TestHandleSessionAnalytics_ServesFixtureDB(t *testing.T) {
 }
 
 func TestHandleEvalRuns_EmptyList(t *testing.T) {
+	// The bench store is a package global that persists to $HOME/.ywai; real
+	// runs from this machine would leak into the test and make it order-
+	// dependent. Swap in a temp-dir store for the duration of the test.
+	benchRuns = newBenchStoreAt(t.TempDir())
 	s := &Server{mux: http.NewServeMux()}
 	s.registerEvalsRoutes()
 	req := httptest.NewRequest(http.MethodGet, "/api/evals/runs", nil)

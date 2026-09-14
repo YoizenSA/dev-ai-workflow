@@ -16,9 +16,8 @@ import (
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/missions/web"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/toolsapi"
 )
 
 const DefaultPort = 5768
@@ -37,11 +36,14 @@ func RegisterEmbeddedUI(ui func() fs.FS) {
 	embeddedUI = ui
 }
 
-// Server is the unified ywai control server combining the config API and Missions.
+// Server is the unified ywai control server. It owns one http.ServeMux that
+// every API registers onto directly: the config API, the shared tool API, and
+// the control-server routes. There is no longer a per-package server wrapper
+// or a prefix proxy between them.
 type Server struct {
 	port      int
-	configAPI *configapi.Server
-	missions  *web.Server
+	configAPI *configapi.Handlers
+	toolsAPI  *toolsapi.Handlers
 	httpSrv   *http.Server
 	mux       *http.ServeMux
 	portReady chan struct{}
@@ -59,18 +61,10 @@ func New(port int) (*Server, error) {
 		port = DefaultPort
 	}
 
-	kServer := configapi.New(port)
-
-	missionsStore, err := missions.OpenStore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open missions store: %w", err)
-	}
-	mServer := web.New(port, missionsStore)
-
 	s := &Server{
 		port:      port,
-		configAPI: kServer,
-		missions:  mServer,
+		configAPI: configapi.NewHandlers(),
+		toolsAPI:  toolsapi.NewHandlers(),
 		portReady: make(chan struct{}),
 		startedAt: time.Now(),
 	}
@@ -85,7 +79,6 @@ func New(port int) (*Server, error) {
 	pushStore, _ := NewPushStore()
 	if pushStore != nil {
 		s.push = NewPushAPI(pushStore)
-		mServer.SetEventSink(newFeaturePushSink(s.push.sender.Send))
 	}
 
 	s.teamAPI = NewTeamAPI()
@@ -106,12 +99,25 @@ func (s *Server) buildRoutes() {
 	// Self-update trigger: spawns a detached `ywai update` process.
 	s.mux.HandleFunc("POST /api/update", s.updateHandler)
 
-	// ─── Config API ──────────────────────────────────────────────
-	s.mux.HandleFunc("/api/", s.configAPIHandler)
+	// ─── Config + Tool APIs ─────────────────────────────────────
+	// Both register their routes flat on this mux, in the order they are
+	// declared. Go's ServeMux resolves by specificity, not registration
+	// order, so the only rule is that no two packages claim the same
+	// method+pattern.
+	configapi.RegisterRoutes(s.mux, s.configAPI)
+	toolsapi.RegisterRoutes(s.mux, s.toolsAPI)
 
-	// ─── Missions API ────────────────────────────────────────────
-	s.mux.HandleFunc("/missions/api/", s.missionsHandler)
-	s.mux.HandleFunc("/missions/ws", s.missionsHandler)
+	// Unknown /api/* paths must stay a 404 the client can parse. Without this
+	// catch-all they fall through to the SPA handler, which answers 200 with
+	// index.html — an API call that looks like a puzzling parse error.
+	//
+	// This also absorbs wrong-method requests (POST /api/version and the
+	// like): a pattern that matches the path but not the method resolves here
+	// rather than to ServeMux's built-in plain-text 405, so the UI gets JSON
+	// either way.
+	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	})
 
 	// ─── MCP Store API ──────────────────────────────────────────
 	s.registerMcpStoreRoutes()
@@ -134,9 +140,6 @@ func (s *Server) buildRoutes() {
 	// ─── Health monitoring API ──────────────────────────────────
 	s.registerHealthRoutes()
 
-	// ─── Scheduler API ─────────────────────────────────────────
-	s.registerSchedulerRoutes()
-
 	// ─── Git status API ─────────────────────────────────────────
 	s.registerGitRoutes()
 
@@ -148,30 +151,16 @@ func (s *Server) buildRoutes() {
 
 	// ─── Evals / Session Analytics API ──────────────────────────
 	s.registerEvalsRoutes()
+	s.registerLeaderboardRoutes()
 
-	// ─── Chat API ───────────────────────────────────────────────
-	// Proxies to a local OpenCode server when one is running.
-	s.registerChatRoutes()
+	// ─── Isolated env profiles API (ywai env) ───────────────────
+	s.registerEnvProfileRoutes()
 
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
 
-	// Everything else (/, /missions, /settings, /app.js, etc.)
+	// Everything else (/, /settings, /memories, /workflows, /assets/*, …)
 	s.mux.HandleFunc("/", s.serveSPA)
-}
-
-// configAPIHandler forwards requests to the config API HTTP handler.
-func (s *Server) configAPIHandler(w http.ResponseWriter, r *http.Request) {
-	s.configAPI.HTTPHandler().ServeHTTP(w, r)
-}
-
-// missionsHandler strips the /missions prefix and forwards to missions handler.
-func (s *Server) missionsHandler(w http.ResponseWriter, r *http.Request) {
-	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/missions")
-	if r.URL.Path == "" {
-		r.URL.Path = "/"
-	}
-	s.missions.Handler().ServeHTTP(w, r)
 }
 
 // healthHandler returns server health status.
@@ -279,7 +268,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	// Root or known SPA routes → index.html
-	if path == "/" || path == "/missions" || path == "/settings" || path == "/memories" || path == "/workflows" {
+	if path == "/" || path == "/settings" || path == "/memories" || path == "/workflows" {
 		s.serveSPAIndex(w, r)
 		return
 	}
@@ -372,12 +361,6 @@ func guessContentType(path string) string {
 func (s *Server) Start() error {
 	log.Printf("Starting control server on port %d", s.port)
 
-	// Start the config API hub in background
-	go s.configAPI.Hub().Run()
-
-	// Start missions hub in background
-	go s.missions.Hub().Run()
-
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
 	if err != nil {
 		s.startErr = fmt.Errorf("failed to listen on port %d: %w", s.port, err)
@@ -385,7 +368,7 @@ func (s *Server) Start() error {
 		return s.startErr
 	}
 
-	s.httpSrv = &http.Server{Handler: s.mux}
+	s.httpSrv = &http.Server{Handler: chain(s.mux)}
 
 	// Signal port is ready
 	close(s.portReady)

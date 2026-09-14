@@ -1,91 +1,4 @@
-// ─── Missions Types ────────────────────────────────────────────────────────
-
-export type MissionStatus =
-  | 'pending'
-  | 'planning'
-  | 'active'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'validating'
-
-export type FeatureStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-
-export interface Feature {
-  id: string
-  description: string
-  status: FeatureStatus
-  skillName?: string
-  milestone?: string
-  preconditions?: string[]
-  expectedBehavior?: string[]
-  fulfills?: string[]
-  workerSessionIds?: string[]
-}
-
-export interface Milestone {
-  name: string
-  description: string
-}
-
-export interface PlanMilestone {
-  name: string
-  description: string
-}
-
-export interface PlanFeature {
-  id: string
-  description: string
-  skillName: string
-  milestone: string
-  preconditions?: string[]
-  expectedBehavior?: string[]
-  fulfills?: string[]
-}
-
-export interface PlanMission {
-  name: string
-  description: string
-  project?: string
-  milestones: PlanMilestone[]
-  features: PlanFeature[]
-  model?: string
-  agent?: string
-}
-
-export interface Mission {
-  id: string
-  name: string
-  project?: string
-  status: MissionStatus
-  createdAt: string
-  updatedAt: string
-  completedAt?: string | null
-  features?: Feature[] // undefined in list view, present in detail
-  milestones?: Milestone[] // undefined in list view
-  featureCount?: number
-  milestoneCount?: number
-  model?: string
-  agent?: string
-}
-
-export interface Project {
-  name: string
-  path: string
-  branch?: string
-}
-
-export interface GitInfo {
-  isGitRepo: boolean
-  currentBranch?: string
-  branches?: string[]
-}
+// —— Tools API Types ——
 
 export interface FSEntry {
   name: string
@@ -108,23 +21,12 @@ export interface ModelInfo {
 export interface ModelsResponse {
   modelsByProvider: Record<string, ModelInfo[]>
   default: string
+  /** Providers with usable credentials (auth store + {env:VAR} keys). Empty/absent = unknown, show all. */
+  authedProviders?: string[]
 }
 
 export interface AgentsResponse {
   agents: string[]
-}
-
-export interface FeatureLogLine {
-  missionId: string
-  featureId: string
-  line: string
-  timestamp: number
-}
-
-export interface FeatureLogsResponse {
-  missionId: string
-  featureId: string
-  content: string
 }
 
 // ─── WebSocket Messages ────────────────────────────────────────────────────
@@ -219,6 +121,49 @@ export interface SkillInfo {
   scope: 'bundled' | 'custom'
 }
 
+export interface SkillSurfaceLocation {
+  key: string
+  label: string
+  path: string
+  found: boolean
+}
+
+export interface SkillSurfaceEntry {
+  location: string
+  path: string
+  hash: string
+  symlink?: string
+  broken?: boolean
+}
+
+export interface SkillSurfaceSkill {
+  name: string
+  // duplicate = 2+ byte-identical copies; shadowed = 2+ copies that differ.
+  status: 'unique' | 'duplicate' | 'shadowed' | 'unreadable'
+  entries: SkillSurfaceEntry[]
+}
+
+export interface SkillStandardizeAction {
+  kind: 'delete-broken-link' | 'delete-empty-dir' | 'resolve-shadow' | 'remove-duplicate'
+  name: string
+  path: string
+  detail: string
+}
+
+// Dry run returns `actions`; an execute returns `deleted` + `failed`.
+export interface SkillStandardizeResult {
+  projectDir?: string
+  actions?: SkillStandardizeAction[]
+  deleted?: SkillStandardizeAction[]
+  failed?: { path: string; error: string }[]
+}
+
+export interface SkillSurface {
+  projectDir: string
+  locations: SkillSurfaceLocation[]
+  skills: SkillSurfaceSkill[]
+}
+
 export interface MCPServer {
   name: string
   config: {
@@ -290,23 +235,10 @@ export type RoleDefaults = Partial<Record<RoleName, RoleDefault>>
 export interface UserConfig {
   default_preset?: string
   default_sdd_mode?: string
-  default_persona?: string
-  default_scope?: string
-  default_tui?: boolean
   default_mcp?: boolean
   agents?: string[]
-  colored_output?: boolean
-  log_level?: string
-  custom_agents_dir?: string
-  custom_skills_dir?: string
   tokenbank_url?: string
   tokenbank_api_key?: string
-  server?: {
-    port?: number
-    background?: boolean
-    mcp?: boolean
-    autostart?: boolean
-  }
   role_defaults?: RoleDefaults
   vision_model?: string
   vision_model_override?: string
@@ -503,7 +435,7 @@ export interface OrchestratorProfile {
   display_name?: string;
   description?: string;
   is_seed?: boolean;
-  // Keyed by agent name (dev, qa, architect, qa-analyst, migration-planner, …).
+  // Keyed by agent name (dev, qa, architect, qa-analyst, qa-dev, …).
   agents?: Record<string, OrchestratorModelMapping>;
   /** Explicit omp modelRoles overrides for this profile (verbatim values). */
   omp_model_roles?: Record<string, string>;
@@ -617,6 +549,9 @@ export interface WorkflowNodeData {
 	// group container size (visual only)
 	width?: number;
 	height?: number;
+	/** Group collapsed on the canvas: children are hidden and edges crossing the
+	 * boundary are re-pointed at the group box. Visual only. */
+	collapsed?: boolean;
 
 	// mcp
 	server?: string;
@@ -664,12 +599,24 @@ export interface Workflow {
 	updatedAt: string;
 }
 
+export interface WorkflowSeedDiff {
+	inSync: boolean;
+	/** The bundled seed's version/updatedAt, for display. */
+	version?: string;
+	updatedAt?: string;
+	addedNodes?: string[];
+	removedNodes?: string[];
+	changedNodes?: string[];
+}
+
 export interface WorkflowSummary {
 	name: string;
 	description: string;
 	version: string;
 	nodeCount: number;
 	updatedAt: string;
+	/** Drift against the bundled seed; absent when no seed is available. */
+	seed?: WorkflowSeedDiff;
 }
 
 export interface WorkflowValidationIssue {
@@ -696,6 +643,8 @@ export interface WorkflowExportPlan {
 	/** Rough orchestrator prompt size (chars/4 heuristic). 0 when not computed. */
 	estimatedTokens: number;
 	dryRun: boolean;
+	/** True on an uninstall result: `files` are the artifacts that were deleted. */
+	removed?: boolean;
 }
 
 // ─── Slash command options (A1) ────────────────────────────────────────────
@@ -761,4 +710,34 @@ export interface WorkflowRunLine {
 	stream: 'stdout' | 'stderr';
 	text: string;
 	ts: number;
+}
+
+// ─── Azure DevOps ─────────────────────────────────────────────────────────
+// Mirror the Go structs in internal/control/ado_config.go. Shared by
+// AdoConfig.tsx, AdoSetupWizard.tsx and the ado methods on configApi.
+
+export interface AdoProfile {
+	org: string;
+	project: string;
+	patEnvVar: string;
+	repos: string[];
+	default?: boolean;
+}
+
+export interface AdoConfig {
+	defaultProfile: string;
+	profiles: Record<string, AdoProfile>;
+}
+
+export interface AdoPatStatus {
+	hasPat: boolean;
+	source: "env" | "file" | "none";
+}
+
+export interface AdoCliStatus {
+	installed: boolean;
+	version: string;
+	latest: string | null;
+	updateAvailable: boolean;
+	error?: string;
 }

@@ -1,4 +1,5 @@
 import { render, screen, renderHook, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { HealthDashboard, HealthStatusCard } from './HealthDashboard';
 import { useHealth } from './useHealth';
 
@@ -9,6 +10,15 @@ interface HealthStatus {
 	db_ok: boolean;
 	repo_count: number;
 	last_check: string;
+}
+
+interface EnvProfile {
+	name: string;
+	preset: string;
+	port: number;
+	created_at: string;
+	running: boolean;
+	url: string;
 }
 
 // ----- Test fixtures -------------------------------------------------------
@@ -28,6 +38,29 @@ function mockFetchResponse(status: HealthStatus) {
 		ok: true,
 		json: () => Promise.resolve(status),
 	});
+}
+
+function mockFetchWithEnvs(status: HealthStatus, envs: EnvProfile[]) {
+	globalThis.fetch = vi.fn().mockImplementation((url: unknown) => {
+		if (String(url).includes('/api/envs')) {
+			return Promise.resolve({
+				ok: true,
+				json: () => Promise.resolve({ envs }),
+			});
+		}
+		return Promise.resolve({
+			ok: true,
+			json: () => Promise.resolve(status),
+		});
+	});
+}
+
+function renderDashboard() {
+	return render(
+		<MemoryRouter>
+			<HealthDashboard />
+		</MemoryRouter>,
+	);
 }
 
 // ----- Setup / teardown ----------------------------------------------------
@@ -73,8 +106,11 @@ describe('useHealth', () => {
 
 		const { result } = renderHook(() => useHealth());
 
+		// `error` starts as null, and toBeDefined() passes for null — waiting on
+		// that returned on the first render, before the rejection was handled,
+		// which is why `loading` was still true here. Wait for the real state.
 		await waitFor(() => {
-			expect(result.current.error).toBeDefined();
+			expect(result.current.error).toBeInstanceOf(Error);
 		});
 		expect(result.current.data).toBeNull();
 		expect(result.current.loading).toBe(false);
@@ -89,7 +125,7 @@ describe('HealthDashboard', () => {
 	it('renders "Healthy" when all checks pass', async () => {
 		mockFetchResponse(healthyStatus());
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/healthy/i)).toBeInTheDocument();
@@ -99,7 +135,7 @@ describe('HealthDashboard', () => {
 	it('renders "Unhealthy" when daemon is down', async () => {
 		mockFetchResponse(healthyStatus({ daemon_ok: false }));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/unhealthy/i)).toBeInTheDocument();
@@ -109,7 +145,7 @@ describe('HealthDashboard', () => {
 	it('renders "Unhealthy" when database is down', async () => {
 		mockFetchResponse(healthyStatus({ db_ok: false }));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/unhealthy/i)).toBeInTheDocument();
@@ -119,17 +155,17 @@ describe('HealthDashboard', () => {
 	it('renders repo count badge', async () => {
 		mockFetchResponse(healthyStatus({ repo_count: 3 }));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
-			expect(screen.getByText(/3/)).toBeInTheDocument();
+			expect(screen.getByText('3 repos')).toBeInTheDocument();
 		});
 	});
 
 	it('renders last check timestamp', async () => {
 		mockFetchResponse(healthyStatus());
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/2025|jul|03/i)).toBeInTheDocument();
@@ -139,7 +175,7 @@ describe('HealthDashboard', () => {
 	it('shows loading indicator while fetching', () => {
 		globalThis.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		expect(screen.getByLabelText(/loading health status/i)).toBeInTheDocument();
 	});
@@ -147,7 +183,7 @@ describe('HealthDashboard', () => {
 	it('shows error message on fetch failure', async () => {
 		globalThis.fetch = vi.fn().mockRejectedValue(new Error('Failed'));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/error|failed/i)).toBeInTheDocument();
@@ -157,7 +193,7 @@ describe('HealthDashboard', () => {
 	it('renders "Unhealthy" when both daemon and db are down', async () => {
 		mockFetchResponse(healthyStatus({ daemon_ok: false, db_ok: false }));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/unhealthy/i)).toBeInTheDocument();
@@ -167,7 +203,7 @@ describe('HealthDashboard', () => {
 	it('renders correct card states in mixed scenario (daemon down, db up)', async () => {
 		mockFetchResponse(healthyStatus({ daemon_ok: false, db_ok: true }));
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/unhealthy/i)).toBeInTheDocument();
@@ -180,6 +216,77 @@ describe('HealthDashboard', () => {
 		// Database card should show ok icon
 		const dbCard = screen.getByText(/database/i).closest('div')!;
 		expect(dbCard.querySelector('[data-status="ok"]')).toBeInTheDocument();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Environments section in HealthDashboard
+// ---------------------------------------------------------------------------
+
+describe('HealthDashboard environments', () => {
+	const envs: EnvProfile[] = [
+		{ name: 'dev', preset: 'dev', port: 18681, created_at: '', running: true, url: 'http://localhost:18681' },
+		{ name: 'qa', preset: 'qa', port: 18682, created_at: '', running: false, url: 'http://localhost:18682' },
+	];
+
+	it('lists environments with running states', async () => {
+		mockFetchWithEnvs(healthyStatus(), envs);
+
+		renderDashboard();
+
+		await waitFor(() => {
+			expect(screen.getByText('Environments (2)')).toBeInTheDocument();
+		});
+		expect(document.querySelector('[data-env="dev"]')).toBeInTheDocument();
+		expect(document.querySelector('[data-env="qa"]')).toBeInTheDocument();
+		expect(document.querySelector('[data-env="dev"]')?.getAttribute('data-running')).toBe('true');
+		expect(document.querySelector('[data-env="qa"]')?.getAttribute('data-running')).toBe('false');
+		expect(screen.getByText('Running')).toBeInTheDocument();
+		expect(screen.getByText('Stopped')).toBeInTheDocument();
+	});
+
+	it('shows empty state when there are no environments', async () => {
+		mockFetchWithEnvs(healthyStatus(), []);
+
+		renderDashboard();
+
+		await waitFor(() => {
+			expect(screen.getByText('Environments (0)')).toBeInTheDocument();
+		});
+		expect(screen.getByText(/no environments yet/i)).toBeInTheDocument();
+	});
+
+	it('links to the environments page', async () => {
+		mockFetchWithEnvs(healthyStatus(), envs);
+
+		renderDashboard();
+
+		await waitFor(() => {
+			expect(screen.getByText('Environments (2)')).toBeInTheDocument();
+		});
+		const link = screen.getByRole('link', { name: /manage environments/i });
+		expect(link).toHaveAttribute('href', '/envs');
+	});
+
+	it('shows an error when environments fail to load', async () => {
+		const status = healthyStatus();
+		globalThis.fetch = vi.fn().mockImplementation((url: unknown) => {
+			if (String(url).includes('/api/envs')) {
+				return Promise.reject(new Error('envs down'));
+			}
+			return Promise.resolve({
+				ok: true,
+				json: () => Promise.resolve(status),
+			});
+		});
+
+		renderDashboard();
+
+		await waitFor(() => {
+			expect(screen.getByText(/could not load environments/i)).toBeInTheDocument();
+		});
+		// Health summary still renders.
+		expect(screen.getByText(/healthy/i)).toBeInTheDocument();
 	});
 });
 
@@ -212,7 +319,7 @@ describe('HealthStatusCard', () => {
 	it('renders check name and both daemon/db cards in dashboard', async () => {
 		mockFetchResponse(healthyStatus());
 
-		render(<HealthDashboard />);
+		renderDashboard();
 
 		await waitFor(() => {
 			expect(screen.getByText(/daemon/i)).toBeInTheDocument();

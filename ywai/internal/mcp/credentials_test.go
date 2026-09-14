@@ -8,8 +8,8 @@ import (
 
 // These tests pin the contract of the credentials package from
 // ywai/internal/mcp/credentials.go (TDD slice 0 of the "Real MCP Install"
-// plan). They are RED right now: the package and the three functions
-// (ValidateCreds, RedactMessage, MergeEnv) do not exist yet, so the file
+// plan). They are RED right now: the package and the two functions
+// (ValidateCreds, MergeEnv) do not exist yet, so the file
 // will not compile until @dev implements them.
 //
 // Assumptions baked into the tests (derived from the architect's plan, see
@@ -19,11 +19,6 @@ import (
 //     after applying `provided`. The order of the returned slice is NOT
 //     pinned, so tests compare by set membership (sorted names).
 //   - A provided value of "" counts as missing for required specs.
-//   - RedactMessage replaces the value half of `NAME=VALUE` env-var
-//     assignments (case-insensitive on the NAME side) with "***". It also
-//     redacts the password segment of any URL of the shape
-//     "scheme://user:secret@host". The original casing of the name in the
-//     message is preserved in the output.
 //   - MergeEnv takes a `base` slice in os.Environ() format and a flat
 //     `provided` map. It returns the merged slice plus two counters:
 //     `setCount` is the number of keys from `provided` that appear in the
@@ -145,75 +140,6 @@ func TestValidateCreds_MultipleMissing(t *testing.T) {
 	want := []string{"B", "C"}
 	if !slices.Equal(gotNames, want) {
 		t.Errorf("ValidateCreds(multiple missing) missing = %v, want %v", gotNames, want)
-	}
-}
-
-// ─── RedactMessage ────────────────────────────────────────────────────────
-
-func TestRedactMessage_TokenAssignment(t *testing.T) {
-	// Standard env-var assignment: the value portion (whitespace-delimited
-	// token after the first "=") is replaced with "***".
-	in := "GITHUB_TOKEN=ghp_abc123 def"
-	got := RedactMessage(in, []string{"GITHUB_TOKEN"})
-	want := "GITHUB_TOKEN=*** def"
-	if got != want {
-		t.Errorf("RedactMessage(%q) = %q, want %q", in, got, want)
-	}
-}
-
-func TestRedactMessage_AuthHeader(t *testing.T) {
-	// "Authorization: Bearer xyz" is NOT a NAME=VALUE env-var assignment, so
-	// the redactor must not mistake "xyz" for the value of GITHUB_TOKEN.
-	// This pins format-awareness: the redactor looks for the env-var
-	// *assignment* shape, not for the value floating in arbitrary text.
-	in := "Authorization: Bearer xyz"
-	got := RedactMessage(in, []string{"GITHUB_TOKEN"})
-	if got != in {
-		t.Errorf("RedactMessage(AuthHeader) = %q, want unchanged %q", got, in)
-	}
-}
-
-func TestRedactMessage_PasswordInUrl(t *testing.T) {
-	// URL with an embedded password: the segment between ":" and "@" is
-	// replaced with "***". This is the pattern that catches accidental
-	// logging of DATABASE_URL, REDIS_URL, etc.
-	in := "postgres://user:secret@host/db"
-	got := RedactMessage(in, []string{"DATABASE_URL"})
-	want := "postgres://user:***@host/db"
-	if got != want {
-		t.Errorf("RedactMessage(url password) = %q, want %q", got, want)
-	}
-}
-
-func TestRedactMessage_NoSecret(t *testing.T) {
-	// Message contains no env-var assignment and no URL → unchanged.
-	in := "normal log line"
-	got := RedactMessage(in, []string{"GITHUB_TOKEN"})
-	if got != in {
-		t.Errorf("RedactMessage(no secret) = %q, want unchanged %q", got, in)
-	}
-}
-
-func TestRedactMessage_MultipleSecrets(t *testing.T) {
-	// Two env-var assignments on the same line, each with a different name.
-	// Both values must be redacted independently.
-	in := "GITHUB_TOKEN=a POSTGRES_URL=b"
-	got := RedactMessage(in, []string{"GITHUB_TOKEN", "POSTGRES_URL"})
-	want := "GITHUB_TOKEN=*** POSTGRES_URL=***"
-	if got != want {
-		t.Errorf("RedactMessage(multiple) = %q, want %q", got, want)
-	}
-}
-
-func TestRedactMessage_CaseInsensitive(t *testing.T) {
-	// Name match is case-insensitive: "github_token" in the message must be
-	// recognized as GITHUB_TOKEN. The name in the output keeps its original
-	// casing (we do NOT rewrite it to uppercase).
-	in := "github_token=value"
-	got := RedactMessage(in, []string{"GITHUB_TOKEN"})
-	want := "github_token=***"
-	if got != want {
-		t.Errorf("RedactMessage(case-insensitive) = %q, want %q", got, want)
 	}
 }
 

@@ -17,12 +17,25 @@ export function useWebSocket(
 ): WebSocketHookReturn {
   const wsRef = useRef<WebSocket | null>(null)
   const onMessageRef = useRef(onMessage)
+  // True between a manual disconnect() and the next connect(); the close
+  // handler must not schedule a reconnect for an intentional close.
+  const manualCloseRef = useRef(false)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     onMessageRef.current = onMessage
   }, [onMessage])
 
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+  }, [])
+
   const connect = useCallback(() => {
+    clearReconnectTimer()
+    manualCloseRef.current = false
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     const url = buildWSURL(path)
@@ -42,8 +55,9 @@ export function useWebSocket(
     }
 
     ws.onclose = () => {
+      if (manualCloseRef.current) return
       console.log(`[WS] disconnected from ${path}, reconnecting...`)
-      setTimeout(connect, 3000)
+      reconnectTimerRef.current = setTimeout(connect, 3000)
     }
 
     ws.onerror = (err) => {
@@ -51,14 +65,16 @@ export function useWebSocket(
     }
 
     wsRef.current = ws
-  }, [path])
+  }, [path, clearReconnectTimer])
 
   const disconnect = useCallback(() => {
+    manualCloseRef.current = true
+    clearReconnectTimer()
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
     }
-  }, [])
+  }, [clearReconnectTimer])
 
   const send = useCallback((data: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

@@ -15,33 +15,6 @@ function BoneLine({ w = "100%", h = 12, className = "" }: { w?: string; h?: numb
 	);
 }
 
-export function MissionsBonesFallback() {
-	return (
-		<div className="by-fallback missions" aria-busy="true" aria-label="Loading missions">
-			<header className="page-header">
-				<div className="page-heading">
-					<BoneLine w="80px" h={10} />
-					<BoneLine w="220px" h={24} />
-					<BoneLine w="360px" h={12} />
-				</div>
-			</header>
-			<div className="by-fallback-grid">
-				{Array.from({ length: 4 }).map((_, i) => (
-					<div key={i} className="by-fallback-card by-fallback-card-pad">
-						<BoneLine w="50%" h={16} />
-						<BoneLine w="90%" h={12} />
-						<BoneLine w="75%" h={12} />
-						<div className="by-fallback-row">
-							<BoneLine w="64px" h={20} className="by-bone-round" />
-							<BoneLine w="64px" h={20} className="by-bone-round" />
-						</div>
-					</div>
-				))}
-			</div>
-		</div>
-	);
-}
-
 export function HealthBonesFallback() {
 	return (
 		<div className="by-fallback health-dashboard" aria-busy="true" aria-label="Loading health status">
@@ -64,29 +37,6 @@ export function HealthBonesFallback() {
 }
 
 /** Fixture content for boneyard CLI/Vite capture (mirrors real layout). */
-
-export function MissionsCaptureFixture(): ReactNode {
-	return (
-		<div className="missions" style={{ padding: 16 }}>
-			<header className="page-header">
-				<div className="page-heading">
-					<span className="page-eyebrow">Missions</span>
-					<h1 className="page-title">Mission Control</h1>
-					<p className="page-subtitle">2 active · 1 completed · 3 projects</p>
-				</div>
-			</header>
-			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-				{[1, 2, 3, 4].map((n) => (
-					<div key={n} className="card card-pad" style={{ padding: 16 }}>
-						<h3>Mission {n}</h3>
-						<p>Deliver slice {n} with tests and docs</p>
-						<span className="pill">active</span>
-					</div>
-				))}
-			</div>
-		</div>
-	);
-}
 
 export function HealthCaptureFixture(): ReactNode {
 	return (

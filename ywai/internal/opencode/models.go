@@ -1,5 +1,7 @@
 package opencode
 
+import "strings"
+
 // AgentInfo represents an agent from either server API or local config.
 type AgentInfo struct {
 	ID          string `json:"id"`
@@ -14,6 +16,20 @@ type ModelInfo struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider,omitempty"`
 	Name     string `json:"name,omitempty"`
+}
+
+// IsProviderCatalog reports a list of provider ids mistaken for models
+// (OpenCode v2 GET /api/provider). Real model ids are "provider/model".
+func IsProviderCatalog(models []ModelInfo) bool {
+	if len(models) == 0 {
+		return false
+	}
+	for _, m := range models {
+		if strings.Contains(m.ID, "/") {
+			return false
+		}
+	}
+	return true
 }
 
 // ClientStatus indicates connectivity state of a Client.

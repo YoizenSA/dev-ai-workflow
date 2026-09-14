@@ -81,9 +81,13 @@ compute_version() {
 # ---------------------------------------------------------------------------
 
 do_test() {
+    # -timeout 30m: Go's default is 10m per test binary, which the e2e
+    # package can exceed on Windows (build + spawn heavy; e2e alone is
+    # budgeted 25m in CI). Cap higher so slow machines fail on real
+    # assertions, not on the harness clock.
     info "Running all tests..."
-    cmd "go test ./... -v"
-    go test ./... -v
+    cmd "go test ./... -v -timeout 30m"
+    go test ./... -v -timeout 30m
     ok "All tests passed"
 }
 
@@ -223,8 +227,54 @@ do_mcp_test() {
     fi
 }
 
+do_docker_matrix() {
+    local profile="${1:-dry}"
+    if ! command -v docker >/dev/null 2>&1; then
+        fail "Docker not found - skipping the lifecycle matrix (install Docker to run it)"
+        return 0
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        fail "Docker daemon not reachable - skipping the lifecycle matrix (start Docker to run it)"
+        return 0
+    fi
+    case "$profile" in
+    dry | net | nightly) ;;
+    *)
+        fail "Unknown docker-matrix profile: $profile (want dry, net or nightly)"
+        exit 1
+        ;;
+    esac
+    info "Running the Docker lifecycle matrix (profile: ${profile})..."
+    cmd "bash e2e/docker/run-matrix.sh --profile ${profile}"
+    bash e2e/docker/run-matrix.sh --profile "$profile"
+}
+
 do_version() {
     compute_version
+}
+
+do_watch() {
+    if ! command -v air >/dev/null 2>&1; then
+        fail "air not found - install it with: go install github.com/air-verse/air@latest"
+        exit 1
+    fi
+    info "Building the web UI once (dist/) so the server has something to serve..."
+    if command -v npm >/dev/null 2>&1; then
+        npm --prefix internal/control/web run build
+    else
+        fail "npm not found - serving whatever dist/ already exists"
+    fi
+
+    info "Hot reload: rebuild + restart on every .go change (config: .air.toml)"
+    info "Frontend edits: refresh the browser, or run './scripts/dev.sh web' for live HMR on :3000"
+    cmd "air -c .air.toml"
+    air -c .air.toml
+}
+
+do_web() {
+    info "Vite dev server with HMR on http://localhost:3000 (API + WS proxied to :5768)"
+    cmd "npm --prefix internal/control/web run dev"
+    npm --prefix internal/control/web run dev
 }
 
 do_help() {
@@ -244,6 +294,11 @@ Subcommands:
   check        Full pipeline: lint → test → build-full → verify → install
   ui           Build + install + start the control server UI on port 5768
   mcp-test     Build + install + verify MCP daemon responds
+  docker-matrix [dry|net|nightly]
+               Docker lifecycle matrix (default dry; skips cleanly without Docker)
+  watch        Hot reload for the Go server: air rebuilds ywai-dev.exe and
+               restarts it on every .go change (needs: go install github.com/air-verse/air@latest)
+  web          Vite dev server with HMR on :3000, API proxied to :5768
   version      Print the version string that would be used
   help         Show this usage message
 
@@ -284,6 +339,15 @@ case "${1:-help}" in
         ;;
     mcp-test)
         do_mcp_test
+        ;;
+    docker-matrix)
+        do_docker_matrix "${2:-dry}"
+        ;;
+    watch)
+        do_watch
+        ;;
+    web)
+        do_web
         ;;
     version)
         do_version

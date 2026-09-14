@@ -26,7 +26,7 @@ import {
 	Save,
 } from "lucide-react";
 import { useAgentsDiagramStore } from "../../stores/agentsDiagramStore";
-import { configApi, missionsApi, profilesApi } from "../../api/client";
+import { configApi, toolsApi, profilesApi } from "../../api/client";
 import type {
 	AgentGraphNode,
 	AgentGraphEdge,
@@ -37,7 +37,7 @@ import type {
 } from "../../api/types";
 import Modal from "../shared/Modal";
 import ImportAgentsModal from "./ImportAgentsModal";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 import "./Orchestrator.css";
 
 /**
@@ -306,6 +306,7 @@ export default function OrchestratorTab() {
 	const [importOpen, setImportOpen] = useState(false);
 	const [newAgentOpen, setNewAgentOpen] = useState(false);
 	const [newAgentName, setNewAgentName] = useState("");
+	const [createError, setCreateError] = useState<string | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [newTarget, setNewTarget] = useState("");
 	// null = "not yet initialized": on first graph load we default to showing
@@ -405,7 +406,7 @@ export default function OrchestratorTab() {
 	}, [load]);
 
 	useEffect(() => {
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((r) => setModels(Object.values(r.modelsByProvider).flat()))
 			.catch(() => setModels([]));
@@ -505,10 +506,15 @@ export default function OrchestratorTab() {
 		setBusy("create");
 		try {
 			await configApi.createAgent(name, "---\nmode: subagent\n---\n\n");
+			setCreateError(null);
 			setNewAgentName("");
 			setNewAgentOpen(false);
 			await load();
 			selectAgent(name);
+		} catch (e) {
+			setCreateError(
+				e instanceof Error ? e.message : `Failed to create agent "${name}"`,
+			);
 		} finally {
 			setBusy(null);
 		}
@@ -595,6 +601,9 @@ export default function OrchestratorTab() {
 					<RefreshCw size={14} /> Refresh
 				</button>
 				{error && <span className="alert alert-danger orch-error">{error}</span>}
+				{createError && (
+					<span className="alert alert-danger orch-error">{createError}</span>
+				)}
 				<span className="spacer" />
 				<span className="orch-legend">
 					<span className="legend-item"><i className="dot allow" /> allow</span>

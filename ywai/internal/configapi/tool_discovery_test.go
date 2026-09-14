@@ -12,19 +12,19 @@ import (
 // set (not a regex scan of the minified file).
 func TestDiscoverConfigPluginTools_KnownBundle(t *testing.T) {
 	entries := []string{
-		"/home/user/.config/opencode/background-agents-v2.js",
-		"file:/home/user/.config/opencode/background-agents-v2.js",
+		"/home/user/.config/opencode/background-agents.js",
+		"file:/home/user/.config/opencode/background-agents.js",
 	}
 
 	got := discoverConfigPluginTools(entries)
 
-	tools, ok := got["background-agents-v2"]
+	tools, ok := got["background-agents"]
 	if !ok {
-		t.Fatalf("expected background-agents-v2 plugin in result, got keys: %v", keysOf(got))
+		t.Fatalf("expected background-agents plugin in result, got keys: %v", keysOf(got))
 	}
 	for _, want := range []string{"delegate", "delegation_read", "delegation_stop"} {
 		if !slices.Contains(tools, want) {
-			t.Errorf("background-agents-v2 tools missing %q; got %v", want, tools)
+			t.Errorf("background-agents tools missing %q; got %v", want, tools)
 		}
 	}
 }

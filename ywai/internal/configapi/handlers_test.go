@@ -6,42 +6,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-// setupTestServer creates a server on a random port, starts it, and returns
-// the server and base URL. The caller must defer s.Stop().
-func setupTestServer(t *testing.T) (*Server, string) {
-	s := New(0)
-	go func() {
-		if err := s.Start(); err != nil {
-			// Server may fail to start (e.g., port conflict); log and skip.
-			t.Logf("server Start returned: %v", err)
-		}
-	}()
-
-	client := &http.Client{Timeout: 1 * time.Second}
-	for i := 0; i < 100; i++ {
-		port := s.Port()
-		if port == 0 {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		baseURL := fmt.Sprintf("http://localhost:%d", port)
-		resp, err := client.Get(baseURL + "/api/config/agents")
-		if err == nil {
-			resp.Body.Close()
-			return s, baseURL
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatalf("server did not start within timeout, last port: %d", s.Port())
-	return s, "" // unreachable
+// setupTestServer serves the config API over httptest and returns its base URL.
+func setupTestServer(t *testing.T) string {
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandlers())
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	return ts.URL
 }
 
 // --- Permission Frontmatter Helper Tests ---
@@ -153,45 +131,45 @@ func TestExtractModeFromFrontmatter_Empty(t *testing.T) {
 }
 
 func TestUpdatePermissionsInFrontmatter_ExistingPermission(t *testing.T) {
+	// Migration input: v1-era frontmatter carrying a nested `permission:` map.
 	content := "---\ndescription: Test agent\nmode: all\npermission:\n  read: allow\n  edit: deny\n---\n\n# Agent Body"
 	newPerms := map[string]string{"read": "allow", "edit": "allow", "bash": "ask"}
-	updated := updatePermissionsInFrontmatter(content, newPerms)
+	updated := updatePermissionsInFrontmatter(content, "tester", newPerms)
 
 	// Verify the body is preserved
 	if !strings.Contains(updated, "# Agent Body") {
 		t.Error("body was lost")
 	}
 
-	// Verify new permissions are present (v2 rule array form)
-	if !strings.Contains(updated, "permissions:") {
-		t.Error("v2 permissions block missing")
-	}
-	if !strings.Contains(updated, "action: edit") || !strings.Contains(updated, "effect: allow") {
+	// Verify new permissions are present as ordered v2 rules
+	if !strings.Contains(updated, "- action: edit\n    resource: \"*\"\n    effect: allow") {
 		t.Error("edit permission not updated")
 	}
-	if !strings.Contains(updated, "action: shell") || !strings.Contains(updated, "effect: ask") {
-		t.Error("bash (shell) permission not added")
+	// The v1 permission: map must be dropped, not kept alongside the list.
+	if strings.Contains(updated, "\npermission:\n") {
+		t.Errorf("legacy permission map must not survive the rewrite:\n%s", updated)
 	}
 
-	// Verify the legacy permission block is replaced, not duplicated.
-	if strings.Contains(updated, "permission:") {
-		t.Errorf("legacy permission: block should be gone:\n%s", updated)
+	// Verify exactly one permission block (the permissions: list) remains
+	count := strings.Count(updated, "permissions:")
+	if count != 1 {
+		t.Errorf("expected 1 permissions: block, got %d", count)
 	}
 }
 
 func TestUpdatePermissionsInFrontmatter_OldToolsFormat(t *testing.T) {
 	content := "---\ndescription: Test agent\ntools:\n  read: true\n  edit: false\n---\n\n# Agent Body"
 	newPerms := map[string]string{"read": "allow", "edit": "allow"}
-	updated := updatePermissionsInFrontmatter(content, newPerms)
+	updated := updatePermissionsInFrontmatter(content, "tester", newPerms)
 
-	// Should replace tools: with the v2 permissions rule array
+	// Should replace tools: with the permissions rule list
 	if strings.Contains(updated, "tools:") {
 		t.Error("old tools: block should be replaced")
 	}
 	if !strings.Contains(updated, "permissions:") {
 		t.Error("permissions: block should exist")
 	}
-	if !strings.Contains(updated, "action: edit") || !strings.Contains(updated, "effect: allow") {
+	if !strings.Contains(updated, "- action: edit") || !strings.Contains(updated, "effect: allow") {
 		t.Error("edit should be allow")
 	}
 }
@@ -199,13 +177,13 @@ func TestUpdatePermissionsInFrontmatter_OldToolsFormat(t *testing.T) {
 func TestUpdatePermissionsInFrontmatter_NoFrontmatter(t *testing.T) {
 	content := "# Agent Body\n\nSome content"
 	newPerms := map[string]string{"read": "allow"}
-	updated := updatePermissionsInFrontmatter(content, newPerms)
+	updated := updatePermissionsInFrontmatter(content, "tester", newPerms)
 
 	if !strings.HasPrefix(updated, "---") {
 		t.Error("should add frontmatter")
 	}
-	if !strings.Contains(updated, "permissions:") || !strings.Contains(updated, "action: read") {
-		t.Error("permission rules should be present")
+	if !strings.Contains(updated, "- action: read") {
+		t.Error("permission should be present")
 	}
 	if !strings.Contains(updated, "# Agent Body") {
 		t.Error("body should be preserved")
@@ -278,18 +256,6 @@ func TestValidPermissionValues_RejectsInvalid(t *testing.T) {
 	}
 }
 
-func TestSortedPermissionKeys_IsSorted(t *testing.T) {
-	keys := sortedPermissionKeys()
-	if len(keys) != len(ValidPermissionKeys) {
-		t.Errorf("expected %d keys, got %d", len(ValidPermissionKeys), len(keys))
-	}
-	for i := 1; i < len(keys); i++ {
-		if keys[i-1] >= keys[i] {
-			t.Errorf("keys not sorted: %q >= %q", keys[i-1], keys[i])
-		}
-	}
-}
-
 func TestPutAgentPermissions_SyncsFrontmatter(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -328,8 +294,7 @@ Prompt body
 		t.Fatalf("write agent md: %v", err)
 	}
 
-	s, baseURL := setupTestServer(t)
-	defer s.Stop()
+	baseURL := setupTestServer(t)
 
 	payload := map[string]string{
 		"read": "allow",
@@ -374,7 +339,7 @@ Prompt body
 	if err != nil {
 		t.Fatalf("read agent md: %v", err)
 	}
-	if !strings.Contains(string(mdData), "action: edit") || !strings.Contains(string(mdData), "effect: deny") {
+	if !strings.Contains(string(mdData), "- action: edit\n    resource: \"*\"\n    effect: deny") {
 		t.Errorf("AGENT.md frontmatter not updated: %s", string(mdData))
 	}
 	if !strings.Contains(string(mdData), "Prompt body") {

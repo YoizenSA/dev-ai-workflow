@@ -8,6 +8,23 @@ import (
 	"strings"
 )
 
+// ParseJSONC parses JSON or JSONC bytes, stripping comments when jsonc is
+// true. Exported so packages that already hold the file bytes (the mcp
+// agent-config reader) reuse this lenient parser instead of plain
+// json.Unmarshal.
+func ParseJSONC(data []byte, jsonc bool) (map[string]any, error) {
+	clean := string(data)
+	if jsonc {
+		clean = stripJSONCComments(clean)
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal([]byte(clean), &root); err != nil {
+		return nil, err
+	}
+	return root, nil
+}
+
 // ReadJSONC reads a JSON or JSONC file, stripping comments if the extension is .jsonc.
 func ReadJSONC(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
@@ -15,13 +32,8 @@ func ReadJSONC(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	clean := string(data)
-	if strings.HasSuffix(path, ".jsonc") {
-		clean = stripJSONCComments(clean)
-	}
-
-	var root map[string]any
-	if err := json.Unmarshal([]byte(clean), &root); err != nil {
+	root, err := ParseJSONC(data, strings.HasSuffix(path, ".jsonc"))
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return root, nil

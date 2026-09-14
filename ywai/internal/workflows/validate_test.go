@@ -49,17 +49,40 @@ func TestValidateDuplicateEndpoints(t *testing.T) {
 	}
 }
 
-func TestValidateCycle(t *testing.T) {
+func TestValidateCycleThatDrainsIsSilent(t *testing.T) {
 	wf := simpleValidWorkflow()
-	// Create a cycle a -> e -> a.
+	// Loop a -> e -> a: every loop node can still reach end, so the loop is a
+	// safe review→fix pattern — no warning.
 	wf.Connections = append(wf.Connections, Connection{From: "e", To: "a"})
 	res := Validate(wf)
-	// A cycle is a warning (review→fix loops are valid), not an error.
+	// A cycle is a warning at most, never an error.
 	if !res.Valid {
-		t.Fatal("cyclic graph should still be valid (cycle is a warning)")
+		t.Fatal("cyclic graph should still be valid (cycle is a warning at most)")
+	}
+	if hasIssueContaining(res.Warnings, "cycle") {
+		t.Fatalf("draining loop should not warn, got: %+v", res.Warnings)
+	}
+}
+
+func TestValidateCycleThatTrapsWarns(t *testing.T) {
+	wf := simpleValidWorkflow()
+	// Loop a -> b -> a with no path from the loop to end: the run can spin
+	// there forever, so the warning must name the trapped nodes.
+	wf.Nodes = append(wf.Nodes, Node{ID: "b", Type: NodeTypeSubAgent, Name: "b", Data: NodeData{AgentDescription: "does b"}})
+	wf.Connections = []Connection{
+		{From: "s", To: "a"},
+		{From: "a", To: "b"},
+		{From: "b", To: "a"},
+	}
+	res := Validate(wf)
+	if !res.Valid {
+		t.Fatal("cyclic graph should still be valid (cycle is a warning at most)")
 	}
 	if !hasIssueContaining(res.Warnings, "cycle") {
-		t.Fatalf("expected cycle warning, got: %+v", res.Warnings)
+		t.Fatalf("expected trapped-cycle warning, got: %+v", res.Warnings)
+	}
+	if !hasIssueContaining(res.Warnings, "never reach the end") {
+		t.Fatalf("expected the warning to explain the trap, got: %+v", res.Warnings)
 	}
 }
 
@@ -104,26 +127,6 @@ func TestHasCycle(t *testing.T) {
 	}
 	if !wf.hasCycle() {
 		t.Fatal("self-loop should be a cycle")
-	}
-}
-
-func TestTopoOrder(t *testing.T) {
-	wf := simpleValidWorkflow()
-	order, err := wf.topoOrder()
-	if err != nil {
-		t.Fatalf("topoOrder: %v", err)
-	}
-	// start must come before a, a before end.
-	pos := func(id string) int {
-		for i, n := range order {
-			if n == id {
-				return i
-			}
-		}
-		return -1
-	}
-	if pos("s") >= pos("a") || pos("a") >= pos("e") {
-		t.Fatalf("topo order wrong: %v", order)
 	}
 }
 

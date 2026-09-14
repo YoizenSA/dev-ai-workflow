@@ -22,6 +22,9 @@ interface Score {
   total: number;
   gotHard: boolean;
   answered: boolean;
+  // Weighted is the weight share the hits cover, 0..1. Old runs stored before
+  // weighted scoring omit it, so it stays optional.
+  weighted?: number;
 }
 
 interface Metrics {
@@ -44,6 +47,10 @@ interface Attempt {
   metrics: Metrics;
   response?: string;
   error?: string;
+  // costUsd/costKnown price the attempt from the backend's table; both are
+  // absent when the model has no known rates.
+  costUsd?: number;
+  costKnown?: boolean;
 }
 
 interface Run {
@@ -54,6 +61,7 @@ interface Run {
   provider: string;
   rounds: number;
   models: string[];
+  environment?: string;
   attempts: Attempt[];
   status: string;
   error?: string;
@@ -61,12 +69,17 @@ interface Run {
   endedAt?: string;
 }
 
-const PROVIDER = "opencode-admin";
+const DEFAULT_PROVIDER = "opencode-admin";
 
-export default function AgentBenchmarks() {
+export default function AgentBenchmarks({ env = "" }: { env?: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [providers, setProviders] = useState<string[]>([]);
+  const [providerSections, setProviderSections] = useState<
+    Record<string, { models?: Record<string, unknown> }>
+  >({});
+  const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [taskId, setTaskId] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [rounds, setRounds] = useState(1);
@@ -76,27 +89,67 @@ export default function AgentBenchmarks() {
 
   const loadRuns = useCallback(async () => {
     try {
-      const res = await fetch("/api/evals/runs");
+      const res = await fetch(`/api/evals/runs${env ? `?env=${encodeURIComponent(env)}` : ""}`);
       const data = await res.json();
       setRuns(data.runs ?? []);
     } catch {
       /* a failed poll is not worth interrupting a running benchmark for */
     }
-  }, []);
+  }, [env]);
+
+  // Ask the server to cancel a run: the active one gets its context
+  // cancelled; an orphaned "running" record (server restarted mid-run) is
+  // closed out directly.
+  const stopRun = useCallback(
+    async (id: string) => {
+      try {
+        await fetch(`/api/evals/runs/${encodeURIComponent(id)}/stop`, { method: "POST" });
+      } catch {
+        /* the poll reflects the final state */
+      }
+      void loadRuns();
+    },
+    [loadRuns],
+  );
 
   useEffect(() => {
     (async () => {
       try {
-        const [t, p] = await Promise.all([
+        const [t, live] = await Promise.all([
           fetch("/api/evals/tasks").then((r) => r.json()),
-          fetch("/api/chat/providers").then((r) => r.json()).catch(() => null),
+          fetch(`/api/evals/models-live${env ? `?env=${encodeURIComponent(env)}` : ""}`)
+            .then((r) => {
+              if (!r.ok) throw new Error(`models-live: ${r.status}`);
+              return r.json();
+            })
+            .catch(() => null),
         ]);
         const list: Task[] = t.tasks ?? [];
         setTasks(list);
         if (list.length) setTaskId(list[0].id);
 
-        const provider = (p?.providers ?? []).find((x: { id: string }) => x.id === PROVIDER);
-        setModels(Object.keys(provider?.models ?? {}).sort());
+        // Live models from the running OpenCode server (every provider it
+        // sees: built-ins, env logins, auth.json, all config layers).
+        const liveModels = (live?.models ?? []) as { provider: string; id: string }[];
+        if (liveModels.length) {
+          const byProvider: Record<string, { models: Record<string, unknown> }> = {};
+          for (const m of liveModels) {
+            if (!m.provider || !m.id) continue;
+            byProvider[m.provider] ??= { models: {} };
+            byProvider[m.provider].models[m.id] = {};
+          }
+          applyProviders(byProvider);
+          return;
+        }
+
+        // Fallback: the static opencode.json provider section (hand-configured
+        // providers only) when the live server is unreachable.
+        const p = await fetch("/api/config/providers")
+          .then((r) => r.json())
+          .catch(() => null);
+        // /api/config/providers returns the opencode.json provider section,
+        // an object keyed by provider name (not the old proxy's array shape).
+        applyProviders((p ?? {}) as Record<string, { models?: Record<string, unknown> }>);
       } catch (e) {
         setError(String(e));
       }
@@ -104,7 +157,42 @@ export default function AgentBenchmarks() {
     loadRuns();
   }, [loadRuns]);
 
+  function applyProviders(section: Record<string, { models?: Record<string, unknown> }>) {
+    const names = Object.keys(section).sort();
+    const chosen = section[DEFAULT_PROVIDER] ? DEFAULT_PROVIDER : (names[0] ?? DEFAULT_PROVIDER);
+    setProviderSections(section);
+    setProviders(names);
+    setProvider(chosen);
+    setModels(Object.keys(section[chosen]?.models ?? {}).sort());
+  }
+
   const activeRun = runs.find((r) => r.status === "running");
+
+  // Live tail: while a run is in flight, poll what its agent is doing right
+  // now (the opencode session the attempt created).
+  const [live, setLive] = useState<{ active: boolean; runId?: string; model?: string; round?: number; events?: { kind: string; text: string; at: number }[] } | null>(null);
+  useEffect(() => {
+    if (!activeRun) {
+      setLive(null);
+      return;
+    }
+    let alive = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/evals/runs/${encodeURIComponent(activeRun.id)}/live`);
+        const body = await res.json();
+        if (alive) setLive(body);
+      } catch {
+        /* transient: the next tick retries */
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 2500);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [activeRun]);
 
   // Poll only while something is in flight; a finished board does not need refreshing.
   useEffect(() => {
@@ -125,10 +213,10 @@ export default function AgentBenchmarks() {
     setError("");
     setStarting(true);
     try {
-      const res = await fetch("/api/evals/runs", {
+      const res = await fetch(`/api/evals/runs${env ? `?env=${encodeURIComponent(env)}` : ""}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId, models: picked, provider: PROVIDER, rounds }),
+        body: JSON.stringify({ taskId, models: picked, provider, rounds }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? res.statusText);
@@ -143,6 +231,25 @@ export default function AgentBenchmarks() {
   return (
     <div className="bench">
       <section className="bench-config">
+        <label className="bench-field">
+          <span>Provider</span>
+          <select
+            value={provider}
+            onChange={(e) => {
+              const next = e.target.value;
+              setProvider(next);
+              setPicked([]); // model ids are provider-scoped; stale picks would POST a bad run
+              setModels(Object.keys(providerSections[next]?.models ?? {}).sort());
+            }}
+          >
+            {providers.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="bench-field">
           <span>Task</span>
           <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
@@ -213,7 +320,12 @@ export default function AgentBenchmarks() {
       )}
 
       {runs.map((run) => (
-        <RunCard key={run.id} run={run} />
+        <RunCard
+          key={run.id}
+          run={run}
+          onStop={stopRun}
+          live={live?.active && live.runId === run.id ? live : undefined}
+        />
       ))}
 
       {!runs.length && (
@@ -225,7 +337,28 @@ export default function AgentBenchmarks() {
   );
 }
 
-function RunCard({ run }: { run: Run }) {
+// Same conventions as SessionAnalytics: sub-cent amounts keep four decimals so
+// they do not round to a misleading "$0.00"; weighted share drops the decimal
+// once it is above 10%.
+function formatCost(n: number): string {
+  if (!n) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
+}
+
+function formatWeighted(weighted: number): string {
+  return `${(weighted * 100).toFixed(weighted >= 0.1 ? 0 : 1)}%`;
+}
+
+type LiveTail = {
+  active: boolean;
+  runId?: string;
+  model?: string;
+  round?: number;
+  events?: { kind: string; text: string; at: number }[];
+};
+
+function RunCard({ run, onStop, live }: { run: Run; onStop?: (id: string) => void; live?: LiveTail }) {
   // Rank by correctness first: a model that answers in eight turns while missing half
   // the expected findings is not better than one that grinds to the complete answer.
   const rows = useMemo(
@@ -245,11 +378,35 @@ function RunCard({ run }: { run: Run }) {
         <strong>{run.taskName}</strong>
         <span className="muted">
           @{run.agent} · {run.rounds} round(s) · {run.models.length} model(s)
+          {run.environment ? ` · ${run.environment}` : ""}
         </span>
-        <span className={`badge badge-${run.status === "done" ? "ok" : run.status === "failed" ? "danger" : "warn"}`}>
+        <span className={`badge badge-${run.status === "done" ? "ok" : run.status === "failed" || run.status === "cancelled" || run.status === "interrupted" ? "danger" : "warn"}`}>
           {run.status}
         </span>
+        {run.status === "running" && onStop && (
+          <button className="btn btn-sm" onClick={() => onStop(run.id)}>
+            Stop
+          </button>
+        )}
       </header>
+
+      {live && (
+        <div className="bench-live">
+          <div className="bench-live-head">
+            <span className="bench-live-dot" />
+            live · {live.model} · round {live.round ?? "?"}
+          </div>
+          <pre className="bench-live-tail">
+            {(live.events ?? []).length === 0 && <div className="bench-live-line">waiting for activity…</div>}
+            {(live.events ?? []).map((e, i) => (
+              <div key={`${e.at}-${i}`} className={`bench-live-line is-${e.kind}`}>
+                <span className="bench-live-kind">{e.kind}</span>
+                {e.text || "…"}
+              </div>
+            ))}
+          </pre>
+        </div>
+      )}
 
       {run.error && (
         <div className="alert alert-danger">
@@ -264,6 +421,7 @@ function RunCard({ run }: { run: Run }) {
               <th>Model</th>
               <th>R</th>
               <th>Score</th>
+              <th>Weighted</th>
               <th>Hard</th>
               <th>Turns</th>
               <th>Reads</th>
@@ -271,6 +429,7 @@ function RunCard({ run }: { run: Run }) {
               <th>Inv</th>
               <th>Worst file</th>
               <th>Tokens</th>
+              <th>Cost</th>
               <th>Time</th>
             </tr>
           </thead>
@@ -288,6 +447,7 @@ function RunCard({ run }: { run: Run }) {
                     <span className="muted">no answer</span>
                   )}
                 </td>
+                <td>{a.score.weighted != null ? formatWeighted(a.score.weighted) : "—"}</td>
                 <td>{a.score.gotHard ? "✓" : "—"}</td>
                 <td>{a.metrics.turns}</td>
                 <td>{a.metrics.reads}</td>
@@ -295,12 +455,13 @@ function RunCard({ run }: { run: Run }) {
                 <td>{a.metrics.invalid || ""}</td>
                 <td>{a.metrics.worstFileReads}</td>
                 <td>{(a.metrics.tokensInput + a.metrics.tokensOutput).toLocaleString()}</td>
+                <td>{a.costKnown ? formatCost(a.costUsd ?? 0) : "—"}</td>
                 <td>{a.seconds.toFixed(0)}s</td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={11} className="muted">
+                <td colSpan={13} className="muted">
                   Waiting for the first attempt…
                 </td>
               </tr>

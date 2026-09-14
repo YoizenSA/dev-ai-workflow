@@ -5,8 +5,6 @@ import {
 	Check,
 	Monitor,
 	Package,
-	Plug,
-	RefreshCw,
 	Server,
 	Settings as SettingsIcon,
 	Share2,
@@ -15,7 +13,8 @@ import {
 	User,
 } from "lucide-react";
 import { useUrlTab } from "../../hooks/useUrlTab";
-import { configApi, missionsApi } from "../../api/client";
+import { configApi, toolsApi, getConfigProfileScope, setConfigProfileScope } from "../../api/client";
+import { envsApi } from "../../api/envs";
 import type {
 	MCPServer,
 	ModelInfo,
@@ -23,13 +22,13 @@ import type {
 	OpenCodeConfig as OpenCodeConfigType,
 } from "../../api/types";
 import { NotificationsTab } from "./NotificationsTab";
+import SkillSurfacePanel from "./SkillSurfacePanel";
 import SearchSelect from "../shared/SearchSelect";
-import ModelCombobox from "../missions/ModelCombobox";
+import ModelCombobox from "../shared/ModelCombobox";
 import Modal from "../shared/Modal";
 import "./Settings.css";
 
 // Heavy tabs: only pull their JS when the user opens them.
-const RoleDefaultsTab = lazy(() => import("./RoleDefaultsTab"));
 const ReferencesTab = lazy(() => import("./ReferencesTab"));
 const OrchestratorTab = lazy(() => import("./OrchestratorTab"));
 const ProfilesTab = lazy(() => import("./ProfilesTab"));
@@ -50,16 +49,13 @@ function TabChunkFallback() {
 
 type Tab =
 	| "general"
-	| "roles"
 	| "agents"
 	| "orchestrator"
 	| "skills"
 	| "mcp"
 	| "providers"
-	| "tools"
 	| "references"
-	| "profiles"
-	| "notifications";
+	| "profiles";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 	{
@@ -67,12 +63,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "General",
 		icon: <SettingsIcon size={16} />,
 	},
-	// ponytail: role defaults hidden — configure per-agent instead
-	// {
-	// 	id: "roles",
-	// 	label: "Role Defaults",
-	// 	icon: <Users size={16} />,
-	// },
 	{
 		id: "agents",
 		label: "Agents",
@@ -104,8 +94,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		label: "Providers",
 		icon: <Activity size={16} />,
 	},
-	// ponytail: Tools tab hidden — read-only tool listing, redundant with the
-	// per-agent Permissions view.
 	{
 		id: "references",
 		label: "References",
@@ -117,12 +105,31 @@ const TAB_IDS = TABS.map((t) => t.id);
 
 export default function Settings() {
 	const [activeTab, setActiveTab] = useUrlTab<Tab>("general", TAB_IDS);
+	const [scope, setScope] = useState<string | null>(() => getConfigProfileScope());
+	const [envNames, setEnvNames] = useState<string[]>([]);
+
+	function changeScope(v: string | null) {
+		setConfigProfileScope(v);
+		setScope(v);
+	}
+
+	// Envs deep-link lands here with scope pre-set (localStorage): adopt it.
+	// Plus load env names for the picker.
+	useEffect(() => {
+		setScope(getConfigProfileScope());
+		envsApi.list().then(
+			(res) => setEnvNames((res.envs ?? []).map((e) => e.name)),
+			() => {},
+		);
+	}, []);
 
 	// On enter: revalidate models (server cache kick) + warm common config
 	// payloads in parallel. Tabs still own their UI state; this only primes
 	// network caches so switching tabs / second visit feels instant.
 	useEffect(() => {
-		void missionsApi.listModels({ force: true }).catch(() => {});
+		// No force: the General tab owns the single forced revalidation.
+		// This call only warms the client/server model cache.
+		void toolsApi.listModels().catch(() => {});
 		void Promise.all([
 			configApi.getConfig().catch(() => null),
 			configApi.listAgents().catch(() => null),
@@ -160,15 +167,37 @@ export default function Settings() {
 						{tab.label}
 					</button>
 				))}
+				<span className="scope-picker" title="Choose which config every tab reads and writes">
+					<span className="scope-picker-label">Editing:</span>
+					<select
+						aria-label="settings scope"
+						value={scope ?? ""}
+						onChange={(e) => changeScope(e.target.value || null)}
+					>
+						<option value="">Global</option>
+						{envNames.map((n) => (
+							<option key={n} value={n}>{n}</option>
+						))}
+						{scope && !envNames.includes(scope) && (
+							<option value={scope}>{scope} (deleted?)</option>
+						)}
+					</select>
+				</span>
 			</div>
 
-			<div className="tab-content">
+			{scope && (
+				<div className="scope-banner" role="status">
+					<strong>Editing env: {scope}</strong>
+					<span>
+						Every change below applies to <code>~/.ywai/profiles/{scope}/</code> — global
+						config stays untouched. ywai-level model profiles and server settings stay global.
+					</span>
+					<button className="btn btn-ghost btn-sm" onClick={() => changeScope(null)}>Back to global</button>
+				</div>
+			)}
+
+			<div className="tab-content" key={scope ?? "global"}>
 				{activeTab === "general" && <GeneralTab />}
-				{activeTab === "roles" && (
-					<Suspense fallback={<TabChunkFallback />}>
-						<RoleDefaultsTab />
-					</Suspense>
-				)}
 				{activeTab === "agents" && <AgentsTab />}
 				{activeTab === "orchestrator" && (
 					<Suspense fallback={<TabChunkFallback />}>
@@ -181,10 +210,8 @@ export default function Settings() {
 					</Suspense>
 				)}
 				{activeTab === "skills" && <SkillsTab />}
-				{activeTab === "notifications" && <NotificationsTab />}
 				{activeTab === "mcp" && <MCPTab />}
 				{activeTab === "providers" && <ProvidersTab />}
-				{activeTab === "tools" && <ToolsTab />}
 				{activeTab === "references" && (
 					<Suspense fallback={<TabChunkFallback />}>
 						<ReferencesTab />
@@ -223,7 +250,7 @@ function GeneralTab() {
 
 	useEffect(() => {
 		// Fast path only: local config + agents + vision catalog. Never block
-		// first paint on missionsApi.listModels() — that shells out to
+		// first paint on toolsApi.listModels() — that shells out to
 		// `opencode models` (multi-second cold start). Model pickers fill in
 		// once the slow catalog arrives (see second effect below).
 		Promise.all([
@@ -268,13 +295,13 @@ function GeneralTab() {
 		// Models: paint from client/server cache immediately, then revalidate
 		// in parallel (force kicks CLI refresh server-side without blocking).
 		const applyModels = (modelsRes: Awaited<
-			ReturnType<typeof missionsApi.listModels>
+			ReturnType<typeof toolsApi.listModels>
 		> | null) => {
 			if (!modelsRes) return;
 			setModels(Object.values(modelsRes.modelsByProvider ?? {}).flat());
 		};
-		missionsApi.listModels().then(applyModels).catch(() => {});
-		missionsApi
+		toolsApi.listModels().then(applyModels).catch(() => {});
+		toolsApi
 			.listModels({ force: true })
 			.then(applyModels)
 			.catch(() => {});
@@ -478,14 +505,14 @@ function GeneralTab() {
 			</div>
 
 			{/* ─── Vision bridge ──────────────────────────────────────── */}
-			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
-				<span className="field-label" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+			<div className="field span-2" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "var(--space-5)", marginTop: "var(--space-3)" }}>
+				<h4 style={{ fontSize: "var(--text-md)", color: "var(--text)" }}>
 					Vision bridge
-				</span>
-				<span className="field-hint" style={{ display: "block", marginTop: "0.25rem" }}>
-					When the chat model cannot see images (e.g. DeepSeek), the vision-bridge
+				</h4>
+				<span className="field-help" style={{ display: "block", maxWidth: "72ch", marginBottom: "var(--space-2)" }}>
+					When the main model cannot see images (e.g. DeepSeek), the vision-bridge
 					plugin analyzes attached images with a vision model and injects the text
-					for the chat model. The image is analyzed through OpenCode, so any model
+					for the main model. The image is analyzed through OpenCode, so any model
 					OpenCode knows works — no separate endpoint or API key needed.
 				</span>
 			</div>
@@ -499,20 +526,20 @@ function GeneralTab() {
 					onChange={(v) => setVisionModel(v)}
 				/>
 				{visionModelsError && (
-					<span className="field-hint" style={{ color: "var(--danger, #c44)", display: "block", marginTop: "0.35rem" }}>
+					<span className="field-help error">
 						{visionModelsError}
 					</span>
 				)}
 				{!visionModelsError && visionModels.length === 0 && (
-					<span className="field-hint" style={{ display: "block", marginTop: "0.35rem" }}>
+					<span className="field-help">
 						No vision-capable models found in your OpenCode providers. Type a
 						model id as provider/model.
 					</span>
 				)}
 				<button
 					type="button"
-					className="btn btn-ghost"
-					style={{ marginTop: "0.5rem" }}
+					className="btn btn-ghost btn-sm"
+					style={{ alignSelf: "flex-start", marginTop: "0.25rem" }}
 					onClick={() => setVisionModel("")}
 					disabled={!visionModel}
 				>
@@ -530,6 +557,7 @@ function GeneralTab() {
 
 			<button
 				className="btn btn-primary"
+				style={{ marginTop: "var(--space-4)" }}
 				onClick={handleSave}
 				disabled={saving}
 				aria-busy={saving || undefined}
@@ -546,11 +574,11 @@ function GeneralTab() {
 
 			{/* ─── AGENTS.md Editor ────────────────────────────────────────── */}
 			<div className="card card-pad" style={{ marginTop: "2rem" }}>
-				<div className="card-header">
-					<h3>AGENTS.md</h3>
-					<span className="muted">{agentsMdPath || "Not found"}</span>
+				<div className="card-header" style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+					<h3 style={{ fontSize: "var(--text-lg)" }}>AGENTS.md</h3>
+					<code className="muted mono" style={{ fontSize: "var(--text-xs)" }}>{agentsMdPath || "Not found"}</code>
 				</div>
-				<p className="muted" style={{ marginBottom: "1rem" }}>
+				<p className="muted" style={{ margin: "0.35rem 0 1rem", fontSize: "var(--text-sm)" }}>
 					Edit the AGENTS.md file from the project root. This file contains
 					project-wide instructions for AI agents.
 				</p>
@@ -683,6 +711,8 @@ function AgentsTab() {
 	const [savingPerms, setSavingPerms] = useState<string | null>(null);
 	const [message, setMessage] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [deletingName, setDeletingName] = useState<string | null>(null);
+	const [deletingGroup, setDeletingGroup] = useState<string | null>(null);
 
 	// Load the agent list + tools on mount. We intentionally do NOT fetch each
 	// agent's full content here — doing so fired one HTTP request per agent and
@@ -784,7 +814,7 @@ function AgentsTab() {
 
 	// Load the available model catalog once for the model picker.
 	useEffect(() => {
-		missionsApi
+		toolsApi
 			.listModels()
 			.then((m) => {
 				if (m?.modelsByProvider) {
@@ -870,25 +900,75 @@ function AgentsTab() {
 		}
 	};
 
-	const handleDeleteAgent = async () => {
-		if (!selected) return;
-		if (!confirm(`Delete agent "${selected}"?`)) return;
+	const handleDeleteAgentByName = async (name: string) => {
+		if (!name) return;
+		if (!confirm(`Delete agent "${name}"?`)) return;
+		setDeletingName(name);
 		setSaving(true);
 		try {
-			await configApi.deleteAgent(selected);
-			setAgents((prev) => prev.filter((a) => a.name !== selected));
-			const remaining = agents.filter((a) => a.name !== selected);
-			if (remaining.length > 0) {
-				setSelected(remaining[0].name);
-				setEditContent(remaining[0].content ?? "");
-			} else {
-				setSelected(null);
-				setEditContent("");
+			await configApi.deleteAgent(name);
+			setAgents((prev) => prev.filter((a) => a.name !== name));
+			if (selected === name) {
+				const remaining = agents.filter((a) => a.name !== name);
+				if (remaining.length > 0) {
+					setSelected(remaining[0].name);
+					setEditContent(remaining[0].content ?? "");
+				} else {
+					setSelected(null);
+					setEditContent("");
+				}
 			}
-			setMessage("Agent deleted");
+			setMessage(`Agent "${name}" deleted`);
 		} catch (err) {
 			setMessage(`Error: ${err}`);
 		} finally {
+			setDeletingName(null);
+			setSaving(false);
+		}
+	};
+
+	const handleDeleteAgent = async () => {
+		if (!selected) return;
+		await handleDeleteAgentByName(selected);
+	};
+
+	const handleDeleteGroup = async (team: string, names: string[]) => {
+		if (names.length === 0) return;
+		const displayTeam = team === "other" ? "Other" : team;
+		const preview = names.slice(0, 8).join(", ") + (names.length > 8 ? `, … +${names.length - 8} more` : "");
+		if (!confirm(`Delete ${names.length} agent(s) from "${displayTeam}"?\n${preview}`)) return;
+		setDeletingGroup(team);
+		setSaving(true);
+		try {
+			const results = await Promise.allSettled(names.map((n) => configApi.deleteAgent(n)));
+			const succeeded: string[] = [];
+			const failed: string[] = [];
+			results.forEach((r, i) => {
+				if (r.status === "fulfilled") succeeded.push(names[i]);
+				else failed.push(names[i]);
+			});
+			if (succeeded.length > 0) {
+				setAgents((prev) => prev.filter((a) => !succeeded.includes(a.name)));
+				if (selected && succeeded.includes(selected)) {
+					const remaining = agents.filter((a) => !succeeded.includes(a.name));
+					if (remaining.length > 0) {
+						setSelected(remaining[0].name);
+						setEditContent(remaining[0].content ?? "");
+					} else {
+						setSelected(null);
+						setEditContent("");
+					}
+				}
+			}
+			setMessage(
+				failed.length > 0
+					? `Error: Deleted ${succeeded.length}, failed ${failed.length}: ${failed.join(", ")}`
+					: `Deleted ${succeeded.length} agent(s) from "${team === "other" ? "Other" : team}"`,
+			);
+		} catch (err) {
+			setMessage(`Error: ${err}`);
+		} finally {
+			setDeletingGroup(null);
 			setSaving(false);
 		}
 	};
@@ -914,7 +994,6 @@ function AgentsTab() {
 	const teamOrder = [
 		"core",
 		"qa-automation",
-		"social-refactor",
 		"experiment",
 		"custom",
 		"other",
@@ -1172,24 +1251,73 @@ function AgentsTab() {
 					{sortedTeams.map((team) => {
 						const filtered = filterAgents(grouped[team]);
 						if (filtered.length === 0) return null;
+						const isDeletingGroup = deletingGroup === team;
 						return (
 							<div key={team} className="tools-section">
 								<div className="agents-group-header">
-									{team === "other" ? "Other" : team}
-									<span style={{ marginLeft: "var(--space-2)", opacity: 0.5 }}>
-										({filtered.length})
+									<span>
+										{team === "other" ? "Other" : team}
+										<span style={{ marginLeft: "var(--space-2)", opacity: 0.5 }}>
+											({filtered.length})
+										</span>
 									</span>
-								</div>
-								{filtered.map((agent) => (
 									<button
-										key={agent.name}
-										onClick={() => handleSelectAgent(agent.name)}
-										className={`agent-item ${selected === agent.name ? "active" : ""}`}
+										type="button"
+										className="agents-group-delete"
+										title={`Delete all ${filtered.length} in ${team === "other" ? "Other" : team}`}
+										aria-label={`Delete all ${filtered.length} agents in ${team}`}
+										disabled={saving || isDeletingGroup}
+										onClick={() =>
+											handleDeleteGroup(
+												team,
+												filtered.map((a) => a.name),
+											)
+										}
 									>
-										<span className="agent-item-dot" />
-										{agent.name}
+										<Trash2 size={13} />
+										{isDeletingGroup ? "…" : ""}
 									</button>
-								))}
+								</div>
+								{filtered.map((agent) => {
+									const isDeleting = deletingName === agent.name;
+									const isSelected = selected === agent.name;
+									return (
+										<div
+											key={agent.name}
+											role="button"
+											tabIndex={0}
+											onClick={() => handleSelectAgent(agent.name)}
+											onKeyDown={(e) => {
+												if ((e.target as HTMLElement).closest?.("button")) return;
+												if (e.key === "Enter" || e.key === " ") {
+													e.preventDefault();
+													handleSelectAgent(agent.name);
+												}
+											}}
+											className={`agent-item ${isSelected ? "active" : ""}`}
+											title={agent.name}
+											aria-label={`Select agent ${agent.name}`}
+											aria-current={isSelected || undefined}
+										>
+											<span className="agent-item-dot" />
+											<span className="agent-item-name">{agent.name}</span>
+											<button
+												type="button"
+												className="agent-item-delete"
+												title={`Delete ${agent.name}`}
+												aria-label={`Delete ${agent.name}`}
+												disabled={saving || isDeleting}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleDeleteAgentByName(agent.name);
+												}}
+												onKeyDown={(e) => e.stopPropagation()}
+											>
+												<Trash2 size={14} />
+											</button>
+										</div>
+									);
+								})}
 							</div>
 						);
 					})}
@@ -1212,7 +1340,9 @@ function AgentsTab() {
 								className="btn btn-danger"
 								onClick={handleDeleteAgent}
 								disabled={saving}
+								title={`Delete ${selectedAgent.name}`}
 							>
+								<Trash2 size={14} />
 								Delete
 							</button>
 						</div>
@@ -1421,6 +1551,11 @@ function SkillsTab() {
 							{skill.hasSkillMD && (
 								<span className="pill pill-accent">Enabled</span>
 							)}
+							{skill.scope === "bundled" && (
+								<span className="pill" title="Shipped with ywai; cannot be deleted">
+									Bundled
+								</span>
+							)}
 						</div>
 						{skill.description && (
 							<p className="skill-card-desc skill-card-desc-truncate">
@@ -1440,19 +1575,22 @@ function SkillsTab() {
 							>
 								Edit
 							</button>
-							<button
-								className="btn btn-sm btn-danger"
-								onClick={() => handleDelete(skill.name)}
-							>
-								Delete
-							</button>
+							{skill.scope !== "bundled" && (
+								<button
+									className="btn btn-sm btn-danger"
+									onClick={() => handleDelete(skill.name)}
+								>
+									Delete
+								</button>
+							)}
 						</div>
 					</div>
 				))}
 			</div>
 
-			{/* View Modal */}
-			{viewingSkill && (
+			<SkillSurfacePanel />
+
+			{/* View Modal */}			{viewingSkill && (
 				<Modal
 					open={true}
 					onClose={() => setViewingSkill(null)}
@@ -1519,6 +1657,10 @@ function MCPTab() {
 	const [servers, setServers] = useState<MCPServer[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [toggling, setToggling] = useState<string | null>(null);
+	// Draft endpoints, keyed by server name. A remote server installed without
+	// one (Grafana) is unusable until it is filled in here.
+	const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
+	const [urlError, setUrlError] = useState<Record<string, string>>({});
 
 	useEffect(() => {
 		configApi
@@ -1541,8 +1683,45 @@ function MCPTab() {
 					s.name === server.name ? { ...s, enabled: !s.enabled } : s,
 				),
 			);
+			setUrlError((prev) => ({ ...prev, [server.name]: "" }));
 		} catch (err) {
-			alert(`Error: ${err}`);
+			// The common failure is enabling a remote server that has no
+			// endpoint yet; say so next to the field instead of in an alert.
+			setUrlError((prev) => ({
+				...prev,
+				[server.name]: needsUrl(server)
+					? "Set the server URL before enabling it"
+					: String(err),
+			}));
+		} finally {
+			setToggling(null);
+		}
+	};
+
+	const needsUrl = (server: MCPServer) =>
+		server.config.type === "remote" && !(server.config.url ?? "").trim();
+
+	const saveUrl = async (server: MCPServer) => {
+		const next = (urlDrafts[server.name] ?? server.config.url ?? "").trim();
+		setToggling(server.name);
+		try {
+			await configApi.updateMCP(server.name, {
+				enabled: server.enabled,
+				url: next,
+			});
+			setServers((prev) =>
+				prev.map((s) =>
+					s.name === server.name
+						? { ...s, config: { ...s.config, url: next } }
+						: s,
+				),
+			);
+			setUrlError((prev) => ({ ...prev, [server.name]: "" }));
+		} catch {
+			setUrlError((prev) => ({
+				...prev,
+				[server.name]: "Must be an absolute http(s) URL",
+			}));
 		} finally {
 			setToggling(null);
 		}
@@ -1597,9 +1776,41 @@ function MCPTab() {
 									{server.enabled ? "Enabled" : "Disabled"}
 								</span>
 							</div>
-							<p className="mcp-command-desc">
-								{server.config.command?.join(" ") ?? server.config.url ?? "—"}
-							</p>
+							{server.config.type === "remote" ? (
+								<div className="mcp-url-row">
+									<input
+										className="input"
+										type="url"
+										aria-label={`${server.name} server URL`}
+										placeholder="https://grafana.internal.example/mcp"
+										value={urlDrafts[server.name] ?? server.config.url ?? ""}
+										onChange={(e) =>
+											setUrlDrafts((prev) => ({
+												...prev,
+												[server.name]: e.target.value,
+											}))
+										}
+									/>
+									<button
+										className="btn btn-sm"
+										onClick={() => saveUrl(server)}
+										disabled={
+											toggling === server.name ||
+											(urlDrafts[server.name] ?? server.config.url ?? "") ===
+												(server.config.url ?? "")
+										}
+									>
+										Save URL
+									</button>
+								</div>
+							) : (
+								<p className="mcp-command-desc">
+									{server.config.command?.join(" ") ?? "—"}
+								</p>
+							)}
+							{urlError[server.name] && (
+								<p className="mcp-command-desc error">{urlError[server.name]}</p>
+							)}
 						</div>
 						<div className="mcp-actions-row">
 							<button
@@ -1826,107 +2037,3 @@ function ProvidersTab() {
 	);
 }
 
-// ─── Tools Tab ─────────────────────────────────────────────────────────────
-
-function ToolsTab() {
-	const [tools, setTools] = useState<{
-		built_in: string[];
-		all: string[];
-		mcp_tools: Record<string, { tools: string[]; enabled: boolean }>;
-		plugin_tools: Record<string, string[]>;
-	} | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [resyncing, setResyncing] = useState(false);
-
-	const load = useCallback((refresh: boolean) => {
-		if (refresh) setResyncing(true);
-		configApi
-			.listTools(refresh)
-			.then((data) => {
-				setTools(data);
-				setLoading(false);
-			})
-			.catch(() => setLoading(false))
-			.finally(() => setResyncing(false));
-	}, []);
-
-	useEffect(() => {
-		load(false);
-	}, [load]);
-
-	if (loading) {
-		return (
-			<div aria-busy="true" className="skeleton skel-card" style={{ margin: 'var(--space-4)' }}>
-				<div className="skel-line title" />
-				<div className="skel-line desc" />
-				<div className="skel-line desc sm" />
-			</div>
-		);
-	}
-
-	if (!tools) {
-		return (
-			<div className="card card-pad">
-				<p className="muted">No tools data available</p>
-			</div>
-		);
-	}
-
-	const sections: { label: string; data: string[]; icon: React.ReactNode }[] = [
-		{ label: "Built-in", data: tools.built_in, icon: <SettingsIcon size={16} /> },
-		...Object.entries(tools.mcp_tools).map(([server, group]) => ({
-			label: `MCP: ${server}${group.enabled ? "" : " (disabled)"}`,
-			data: group.tools,
-			icon: <Plug size={16} />,
-		})),
-		...Object.entries(tools.plugin_tools).map(([plugin, toolsList]) => ({
-			label: `Plugin: ${plugin}`,
-			data: toolsList,
-			icon: <Package size={16} />,
-		})),
-	];
-
-	return (
-		<div className="card card-pad">
-			<div className="tools-header">
-				<button
-					type="button"
-					className="btn btn-sm"
-					onClick={() => load(true)}
-					disabled={resyncing}
-					title="Re-scan tools (built-in, MCP servers, and plugins)"
-				>
-					<RefreshCw
-						size={14}
-						className={resyncing ? "spin" : undefined}
-						aria-hidden="true"
-					/>
-					{resyncing ? "Resyncing…" : "Resync"}
-				</button>
-			</div>
-			{sections.length === 0 && <p className="muted">No tools found</p>}
-			{sections.map((section) => {
-				const toolsList = Array.isArray(section.data) ? section.data : [];
-				if (toolsList.length === 0) return null;
-				return (
-					<div key={section.label} className="tools-section">
-						<h3 className="tools-section-title">
-							<span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
-								{section.icon}
-								{section.label}
-							</span>
-							<span className="tools-section-count">({toolsList.length})</span>
-						</h3>
-						<div className="tools-pills-container">
-							{toolsList.map((tool) => (
-								<span key={tool} className="pill pill-muted tools-pill">
-									{tool}
-								</span>
-							))}
-						</div>
-					</div>
-				);
-			})}
-		</div>
-	);
-}

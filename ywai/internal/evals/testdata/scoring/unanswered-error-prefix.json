@@ -1,0 +1,12 @@
+{
+  "name": "unanswered-error-prefix",
+  "taskId": "golden-mixed",
+  "response": "ERROR: config.load and retryloop were never reached because the run crashed before any output.",
+  "expected": {
+    "hits": [],
+    "missed": ["config.load", "retryLoop", "graceful shutdown"],
+    "total": 3,
+    "gotHard": false,
+    "answered": false
+  }
+}

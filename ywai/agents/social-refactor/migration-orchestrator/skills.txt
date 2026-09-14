@@ -1,3 +1,0 @@
-adr-skill
-decision-mapping
-codebase-design

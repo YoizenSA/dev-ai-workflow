@@ -2,35 +2,27 @@ package configapi
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"net"
 	"net/http"
-	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
 )
 
-// DefaultUIPort is the default port for the UI server.
-const DefaultUIPort = 5768
-
-// Server is the embedded HTTP server for the config/UI API.
-type Server struct {
-	port    int
-	hub     *Hub
-	httpSrv *http.Server
-	mux     *http.ServeMux
-}
-
-// New creates a new config/UI API server listening on the given port.
-// Use port 0 to let the OS pick a free port.
-func New(port int) *Server {
+// NewHandlers builds the config API handlers and their WebSocket hub.
+func NewHandlers() *Handlers {
 	hub := NewHub()
 	oc := opencode.DefaultClient(context.Background())
-	handlers := &Handlers{hub: hub, opencodeClient: oc}
+	return &Handlers{hub: hub, opencodeClient: oc}
+}
 
-	mux := http.NewServeMux()
+// Hub returns the WebSocket hub these handlers broadcast on. The control
+// server wires it into the MCP job manager so install events reach the UI over
+// the same /api/events socket.
+func (h *Handlers) Hub() *Hub {
+	return h.hub
+}
 
+// RegisterRoutes wires the config API routes onto mux.
+func RegisterRoutes(mux *http.ServeMux, handlers *Handlers) {
 	// WebSocket route
 	mux.HandleFunc("GET /api/events", handlers.HandleWebSocket)
 
@@ -76,74 +68,4 @@ func New(port int) *Server {
 
 	// Native directory picker
 	mux.HandleFunc("POST /api/browse-directory", handlers.BrowseDirectory)
-
-	// UI (frontend)
-	mux.Handle("GET /", uiHandler())
-
-	return &Server{
-		port: port,
-		hub:  hub,
-		mux:  mux,
-	}
-}
-
-// Start starts the HTTP server and begins serving requests.
-// This call blocks until the server is stopped or fails to start.
-func (s *Server) Start() error {
-	s.httpSrv = &http.Server{
-		Addr:         fmt.Sprintf(":%d", s.port),
-		Handler:      s.mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	// Start the WebSocket hub
-	go s.hub.Run()
-
-	ln, err := net.Listen("tcp", s.httpSrv.Addr)
-	if err != nil {
-		if s.port != 0 {
-			log.Printf("Port %d in use, falling back to random port", s.port)
-			s.port = 0
-			s.httpSrv.Addr = ":0"
-			ln, err = net.Listen("tcp", ":0")
-		}
-		if err != nil {
-			return fmt.Errorf("configapi: failed to listen: %w", err)
-		}
-	}
-
-	// Capture the actual port (useful when port 0 is used)
-	s.port = ln.Addr().(*net.TCPAddr).Port
-
-	if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("configapi: server error: %w", err)
-	}
-	return nil
-}
-
-// Stop gracefully shuts down the HTTP server.
-func (s *Server) Stop() {
-	if s.httpSrv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.httpSrv.Shutdown(ctx)
-	}
-}
-
-// Port returns the actual port the server is listening on.
-func (s *Server) Port() int {
-	return s.port
-}
-
-// HTTPHandler returns the HTTP handler for the config API server.
-// This allows the server to be mounted in other muxes.
-func (s *Server) HTTPHandler() http.Handler {
-	return s.mux
-}
-
-// Hub returns the WebSocket hub for the config API server.
-func (s *Server) Hub() *Hub {
-	return s.hub
 }

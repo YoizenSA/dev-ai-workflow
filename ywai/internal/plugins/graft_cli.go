@@ -92,32 +92,50 @@ func WireGraftMCP() error {
 	}
 
 	// Only agents whose SettingsPaths entry is a JSON config with a shape
-	// ywai understands (opencode/kilocode "mcp", claude-code/pi
+	// ywai understands (opencode "mcp", claude-code/pi
 	// "mcpServers"). omp points at models.yml and the IDE agents use their
 	// own file formats, so they are skipped.
 	wired := false
+	var failures []string
 	for name, configPath := range agent.SettingsPaths() {
 		switch name {
-		case "opencode", "kilocode", "claude-code", "pi":
+		case "opencode", "claude-code", "pi":
 		default:
 			continue
 		}
 		if configPath == "" {
 			continue
 		}
+		// SettingsPaths resolves opencode with FindJSONCPath, which returns a
+		// candidate path whether or not the file exists. Wiring an agent that
+		// was never installed only produced a puzzling "cannot find the path"
+		// warning, so skip what is not on disk.
+		if _, err := os.Stat(configPath); err != nil {
+			continue
+		}
 		if err := writeGraftMCPEntry(configPath, name, entry.Command); err != nil {
-			return fmt.Errorf("failed to wire graft MCP for %s: %w", name, err)
+			// One unwritable config must not cost the others their MCP entry.
+			// Returning here left the rest unwired, and since Go randomizes map
+			// order, which agents got graft varied between runs.
+			failures = append(failures, fmt.Sprintf("%s: %v", name, err))
+			continue
 		}
 		wired = true
 	}
 	if !wired {
+		if len(failures) > 0 {
+			return fmt.Errorf("failed to wire graft MCP: %s", strings.Join(failures, "; "))
+		}
 		return fmt.Errorf("no agent configs found to wire graft MCP into")
+	}
+	if len(failures) > 0 {
+		fmt.Printf("  Warning: graft MCP not wired for %s\n", strings.Join(failures, "; "))
 	}
 	return nil
 }
 
 // writeGraftMCPEntry writes the graft MCP server in the target's native
-// shape. OpenCode/kilocode require type+command-array+enabled; Claude/pi
+// shape. OpenCode requires type+command-array+enabled; Claude/pi
 // use command+args. Always overwrites so a previous Claude-shaped write
 // cannot leave OpenCode unable to boot.
 func writeGraftMCPEntry(configPath, agentName string, command []string) error {
@@ -133,9 +151,9 @@ func writeGraftMCPEntry(configPath, agentName string, command []string) error {
 	entry := mcp.CatalogEntry{Type: "local", Command: command}
 	shape := mcp.BuildEntryShape(mcpShapeTarget(agentName), entry, nil)
 	if key == "mcp" {
-		servers := collectOpenCodeServers(mcpMap)
+		servers := mcp.CollectOpenCodeServers(mcpMap)
 		servers["graft"] = shape
-		root[key] = nestOpenCodeMCP(mcpMap, servers)
+		root[key] = mcp.WriteOpenCodeMCP(mcpMap, servers)
 	} else {
 		mcpMap["graft"] = shape
 		root[key] = mcpMap

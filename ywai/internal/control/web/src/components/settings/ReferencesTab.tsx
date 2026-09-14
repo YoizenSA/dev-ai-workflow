@@ -386,7 +386,7 @@ export default function ReferencesTab() {
 									placeholder="my-reference"
 									disabled={!!editing}
 								/>
-								<span className="settings-item-desc">Short name used as @reference in chat. No spaces or slashes.</span>
+								<span className="settings-item-desc">Short name used for @references. No spaces or slashes.</span>
 							</div>
 						</div>
 

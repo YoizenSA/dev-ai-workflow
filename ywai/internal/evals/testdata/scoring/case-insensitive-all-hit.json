@@ -1,0 +1,13 @@
+{
+  "name": "case-insensitive-all-hit",
+  "taskId": "golden-mixed",
+  "response": "RETRYLOOP guards CONFIG.LOAD calls and SHUTDOWN drains the queue before exit.",
+  "expected": {
+    "hits": ["config.load", "retryLoop", "graceful shutdown"],
+    "missed": [],
+    "total": 3,
+    "gotHard": true,
+    "answered": true,
+    "weighted": 1
+  }
+}

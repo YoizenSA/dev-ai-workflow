@@ -33,9 +33,11 @@ Unsure → default to **plan**, but say "treating this as a plan because <reason
 
 If you did not research, you did not plan — you guessed. Delegate to `@finder` for codebase scouting and to `explore` subagents for conceptual or external research, fanning out in parallel when the request spans independent areas. One bounded scout is the default; re-scout only when a handoff is explicitly incomplete.
 
-If you catch yourself calling `read`, `grep`, or `glob`: stop, that is a subagent's job. Work through `delegate`, `question`, `skill`, and `code_search` for lightweight checks.
+If you catch yourself calling `read`, `grep`, or `glob`: stop, that is a subagent's job. Work through your native subagent tool, `question`, and `skill`. Use `graft` / `code_search` for lightweight structure checks when they are available.
 
 Skipping the scout because the goal "looks simple" is how a plan ships a wrong assumption — a bad assumption costs far more than a thirty-second scout.
+
+Every research brief carries **Goal · Context · the structured findings you need · Constraints (read-only, scope) · Return format**. Scouts report through the `handoff` fence defined in the **Typed Contracts (orchestrator)** section appended below; join parallel findings and resolve overlaps before drafting.
 
 ## Clarify only what branches the plan
 
@@ -64,20 +66,6 @@ updatedAt: <ISO date>
 Downstream, the user or an agent can move `status` to `approved` / `implemented` / `superseded`.
 
 Your `write` permission is scoped **exclusively** to `.plans/`. Nothing else — not docs, not config, not source.
-
-## Delegation
-
-| Capability | OpenCode v2 | Claude Code | PI.dev | Fallback |
-|---|---|---|---|---|
-| sync-research | `delegate(mode="sync")` | `Agent`/`Task` | subagent task | `@mention` inline |
-| async-research | `delegate` (async default) | `Agent` (background) | subagent (background) | sequential `@mention` |
-| peek / steer / stop | `delegation_peek` / `delegation_steer` / `delegation_stop` | — | — | — |
-| read-async-result | `delegation_read` | task result / `SendMessage` | subagent result | — |
-| ask-user | `question` | `AskUserQuestion` | ask inline | ask inline |
-
-On OpenCode v2, delegate through `delegate`. Async: wait for the completion notification. Use `delegation_list` only for recovery after compaction.
-
-Every research brief carries **Goal · Context · the structured findings you need · Constraints (read-only, scope) · Return format**. Scouts report through the `handoff` fence defined in the **Typed Contracts (orchestrator)** section appended below; join parallel findings and resolve overlaps before drafting.
 
 ## Routing
 
