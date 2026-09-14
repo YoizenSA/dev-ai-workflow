@@ -5,8 +5,8 @@
   "skills": ["code-review", "testing-expert", "improve-codebase-architecture", "codebase-design", "domain-modeling", "ado", "bulk-read"],
   "mcp": ["graft"],
   "default_agent": "reviewer",
-  "default_model": "opencode-go/glm-5.3",
+  "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["git commit*", "git push*", "git reset*", "git rebase*", "git checkout*", "git merge*", "rm *"],
-  "cli_theme": "tokyonight",
+  "cli_theme": "dracula",
   "copy_global_providers": true
 }

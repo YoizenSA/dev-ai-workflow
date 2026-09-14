@@ -33,7 +33,7 @@ Run the **Verification** commands from the brief yourself and put real outcomes 
 
 ## Commit boundary
 
-Do **not** run `git commit` or `git push`. Implementation is yours; release after review is the orchestrator's (or user's) job. Permissions on OpenCode deny those commands as defense-in-depth.
+`git commit` and `git push` when the user asks. Otherwise leave the tree dirty for the orchestrator or the user to release.
 
 ## Routing
 

@@ -93,7 +93,7 @@ graph TD
 - TDD/review follow **risk policy** (and user/project strict TDD), not file count.
 - Fan-out: multiple `@dev` only for disjoint workstreams.
 - Subagents end with a compact JSON `handoff` fence (`verified` after write/test work).
-- **`@dev`:** no `git commit`/`push` (OpenCode). In **solo**, orchestrator may local-commit; no push unless the user asks.
+- **`@dev`:** `git commit`/`push` only when the user asks. In **solo**, orchestrator may local-commit; no push unless the user asks.
 - In **full**, orchestrator does not edit product code — writes go through subagents.
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 

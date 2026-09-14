@@ -141,7 +141,6 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
-	writeSkill(t, repoSkillsDir, "judgment-day", false)
 
 	agentSkillsDir := filepath.Join(t.TempDir(), "agent-skills")
 	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
@@ -158,7 +157,7 @@ func TestCopyToSkipsNonYwaiExtraSkills(t *testing.T) {
 	if IsLinkOrJunction(filepath.Join(agentSkillsDir, "yz-ui")) {
 		t.Fatal("yz-ui should be a real directory, not a link/junction")
 	}
-	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
+	for _, name := range []string{"sdd-init", "skill-creator"} {
 		if _, err := os.Lstat(filepath.Join(agentSkillsDir, name)); !os.IsNotExist(err) {
 			t.Fatalf("%s should not be copied by ywai; err=%v", name, err)
 		}
@@ -269,7 +268,6 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	writeSkill(t, repoSkillsDir, "yz-ui", true)
 	writeSkill(t, repoSkillsDir, "sdd-init", false)
 	writeSkill(t, repoSkillsDir, "skill-creator", false)
-	writeSkill(t, repoSkillsDir, "judgment-day", false)
 
 	got, err := ListAvailable()
 	if err != nil {
@@ -279,7 +277,7 @@ func TestListAvailableSkipsNonYwaiExtraSkills(t *testing.T) {
 	if !slices.Contains(got, "yz-ui") {
 		t.Fatalf("ListAvailable() = %v, want yz-ui", got)
 	}
-	for _, name := range []string{"sdd-init", "skill-creator", "judgment-day"} {
+	for _, name := range []string{"sdd-init", "skill-creator"} {
 		if slices.Contains(got, name) {
 			t.Fatalf("ListAvailable() = %v, must not include non-ywai extra %s", got, name)
 		}

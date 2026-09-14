@@ -1765,31 +1765,17 @@ func TestBashVerifyRendersAllowlist(t *testing.T) {
 	}
 }
 
-// Code executors own the keyboard for edits, not the release button. Commit
-// and push stay with the review-then-commit path (orchestrator / user).
-func TestNoCommitAgentsDenyGitCommitPush(t *testing.T) {
-	for _, name := range []string{"dev", "qa-dev"} {
+// Commit/push is not a per-agent name pack. bash:allow is a full shell;
+// bash:verify stays inspect-only. Lane deny_bash may still lock a review env.
+func TestBuildOpenCodeMarkdownHasNoCommitNamePack(t *testing.T) {
+	for _, name := range []string{"dev", "qa-dev", "qa-orchestrator", "reviewer", "ask"} {
 		md := BuildOpenCodeMarkdown(name, AgentProfile{
 			Description: name, Prompt: "# x", Mode: "all",
 			Permission: map[string]string{"bash": "allow", "edit": "allow"},
 		})
-		for _, denied := range []string{
-			`resource: "git commit*"`,
-			`resource: "git push*"`,
-		} {
-			if !strings.Contains(md, denied+"\n    effect: deny") {
-				t.Errorf("%s missing denial %s", name, denied)
-			}
+		if strings.Contains(md, `resource: "git commit*"`) {
+			t.Errorf("%s must not get a git-commit rule from the profile name", name)
 		}
-	}
-
-	// devops may push/deploy; do not apply the no-commit pack there.
-	md := BuildOpenCodeMarkdown("devops", AgentProfile{
-		Description: "devops", Prompt: "# x", Mode: "all",
-		Permission: map[string]string{"bash": "allow"},
-	})
-	if strings.Contains(md, `resource: "git commit*"`) {
-		t.Error("devops must not get the no-commit pack")
 	}
 }
 

@@ -49,26 +49,42 @@ func TestPresetGetters(t *testing.T) {
 	if groups := PresetGroups(spec); len(groups) != 2 || groups[0] != "core" {
 		t.Errorf("PresetGroups(dev) = %v", groups)
 	}
-	// dev/qa install ALL skills/MCPs like a global install: empty allowlist
-	// means no filter (keep current behavior). Never re-add a filter here
-	// without an explicit user request.
+	// dev/qa install ALL skills like a global install: empty skills allowlist
+	// means no filter (keep current behavior). MCPs are an explicit
+	// allowlist per user request (graft + grafana + chrome-devtools).
 	if skills := PresetSkills(spec); skills != nil {
 		t.Errorf("PresetSkills(dev) = %v, want nil (all)", skills)
 	}
-	if mcp := PresetMCPIDs(spec); mcp != nil {
-		t.Errorf("PresetMCPIDs(dev) = %v, want nil (all)", mcp)
+	if mcp := PresetMCPIDs(spec); len(mcp) != 3 || mcp[0] != "graft" || mcp[1] != "grafana" || mcp[2] != "chrome-devtools" {
+		t.Errorf("PresetMCPIDs(dev) = %v, want [graft grafana chrome-devtools]", mcp)
 	}
-	if deny := PresetDenyBash(spec); len(deny) != 2 {
-		t.Errorf("PresetDenyBash(dev) = %v", deny)
+	if deny := PresetDenyBash(spec); deny != nil {
+		t.Errorf("PresetDenyBash(dev) = %v, want nil (commit/push is each agent's bash permission)", deny)
 	}
-	if only := DenyBashOnlyAgents("orchestrator"); len(only) != 2 || only[0] != "dev" || only[1] != "qa-dev" {
-		t.Errorf("DenyBashOnlyAgents(orchestrator) = %v, want [dev qa-dev]", only)
+	if !ShouldStripCommitDenies("orchestrator") {
+		t.Error("daily-dev must strip stale git commit/push denials")
 	}
-	if only := DenyBashOnlyAgents("qa-orchestrator"); only != nil {
-		t.Errorf("DenyBashOnlyAgents(qa-orchestrator) = %v, want nil (verify-only lane stays locked)", only)
+	if !ShouldStripCommitDenies("qa-orchestrator") {
+		t.Error("QA lane must strip stale git commit/push denials")
 	}
-	if only := DenyBashOnlyAgents("reviewer"); only != nil {
-		t.Errorf("DenyBashOnlyAgents(reviewer) = %v, want nil", only)
+	if ShouldStripCommitDenies("reviewer") {
+		t.Error("code-review must keep the commit/push lane pack")
+	}
+	qaSpec, err := PresetSpec(Profile{Name: "x", Preset: "qa"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range PresetDenyBash(qaSpec) {
+		if strings.Contains(p, "git commit") || strings.Contains(p, "git push") {
+			t.Errorf("qa deny_bash still has %q; commit/push is each agent's bash permission", p)
+		}
+	}
+	crSpec, err := PresetSpec(Profile{Name: "x", Preset: "code-review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(PresetDenyBash(crSpec), " "); !strings.Contains(got, "git commit") {
+		t.Errorf("code-review deny_bash missing git commit, got %v", PresetDenyBash(crSpec))
 	}
 	if got := PresetDefaultAgent(spec); got != "orchestrator" {
 		t.Errorf("PresetDefaultAgent(dev) = %q", got)

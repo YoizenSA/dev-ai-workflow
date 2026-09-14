@@ -440,19 +440,30 @@ func applyManaged(o applyOpts) applyResult {
 		}
 	}
 
-	// Preset enforcement: append preset deny_bash patterns. Daily-dev locks
-	// only @dev/@qa-dev; everyone else is stripped of a stale commit/push
-	// deny. QA / code-review still apply the pack to every agent. Runs after
-	// the workflow export so workflow sub-agents are covered too. The agents
-	// dir is already sandbox-resolved: global is never touched.
-	if plan.InstallProfiles && preset.InScope && !preset.Bare && len(preset.DenyBash) > 0 {
-		only := envprofile.DenyBashOnlyAgents(preset.DefaultAgent)
-		if o.Opts.DryRun {
-			fmt.Printf("  Would append %d preset shell-deny rule(s)\n", len(preset.DenyBash))
-		} else if n, err := envprofile.AppendDenyBashToAgents(config.OpenCodeAgentsDir(), preset.DenyBash, only); err != nil {
-			r.warnf("failed to append preset shell-deny rules: %v", err)
-		} else if n > 0 {
-			fmt.Printf("  ✓ %d agent file(s) updated with preset shell-deny rules\n", n)
+	// Preset enforcement: append remaining deny_bash (snapshots, force-push,
+	// …) to every agent, then on daily-dev/QA strip stale git commit/push
+	// denies so each agent's bash permission is the only gate. code-review
+	// keeps commit/push in the pack and does not strip. Runs after the
+	// workflow export so workflow sub-agents are covered too.
+	if plan.InstallProfiles && preset.InScope && !preset.Bare {
+		dir := config.OpenCodeAgentsDir()
+		if len(preset.DenyBash) > 0 {
+			if o.Opts.DryRun {
+				fmt.Printf("  Would append %d preset shell-deny rule(s)\n", len(preset.DenyBash))
+			} else if n, err := envprofile.AppendDenyBashToAgents(dir, preset.DenyBash, nil); err != nil {
+				r.warnf("failed to append preset shell-deny rules: %v", err)
+			} else if n > 0 {
+				fmt.Printf("  ✓ %d agent file(s) updated with preset shell-deny rules\n", n)
+			}
+		}
+		if envprofile.ShouldStripCommitDenies(preset.DefaultAgent) {
+			if o.Opts.DryRun {
+				fmt.Println("  Would strip stale git commit/push denials")
+			} else if n, err := envprofile.AppendDenyBashToAgents(dir, []string{"git commit*", "git push*"}, []string{}); err != nil {
+				r.warnf("failed to strip stale commit/push denials: %v", err)
+			} else if n > 0 {
+				fmt.Printf("  ✓ %d agent file(s) lost stale git commit/push denials\n", n)
+			}
 		}
 	}
 

@@ -154,17 +154,16 @@ func PresetMCPIDs(spec map[string]any) []string { return stringList(spec, "mcp")
 // profile's agent rules, or nil when unset.
 func PresetDenyBash(spec map[string]any) []string { return stringList(spec, "deny_bash") }
 
-// DenyBashOnlyAgents is the agent files that receive the preset's shell-deny
-// pack on daily-dev lanes. Empty means apply to every agent (qa / code-review
-// are verify/review-only). Daily-dev defaults to the orchestrator, so only
-// the code executors stay locked: @dev / @qa-dev. Everyone else — including
-// the orchestrator, devops, infra-docs, and workflow sub-agents — can commit
-// when asked. Matches noCommitAgents in the agents package.
-func DenyBashOnlyAgents(defaultAgent string) []string {
-	if strings.TrimSpace(defaultAgent) == "orchestrator" {
-		return []string{"dev", "qa-dev"}
+// ShouldStripCommitDenies reports whether this lane should remove stale
+// git commit/push shell-denies from every agent file. Daily-dev and QA
+// leave commit/push to each agent's bash permission (allow / verify / deny).
+// code-review keeps the lane pack so the shell cannot rewrite history.
+func ShouldStripCommitDenies(defaultAgent string) bool {
+	switch strings.TrimSpace(defaultAgent) {
+	case "orchestrator", "qa-orchestrator":
+		return true
 	}
-	return nil
+	return false
 }
 
 // PresetDefaultAgent returns the preset default_agent, or "" when unset.
@@ -235,11 +234,11 @@ func ShouldInstallMCP(serverID string, allow []string) bool {
 
 // AppendDenyBashToAgents appends shell-deny rules (action shell, effect deny)
 // for patterns to agent files in agentsDir. Patterns already present in a
-// file's frontmatter are skipped per file. If only is non-empty, those names
-// (without .md) receive the pack and every other file has the patterns
-// stripped, so a re-apply heals specialists that an older ywai locked. An
-// empty only applies the pack to every file. It returns how many files
-// changed.
+// file's frontmatter are skipped per file.
+//
+// only == nil appends to every file. A non-nil only (including empty) appends
+// only to those names (without .md) and strips the patterns from everyone
+// else, so a re-apply heals stale denials. It returns how many files changed.
 //
 // agentsDir must be the profile's agents dir (already sandbox-resolved by the
 // caller); nothing outside it is read or written, so the global install is
@@ -260,7 +259,9 @@ func AppendDenyBashToAgents(agentsDir string, patterns, only []string) (int, err
 			onlySet[s] = true
 		}
 	}
-	restrict := len(onlySet) > 0
+	// nil only = append to every file. Non-nil (including empty) = append
+	// only to named files and strip the patterns from everyone else.
+	restrict := only != nil
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
 		if os.IsNotExist(err) {

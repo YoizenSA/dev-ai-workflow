@@ -1,12 +1,12 @@
 {
   "name": "qa",
-  "description": "Strict testing: everything installed, verify-only shell.",
+  "description": "Strict testing: everything installed; snapshot updates denied.",
   "groups": ["core", "qa-automation", "experiment"],
   "skills": [],
-  "mcp": [],
+  "mcp": ["graft", "grafana", "chrome-devtools"],
   "default_agent": "qa-orchestrator",
   "default_model": "opencode-admin/glm-5.3-flash",
-  "deny_bash": ["* -u", "*--update-snapshot*", "git commit*", "git push*"],
-  "cli_theme": "tokyonight",
+  "deny_bash": ["* -u", "*--update-snapshot*"],
+  "cli_theme": "gruvbox",
   "copy_global_providers": true
 }

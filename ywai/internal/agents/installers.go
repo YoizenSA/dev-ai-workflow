@@ -678,30 +678,6 @@ var verifyBashAllowPatterns = []string{
 	"mypy*",
 }
 
-// noCommitBashDenyPatterns block commit/push for code executors. Review-then-
-// commit: edits land via the executor; release actions stay with the
-// coordinator/user after review. OpenCode is the enforcement authority; Claude
-// and PI do not get nested bash rules.
-var noCommitBashDenyPatterns = []string{
-	"git commit*",
-	"git push*",
-	"git * commit*",
-	"git * push*",
-	"env git commit*",
-	"env git push*",
-	"git.exe commit*",
-	"git.exe push*",
-	"git.exe * commit*",
-	"git.exe * push*",
-}
-
-// noCommitAgents may edit code but must not commit or push. devops is excluded
-// on purpose: deploy flows legitimately push.
-var noCommitAgents = map[string]bool{
-	"dev":    true,
-	"qa-dev": true,
-}
-
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
 // buckets (ado, memory, intercom, mcp) expanded to the opencode-native wildcard
 // patterns that actually gate the underlying tools. Keys without a bucket mapping

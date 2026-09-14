@@ -203,11 +203,6 @@ func RulesFromPermissionMap(baseName string, perms map[string]string) []Permissi
 		for _, p := range falseGreenBashPatterns {
 			emit("shell", p, EffectDeny)
 		}
-		if noCommitAgents[baseName] && b != "verify" {
-			for _, p := range noCommitBashDenyPatterns {
-				emit("shell", p, EffectDeny)
-			}
-		}
 	}
 
 	return rules

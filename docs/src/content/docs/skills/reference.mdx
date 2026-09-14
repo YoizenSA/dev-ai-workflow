@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 # Skills Reference
 
-Las 29 skills que ywai instala, tal como viven en `ywai/skills/`. Cada una le da al agente conocimiento especializado que se carga por id (`skill`) sólo cuando el trigger aplica, así que no ocupan contexto mientras no hacen falta.
+Las 30 skills que ywai instala, tal como viven en `ywai/skills/`. Cada una le da al agente conocimiento especializado que se carga por id (`skill`) sólo cuando el trigger aplica, así que no ocupan contexto mientras no hacen falta.
 
 <Aside type="note">
 El campo **Trigger** viene del `description:` de cada `SKILL.md`. Es lo que el modelo lee para decidir si carga la skill, no una lista de comandos que tengas que escribir.
@@ -98,6 +98,12 @@ Resolver conflictos activos de git merge o rebase. Entiende el contexto de cada 
 **Trigger:** review this PR/branch/diff, code review, pre-merge check
 
 Review de diffs por defectos probados: cada finding trae su escenario de falla concreto; sin escenario es preferencia y se descarta o va como nit.
+
+### judgment-day
+
+**Trigger:** judgment day, dual review, adversarial review, juzgar
+
+Doble revisión ciega y adversarial con máximo dos rondas de fix: dos jueces en paralelo, solo se corrige lo confirmado por ambos.
 
 ### delegate-opencode2
 
