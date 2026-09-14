@@ -42,6 +42,9 @@ func TestBuiltinPresetsAreConsistent(t *testing.T) {
 		if m := PresetDefaultModel(spec); m != "" && !strings.Contains(m, "/") {
 			t.Errorf("%s: default_model %q must be provider/model", name, m)
 		}
+		if m := PresetDefaultModel(spec); m != "" && !strings.HasPrefix(m, "opencode-") {
+			t.Errorf("%s: default_model %q must use an opencode-* provider (typo guard)", name, m)
+		}
 	}
 }
 
