@@ -33,6 +33,18 @@ Single-source clusters are suspects; joined ones are findings:
 - git authors (one dev or team? changes the lever: habit vs process)
 - weekday/time split (weekend spikes = unattended loops misbehaving)
 
+## Navigation
+
+Reads concentrate on one file while the fix lives elsewhere. The fix is a pointer plus `graft_file_api` first, never more docs.
+
+## Steering no-ops
+
+The prompt holds the instruction and behavior never changes. Move how-to out of AGENTS.md into a skill or check. Delete text that changes nothing.
+
+## Missing info
+
+The attempt `error` names logs or access the agent never had. Do not blame the model. Propose tee dev logs or readonly access as the tool experiment.
+
 ## Rank, then cut
 
 Score survivors by frequency × impact × fixability. Three Strong max is a ceiling, not a quota — two Strong beats three padded. Everything else is `Worth exploring` or `Speculative` with the next measurement named.

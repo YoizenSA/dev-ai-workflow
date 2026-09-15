@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
@@ -83,8 +85,9 @@ func InstallGraftCLI() error {
 // If the graft binary cannot be resolved, the error tells the user to run
 // InstallGraftCLI first.
 func WireGraftMCP() error {
-	if _, err := exec.LookPath("graft"); err != nil {
-		return fmt.Errorf("graft binary not found — install it first (it should have been installed in the previous step)")
+	exe, err := resolveGraftBinary()
+	if err != nil {
+		return err
 	}
 	entry, ok := mcp.CatalogByID("graft")
 	if !ok {
@@ -113,7 +116,7 @@ func WireGraftMCP() error {
 		if _, err := os.Stat(configPath); err != nil {
 			continue
 		}
-		if err := writeGraftMCPEntry(configPath, name, entry.Command); err != nil {
+		if err := writeGraftMCPEntry(configPath, name, graftLaunchCommand(exe, entry.Command)); err != nil {
 			// One unwritable config must not cost the others their MCP entry.
 			// Returning here left the rest unwired, and since Go randomizes map
 			// order, which agents got graft varied between runs.
@@ -132,6 +135,95 @@ func WireGraftMCP() error {
 		fmt.Printf("  Warning: graft MCP not wired for %s\n", strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+// resolveGraftBinary returns the path to the graft executable. PATH comes
+// first; when that misses it probes npm's global bin, because
+// InstallGraftCLI runs `npm i -g` inside this same process and the process
+// PATH is a snapshot taken at launch — on a machine where npm's global bin
+// was not already on PATH (a fresh Node install), the binary exists but
+// LookPath cannot see it until the next shell.
+func resolveGraftBinary() (string, error) {
+	if exe, err := exec.LookPath("graft"); err == nil {
+		return exe, nil
+	}
+	if exe, ok := graftInNPMPrefix(); ok {
+		return exe, nil
+	}
+	return "", fmt.Errorf("graft binary not found on PATH — it may be installed but not yet visible to this process; open a new shell and re-run, or install it with `npm i -g %s`", GraftNPMPackage)
+}
+
+// graftInNPMPrefix looks for graft in npm's global bin directory. On Windows
+// npm puts the launchers directly in the prefix; elsewhere they live in
+// prefix/bin.
+func graftInNPMPrefix() (string, bool) {
+	prefix, ok := npmGlobalPrefix()
+	if !ok {
+		return "", false
+	}
+	candidates := []string{filepath.Join(prefix, "bin", "graft")}
+	if runtime.GOOS == "windows" {
+		candidates = []string{filepath.Join(prefix, "graft.cmd"), filepath.Join(prefix, "graft.exe")}
+	}
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && !st.IsDir() {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// npmGlobalPrefix returns npm's global install prefix.
+func npmGlobalPrefix() (string, bool) {
+	out, err := exec.Command("npm", "prefix", "-g").Output()
+	if err != nil {
+		return "", false
+	}
+	prefix := strings.TrimSpace(string(out))
+	return prefix, prefix != ""
+}
+
+// graftNodeEntrypoint locates the CLI's JavaScript entrypoint inside npm's
+// global node_modules. Both npm launchers are thin wrappers that exec
+// `node <this file>`, so calling node directly is equivalent.
+func graftNodeEntrypoint() (string, bool) {
+	prefix, ok := npmGlobalPrefix()
+	if !ok {
+		return "", false
+	}
+	js := filepath.Join(prefix, "node_modules", "@nanonets", "graft", "dist", "cli.js")
+	if st, err := os.Stat(js); err == nil && !st.IsDir() {
+		return js, true
+	}
+	return "", false
+}
+
+// graftLaunchCommand rewrites the catalog's argv so MCP hosts can actually
+// spawn it on Windows, where none of npm's three launchers is reliably
+// spawnable without a shell:
+//
+//   - `graft` (no extension) is a Unix shell script; a host that spawns
+//     without a shell applies no PATHEXT, hits this file and fails ENOENT.
+//   - `graft.cmd` is refused outright by Node-based hosts, which since
+//     CVE-2024-27980 reject .cmd/.bat unless shell:true (EINVAL).
+//
+// Both launchers only exec `node <pkg>/dist/cli.js`, so the entry is written
+// as node + that script: node.exe is a real executable every host can spawn
+// directly. If the script cannot be located, fall back to the resolved
+// launcher, which is still better than the bare name. Elsewhere the bare
+// name is left alone so configs stay portable across machines.
+func graftLaunchCommand(exe string, command []string) []string {
+	if runtime.GOOS != "windows" || len(command) == 0 {
+		return command
+	}
+	rest := append([]string{}, command[1:]...)
+	if js, ok := graftNodeEntrypoint(); ok {
+		return append([]string{"node", js}, rest...)
+	}
+	if exe == "" {
+		return command
+	}
+	return append([]string{exe}, rest...)
 }
 
 // writeGraftMCPEntry writes the graft MCP server in the target's native

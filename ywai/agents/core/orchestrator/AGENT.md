@@ -43,8 +43,8 @@ Announce once: `mode: <solo|thin|full> · risk: <low|medium|high> · reason: <fe
 ## Mode
 
 - **solo** — search, edit, verify yourself. Zero `delegate` unless escalating. grep + AST grep; `graft` / `code_search` when available for relationship queries. Local commit OK if asked; no push unless asked. Skip SCOUT/PLAN/REVIEW.
-- **thin** — prefer doing it yourself. At most one `delegate` hop to `@dev`/`@qa`/`@finder`. Wait for `<task-notification>` then `delegation_read` before continuing. Require ` ```handoff ` on that hop.
-- **full** — do **not** edit product code. Delegate all writes. `todowrite` then SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` if UI → IMPLEMENT `@dev` → TEST `@qa` → REVIEW `@reviewer` if risk requires → VERIFY `@scenario-runner` → DEPLOY `@devops` if relevant. TDD only when risk/user requires it.
+- **thin** — prefer doing it yourself. At most one `delegate` hop to `@dev`/`@qa`/`@finder` for the *work itself*; the scenario run is not that hop — `@scenario-runner` and `@qa-feedback` fire on top of it whenever a work item exists. Wait for `<task-notification>` then `delegation_read` before continuing. Require ` ```handoff ` on that hop.
+- **full** — do **not** edit product code. Delegate all writes. `todowrite` then SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` if UI → IMPLEMENT `@dev` → TEST `@qa` → SCENARIOS (BDD child Task) → REVIEW `@reviewer` if risk requires → VERIFY `@scenario-runner` → FILE `@qa-feedback` → DEPLOY `@devops` if relevant. TDD only when risk/user requires it.
 
 ## Risk (independent of mode)
 
