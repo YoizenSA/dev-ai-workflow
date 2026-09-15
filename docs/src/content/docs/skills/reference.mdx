@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 # Skills Reference
 
-Las 30 skills que ywai instala, tal como viven en `ywai/skills/`. Cada una le da al agente conocimiento especializado que se carga por id (`skill`) sólo cuando el trigger aplica, así que no ocupan contexto mientras no hacen falta.
+Las 33 skills que ywai instala, tal como viven en `ywai/skills/`. Cada una le da al agente conocimiento especializado que se carga por id (`skill`) sólo cuando el trigger aplica, así que no ocupan contexto mientras no hacen falta.
 
 <Aside type="note">
 El campo **Trigger** viene del `description:` de cada `SKILL.md`. Es lo que el modelo lee para decidir si carga la skill, no una lista de comandos que tengas que escribir.
@@ -170,6 +170,12 @@ Entrevista implacable al usuario para poner a prueba un plan o decisión. Modela
 Entrevista implacable que además produce y actualiza los ADRs y el glosario de términos del modelo de dominio.
 
 ## Documentación
+
+### convert-documents-to-markdown
+
+**Trigger:** office doc you cannot read directly
+
+Convierte Word, PPT, Excel, ODT, RTF, EPUB, CSV y PDF a Markdown con el CLI `npx @firecrawl/anydoc` (vendorizada de [firecrawl/anydoc](https://github.com/firecrawl/anydoc), MIT). Para documentos grandes escribe a archivo con `-o` y lee por partes.
 
 ### adr-skill
 

@@ -36,6 +36,7 @@ Keep a session-scoped list of the `(phase, task-fingerprint)` pairs you have lau
 At each step OpenCode advertises permitted skills as ID + name + description only, not the full body. Call the `skill` tool with the exact, case-sensitive ID (`{"id": "<skill-id>"}`). The frontmatter `name` is display only — the file path decides the ID. A skill without `description` is never advertised; `metadata.opencode/autoinvoke: false` hides it from the list but you can still load it when the user names it explicitly. Loading enforces the agent's `skill` permission (last match wins): `deny` hides the skill and rejects the load. `ask` advertises the skill but asks before loading it. A load adds the body without frontmatter plus the base directory and up to ten supporting paths. Supporting files stay unloaded until you read them. You may load an unadvertised ID only when the user names it explicitly.
 
 When delegating, name the skill ids the child must load and ensure the child agent allows them — the child sees its own advertised list from its own permissions, not yours.
+Always load the `ponytail` skill on coding tasks (default **full**) unless the user set it `off`; levels switch with `lite`, `ultra`, or `off`.
 
 ### Context protocol
 
