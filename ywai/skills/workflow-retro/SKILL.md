@@ -16,7 +16,7 @@ Query via `ywai`. Raw DB reads only for the freshness check in [references/queri
 3. Validate freshness before analyzing. A blind tracker is finding #1, not a footnote.
 4. Cluster only on >=3 evidences. One anecdote is not a finding.
 5. Falsify before proposing. Each hypothesis states what would disprove it; check that first.
-6. One friction = one lever (skill|agent|tool|code) + one experiment. Never two changes in one experiment.
+6. One friction = one lever (skill|agent|tool|code) + one experiment. Never two changes in one experiment. Classify first: mechanical (fixed syntactic pattern, banned API, import shape, file-location rule) goes to a deterministic check (lever code|tool: repo linter rule, pre-commit hook, or CI job); judgement call (cross-file consistency, matches surrounding style, needs intent) goes to skill|agent. Default to building the check. Place the fix where it runs. Review imposes standards. Implementation follows pointers. AGENTS.md holds pointers only.
 7. Report as HTML (see [references/report.md](references/report.md)). OS temp dir, open it, report the absolute path. Nothing lands in the repo.
 8. `mem_save` only the top 3 as `pattern`. The detail lives in the report.
 
@@ -35,6 +35,7 @@ Run in order, `--json` always. Full command list in [references/queries.md](refe
 - `GET /api/evals/runs` + `/api/evals/summary` — hard scores, turns, invalid, cost, attempt errors.
 - `GET /api/engram/search?q=<symptom>` + `/prompts` + `/observations` + `POST /api/engram/memory-evals` — recall quality.
 - `git log --since=<n>.days` — oneline + name-only + authors.
+- Guardrail: repo check command + hooks + CI workflow (`lint`/`check` scripts, pre-commit hook, CI lint/typecheck/test job). Read before proposing a new check. An unwired or broken check is the finding, not a reinvention.
 
 ### 3. Validate
 
@@ -50,7 +51,7 @@ For each cluster, write the disproof before the proposal: the one check that wou
 
 ### 6. Propose
 
-Survivors become cards: evidence (3 sessions + metrics) / hypothesis / lever / ONE experiment / success metric. Rank by frequency × impact × fixability. Fewer Strong findings beats padded ones.
+Survivors become cards: evidence (3 sessions + metrics) / hypothesis / lever / ONE experiment / success metric. Rank by frequency × impact × fixability. Fewer Strong findings beats padded ones. A repo with no guardrail (no pre-commit hook and no CI job running lint/typecheck/test) is itself a finding, not a neutral default.
 
 ### 7. Report + save
 
