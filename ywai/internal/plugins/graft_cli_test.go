@@ -125,6 +125,61 @@ func assertOpenCodeGraftShape(t *testing.T, path string) {
 	}
 }
 
+// On Windows the bare name `graft` resolves to the Unix shell script npm
+// also drops in the prefix, so a host that spawns without a shell gets
+// ENOENT. The wired entry must carry the resolved launcher instead.
+func TestGraftLaunchCommand_SubstitutesResolvedBinaryOnWindows(t *testing.T) {
+	exe := filepath.Join("C:\\", "npm", "graft.cmd")
+	got := graftLaunchCommand(exe, []string{"graft", "mcp"})
+
+	if runtime.GOOS != "windows" {
+		if len(got) != 2 || got[0] != "graft" {
+			t.Fatalf("non-windows must keep the bare name for portability: %#v", got)
+		}
+		return
+	}
+	// Either shape is correct, depending on whether the npm-installed
+	// entrypoint could be located: [node <cli.js> mcp] is preferred, the
+	// resolved launcher is the fallback. What must never survive is the
+	// bare name, and the subcommand must be carried through.
+	if got[0] == "graft" {
+		t.Fatalf("bare name survived on windows — hosts cannot spawn it: %#v", got)
+	}
+	if got[len(got)-1] != "mcp" {
+		t.Fatalf("subcommand lost: %#v", got)
+	}
+	if got[0] != "node" && got[0] != exe {
+		t.Fatalf("argv[0] = %q, want node or %q", got[0], exe)
+	}
+}
+
+// The catalog slice is shared state; rewriting argv in place would corrupt
+// it for every later consumer.
+func TestGraftLaunchCommand_DoesNotMutateInput(t *testing.T) {
+	in := []string{"graft", "mcp"}
+	graftLaunchCommand(filepath.Join("C:\\", "npm", "graft.cmd"), in)
+	if in[0] != "graft" {
+		t.Fatalf("input mutated: %#v", in)
+	}
+}
+
+func TestGraftLaunchCommand_EmptyArgvIsLeftAlone(t *testing.T) {
+	if got := graftLaunchCommand("x", nil); got != nil {
+		t.Errorf("nil argv = %#v, want nil", got)
+	}
+}
+
+// With no launcher resolved AND no npm entrypoint on disk there is nothing
+// better to write, so the original argv must survive untouched rather than
+// becoming a half-built command.
+func TestGraftLaunchCommand_FallsBackWhenNothingResolves(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // hide npm, so graftNodeEntrypoint misses
+	got := graftLaunchCommand("", []string{"graft", "mcp"})
+	if len(got) != 2 || got[0] != "graft" || got[1] != "mcp" {
+		t.Errorf("graftLaunchCommand = %#v, want [graft mcp]", got)
+	}
+}
+
 func TestPlugins_GraftSurfacePresent(t *testing.T) {
 	t.Log("InstallGraftCLI and WireGraftMCP are exported by internal/plugins")
 
