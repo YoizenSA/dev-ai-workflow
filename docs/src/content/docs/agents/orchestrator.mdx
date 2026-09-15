@@ -89,7 +89,7 @@ flowchart LR
 ### full
 
 - **No edita código de producto.** Delega todas las escrituras.
-- `todowrite` → SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` si UI → IMPLEMENT `@dev` → TEST `@qa` → REVIEW `@reviewer` si risk lo requiere → DEPLOY `@devops` si aplica.
+- `todowrite` → SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` si UI → IMPLEMENT `@dev` → TEST `@qa` → SCENARIOS (child Task BDD) → REVIEW `@reviewer` si risk lo requiere → VERIFY `@scenario-runner` → FILE `@qa-feedback` → DEPLOY `@devops` si aplica.
 - TDD solo si risk/usuario lo pide.
 
 ```mermaid
@@ -97,7 +97,7 @@ flowchart TD
     O[Orchestrator] --> M{Mode}
     M -->|solo| A[Ejecuta todo: grep+AST; graft/code_search si hay; edita, verifica]
     M -->|thin| B[Ejecuta directo + máx 1 delegación sync con handoff]
-    M -->|full| C[todowrite -> SCOUT -> PLAN -> DESIGN -> IMPLEMENT -> TEST -> REVIEW -> DEPLOY]
+    M -->|full| C[todowrite -> SCOUT -> PLAN -> DESIGN -> IMPLEMENT -> TEST -> SCENARIOS -> REVIEW -> VERIFY -> DEPLOY]
     A --> D[Local commit OK si pidió; no push sin pedido]
     B --> D
     C --> D
@@ -123,12 +123,16 @@ flowchart TD
     E -->|implementar| H["@dev"]
     E -->|tests| I["@qa"]
     E -->|revisar| J["@reviewer"]
+    E -->|correr escenarios| N["@scenario-runner"]
+    E -->|cargar resultados en el item| P["@qa-feedback"]
     E -->|deploy| K["@devops"]
     F --> L[handoff]
     G --> L
     H --> L
     I --> L
     J --> L
+    N --> L
+    P --> L
     K --> L
     L --> M[Verificación: tests reales ejecutados]
 ```
@@ -136,6 +140,80 @@ flowchart TD
 Cada delegación lleva: **Goal · Context · Acceptance · Files · Verification · Return format**. Los subagentes no pueden re-delegar. Para archivos disjuntos: 2–4 en paralelo. Dos reintentos y escalá.
 
 **Contratos tipados** (fences `handoff` / `review`) — si tras escribir/testear/revisar falta el fence, la entrega está incompleta y se re-delega una vez. `status=done` solo cuando se cumple la aceptación. Cualquier P0 o `verdict=block` frena el cierre. `verified` son comandos reales + resultados (o `not-requested`/`n/a`).
+
+## Work item, BDD y verificación de escenarios
+
+El disparador **no es el modo: es el work item.** Si hay un id en mano, el cambio
+lleva escenarios Gherkin y una corrida con evidencia, también en `solo` y `thin`.
+El modo decide quién maneja, no si el cambio se verifica.
+
+El orchestrator pregunta **una vez**, antes de planificar, si el trabajo está
+trackeado. Nunca adivina el id ni lo infiere del nombre de la rama, y nunca crea
+un work item sin que se lo pidan — un ticket lo ve todo el equipo.
+
+| Estado | Escribe escenarios | Los corre |
+|---|---|---|
+| Hay id de work item | sí | sí |
+| El id aparece tarde (a mitad o después) | sí, sacados del cambio real | sí |
+| Se ofreció crear uno y el usuario dijo que no | no — lo dice al reportar | no |
+| `[work_item.create]` deshabilitado | no — lo dice una vez | no |
+
+Un "no" no es definitivo: si el id aparece después — lo normal es que aparezca
+cuando alguien va a cerrar el ticket — retoma este camino desde donde esté, y los
+escenarios salen de **lo que realmente se construyó**.
+
+### Cuándo se escriben
+
+**Después de implementar, antes del review** — el mismo orden que corre el
+workflow `ship`: implementar → escenarios → review → correr. No al final: la
+corrida está gateada en que existan, y un reviewer que puede leerlos revisa
+contra la intención y no solo contra el diff.
+
+La cobertura va en un **child Task** bajo el item padre (`ado wi create-child
+--parent <id> --type Task`) — siempre Task, nunca User Story ni Bug — escrito con
+la skill `gherkin-bdd`, cubriendo todos los flujos y edge cases, no solo el happy
+path.
+
+### Cuándo se corren
+
+Dos condiciones, los mismos dos gates que `ship`:
+
+1. **Existen escenarios** — el child Task, o los acceptance criteria si no hay
+   item. Si no hay en ningún lado, eso mismo es el hallazgo: se dice, no se
+   declara éxito.
+2. **El review está limpio y sus fixes aplicados** — no solo revisado. Lo que se
+   ejercita tiene que ser el código como va a shippear.
+
+```mermaid
+flowchart LR
+    I[Implementado] --> W{¿Hay work item}
+    W -->|no| Z[Reportar sin escenarios]
+    W -->|sí| S[Child Task con Gherkin]
+    S --> R[Review]
+    R --> G{¿Limpio y fixes aplicados}
+    G -->|no| F[Fix y volver a review]
+    F --> R
+    G -->|sí| V["@scenario-runner con evidencia"]
+    V --> C{¿Todo verde}
+    C -->|no| F
+    C -->|sí| Q["@qa-feedback: comenta el item"]
+    Q --> D[Done]
+```
+
+`@scenario-runner` levanta el entorno (logs de Docker en local, Grafana si es
+compartido), maneja el browser o la API según qué observa cada `Then`, y archiva
+la evidencia en `.evidence/<run-id>/`: screenshot en la aserción, el request que
+falla, el excerpt de log de la ventana de la corrida.
+
+**Un escenario rojo bloquea**, aunque el review esté limpio. Se manda a arreglar
+y se vuelve a correr, **como mucho dos veces**; después se para y se reporta qué
+sigue fallando con su evidencia, en lugar de loopear. Un rojo nunca se resuelve
+editando el escenario.
+
+Al final `@qa-feedback` deja el resultado en el board: el resumen como comentario
+en el item padre y un **Bug child por escenario fallido** con su evidencia. Los
+escenarios *blocked* se reportan como blocked en el padre, nunca como Bug. Un
+resultado que solo vive en el transcript es un resultado que nadie acciona.
 
 ## Cuándo usarlo
 
