@@ -60,8 +60,19 @@ button{font:inherit;font-size:var(--text-sm);color:var(--text);background:var(--
 button:hover{background:var(--surface-hover)}
 button.primary{background:var(--btn-primary-bg);border-color:transparent;color:#fff}
 button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(26,102,255,.42)}
+button[hidden]{display:none}
+/* section nav */
+.toc{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-5)}
+.toc:empty{display:none}
+.toc a{font-size:var(--text-xs);color:var(--text-soft);text-decoration:none;
+  border:1px solid var(--panel-border);border-radius:999px;padding:.25rem .75rem;background:var(--surface-soft)}
+.toc a:hover{background:var(--surface-hover);color:var(--text)}
 section{margin-bottom:var(--space-5)}
 h2{font-size:var(--text-lg);margin:0 0 var(--space-3)}
+h2 .anchor{color:inherit;text-decoration:none}
+h2 .anchor:hover{text-decoration:underline}
+h2 .anchor::before{content:"#";color:var(--text-faint);margin-right:.35em;font-weight:400}
+section{scroll-margin-top:var(--space-4)}
 h4{margin:0 0 var(--space-2);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint)}
 .card{background:var(--surface);border:1px solid var(--panel-border);border-radius:var(--radius-md);
   padding:var(--space-4);box-shadow:var(--shadow-glass);margin-bottom:var(--space-3);break-inside:avoid}
@@ -82,6 +93,8 @@ li{margin:.2rem 0}
   border-radius:var(--radius-sm);padding:var(--space-3);overflow-x:auto}
 pre.diagram{margin:0}
 .diagram-box svg{max-width:100%;height:auto;display:block;margin:0 auto}
+.diagram-error{border-color:var(--danger-border)}
+.diagram-note{font-size:var(--text-xs);color:var(--tint-danger);margin:.5rem 0 0}
 /* before / after */
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 @media(max-width:720px){.duo{grid-template-columns:1fr}}
@@ -89,6 +102,9 @@ pre.diagram{margin:0}
   border:1px solid var(--panel-border);border-left:3px solid var(--panel-border-strong)}
 .side.now{border-left-color:var(--danger)}
 .side.next{border-left-color:var(--success)}
+/* delta list */
+.delta{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.delta li{display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--text-sm);color:var(--text-soft)}
 /* options */
 .option{border-left:3px solid var(--panel-border-strong)}
 .option.rec{border-left-color:var(--success)}
@@ -97,9 +113,18 @@ pre.code{margin:0;font-family:var(--font-mono);font-size:var(--text-xs);line-hei
   color:var(--text-soft);white-space:pre;overflow-x:auto}
 pre.code b{color:var(--text);font-weight:600}
 pre.code i{color:var(--text-faint);font-style:italic}
+/* present mode: one section only, short fade */
+#canvas section{transition:opacity .15s ease-in}
+body.presenting #canvas section{display:none}
+body.presenting #canvas section.present-focus{display:block;opacity:1}
+body.presenting .toc{display:none}
+@media(prefers-reduced-motion:reduce){
+  #canvas section{transition:none}
+}
 footer{color:var(--text-faint);font-size:var(--text-xs);margin-top:var(--space-6)}
 @media print{
-  .toolbar{display:none!important}
+  .toolbar,.toc{display:none!important}
+  body.presenting #canvas section{display:block}
   body{background:#fff;background-image:none}
   .wrap{max-width:none;padding:0}
   .card,.diagram-box,.side{box-shadow:none;break-inside:avoid}
@@ -117,22 +142,27 @@ footer{color:var(--text-faint);font-size:var(--text-xs);margin-top:var(--space-6
     </div>
     <div class="toolbar">
       <button id="btn-theme" type="button" title="Alternar tema">Tema claro/oscuro</button>
+      <button id="btn-present" type="button" title="Enfocar una sección (F)">Presentar</button>
+      <button id="btn-prev" type="button" title="Sección anterior ([)" hidden>←</button>
+      <button id="btn-next" type="button" title="Sección siguiente (P o ])" hidden>→</button>
       <button id="btn-pdf" type="button" class="primary" title="Guardar como PDF">Exportar PDF</button>
       <button id="btn-png" type="button" title="Guardar como imagen PNG">Exportar PNG</button>
     </div>
   </header>
+  <nav class="toc" id="toc" aria-label="Secciones"></nav>
 
   <main id="canvas">
     <!-- Fill with 2-5 blocks picked from references/diagrams.md:
-         idea-map | before-after | options | decision-tree | sequence | code-sketch -->
+         idea-map | before-after | options | decision-tree | sequence | code-sketch | delta -->
   </main>
 
-  <footer>Generado por la skill <span class="mono">visual-thinking</span> · tokens ywai/yz-ui · PDF vía impresión, PNG vía html2canvas · Mermaid requiere red.</footer>
+  <footer>Generado por la skill <span class="mono">visual-thinking</span> · tokens ywai/yz-ui · PDF vía impresión, PNG vía html2canvas · Mermaid requiere red · <span id="vt-preflight"></span> · <span class="mono">F presenta · P / [ ] cambia · Esc sale</span></footer>
 </div>
 
 <script>
-/* Theme, PDF and PNG work offline. Mermaid rendering lives in the module script
-   below; if the CDN is unreachable the canvas still reads as text. */
+/* Theme, PDF, PNG, nav, hash and present mode work offline.
+   Mermaid rendering lives in the module script below; if the CDN
+   is unreachable the canvas still reads as text. */
 (function(){
   var root=document.documentElement;
   var saved=null; try{saved=localStorage.getItem("vt-theme");}catch(e){}
@@ -156,6 +186,138 @@ footer{color:var(--text-faint);font-size:var(--text-xs);margin-top:var(--space-6
       download(canvas.toDataURL("image/png"));
     }).catch(function(err){alert("No se pudo generar el PNG: "+err);});
   });
+
+  /* Known ids keep old canvases working when a section has no id. */
+  var KNOWN=["idea-map","before-after","options","decision-tree","sequence","code-sketch","delta"];
+  function slug(text){
+    var s=(text||"").toLowerCase().replace(/[^a-z0-9áéíóúñü \/&-]+/g,"").trim();
+    if(/idea/.test(s))return "idea-map";
+    if(/before|after|antes|despu/.test(s))return "before-after";
+    if(/option|opci/.test(s))return "options";
+    if(/decision|decisi/.test(s))return "decision-tree";
+    if(/sequence|secuencia/.test(s))return "sequence";
+    if(/code|cod/.test(s))return "code-sketch";
+    if(/delta|diff|cambio/.test(s))return "delta";
+    return "";
+  }
+  function sections(){
+    return Array.prototype.slice.call(document.querySelectorAll("#canvas > section"));
+  }
+  function ensureIds(){
+    sections().forEach(function(sec){
+      if(sec.id&&KNOWN.indexOf(sec.id)>=0)return;
+      var h=sec.querySelector("h2");
+      var guess=h?slug(h.textContent):"";
+      if(guess){
+        var clash=document.getElementById(guess);
+        if(!clash||clash===sec)sec.id=guess;
+      }
+    });
+  }
+  function ensureAnchors(){
+    sections().forEach(function(sec){
+      var h=sec.querySelector("h2");
+      if(!h||!sec.id)return;
+      if(h.querySelector("a.anchor"))return;
+      var a=document.createElement("a");
+      a.className="anchor";a.href="#"+sec.id;a.textContent=h.textContent;
+      h.textContent="";h.appendChild(a);
+    });
+  }
+  function reducedMotion(){
+    return window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+  function scrollToSec(sec){
+    if(!sec)return;
+    try{sec.scrollIntoView({behavior:reducedMotion()?"auto":"smooth",block:"start"});}
+    catch(e){sec.scrollIntoView();}
+  }
+  function buildToc(){
+    var toc=document.getElementById("toc");
+    if(!toc)return;
+    toc.textContent="";
+    sections().forEach(function(sec){
+      if(!sec.id)return;
+      var h=sec.querySelector("h2");
+      var a=document.createElement("a");
+      a.href="#"+sec.id;
+      a.textContent=h?h.textContent:sec.id;
+      toc.appendChild(a);
+    });
+  }
+  function restoreHash(){
+    if(!location.hash)return;
+    var el=document.querySelector(location.hash);
+    if(el&&el.scrollIntoView)scrollToSec(el);
+  }
+
+  /* Present mode: focus one section, cycle with P / [ ]. */
+  var presenting=false,idx=0;
+  var btnPresent=document.getElementById("btn-present");
+  var btnPrev=document.getElementById("btn-prev");
+  var btnNext=document.getElementById("btn-next");
+  function current(){return sections()[idx];}
+  function paint(){
+    sections().forEach(function(sec,i){
+      sec.classList.toggle("present-focus",presenting&&i===idx);
+    });
+    var on=presenting?"":"hidden";
+    if(on)btnPrev.setAttribute("hidden","");else btnPrev.removeAttribute("hidden");
+    if(on)btnNext.setAttribute("hidden","");else btnNext.removeAttribute("hidden");
+    btnPresent.textContent=presenting?"Salir":"Presentar";
+  }
+  function enter(at){
+    var list=sections();
+    if(!list.length)return;
+    presenting=true;
+    idx=Math.max(0,Math.min(at||0,list.length-1));
+    document.body.classList.add("presenting");
+    paint();
+    var sec=current();
+    if(sec&&sec.id){try{history.replaceState(null,"","#"+sec.id);}catch(e){location.hash=sec.id;}}
+    scrollToSec(sec);
+  }
+  function exit(){
+    presenting=false;
+    document.body.classList.remove("presenting");
+    paint();
+  }
+  function step(dir){
+    var list=sections();
+    if(!list.length)return;
+    if(!presenting){enter(dir>0?0:list.length-1);return;}
+    idx=(idx+dir+list.length)%list.length;
+    paint();
+    var sec=current();
+    if(sec&&sec.id){try{history.replaceState(null,"","#"+sec.id);}catch(e){location.hash=sec.id;}}
+    scrollToSec(sec);
+  }
+  btnPresent.addEventListener("click",function(){presenting?exit():enter(0);});
+  btnPrev.addEventListener("click",function(){step(-1);});
+  btnNext.addEventListener("click",function(){step(1);});
+  document.addEventListener("keydown",function(e){
+    var t=e.target&&(e.target.tagName||"").toLowerCase();
+    if(t==="input"||t==="textarea"||e.target.isContentEditable)return;
+    if(e.key==="Escape"&&presenting){exit();return;}
+    if(e.key==="f"||e.key==="F"){
+      var fromHash=0;
+      if(!presenting&&location.hash){
+        var el=document.querySelector(location.hash);
+        var i=sections().indexOf(el);
+        if(i>=0)fromHash=i;
+      }
+      presenting?exit():enter(fromHash);
+    }
+    else if(e.key==="p"||e.key==="P"){if(presenting)step(1);}
+    else if(e.key==="]"){step(1);}
+    else if(e.key==="["){step(-1);}
+  });
+
+  ensureIds();
+  ensureAnchors();
+  buildToc();
+  restoreHash();
+  window.vtPresent={enter:enter,exit:exit,step:step};
 })();
 </script>
 <script type="module">
@@ -167,16 +329,80 @@ footer{color:var(--text-faint);font-size:var(--text-xs);margin-top:var(--space-6
   };
   var pres=Array.from(document.querySelectorAll("pre.diagram"));
   pres.forEach(function(p){p.dataset.source=p.textContent;});
+  var badge=document.getElementById("vt-preflight");
+
+  /* Preflight: warn past ~12 nodes, block rgba() in classDef. */
+  function preflight(src){
+    var warns=[];
+    var blocked=false;
+    var lines=src.split("\n");
+    var rgbaLine=lines.some(function(l){return /classDef/i.test(l)&&/rgba\s*\(/i.test(l);});
+    if(rgbaLine){blocked=true;warns.push("rgba() in classDef — use 8-digit hex");}
+    var hits=src.match(/[A-Za-z0-9_]+\s*[\[\(\{]/g)||[];
+    var skip=["flowchart","subgraph","classDef","linkStyle"];
+    var nodes=hits.filter(function(h){
+      var name=h.trim().toLowerCase();
+      return !skip.some(function(k){return name.indexOf(k.toLowerCase())===0;});
+    }).length;
+    if(nodes>12)warns.push(nodes+" nodes past the 12-node guide");
+    return {warns:warns,blocked:blocked,nodes:nodes};
+  }
+  function flagDiagram(pre,check){
+    var box=pre.closest(".diagram-box");
+    if(check.blocked||check.warns.length){
+      var msg="Preflight: "+check.warns.join("; ");
+      try{console.warn("[visual-thinking]",msg);}catch(e){}
+      pre.title=msg;
+    }
+    if(check.blocked){
+      if(box)box.classList.add("diagram-error");
+      var note=document.createElement("p");
+      note.className="diagram-note";
+      note.textContent="Diagrama no renderizado ("+check.warns.join("; ")+"). Fuente abajo.";
+      pre.parentNode.insertBefore(note,pre);
+      return false;
+    }
+    return true;
+  }
+  function paintBadge(results){
+    var warns=results.reduce(function(n,r){return n+r.check.warns.length;},0);
+    if(badge)badge.textContent=results.length+" diagramas · "+warns+" avisos";
+  }
 
   async function renderDiagrams(){
     mermaid.initialize({startOnLoad:false,theme:MERMAID_THEME[currentTheme()],securityLevel:"loose"});
-    try{await mermaid.run({nodes:pres,suppressErrors:true});}
-    catch(e){/* one bad diagram must not kill the canvas */}
+    var results=[];
+    /* Render one diagram at a time so one bad source cannot kill the canvas. */
+    for(var i=0;i<pres.length;i++){
+      var pre=pres[i];
+      var src=pre.dataset.source||pre.textContent;
+      var check=preflight(src);
+      results.push({pre:pre,check:check});
+      if(!flagDiagram(pre,check))continue;
+      try{await mermaid.run({nodes:[pre],suppressErrors:true});}
+      catch(e){
+        try{console.warn("[visual-thinking] diagram failed:",e);}catch(_e){}
+        pre.removeAttribute("data-processed");
+        pre.textContent=src;
+        var box=pre.closest(".diagram-box");
+        if(box)box.classList.add("diagram-error");
+        var note=document.createElement("p");
+        note.className="diagram-note";
+        note.textContent="Diagrama no renderizado. Fuente abajo.";
+        pre.parentNode.insertBefore(note,pre);
+        check.warns.push("render failed");
+      }
+    }
+    paintBadge(results);
   }
   window.addEventListener("vt-theme",function(){
     pres.forEach(function(p){
       p.removeAttribute("data-processed");
       p.textContent=p.dataset.source;
+      var box=p.closest(".diagram-box");
+      if(box)box.classList.remove("diagram-error");
+      var sib=p.parentNode.querySelector(".diagram-note");
+      if(sib)sib.remove();
     });
     renderDiagrams();
   });

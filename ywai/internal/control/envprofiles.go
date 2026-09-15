@@ -30,6 +30,7 @@ func (s *Server) registerEnvProfileRoutes() {
 	s.mux.HandleFunc("GET /api/envs/{name}/status", s.handleEnvStatus)
 	s.mux.HandleFunc("GET /api/envs/{name}/logs", s.handleEnvLogs)
 	s.mux.HandleFunc("POST /api/envs/{name}/import-providers", s.handleEnvImportProviders)
+	s.mux.HandleFunc("POST /api/envs/{name}/import-ado", s.handleEnvImportAdo)
 	s.registerEnvPresetRoutes()
 }
 
@@ -150,6 +151,15 @@ func (s *Server) handleEnvCreate(w http.ResponseWriter, r *http.Request) {
 			restartEnvServiceForLogins(p, copied)
 		}
 	}
+	// Ado profiles follow their own preset key, independent of providers.
+	if spec, err := envprofile.Preset(p.Preset); err == nil && envprofile.PresetCopyAdo(spec) {
+		// Seed `ado init` profiles too (env wins on conflicts); warn-only.
+		if adopted, aerr := envprofile.CopyAdoConfig(p); aerr != nil {
+			resp["copy_ado_error"] = aerr.Error()
+		} else {
+			resp["copied_ado"] = adopted
+		}
+	}
 	writeJSON(w, http.StatusCreated, resp)
 }
 
@@ -174,6 +184,28 @@ func (s *Server) handleEnvImportProviders(w http.ResponseWriter, r *http.Request
 	}
 	restartEnvServiceForLogins(p, copied)
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "copied": copied})
+}
+
+// handleEnvImportAdo merges the global `ado` CLI profiles into an existing
+// env (entries the env already has are kept).
+// POST /api/envs/{name}/import-ado
+func (s *Server) handleEnvImportAdo(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if err := envprofile.ValidateName(name); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	p, err := envprofile.Get(name)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("unknown profile %q", name)})
+		return
+	}
+	copied, err := envprofile.CopyAdoConfig(p)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": name, "copied_ado": copied})
 }
 
 // restartEnvServiceForLogins stops the env's managed opencode service after

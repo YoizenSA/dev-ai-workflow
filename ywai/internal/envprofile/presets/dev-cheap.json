@@ -5,8 +5,9 @@
   "skills": ["tdd", "git-commit", "diagnosing-bugs", "bulk-read", "delegate-opencode2"],
   "mcp": ["graft"],
   "default_agent": "orchestrator",
-  "default_model": "openocode-admin/deepseek-v4-flash",
+  "default_model": "opencode-admin/deepseek-v4-flash",
   "deny_bash": [],
   "cli_theme": "catppuccin",
-  "copy_global_providers": true
+  "copy_global_providers": true,
+  "copy_ado_config": true
 }

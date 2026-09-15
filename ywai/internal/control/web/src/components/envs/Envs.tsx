@@ -108,6 +108,19 @@ export default function Envs() {
       setNotice(`${name}: ${copiedSummary(res.copied)}`)
     })
 
+  const adoptedAdoSummary = (c?: { profiles: string[] | null; defaultProfile?: boolean }) => {
+    const head = c?.profiles?.length
+      ? `Ado profiles ${c.profiles.join(', ')}${c.defaultProfile ? ' + default' : ''}.`
+      : 'Ado profiles already in sync.'
+    return head
+  }
+
+  const handleImportAdo = (name: string) =>
+    void run(`import-ado:${name}`, async () => {
+      const res = await envsApi.importAdo(name)
+      setNotice(`${name}: ${adoptedAdoSummary(res.copied_ado)}`)
+    })
+
   const anyBusy = busy !== null
   const isBusy = (key: string) => busy === key
 
@@ -149,6 +162,11 @@ export default function Envs() {
       setCopyTouched(false)
       if (res.copy_error) setError(`Env created, but copying providers failed: ${res.copy_error}`)
       else if (copyProviders) setNotice(`${nameTrim}: ${copiedSummary(res.copied)}`)
+      // Ado follows the preset's own copy_ado_config, independent of the providers checkbox.
+      if (res.copy_ado_error) setError(`Env created, but copying ado profiles failed: ${res.copy_ado_error}`)
+      else if (res.copied_ado?.profiles?.length || res.copied_ado?.defaultProfile) {
+        setNotice(`${nameTrim}: ${adoptedAdoSummary(res.copied_ado)}`)
+      }
     })
   }
 
@@ -430,6 +448,14 @@ export default function Envs() {
                       title="Copy your global opencode providers and credentials into this env (keeps what it already has)"
                     >
                       {isBusy(`import:${env.name}`) ? 'Importing…' : 'Import providers'}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleImportAdo(env.name)}
+                      disabled={anyBusy}
+                      title="Copy your global ado CLI profiles into this env (keeps what it already has)"
+                    >
+                      {isBusy(`import-ado:${env.name}`) ? 'Importing…' : 'Import ado'}
                     </button>
                     <span className="envs-actions-spacer" />
                     <button className="btn btn-ghost btn-sm envs-delete" onClick={() => handleDelete(env.name)} disabled={anyBusy}>

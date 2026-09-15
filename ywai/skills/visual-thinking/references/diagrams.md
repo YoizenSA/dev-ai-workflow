@@ -8,6 +8,25 @@ Render `../assets/canvas-template.html`. Self-contained shell: yz-ui tokens, Mer
 - `#meta-date` — today, `YYYY-MM-DD`.
 - `#meta-status` — one of `explorando` / `en decisión` / `decidido`.
 - `#canvas` — the body. Replace the placeholder comment with 2–5 `<section>` blocks picked from below. Pick what the discussion needs; never one of each.
+- `#toc` and `#vt-preflight` already exist in the template. Do not add them per block.
+
+## Section ids and deep-links
+
+Every `<section>` carries a stable id so the canvas supports deep-links:
+
+- `idea-map`, `before-after`, `options`, `decision-tree`, `sequence`, `code-sketch`, `delta`.
+
+Write each heading as `<h2><a class="anchor" href="#<id>">Title</a></h2>`. The template builds the header nav from the sections present, keeps the theme in `localStorage`, and restores `location.hash` on load. Old canvases without ids still render: the template slugs the `h2` text to the nearest known id at runtime.
+
+## Present mode
+
+The template ships a minimal focus mode with no new deps: `F` enters or exits, `P` or `]` moves next, `[` moves previous, `Esc` exits. It hides all sections except the focused one. Motion is finite (one short fade) and off under `prefers-reduced-motion`. No per-block markup needed.
+
+## Preflight rules (enforced by the template, follow them when you write sources)
+
+- Max ~12 nodes per diagram. The template counts node shapes and warns past 12. Split the diagram when it warns.
+- Never `rgba()` inside `classDef`: its commas break the parser. Use 8-digit hex fills (`#dc262629`, `#10b98129`, `#fdbd2726`).
+- One bad diagram never kills the canvas: the template isolates failures, shows the source text with a short reason, and renders the rest. The footer badge reports diagram and warning counts.
 
 ## Output rules
 
@@ -30,8 +49,8 @@ Render `../assets/canvas-template.html`. Self-contained shell: yz-ui tokens, Mer
 The overview. Use when opening a topic: what the idea touches and how the parts relate.
 
 ```html
-<section>
-  <h2>Idea map</h2>
+<section id="idea-map">
+  <h2><a class="anchor" href="#idea-map">Idea map</a></h2>
   <div class="card diagram-box">
     <pre class="diagram">
 mindmap
@@ -52,13 +71,13 @@ mindmap
 
 If `mindmap` fails to render (older caches), fall back to `flowchart TD` with the root at the top.
 
-## Block: before / after
+## Block: before / after (+ delta)
 
-Current state vs proposed state. Use for a concrete proposed change to a flow, structure or process.
+Current state vs proposed state. Use for a concrete proposed change to a flow, structure or process. Old two-column canvases without a delta list stay valid.
 
 ```html
-<section>
-  <h2>Before / After</h2>
+<section id="before-after">
+  <h2><a class="anchor" href="#before-after">Before / After</a></h2>
   <div class="duo">
     <div class="side now">
       <h4>Hoy</h4>
@@ -85,6 +104,28 @@ flowchart LR
       <p class="kv">{{what changes, one sentence}}</p>
     </div>
   </div>
+  <ul class="delta">
+    <li><span class="badge good">Added</span> Queue between Checkout and Inventory</li>
+    <li><span class="badge bad">Removed</span> Sync call from Mailer to Inventory</li>
+    <li><span class="badge warn">Changed</span> Reserve becomes async with retry</li>
+  </ul>
+</section>
+```
+
+Contract for the delta list:
+
+- Lives inside the `before-after` section, after the `.duo` grid. Omit it when the two diagrams already make the change obvious.
+- One `<li>` per change, each opens with a badge: `Added` (good), `Removed` (bad), `Changed` (warn). Keep each item to one sentence.
+- When no diagrams fit (a pure list change), a standalone section is valid:
+
+```html
+<section id="delta">
+  <h2><a class="anchor" href="#delta">Delta</a></h2>
+  <ul class="delta">
+    <li><span class="badge good">Added</span> {{one sentence}}</li>
+    <li><span class="badge bad">Removed</span> {{one sentence}}</li>
+    <li><span class="badge warn">Changed</span> {{one sentence}}</li>
+  </ul>
 </section>
 ```
 
@@ -93,8 +134,8 @@ flowchart LR
 Alternatives in competition. Use when >=2 options are on the table and one must win.
 
 ```html
-<section>
-  <h2>Options</h2>
+<section id="options">
+  <h2><a class="anchor" href="#options">Options</a></h2>
   <article class="card option rec">
     <div class="row"><span class="badge good">Recommended</span><span class="badge">option name</span></div>
     <p class="kv">{{one-sentence shape of the option}}</p>
@@ -120,8 +161,8 @@ Alternatives in competition. Use when >=2 options are on the table and one must 
 What is settled, what is open, what unlocks what. Use when decisions depend on each other. Pairs with the grilling skill: this is its design tree, drawn.
 
 ```html
-<section>
-  <h2>Decision tree</h2>
+<section id="decision-tree">
+  <h2><a class="anchor" href="#decision-tree">Decision tree</a></h2>
   <div class="card diagram-box">
     <pre class="diagram">
 flowchart TD
@@ -145,8 +186,8 @@ Settled nodes solid green, open nodes dashed amber rhombuses (`{"..."}`). The fr
 Interaction over time. Use for API flows, event chains, and the classic "before: N round-trips; after: 1". Solid `->>` is a call, dashed `-->>` is a reply.
 
 ```html
-<section>
-  <h2>Sequence</h2>
+<section id="sequence">
+  <h2><a class="anchor" href="#sequence">Sequence</a></h2>
   <div class="card diagram-box">
     <pre class="diagram">
 sequenceDiagram
@@ -170,8 +211,8 @@ Before/after round-trips pair well as two sequence diagrams inside one `.duo` gr
 The shape of the change in code: an interface sketch, pseudo-code, the hot line before and after. Use when the discussion is about code shape, not flows. Sketches, never dumps: max ~12 lines per side, elide with `…`, `<b>` marks the line that matters.
 
 ```html
-<section>
-  <h2>Code sketch</h2>
+<section id="code-sketch">
+  <h2><a class="anchor" href="#code-sketch">Code sketch</a></h2>
   <div class="duo">
     <div class="side now">
       <h4>Hoy</h4>

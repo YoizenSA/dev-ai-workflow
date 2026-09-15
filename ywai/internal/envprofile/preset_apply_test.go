@@ -100,6 +100,34 @@ func TestPresetGetters(t *testing.T) {
 	}
 }
 
+// The devops lane pack is a curated blocklist: every entry must be a glob
+// (trailing *) so it matches with arguments, and no entry may repeat.
+func TestDevopsDenyBashNormalized(t *testing.T) {
+	spec, err := PresetSpec(Profile{Name: "x", Preset: "devops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deny := PresetDenyBash(spec)
+	if len(deny) == 0 {
+		t.Fatal("devops deny_bash empty, want the lane pack")
+	}
+	seen := map[string]bool{}
+	for _, d := range deny {
+		if !strings.HasSuffix(d, "*") {
+			t.Errorf("devops deny_bash entry %q has no trailing glob", d)
+		}
+		if seen[d] {
+			t.Errorf("devops deny_bash entry %q duplicated", d)
+		}
+		seen[d] = true
+	}
+	for _, want := range []string{"kubectl delete*", "helm uninstall*", "helm update*", "helm install*", "terraform destroy*", "terraform apply*", "git push --force*", "az group delete*", "az aks get-credentials*", "Remove-Az*"} {
+		if !seen[want] {
+			t.Errorf("devops deny_bash missing %q", want)
+		}
+	}
+}
+
 func TestShouldInstallMCP(t *testing.T) {
 	if !ShouldInstallMCP("graft", nil) {
 		t.Errorf("empty allowlist must allow")

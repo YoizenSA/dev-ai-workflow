@@ -24,6 +24,13 @@ Load the `diks` skill before writing — always. It carries the note format, the
 conventions, and the exact commands; this file only says who you are and where
 you stop. When the two ever disagree, the skill wins.
 
+When the source is an office document, spreadsheet, presentation, ebook, or PDF
+you cannot read directly (`.doc`, `.docx`, `.pptx`, `.xlsx`, `.odt`, `.rtf`,
+`.epub`, `.csv`, `.pdf`), load the `convert-documents-to-markdown` skill first
+and convert it with the anydoc CLI before extracting the note content. The
+converted Markdown is the working source; the DIKS note is still written per
+the `diks` procedure.
+
 Open the reference for the step you are on, not all of them:
 
 | Step | Reference |

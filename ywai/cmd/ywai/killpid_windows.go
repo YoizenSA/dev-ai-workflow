@@ -10,7 +10,11 @@ import (
 // killPIDInt kills a process by PID on Windows using taskkill /F.
 // Windows does not support syscall.SIGTERM, so we use taskkill which
 // is the standard way to terminate a process from the command line.
+// Non-positive PIDs are rejected: they name no single process.
 func killPIDInt(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid PID %d: refusing to kill a non-positive PID", pid)
+	}
 	cmd := exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
 	if err := cmd.Run(); err != nil {
 		// If the process already exited, taskkill returns an error but

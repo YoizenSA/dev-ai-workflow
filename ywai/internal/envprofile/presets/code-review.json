@@ -8,5 +8,6 @@
   "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["git commit*", "git push*", "git reset*", "git rebase*", "git checkout*", "git merge*", "rm *"],
   "cli_theme": "dracula",
-  "copy_global_providers": true
+  "copy_global_providers": true,
+  "copy_ado_config": true
 }

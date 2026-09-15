@@ -29,7 +29,8 @@ Compress the discussion into its skeleton: topic, what is settled, what is open,
 Pick blocks from [references/diagrams.md](references/diagrams.md):
 
 - **Idea map** — the overview: parts and how they relate.
-- **Before / After** — current state vs proposed state, side by side.
+- **Before / After** — current state vs proposed state, side by side. Add an explicit **Delta** list when the change needs it (Added / Removed / Changed).
+- **Delta** — the explicit diff under Before / After (or standalone when no diagrams fit).
 - **Options** — alternatives in competition, trade-offs, one recommendation.
 - **Decision tree** — what is settled, what is open, what unlocks what.
 - **Sequence** — who calls whom, in what order, how many round-trips.

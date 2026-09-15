@@ -8,5 +8,6 @@
   "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": [],
   "cli_theme": "tokyonight",
-  "copy_global_providers": true
+  "copy_global_providers": true,
+  "copy_ado_config": true
 }

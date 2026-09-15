@@ -42,6 +42,9 @@ func TestBuiltinPresetsAreConsistent(t *testing.T) {
 		if m := PresetDefaultModel(spec); m != "" && !strings.Contains(m, "/") {
 			t.Errorf("%s: default_model %q must be provider/model", name, m)
 		}
+		if m := PresetDefaultModel(spec); m != "" && !strings.HasPrefix(m, "opencode-") {
+			t.Errorf("%s: default_model %q must use an opencode-* provider (typo guard)", name, m)
+		}
 	}
 }
 
@@ -54,5 +57,22 @@ func TestNewPresetsCopyProviders(t *testing.T) {
 		if !PresetCopyProviders(spec) {
 			t.Errorf("%s: copy_global_providers must default to true", name)
 		}
+	}
+}
+
+func TestNewPresetsCopyAdo(t *testing.T) {
+	for _, name := range []string{"dev", "qa", "devops", "dev-cheap", "code-review"} {
+		spec, err := Preset(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !PresetCopyAdo(spec) {
+			t.Errorf("%s: copy_ado_config must default to true", name)
+		}
+	}
+	if spec, err := Preset("personal"); err != nil {
+		t.Fatal(err)
+	} else if PresetCopyAdo(spec) {
+		t.Error("personal: copy_ado_config must default to false (bare installs nothing)")
 	}
 }
