@@ -360,8 +360,8 @@ func TestPlanStandardize_Dedupe(t *testing.T) {
 	if a := byPath["/a/same"]; a.Kind != "delete-empty-dir" {
 		t.Fatalf("debris copy = %+v, want delete-empty-dir", a)
 	}
-	if a := byPath["/a/mix"]; a.Kind != "resolve-shadow" || !strings.Contains(a.Detail, "/c/mix") {
-		t.Fatalf("shadow must keep the readable claude copy, not the empty opencode dir: %+v", actions)
+	if a := byPath["/c/mix"]; a.Kind != "resolve-shadow" || !strings.Contains(a.Detail, "/a/mix") {
+		t.Fatalf("shadow must keep the canonical agents copy, not the per-host claude copy: %+v", actions)
 	}
 	if a := byPath["/o/mix"]; a.Kind != "delete-empty-dir" {
 		t.Fatalf("empty opencode dir = %+v, want delete-empty-dir", a)

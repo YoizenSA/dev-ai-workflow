@@ -12,6 +12,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -234,32 +235,82 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	if len(skillAllow) > 0 {
 		fmt.Printf("  Preset skills filter: %s\n", strings.Join(skillAllow, ", "))
 	}
-	for _, a := range agents {
-		if skip, reason := skipSkillCopy(a, agents); skip {
-			if !dryRun {
-				if removed := skills.PruneYwaiSkills(a.SkillsDir); len(removed) > 0 {
-					fmt.Printf("  [%s] removed %d duplicate skill(s): %s\n", a.Name, len(removed), reason)
-				}
-			}
-			continue
+	copyOne := func(dir string) error {
+		if len(skillAllow) > 0 {
+			return skills.CopyFiltered(dir, skillAllow)
 		}
+		return skills.CopyTo(dir)
+	}
+	// opencode and claude-code share one canonical dir: OpenCode reads
+	// ~/.agents/skills natively, Claude Code through per-skill compat links.
+	// Every other host keeps its own per-host copy, untouched.
+	var canonical []string
+	var others []agent.Agent
+	for _, a := range agents {
+		switch a.Name {
+		case "opencode", "claude-code":
+			canonical = append(canonical, a.Name)
+		default:
+			others = append(others, a)
+		}
+	}
+	if len(canonical) > 0 {
+		dir := config.AgentsSkillsDir()
+		if dryRun {
+			fmt.Printf("  Would install ywai extra skills → %s (for %s)\n", dir, strings.Join(canonical, ", "))
+			done = append(done, canonical...)
+		} else {
+			if err := copyOne(dir); err != nil {
+				fmt.Printf("  Warning: failed to copy extra skills to %s: %v\n", dir, err)
+			} else {
+				done = append(done, canonical...)
+			}
+			// The canonical dir inside a profile sandbox is profile-local,
+			// so global cleanup must never run from a scoped apply: it
+			// would touch state the profile does not own.
+			if !envprofile.InProfileScope() {
+				cleanLegacySkillDuplicates(dir)
+				ensureClaudeCompatLinks(dir)
+			}
+		}
+	}
+	for _, a := range others {
 		if dryRun {
 			done = append(done, a.Name)
 			continue
 		}
-		var copyErr error
-		if len(skillAllow) > 0 {
-			copyErr = skills.CopyFiltered(a.SkillsDir, skillAllow)
-		} else {
-			copyErr = skills.CopyTo(a.SkillsDir)
-		}
-		if copyErr != nil {
-			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, copyErr)
+		if err := copyOne(a.SkillsDir); err != nil {
+			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
 			continue
 		}
 		done = append(done, a.Name)
 	}
 	summarizeAgents(dryRun, "ywai extra skills", done)
+}
+
+// cleanLegacySkillDuplicates drops the pre-canonical per-host copies ywai
+// used to write: one physical copy in ~/.agents/skills replaced them.
+func cleanLegacySkillDuplicates(canonical string) {
+	legacy := []string{
+		filepath.Join(config.OpenCodeUserConfigDir(), "skills"),
+		config.ClaudeSkillsDir(),
+	}
+	if removed := skills.RemoveLegacyDuplicates(canonical, legacy); len(removed) > 0 {
+		fmt.Printf("  Removed %d legacy duplicate skill(s); canonical is %s\n", len(removed), canonical)
+	}
+}
+
+// ensureClaudeCompatLinks keeps one link per canonical skill in
+// ~/.claude/skills, the only location Claude Code guarantees.
+func ensureClaudeCompatLinks(canonical string) {
+	created, err := skills.EnsureClaudeCompatLinks(canonical, config.ClaudeSkillsDir())
+	if err != nil {
+		fmt.Printf("  Warning: Claude compat links: %v\n", err)
+		return
+	}
+	if created > 0 {
+		fmt.Printf("  Linked %d skill(s) for Claude Code\n", created)
+	}
 }
 
 // scopedPresetSpec returns the active profile's preset spec, or nil when
@@ -274,27 +325,6 @@ func scopedPresetSpec() map[string]any {
 		return nil
 	}
 	return spec
-}
-
-// skipSkillCopy reports whether a host already sees the skills through another
-// host's directory, so copying them again only duplicates the catalog it loads.
-//
-// opencode reads ~/.agents/skills, ~/.claude/skills and its own dir (verified
-// in the 1.18.29 binary), so with Claude Code installed its copy adds a second
-// entry for every skill and nothing else.
-//
-// ponytail: one rule for the one overlap that exists today; generalize into a
-// table if another host starts reading a sibling's directory.
-func skipSkillCopy(a agent.Agent, all []agent.Agent) (bool, string) {
-	if a.Name != "opencode" {
-		return false, ""
-	}
-	for _, other := range all {
-		if other.Name == "claude-code" {
-			return true, "opencode reads ~/.claude/skills"
-		}
-	}
-	return false, ""
 }
 
 func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
@@ -619,6 +649,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		if !ok || configPath == "" {
 			fmt.Printf("  [%s] No config path found, skipping plugins\n", a.Name)
 			continue
+		}
+		if a.Name == "omp" {
+
+			ompPath, err := mcp.EntryTargetPath("omp")
+			if err != nil {
+				fmt.Printf("  [%s] Warning: cannot resolve MCP config path: %v\n", a.Name, err)
+				continue
+			}
+			configPath = ompPath
 		}
 
 		if dryRun {

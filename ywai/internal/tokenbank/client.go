@@ -221,7 +221,6 @@ func ReadJSONFile(path string) (map[string]interface{}, error) {
 	return result, nil
 }
 
-// ReadJSONArrayFile reads and parses a JSON array file.
 func ReadJSONArrayFile(path string) ([]interface{}, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

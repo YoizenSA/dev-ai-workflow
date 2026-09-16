@@ -342,6 +342,136 @@ func TestRemoveStaleYwaiSkillLinksRemovesOnlyYwaiSourceLinks(t *testing.T) {
 	}
 }
 
+// The canonical layout keeps one physical copy in ~/.agents/skills and
+// removes the pre-canonical per-host copies. Removal must prove ownership
+// (marker or ywai-source link) and must keep the only copy left when the
+// canonical one is missing.
+func TestRemoveLegacyDuplicates(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+
+	repoSkillsDir := filepath.Join(repo, "skills")
+	writeSkill(t, repoSkillsDir, "alpha", true) // shipped
+	writeSkill(t, repoSkillsDir, "beta", true)  // shipped, canonical copy missing
+
+	canonical := t.TempDir()
+	writeSkill(t, canonical, "alpha", true)
+
+	legacyOC := t.TempDir()
+	writeSkill(t, legacyOC, "alpha", true)   // duplicate physical copy: goes
+	writeSkill(t, legacyOC, "beta", true)    // shipped but canonical missing: stays
+	writeSkill(t, legacyOC, "retired", true) // unshipped marker dir: goes
+	writeSkill(t, legacyOC, "mine", false)   // user skill: stays
+
+	legacyClaude := t.TempDir()
+	if err := os.Symlink(filepath.Join(repoSkillsDir, "alpha"), filepath.Join(legacyClaude, "alpha")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	external := filepath.Join(t.TempDir(), "external")
+	if err := os.MkdirAll(external, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(legacyClaude, "foreign")); err != nil {
+		t.Fatalf("create foreign symlink: %v", err)
+	}
+
+	removed := RemoveLegacyDuplicates(canonical, []string{legacyOC, legacyClaude, filepath.Join(t.TempDir(), "absent")})
+
+	wantGone := []string{
+		filepath.Join(legacyOC, "alpha"),
+		filepath.Join(legacyOC, "retired"),
+		filepath.Join(legacyClaude, "alpha"),
+	}
+	slices.Sort(wantGone)
+	if !slices.Equal(removed, wantGone) {
+		t.Fatalf("removed = %v, want %v", removed, wantGone)
+	}
+	for _, keep := range []string{
+		filepath.Join(legacyOC, "beta"),
+		filepath.Join(legacyOC, "mine"),
+		filepath.Join(legacyClaude, "foreign"),
+		filepath.Join(canonical, "alpha"),
+	} {
+		if _, err := os.Lstat(keep); err != nil {
+			t.Errorf("%s must survive: %v", keep, err)
+		}
+	}
+}
+
+// Claude Code only guarantees ~/.claude/skills, so each canonical skill gets
+// a compat link there. Links cost no bytes; user skills are never replaced.
+func TestEnsureClaudeCompatLinks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := t.TempDir()
+	t.Cleanup(func() {
+		config.SetRepoRoot("")
+		config.ResetConfig()
+	})
+	config.SetRepoRoot(repo)
+	config.ResetConfig()
+	writeSkill(t, filepath.Join(repo, "skills"), "alpha", true)
+
+	canonical := t.TempDir()
+	writeSkill(t, canonical, "alpha", true)
+	writeSkill(t, canonical, "beta", true)
+	claude := t.TempDir()
+
+	// A stale ywai-owned physical copy is replaced by a link.
+	writeSkill(t, claude, "alpha", true)
+	if err := os.WriteFile(filepath.Join(claude, "alpha", "SKILL.md"), []byte("# stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A user skill sharing a canonical name is left alone.
+	userDir := filepath.Join(claude, "beta")
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "SKILL.md"), []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := EnsureClaudeCompatLinks(canonical, claude)
+	if err != nil {
+		t.Fatalf("EnsureClaudeCompatLinks: %v", err)
+	}
+	if created != 1 {
+		t.Fatalf("created = %d, want 1 (alpha linked, beta user-owned)", created)
+	}
+	link := filepath.Join(claude, "alpha")
+	if !IsLinkOrJunction(link) {
+		t.Fatalf("%s must be a link, not a copy", link)
+	}
+	data, err := os.ReadFile(filepath.Join(link, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read through compat link: %v", err)
+	}
+	if !strings.Contains(string(data), "# alpha") {
+		t.Fatalf("compat link serves wrong content: %q", data)
+	}
+	if data, err := os.ReadFile(filepath.Join(userDir, "SKILL.md")); err != nil || string(data) != "# mine\n" {
+		t.Fatalf("user skill was touched: %q, err=%v", data, err)
+	}
+
+	// Second run is a no-op: the link already points at the canonical copy.
+	again, err := EnsureClaudeCompatLinks(canonical, claude)
+	if err != nil {
+		t.Fatalf("second EnsureClaudeCompatLinks: %v", err)
+	}
+	if again != 0 {
+		t.Fatalf("second run created = %d, want 0", again)
+	}
+}
+
 func writeSkill(t *testing.T, root, name string, ywaiExtra bool) {
 	t.Helper()
 	dir := filepath.Join(root, name)

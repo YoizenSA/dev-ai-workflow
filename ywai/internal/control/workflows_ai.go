@@ -250,10 +250,10 @@ type skillInfo struct {
 	Description string `json:"description"`
 }
 
-// handleSkillsList lists the Agent Skills installed under the opencode skills
+// handleSkillsList lists the Agent Skills installed in the canonical skills
 // dir (one directory per skill, each with a SKILL.md). Returns [] when none.
 func (a *workflowsAPI) handleSkillsList(w http.ResponseWriter, r *http.Request) {
-	dir := config.OpenCodeSkillsDir()
+	dir := config.AgentsSkillsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		writeJSON(w, http.StatusOK, []skillInfo{})

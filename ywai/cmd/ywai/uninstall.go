@@ -15,6 +15,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/autostart"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
 	"github.com/spf13/cobra"
@@ -60,8 +61,9 @@ Removes, for every detected agent (or just --agent):
   - vendored plugins (vision-bridge, background-agents) and their entries
     in the agent config's "plugins" array
   - ywai agent profiles installed into the agent's agents directory
-  - ywai skills (only links into ywai's skills dir, or copies carrying
-    ywai's marker file — never a skill you wrote)
+  - ywai skills: one canonical copy in ~/.agents/skills, Claude compat links
+    into it, and legacy per-host copies — only links into ywai's skills
+    dirs, or copies carrying ywai's marker file (never a skill you wrote)
   - the autostart service, and stops a running control server
 
 Left alone:
@@ -409,6 +411,16 @@ func buildUninstallPlan(agents []agent.Agent, purge, discardSessions bool) []rem
 
 	for _, a := range agents {
 		configPath := settingsPaths[a.Name]
+		if a.Name == "omp" {
+			// SettingsPaths points omp at models.yml, an "is configured"
+			// marker in YAML. Every reader below parses JSON and fails
+			// silently on it (countYwaiConfigRefs and retiredMCPsIn both
+			// return zero on a parse error), so uninstall left omp's ywai
+			// entries behind. Point at the file they were written to.
+			if ompPath, err := mcp.EntryTargetPath("omp"); err == nil {
+				configPath = ompPath
+			}
+		}
 
 		// Vendored plugin bundles + their entries in the "plugins" array.
 		if configPath != "" {
@@ -529,6 +541,32 @@ func buildUninstallPlan(agents []agent.Agent, purge, discardSessions bool) []rem
 					apply: func() error { return os.RemoveAll(path) },
 				})
 			}
+		}
+	}
+
+	// The canonical dir and the legacy host dirs are shared state, not owned
+	// by one agent: with --agent they would otherwise be skipped, and legacy
+	// copies from pre-canonical installs live outside every current SkillsDir.
+	seen := map[string]bool{}
+	for _, a := range agents {
+		seen[filepath.Clean(a.SkillsDir)] = true
+	}
+	for _, dir := range []string{
+		config.AgentsSkillsDir(),
+		filepath.Join(config.OpenCodeUserConfigDir(), "skills"),
+		config.ClaudeSkillsDir(),
+	} {
+		if dir == "" || seen[filepath.Clean(dir)] {
+			continue
+		}
+		seen[filepath.Clean(dir)] = true
+		for _, skill := range ywaiSkillsIn(dir) {
+			path := skill
+			plan = append(plan, removal{
+				kind:  kindSkill,
+				label: fmt.Sprintf("[shared] skill %s (%s)", filepath.Base(path), dir),
+				apply: func() error { return os.RemoveAll(path) },
+			})
 		}
 	}
 
@@ -691,11 +729,12 @@ func ywaiProfileFilesIn(dir string) []string {
 	return out
 }
 
-// ywaiSkillsIn lists skills ywai installed, by the two ways install can place
-// them: a link into ywai's skills directory, or a copied directory carrying the
+// ywaiSkillsIn lists skills ywai installed, by the ways install can place
+// them: a link into ywai's skills directory or into the canonical
+// ~/.agents/skills (Claude compat links), or a copied directory carrying the
 // ".ywai-extra" marker that copyDir brings along.
 //
-// Both tests prove ownership from the artifact itself rather than from its
+// All tests prove ownership from the artifact itself rather than from its
 // name, so a skill the user wrote is never removed even when its name collides
 // with one ywai ships.
 func ywaiSkillsIn(skillsDir string) []string {
@@ -704,6 +743,7 @@ func ywaiSkillsIn(skillsDir string) []string {
 		return nil
 	}
 	src := config.SkillsSourceDir()
+	canonical := config.AgentsSkillsDir()
 	var out []string
 	for _, e := range entries {
 		path := filepath.Join(skillsDir, e.Name())
@@ -713,7 +753,11 @@ func ywaiSkillsIn(skillsDir string) []string {
 			if err != nil {
 				continue
 			}
-			if strings.HasPrefix(filepath.Clean(target), filepath.Clean(src)) {
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(path), target)
+			}
+			target = filepath.Clean(target)
+			if withinDir(target, src) || withinDir(target, canonical) {
 				out = append(out, path)
 			}
 			continue
@@ -728,6 +772,19 @@ func ywaiSkillsIn(skillsDir string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// withinDir reports whether path sits inside root.
+func withinDir(path, root string) bool {
+	root = filepath.Clean(root)
+	if root == "." || root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // ywaiSkillMarker is the file copyDir copies into every skill ywai installs.

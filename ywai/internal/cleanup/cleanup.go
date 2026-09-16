@@ -17,6 +17,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 // retiredAgents are agents removed from ywai that may still be installed by a
@@ -62,6 +65,7 @@ func Run(opts Options) []string {
 	c.cleanSkillRegistry(opts.Home, opts.Repo)
 	c.cleanRetiredConfigArtifacts(ocDir)
 	c.cleanRetiredAgents(opts.Home)
+	c.cleanVSCodePrompts(opts.Home)
 	c.cleanLegacyPlugins(ocDir)
 	c.cleanQuota(ocDir)
 	c.cleanSubagentStatusline(ocDir)
@@ -105,6 +109,69 @@ func (c *collector) removePath(path string, desc string) {
 		}
 	}
 	c.logf("%s %s (%s)", c.verb(), path, desc)
+}
+
+// vsCodePromptDirs are the User/prompts directories a past ywai release wrote
+// agent profiles into, back when VS Code Copilot was a supported host. Only
+// "Code" is listed: the installer never wrote to Code - Insiders, so neither
+// does the sweep.
+func vsCodePromptDirs(home string) []string {
+	dirs := []string{
+		filepath.Join(home, ".config", "Code", "User", "prompts"),
+		filepath.Join(home, "Library", "Application Support", "Code", "User", "prompts"),
+	}
+	if appdata := os.Getenv("APPDATA"); appdata != "" {
+		dirs = append(dirs, filepath.Join(appdata, "Code", "User", "prompts"))
+	}
+	return dirs
+}
+
+// cleanVSCodePrompts removes the *.instructions.md profiles ywai used to
+// install for VS Code Copilot. Support for that host is gone, so nothing
+// rewrites or removes them any more.
+//
+// A file is only removed when its name matches a profile ywai ships: this
+// directory is shared with prompts the user wrote by hand, and those are never
+// touched. If the shipped profile list cannot be loaded the sweep does
+// nothing rather than guess.
+func (c *collector) cleanVSCodePrompts(home string) {
+	profiles, err := agentprofiles.LoadProfiles(config.AgentsSourceDir())
+	if err != nil || len(profiles) == 0 {
+		return
+	}
+	owned := make(map[string]bool, len(profiles))
+	for name := range profiles {
+		owned[filepath.Base(name)] = true
+	}
+
+	const suffix = ".instructions.md"
+	for _, dir := range vsCodePromptDirs(home) {
+		// Nested profile names (core/architect) were written into a
+		// subdirectory, so the scan goes one level deeper as well.
+		roots := []string{dir}
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					roots = append(roots, filepath.Join(dir, e.Name()))
+				}
+			}
+		}
+		for _, root := range roots {
+			entries, err := os.ReadDir(root)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), suffix) {
+					continue
+				}
+				if !owned[strings.TrimSuffix(e.Name(), suffix)] {
+					continue
+				}
+				c.removePath(filepath.Join(root, e.Name()), "retired VS Code Copilot profile")
+			}
+		}
+	}
 }
 
 // --- skill registry + .atl -------------------------------------------------

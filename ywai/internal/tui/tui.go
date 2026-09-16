@@ -235,7 +235,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 			{Name: "Install ecosystem", Status: "pending"},
 			{Name: "Copy extra skills", Status: "pending"},
 			{Name: "Install agent profiles", Status: "pending"},
-			{Name: "Apply overrides", Status: "pending"},
 			{Name: "Install plugins", Status: "pending"},
 		},
 	}
@@ -1236,11 +1235,6 @@ func (m *Model) viewProgress() string {
 // ──────────────────────────────────────────────────────────────────────────────
 // Public accessors
 // ──────────────────────────────────────────────────────────────────────────────
-
-// SelectedAgent returns the selected agent name.
-func (m *Model) SelectedAgent() string {
-	return m.selectedAgent
-}
 
 // InstallMetaDevToolsMCP returns whether the Meta Developer Tools MCP should
 // be installed.

@@ -28,19 +28,20 @@ var KnownAgents = []struct {
 		// OpenCode 2 binary wins.
 		Binary: "opencode2",
 		SkillsPath: func() string {
-			// Sandbox-aware: under YWAI_PROFILE (or ?profile= scope) this
-			// resolves inside the environment (OPENCODE_CONFIG_DIR), so a
-			// scoped install writes skills to the profile instead of leaking
-			// them to the global ~/.config/opencode/skills. Globally it
-			// falls back to the same path as before.
-			return config.OpenCodeSkillsDir()
+			// Single canonical copy: OpenCode reads ~/.agents/skills natively,
+			// so no per-host copy. Sandbox-aware (see AgentsSkillsDir): under
+			// YWAI_PROFILE this resolves inside the profile instead of
+			// leaking to the global dir.
+			return config.AgentsSkillsDir()
 		},
 	},
 	{
 		Name:   "claude-code",
 		Binary: "claude",
 		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".claude", "skills")
+			// Same canonical dir; Claude Code reaches it through per-skill
+			// compat links (skills.EnsureClaudeCompatLinks).
+			return config.AgentsSkillsDir()
 		},
 	},
 	{
@@ -203,16 +204,6 @@ func whichViaShell(name string) string {
 func Detect() []Agent {
 	var found []Agent
 	for _, ka := range KnownAgents {
-		if ka.Binary == "" {
-			if detectByConfigDir(ka.Name, ka.SkillsPath()) {
-				found = append(found, Agent{
-					Name:      ka.Name,
-					SkillsDir: ka.SkillsPath(),
-				})
-			}
-			continue
-		}
-
 		path := FindBinary(ka.Binary)
 		if ka.Name == "opencode" {
 			path, _ = FindOpenCode()

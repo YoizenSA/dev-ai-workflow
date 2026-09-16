@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -259,9 +258,6 @@ func stripFrontmatter(content string) string {
 	}
 	return strings.TrimSpace(content[end+6:])
 }
-
-func isDarwin() bool  { return runtime.GOOS == "darwin" }
-func isWindows() bool { return runtime.GOOS == "windows" }
 
 // InstallOpenCodeMarkdown writes agent profiles as flat .md files to
 // ~/.config/opencode/agents/. opencode derives the agent id from the file's
