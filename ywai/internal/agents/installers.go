@@ -260,7 +260,6 @@ func stripFrontmatter(content string) string {
 	return strings.TrimSpace(content[end+6:])
 }
 
-
 func isDarwin() bool  { return runtime.GOOS == "darwin" }
 func isWindows() bool { return runtime.GOOS == "windows" }
 

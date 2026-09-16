@@ -134,24 +134,6 @@ func TestKnownAgents_EachNameIsInAvailableNames(t *testing.T) {
 	}
 }
 
-// ─── Desktop agents (no binary) ───────────────────────────────────────────
-
-func TestKnownAgents_DesktopAgentsHaveEmptyBinary(t *testing.T) {
-	desktopAgents := map[string]bool{
-		"windsurf":    true,
-		"antigravity": true,
-		"trae-ide":    true,
-	}
-
-	for _, ka := range KnownAgents {
-		if desktopAgents[ka.Name] && ka.Binary != "" {
-			t.Fatalf("desktop agent %q should have empty Binary, got %q", ka.Name, ka.Binary)
-		}
-	}
-}
-
-// ─── SettingsPaths ────────────────────────────────────────────────────────
-
 func TestSettingsPaths_ReturnsMap(t *testing.T) {
 	paths := SettingsPaths()
 	if paths == nil {
@@ -195,39 +177,6 @@ func TestSettingsPaths_OpenCodePrefersJSONC(t *testing.T) {
 	}
 }
 
-func TestSettingsPaths_WindsurfReturnsEmptyIfNotExists(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	paths := SettingsPaths()
-	if paths["windsurf"] != "" {
-		t.Fatalf("windsurf should be empty when mcp_config.json doesn't exist, got %q", paths["windsurf"])
-	}
-}
-
-func TestSettingsPaths_WindsurfReturnsPathIfExists(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses unix paths")
-	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	mcpPath := filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")
-	_ = os.MkdirAll(filepath.Dir(mcpPath), 0o755)
-	if err := os.WriteFile(mcpPath, []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write mcp_config.json: %v", err)
-	}
-
-	paths := SettingsPaths()
-	want := mcpPath
-	if paths["windsurf"] != want {
-		t.Fatalf("windsurf path = %q, want %q", paths["windsurf"], want)
-	}
-}
-
-// ─── Detect ───────────────────────────────────────────────────────────────
-
 func TestDetect_FindsAgentByConfigDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -236,8 +185,8 @@ func TestDetect_FindsAgentByConfigDir(t *testing.T) {
 	// Create cursor config dir + skills dir: Detect falls back to the config
 	// dir when the binary is absent from PATH, and reports the same skills dir
 	// when it is present.
-	windsurfDir := filepath.Join(home, ".cursor")
-	skillsDir := filepath.Join(windsurfDir, "skills")
+	cursorDir := filepath.Join(home, ".cursor")
+	skillsDir := filepath.Join(cursorDir, "skills")
 	os.MkdirAll(skillsDir, 0o755)
 
 	agents := Detect()
@@ -245,8 +194,8 @@ func TestDetect_FindsAgentByConfigDir(t *testing.T) {
 	for _, a := range agents {
 		if a.Name == "cursor" {
 			found = true
-			if a.SkillsDir != filepath.Join(windsurfDir, "skills") {
-				t.Fatalf("cursor skills = %q, want %q", a.SkillsDir, filepath.Join(windsurfDir, "skills"))
+			if a.SkillsDir != filepath.Join(cursorDir, "skills") {
+				t.Fatalf("cursor skills = %q, want %q", a.SkillsDir, filepath.Join(cursorDir, "skills"))
 			}
 			break
 		}

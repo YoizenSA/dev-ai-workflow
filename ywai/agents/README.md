@@ -204,4 +204,4 @@ TokenBank models for OMP: `ywai tokenbank configure --agent omp` → `~/.omp/age
 - **Focused**: Each agent has a clear, narrow role
 - **Opinionated**: Strong defaults that work out of the box
 - **Composable**: Agents can reference skills for domain-specific knowledge
-- **Portable**: Works across opencode, claude-code, cursor, windsurf, PI.dev, etc.
+- **Portable**: Works across opencode, claude-code, cursor, codex, PI.dev, etc.

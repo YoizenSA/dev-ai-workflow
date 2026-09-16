@@ -9,7 +9,7 @@ import (
 )
 
 func testAgents() []agent.Agent {
-	// Both must be profile-install hosts (windsurf is detected but not installable).
+	// Both must be profile-install hosts (cursor is detected but not installable).
 	return []agent.Agent{
 		{Name: "opencode", BinaryName: "opencode"},
 		{Name: "pi", BinaryName: "pi"},
@@ -71,11 +71,11 @@ func TestNewModel_SingleAgentNoAll(t *testing.T) {
 }
 
 func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
-	// windsurf/gemini may be on PATH but ywai has no profile install for them.
+	// cursor/codex may be on PATH but ywai has no profile install for them.
 	m := NewModel([]agent.Agent{
 		{Name: "opencode", BinaryName: "opencode"},
-		{Name: "windsurf", BinaryName: "windsurf"},
-		{Name: "gemini-cli", BinaryName: "gemini"},
+		{Name: "cursor", BinaryName: "cursor"},
+		{Name: "codex", BinaryName: "codex"},
 		{Name: "omp", BinaryName: "omp"},
 	})
 	names := make([]string, 0, len(m.agents))
@@ -87,7 +87,7 @@ func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
 		t.Fatalf("expected 3 options (2 supported + all), got %d: %v", len(m.agents), names)
 	}
 	for _, n := range names {
-		if n == "windsurf" || n == "gemini-cli" {
+		if n == "cursor" || n == "codex" {
 			t.Fatalf("unsupported host %q must not appear in install list: %v", n, names)
 		}
 	}
