@@ -14,7 +14,6 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/configapi"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/overrides"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
@@ -42,7 +41,6 @@ type managedPlan struct {
 	InstallPlugins  bool
 	SetDefaultAgent bool
 	SetDefaultModel bool
-	ApplyOverrides  bool
 	RefreshVersion  bool
 	ExportWorkflows bool
 	// Reseed refreshes the shared ~/.ywai skills + agent profile cache.
@@ -64,7 +62,6 @@ func planManaged(mode applyMode, profile ...string) managedPlan {
 		InstallPlugins:  true,
 		SetDefaultAgent: true,
 		SetDefaultModel: true,
-		ApplyOverrides:  true,
 		RefreshVersion:  true,
 		ExportWorkflows: true,
 		Reseed:          !scoped,
@@ -161,9 +158,6 @@ func countApplySteps(plan managedPlan, o applyOpts) int {
 		n++ // Applying orchestrator model profile
 		n++ // Configuring TokenBank providers
 	}
-	if plan.ApplyOverrides {
-		n++
-	}
 	if plan.ExportWorkflows {
 		n++
 	}
@@ -241,14 +235,13 @@ func applyPresetHook(plan *managedPlan, o *applyOpts) presetApplyContext {
 		plan.SetDefaultModel = false
 		plan.WriteAgentsMd = false
 		plan.ExportWorkflows = false
-		plan.ApplyOverrides = false
-		fmt.Printf("  Bare preset %q: skipping agents, skills, MCP/plugins, defaults, AGENTS.md, workflows and overrides.\n", p.Preset)
+		fmt.Printf("  Bare preset %q: skipping agents, skills, MCP/plugins, defaults, AGENTS.md and workflows.\n", p.Preset)
 		fmt.Println("  Skipping agent profiles install for bare preset.")
 		fmt.Println("  Skipping skills copy for bare preset.")
 		fmt.Println("  Skipping MCP/plugin wiring for bare preset.")
 		fmt.Println("  Skipping default_agent/default_model writes for bare preset.")
 		fmt.Println("  Skipping AGENTS.md write for bare preset.")
-		fmt.Println("  Skipping workflows export and overrides for bare preset.")
+		fmt.Println("  Skipping workflows export for bare preset.")
 		return ctx
 	}
 	ctx.DefaultAgent = envprofile.PresetDefaultAgent(spec)
@@ -406,18 +399,6 @@ func applyManaged(o applyOpts) applyResult {
 		// TokenBank proxy into opencode / pi / omp when credentials exist.
 		steps.next("Configuring TokenBank providers")
 		reapplyTokenBank(o.Opts.DryRun)
-	}
-
-	// ── overrides ─────────────────────────────────────────────────────────
-	if plan.ApplyOverrides {
-		steps.next("Applying ywai overrides")
-		if o.Opts.DryRun {
-			fmt.Println("  Would apply OpenSpec→SDD overrides.")
-		} else if err := overrides.ApplyOpenSpecToSDDOverride(agentDirs); err != nil {
-			r.warnf("failed to apply overrides: %v", err)
-		} else {
-			fmt.Println("  ✓ overrides applied")
-		}
 	}
 
 	// ── workflows ─────────────────────────────────────────────────────────
