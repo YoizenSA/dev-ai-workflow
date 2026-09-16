@@ -1,5 +1,5 @@
 // Package tokenbank provides a client for the TokenBank setup API
-// and config writers for opencode, copilot, pi, and omp (oh-my-pi) agents.
+// and config writers for opencode, pi, and omp (oh-my-pi) agents.
 package tokenbank
 
 import (

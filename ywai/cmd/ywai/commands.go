@@ -1303,12 +1303,8 @@ var tokenbankConfigureCmd = &cobra.Command{
 				if err := tokenbank.ConfigureOmp(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
 					return fmt.Errorf("error configuring omp: %w", err)
 				}
-			case "copilot":
-				if err := tokenbank.ConfigureCopilot(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
-					return fmt.Errorf("error configuring copilot: %w", err)
-				}
 			default:
-				return fmt.Errorf("unknown agent %q. Use: opencode, pi, omp, copilot", agentFlag)
+				return fmt.Errorf("unknown agent %q. Use: opencode, pi, omp", agentFlag)
 			}
 		} else {
 			// Configure all agents
@@ -1393,7 +1389,7 @@ func init() {
 	tokenbankSetupCmd.Flags().String("key", "", "TokenBank proxy API key")
 	tokenbankCmd.AddCommand(tokenbankSetupCmd)
 
-	tokenbankConfigureCmd.Flags().String("agent", "", "Agent to configure: opencode, copilot, pi, omp (default: all)")
+	tokenbankConfigureCmd.Flags().String("agent", "", "Agent to configure: opencode, pi, omp (default: all)")
 	tokenbankCmd.AddCommand(tokenbankConfigureCmd)
 
 	rootCmd.AddCommand(tokenbankCmd)

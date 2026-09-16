@@ -403,7 +403,7 @@ func applyManaged(o applyOpts) applyResult {
 			}
 		}
 
-		// TokenBank proxy into opencode / pi / omp / copilot when credentials exist.
+		// TokenBank proxy into opencode / pi / omp when credentials exist.
 		steps.next("Configuring TokenBank providers")
 		reapplyTokenBank(o.Opts.DryRun)
 	}

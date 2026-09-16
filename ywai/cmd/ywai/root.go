@@ -432,12 +432,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			agentsDir := filepath.Join(home, ".claude", "agents")
 			_ = agentprofiles.InstallClaude(agentsDir, profiles)
 
-		case "vscode-copilot":
-			promptsDir := agentprofiles.VSCodePromptsDir()
-			if promptsDir != "" {
-				_ = agentprofiles.InstallVSCode(promptsDir, profiles)
-			}
-
 		case "pi":
 			agentsDir := filepath.Join(home, ".pi", "agent", "agents")
 			if err := agentprofiles.InstallPi(agentsDir, profiles, overwriteAgents); err != nil {

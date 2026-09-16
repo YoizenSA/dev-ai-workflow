@@ -51,79 +51,10 @@ var KnownAgents = []struct {
 		},
 	},
 	{
-		Name:   "windsurf",
-		Binary: "", // desktop app, no binary on PATH
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".codeium", "windsurf", "skills")
-		},
-	},
-	{
-		Name:   "gemini-cli",
-		Binary: "gemini",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".gemini", "skills")
-		},
-	},
-	{
-		Name:   "vscode-copilot",
-		Binary: "code",
-		SkillsPath: func() string {
-			if runtime.GOOS == "windows" {
-				return filepath.Join(os.Getenv("APPDATA"), "Code", "User", "skills")
-			}
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(homeDir(), "Library", "Application Support", "Code", "User", "skills")
-			}
-			return filepath.Join(homeDir(), ".config", "Code", "skills")
-		},
-	},
-	{
 		Name:   "codex",
 		Binary: "codex",
 		SkillsPath: func() string {
 			return filepath.Join(homeDir(), ".codex", "skills")
-		},
-	},
-	{
-		Name:   "kimi",
-		Binary: "kimi",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".kimi", "skills")
-		},
-	},
-	{
-		Name:   "qwen-code",
-		Binary: "qwen",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".qwen", "skills")
-		},
-	},
-	{
-		Name:   "antigravity",
-		Binary: "",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".gemini", "antigravity", "skills")
-		},
-	},
-	{
-		Name:   "kiro-ide",
-		Binary: "kiro",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".kiro", "skills")
-		},
-	},
-	{
-		Name:   "openclaw",
-		Binary: "openclaw",
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".openclaw", "skills")
-		},
-	},
-	{
-		Name:   "trae-ide",
-		Binary: "", // desktop app, no binary on PATH
-		SkillsPath: func() string {
-			return filepath.Join(homeDir(), ".trae", "skills")
 		},
 	},
 	{
@@ -362,8 +293,6 @@ func SettingsPaths() map[string]string {
 	return map[string]string{
 		"opencode":    config.FindJSONCPath(config.OpenCodeConfigDir(), "opencode"),
 		"claude-code": pathIfExists(filepath.Join(home, ".claude", "settings.json")),
-		"windsurf":    pathIfExists(filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")),
-		"gemini-cli":  pathIfExists(filepath.Join(home, ".gemini", "settings.json")),
 		"pi":          pathIfExists(filepath.Join(home, ".pi", "agent", "mcp.json")),
 		// OMP models live in models.yml; expose the agent dir for callers that
 		// only need "is configured" via a path (tokenbank / install hooks).
@@ -380,10 +309,7 @@ func pathIfExists(path string) string {
 
 func AvailableNames() []string {
 	return []string{
-		"opencode", "claude-code", "cursor", "windsurf",
-		"gemini-cli", "vscode-copilot", "codex",
-		"kimi", "qwen-code", "antigravity", "kiro-ide",
-		"openclaw", "trae-ide", "pi", "omp",
+		"opencode", "claude-code", "cursor", "codex", "pi", "omp",
 	}
 }
 
@@ -397,7 +323,6 @@ func AvailableNames() []string {
 var ProfileInstallHosts = []string{
 	"opencode",
 	"claude-code",
-	"vscode-copilot",
 	"pi",
 	"omp",
 }

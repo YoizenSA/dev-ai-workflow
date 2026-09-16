@@ -111,10 +111,9 @@ test_agent_profiles_tools() {
 test_dry_run_install() {
     log_test "Dry-run installation for each agent"
     
-    for agent_id in "vscode-copilot" "opencode" "pi"; do
+    for agent_id in "opencode" "pi"; do
         local binary_name
         case "$agent_id" in
-            "vscode-copilot") binary_name="code" ;;
             "opencode") binary_name="opencode" ;;
             "pi") binary_name="pi" ;;
         esac

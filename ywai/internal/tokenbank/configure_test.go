@@ -372,20 +372,6 @@ func TestReplaceOwnedProvider_NoProviderInResponse(t *testing.T) {
 	}
 }
 
-// TestEntryVendors_OnlyManagedVendors pins which Copilot entries ywai may
-// prune: only those under a vendor the API response itself manages.
-func TestEntryVendors_OnlyManagedVendors(t *testing.T) {
-	got := entryVendors([]interface{}{
-		map[string]interface{}{"vendor": "Token Bank", "name": "a"},
-		map[string]interface{}{"vendor": "Token Bank", "name": "b"},
-		map[string]interface{}{"name": "no-vendor"},
-		"not-a-map",
-	})
-	if len(got) != 1 || !got["Token Bank"] {
-		t.Errorf("entryVendors = %v, want just the Token Bank vendor", got)
-	}
-}
-
 // TestConfigureOpenCode_DropsModelsAbsentFromGET is the user-facing contract:
 // `ywai tokenbank configure` must write ~/.config/opencode/opencode.json (not
 // an OPENCODE_CONFIG_DIR isolate) and the models there must match GET

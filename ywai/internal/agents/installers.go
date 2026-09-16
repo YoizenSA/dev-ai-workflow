@@ -241,49 +241,6 @@ func installPiStyleAgents(
 	return nil
 }
 
-// InstallVSCode writes agent profiles as .instructions.md files to VS Code Copilot prompts dir.
-// VS Code Copilot reads *.instructions.md files from the User/prompts/ directory.
-// Users activate them from Copilot Chat with @workspace or participant selection.
-func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
-	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
-		return fmt.Errorf("create dir %s: %w", promptsDir, err)
-	}
-
-	installed := 0
-	for name, profile := range profiles {
-		targetPath := filepath.Join(promptsDir, name+".instructions.md")
-
-		// Ensure parent directory exists for nested agent names
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
-			continue
-		}
-
-		// Skip if already exists
-		if _, err := os.Stat(targetPath); err == nil {
-			continue
-		}
-
-		// Build VS Code Copilot instructions file
-		// Strip YAML frontmatter from prompt — VS Code doesn't use it
-		prompt := stripFrontmatter(profile.Prompt)
-
-		content := fmt.Sprintf("---\nname: %s\ndescription: %s\napplyTo: '**'\n---\n\n%s",
-			name, yamlScalar(profile.Description), prompt)
-
-		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
-			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
-			continue
-		}
-		installed++
-	}
-
-	if installed > 0 {
-		fmt.Printf("  Installed %d agent profiles to %s\n", installed, promptsDir)
-	}
-	return nil
-}
-
 // toolStringEnabled reports whether a flat host tool string (Claude/PI) should
 // include this opencode permission. bash: verify is OpenCode-only nested
 // enforcement — other hosts get no shell rather than a full shell.
@@ -303,33 +260,6 @@ func stripFrontmatter(content string) string {
 	return strings.TrimSpace(content[end+6:])
 }
 
-// VSCodePromptsDir returns the VS Code User prompts directory for the current platform.
-func VSCodePromptsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return vsCodeUserDir(home)
-}
-
-func vsCodeUserDir(home string) string {
-	switch {
-	case isDarwin():
-		return filepath.Join(home, "Library", "Application Support", "Code", "User", "prompts")
-	case isWindows():
-		appData := os.Getenv("APPDATA")
-		if appData == "" {
-			appData = filepath.Join(home, "AppData", "Roaming")
-		}
-		return filepath.Join(appData, "Code", "User", "prompts")
-	default: // linux
-		xdg := os.Getenv("XDG_CONFIG_HOME")
-		if xdg == "" {
-			xdg = filepath.Join(home, ".config")
-		}
-		return filepath.Join(xdg, "Code", "User", "prompts")
-	}
-}
 
 func isDarwin() bool  { return runtime.GOOS == "darwin" }
 func isWindows() bool { return runtime.GOOS == "windows" }

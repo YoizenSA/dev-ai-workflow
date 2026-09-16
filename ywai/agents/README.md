@@ -196,7 +196,6 @@ cat ywai/agents/dev/AGENT.md
 | PI.dev | `~/.pi/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) | ✅ Full support |
 | OMP (oh-my-pi) | `~/.omp/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) — **core group only** | ✅ Core agents |
 | Cursor | `~/.cursor/agents/*.md` | (same as Claude) | ✅ Full support |
-| VS Code Copilot | `~/.config/Code/User/prompts/*.instructions.md` | `name`, `description`, `applyTo` | ✅ Full support |
 
 TokenBank models for OMP: `ywai tokenbank configure --agent omp` → `~/.omp/agent/models.yml`.
 

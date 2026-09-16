@@ -14,10 +14,7 @@ import (
 func TestAvailableNames_ContainsAllKnownAgents(t *testing.T) {
 	names := AvailableNames()
 	expected := []string{
-		"opencode", "claude-code", "cursor", "windsurf",
-		"gemini-cli", "vscode-copilot", "codex",
-		"kimi", "qwen-code", "antigravity", "kiro-ide",
-		"openclaw", "trae-ide", "pi", "omp",
+		"opencode", "claude-code", "cursor", "codex", "pi", "omp",
 	}
 
 	if len(names) != len(expected) {
@@ -94,70 +91,6 @@ func TestAvailableNames_NoDuplicates(t *testing.T) {
 
 // ─── KnownAgents paths ───────────────────────────────────────────────────
 
-func TestKnownAgents_WindsurfUsesCodeiumPath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	for _, ka := range KnownAgents {
-		if ka.Name != "windsurf" {
-			continue
-		}
-		got := ka.SkillsPath()
-		want := filepath.Join(home, ".codeium", "windsurf", "skills")
-		if got != want {
-			t.Fatalf("windsurf SkillsPath = %q, want %q", got, want)
-		}
-		return
-	}
-	t.Fatal("windsurf not found in KnownAgents")
-}
-
-func TestKnownAgents_KimiUsesHomeKimi(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	for _, ka := range KnownAgents {
-		if ka.Name != "kimi" {
-			continue
-		}
-		got := ka.SkillsPath()
-		want := filepath.Join(home, ".kimi", "skills")
-		if got != want {
-			t.Fatalf("kimi SkillsPath = %q, want %q", got, want)
-		}
-		return
-	}
-	t.Fatal("kimi not found in KnownAgents")
-}
-
-func TestKnownAgents_OpenClawExists(t *testing.T) {
-	found := false
-	for _, ka := range KnownAgents {
-		if ka.Name == "openclaw" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("openclaw not found in KnownAgents")
-	}
-}
-
-func TestKnownAgents_TraeExists(t *testing.T) {
-	found := false
-	for _, ka := range KnownAgents {
-		if ka.Name == "trae-ide" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("trae-ide not found in KnownAgents")
-	}
-}
-
 func TestKnownAgents_PiExists(t *testing.T) {
 	found := false
 	for _, ka := range KnownAgents {
@@ -225,7 +158,7 @@ func TestSettingsPaths_ReturnsMap(t *testing.T) {
 		t.Fatal("SettingsPaths() returned nil")
 	}
 
-	expected := []string{"opencode", "windsurf", "gemini-cli", "pi"}
+	expected := []string{"opencode", "pi"}
 	for _, name := range expected {
 		if _, ok := paths[name]; !ok {
 			t.Fatalf("SettingsPaths() missing %q", name)
@@ -300,24 +233,26 @@ func TestDetect_FindsAgentByConfigDir(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	// Create windsurf config dir + skills dir (desktop app, detected by config dir)
-	windsurfDir := filepath.Join(home, ".codeium", "windsurf")
+	// Create cursor config dir + skills dir: Detect falls back to the config
+	// dir when the binary is absent from PATH, and reports the same skills dir
+	// when it is present.
+	windsurfDir := filepath.Join(home, ".cursor")
 	skillsDir := filepath.Join(windsurfDir, "skills")
 	os.MkdirAll(skillsDir, 0o755)
 
 	agents := Detect()
 	found := false
 	for _, a := range agents {
-		if a.Name == "windsurf" {
+		if a.Name == "cursor" {
 			found = true
 			if a.SkillsDir != filepath.Join(windsurfDir, "skills") {
-				t.Fatalf("windsurf skills = %q, want %q", a.SkillsDir, filepath.Join(windsurfDir, "skills"))
+				t.Fatalf("cursor skills = %q, want %q", a.SkillsDir, filepath.Join(windsurfDir, "skills"))
 			}
 			break
 		}
 	}
 	if !found {
-		t.Fatal("windsurf not detected via config dir")
+		t.Fatal("cursor not detected via config dir")
 	}
 }
 
