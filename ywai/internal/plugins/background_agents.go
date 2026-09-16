@@ -8,27 +8,19 @@ import (
 )
 
 // ywaiPluginsSubdir is a ywai-owned directory under the opencode config dir
-// where vendored plugin bundles live. It deliberately avoids opencode's own
-// auto-discovered "plugin"/"plugins" directory so the bundle is loaded exactly
-// once — via the explicit absolute path we add to the "plugin" array — instead
-// of being double-loaded by directory discovery.
+// where older installs left vendored plugin copies. New bundles go straight
+// into the auto-discovered plugins directory; the old directory is only
+// cleaned up, never written.
 const ywaiPluginsSubdir = "ywai-plugins"
 
-// InstallBackgroundAgents vendors the background-agents plugin bundle into the
-// location OpenCode 2 scans by itself. The plugin is v2-only: it is the
-// supervision layer on top of v2's built-in `subagent` tool (notifications,
-// steer/stop, watchdog, crash recovery, artifacts) and no longer carries the
-// v1 host surface. FlavorMarkerName remains only so installs can sweep the
-// marker files the old v1+v2 dual plugin wrote beside its bundles; the
-// v2-only plugin never reads them.
-const FlavorMarkerName = "ywai-opencode-flavor.json"
-
+// InstallBackgroundAgents vendors the background-agents plugin bundle into
+// the location OpenCode scans by itself: the supervision layer on top of the
+// built-in `subagent` tool (notifications, steer/stop, watchdog, crash
+// recovery, artifacts).
 func InstallBackgroundAgents(configPath string) error {
-	bundle, err := config.BackgroundAgentsBundlePath()
-	if err != nil {
-		return err
-	}
-	return installBackgroundAgentsWithBundle(configPath, bundle)
+	// Agent-agnostic: the manifest drives the opencode-only gating, and this
+	// entry names no slash command, so no agent name is needed.
+	return installVendorJS("", configPath, ManifestEntry{Bundle: "background-agents"})
 }
 
 // installBackgroundAgentsWithBundle copies the bundle at bundleSrc into the
@@ -48,26 +40,8 @@ const AutoDiscoveredPluginsSubdir = "plugins"
 const autoDiscoveredPluginsSubdir = AutoDiscoveredPluginsSubdir
 
 func installBackgroundAgentsWithBundle(configPath, bundleSrc string) error {
-	return installBackgroundAgentsV2(configPath, bundleSrc)
-}
-
-// installBackgroundAgentsV2 vendors the bundle into the directory OpenCode
-// scans by itself and leaves the config array alone.
-//
-// v2 accepts only directories as explicit plugin paths, so the v1 arrangement —
-// a .js under ywai-plugins/ referenced by absolute path — is dropped with a
-// warning and the plugin never loads. Auto-discovery takes plain .js files, so
-// the bundle simply lives where OpenCode already looks. Any stale explicit
-// entry is removed, otherwise the warning keeps firing on every start.
-func installBackgroundAgentsV2(configPath, bundleSrc string) error {
-	// The v1-era dual plugin wrote a flavor marker beside its bundles; the
-	// v2-only plugin never reads it, so sweep stale copies on every install.
-	if err := sweepFlavorMarkers(configPath); err != nil {
-		return err
-	}
-
-	// Drop the v1-shaped entry and the copy it pointed at, so the bundle is
-	// discovered once rather than also being pointed at and rejected.
+	// Drop the stale explicit entry and the copy it pointed at, so the
+	// bundle is discovered once rather than also being pointed at.
 	return installVendorPluginV2(configPath, bundleSrc, config.BackgroundAgentsBundleName)
 }
 
@@ -86,29 +60,11 @@ func containsPluginPath(plugins []any, path string) bool {
 	return false
 }
 
-// openCodePlugins returns the OpenCode v1 "plugin" array. If only a v2
-// "plugins" key exists, those entries are migrated. The v2 key is always
-// deleted so the file never carries both.
-func openCodePlugins(root map[string]any) []any {
-	var out []any
-	if raw, ok := root["plugin"]; ok {
-		out = pluginsToSlice(raw)
-	} else if raw, ok := root["plugins"]; ok {
-		out = pluginsToSlice(raw)
-	}
-	// Both spellings are cleared here; writePlugins puts back the one the
-	// active flavor reads. Leaving the other behind would strand a second,
-	// stale plugin list in the file.
-	delete(root, "plugin")
-	delete(root, "plugins")
-	if out == nil {
-		return []any{}
-	}
-	return out
-}
-
-func pluginsToSlice(raw any) []any {
-	switch v := raw.(type) {
+// pluginArray returns the "plugins" array. A lone string is tolerated for
+// hand-edited files; anything else reads as empty. Every opencode.json and
+// cli.json plugin edit funnels through here and writePluginArray.
+func pluginArray(root map[string]any) []any {
+	switch v := root["plugins"].(type) {
 	case []any:
 		return append([]any{}, v...)
 	case string:
@@ -121,18 +77,11 @@ func pluginsToSlice(raw any) []any {
 	}
 }
 
-// writePlugins stores the plugin list under the key the active OpenCode reads:
-// v1 uses "plugin", v2 renamed it to "plugins". Only one is written, so the
-// other never lingers as a stale second list. Every opencode.json and cli.json
-// plugin edit funnels through here — see openCodePlugins for the read side,
-// which accepts either spelling so a flavor switch keeps existing entries.
-// TODO(decision): tui_logo_test.go and plugin_array_flavor_test.go currently
-// assert opposite key conventions; the surviving key for opencode2-only
-// builds is an open call for the drop-v1 batch owner.
-func writePlugins(root map[string]any, plugins []any) {
-	key, stale := "plugins", "plugin"
-	delete(root, stale)
-	root[key] = plugins
+// writePluginArray stores the plugin list under "plugins", dropping the stale
+// v1 "plugin" key when an older install left it behind.
+func writePluginArray(root map[string]any, plugins []any) {
+	delete(root, "plugin")
+	root["plugins"] = plugins
 }
 
 // copyFile copies src to dst, truncating dst if it exists.

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -177,50 +176,35 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	current := AppVersion
-	latest, err := selfupdate.LatestVersion()
+	latestStable, err := selfupdate.LatestVersion()
 	if err != nil {
 		// Can't check — still return current version
 		fmt.Fprintf(w, `{"current":%q,"latest":null,"updateAvailable":false,"error":%q}`,
 			current, err.Error())
 		return
 	}
+	latestBeta := ""
+	if b, berr := selfupdate.LatestPrereleaseVersion(); berr == nil {
+		latestBeta = b
+	}
+	offer := selfupdate.Offer(current, latestStable, latestBeta)
 
-	// Only offer an update when the latest published release is strictly NEWER
-	// than the running version. A plain inequality check wrongly flagged an
-	// update when GitHub's "latest" release lagged behind a newer local build
-	// (e.g. running v8.8.8 while the latest published release is still v8.8.6).
-	updateAvail := !strings.HasPrefix(current, "dev") && isNewerVersion(latest, current)
-	fmt.Fprintf(w, `{"current":%q,"latest":%q,"updateAvailable":%t}`,
-		current, latest, updateAvail)
+	fmt.Fprintf(w, `{"current":%q,"latest":%q,"latestStable":%q,"latestBeta":%q,"channel":%q,"updateCommand":%q,"updateAvailable":%t,"stableNewer":%t}`,
+		current, offer.Latest, latestStable, latestBeta, offer.Channel, offer.Command, offer.Available, offer.StableNewer)
 }
 
 // isNewerVersion reports whether semver `latest` is strictly greater than
-// `current`. Both may carry a leading "v" and a pre-release/build suffix, which
-// are ignored; only MAJOR.MINOR.PATCH are compared.
+// `current`. Leading "v" and pre-release suffixes follow semver precedence
+// (a release outranks its prereleases; beta.18 > beta.17).
 func isNewerVersion(latest, current string) bool {
-	l := parseSemver(latest)
-	c := parseSemver(current)
-	for i := 0; i < 3; i++ {
-		if l[i] != c[i] {
-			return l[i] > c[i]
-		}
-	}
-	return false
+	return selfupdate.CompareVersions(latest, current) > 0
 }
 
-func parseSemver(v string) [3]int {
-	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
-	if i := strings.IndexAny(v, "-+"); i >= 0 {
-		v = v[:i]
+func updateArgs(version string) []string {
+	if selfupdate.IsPrerelease(version) {
+		return []string{"update", "--beta"}
 	}
-	var out [3]int
-	for i, part := range strings.Split(v, ".") {
-		if i >= 3 {
-			break
-		}
-		out[i], _ = strconv.Atoi(strings.TrimSpace(part))
-	}
-	return out
+	return []string{"update"}
 }
 
 // updateHandler spawns a detached `ywai update` process and returns
@@ -246,7 +230,7 @@ func (s *Server) updateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command(exe, "update")
+	cmd := exec.Command(exe, updateArgs(AppVersion)...)
 	cmd.SysProcAttr = detachedSysProcAttr()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

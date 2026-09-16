@@ -16,21 +16,21 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
-		if arr := pluginArray(t, path); len(arr) != 0 {
+		if arr := pluginArrayFromFile(t, path); len(arr) != 0 {
 			t.Errorf("plugin array = %v, want empty", arr)
 		}
 	})
 
 	t.Run("preserves_existing_entries", func(t *testing.T) {
 		path := writeAgentConfig(t, "opencode.json", map[string]any{
-			"plugin": []any{"some-other-plugin"},
+			"plugins": []any{"some-other-plugin"},
 		})
 
 		if err := InstallPonytail("opencode", path); err != nil {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
-		arr := pluginArray(t, path)
+		arr := pluginArrayFromFile(t, path)
 		if !containsString(arr, "some-other-plugin") {
 			t.Errorf("plugin array %v dropped pre-existing entry", arr)
 		}
@@ -50,7 +50,7 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 			}
 		}
 
-		arr := pluginArray(t, path)
+		arr := pluginArrayFromFile(t, path)
 		if len(arr) != 1 || !containsString(arr, "other") || containsString(arr, PonytailNPMPackage) {
 			t.Errorf("plugin array = %v, want only preserved entry", arr)
 		}
@@ -65,7 +65,7 @@ func TestInstallPonytail_OpenCode(t *testing.T) {
 			t.Fatalf("InstallPonytail() error = %v", err)
 		}
 
-		arr := pluginArray(t, path)
+		arr := pluginArrayFromFile(t, path)
 		if len(arr) != 1 || !containsString(arr, "other") || containsString(arr, PonytailNPMPackage) {
 			t.Errorf("plugin array = %v, want only preserved entry", arr)
 		}

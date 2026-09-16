@@ -217,8 +217,20 @@ export const toolsApi = {
 
 export const configApi = {
 	// Version check
-	getVersion: () => request<{ current: string; latest: string | null; updateAvailable: boolean; error?: string }>("/api/version"),
-	// Trigger a detached `ywai update`. The server relaunches itself, so the
+	getVersion: () =>
+		request<{
+			current: string;
+			latest: string | null;
+			latestStable?: string;
+			latestBeta?: string;
+			channel?: string;
+			updateCommand?: string;
+			updateAvailable: boolean;
+			stableNewer?: boolean;
+			error?: string;
+		}>("/api/version"),
+	// Trigger a detached `ywai update` (or `ywai update --beta` when the
+	// running binary is a prerelease). The server relaunches itself, so the
 	// caller should poll health and reload once it comes back.
 	triggerUpdate: () => request<{ started: boolean; pid?: number; error?: string }>("/api/update", { method: "POST" }),
 

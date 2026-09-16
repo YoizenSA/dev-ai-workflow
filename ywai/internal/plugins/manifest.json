@@ -1,14 +1,14 @@
 {
   "install": [
-    { "id": "background-agents", "agents": ["opencode"], "flavor": "v2" },
-    { "id": "background-agents-notify", "agents": ["opencode"], "flavor": "v2" },
-    { "id": "vision-bridge", "agents": ["opencode"] },
-    { "id": "advisor", "agents": ["opencode"] },
-    { "id": "tui-logo", "agents": ["opencode"] },
-    { "id": "chrome-devtools" },
-    { "id": "grafana" },
-    { "id": "microsoft-learn", "flag": "mcp" },
-    { "id": "meta-devtools", "flag": "meta-mcp" },
-    { "id": "ponytail", "flag": "ponytail", "agents": ["opencode",  "claude-code"] }
+    { "id": "background-agents", "kind": "vendor-js", "bundle": "background-agents", "agents": ["opencode"] },
+    { "id": "background-agents-notify", "kind": "vendor-tui", "bundle": "background-agents-notify", "dir": "background-agents-notify", "agents": ["opencode"] },
+    { "id": "vision-bridge", "kind": "vendor-js", "bundle": "vision-bridge", "agents": ["opencode"] },
+    { "id": "advisor", "kind": "vendor-js", "bundle": "advisor", "command": "advisor.md", "agents": ["opencode"] },
+    { "id": "tui-logo", "kind": "vendor-tui", "bundle": "tui-logo", "dir": "ywai-logo", "mouse": true, "agents": ["opencode"] },
+    { "id": "chrome-devtools", "kind": "mcp" },
+    { "id": "grafana", "kind": "mcp" },
+    { "id": "microsoft-learn", "kind": "mcp", "flag": "mcp", "label": "Microsoft Learn MCP", "description": "Access to official Microsoft documentation", "claudeStdio": ["npx", "@anthropic/mcp-server-microsoft-learn"] },
+    { "id": "meta-devtools", "kind": "mcp", "flag": "meta-mcp", "label": "Meta Developer Tools MCP", "description": "Meta apps, webhooks, compliance and developer docs (sign in from your agent)" },
+    { "id": "ponytail", "kind": "exec", "flag": "ponytail", "label": "Ponytail", "description": "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)", "agents": ["opencode",  "claude-code"], "remove": "@dietrichgebert/ponytail", "marketplace": "DietrichGebert/ponytail", "plugin": "ponytail@ponytail" }
   ]
 }

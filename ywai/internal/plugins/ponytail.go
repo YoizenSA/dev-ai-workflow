@@ -38,14 +38,10 @@ var claudeCLI = "claude"
 // configPath is required for OpenCode-format agents; ignored for claude-code.
 // Returns an error the caller should surface as a non-fatal warning.
 func InstallPonytail(agentName, configPath string) error {
-	switch agentName {
-	case "opencode":
-		return removeOpenCodePluginName(configPath, PonytailNPMPackage)
-	case "claude-code":
-		return installPonytailClaude()
-	default:
-		return fmt.Errorf("ponytail install not supported for agent %q", agentName)
-	}
+	return installExecEntry(agentName, configPath, ManifestEntry{
+		ID: "ponytail", Remove: PonytailNPMPackage,
+		Marketplace: PonytailClaudeMarketplaceSource, Plugin: PonytailClaudePluginID,
+	})
 }
 
 // SupportsPonytail reports whether ywai can install ponytail for the agent.
@@ -58,26 +54,32 @@ func SupportsPonytail(agentName string) bool {
 	}
 }
 
-// installPonytailClaude adds the ponytail marketplace and installs the plugin
-// via the Claude Code CLI (user scope).
-func installPonytailClaude() error {
+// installClaudeMarketplacePlugin adds a marketplace and installs a plugin via
+// the Claude Code CLI (user scope). Both commands are idempotent.
+func installClaudeMarketplacePlugin(marketplace, pluginID string) error {
 	if _, err := exec.LookPath(claudeCLI); err != nil {
 		return fmt.Errorf("%s not found in PATH — install Claude Code, then run: %s plugin marketplace add %s && %s plugin install %s",
-			claudeCLI, claudeCLI, PonytailClaudeMarketplaceSource, claudeCLI, PonytailClaudePluginID)
+			claudeCLI, claudeCLI, marketplace, claudeCLI, pluginID)
 	}
 
 	// marketplace add is idempotent when already declared ("already on disk").
-	if out, err := runClaudePlugin("marketplace", "add", PonytailClaudeMarketplaceSource); err != nil {
+	if out, err := runClaudePlugin("marketplace", "add", marketplace); err != nil {
 		return fmt.Errorf("claude plugin marketplace add %s failed: %w%s",
-			PonytailClaudeMarketplaceSource, err, formatCmdOutput(out))
+			marketplace, err, formatCmdOutput(out))
 	}
 
 	// install is idempotent when already installed.
-	if out, err := runClaudePlugin("install", PonytailClaudePluginID, "-s", "user"); err != nil {
+	if out, err := runClaudePlugin("install", pluginID, "-s", "user"); err != nil {
 		return fmt.Errorf("claude plugin install %s failed: %w%s",
-			PonytailClaudePluginID, err, formatCmdOutput(out))
+			pluginID, err, formatCmdOutput(out))
 	}
 	return nil
+}
+
+// installPonytailClaude adds the ponytail marketplace and installs the plugin
+// via the Claude Code CLI (user scope).
+func installPonytailClaude() error {
+	return installClaudeMarketplacePlugin(PonytailClaudeMarketplaceSource, PonytailClaudePluginID)
 }
 
 // runClaudePlugin runs `claude plugin <args...>` and returns combined output.
@@ -116,7 +118,7 @@ func removeOpenCodePluginName(configPath, pluginName string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	plugins := openCodePlugins(root)
+	plugins := pluginArray(root)
 	filtered := make([]any, 0, len(plugins))
 	for _, plugin := range plugins {
 		if name, ok := plugin.(string); ok && name == pluginName {
@@ -124,7 +126,7 @@ func removeOpenCodePluginName(configPath, pluginName string) error {
 		}
 		filtered = append(filtered, plugin)
 	}
-	writePlugins(root, filtered)
+	writePluginArray(root, filtered)
 
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)

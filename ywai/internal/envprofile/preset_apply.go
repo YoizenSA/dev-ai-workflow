@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 )
 
 // preset_apply.go — preset enforcement for profile-scoped apply.
@@ -75,7 +77,7 @@ func PresetNone(spec map[string]any, key string) bool {
 // (engram, plugins) always installs.
 func FilterableMCPIDs() []string {
 	ids := []string{"graft"}
-	for id := range mcpServerManifestIDs {
+	for _, id := range mcpServerManifestIDs() {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
@@ -201,20 +203,30 @@ func ScopedPreset() (Profile, map[string]any, error) {
 }
 
 // mcpServerManifestIDs are the plugin-manifest entry ids that install an MCP
-// server (mirrors internal/plugins/manifest.go + mcp.go). Plugin entries
-// (background-agents, background-agents-notify, vision-bridge, advisor,
-// tui-logo, ponytail) always install; only these ids are filtered by the
-// preset mcp[] allowlist.
-var mcpServerManifestIDs = map[string]bool{
-	"chrome-devtools": true,
-	"grafana":         true,
-	"microsoft-learn": true,
-	"meta-devtools":   true,
+// server, derived from the manifest (kind == mcp) instead of a hand-kept
+// mirror. Only these ids are filtered by the preset mcp[] allowlist; every
+// other manifest entry always installs.
+func mcpServerManifestIDs() []string {
+	mf, _ := plugins.LoadManifest()
+	var ids []string
+	for _, e := range mf.Install {
+		if e.Kind == plugins.KindMCP {
+			ids = append(ids, e.ID)
+		}
+	}
+	return ids
 }
 
 // IsMCPServerManifestID reports whether a manifest entry id installs an MCP
 // server (and is therefore subject to the preset mcp[] filter).
-func IsMCPServerManifestID(id string) bool { return mcpServerManifestIDs[id] }
+func IsMCPServerManifestID(id string) bool {
+	for _, known := range mcpServerManifestIDs() {
+		if known == id {
+			return true
+		}
+	}
+	return false
+}
 
 // ShouldInstallMCP reports whether an MCP server id installs under the
 // allowlist. An empty allowlist means no filter (keep current behavior).

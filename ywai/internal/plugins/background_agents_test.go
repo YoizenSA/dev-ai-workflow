@@ -18,10 +18,10 @@ func containsString(slice []any, want string) bool {
 	return false
 }
 
-// pluginArray returns the root v2 "plugins" array as []any (nil when the key
-// is absent). A surviving v1-era "plugin" key means the write failed to
-// migrate the config, so it fails the test.
-func pluginArray(t *testing.T, path string) []any {
+// pluginArrayFromFile returns the root "plugins" array as []any (nil when the
+// key is absent). A surviving v1-era "plugin" key means the write failed to
+// drop it, so it fails the test.
+func pluginArrayFromFile(t *testing.T, path string) []any {
 	t.Helper()
 	root := readConfigRoot(t, path)
 	if _, ok := root["plugin"]; ok {
@@ -57,9 +57,6 @@ func TestInstallBackgroundAgents_Integration(t *testing.T) {
 	// The real bundle is ~1.5 MB; guard against an empty/truncated copy.
 	if info.Size() < 1024 {
 		t.Errorf("copied bundle size = %d bytes, want a real bundle (>1KB)", info.Size())
-	}
-	if _, err := os.Stat(filepath.Join(dir, autoDiscoveredPluginsSubdir, FlavorMarkerName)); !os.IsNotExist(err) {
-		t.Errorf("flavor marker must not be written anymore; the v2-only plugin never reads it (err = %v)", err)
 	}
 	root := readConfigRoot(t, configPath)
 	if _, ok := root["plugin"]; ok {

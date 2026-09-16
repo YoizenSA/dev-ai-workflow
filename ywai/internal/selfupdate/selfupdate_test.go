@@ -57,12 +57,51 @@ func TestComparePrereleaseVersions(t *testing.T) {
 		{"v8.25.0-beta", "v8.25.0-beta.1"},
 	}
 	for _, c := range cases {
-		if compareVersions(c.a, c.b) >= 0 || compareVersions(c.b, c.a) <= 0 {
+		if CompareVersions(c.a, c.b) >= 0 || CompareVersions(c.b, c.a) <= 0 {
 			t.Errorf("want %s < %s", c.a, c.b)
 		}
 	}
-	if compareVersions("v1.2.3-beta.4", "1.2.3-beta.4") != 0 {
+	if CompareVersions("v1.2.3-beta.4", "1.2.3-beta.4") != 0 {
 		t.Error("the v prefix must not affect ordering")
+	}
+}
+
+func TestOfferKeepsBetaOnBetaChannel(t *testing.T) {
+	// Screenshot case: on a newer beta, GitHub "latest" is an older stable.
+	got := Offer("8.26.0-beta.17", "v8.24.8", "v8.26.0-beta.17")
+	if got.Channel != "beta" || got.Command != "ywai update --beta" {
+		t.Errorf("channel/command = %s %q, want beta / ywai update --beta", got.Channel, got.Command)
+	}
+	if got.Available {
+		t.Error("same beta must not flag an update")
+	}
+	if got.StableNewer {
+		t.Error("older stable must not be advertised as newer")
+	}
+	if got.Latest != "v8.26.0-beta.17" {
+		t.Errorf("latest = %q, want the beta head", got.Latest)
+	}
+
+	got = Offer("8.26.0-beta.17", "v8.24.8", "v8.26.0-beta.18")
+	if !got.Available || got.Latest != "v8.26.0-beta.18" {
+		t.Errorf("newer beta: available=%v latest=%q", got.Available, got.Latest)
+	}
+	if got.StableNewer {
+		t.Error("8.24.8 is not newer than 8.26.0-beta.17")
+	}
+
+	// Newer stable of the same series: show both (beta update + stableNewer).
+	got = Offer("8.26.0-beta.17", "v8.26.0", "v8.26.0-beta.18")
+	if !got.Available || !got.StableNewer {
+		t.Errorf("want both channels newer, got available=%v stableNewer=%v", got.Available, got.StableNewer)
+	}
+
+	got = Offer("8.24.8", "v8.24.9", "v8.26.0-beta.1")
+	if got.Channel != "stable" || got.Command != "ywai update" {
+		t.Errorf("stable channel = %s %q", got.Channel, got.Command)
+	}
+	if !got.Available || got.Latest != "v8.24.9" {
+		t.Errorf("stable user must track stable, available=%v latest=%q", got.Available, got.Latest)
 	}
 }
 

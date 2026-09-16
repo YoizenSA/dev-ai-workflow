@@ -52,7 +52,7 @@ Guidelines:
 7. Create (defaults from the create contract unless the user says otherwise):
    `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" --field "Custom.USProducto=<producto>" --field "Custom.Sponsors=<sponsor>" [--description "<d>"] [--priority <n>] [--parent <id>]`
 8. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
-9. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+9. Verify: `ado wi get <id>`; give the user the URL, then ID, type, title, state.
 
 Confirm with the user before creating when the request is ambiguous, the item is
 high-impact (Feature/Epic), or no type was specified.
@@ -62,7 +62,7 @@ If creation is rejected, the error names the violated rule — fix the flag, don
 ## Update a work item after finishing work
 
 1. `ado wi get <id>` — confirm current state and that it's the right item.
-2. `ado wi update <id> --state "<state>" --comment "<what was done, PR link>"` — one command updates state and comments.
+2. `ado wi update <id> --state "<state>" --comment "<what was done, PR-id:1234>"` — one command updates state and comments.
 
 ## Create a PR for finished work
 
@@ -70,12 +70,14 @@ If creation is rejected, the error names the violated rule — fix the flag, don
 2. `ado wi get <id>` if linking a work item — verify the ID.
 3. `ado pr create --repo <r> --source <branch> --target <branch> --title "<t>" --wi <id> [--draft]`.
 4. Respect `.adoconfig.toml` `[pr]` rules: `require_work_item`, `default_draft`.
+5. Give the user the PR URL (from CLI output, or `ado pr get` if missing).
 
 ## Create a chain of PRs from work items
 
 1. `ado wi get <id>` for each item — confirm order and scope.
 2. `ado pr chain --repo <r> --wi 1,2,3 [--strategy feature-chain|stacked]` — order of `--wi` is the chain order.
 3. Strategy/base/prefix default from `.adoconfig.toml` `[chain]`; only pass flags to override.
+4. Give the user each PR URL.
 
 ## Find my pending work
 

@@ -114,7 +114,6 @@ func TestParseManifest_Rejects(t *testing.T) {
 		"unknown id":   `{"install":[{"id":"nope"}]}`,
 		"duplicate id": `{"install":[{"id":"grafana"},{"id":"grafana"}]}`,
 		"missing id":   `{"install":[{"agents":["opencode"]}]}`,
-		"bad flavor":   `{"install":[{"id":"grafana","flavor":"v3"}]}`,
 		"not json":     `{"install":`,
 	}
 	for name, doc := range cases {

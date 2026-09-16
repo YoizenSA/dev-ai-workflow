@@ -11,9 +11,8 @@ import (
 )
 
 // installVendorPluginV2 vendors a plugin bundle into ~/.config/opencode/plugins/
-// where OpenCode v2 auto-discovers plain .js files without needing an entry in
-// the plugins array (which only accepts directories in v2). Any stale explicit
-// path entry from a v1 install is purged from the config.
+// where OpenCode auto-discovers plain .js files. Any stale explicit entry is
+// purged from the config.
 func installVendorPluginV2(configPath, bundleSrc, bundleName string) error {
 	destDir := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -33,32 +32,18 @@ func installVendorPluginV2(configPath, bundleSrc, bundleName string) error {
 		return fmt.Errorf("read %s: %w", configPath, err)
 	}
 	kept := make([]any, 0)
-	for _, raw := range openCodePlugins(root) {
+	for _, raw := range pluginArray(root) {
 		if s, ok := raw.(string); ok && strings.Contains(s, bundleName) {
 			continue
 		}
 		kept = append(kept, raw)
 	}
-	writePlugins(root, kept)
+	writePluginArray(root, kept)
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
 	}
 	if err := os.Remove(filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir, bundleName)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
-	}
-	return nil
-}
-
-// sweepFlavorMarkers deletes the flavor marker files the old v1+v2 dual
-// plugin wrote beside its bundles. The v2-only plugins never read them.
-func sweepFlavorMarkers(configPath string) error {
-	for _, markerDir := range []string{
-		filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir),
-		filepath.Join(filepath.Dir(configPath), ywaiPluginsSubdir),
-	} {
-		if err := os.Remove(filepath.Join(markerDir, FlavorMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove stale flavor marker: %w", err)
-		}
 	}
 	return nil
 }

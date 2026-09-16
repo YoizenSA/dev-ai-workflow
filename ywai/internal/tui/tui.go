@@ -3,12 +3,14 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -515,21 +517,77 @@ func (m *Model) toggleCurrentMCP() {
 	if !m.shouldShowMCPStep() {
 		return
 	}
-	// Rows must stay in the same order as renderMCPStep's list.
-	switch m.optionalPluginCursor {
-	case 0:
+	// Rows come from the manifest, so the toggle follows the same order the
+	// step renders; the flag decides which install toggle flips.
+	rows := m.optionalPluginRows()
+	if m.optionalPluginCursor < 0 || m.optionalPluginCursor >= len(rows) {
+		return
+	}
+	m.toggleOptionalFlag(rows[m.optionalPluginCursor].Flag)
+}
+
+// toggleOptionalFlag flips the install toggle behind a manifest flag.
+func (m *Model) toggleOptionalFlag(flag string) {
+	switch flag {
+	case "mcp":
 		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-	case 1:
+	case "meta-mcp":
 		m.installMetaDevToolsMCP = !m.installMetaDevToolsMCP
-	case 2:
+	case "ponytail":
 		m.installPonytail = !m.installPonytail
 	}
+}
+
+// optionalFlagChecked reports the install toggle behind a manifest flag.
+func (m *Model) optionalFlagChecked(flag string) bool {
+	switch flag {
+	case "mcp":
+		return m.installMicrosoftLearnMCP
+	case "meta-mcp":
+		return m.installMetaDevToolsMCP
+	case "ponytail":
+		return m.installPonytail
+	default:
+		return false
+	}
+}
+
+// optionalPluginRows returns the manifest entries behind a CLI flag — the
+// optional plugins step — in manifest order, keeping only entries that apply
+// to the selected agent.
+func (m *Model) optionalPluginRows() []plugins.ManifestEntry {
+	mf, _ := plugins.LoadManifest()
+	applies := func(e plugins.ManifestEntry, agent string) bool {
+		return len(e.Agents) == 0 || slices.Contains(e.Agents, agent)
+	}
+	var rows []plugins.ManifestEntry
+	for _, e := range mf.Install {
+		if e.Flag == "" {
+			continue
+		}
+		if m.selectedAgent == "" || m.selectedAgent == "all" {
+			for _, a := range m.agents {
+				if a.Name == "all" {
+					continue
+				}
+				if applies(e, a.Name) {
+					rows = append(rows, e)
+					break
+				}
+			}
+			continue
+		}
+		if applies(e, m.selectedAgent) {
+			rows = append(rows, e)
+		}
+	}
+	return rows
 }
 
 // optionalPluginCount is the number of toggles on the Optional plugins step.
 func (m *Model) optionalPluginCount() int {
 	if m.shouldShowMCPStep() {
-		return 3 // Microsoft Learn MCP + Meta Developer Tools + Ponytail
+		return len(m.optionalPluginRows())
 	}
 	return 0
 }
@@ -1006,22 +1064,17 @@ func (m *Model) viewMCP() string {
 		desc    string
 		checked bool
 	}
-	rows := []pluginRow{
-		{
-			name:    "Microsoft Learn MCP",
-			desc:    "Access to official Microsoft documentation",
-			checked: m.installMicrosoftLearnMCP,
-		},
-		{
-			name:    "Meta Developer Tools MCP",
-			desc:    "Meta apps, webhooks, compliance and developer docs (sign in from your agent)",
-			checked: m.installMetaDevToolsMCP,
-		},
-		{
-			name:    "Ponytail",
-			desc:    "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)",
-			checked: m.installPonytail,
-		},
+	var rows []pluginRow
+	for _, e := range m.optionalPluginRows() {
+		name := e.Label
+		if name == "" {
+			name = e.Flag
+		}
+		rows = append(rows, pluginRow{
+			name:    name,
+			desc:    e.Desc,
+			checked: m.optionalFlagChecked(e.Flag),
+		})
 	}
 
 	for i, row := range rows {
@@ -1108,21 +1161,17 @@ func (m *Model) viewConfirm() string {
 	}
 
 	if m.shouldShowMCPStep() {
-		mcpLabel := "no"
-		if m.installMicrosoftLearnMCP {
-			mcpLabel = "yes"
+		for _, e := range m.optionalPluginRows() {
+			label := "no"
+			if m.optionalFlagChecked(e.Flag) {
+				label = "yes"
+			}
+			name := e.Label
+			if name == "" {
+				name = e.Flag
+			}
+			rows = append(rows, [2]string{name, label})
 		}
-		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
-		metaLabel := "no"
-		if m.installMetaDevToolsMCP {
-			metaLabel = "yes"
-		}
-		rows = append(rows, [2]string{"Meta Developer Tools MCP", metaLabel})
-		ponytailLabel := "no"
-		if m.installPonytail {
-			ponytailLabel = "yes"
-		}
-		rows = append(rows, [2]string{"Ponytail", ponytailLabel})
 	}
 
 	// Find max label width for alignment

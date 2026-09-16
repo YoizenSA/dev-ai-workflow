@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
@@ -92,9 +93,10 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// Keep ~/.ywai/version.json's installed version current for the TUI logo.
-		// No network here (see versionfile.Touch); cheap enough for every command.
-		_ = versionfile.Touch(version)
+		// Keep ~/.ywai/version.json current for the TUI logo. Refresh is
+		// throttled (24h) and, for beta installs, backfills the prerelease
+		// head even when a legacy file only cached GitHub's stable.
+		_ = versionfile.Refresh(version, 24*time.Hour)
 	},
 }
 

@@ -2,7 +2,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useTerminalDimensions } from "@opentui/solid"
 import { RGBA } from "@opentui/core"
-import { createMemo, createSignal, onCleanup, Index } from "solid-js"
+import { createMemo, createSignal, onCleanup, Index, Show } from "solid-js"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -19,8 +19,17 @@ const wordmark = [
   "   ╚═╝    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝",
 ]
 
+// Smaller typeface of the same box-drawing family (single-stroke, ~15 cols).
+// The 6-line mark is filled ██╗; this is the light ╦╚╝ cut for mid-height
+// terminals where the heavy 3-line crop still collided with the prompt.
+const smallMark = [
+  "╦ ╦ ╦   ╦ ╔═╗ ╦",
+  "╚╦╝ ╦ ╦ ╦ ╠═╣ ║",
+  " ╩   ╩ ╩  ╩ ╩ ╩",
+]
+
 const mediumMark = "◆  Ywai  ◆"
-const compactArt = "✦ Ywai ✦"
+const compactArt = "✦ ywai"
 
 // Brand palette from the ywai icon (icon.svg): orange, blue, purple.
 type RGB = [number, number, number]
@@ -55,20 +64,20 @@ type Egg = { at: number; text: string; toast?: string }
 // Click ladder. Toasts fire only on the click that lands on `at` (not on load,
 // so a persisted gentleman does not dump the whole campaign at startup).
 const eggs: Egg[] = [
-  { at: 3, text: "you found me 🎉" },
-  { at: 7, text: "yoizen ai · keep clicking…" },
-  { at: 13, text: "that's not a skill" },
-  { at: 21, text: "✦ certified ywai gentleman ✦", toast: "title unlocked" },
-  { at: 34, text: "ponytail: YAGNI. you: click.", toast: "ponytail disapproves" },
+  { at: 3, text: "hey — the logo is a button.", toast: "you found me" },
+  { at: 7, text: "yoizen ai · keep going", toast: "ywai" },
+  { at: 13, text: "still not a skill.", toast: "nice try" },
+  { at: 21, text: "certified ywai gentleman", toast: "title unlocked" },
+  { at: 34, text: "ponytail says YAGNI. you clicked anyway.", toast: "ponytail disapproves" },
   { at: 42, text: "42 clicks. the answer was ywai.", toast: "don't panic" },
-  { at: 64, text: "your orchestrator filed a complaint", toast: "delegation refused" },
-  { at: 89, text: "i-have-adhd wants this loop back", toast: "focus check" },
-  { at: 100, text: "certified clicker. go ship.", toast: "achievement: stop" },
+  { at: 64, text: "the orchestrator filed a complaint.", toast: "delegation refused" },
+  { at: 89, text: "i-have-adhd wants this loop back.", toast: "focus check" },
+  { at: 100, text: "ok. go ship.", toast: "achievement: stop" },
 ]
 
 const encore = [
-  "the logo is a button now. you made it one.",
-  "ywai update won't fix this",
+  "the logo is a button. you made it one.",
+  "ywai update --beta won't fix this",
   "delegate this urge to a subagent",
   "gentleman-programming would never",
   "one more for the workflow retro",
@@ -96,7 +105,16 @@ const speedFor = (clicks: number) => {
   return 1
 }
 
-type VersionInfo = { installed?: string; latest?: string; updateAvailable?: boolean }
+type VersionInfo = {
+  installed?: string
+  latest?: string
+  latestStable?: string
+  latestBeta?: string
+  channel?: string
+  updateCommand?: string
+  updateAvailable?: boolean
+  stableNewer?: boolean
+}
 
 const readVersionInfo = (): VersionInfo => {
   try {
@@ -109,6 +127,38 @@ const readVersionInfo = (): VersionInfo => {
 
 const tag = (v?: string) => (v ? (v.startsWith("v") ? v : `v${v}`) : "")
 
+const isBetaVer = (v?: string) => /-(beta|rc|pre|alpha)/i.test(v ?? "")
+
+const channelOf = (info: VersionInfo) =>
+  info.channel || (isBetaVer(info.installed) ? "beta" : "stable")
+
+const updateCommand = (info: VersionInfo) =>
+  info.updateCommand || (channelOf(info) === "beta" ? "ywai update --beta" : "ywai update")
+
+const clip = (s: string, width: number) => {
+  const max = Math.max(8, width - 4)
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
+const updateLines = (info: VersionInfo, width: number): string[] => {
+  const lines: string[] = []
+  const cmd = updateCommand(info)
+  if (info.updateAvailable && info.latest) {
+    const long = `↑ ${tag(info.latest)} — ${cmd}`
+    if (width >= long.length + 2) lines.push(long)
+    else {
+      lines.push(`↑ ${tag(info.latest)}`)
+      if (width >= cmd.length + 2) lines.push(cmd)
+    }
+  }
+  if (channelOf(info) === "beta" && info.stableNewer && info.latestStable) {
+    const long = `stable ${tag(info.latestStable)} — ywai update`
+    if (width >= long.length + 2) lines.push(long)
+    else lines.push(`stable ${tag(info.latestStable)}`)
+  }
+  return lines
+}
+
 // v2 ResolvedTheme is nested (theme.text.subdued, theme.text.feedback.*).
 // Older hosts passed flat keys. Prefer v2; fall back so a missing token
 // never paints the default (white) fg.
@@ -119,9 +169,20 @@ const themeWarning = (theme) =>
   theme?.text?.feedback?.warning?.default ?? theme?.text?.status?.unread ?? themeAccent(theme)
 
 const aboutMessage = (info: VersionInfo) => {
-  const installed = info.installed ? `installed ${tag(info.installed)}` : "installed version unknown"
-  if (info.updateAvailable) return `${installed}\n↑ ${tag(info.latest)} available — run \`ywai update\``
-  return info.installed ? `${installed}\nup to date` : installed
+  const channel = channelOf(info)
+  const installed = info.installed
+    ? `installed ${tag(info.installed)} (${channel})`
+    : "installed version unknown"
+  const lines = [installed]
+  if (info.updateAvailable && info.latest) {
+    lines.push(`↑ ${tag(info.latest)} — ${updateCommand(info)}`)
+  } else if (info.installed) {
+    lines.push(channel === "beta" ? "up to date on beta" : "up to date")
+  }
+  if (channel === "beta" && info.stableNewer && info.latestStable) {
+    lines.push(`stable ${tag(info.latestStable)} — ywai update`)
+  }
+  return lines.join("\n")
 }
 
 const showAbout = (ctx) => {
@@ -148,21 +209,34 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   onCleanup(() => clearInterval(timer))
 
   const size = createMemo(() => {
-    const t = dim()
-    if (t.height >= wordmark.length + 6 && t.width >= 64) return "full"
-    if (t.width >= 28) return "medium"
-    return "compact"
+    const t = dim() || { width: 80, height: 24 }
+    const w = t.width ?? 80
+    const h = t.height ?? 24
+    // Host home already uses ~16 rows. The 6-line mark needs leftover
+    // height or it paints over the prompt (the screenshot case).
+    if (h >= 46 && w >= 70) return "full"
+    if (h >= 34 && w >= 32) return "small"
+    if (h >= 24 && w >= 22) return "medium"
+    if (h >= 18) return "compact"
+    return "hidden"
   })
 
-  const tagline = createMemo(() => taglineFor(props.clicks()))
+  const tagline = createMemo(() => {
+    const raw = taglineFor(props.clicks())
+    if (!raw) return null
+    return clip(raw, dim()?.width ?? 80)
+  })
   const [version, setVersion] = createSignal(readVersionInfo())
   const versionPoll = setInterval(() => setVersion(readVersionInfo()), 30_000)
   onCleanup(() => clearInterval(versionPoll))
   const mark = createMemo(() => {
     if (size() === "full") return wordmark
+    if (size() === "small") return smallMark
     if (size() === "medium") return [mediumMark]
     return [compactArt]
   })
+  const hints = createMemo(() => updateLines(version(), dim()?.width ?? 80))
+  const showMeta = () => size() === "full" || size() === "small" || size() === "medium"
 
   // Color for wordmark row `row` of `rows`: a vertical gradient sweep. During a
   // click flash each row brightens toward white for a satisfying burst.
@@ -176,6 +250,7 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
   }
 
   return (
+    <Show when={size() !== "hidden"}>
     <box
       flexDirection="column"
       alignItems="center"
@@ -188,6 +263,12 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
             message: hit.text,
             variant: "success",
           })
+        } else if (version().updateAvailable) {
+          props.ctx.ui?.toast?.show?.({
+            title: channelOf(version()) === "beta" ? "ywai beta" : "ywai update",
+            message: `${updateCommand(version())}  (${tag(version().installed)} → ${tag(version().latest)})`,
+            variant: "info",
+          })
         }
         props.bump()
         setFlash(hit ? 16 : 10)
@@ -196,14 +277,15 @@ const Logo = (props: { ctx: any; clicks: () => number; bump: () => void }) => {
       <Index each={mark()}>
         {(line, row) => <text fg={rowColor(row, mark().length)}>{line()}</text>}
       </Index>
-      {version().installed ? (
+      {showMeta() && version().installed ? (
         <text fg={themeMuted(props.ctx.theme)}>{`ywai ${tag(version().installed)}`}</text>
       ) : null}
-      {version().updateAvailable ? (
-        <text fg={themeWarning(props.ctx.theme)}>{`↑ ${tag(version().latest)} available — run \`ywai update\``}</text>
-      ) : null}
+      <Index each={showMeta() ? hints() : []}>
+        {(line) => <text fg={themeWarning(props.ctx.theme)}>{line()}</text>}
+      </Index>
       {tagline() ? <text fg={themeAccent(props.ctx.theme)}>{tagline()}</text> : null}
     </box>
+    </Show>
   )
 }
 
@@ -224,9 +306,14 @@ const VersionChip = (props: { ctx: any }) => {
       fg={info().updateAvailable ? themeWarning(props.ctx.theme) : themeMuted(props.ctx.theme)}
       onMouseDown={() => {
         if (info().updateAvailable) {
+          const v = info()
+          const extra =
+            channelOf(v) === "beta" && v.stableNewer && v.latestStable
+              ? `\nstable ${tag(v.latestStable)} — ywai update`
+              : ""
           props.ctx.ui?.toast?.show?.({
-            title: "ywai update",
-            message: `run \`ywai update\`  (${tag(info().installed)} → ${tag(info().latest)})`,
+            title: channelOf(v) === "beta" ? "ywai beta" : "ywai update",
+            message: `${updateCommand(v)}  (${tag(v.installed)} → ${tag(v.latest)})${extra}`,
             variant: "info",
           })
           return

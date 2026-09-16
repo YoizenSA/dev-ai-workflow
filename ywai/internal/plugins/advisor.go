@@ -12,11 +12,7 @@ import (
 // keeps enabling it a config change rather than a reinstall, and means a
 // disabled advisor registers no hooks at all.
 func InstallAdvisor(configPath string) error {
-	bundle, err := config.AdvisorBundlePath()
-	if err != nil {
-		return err
-	}
-	return installAdvisorWithBundle(configPath, bundle)
+	return installVendorJS("", configPath, ManifestEntry{Bundle: "advisor"})
 }
 
 func installAdvisorWithBundle(configPath, bundleSrc string) error {

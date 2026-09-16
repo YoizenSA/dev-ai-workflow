@@ -331,7 +331,7 @@ func (s *Server) handleAdoSavePAT(w http.ResponseWriter, r *http.Request) {
 // the latest version published to npm, and whether an update is available.
 // Mirrors the shape of /api/version: on registry failure `latest` is null and
 // `updateAvailable` is false (non-fatal). The comparison reuses
-// isNewerVersion/parseSemver from server.go (same package).
+// isNewerVersion from server.go (same package).
 func (s *Server) handleAdoCLIStatus(w http.ResponseWriter, r *http.Request) {
 	version, installed := plugins.AdoCLIInfo()
 

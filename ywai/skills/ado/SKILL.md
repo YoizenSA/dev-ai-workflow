@@ -18,6 +18,8 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - Never invent IDs, repos, or branch names — discover them with a read command first.
 - Work item creation defaults (unless the user says otherwise): always `--type "User Story"`; assignee resolved at runtime from `ado wi list` (`@<name>` column) — never hardcode; ALWAYS ask Social vs Infra Kanban first (Social → `--profile ysocial --area "ySocial\Kanban"`; Infra → `--area "Infra\\Infra Kanban"`); always ask Producto + Sponsors and pass `--field Custom.USProducto=<v>` and `--field Custom.Sponsors=<v>` (the template rejects the create without them); never `--field System.AreaPath`; `--description` is Azure DevOps HTML, and work item comments render as HTML too — wrap Markdown content in `<pre>` (see `references/templates.md`).
 - `[repo]` is optional; omit it to auto-discover a PR by ID. `--profile <name>` overrides the active profile.
+- When writing any ADO text (PR comments, vote comments, work item comments/descriptions/titles): reference a pull request as `PR-id:1234`. Never `#1234` — Azure DevOps treats `#N` as a work item mention.
+- After creating a PR or work item (`pr create`, `pr chain`, `wi create`, `wi create-child`): always give the user the Azure DevOps URL. Copy it from CLI output; if missing, fetch with `ado pr get` / `ado wi get`.
 
 ## Decision Gates
 

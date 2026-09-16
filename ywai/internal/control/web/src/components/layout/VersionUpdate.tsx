@@ -7,7 +7,10 @@ type Status = "idle" | "updating" | "error";
 interface VersionInfo {
 	current: string;
 	latest: string | null;
+	latestStable?: string;
+	channel?: string;
 	updateAvailable: boolean;
+	stableNewer?: boolean;
 }
 
 // Polls /health until the relaunched server answers, then reloads the page so
@@ -79,10 +82,15 @@ export function VersionUpdate(): JSX.Element | null {
 			<div className="version-update-info">
 				<ArrowUp size={16} aria-hidden="true" />
 				<span className="version-update-text">
-					Update available
+					{info.channel === "beta" ? "Beta update available" : "Update available"}
 					<span className="version-update-versions">
 						{info.current} → {info.latest}
 					</span>
+					{info.channel === "beta" && info.stableNewer && info.latestStable ? (
+						<span className="version-update-versions">
+							stable {info.latestStable}
+						</span>
+					) : null}
 				</span>
 			</div>
 			{status === "error" && error && (

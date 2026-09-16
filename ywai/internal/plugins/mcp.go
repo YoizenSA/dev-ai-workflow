@@ -129,6 +129,52 @@ func catalogEntry(id string) (mcppkg.CatalogEntry, error) {
 	return entry, nil
 }
 
+// checkCatalogID reports whether a catalog id is known.
+func checkCatalogID(id string) error {
+	if _, ok := mcppkg.CatalogByID(id); !ok {
+		return fmt.Errorf("unknown MCP catalog id %q", id)
+	}
+	return nil
+}
+
+// installCatalogMCP merges one catalog server into the agent's config,
+// writing the shape each format reads. Local servers split their argv into
+// command + args on claude-code/pi and keep the full argv on opencode;
+// remote servers use the per-format remote spelling, disabled when the
+// catalog ships no endpoint (a per-deployment URL the install UI collects).
+// claudeStdio, when set, replaces the claude-code/pi entry with a stdio
+// server argv instead of the catalog transport.
+func installCatalogMCP(configPath, agentName, catalogID string, claudeStdio []string) error {
+	entry, err := catalogEntry(catalogID)
+	if err != nil {
+		return err
+	}
+	disabled := entry.URL == "" || entry.DefaultDisabled
+	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
+		if configKey == "mcpServers" {
+			if len(claudeStdio) > 0 {
+				return map[string]any{
+					"command": claudeStdio[0],
+					"args":    argvAny(claudeStdio[1:]),
+				}
+			}
+			if entry.Type == "local" {
+				// Claude Code / pi split the argv into command + args.
+				return map[string]any{
+					"command": entry.Command[0],
+					"args":    argvAny(entry.Command[1:]),
+				}
+			}
+			return remoteEntry(configKey, entry.URL, disabled)
+		}
+		if entry.Type == "local" {
+			// OpenCode: mcp.servers.<id> with type "local" and a full argv.
+			return map[string]any{"type": "local", "command": argvAny(entry.Command)}
+		}
+		return remoteEntry(configKey, entry.URL, disabled)
+	})
+}
+
 // argvAny copies a string argv into []any, the type JSON configs round-trip.
 func argvAny(argv []string) []any {
 	out := make([]any, len(argv))
@@ -144,32 +190,15 @@ func argvAny(argv []string) []any {
 // ywai can do — the endpoint answers 401 until the user signs in from their
 // agent, which is expected.
 func InstallMetaDevToolsMCP(configPath, agentName string) error {
-	entry, err := catalogEntry("meta-devtools")
-	if err != nil {
-		return err
-	}
-	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
-		return remoteEntry(configKey, entry.URL, false)
-	})
+	return installCatalogMCP(configPath, agentName, "meta-devtools", nil)
 }
 
 // InstallMicrosoftLearnMCP adds the Microsoft Learn MCP server to the agent's
 // config file. The endpoint is catalog data; claude-code/pi run the npm stdio
 // server instead of the remote one.
 func InstallMicrosoftLearnMCP(configPath, agentName string) error {
-	entry, err := catalogEntry("microsoft-learn")
-	if err != nil {
-		return err
-	}
-	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
-		if configKey == "mcpServers" {
-			return map[string]any{
-				"command": "npx",
-				"args":    []any{"@anthropic/mcp-server-microsoft-learn"},
-			}
-		}
-		return remoteEntry(configKey, entry.URL, false)
-	})
+	return installCatalogMCP(configPath, agentName, "microsoft-learn",
+		[]string{"npx", "@anthropic/mcp-server-microsoft-learn"})
 }
 
 // RemoveVisionMCP removes the legacy mcp-vision MCP server entry from the
@@ -214,21 +243,7 @@ func RemoveVisionMCP(configPath, agentName string) error {
 // agent needs a browser to run a UI scenario at all: without it the agent
 // installs fine and then cannot do the one thing it exists for.
 func InstallChromeDevToolsMCP(configPath, agentName string) error {
-	entry, err := catalogEntry("chrome-devtools")
-	if err != nil {
-		return err
-	}
-	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
-		if configKey == "mcpServers" {
-			// Claude Code / pi split the argv into command + args.
-			return map[string]any{
-				"command": entry.Command[0],
-				"args":    argvAny(entry.Command[1:]),
-			}
-		}
-		// OpenCode: mcp.servers.<id> with type "local" and a full argv.
-		return map[string]any{"type": "local", "command": argvAny(entry.Command)}
-	})
+	return installCatalogMCP(configPath, agentName, "chrome-devtools", nil)
 }
 
 // InstallGrafanaMCP registers the Grafana MCP server, disabled and with no
@@ -241,11 +256,5 @@ func InstallChromeDevToolsMCP(configPath, agentName string) error {
 // nobody discovers. Disabled matters: an enabled entry with no URL is a server
 // the agent tries and fails to reach on every start.
 func InstallGrafanaMCP(configPath, agentName string) error {
-	entry, err := catalogEntry("grafana")
-	if err != nil {
-		return err
-	}
-	return installMCPEntry(configPath, agentName, entry.ID, func(configKey string) map[string]any {
-		return remoteEntry(configKey, entry.URL, true)
-	})
+	return installCatalogMCP(configPath, agentName, "grafana", nil)
 }

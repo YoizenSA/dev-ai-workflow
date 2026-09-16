@@ -12,8 +12,8 @@ func seedBundle(t *testing.T) (configPath, bundle string) {
 	dir := t.TempDir()
 	configPath = filepath.Join(dir, "opencode.json")
 	if err := config.WriteJSONC(configPath, map[string]any{
-		// A v1-shaped entry, as an earlier install would have left it.
-		"plugin": []any{filepath.Join(dir, ywaiPluginsSubdir, config.BackgroundAgentsBundleName), "other.js"},
+		// A stale explicit entry, as an earlier install would have left it.
+		"plugins": []any{filepath.Join(dir, ywaiPluginsSubdir, config.BackgroundAgentsBundleName), "other.js"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -45,10 +45,6 @@ func TestInstallBackgroundAgents_V2UsesAutoDiscovery(t *testing.T) {
 	if _, err := os.Stat(discovered); err != nil {
 		t.Errorf("bundle not vendored into the scanned dir: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, autoDiscoveredPluginsSubdir, FlavorMarkerName)); !os.IsNotExist(err) {
-		t.Errorf("flavor marker must not be written anymore; the v2-only plugin never reads it (err = %v)", err)
-	}
-
 	root, err := config.ReadJSONC(configPath)
 	if err != nil {
 		t.Fatal(err)
