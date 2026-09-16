@@ -76,12 +76,6 @@ func installClaudeMarketplacePlugin(marketplace, pluginID string) error {
 	return nil
 }
 
-// installPonytailClaude adds the ponytail marketplace and installs the plugin
-// via the Claude Code CLI (user scope).
-func installPonytailClaude() error {
-	return installClaudeMarketplacePlugin(PonytailClaudeMarketplaceSource, PonytailClaudePluginID)
-}
-
 // runClaudePlugin runs `claude plugin <args...>` and returns combined output.
 func runClaudePlugin(args ...string) (string, error) {
 	full := append([]string{"plugin"}, args...)
