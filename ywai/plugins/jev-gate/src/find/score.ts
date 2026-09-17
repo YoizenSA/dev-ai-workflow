@@ -27,6 +27,8 @@ export interface FindResult {
 	query: string
 	hits: Hit[]
 	scannedSegments: number
+	/** Segments the corpus produced, before the cap. Coverage is scanned/total. */
+	totalSegments: number
 	truncated: boolean
 	usage: Usage
 	latencyMs: number
@@ -156,6 +158,7 @@ export async function findInSegments(
 		query,
 		hits: hits.slice(0, options.limit ?? 20),
 		scannedSegments: scanned.length,
+		totalSegments: segments.length,
 		truncated,
 		usage,
 		latencyMs: now() - startedAt,

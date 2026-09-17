@@ -133,6 +133,16 @@ describe("findInSegments", () => {
 		const result = await findInSegments(scriptedClient({}), "q", many, { batchSize: 50 })
 		expect(result.truncated).toBe(true)
 		expect(result.scannedSegments).toBe(200)
+		// Coverage is only legible against the whole corpus: 200 of 200 and
+		// 200 of 205 print the same number and mean different things.
+		expect(result.totalSegments).toBe(205)
+	})
+
+	test("a full pass reports total equal to scanned, so coverage reads as complete", async () => {
+		const few = Array.from({ length: 12 }, (_, i) => segmentFile(`src/f${i}.ts`, lines(5))[0])
+		const result = await findInSegments(scriptedClient({}), "q", few)
+		expect(result.truncated).toBe(false)
+		expect(result.scannedSegments).toBe(result.totalSegments)
 	})
 
 	test("limit caps what comes back", async () => {

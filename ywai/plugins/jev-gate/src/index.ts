@@ -121,7 +121,9 @@ export function collectSearchFiles(root: string, target = "."): Array<{ path: st
 	const visit = (current: string) => {
 		const info = statSync(current)
 		if (info.isDirectory()) {
-			for (const entry of readdirSync(current)) {
+			// Sorted: the segment cap makes walk order decide what gets searched
+			// at all, and readdirSync order is not guaranteed stable.
+			for (const entry of readdirSync(current).sort()) {
 				if (entry === "node_modules" || entry === ".git" || entry === "dist") continue
 				visit(join(current, entry))
 			}
@@ -251,7 +253,9 @@ async function setup(ctx: JevContext) {
 				"Semantic grep: find where something is actually done in the codebase, not where " +
 				"it is merely named or mentioned. Returns file:line ranges with a snippet and a " +
 				"probability. Slower and costlier than grep - use it when the words in the code " +
-				"are not the words in the question.",
+				`are not the words in the question. Searches at most ${MAX_FIND_SEGMENTS} segments ` +
+				"in directory order, so on a large repo it covers only part of it unless you " +
+				"narrow the search with `root`; the result always says how much it covered.",
 			input: {
 				type: "object",
 				properties: {
@@ -278,11 +282,24 @@ async function setup(ctx: JevContext) {
 						limit: input.limit,
 					})
 
+					const threshold = input.threshold ?? FIND_THRESHOLD
 					if (result.hits.length === 0) {
+						if (result.truncated) {
+							const pct = Math.round((result.scannedSegments / result.totalSegments) * 100)
+							return {
+								content:
+									`**Search incomplete - this is not a negative result.** Nothing scored at or ` +
+									`over ${threshold} for "${input.query}", but only the first ` +
+									`${result.scannedSegments} of ${result.totalSegments} segments were sent ` +
+									`(${pct}% of the corpus, in directory order - the rest was never searched).\n\n` +
+									`Narrow the search with \`root\` and run it again before concluding anything.`,
+							}
+						}
 						return {
 							content:
-								`No segment scored at or over ${input.threshold ?? FIND_THRESHOLD} for "${input.query}" ` +
-								`(${result.scannedSegments} segments). This is not proof it does not exist.`,
+								`No segment scored at or over ${threshold} for "${input.query}" across all ` +
+								`${result.scannedSegments} segment(s) of \`${input.root ?? "."}\`. ` +
+								`The whole corpus was searched, but a miss is still not proof it does not exist.`,
 						}
 					}
 
@@ -295,7 +312,9 @@ async function setup(ctx: JevContext) {
 						].join("\n"),
 					)
 					const truncated = result.truncated
-						? `\n\n_Stopped at ${MAX_FIND_SEGMENTS} segments; results are partial._`
+						? `\n\n_Partial: searched the first ${result.scannedSegments} of ` +
+							`${result.totalSegments} segments, in directory order. Anything past that ` +
+							`was never sent - narrow with \`root\` to cover it._`
 						: ""
 					return {
 						content:

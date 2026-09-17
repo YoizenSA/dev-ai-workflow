@@ -93,5 +93,15 @@ not whether it mentions it. It costs a Jev request per batch of segments, so
 reach for `grep` first and use this when the words in the code are not the
 words in the question.
 
+It reads the working tree from disk, so uncommitted changes are searched like
+anything else. There is no index and nothing is read from git.
+
+It searches at most 200 segments in directory order. On a repo bigger than
+that it covers only the part it reached, and the result says so: **"Search
+incomplete"** means the rest was never sent to Jev, not that nothing is there.
+Narrow it with `root` and run it again instead of concluding from a partial
+pass.
+
 A result of no hits is not proof the code does not exist - say "nothing scored
-over the threshold", not "it is not there".
+over the threshold", not "it is not there". If you cannot explain a miss, say
+you cannot explain it; do not invent a mechanism for it.
