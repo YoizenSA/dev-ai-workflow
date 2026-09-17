@@ -107,7 +107,7 @@ describe("splitDiff", () => {
 
 describe("rankSignals", () => {
 	const matrix = {
-		"src/a.ts": { security: 0.9, correctness: 0.75, compatibility: 0.99, testGap: 0.71 },
+		"src/a.ts": { security: 0.9, correctness: 0.85, compatibility: 0.99, testGap: 0.95 },
 		"src/b.ts": { correctness: 0.9, reliability: 0.2 },
 	}
 
@@ -119,13 +119,17 @@ describe("rankSignals", () => {
 	})
 
 	test("drops everything under threshold", () => {
-		expect(rankSignals(matrix, 10).every((s) => s.probability >= 0.7)).toBe(true)
+		expect(rankSignals(matrix, 10).every((s) => s.probability >= 0.8)).toBe(true)
 		expect(rankSignals(matrix, 10, 0.95)).toEqual([])
 	})
 
-	test("compatibility never opens a follow-up, however high it scores", () => {
-		// Spike A: it scored highest on the clean fixture. Screened, not located.
-		expect(rankSignals(matrix, 10).some((s) => s.dimension === "compatibility")).toBe(false)
+	test("compatibility and testGap never open a follow-up, however high", () => {
+		// Fase 6: compatibility scored highest on the clean rename, and testGap
+		// fired on 6 fixtures nobody expected while missing the one test-gap
+		// fixture. Screened and reported, never located.
+		const promoted = rankSignals(matrix, 10).map((s) => s.dimension)
+		expect(promoted).not.toContain("compatibility")
+		expect(promoted).not.toContain("testGap")
 	})
 
 	test("respects MAX_FOLLOW_UPS", () => {

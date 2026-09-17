@@ -6,7 +6,13 @@
  */
 import type { Dimension } from "./types"
 
-export const SCREEN_THRESHOLD = 0.7
+/**
+ * Calibrated by the Fase 6 eval over 10 labeled fixtures, not guessed.
+ * 0.70 caught 6/8 dirty fixtures but raised a dimension on 1 of 2 clean ones;
+ * 0.80 caught the same 6/8 with 0 of 2 clean fixtures raising anything;
+ * 0.90 dropped to 4/8, losing a logged password and a dropped await.
+ */
+export const SCREEN_THRESHOLD = 0.8
 export const MIN_LOCATION_CONFIDENCE = 0.55
 export const OWNER_SEVERITY = 1.5
 export const BLOCKING_SEVERITY = 2.0
@@ -32,17 +38,19 @@ export const DIMENSIONS: Dimension[] = [
 /**
  * Dimensions allowed to open a follow-up.
  *
- * `compatibility` is screened and reported but never promoted on its own:
- * Spike A (2026-09-17) scored it 0.77-0.86 on all four fixtures, highest of all
- * on the *clean* rename, so at SCREEN_THRESHOLD it would open a follow-up on
- * essentially every patch. Fase 6 either rewrites its question or drops it.
+ * Two of the five are screened and reported but never promoted on their own,
+ * both on eval evidence rather than taste:
+ *
+ * - `compatibility` scored 0.77-0.86 on all four Spike A fixtures, highest of
+ *   all on the *clean* rename. It is right exactly once in the fixture set
+ *   (09, a changed exported signature) and noise the rest of the time.
+ * - `testGap` is worse: across the Fase 6 eval it fired on 6 fixtures nobody
+ *   expected it on, and it MISSED the one fixture labeled test-gap (07). It is
+ *   anti-correlated with the label, so promoting it manufactures findings.
+ *
+ * Both need their questions rewritten before they earn a follow-up back.
  */
-export const LOCATABLE_DIMENSIONS: Dimension[] = [
-	"security",
-	"correctness",
-	"reliability",
-	"testGap",
-]
+export const LOCATABLE_DIMENSIONS: Dimension[] = ["security", "correctness", "reliability"]
 
 /** Never sent to Jev, whatever the diff says (PLAN 3.2). */
 export const DENY_GLOBS = [

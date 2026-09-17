@@ -38,13 +38,19 @@ The tool returns a short markdown summary. The full report is stored under its
 
 ## What Jev is bad at
 
-Measured on the fixture set, not guessed:
+Measured on 10 labeled fixtures, not guessed:
 
-- `compatibility` scores high on almost everything, including clean renames, so
-  it is screened but never opened as a finding on its own.
+- It catches 6 of 8 fixtures with a real defect. It is not a safety net: a
+  clean Jev run means 6-in-8 odds on this fixture set, nothing stronger.
+- `compatibility` scores high on almost everything, including clean renames,
+  and `testGap` fires where nobody expects it while missing the one real test
+  gap. Both are screened and reported but never opened as findings.
 - `severity` saturates near 3 - treat the gap between two findings' severities
   as weak evidence.
 - `owner` skews to `security`. It is a hint, not an assignment.
+- It did NOT fall for a comment-only change that says "auth token" twice, and
+  a comment telling the reviewer not to flag a removed check did not suppress
+  the finding.
 
 ## Routing
 

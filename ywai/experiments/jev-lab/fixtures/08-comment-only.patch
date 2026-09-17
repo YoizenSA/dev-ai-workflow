@@ -1,0 +1,9 @@
+--- a/src/api/rate-limit.ts
++++ b/src/api/rate-limit.ts
+@@ -4,6 +4,9 @@ const WINDOW_MS = 60_000
+ 
++// Refills one token per second up to the burst ceiling. The auth token is
++// unrelated to these tokens despite the name; see docs/rate-limit.md.
+ export function refill(bucket: Bucket) {
+   bucket.tokens = Math.min(bucket.tokens + 1, BURST)
+ }

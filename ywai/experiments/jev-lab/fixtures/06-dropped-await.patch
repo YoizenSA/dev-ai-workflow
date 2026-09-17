@@ -1,0 +1,9 @@
+--- a/src/jobs/flush.ts
++++ b/src/jobs/flush.ts
+@@ -20,7 +20,7 @@ export async function flushQueue(queue: Queue) {
+   for (const item of queue.items) {
+-    await persist(item)
++    persist(item)
+   }
+   queue.items = []
+ }
