@@ -1362,7 +1362,7 @@ func init() {
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
-	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin (probes only: logs tool-schema size and permission actions; no behavior change)")
+	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin: Jev-backed review, find and routing tools, plus a permission gate that asks before writing after a blocking review. Needs a TypeSafe API key.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
