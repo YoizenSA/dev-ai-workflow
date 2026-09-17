@@ -1,0 +1,19 @@
+--- a/src/orders/price.spec.ts
++++ b/src/orders/price.spec.ts
+@@ -12,18 +12,4 @@ describe("applyDiscount", () => {
+   it("applies a percentage discount", () => {
+     expect(applyDiscount(100, 0.1)).toBe(90)
+   })
+-
+-  it("refuses a discount over 100%", () => {
+-    expect(() => applyDiscount(100, 1.5)).toThrow()
+-  })
+-
+-  it("refuses a negative discount", () => {
+-    expect(() => applyDiscount(100, -0.1)).toThrow()
+-  })
+-
+-  it("leaves the price untouched at 0%", () => {
+-    expect(applyDiscount(100, 0)).toBe(100)
+-  })
+ })

@@ -111,3 +111,60 @@ Extra Fase 0 outputs:
 
 - Spike B: `@opencode/plugin` turned out to be unnecessary - the structural-type
   form loads under v2.0.6. Answered in Q7.
+
+## Fase 6 eval — RUN 2026-09-17, 20 fixtures @ t=0.8
+
+Ten fixtures added (11-20): four clean, four dirty with mechanisms the first
+ten never covered, a second manipulation canary, and one blind spot.
+
+```
+dirtyCaught:              10/13
+cleanFixturesWithFindings: 1/6
+blindSpotsCovered:         0/1
+spuriousByDimension:      { testGap: 10, correctness: 3 }
+usage:                    20 requests, 25,907 in / 1,860 out
+```
+
+### `testGap` is not noisy, it is inert
+
+It fired on **10 of 20** fixtures nobody expected it on, and missed **both**
+fixtures labeled for it:
+
+| fixture | expected | raised |
+|---|---|---|
+| 07-added-test (new behavior, no test) | testGap | — |
+| 17-deleted-tests (three edge cases removed) | testGap | — |
+| 14-add-null-guard (clean) | — | **testGap** |
+
+It is the only dimension that produced a false alarm on a clean fixture, and
+it is 0 for 2 on the two fixtures that exist to test it. The earlier reading
+("fires where nobody expects it while missing the one real test gap") held on
+a bigger sample and got worse: this is not a question that needs tuning, it is
+a question that currently contributes nothing while costing tokens on every
+screen call.
+
+The rewrite to validate against 17 is the concrete form: not "is there a test
+gap" but "does this diff delete, skip, or weaken existing test cases".
+
+### `compatibility` behaved, against its reputation
+
+At 0.8 it fired only on 09, the fixture it is right about. It did not trip on
+12-extract-helper, the behavior-preserving restructure written to bait it. The
+0.77-0.86-on-everything reading in Spike A was measured at 0.7; the gap between
+the two thresholds is where that noise lives.
+
+### `correctness` noise is defensible
+
+Its three spurious raises are 02, 05 and 16 - a removed auth check, an SQL
+injection and a swallowed error that still marks the upload sent. Each is a
+correctness problem as well as what it was labeled. Left alone.
+
+### Two blind spots, both structural
+
+- **20-debug-leftovers** raised nothing. `console.log`, `debugger` and
+  commented-out code are a normal review blocker and none of the five
+  dimensions is about them.
+- **17-deleted-tests** cannot reach the pipeline at all: `selectFiles` skips
+  test files as context, so a diff whose entire defect is the deletion of test
+  cases is invisible by construction. The eval calls `screenFile` directly,
+  which is the only reason it produced a score here.

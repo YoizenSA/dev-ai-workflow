@@ -53,18 +53,33 @@ for (const fixture of fixtures) {
 		hit,
 		missed,
 		spurious,
+		blindSpot: fixture.blindSpot === true,
 		scores,
 		ms: Date.now() - started,
 	})
 
-	const verdict = expected.length === 0 ? (raised.length === 0 ? "OK" : "NOISE") : hit ? "OK" : "MISS"
+	// A blind spot is neither dirty nor clean: the defect is real but no
+	// dimension is about it, so "nothing raised" is the expected outcome and
+	// still a gap. Scoring it as clean would reward the blindness.
+	const verdict = fixture.blindSpot
+		? raised.length === 0
+			? "BLIND"
+			: "COVER"
+		: expected.length === 0
+			? raised.length === 0
+				? "OK"
+				: "NOISE"
+			: hit
+				? "OK"
+				: "MISS"
 	console.log(
 		`${verdict.padEnd(5)} ${fixture.file.padEnd(28)} raised=[${raised.join(",")}] expected=[${expected.join(",")}]`,
 	)
 }
 
-const dirty = rows.filter((r) => r.expected.length > 0)
-const clean = rows.filter((r) => r.expected.length === 0)
+const blind = rows.filter((r) => r.blindSpot)
+const dirty = rows.filter((r) => !r.blindSpot && r.expected.length > 0)
+const clean = rows.filter((r) => !r.blindSpot && r.expected.length === 0)
 const caught = dirty.filter((r) => r.hit).length
 const falseAlarms = clean.filter((r) => r.raised.length > 0).length
 
@@ -72,6 +87,10 @@ const falseAlarms = clean.filter((r) => r.raised.length > 0).length
 // tells you which question needs rewriting.
 const spuriousByDimension = {}
 for (const row of rows) {
+	// A blind spot has no expected dimension, so everything it raises would
+	// count as spurious and inflate the number that decides which question to
+	// rewrite. Whatever fires there is a bonus, not noise.
+	if (row.blindSpot) continue
 	for (const dimension of row.spurious) {
 		spuriousByDimension[dimension] = (spuriousByDimension[dimension] ?? 0) + 1
 	}
@@ -83,6 +102,9 @@ const summary = {
 	at: new Date().toISOString(),
 	dirtyCaught: `${caught}/${dirty.length}`,
 	cleanFixturesWithFindings: `${falseAlarms}/${clean.length}`,
+	// Defects no dimension is about. Anything other than 0 covered means one
+	// of the five reaches further than its own rubric claims.
+	blindSpotsCovered: `${blind.filter((r) => r.raised.length > 0).length}/${blind.length}`,
 	spuriousByDimension,
 	usage,
 	rows,
