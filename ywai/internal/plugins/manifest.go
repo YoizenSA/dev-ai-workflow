@@ -53,6 +53,9 @@ type ManifestEntry struct {
 	Kind   string   `json:"kind,omitempty"`
 	Agents []string `json:"agents,omitempty"` // empty = every agent the plugin pass handles
 	Flag   string   `json:"flag,omitempty"`   // install only with this CLI flag: mcp, meta-mcp, ponytail
+	// Skill names a SKILL.md this entry ships, installed into the shared
+	// agent skills dir alongside the bundle. Opencode only.
+	Skill string `json:"skill,omitempty"`
 	// AgentsSection names an AGENTS.md block this entry owns. Written on
 	// install and removed on uninstall, so instructions never outlive the
 	// tools they describe. Opencode only.
@@ -119,6 +122,11 @@ func installVendorJS(agentName, configPath string, e ManifestEntry) error {
 	}
 	if err := installVendorPluginV2(configPath, src, b.name); err != nil {
 		return err
+	}
+	if e.Skill != "" && agentName == "opencode" {
+		if err := installPluginSkill(e.Skill); err != nil {
+			return fmt.Errorf("%s: %w", e.ID, err)
+		}
 	}
 	if e.AgentsSection != "" && agentName == "opencode" {
 		body, ok := agentsSections[e.AgentsSection]
@@ -238,6 +246,9 @@ func resolveEntry(e ManifestEntry) (ManifestEntry, error) {
 	}
 	if e.AgentsSection != "" {
 		resolved.AgentsSection = e.AgentsSection
+	}
+	if e.Skill != "" {
+		resolved.Skill = e.Skill
 	}
 	if e.Flag != "" {
 		resolved.Flag = e.Flag

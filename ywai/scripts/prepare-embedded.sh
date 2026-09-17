@@ -129,6 +129,11 @@ fi
 if [ -f "$JG_BUNDLE" ]; then
     cp -a "$JG_BUNDLE" "$EMBED_DIR/plugins/jev-gate.js"
 fi
+# The jev-gate SKILL.md installs with the plugin, so it has to ship with it.
+if [ -f "$JG_DIR/skills/jev-gate/SKILL.md" ]; then
+    mkdir -p "$EMBED_DIR/plugins/jev-gate-skill"
+    cp -a "$JG_DIR/skills/jev-gate/SKILL.md" "$EMBED_DIR/plugins/jev-gate-skill/SKILL.md"
+fi
 
 # ywai TUI logo (home_logo slot). Plain .tsx source — no build step.
 if [ -d "$REPO_ROOT/plugins/tui" ]; then

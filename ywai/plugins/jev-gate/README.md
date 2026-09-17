@@ -4,7 +4,12 @@ Jev as a **policy layer** over OpenCode 2, not as a chat model. Jev answers
 questions with probabilities; this plugin turns those into review findings.
 
 Opt-in only: `ywai install --jev-gate`, or the "Jev gate (experimental)" row in
-the install TUI.
+the install TUI. That one flag installs everything the plugin needs:
+
+- the bundle, where OpenCode auto-discovers it
+- `skills/jev-gate/SKILL.md` into the shared agent skills directory
+- a `ywai:jev-gate` section in the agent's `AGENTS.md`
+- `~/.ywai/jev-gate.json`, from `TYPESAFE_API_KEY` when it is exported
 
 ## Tools
 

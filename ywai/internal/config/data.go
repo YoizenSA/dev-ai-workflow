@@ -646,6 +646,29 @@ func VisionBridgeBundlePath() (string, error) {
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
+// JevGateSkillPath resolves the SKILL.md that ships with the jev-gate plugin.
+// A source checkout reads it from the plugin; a released binary reads the copy
+// prepare-embedded.sh seeds next to the bundles.
+func JevGateSkillPath() (string, error) {
+	srcSkill := filepath.Join(PluginsSourceDir(), "jev-gate", "skills", "jev-gate", "SKILL.md")
+	if _, err := os.Stat(srcSkill); err == nil {
+		return srcSkill, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), "jev-gate-skill", "SKILL.md")
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("jev-gate SKILL.md not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
 // JevGateBundlePath resolves the path to the bundled jev-gate plugin JS.
 // Same resolution order as VisionBridgeBundlePath.
 func JevGateBundlePath() (string, error) {
