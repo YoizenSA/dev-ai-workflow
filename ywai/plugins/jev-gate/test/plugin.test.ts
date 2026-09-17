@@ -45,7 +45,7 @@ describe("bundle shape", () => {
 		expect(typeof mod.default.setup).toBe("function")
 	})
 
-	test("registers the review and route tools", async () => {
+	test("registers every tool the plugin ships", async () => {
 		const added: string[] = []
 		const entry = await import("../src/index")
 		await entry.default.setup({
@@ -55,7 +55,7 @@ describe("bundle shape", () => {
 				},
 			},
 		} as never)
-		expect(added).toEqual(["jev_review_diff", "jev_review_path", "jev_route"])
+		expect(added).toEqual(["jev_review_diff", "jev_review_path", "jev_find", "jev_route"])
 	})
 })
 

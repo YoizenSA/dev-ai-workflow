@@ -12,6 +12,9 @@ the install TUI.
   screened over threshold (hunk, mechanism, severity, owner).
 - `jev_review_path` - the same pipeline over a file or directory, with a
   confirmation step over 30 files and a hard stop at 80.
+- `jev_find` - semantic grep: 60-line windows with 10 of overlap, scored one
+  question per segment, batched 5 per request. It rejects name-only matches,
+  comments and docs by criteria, not by filtering afterwards.
 - `jev_route` - which agent should execute a task, chosen over the agents this
   install actually reports (`ctx.agent.list()`), with `inline`, `review` and
   `human` always available. Subagents are excluded: routing to something the

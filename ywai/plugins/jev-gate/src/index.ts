@@ -47,11 +47,18 @@ import { findApiKey, keyHelp } from "./adapters/key"
 import { HttpJevClient, MissingKeyError } from "./jev/client"
 import { runChangeReview } from "./review/workflow"
 import { summarize } from "./format"
+import { findInSegments, FIND_THRESHOLD } from "./find/score"
+import { segmentFile, MAX_FIND_SEGMENTS, type Segment } from "./find/segment"
 
 interface JevContext extends V2PluginContext {
 	vcs?: VcsLike
 	storage?: StorageLike
 	permission?: PermissionHost
+}
+
+/** Deny globs and every reported path are POSIX-shaped, Windows included. */
+function toPosix(path: string): string {
+	return path.split("\\").join("/")
 }
 
 function projectDir(ctx: JevContext): string {
@@ -95,6 +102,32 @@ export function collectPathFiles(root: string, target: string): ChangedFile[] {
 			path,
 			patch: [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((line) => `+${line}`)].join("\n"),
 		})
+	}
+
+	visit(absolute)
+	return files
+}
+
+/**
+ * Files Find is allowed to read: source only, deny list applied, docs out.
+ * Find answering with a README is the failure the plan called out by name.
+ */
+export function collectSearchFiles(root: string, target = "."): Array<{ path: string; content: string }> {
+	const absolute = resolve(root, target)
+	const files: Array<{ path: string; content: string }> = []
+
+	const visit = (current: string) => {
+		const info = statSync(current)
+		if (info.isDirectory()) {
+			for (const entry of readdirSync(current)) {
+				if (entry === "node_modules" || entry === ".git" || entry === "dist") continue
+				visit(join(current, entry))
+			}
+			return
+		}
+		const path = toPosix(relative(root, current))
+		if (!isReviewable(path) || isDenied(path)) return
+		files.push({ path, content: readFileSync(current, "utf8") })
 	}
 
 	visit(absolute)
@@ -179,6 +212,70 @@ async function setup(ctx: JevContext) {
 						}
 					}
 					return { content: await reviewAndFormat(ctx, files, toolCtx?.sessionID) }
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+
+		editor.add({
+			name: "jev_find",
+			description:
+				"Semantic grep: find where something is actually done in the codebase, not where " +
+				"it is merely named or mentioned. Returns file:line ranges with a snippet and a " +
+				"probability. Slower and costlier than grep - use it when the words in the code " +
+				"are not the words in the question.",
+			input: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "What to look for, in plain words." },
+					root: { type: "string", description: "Directory to search. Defaults to the project." },
+					threshold: { type: "number", description: `Minimum probability. Defaults to ${FIND_THRESHOLD}.` },
+					limit: { type: "number", description: "Maximum hits to return. Defaults to 20." },
+				},
+				required: ["query"],
+			},
+			execute: async (input: { query: string; root?: string; threshold?: number; limit?: number }) => {
+				try {
+					const apiKey = findApiKey(projectDir(ctx))
+					if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
+					const files = collectSearchFiles(projectDir(ctx), input.root ?? ".")
+					const segments: Segment[] = []
+					for (const file of files) segments.push(...segmentFile(file.path, file.content))
+					if (segments.length === 0) {
+						return { content: `Nothing searchable under \`${input.root ?? "."}\`.` }
+					}
+
+					const result = await findInSegments(new HttpJevClient({ apiKey }), input.query, segments, {
+						threshold: input.threshold,
+						limit: input.limit,
+					})
+
+					if (result.hits.length === 0) {
+						return {
+							content:
+								`No segment scored at or over ${input.threshold ?? FIND_THRESHOLD} for "${input.query}" ` +
+								`(${result.scannedSegments} segments). This is not proof it does not exist.`,
+						}
+					}
+
+					const lines = result.hits.map((hit) =>
+						[
+							`- \`${hit.file}:${hit.startLine}-${hit.endLine}\` (${Math.round(hit.probability * 100)}%)`,
+							"```",
+							hit.snippet,
+							"```",
+						].join("\n"),
+					)
+					const truncated = result.truncated
+						? `\n\n_Stopped at ${MAX_FIND_SEGMENTS} segments; results are partial._`
+						: ""
+					return {
+						content:
+							`**Jev find: "${input.query}"** (${result.hits.length} hit(s), ` +
+							`${result.scannedSegments} segments, ${(result.latencyMs / 1000).toFixed(1)}s, ` +
+							`${result.usage.requests} requests)\n\n${lines.join("\n\n")}${truncated}`,
+					}
 				} catch (err) {
 					return { content: failure(err) }
 				}

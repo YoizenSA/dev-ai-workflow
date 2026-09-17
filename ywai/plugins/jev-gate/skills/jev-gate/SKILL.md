@@ -65,3 +65,13 @@ any decision whose `source` is not `jev`.
 
 If a write suddenly asks for confirmation, the reason is in the prompt. Do not
 work around it by using a shell command instead - `bash` is gated too.
+
+## Finding code
+
+`jev_find` is semantic grep: it asks whether a chunk of code *does* the thing,
+not whether it mentions it. It costs a Jev request per batch of segments, so
+reach for `grep` first and use this when the words in the code are not the
+words in the question.
+
+A result of no hits is not proof the code does not exist - say "nothing scored
+over the threshold", not "it is not there".
