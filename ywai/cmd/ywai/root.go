@@ -633,6 +633,17 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	flags["meta-mcp"] = installMetaMCP
 	flags["ponytail"] = installPonytail
 
+	// jev-gate reads its key from a file because the OpenCode server does not
+	// inherit this process's environment; copy the env key in once, here.
+	if flags["jev-gate"] {
+		keyPath, wrote, err := plugins.EnsureJevKey(os.Getenv("TYPESAFE_API_KEY"))
+		if err != nil {
+			fmt.Printf("  Warning: jev-gate key: %v\n", err)
+		} else {
+			fmt.Println(plugins.JevKeyStatus(keyPath, wrote))
+		}
+	}
+
 	// Preset enforcement (profile scope only): install only preset mcp[]
 	// servers. Empty = keep current. Never uninstalls extra servers, only
 	// skips installing unlisted ones. Plugins always install.

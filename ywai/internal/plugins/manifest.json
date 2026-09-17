@@ -10,6 +10,6 @@
     { "id": "microsoft-learn", "kind": "mcp", "flag": "mcp", "label": "Microsoft Learn MCP", "description": "Access to official Microsoft documentation", "claudeStdio": ["npx", "@anthropic/mcp-server-microsoft-learn"] },
     { "id": "meta-devtools", "kind": "mcp", "flag": "meta-mcp", "label": "Meta Developer Tools MCP", "description": "Meta apps, webhooks, compliance and developer docs (sign in from your agent)" },
     { "id": "ponytail", "kind": "exec", "flag": "ponytail", "label": "Ponytail", "description": "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)", "agents": ["opencode",  "claude-code"], "remove": "@dietrichgebert/ponytail", "marketplace": "DietrichGebert/ponytail", "plugin": "ponytail@ponytail" },
-    { "id": "jev-gate", "kind": "vendor-js", "bundle": "jev-gate", "flag": "jev-gate", "label": "Jev gate (experimental)", "description": "Experimental: jev_review_diff / jev_review_path, a staged diff review by the Jev classifier. Needs a TypeSafe API key; refuses to run without one.", "agents": ["opencode"] }
+    { "id": "jev-gate", "kind": "vendor-js", "bundle": "jev-gate", "flag": "jev-gate", "agentsSection": "jev-gate", "label": "Jev gate (experimental)", "description": "Experimental: jev_review_diff / jev_review_path, a staged diff review by the Jev classifier. Needs a TypeSafe API key; refuses to run without one.", "agents": ["opencode"] }
   ]
 }

@@ -53,11 +53,15 @@ type ManifestEntry struct {
 	Kind   string   `json:"kind,omitempty"`
 	Agents []string `json:"agents,omitempty"` // empty = every agent the plugin pass handles
 	Flag   string   `json:"flag,omitempty"`   // install only with this CLI flag: mcp, meta-mcp, ponytail
-	Label  string   `json:"label,omitempty"`  // install UI row name (flagged entries)
-	Desc   string   `json:"description,omitempty"`
-	Bundle string   `json:"bundle,omitempty"` // vendor-js/vendor-tui: bundle key (see vendorBundles)
-	Dir    string   `json:"dir,omitempty"`    // vendor-tui: plugin directory name under plugins/
-	Mouse  bool     `json:"mouse,omitempty"`  // vendor-tui: enable mouse capture in cli.json
+	// AgentsSection names an AGENTS.md block this entry owns. Written on
+	// install and removed on uninstall, so instructions never outlive the
+	// tools they describe. Opencode only.
+	AgentsSection string `json:"agentsSection,omitempty"`
+	Label         string `json:"label,omitempty"` // install UI row name (flagged entries)
+	Desc          string `json:"description,omitempty"`
+	Bundle        string `json:"bundle,omitempty"` // vendor-js/vendor-tui: bundle key (see vendorBundles)
+	Dir           string `json:"dir,omitempty"`    // vendor-tui: plugin directory name under plugins/
+	Mouse         bool   `json:"mouse,omitempty"`  // vendor-tui: enable mouse capture in cli.json
 	// Command names a slash command file to install alongside the bundle
 	// (opencode only).
 	Command string `json:"command,omitempty"`
@@ -115,6 +119,16 @@ func installVendorJS(agentName, configPath string, e ManifestEntry) error {
 	}
 	if err := installVendorPluginV2(configPath, src, b.name); err != nil {
 		return err
+	}
+	if e.AgentsSection != "" && agentName == "opencode" {
+		body, ok := agentsSections[e.AgentsSection]
+		if !ok {
+			return fmt.Errorf("%s: unknown agents section %q", e.ID, e.AgentsSection)
+		}
+		path := filepath.Join(config.OpenCodeConfigDir(), "AGENTS.md")
+		if err := UpsertAgentsSection(path, e.AgentsSection, body); err != nil {
+			return err
+		}
 	}
 	if e.Command != "" {
 		if agentName != "opencode" {
@@ -221,6 +235,9 @@ func resolveEntry(e ManifestEntry) (ManifestEntry, error) {
 	resolved := d
 	if e.Agents != nil {
 		resolved.Agents = e.Agents
+	}
+	if e.AgentsSection != "" {
+		resolved.AgentsSection = e.AgentsSection
 	}
 	if e.Flag != "" {
 		resolved.Flag = e.Flag
