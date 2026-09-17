@@ -29,6 +29,7 @@ import { collectChangedFiles, type VcsLike } from "./adapters/vcs"
 import {
 	loadDecision,
 	loadRoute,
+	loadRun,
 	saveDecision,
 	saveRoute,
 	saveRun,
@@ -47,7 +48,7 @@ import type { ChangedFile } from "./domain/types"
 import { findApiKey, keyHelp } from "./adapters/key"
 import { HttpJevClient, MissingKeyError } from "./jev/client"
 import { runChangeReview } from "./review/workflow"
-import { summarize } from "./format"
+import { detail, summarize } from "./format"
 import { findInSegments, FIND_THRESHOLD } from "./find/score"
 import { segmentFile, MAX_FIND_SEGMENTS, type Segment } from "./find/segment"
 
@@ -302,6 +303,56 @@ async function setup(ctx: JevContext) {
 							`${result.scannedSegments} segments, ${(result.latencyMs / 1000).toFixed(1)}s, ` +
 							`${result.usage.requests} requests)\n\n${lines.join("\n\n")}${truncated}`,
 					}
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+
+		editor.add({
+			name: "jev_report",
+			description:
+				"Show the scores behind a Jev review: every screened file against every dimension, " +
+				"with its probability, plus which signals opened a finding and which could not be " +
+				"placed. Use it when the summary's verdict is not enough - especially after an " +
+				"INCONCLUSIVE run, where the scores are the only record of what Jev saw. " +
+				"Defaults to this session's last review.",
+			input: {
+				type: "object",
+				properties: {
+					runId: {
+						type: "string",
+						description: "A runId from an earlier summary. Defaults to this session's last review.",
+					},
+				},
+			},
+			execute: async (input: { runId?: string }, toolCtx?: { sessionID?: string }) => {
+				try {
+					let runId = input?.runId
+					if (!runId) {
+						const decision = toolCtx?.sessionID
+							? await loadDecision(ctx.storage, toolCtx.sessionID)
+							: undefined
+						runId = decision?.runId
+					}
+					if (!runId) {
+						return {
+							content:
+								"No runId given and no review recorded for this session. " +
+								"Run `jev_review_diff` or `jev_review_path` first.",
+						}
+					}
+					const report = await loadRun(ctx.storage, runId)
+					if (!report) {
+						// Storage is per-session in practice, so an old runId from
+						// another session reads as missing, not as an empty run.
+						return {
+							content:
+								`No stored run for \`${runId}\`. Reports do not outlive the session ` +
+								"that produced them, so re-run the review instead of reporting nothing.",
+						}
+					}
+					return { content: detail(report) }
 				} catch (err) {
 					return { content: failure(err) }
 				}

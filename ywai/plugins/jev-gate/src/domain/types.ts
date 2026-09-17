@@ -56,6 +56,16 @@ export interface ReviewReport {
 	action: ReviewAction
 	matrix: ScreenMatrix
 	findings: Finding[]
+	/**
+	 * Locatable signals that crossed the screen threshold but could not be
+	 * placed on a changed hunk, so they never became findings.
+	 *
+	 * The count travels because the summary cannot re-derive it: the matrix
+	 * also holds `compatibility` and `testGap`, which score high on almost
+	 * everything and are never promoted. Counting rows in the matrix instead
+	 * reads that noise as a lost signal and prints a caveat on a clean run.
+	 */
+	unplaced: number
 	/** Files seen but deliberately not sent, with the reason. */
 	skipped: Array<{ path: string; reason: string }>
 	/** Always "jev" here; "llm" marks a fallback that gates must ignore. */

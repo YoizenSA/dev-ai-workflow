@@ -4,7 +4,7 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { extractChangedFiles, collectChangedFiles } from "../src/adapters/vcs"
 import { loadDecision, loadRun, saveDecision, saveRun } from "../src/adapters/store"
-import { summarize } from "../src/format"
+import { detail, summarize } from "../src/format"
 import type { ReviewReport } from "../src/domain/types"
 
 const report = (over: Partial<ReviewReport> = {}): ReviewReport => ({
@@ -24,6 +24,7 @@ const report = (over: Partial<ReviewReport> = {}): ReviewReport => ({
 			owner: "security",
 		},
 	],
+	unplaced: 0,
 	skipped: [],
 	source: "jev",
 	questionsVersion: "2026-09-17.1",
@@ -55,7 +56,13 @@ describe("bundle shape", () => {
 				},
 			},
 		} as never)
-		expect(added).toEqual(["jev_review_diff", "jev_review_path", "jev_find", "jev_route"])
+		expect(added).toEqual([
+			"jev_review_diff",
+			"jev_review_path",
+			"jev_find",
+			"jev_report",
+			"jev_route",
+		])
 	})
 })
 
@@ -153,8 +160,60 @@ describe("summarize", () => {
 	})
 
 	test("a signal that could not be placed is said out loud, not dropped", () => {
-		const md = summarize(report({ action: "clean", findings: [], matrix: { "a.ts": { security: 0.95 } } }))
-		expect(md).toContain("none could be placed")
+		const md = summarize(
+			report({ action: "clean", findings: [], unplaced: 1, matrix: { "a.ts": { security: 0.95 } } }),
+		)
+		expect(md).toContain("could not be placed")
+		// The headline is what a human skims, so the word has to carry it too.
+		expect(md).toContain("INCONCLUSIVE")
+		expect(md).not.toContain("CLEAN")
+	})
+
+	test("compatibility noise on a clean run does not manufacture a caveat", () => {
+		// Both dimensions score high on almost everything and are never
+		// promoted, so a matrix full of them is a clean run, not a lost signal.
+		const md = summarize(
+			report({
+				action: "clean",
+				findings: [],
+				unplaced: 0,
+				matrix: { "a.ts": { compatibility: 0.86, testGap: 0.91, security: 0.12 } },
+			}),
+		)
+		expect(md).toContain("CLEAN")
+		expect(md).toContain("No signal reached the screen threshold")
+		expect(md).not.toContain("could not be placed")
+	})
+})
+
+describe("detail", () => {
+	test("shows every dimension's score, not just the ones that opened a finding", () => {
+		const md = detail(
+			report({
+				action: "clean",
+				findings: [],
+				unplaced: 1,
+				matrix: { "a.ts": { security: 0.83, correctness: 0.12, compatibility: 0.86 } },
+			}),
+		)
+		expect(md).toContain("83%")
+		// The score that went nowhere is the whole point of this tool.
+		expect(md).toContain("12%")
+		expect(md).toContain("86%")
+		expect(md).toContain("1 unplaced")
+	})
+
+	test("bolds only a score that could actually open a finding", () => {
+		const md = detail(
+			report({
+				action: "clean",
+				findings: [],
+				matrix: { "a.ts": { security: 0.83, compatibility: 0.86 } },
+			}),
+		)
+		// compatibility is over threshold too, and means nothing.
+		expect(md).toContain("**83%**")
+		expect(md).not.toContain("**86%**")
 	})
 })
 

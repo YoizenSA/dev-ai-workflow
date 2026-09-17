@@ -115,6 +115,7 @@ export async function runChangeReview(
 	const byPath = new Map(targets.map((file) => [file.path, file]))
 
 	const findings: Finding[] = []
+	let unplaced = 0
 	for (const signal of signals) {
 		const file = byPath.get(signal.file)
 		if (!file) continue
@@ -125,8 +126,12 @@ export async function runChangeReview(
 			usage,
 			ownerSeverity,
 		)
-		// No hunk, no finding: a signal we cannot place stays in the matrix.
-		if (!located) continue
+		// No hunk, no finding: a signal we cannot place stays in the matrix,
+		// and is counted so the summary can say so instead of guessing.
+		if (!located) {
+			unplaced++
+			continue
+		}
 		findings.push({
 			file: signal.file,
 			dimension: signal.dimension,
@@ -146,6 +151,7 @@ export async function runChangeReview(
 		action: decideAction(findings, blockingSeverity),
 		matrix,
 		findings,
+		unplaced,
 		skipped,
 		source: "jev",
 		questionsVersion: QUESTIONS_VERSION,

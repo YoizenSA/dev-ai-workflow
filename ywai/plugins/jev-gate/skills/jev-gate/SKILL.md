@@ -20,8 +20,19 @@ Both are Code Mode tools, so they are called inside `execute`:
 return await tools.jev_review_diff({})
 ```
 
-The tool returns a short markdown summary. The full report is stored under its
-`runId`, so do not ask for the JSON unless someone wants the raw run.
+The tool returns a short markdown summary: the verdict and whatever became a
+finding. It does not show the scores behind that verdict.
+
+To see how Jev categorised each file, call `jev_report`. It prints the screen
+matrix - every screened file against all five dimensions with its probability -
+plus which signals opened a finding and which could not be placed. With no
+argument it reports this session's last review; pass a `runId` for an earlier
+one. Reach for it whenever the verdict alone does not answer the question, and
+always after an `INCONCLUSIVE` run, where the scores are the only record of
+what Jev saw.
+
+Two dimensions in that table never open a finding on their own: `compatibility`
+and `testGap`. A high number there is noise - see "What Jev is bad at" below.
 
 ## Rules when reporting
 
@@ -31,9 +42,12 @@ The tool returns a short markdown summary. The full report is stored under its
    the probability and severity attached to the finding.
 3. **`clean` is not `approved`.** Jev never approves. A clean run means no
    signal crossed the threshold - it is not a guarantee the change is correct.
-4. **If the tool says the review did not run, it did not run.** No key, a
+4. **`INCONCLUSIVE` is not `clean`.** It means a signal crossed the threshold
+   and the pipeline could not place it on a changed line. Report it as a review
+   that did not finish, never as a run with nothing to say.
+5. **If the tool says the review did not run, it did not run.** No key, a
    network failure, or an empty diff are not passing reviews. Say so plainly.
-5. **Do not re-run a review to get a different answer.** If a finding looks
+6. **Do not re-run a review to get a different answer.** If a finding looks
    wrong, say why in your own words and leave Jev's number as it is.
 
 ## What Jev is bad at
