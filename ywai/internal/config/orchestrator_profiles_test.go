@@ -52,12 +52,12 @@ func TestInheritProfileHasNoPinnedModels(t *testing.T) {
 	}
 }
 
-func TestDefaultOrchestratorModelProfiles_FastUsesFlashVisionEverywhere(t *testing.T) {
+func TestDefaultOrchestratorModelProfiles_FastUsesDeepseekV41FlashEverywhere(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 
 	got := profiles["fast"].Agents["dev"]
-	if got.Model != "opencode-admin/deepseek-v4-flash-vision-exp" {
-		t.Fatalf("expected fast dev model opencode-admin/deepseek-v4-flash-vision-exp, got %q", got.Model)
+	if got.Model != "opencode-admin/deepseek-v4.1-flash" {
+		t.Fatalf("expected fast dev model opencode-admin/deepseek-v4.1-flash, got %q", got.Model)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestResyncOrchestratorModelProfiles_FallsBackDeterministicallyWhenActivePro
 func TestGetOrchestratorAgentModel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ActiveOrchestratorProfile = "fast"
-	if got := cfg.GetOrchestratorAgentModel("dev"); got != "opencode-admin/deepseek-v4-flash-vision-exp" {
+	if got := cfg.GetOrchestratorAgentModel("dev"); got != "opencode-admin/deepseek-v4.1-flash" {
 		t.Fatalf("expected fast dev model, got %q", got)
 	}
 	if got := cfg.GetOrchestratorAgentModel("nonexistent-agent"); got != "" {
@@ -277,7 +277,7 @@ func TestGetOrchestratorAgentModel(t *testing.T) {
 
 // TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek pins the balanced
 // profile's model assignments after the DeepSeek migration: every Grok and
-// MiniMax assignment was replaced with deepseek-v4-pro / deepseek-v4-flash.
+// MiniMax assignment was replaced with deepseek-v4.1-flash.
 func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 	profiles := DefaultOrchestratorModelProfiles()
 	balanced, ok := profiles["balanced"]
@@ -286,9 +286,9 @@ func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 	}
 
 	roleWant := map[string]string{
-		"advisor": "opencode-admin/deepseek-v4-pro",
-		"plan":    "opencode-admin/deepseek-v4-pro",
-		"default": "opencode-admin/deepseek-v4-flash",
+		"advisor": "opencode-admin/deepseek-v4.1-flash",
+		"plan":    "opencode-admin/deepseek-v4.1-flash",
+		"default": "opencode-admin/deepseek-v4.1-flash",
 	}
 	for role, want := range roleWant {
 		if got := balanced.OmpModelRoles[role]; got != want {
@@ -297,15 +297,15 @@ func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 	}
 
 	agentWant := map[string]string{
-		"advisor":       "opencode-admin/deepseek-v4-pro",
-		"architect":     "opencode-admin/deepseek-v4-pro",
-		"orchestrator":  "opencode-admin/deepseek-v4-pro",
-		"planner-draft": "opencode-admin/deepseek-v4-pro",
-		"planning":      "opencode-admin/deepseek-v4-pro",
-		"dev":           "opencode-admin/deepseek-v4-flash",
-		"finder":        "opencode-admin/deepseek-v4-flash",
-		"qa":            "opencode-admin/deepseek-v4-flash",
-		"ask":           "opencode-admin/deepseek-v4-flash",
+		"advisor":       "opencode-admin/deepseek-v4.1-flash",
+		"architect":     "opencode-admin/deepseek-v4.1-flash",
+		"orchestrator":  "opencode-admin/deepseek-v4.1-flash",
+		"planner-draft": "opencode-admin/deepseek-v4.1-flash",
+		"planning":      "opencode-admin/deepseek-v4.1-flash",
+		"dev":           "opencode-admin/deepseek-v4.1-flash",
+		"finder":        "opencode-admin/deepseek-v4.1-flash",
+		"qa":            "opencode-admin/deepseek-v4.1-flash",
+		"ask":           "opencode-admin/deepseek-v4.1-flash",
 	}
 	for agent, want := range agentWant {
 		if got := balanced.Agents[agent].Model; got != want {
@@ -330,7 +330,7 @@ func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected seeded profile %q to exist", "deep")
 	}
-	if got := deep.OmpModelRoles["slow"]; got != "opencode-admin/grok-4.5" {
+	if got := deep.OmpModelRoles["slow"]; got != "opencode-admin/deepseek-v4.1-flash" {
 		t.Errorf("deep omp_model_roles[slow] changed to %q; deep profile must stay untouched", got)
 	}
 }

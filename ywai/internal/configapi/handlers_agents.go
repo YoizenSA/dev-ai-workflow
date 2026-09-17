@@ -845,7 +845,7 @@ func applyOmpModelRoles(profile userconfig.OrchestratorModelProfile) bool {
 
 // firstProfileModel returns the first non-empty model among the given ywai
 // agent names in the profile, with the opencode provider prefix stripped
-// ("opencode-admin/deepseek-v4-flash" → "deepseek-v4-flash"). omp resolves
+// ("opencode-admin/deepseek-v4.1-flash" → "deepseek-v4.1-flash"). omp resolves
 // bare model ids by fuzzy match against its own providers; an opencode
 // provider id would not resolve on omp.
 func firstProfileModel(profile userconfig.OrchestratorModelProfile, agents []string) string {

@@ -9,7 +9,7 @@ const DefaultOrchestratorModelProfileName = "balanced"
 
 // OrchestratorModelProfile is a named preset of per-agent model assignments.
 // Keys of Agents are agent names (dev, qa, architect, qa-analyst, …); each
-// entry's Model is a full opencode model id (e.g. "opencode-admin/deepseek-v4-pro").
+// entry's Model is a full opencode model id (e.g. "opencode-admin/deepseek-v4.1-flash").
 // Activating a profile writes each agent's model into that agent's markdown
 // config, so it applies both when the agent runs directly and when it is
 // delegated to (the delegate tool falls back to the agent's configured model).
