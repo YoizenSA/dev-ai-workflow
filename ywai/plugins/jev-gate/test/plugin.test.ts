@@ -157,3 +157,38 @@ describe("summarize", () => {
 		expect(md).toContain("none could be placed")
 	})
 })
+
+describe("setup never fails silently", () => {
+	test("a host without ctx.tool.transform records why, instead of vanishing", async () => {
+		const entry = await import("../src/index")
+		const errors: string[] = []
+		const original = console.error
+		console.error = (line: unknown) => void errors.push(String(line))
+		try {
+			await entry.default.setup({} as never)
+		} finally {
+			console.error = original
+		}
+		// The field failure was a plugin that logged "loading plugin" and then
+		// registered nothing, so the tools read as Unknown tool with no clue.
+		expect(errors.join("\n")).toContain("jev-gate")
+		expect(errors.join("\n")).toContain("ctx.tool.transform")
+	})
+
+	test("a transform that throws does not reject setup", async () => {
+		const entry = await import("../src/index")
+		const original = console.error
+		console.error = () => {}
+		try {
+			await entry.default.setup({
+				tool: {
+					transform: async () => {
+						throw new Error("host API changed")
+					},
+				},
+			} as never)
+		} finally {
+			console.error = original
+		}
+	})
+})

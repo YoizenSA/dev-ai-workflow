@@ -21,7 +21,8 @@
  * - Plugin tools reach the model only through Code Mode's `execute`, so the
  *   descriptions below are written for someone reading a catalog entry.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs"
+import { appendFileSync, readFileSync, readdirSync, statSync } from "node:fs"
+import { homedir } from "node:os"
 import { join, relative, resolve } from "node:path"
 import type { V2PluginContext, V2ToolEditor } from "../../shared/v2"
 import { collectChangedFiles, type VcsLike } from "./adapters/vcs"
@@ -147,8 +148,33 @@ async function reviewAndFormat(
 	return summarize(report)
 }
 
+/**
+ * Record why setup failed, where a user can find it.
+ *
+ * A plugin whose setup() rejects still logs "loading plugin" and then
+ * registers nothing, so the tools are simply absent with no explanation - the
+ * exact failure this plugin hit in the field. The Fase 0 probes wrapped every
+ * registration for this reason; production setup has to do the same.
+ */
+function recordSetupFailure(step: string, err: unknown) {
+	const line = `[jev-gate] ${new Date().toISOString()} ${step} failed: ${String(err)}`
+	console.error(line)
+	try {
+		appendFileSync(join(homedir(), ".jev-gate-setup.log"), line + "\n")
+	} catch {
+		// The console line is the fallback; never fail load over a log write.
+	}
+}
+
 async function setup(ctx: JevContext) {
-	await ctx.tool?.transform?.((editor: V2ToolEditor) => {
+	if (typeof ctx.tool?.transform !== "function") {
+		recordSetupFailure(
+			"tool-registration",
+			"ctx.tool.transform is not a function on this OpenCode version; no jev_* tools were registered",
+		)
+		return
+	}
+	await ctx.tool.transform((editor: V2ToolEditor) => {
 		editor.add({
 			name: "jev_review_diff",
 			description:
@@ -355,10 +381,21 @@ async function setup(ctx: JevContext) {
 export default {
 	id: "ywai-jev-gate",
 	setup: async (ctx: V2PluginContext) => {
-		await setup(ctx as JevContext)
+		// Never let a registration failure reject setup(): a rejected setup
+		// silently yields a loaded plugin with no tools, which reads to the
+		// agent as "Unknown tool" and to the user as nothing at all.
+		try {
+			await setup(ctx as JevContext)
+		} catch (err) {
+			recordSetupFailure("setup", err)
+		}
 		if (process.env.JEV_GATE_PROBE === "1") {
-			const { setupProbes } = await import("./probes")
-			await setupProbes(ctx as never)
+			try {
+				const { setupProbes } = await import("./probes")
+				await setupProbes(ctx as never)
+			} catch (err) {
+				recordSetupFailure("probes", err)
+			}
 		}
 	},
 }
