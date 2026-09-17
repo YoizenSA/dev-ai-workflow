@@ -1,0 +1,267 @@
+/**
+ * jev-gate - Jev as a policy layer over OpenCode 2 (PLAN Fase 2).
+ *
+ * Ships two tools:
+ *   jev_review_diff - screen the working-tree diff, locate what screened high
+ *   jev_review_path - the same pipeline over one file or directory
+ *
+ * Both return a short markdown summary; the full report goes to `ctx.storage`
+ * under its runId, so the model never receives 40 KB of JSON.
+ *
+ * Fail closed on purpose: with no TYPESAFE_API_KEY the tools refuse rather
+ * than degrade, because "a Jev review" that Jev never ran is the one output
+ * this plugin must never produce (PLAN 0 / 3.1).
+ *
+ * The Fase 0 probes stay available behind JEV_GATE_PROBE=1 - Code Mode means
+ * the schema-size question needs re-measuring on every host version.
+ *
+ * Authoring notes from Spike B (v2.0.6):
+ * - `process.cwd()` is the user's HOME at plugin load, not the project, so
+ *   every path comes from `ctx.location.directory`.
+ * - Plugin tools reach the model only through Code Mode's `execute`, so the
+ *   descriptions below are written for someone reading a catalog entry.
+ */
+import { readFileSync, readdirSync, statSync } from "node:fs"
+import { join, relative, resolve } from "node:path"
+import type { V2PluginContext, V2ToolEditor } from "../../shared/v2"
+import { collectChangedFiles, type VcsLike } from "./adapters/vcs"
+import {
+	loadDecision,
+	loadRoute,
+	saveDecision,
+	saveRoute,
+	saveRun,
+	type StorageLike,
+} from "./adapters/store"
+import { registerPermissionGate, type PermissionHost } from "./gates/permission"
+import { routeTask } from "./route/decide"
+import {
+	CONFIRM_FILES_CODEBASE,
+	MAX_FILES_CODEBASE,
+	isDenied,
+	isReviewable,
+	isTestFile,
+} from "./domain/config"
+import type { ChangedFile } from "./domain/types"
+import { findApiKey, keyHelp } from "./adapters/key"
+import { HttpJevClient, MissingKeyError } from "./jev/client"
+import { runChangeReview } from "./review/workflow"
+import { summarize } from "./format"
+
+interface JevContext extends V2PluginContext {
+	vcs?: VcsLike
+	storage?: StorageLike
+	permission?: PermissionHost
+}
+
+function projectDir(ctx: JevContext): string {
+	return ctx.location?.directory ?? process.cwd()
+}
+
+/**
+ * One place to turn any failure into a message the agent can repeat safely.
+ * Every branch says nothing was reviewed, because the failure mode that costs
+ * the most is an agent reporting silence as a clean review.
+ */
+function failure(err: unknown): string {
+	const reason = err instanceof MissingKeyError ? err.message : String(err)
+	return (
+		`**Jev review did not run.** ${reason}\n\n` +
+		"Nothing was reviewed. Do not describe this as a passing or clean review."
+	)
+}
+
+/** Walk a path into reviewable files, respecting the deny list and the caps. */
+export function collectPathFiles(root: string, target: string): ChangedFile[] {
+	const absolute = resolve(root, target)
+	const files: ChangedFile[] = []
+
+	const visit = (current: string) => {
+		if (files.length >= MAX_FILES_CODEBASE) return
+		const info = statSync(current)
+		if (info.isDirectory()) {
+			for (const entry of readdirSync(current)) {
+				if (entry === "node_modules" || entry === ".git" || entry === "dist") continue
+				visit(join(current, entry))
+			}
+			return
+		}
+		const path = relative(root, current).replace(/\\/g, "/")
+		if (!isReviewable(path) || isDenied(path) || isTestFile(path)) return
+		// The pipeline screens patches, so present the file as an all-added
+		// patch: same shape, and here every line genuinely is under review.
+		const lines = readFileSync(current, "utf8").split(/\r?\n/)
+		files.push({
+			path,
+			patch: [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((line) => `+${line}`)].join("\n"),
+		})
+	}
+
+	visit(absolute)
+	return files
+}
+
+async function reviewAndFormat(
+	ctx: JevContext,
+	files: ChangedFile[],
+	sessionID: string | undefined,
+): Promise<string> {
+	const apiKey = findApiKey(projectDir(ctx))
+	if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
+	const report = await runChangeReview(new HttpJevClient({ apiKey }), files)
+	await saveRun(ctx.storage, report)
+	if (sessionID) await saveDecision(ctx.storage, sessionID, report)
+	return summarize(report)
+}
+
+async function setup(ctx: JevContext) {
+	await ctx.tool?.transform?.((editor: V2ToolEditor) => {
+		editor.add({
+			name: "jev_review_diff",
+			description:
+				"Review the current working-tree diff with Jev, a classifier that answers with " +
+				"probabilities rather than prose. Returns Jev's own findings with file:line, " +
+				"mechanism and severity. Report them as written: never add findings of your own " +
+				"and attribute them to Jev, and never state one more confidently than its score.",
+			input: {
+				type: "object",
+				properties: {
+					base: { type: "string", description: "Git ref to diff against. Defaults to HEAD." },
+				},
+			},
+			execute: async (input: { base?: string }, toolCtx?: { sessionID?: string }) => {
+				try {
+					const root = projectDir(ctx)
+					const { files, source } = await collectChangedFiles(ctx.vcs, root, input?.base ?? "HEAD")
+					if (files.length === 0) {
+						return { content: "No changed files in the working tree. Nothing to review." }
+					}
+					const summary = await reviewAndFormat(ctx, files, toolCtx?.sessionID)
+					return { content: `${summary}\n\n_diff source: ${source}_` }
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+
+		editor.add({
+			name: "jev_review_path",
+			description:
+				`Review one file or directory with Jev, the same pipeline as jev_review_diff. ` +
+				`Asks for confirmation over ${CONFIRM_FILES_CODEBASE} files and never reviews more ` +
+				`than ${MAX_FILES_CODEBASE}.`,
+			input: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "File or directory, relative to the project." },
+					confirm: {
+						type: "boolean",
+						description: "Required to review more than the confirmation threshold.",
+					},
+				},
+				required: ["path"],
+			},
+			execute: async (
+				input: { path: string; confirm?: boolean },
+				toolCtx?: { sessionID?: string },
+			) => {
+				try {
+					const files = collectPathFiles(projectDir(ctx), input.path)
+					if (files.length === 0) {
+						return { content: `No reviewable JS/TS files under \`${input.path}\`.` }
+					}
+					if (files.length > CONFIRM_FILES_CODEBASE && !input.confirm) {
+						return {
+							content:
+								`\`${input.path}\` has ${files.length} reviewable files, over the ` +
+								`${CONFIRM_FILES_CODEBASE} confirmation threshold. Nothing was sent to Jev. ` +
+								"Re-run with confirm: true to proceed.",
+						}
+					}
+					return { content: await reviewAndFormat(ctx, files, toolCtx?.sessionID) }
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+
+		editor.add({
+			name: "jev_route",
+			description:
+				"Ask Jev who should execute a task: an installed agent, an inline answer, a Jev " +
+				"review, or a person. Records the decision for this session, which makes later " +
+				"writes ask for confirmation when the task was not routed to a writing agent.",
+			input: {
+				type: "object",
+				properties: {
+					task: { type: "string", description: "The task, in the user's own words." },
+					wantsWrite: { type: "boolean", description: "The task explicitly asks to change files." },
+					failingTests: { type: "boolean", description: "There are failing tests right now." },
+				},
+				required: ["task"],
+			},
+			execute: async (
+				input: { task: string; wantsWrite?: boolean; failingTests?: boolean },
+				toolCtx?: { sessionID?: string },
+			) => {
+				try {
+					const apiKey = findApiKey(projectDir(ctx))
+					if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
+					// Route over the agents this install actually has, not the
+					// stock OpenCode roster: a ywai session runs as `orchestrator`.
+					let agents: Array<{ name?: string; description?: string }> = []
+					try {
+						const listed = await ctx.agent?.list?.()
+						if (Array.isArray(listed)) agents = listed
+					} catch {
+						// Fall back to the known roster inside routeTask.
+					}
+					const decision = await routeTask(new HttpJevClient({ apiKey }), { ...input, agents })
+					if (toolCtx?.sessionID) {
+						await saveRoute(ctx.storage, toolCtx.sessionID, {
+							choice: decision.choice,
+							closeCall: decision.closeCall,
+							source: decision.source,
+						})
+					}
+					const reasons = decision.reasonCodes.length
+						? ` - ${decision.reasonCodes.join(", ")}`
+						: ""
+					const agentLine = decision.agent ? ` (agent: \`${decision.agent}\`)` : ""
+					return {
+						content:
+							`**Jev route: \`${decision.choice}\`**${agentLine}${reasons}
+
+` +
+							(decision.closeCall
+								? "This is a close call. Confirm with the user before acting on it."
+								: "Switching agent is the caller's decision; Jev only recommends."),
+					}
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+	})
+
+	// The gate reads what the tools above stored. It can only harden.
+	await registerPermissionGate(ctx.permission, async (sessionID) => ({
+		review: await loadDecision(ctx.storage, sessionID),
+		route: await loadRoute(ctx.storage, sessionID),
+	}))
+}
+
+/**
+ * v2 reads `id` and `setup()` from the default export and rejects
+ * function-shaped exports at load.
+ */
+export default {
+	id: "ywai-jev-gate",
+	setup: async (ctx: V2PluginContext) => {
+		await setup(ctx as JevContext)
+		if (process.env.JEV_GATE_PROBE === "1") {
+			const { setupProbes } = await import("./probes")
+			await setupProbes(ctx as never)
+		}
+	},
+}

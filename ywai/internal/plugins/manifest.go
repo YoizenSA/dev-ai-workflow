@@ -88,6 +88,7 @@ type vendorBundle struct {
 var vendorBundles = map[string]vendorBundle{
 	"background-agents":        {config.BackgroundAgentsBundlePath, config.BackgroundAgentsBundleName},
 	"vision-bridge":            {config.VisionBridgeBundlePath, config.VisionBridgeBundleName},
+	"jev-gate":                 {config.JevGateBundlePath, config.JevGateBundleName},
 	"advisor":                  {config.AdvisorBundlePath, config.AdvisorBundleName},
 	"tui-logo":                 {config.TuiLogoBundlePath, config.TuiLogoBundleName},
 	"background-agents-notify": {config.BackgroundAgentsNotifyBundlePath, config.BackgroundAgentsNotifyBundleName},

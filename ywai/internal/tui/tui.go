@@ -130,10 +130,14 @@ type agentOption struct {
 
 // TUIResult holds all configuration choices made in the TUI.
 type TUIResult struct {
-	Agent           string
-	MCP             bool
-	MetaMCP         bool
-	Ponytail        bool
+	Agent    string
+	MCP      bool
+	MetaMCP  bool
+	Ponytail bool
+	// OptionalFlags carries every other manifest flag toggled on the optional
+	// plugins step, keyed by ManifestEntry.Flag. Entries that need no
+	// dedicated field (experimental ones) ride here.
+	OptionalFlags   map[string]bool
 	OverwriteAgents bool
 	Autostart       bool
 	GroupFilter     agents.GroupFilter
@@ -172,6 +176,9 @@ type Model struct {
 	installMicrosoftLearnMCP bool
 	installMetaDevToolsMCP   bool
 	installPonytail          bool
+	// optionalFlags holds the toggles for flagged manifest entries that have
+	// no dedicated field above, so a new flagged entry needs no TUI change.
+	optionalFlags map[string]bool
 
 	// Overwrite existing profiles
 	overwriteAgents bool
@@ -230,6 +237,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		installMicrosoftLearnMCP: defaults.MCP,
 		installMetaDevToolsMCP:   defaults.MetaMCP,
 		installPonytail:          defaults.Ponytail,
+		optionalFlags:            map[string]bool{},
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
@@ -535,6 +543,11 @@ func (m *Model) toggleOptionalFlag(flag string) {
 		m.installMetaDevToolsMCP = !m.installMetaDevToolsMCP
 	case "ponytail":
 		m.installPonytail = !m.installPonytail
+	default:
+		if m.optionalFlags == nil {
+			m.optionalFlags = map[string]bool{}
+		}
+		m.optionalFlags[flag] = !m.optionalFlags[flag]
 	}
 }
 
@@ -548,7 +561,7 @@ func (m *Model) optionalFlagChecked(flag string) bool {
 	case "ponytail":
 		return m.installPonytail
 	default:
-		return false
+		return m.optionalFlags[flag]
 	}
 }
 
@@ -1307,6 +1320,7 @@ func (m *Model) Result() TUIResult {
 		MCP:             m.installMicrosoftLearnMCP,
 		MetaMCP:         m.installMetaDevToolsMCP,
 		Ponytail:        m.installPonytail,
+		OptionalFlags:   m.optionalFlags,
 		OverwriteAgents: m.overwriteAgents,
 		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),

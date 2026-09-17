@@ -81,6 +81,8 @@ type applyOpts struct {
 	InstallMCP      bool
 	InstallMetaMCP  bool
 	InstallPonytail bool
+	// OptionalFlags: manifest flags without a dedicated field (experimental).
+	OptionalFlags   map[string]bool
 	GroupFilter     agentprofiles.GroupFilter
 	OverwriteAgents bool
 	Autostart       bool
@@ -468,7 +470,7 @@ func applyManaged(o applyOpts) applyResult {
 	// ── plugins + CLIs ────────────────────────────────────────────────────
 	if plan.InstallPlugins {
 		steps.next("Installing plugins + MCP + companion CLIs")
-		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallMetaMCP, o.InstallPonytail)
+		installPluginsForAgents(agents, o.Opts.DryRun, o.InstallMCP, o.InstallMetaMCP, o.InstallPonytail, o.OptionalFlags)
 	}
 
 	// ── default agent ─────────────────────────────────────────────────────

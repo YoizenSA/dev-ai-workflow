@@ -337,7 +337,7 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
+func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, optionalFlags map[string]bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
 	return applyManagedScoped(applyOpts{
 		Mode:            applyInstall,
 		Profile:         profile,
@@ -345,6 +345,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, ins
 		InstallMCP:      installMCP,
 		InstallMetaMCP:  installMetaMCP,
 		InstallPonytail: installPonytail,
+		OptionalFlags:   optionalFlags,
 		GroupFilter:     groupFilter,
 		OverwriteAgents: overwriteAgents,
 		Autostart:       autostart,
@@ -606,7 +607,7 @@ func reseedData() {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool, optionalFlags map[string]bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 	var done []string
 
@@ -622,7 +623,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	for _, w := range manifestWarnings {
 		fmt.Printf("  Warning: %v\n", w)
 	}
-	flags := map[string]bool{"mcp": installMCP, "meta-mcp": installMetaMCP, "ponytail": installPonytail}
+	// Flags with a dedicated toggle first; optionalFlags carries the rest
+	// (experimental manifest entries) and never overrides the named ones.
+	flags := map[string]bool{}
+	for k, v := range optionalFlags {
+		flags[k] = v
+	}
+	flags["mcp"] = installMCP
+	flags["meta-mcp"] = installMetaMCP
+	flags["ponytail"] = installPonytail
 
 	// Preset enforcement (profile scope only): install only preset mcp[]
 	// servers. Empty = keep current. Never uninstalls extra servers, only

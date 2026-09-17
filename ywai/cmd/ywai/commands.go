@@ -410,6 +410,8 @@ var installCmd = &cobra.Command{
 		var installMCP bool
 		var installMetaMCP bool
 		var installPonytail bool
+		// Flagged manifest entries with no dedicated toggle (experimental).
+		optionalFlags := map[string]bool{}
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
 		ranTUI := false
@@ -439,6 +441,9 @@ var installCmd = &cobra.Command{
 			installMCP = result.MCP
 			installMetaMCP = result.MetaMCP
 			installPonytail = result.Ponytail
+			for k, v := range result.OptionalFlags {
+				optionalFlags[k] = v
+			}
 			overwriteAgents = result.OverwriteAgents
 			groupFilter = result.GroupFilter
 			autostartFlag = result.Autostart
@@ -447,6 +452,7 @@ var installCmd = &cobra.Command{
 			installMCP = mcpFlag
 			installMetaMCP = getBoolFlag(cmd, "meta-mcp")
 			installPonytail = ponytailFlag
+			optionalFlags["jev-gate"] = getBoolFlag(cmd, "jev-gate")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -468,7 +474,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag, profileFlag)
+		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, optionalFlags, groupFilter, overwriteAgents, autostartFlag, profileFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -1356,6 +1362,7 @@ func init() {
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
+	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin (probes only: logs tool-schema size and permission actions; no behavior change)")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")

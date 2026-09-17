@@ -45,7 +45,7 @@ func TestLoadManifest_EmbeddedDefault(t *testing.T) {
 	}
 	want := []string{
 		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo",
-		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail",
+		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail", "jev-gate",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("embedded manifest ids = %v, want %v", ids, want)

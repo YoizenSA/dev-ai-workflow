@@ -8,6 +8,8 @@ BA_DIR="$REPO_ROOT/plugins/background-agents"
 BA_BUNDLE="$BA_DIR/dist/background-agents.js"
 VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
+JG_DIR="$REPO_ROOT/plugins/jev-gate"
+JG_BUNDLE="$JG_DIR/dist/jev-gate.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
 AD_BUNDLE="$AD_DIR/dist/advisor.js"
 
@@ -44,6 +46,10 @@ if command -v bun >/dev/null 2>&1; then
     echo "Building vision-bridge plugin (bun bundle)…"
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
+    echo "Building jev-gate plugin (bun bundle)…"
+    # Type-only shared imports: bundles without node_modules (like vision-bridge).
+    bun build "$JG_DIR/src/index.ts" \
+        --outfile "$JG_BUNDLE" --target node
     echo "Building advisor plugin (bun bundle)…"
     # Advisor imports `tool` as a value from @opencode-ai/plugin. A type-only
     # import (vision-bridge) can bundle without node_modules; this cannot.
@@ -66,6 +72,11 @@ elif [ -f "$BA_BUNDLE" ]; then
         echo "using existing advisor bundle as-is"
     else
         echo "WARNING: advisor bundle missing (optional when bun unavailable)"
+    fi
+    if [ -f "$JG_BUNDLE" ]; then
+        echo "using existing jev-gate bundle as-is"
+    else
+        echo "WARNING: jev-gate bundle missing (optional when bun unavailable)"
     fi
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
@@ -114,6 +125,9 @@ if [ -f "$AD_DIR/command/advisor.md" ]; then
 fi
 if [ -f "$VB_BUNDLE" ]; then
     cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"
+fi
+if [ -f "$JG_BUNDLE" ]; then
+    cp -a "$JG_BUNDLE" "$EMBED_DIR/plugins/jev-gate.js"
 fi
 
 # ywai TUI logo (home_logo slot). Plain .tsx source — no build step.

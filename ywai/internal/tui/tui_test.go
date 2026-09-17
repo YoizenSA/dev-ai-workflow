@@ -504,8 +504,10 @@ func TestMetaDevToolsMCPToggle(t *testing.T) {
 	if m.step != stepMCP {
 		t.Fatalf("expected stepMCP, got %d", m.step)
 	}
-	if m.optionalPluginCount() != 3 {
-		t.Fatalf("optionalPluginCount()=%d, want 3", m.optionalPluginCount())
+	// Rows 0..2 are the named toggles; flagged experimental entries are
+	// appended after them, so only the first three indices are pinned here.
+	if m.optionalPluginCount() < 3 {
+		t.Fatalf("optionalPluginCount()=%d, want at least 3", m.optionalPluginCount())
 	}
 
 	sendKey(&m, "down") // focus Meta Developer Tools MCP

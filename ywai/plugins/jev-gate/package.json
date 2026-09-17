@@ -1,0 +1,15 @@
+{
+  "name": "ywai-jev-gate",
+  "version": "0.1.0",
+  "description": "Experimental Jev probes for OpenCode 2 - logs tool-schema size and permission actions. No behavior change.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}

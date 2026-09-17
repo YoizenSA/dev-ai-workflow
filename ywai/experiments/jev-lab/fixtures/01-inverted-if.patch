@@ -1,0 +1,12 @@
+--- a/src/cart/total.ts
++++ b/src/cart/total.ts
+@@ -10,7 +10,7 @@ interface Coupon {
+ export function canApplyCoupon(cart: Cart, coupon: Coupon): boolean {
+   if (cart.items.length === 0) {
+     return false
+   }
+-  if (cart.total < coupon.minAmount) {
++  if (cart.total <= coupon.minAmount) {
+     return false
+   }
+   return coupon.expiresAt > Date.now()

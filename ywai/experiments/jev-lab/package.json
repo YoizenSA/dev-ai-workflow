@@ -1,0 +1,9 @@
+{
+  "name": "jev-lab",
+  "private": true,
+  "type": "module",
+  "description": "Experimental environment for the Jev gate layer. Nothing here ships or loads outside this directory.",
+  "dependencies": {
+    "@typesafe-ai/sdk": "0.6.0"
+  }
+}

@@ -30,6 +30,9 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // that auto-routes images through TokenBank vision for text-only models.
 const VisionBridgeBundleName = "vision-bridge.js"
 
+// JevGateBundleName is the filename of the jev-gate opencode plugin bundle.
+const JevGateBundleName = "jev-gate.js"
+
 // AdvisorBundleName is the filename of the advisor opencode plugin: a second
 // model that reviews each turn and injects notes the agent can weigh.
 const AdvisorBundleName = "advisor.js"
@@ -641,6 +644,28 @@ func VisionBridgeBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// JevGateBundlePath resolves the path to the bundled jev-gate plugin JS.
+// Same resolution order as VisionBridgeBundlePath.
+func JevGateBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "jev-gate", "dist", JevGateBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), JevGateBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("jev-gate plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 // AdvisorCommandPath resolves the /advisor slash command markdown that ships
