@@ -1,6 +1,6 @@
 ---
 name: qa-probe
-description: "Probe an app with Jev: URL, cases, evidence. Drive with jev_do, never the desktop browser. Trigger: qa-probe, try this app, smoke this admin, exploratory QA, test this URL."
+description: "Probe an app with Jev via jev_do, never the desktop browser. Trigger: qa-probe, try this app, smoke test, exploratory QA."
 ---
 
 # QA Probe
