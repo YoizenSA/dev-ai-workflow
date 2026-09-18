@@ -12,10 +12,10 @@ El scenario-runner ejecuta los escenarios Gherkin contra la aplicación en ejecu
 ## Qué hace
 
 1. **Fija el ambiente primero** — Local (logs de `docker compose`/`docker logs`) o QA compartido (Grafana MCP: Loki + dashboards, ventana del run). Si no pregunta ante ambigüedad en vez de asumir localhost; si el ambiente no responde, frena y lo reporta. Un escenario que no pudo correr no es un escenario que pasó.
-2. **Elige el instrumento más barato que observe el `Then`** — API: aserción contra la respuesta (un browser solo suma flakiness). UI: browser real vía MCP `chrome-devtools` (`navigate_page`, `click`, `fill`, `wait_for`, `take_screenshot`), apuntando desde el árbol de accesibilidad (`take_snapshot`). Ante una falla, consola y red suelen explicar antes que los logs. Espera por condiciones, nunca sleeps fijos (`condition-based-waiting`).
+2. **Elige el instrumento más barato que observe el `Then`** — API: aserción contra la respuesta (un browser solo suma flakiness). UI: Given/When vía MCP `chrome-devtools`; el Then lo puntúa `jev_check_page` con el árbol de accesibilidad (`take_snapshot`). El PASS de UI lo firma Jev, no el agente. Ante una falla, consola y red suelen explicar antes que los logs. Espera por condiciones, nunca sleeps fijos (`condition-based-waiting`).
 3. **Respeta los escenarios** — Mapea cada `Given`/`When`/`Then` a algo hecho u observado; lo que no se puede ejercer queda **blocked**, nunca passed.
-4. **Archiva evidencia** — Es el deliverable, bajo `.evidence/<run-id>/`: screenshot en el momento de la aserción por escenario, request/response en API, extracto de logs acotado a la ventana. Sin releer screenshots en la sesión (un 413 te voltea el run). Lo que no pudo capturar, lo declara.
-5. **Reporta veredicto** — Una línea por escenario (`PASS | FAIL | BLOCKED` + nombre + path de evidencia), y por cada falla: esperado vs actual + qué dicen los logs. Un escenario en rojo bloquea aunque el review haya salido limpio: el review leyó el código, él lo corrió.
+4. **Archiva evidencia** — Es el deliverable, bajo `.evidence/<run-id>/`: screenshot en el momento de la aserción por escenario, línea Jev Then en UI, request/response en API, extracto de logs acotado a la ventana. Sin releer screenshots en la sesión (un 413 te voltea el run). Lo que no pudo capturar, lo declara.
+5. **Reporta veredicto** — Una línea por escenario (`PASS | FAIL | BLOCKED` + nombre + path de evidencia; UI también lleva la probabilidad de Jev), y por cada falla: esperado vs actual + qué dicen los logs. Un escenario en rojo bloquea aunque el review haya salido limpio: el review leyó el código, él lo corrió.
 
 ```mermaid
 flowchart LR
@@ -42,7 +42,7 @@ Viene en el disco con ywai pero **no** está en el grupo `core`: el install por 
 ywai install --all-groups
 ```
 
-Skills por allowlist: `qa-evidence`, `gherkin-bdd`, `condition-based-waiting`, `playwright-e2e-testing`, `diagnosing-bugs`.
+Skills por allowlist: `qa-evidence`, `gherkin-bdd`, `condition-based-waiting`, `playwright-e2e-testing`, `diagnosing-bugs`, `jev-gate`.
 
 ## Límites
 

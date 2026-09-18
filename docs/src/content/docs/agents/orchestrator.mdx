@@ -201,9 +201,10 @@ flowchart LR
 ```
 
 `@scenario-runner` levanta el entorno (logs de Docker en local, Grafana si es
-compartido), maneja el browser o la API según qué observa cada `Then`, y archiva
-la evidencia en `.evidence/<run-id>/`: screenshot en la aserción, el request que
-falla, el excerpt de log de la ventana de la corrida.
+compartido), maneja Given/When en el browser o la API según qué observa cada
+`Then`, y archiva la evidencia en `.evidence/<run-id>/`: screenshot en la
+aserción, la línea Jev Then en UI, el request que falla, el excerpt de log de
+la ventana de la corrida. Un Then visible lo puntúa `jev_check_page`.
 
 **Un escenario rojo bloquea**, aunque el review esté limpio. Se manda a arreglar
 y se vuelve a correr, **como mucho dos veces**; después se para y se reporta qué

@@ -14,8 +14,12 @@ Read the `Then`. Whatever it asserts is what you must observe — that decides t
 | The `Then` asserts | Run it as | Why |
 |---|---|---|
 | A status code, payload, or persisted record | HTTP call | A browser adds a rendering layer between you and the assertion, and every flake it brings is yours to debug |
-| Something the user sees, reaches, or is told | Browser | The rendering *is* the behaviour |
+| Something the user sees, reaches, or is told | Browser + Jev | Drive Given/When in the browser; `jev_check_page` scores the Then. You do not invent that PASS |
 | A log line, metric, or emitted event | Trigger it any way, assert on the log/metric | The UI may look fine while the side effect never fired |
+
+### UI Then is Jev's
+
+For a visible Then: take the accessibility snapshot, call `jev_check_page` with that snapshot and the Then verbatim, and file Jev's line (`PASS`/`FAIL` + probability) next to the screenshot. A UI PASS without that line is a claim. A missing key or a failed Jev call is not PASS — it is BLOCKED. Load the `jev-gate` skill. Do not override Jev's number.
 
 Never assert on a fixed sleep. Wait for the condition — see `condition-based-waiting`.
 
@@ -27,6 +31,7 @@ One directory per run, referenced by path in every report:
 .evidence/<run-id>/
   report.md                       verdict per scenario + failure detail
   <scenario-slug>.png             the screenshot at the assertion
+  <scenario-slug>.jev.md          Jev Then line (UI scenarios only)
   <scenario-slug>.http            request and response for API scenarios
   <scenario-slug>.log             the log excerpt around a failure
 ```

@@ -22,10 +22,12 @@ who drives, not whether the change is verified.
 ### How
 
 Delegate to `@scenario-runner`, which establishes the environment (Docker logs
-locally, Grafana for a shared one), drives the browser or the API depending on
-what each `Then` actually observes, and files the evidence — a screenshot at the
-assertion, the failing request, the log excerpt around each failure — under
-`.evidence/<run-id>/`.
+locally, Grafana for a shared one), drives Given/When in the browser or hits
+the API depending on what each `Then` actually observes, and files the
+evidence — a screenshot at the assertion, the Jev Then line for every UI
+scenario, the failing request, the log excerpt around each failure — under
+`.evidence/<run-id>/`. A UI Then is scored by `jev_check_page`; the runner
+does not invent that PASS.
 
 **A red scenario blocks**, even with a clean review. Send it back for a fix and
 run it again, at most twice; after that stop and report what is still failing

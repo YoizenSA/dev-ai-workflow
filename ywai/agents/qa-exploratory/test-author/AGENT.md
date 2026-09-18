@@ -20,7 +20,7 @@ You turn a feature summary into an Azure DevOps Exploratory Test work item, link
 
 ## Scenarios
 
-Use the `gherkin-bdd` skill for scenario structure, rules and anti-patterns. Use the `ado` skill to create and attach the work item, and `playwright-e2e-testing` when a scenario is a candidate for later automation.
+Use the `gherkin-bdd` skill for scenario structure, rules and anti-patterns. Use the `ado` skill to create and attach the work item, and `playwright-e2e-testing` when a scenario is a candidate for later automation. Write UI Thens as observable outcomes — `@scenario-runner` will score them with Jev, not by clicking through your steps.
 
 **Done when** the work item exists, is linked to the user story, and every case in the summary maps to at least one scenario with an observable assertion.
 

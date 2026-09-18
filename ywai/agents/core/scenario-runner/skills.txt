@@ -3,3 +3,4 @@ gherkin-bdd
 condition-based-waiting
 playwright-e2e-testing
 diagnosing-bugs
+jev-gate

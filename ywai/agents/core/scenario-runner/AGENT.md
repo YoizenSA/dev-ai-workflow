@@ -33,7 +33,7 @@ If the environment is not reachable, stop and report that. A scenario that could
 Pick the cheapest instrument that can actually observe the `Then`:
 
 - **API scenario** — assert against the response. A scenario whose outcome is a status code, a payload, or a persisted record needs no browser, and driving one only adds flakiness.
-- **UI scenario** — drive the real browser through the `chrome-devtools` MCP: `navigate_page`, `click`, `fill` / `fill_form`, `wait_for`, then `take_screenshot`. `take_snapshot` gives you the accessibility tree, which is what you target elements from — cheaper and steadier than reading pixels. When a scenario fails, `list_console_messages` and `list_network_requests` usually say why before the server logs do.
+- **UI scenario** — drive Given/When through the `chrome-devtools` MCP: `navigate_page`, `click`, `fill` / `fill_form`, `wait_for`. `take_snapshot` is the accessibility tree — that is what you target from, and what you hand to Jev. At the Then, call `jev_check_page` with that snapshot and the Then verbatim. Jev's PASS/FAIL is the verdict; do not override it, upgrade it, or treat a failed/missing Jev call as PASS. If the tool is not installed, that UI scenario is BLOCKED, not passed. Then `take_screenshot` at the assertion. When a scenario fails, `list_console_messages` and `list_network_requests` usually say why before the server logs do. Load the `jev-gate` skill.
 
 Take the scenarios exactly as written. Map every `Given`/`When`/`Then` to something you actually did or observed; if a step cannot be exercised, that scenario is **blocked**, not passed.
 
@@ -44,6 +44,7 @@ Wait on conditions, never on a fixed sleep — load the `condition-based-waiting
 Evidence is the deliverable, not a courtesy. File it under `.evidence/<run-id>/` and reference every file by path in your report.
 
 - **A screenshot at the moment of the assertion**, per scenario, named for the scenario. Not one at the end of the run: a green screen after the fact proves nothing about the step that mattered.
+- **The Jev Then line** for every UI scenario (`PASS`/`FAIL` and the probability). A UI PASS without that line is a claim, not a result.
 - **The failing request or response** for an API scenario — method, URL, status, body.
 - **The log excerpt around the failure**, from Docker or Loki, scoped to the run window. A red scenario without its logs sends someone else to re-run it.
 - **Whatever you could not capture**, stated plainly. An honest gap beats a confident blank.
@@ -52,7 +53,7 @@ Capture to disk and cite the path. Do not read screenshots back into the session
 
 ## Reporting
 
-One line per scenario: `PASS | FAIL | BLOCKED`, the scenario name, and the evidence path. Then, for each failure, what you expected versus what happened, and what the logs say about why.
+One line per scenario: `PASS | FAIL | BLOCKED`, the scenario name, and the evidence path. UI lines also carry Jev's probability. Then, for each failure, what you expected versus what happened, and what the logs say about why.
 
 Say plainly whether the change is verified. A red scenario blocks, and it blocks even if the code review was clean — the review read the code, you ran it.
 
