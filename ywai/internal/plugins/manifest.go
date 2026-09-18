@@ -96,6 +96,7 @@ var vendorBundles = map[string]vendorBundle{
 	"background-agents":        {config.BackgroundAgentsBundlePath, config.BackgroundAgentsBundleName},
 	"vision-bridge":            {config.VisionBridgeBundlePath, config.VisionBridgeBundleName},
 	"jev-gate":                 {config.JevGateBundlePath, config.JevGateBundleName},
+	"jev-compaction":           {config.JevCompactionBundlePath, config.JevCompactionBundleName},
 	"advisor":                  {config.AdvisorBundlePath, config.AdvisorBundleName},
 	"tui-logo":                 {config.TuiLogoBundlePath, config.TuiLogoBundleName},
 	"background-agents-notify": {config.BackgroundAgentsNotifyBundlePath, config.BackgroundAgentsNotifyBundleName},

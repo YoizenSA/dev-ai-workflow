@@ -1,0 +1,20 @@
+{
+  "name": "ywai-jev-compaction",
+  "version": "0.1.0",
+  "description": "OpenCode 2 plugin: drops stale tool calls and results before each request, using Jev decisions (fast-jev-compaction).",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "files": [
+    "src",
+    "vendor",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outfile dist/jev-compaction.js --target node",
+    "test": "bun test"
+  }
+}

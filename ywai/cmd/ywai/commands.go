@@ -453,6 +453,7 @@ var installCmd = &cobra.Command{
 			installMetaMCP = getBoolFlag(cmd, "meta-mcp")
 			installPonytail = ponytailFlag
 			optionalFlags["jev-gate"] = getBoolFlag(cmd, "jev-gate")
+			optionalFlags["jev-compaction"] = getBoolFlag(cmd, "jev-compaction")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -1363,6 +1364,7 @@ func init() {
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
 	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin: Jev-backed review, find and routing tools, plus a permission gate that asks before writing after a blocking review. Needs a TypeSafe API key.")
+	installCmd.Flags().Bool("jev-compaction", false, "Install the experimental jev-compaction opencode plugin: drops stale tool calls and results before each request using Jev decisions, plus the jev_compact tool. Reuses the jev-gate API key file.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
 	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
