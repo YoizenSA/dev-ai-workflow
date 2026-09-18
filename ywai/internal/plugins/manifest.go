@@ -3,6 +3,7 @@ package plugins
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,6 +66,10 @@ type ManifestEntry struct {
 	Bundle        string `json:"bundle,omitempty"` // vendor-js/vendor-tui: bundle key (see vendorBundles)
 	Dir           string `json:"dir,omitempty"`    // vendor-tui: plugin directory name under plugins/
 	Mouse         bool   `json:"mouse,omitempty"`  // vendor-tui: enable mouse capture in cli.json
+	// Retire names auto-discovered plugin files this entry supersedes. They
+	// are renamed to *.disabled on every install, since their owner may
+	// redeploy them.
+	Retire []string `json:"retire,omitempty"`
 	// Command names a slash command file to install alongside the bundle
 	// (opencode only).
 	Command string `json:"command,omitempty"`
@@ -100,6 +105,7 @@ var vendorBundles = map[string]vendorBundle{
 	"advisor":                  {config.AdvisorBundlePath, config.AdvisorBundleName},
 	"tui-logo":                 {config.TuiLogoBundlePath, config.TuiLogoBundleName},
 	"background-agents-notify": {config.BackgroundAgentsNotifyBundlePath, config.BackgroundAgentsNotifyBundleName},
+	"orca-status":              {config.OrcaStatusBundlePath, config.OrcaStatusBundleName},
 }
 
 // slashCommands maps an installed command file to the source it is copied
@@ -167,7 +173,23 @@ func installVendorTUI(configPath string, e ManifestEntry) error {
 		return fmt.Errorf("install %s: %w", e.ID, err)
 	}
 	tuiConfig := filepath.Join(filepath.Dir(configPath), tuiConfigName)
-	return patchTuiPlugin(tuiConfig, destDir, e.Mouse)
+	if err := patchTuiPlugin(tuiConfig, destDir, e.Mouse); err != nil {
+		return err
+	}
+	return retirePlugins(configPath, e.Retire)
+}
+
+// retirePlugins renames superseded plugin files so the loader skips them.
+// Renaming (not deleting) keeps someone else's file recoverable.
+func retirePlugins(configPath string, names []string) error {
+	dir := filepath.Join(filepath.Dir(configPath), autoDiscoveredPluginsSubdir)
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if err := os.Rename(path, path+".disabled"); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("retire %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 // installExecEntry removes a legacy plugin entry on opencode and installs via

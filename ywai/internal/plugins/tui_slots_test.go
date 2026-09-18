@@ -66,9 +66,15 @@ func TestTuiPluginsClaimPublishedSlots(t *testing.T) {
 				if nl := strings.Index(declared, "\n"); nl >= 0 {
 					declared = declared[:nl]
 				}
-				// Exemption only covers the attention channel today.
-				if strings.Contains(declared, "attention.notify") &&
-					strings.Contains(string(data), "attention.notify") {
+				// Exemption covers the attention channel and Orca's hook endpoint.
+				exempt := false
+				for _, mech := range []string{"attention.notify", "/hook/opencode"} {
+					if strings.Contains(declared, mech) &&
+						strings.Count(string(data), mech) > 1 {
+						exempt = true
+					}
+				}
+				if exempt {
 					checked++
 					continue
 				}

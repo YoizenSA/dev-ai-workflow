@@ -726,15 +726,6 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
-		// Orca deploys a status plugin into the config dir ywai manages, and on
-		// v2 it fails to load. Repair it here so the status bar is not dead
-		// until Orca ships its own fix; re-applied because Orca redeploys it.
-		if patched, err := plugins.RepairOrcaStatusPluginV2(configPath); err != nil {
-			fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
-		} else if patched {
-			fmt.Printf("  [%s] Repaired Orca status plugin for OpenCode v2\n", a.Name)
-		}
-
 		// Remove leftover Azure DevOps plugin entries from older installs. ywai
 		// now drives Azure DevOps through the `ado` skill (Bash CLI) instead of
 		// the in-process plugin, so its tools must not stay registered.

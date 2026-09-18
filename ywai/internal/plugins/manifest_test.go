@@ -44,7 +44,7 @@ func TestLoadManifest_EmbeddedDefault(t *testing.T) {
 		ids = append(ids, e.ID)
 	}
 	want := []string{
-		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo",
+		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo", "orca-status",
 		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail", "jev-gate",
 		"jev-compaction",
 	}

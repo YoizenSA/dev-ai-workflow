@@ -49,6 +49,10 @@ const TuiLogoBundleName = "ywai-logo.tsx"
 // notification TUI sidecar (plain .tsx source, no build step), like the logo.
 const BackgroundAgentsNotifyBundleName = "background-agents-notify.tsx"
 
+// OrcaStatusBundleName is the Orca pane-status bridge TUI plugin (plain .tsx).
+// It replaces the server plugin Orca deploys, which cannot tell panes apart.
+const OrcaStatusBundleName = "orca-status.tsx"
+
 func EnsureDataDir() error {
 	fsMutex.Lock()
 	defer fsMutex.Unlock()
@@ -809,6 +813,25 @@ func BackgroundAgentsNotifyBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("background-agents notify sidecar not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// OrcaStatusBundlePath resolves the Orca status bridge source, same order as
+// TuiLogoBundlePath: source checkout, seeded copy, embedded FS on demand.
+func OrcaStatusBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", OrcaStatusBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+	seeded := filepath.Join(DataPluginsDir(), "tui", OrcaStatusBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+	return "", fmt.Errorf("orca status plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {
