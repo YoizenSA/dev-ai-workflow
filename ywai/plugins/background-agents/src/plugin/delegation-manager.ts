@@ -1705,10 +1705,9 @@ class DelegationManager {
 		const launchResult = await launch({
 			agent: input.agent,
 			prompt: input.prompt,
-			model: input.model ? `${input.model.providerID}/${input.model.modelID}` : undefined,
-			// The native tool applies effort as the model's variant — same
-			// semantics this plugin's own `effort` argument documents.
-			effort: input.model?.variant,
+			// The native tool takes the variant inline ("provider/model#variant")
+			// and has no effort argument, so a split variant would be dropped.
+			model: input.model ? formatModelRef(input.model) : undefined,
 			background: true,
 		})
 

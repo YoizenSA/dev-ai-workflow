@@ -69,7 +69,7 @@ Use \`delegation_read\` with the ID to retrieve the full persisted output.`,
 				.string()
 				.optional()
 				.describe(
-					'Optional model override for THIS run as "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"). Omitted = the agent\'s configured model.',
+					'Optional model override for THIS run as "provider/model-id", or "provider/model-id#variant" to include a variant (e.g. "anthropic/claude-haiku-4-5#high"). Omitted = the agent\'s configured model.',
 				),
 			effort: tool.schema
 				.string()

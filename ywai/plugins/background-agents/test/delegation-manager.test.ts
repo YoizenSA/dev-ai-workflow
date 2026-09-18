@@ -912,13 +912,13 @@ describe("native delegation (v2 launch)", () => {
 
 		expect(delegation.sessionID).toBe("ses_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
 		expect(delegation.model).toBe("anthropic/claude-x#high")
-		// The launch input is the native tool's argument surface: model and
-		// effort split, background forced on.
-		expect(launchCalls[0]).toMatchObject({
+		// The launch input is the native tool's argument surface: the variant
+		// rides inline as "provider/model#variant" (the native tool has no
+		// effort argument), background forced on.
+		expect(launchCalls[0]).toEqual({
 			agent: "researcher",
 			prompt: "Research the topic",
-			model: "anthropic/claude-x",
-			effort: "high",
+			model: "anthropic/claude-x#high",
 			background: true,
 		})
 		// The child counts as a delegation child (anti-recursion tool strip).

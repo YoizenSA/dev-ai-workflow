@@ -95,7 +95,7 @@ const V2_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
 			model: {
 				type: "string",
 				description:
-					'Optional model override for THIS run as "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"). Omitted = the agent\'s configured model.',
+					'Optional model override for THIS run as "provider/model-id", or "provider/model-id#variant" to include a variant (e.g. "anthropic/claude-haiku-4-5#high"). Omitted = the agent\'s configured model.',
 			},
 			effort: {
 				type: "string",

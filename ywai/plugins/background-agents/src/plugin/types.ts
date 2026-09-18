@@ -225,10 +225,8 @@ type NativeSubagentLaunch = (input: {
 	agent: string
 	prompt: string
 	description?: string
-	/** "provider/model-id" for this run; omitted = the agent's configured model. */
+	/** "provider/model-id" or "provider/model-id#variant"; omitted = the agent's configured model. */
 	model?: string
-	/** Reasoning effort for this run; applied as the model's variant. */
-	effort?: string
 	background: boolean
 }) => Promise<unknown>
 
