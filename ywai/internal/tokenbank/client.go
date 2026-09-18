@@ -145,16 +145,14 @@ func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
 	}, nil
 }
 
-// defaultModelPreference is tried in order; it matches the model the
-// orchestrator profiles seed, with the previous flash as a fallback.
-var defaultModelPreference = []string{"deepseek-v4.1-flash", "deepseek-v4-flash"}
-
 func defaultV1Model(models []ModelInfo) string {
-	for _, want := range defaultModelPreference {
-		for _, m := range models {
-			if m.ID == want {
-				return m.ID
-			}
+	// Single source of truth: the default profile's omp default role in
+	// orchestrator_profiles.json, without its provider prefix.
+	seed := config.DefaultOrchestratorModelProfiles()[config.DefaultOrchestratorModelProfileName].OmpModelRoles["default"]
+	want := seed[strings.LastIndex(seed, "/")+1:]
+	for _, m := range models {
+		if want != "" && m.ID == want {
+			return m.ID
 		}
 	}
 	if len(models) > 0 {
