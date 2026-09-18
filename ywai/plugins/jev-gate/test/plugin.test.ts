@@ -63,7 +63,6 @@ describe("bundle shape", () => {
 			"jev_report",
 			"jev_route",
 			"jev_check_page",
-			"jev_do",
 		])
 	})
 })

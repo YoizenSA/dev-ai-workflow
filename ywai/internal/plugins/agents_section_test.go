@@ -85,7 +85,6 @@ func TestJevGateSection_CarriesTheAttributionRules(t *testing.T) {
 		"6 of 8",
 		"jev_review_diff",
 		"jev_check_page",
-		"jev_do",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("jev-gate section missing %q", want)

@@ -15,8 +15,6 @@ extend them.
 - `jev_check_page` — score a Gherkin Then against an accessibility snapshot.
   Drive the page first; Jev never clicks. Relay PASS/FAIL with the probability.
   A missing key is not PASS.
-- `jev_do` — OpenCode gives a `goal` + `url` (+ `values` to type). Jev picks
-  the control; Playwright executes. Do not click with chrome-devtools instead.
 
 They are Code Mode tools, so call them inside `execute`:
 `return await tools.jev_review_diff({})`.

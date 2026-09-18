@@ -47,7 +47,6 @@ import { findApiKey, keyHelp } from "./adapters/key"
 import { HttpJevClient, MissingKeyError } from "./jev/client"
 import { runChangeReview } from "./review/workflow"
 import { checkPage, summarizePageCheck } from "./review/page"
-import { runUltrafast, summarizeUltrafast } from "./browser/ultrafast"
 import { detail, summarize } from "./format"
 import { findInSegments, FIND_THRESHOLD } from "./find/score"
 import { segmentFile, MAX_FIND_SEGMENTS, type Segment } from "./find/segment"
@@ -72,11 +71,8 @@ function projectDir(ctx: JevContext): string {
  * Every branch says nothing was reviewed, because the failure mode that costs
  * the most is an agent reporting silence as a clean review.
  */
-function failure(err: unknown, kind: "review" | "browser" = "review"): string {
+function failure(err: unknown): string {
 	const reason = err instanceof MissingKeyError ? err.message : String(err)
-	if (kind === "browser") {
-		return `**Jev do did not run.** ${reason}\n\nDo not describe this as a completed browser task.`
-	}
 	return (
 		`**Jev review did not run.** ${reason}\n\n` +
 		"Nothing was reviewed. Do not describe this as a passing or clean review."
@@ -491,50 +487,6 @@ async function setup(ctx: JevContext) {
 					return { content: summarizePageCheck(result) }
 				} catch (err) {
 					return { content: failure(err) }
-				}
-			},
-		})
-
-		add({
-			name: "jev_do",
-			description:
-				"Give Jev a goal and a URL (the When). Runs browser-use/jev-ultrafast in its own Chrome: " +
-				"TypeSafe picks each control, code executes. NEVER put passwords or other secrets in the goal " +
-				"(it is sent to TypeSafe); put them in values, keyed by field label or name. " +
-				"Returns done, blocked, or error. done is not the Then: verify with jev_check_page.",
-			input: {
-				type: "object",
-				properties: {
-					goal: {
-						type: "string",
-						description: "What to accomplish, in the user's words. One outcome. No secrets.",
-					},
-					url: { type: "string", description: "Page to open." },
-					values: {
-						type: "object",
-						description:
-							"Text to type, keyed by the field's visible label or name attribute (case-insensitive). " +
-							"Never sent to a model. A password field with no entry here stops the run as blocked.",
-						additionalProperties: { type: "string" },
-					},
-				},
-				required: ["goal", "url"],
-			},
-			execute: async (input: { goal: string; url: string; values?: Record<string, string> }) => {
-				try {
-					const apiKey = findApiKey(projectDir(ctx))
-					if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
-					const values = Object.fromEntries(
-						Object.entries(input.values ?? {}).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]),
-					)
-					const result = await runUltrafast(
-						{ goal: input.goal, url: input.url, values },
-						{ env: { TYPESAFE_API_KEY: apiKey } },
-					)
-					if (result.status === "error") throw new Error(result.error ?? "unknown error")
-					return { content: summarizeUltrafast(result, input.goal) }
-				} catch (err) {
-					return { content: failure(err, "browser") }
 				}
 			},
 		})

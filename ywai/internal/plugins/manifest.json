@@ -10,7 +10,7 @@
     { "id": "microsoft-learn", "kind": "mcp", "flag": "mcp", "label": "Microsoft Learn MCP", "description": "Access to official Microsoft documentation", "claudeStdio": ["npx", "@anthropic/mcp-server-microsoft-learn"] },
     { "id": "meta-devtools", "kind": "mcp", "flag": "meta-mcp", "label": "Meta Developer Tools MCP", "description": "Meta apps, webhooks, compliance and developer docs (sign in from your agent)" },
     { "id": "ponytail", "kind": "exec", "flag": "ponytail", "label": "Ponytail", "description": "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)", "agents": ["opencode",  "claude-code"], "remove": "@dietrichgebert/ponytail", "marketplace": "DietrichGebert/ponytail", "plugin": "ponytail@ponytail" },
-    { "id": "jev-gate", "kind": "vendor-js", "bundle": "jev-gate", "flag": "jev-gate", "agentsSection": "jev-gate", "skill": "jev-gate", "label": "Jev gate (experimental)", "description": "Experimental: Jev review, jev_do (OpenCode goal → Jev picks → Playwright clicks), jev_check_page. Needs a TypeSafe API key; refuses without one.", "agents": ["opencode"] },
+    { "id": "jev-gate", "kind": "vendor-js", "bundle": "jev-gate", "flag": "jev-gate", "agentsSection": "jev-gate", "skill": "jev-gate", "label": "Jev gate (experimental)", "description": "Experimental: Jev review, find, route, and jev_check_page. Needs a TypeSafe API key; refuses without one.", "agents": ["opencode"] },
     { "id": "jev-compaction", "kind": "vendor-js", "bundle": "jev-compaction", "flag": "jev-compaction", "label": "Jev compaction (experimental)", "description": "Experimental: drops stale tool calls/results before each request using Jev decisions. Needs a TypeSafe API key; without one it does nothing.", "agents": ["opencode"] }
   ]
 }
