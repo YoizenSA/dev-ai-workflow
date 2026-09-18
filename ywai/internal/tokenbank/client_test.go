@@ -67,3 +67,13 @@ func TestFetchModels_ReadsV1Catalog(t *testing.T) {
 		t.Fatalf("DefaultModel = %q, want deepseek-v4-flash", got.DefaultModel)
 	}
 }
+
+func TestDefaultV1Model_PrefersV41Flash(t *testing.T) {
+	models := []ModelInfo{{ID: "kimi-k3"}, {ID: "deepseek-v4-flash"}, {ID: "deepseek-v4.1-flash"}}
+	if got := defaultV1Model(models); got != "deepseek-v4.1-flash" {
+		t.Fatalf("defaultV1Model = %q, want deepseek-v4.1-flash", got)
+	}
+	if got := defaultV1Model(models[:2]); got != "deepseek-v4-flash" {
+		t.Fatalf("without v4.1, defaultV1Model = %q, want deepseek-v4-flash", got)
+	}
+}
