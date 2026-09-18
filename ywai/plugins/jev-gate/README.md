@@ -24,6 +24,16 @@ the install TUI. That one flag installs everything the plugin needs:
   install actually reports (`ctx.agent.list()`), with `inline`, `review` and
   `human` always available. Subagents are excluded: routing to something the
   user cannot switch to is a dead end.
+- `jev_check_page` - score a Gherkin Then against an accessibility snapshot.
+  Drive the page first (chrome-devtools or Playwright); Jev never clicks.
+- `jev_do` - the When. OpenCode supplies a goal and a URL; the vendored
+  [jev-ultrafast](vendor/jev_ultrafast/VENDORED.md) runs it in its own headless
+  Chrome on a fresh temp profile (TypeSafe picks each control, code executes).
+  Needs `uv` and Chrome/Chromium. Every typed string comes from `values` (keyed
+  by field label or name); a missing one returns `blocked: missing value`, and a
+  goal containing a value is refused. `done` is not the Then:
+  verify with `jev_check_page`. Not bundled into `dist/`: set
+  `JEV_ULTRAFAST_DIR` when the plugin runs outside this repo.
 
 It also registers a **permission gate**. After a review with blockers, or a
 route to a non-writing agent, the next write asks for confirmation. The gate

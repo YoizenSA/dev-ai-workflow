@@ -1,6 +1,6 @@
 ---
 name: jev-gate
-description: Review a diff or a path with Jev, a classifier that answers with probabilities. Trigger: "review this", pre-merge check, "what did Jev say".
+description: Review a diff with Jev, score a UI Then, or give Jev a browser goal. Trigger: "review this", "open this page", "click through with Jev", UI scenario Then.
 ---
 
 # Jev review
@@ -85,6 +85,54 @@ any decision whose `source` is not `jev`.
 
 If a write suddenly asks for confirmation, the reason is in the prompt. Do not
 work around it by using a shell command instead - `bash` is gated too.
+
+## Browser — `jev_do` is the When
+
+You never drive the browser yourself. Call `jev_do` with the goal and the URL.
+Do not use desktop `browser.tabs.*` or `opencode-in-chrome` for this. It runs
+jev-ultrafast in its own Chrome: Jev chooses each control, code executes.
+
+Every string Jev types comes from `values`, keyed by the field's label or name.
+No model writes text. A field with no matching key stops the run as `blocked`
+with `missing value: '<label>'`: add that key and call `jev_do` again. The goal
+is sent to TypeSafe; a goal that contains any `values` string is refused.
+
+```ts
+return await tools.jev_do({
+  url: "http://localhost:3001/admin",
+  goal: "Log in to the admin dashboard",
+  values: { email: "...", password: "..." },
+})
+```
+
+`jev_do` is this plugin (`jev-gate.js`), not an MCP server. Relay `done` /
+`blocked` / error verbatim. Do not add clicks of your own. A missing key or a
+failed call is not a completed task.
+
+`done` means Jev stopped acting, **not** that the scenario passed. The Then is
+always a separate `jev_check_page` call.
+
+Then, if you need a Gherkin Then scored, use `jev_check_page` on a snapshot
+of the resulting page.
+
+## Browser Then
+
+`jev_check_page` scores a Gherkin Then against an accessibility snapshot.
+Playwright or chrome-devtools describes the page; Jev answers with a
+probability. Jev never clicks.
+
+```ts
+return await tools.jev_check_page({
+  snapshot: ariaTree,
+  then: "the New workflow action is available",
+})
+```
+
+The tool returns `PASS` or `FAIL` with the probability. Relay that number.
+A missing key or a failed call is not PASS.
+
+Use this from `@scenario-runner` after Given/When, never as a substitute for
+driving the browser, and never as a code review.
 
 ## Finding code
 

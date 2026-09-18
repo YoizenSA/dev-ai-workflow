@@ -1,9 +1,7 @@
 /**
  * jev-gate - Jev as a policy layer over OpenCode 2 (PLAN Fase 2).
  *
- * Ships two tools:
- *   jev_review_diff - screen the working-tree diff, locate what screened high
- *   jev_review_path - the same pipeline over one file or directory
+ * Ships review, find, route, and jev_check_page (Gherkin Then vs snapshot).
  *
  * Both return a short markdown summary; the full report goes to `ctx.storage`
  * under its runId, so the model never receives 40 KB of JSON.
@@ -48,6 +46,8 @@ import type { ChangedFile } from "./domain/types"
 import { findApiKey, keyHelp } from "./adapters/key"
 import { HttpJevClient, MissingKeyError } from "./jev/client"
 import { runChangeReview } from "./review/workflow"
+import { checkPage, summarizePageCheck } from "./review/page"
+import { runUltrafast, summarizeUltrafast } from "./browser/ultrafast"
 import { detail, summarize } from "./format"
 import { findInSegments, FIND_THRESHOLD } from "./find/score"
 import { segmentFile, MAX_FIND_SEGMENTS, type Segment } from "./find/segment"
@@ -72,8 +72,11 @@ function projectDir(ctx: JevContext): string {
  * Every branch says nothing was reviewed, because the failure mode that costs
  * the most is an agent reporting silence as a clean review.
  */
-function failure(err: unknown): string {
+function failure(err: unknown, kind: "review" | "browser" = "review"): string {
 	const reason = err instanceof MissingKeyError ? err.message : String(err)
+	if (kind === "browser") {
+		return `**Jev do did not run.** ${reason}\n\nDo not describe this as a completed browser task.`
+	}
 	return (
 		`**Jev review did not run.** ${reason}\n\n` +
 		"Nothing was reviewed. Do not describe this as a passing or clean review."
@@ -169,7 +172,23 @@ function recordSetupFailure(step: string, err: unknown) {
 	}
 }
 
+function toolSurface(ctx: JevContext): string {
+	const tool = ctx.tool as { transform?: unknown; add?: unknown; hook?: unknown } | undefined
+	return JSON.stringify({
+		typeofTool: typeof tool,
+		keys: tool && typeof tool === "object" ? Object.keys(tool) : [],
+		typeofTransform: typeof tool?.transform,
+		typeofAdd: typeof tool?.add,
+		typeofHook: typeof tool?.hook,
+	})
+}
+
+function withCodeMode(def: Parameters<V2ToolEditor["add"]>[0]) {
+	return { ...def, options: { ...(def as { options?: object }).options, codemode: true } }
+}
+
 async function setup(ctx: JevContext) {
+	recordSetupFailure("tool-surface", toolSurface(ctx))
 	if (typeof ctx.tool?.transform !== "function") {
 		recordSetupFailure(
 			"tool-registration",
@@ -178,7 +197,8 @@ async function setup(ctx: JevContext) {
 		return
 	}
 	await ctx.tool.transform((editor: V2ToolEditor) => {
-		editor.add({
+		const add = (def: Parameters<V2ToolEditor["add"]>[0]) => editor.add(withCodeMode(def))
+		add({
 			name: "jev_review_diff",
 			description:
 				"Review the current working-tree diff with Jev, a classifier that answers with " +
@@ -206,7 +226,7 @@ async function setup(ctx: JevContext) {
 			},
 		})
 
-		editor.add({
+		add({
 			name: "jev_review_path",
 			description:
 				`Review one file or directory with Jev, the same pipeline as jev_review_diff. ` +
@@ -247,7 +267,7 @@ async function setup(ctx: JevContext) {
 			},
 		})
 
-		editor.add({
+		add({
 			name: "jev_find",
 			description:
 				"Semantic grep: find where something is actually done in the codebase, not where " +
@@ -328,7 +348,7 @@ async function setup(ctx: JevContext) {
 			},
 		})
 
-		editor.add({
+		add({
 			name: "jev_report",
 			description:
 				"Show the scores behind a Jev review: every screened file against every dimension, " +
@@ -378,7 +398,7 @@ async function setup(ctx: JevContext) {
 			},
 		})
 
-		editor.add({
+		add({
 			name: "jev_route",
 			description:
 				"Ask Jev who should execute a task: an installed agent, an inline answer, a Jev " +
@@ -432,6 +452,89 @@ async function setup(ctx: JevContext) {
 					}
 				} catch (err) {
 					return { content: failure(err) }
+				}
+			},
+		})
+
+		add({
+			name: "jev_check_page",
+			description:
+				"Score a Gherkin Then against an accessibility snapshot with Jev. " +
+				"Playwright or chrome-devtools describes the page; Jev answers with a " +
+				"probability. Jev never clicks. Returns PASS or FAIL with the probability. " +
+				"Do not restate the result as more certain than that number, and do not " +
+				"treat a missing key or a failed call as PASS.",
+			input: {
+				type: "object",
+				properties: {
+					snapshot: {
+						type: "string",
+						description: "Accessibility tree of the page (aria snapshot or take_snapshot).",
+					},
+					then: {
+						type: "string",
+						description: "The Gherkin Then, verbatim.",
+					},
+					url: { type: "string", description: "Page URL, if known." },
+					title: { type: "string", description: "Page title, if known." },
+				},
+				required: ["snapshot", "then"],
+			},
+			execute: async (input: { snapshot: string; then: string; url?: string; title?: string }) => {
+				try {
+					if (!input?.snapshot?.trim() || !input?.then?.trim()) {
+						return { content: "snapshot and then are required. Nothing was sent to Jev." }
+					}
+					const apiKey = findApiKey(projectDir(ctx))
+					if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
+					const result = await checkPage(new HttpJevClient({ apiKey }), input)
+					return { content: summarizePageCheck(result) }
+				} catch (err) {
+					return { content: failure(err) }
+				}
+			},
+		})
+
+		add({
+			name: "jev_do",
+			description:
+				"Give Jev a goal and a URL (the When). Runs browser-use/jev-ultrafast in its own Chrome: " +
+				"TypeSafe picks each control, code executes. NEVER put passwords or other secrets in the goal " +
+				"(it is sent to TypeSafe); put them in values, keyed by field label or name. " +
+				"Returns done, blocked, or error. done is not the Then: verify with jev_check_page.",
+			input: {
+				type: "object",
+				properties: {
+					goal: {
+						type: "string",
+						description: "What to accomplish, in the user's words. One outcome. No secrets.",
+					},
+					url: { type: "string", description: "Page to open." },
+					values: {
+						type: "object",
+						description:
+							"Text to type, keyed by the field's visible label or name attribute (case-insensitive). " +
+							"Never sent to a model. A password field with no entry here stops the run as blocked.",
+						additionalProperties: { type: "string" },
+					},
+				},
+				required: ["goal", "url"],
+			},
+			execute: async (input: { goal: string; url: string; values?: Record<string, string> }) => {
+				try {
+					const apiKey = findApiKey(projectDir(ctx))
+					if (!apiKey) throw new MissingKeyError(keyHelp(projectDir(ctx)))
+					const values = Object.fromEntries(
+						Object.entries(input.values ?? {}).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]),
+					)
+					const result = await runUltrafast(
+						{ goal: input.goal, url: input.url, values },
+						{ env: { TYPESAFE_API_KEY: apiKey } },
+					)
+					if (result.status === "error") throw new Error(result.error ?? "unknown error")
+					return { content: summarizeUltrafast(result, input.goal) }
+				} catch (err) {
+					return { content: failure(err, "browser") }
 				}
 			},
 		})

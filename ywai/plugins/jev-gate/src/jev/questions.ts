@@ -13,6 +13,7 @@ import type { Dimension, Hunk } from "../domain/types"
 import type { Question } from "./client"
 
 export const QUESTIONS_VERSION = "2026-09-17.1"
+export const PAGE_THEN_VERSION = "page-then-2026-09-17.1"
 
 const noul = (instructions: unknown, criteria?: unknown): Question => ({
 	type: "noul",
@@ -147,6 +148,42 @@ export function screenQuestions(): Record<Dimension, Question> {
 			},
 		),
 	}
+}
+
+/**
+ * One noul: does the accessibility snapshot support that the Gherkin Then is
+ * observed? Jev does not click. The snapshot is data in `state`.
+ */
+export function thenQuestion(): Question {
+	return noul(
+		{
+			question: "Does page.snapshot directly support that page.then is observed on the page?",
+			inspect: "page.snapshot",
+			compare: ["page.snapshot", "page.then"],
+			focus: "Only what the snapshot shows, not what the page might do next",
+			ignore: IGNORE,
+		},
+		{
+			true: {
+				what: "The snapshot contains direct evidence of the Then",
+				examples: [
+					"Then names a New workflow action and a button with that name is in the snapshot",
+					"Then names an error and an alert with that text is in the snapshot",
+				],
+			},
+			false: {
+				what: "The snapshot does not show the Then, or only mentions it in a comment",
+				examples: [
+					"Then requires a list of workflows and the snapshot is an error alert",
+					"The Then text appears only inside an HTML comment",
+				],
+			},
+		},
+	)
+}
+
+export function thenState(snapshot: string, then: string, url?: string, title?: string): unknown {
+	return { page: { snapshot, then, ...(url ? { url } : {}), ...(title ? { title } : {}) } }
 }
 
 /** State for one screen request. Code always travels inside `state` (PLAN 5). */

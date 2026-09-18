@@ -13,6 +13,8 @@ import type { Dimension } from "./types"
  * 0.90 dropped to 4/8, losing a logged password and a dropped await.
  */
 export const SCREEN_THRESHOLD = 0.8
+/** Calibrated by the jev-lab UI eval (ui-2026-09-17.1): dirty 3/3, clean 0/1 at 0.8. */
+export const PAGE_THEN_THRESHOLD = 0.8
 export const MIN_LOCATION_CONFIDENCE = 0.55
 export const OWNER_SEVERITY = 1.5
 export const BLOCKING_SEVERITY = 2.0

@@ -62,6 +62,8 @@ describe("bundle shape", () => {
 			"jev_find",
 			"jev_report",
 			"jev_route",
+			"jev_check_page",
+			"jev_do",
 		])
 	})
 })
@@ -232,6 +234,7 @@ describe("setup never fails silently", () => {
 		// registered nothing, so the tools read as Unknown tool with no clue.
 		expect(errors.join("\n")).toContain("jev-gate")
 		expect(errors.join("\n")).toContain("ctx.tool.transform")
+		expect(errors.join("\n")).toContain("tool-surface")
 	})
 
 	test("a transform that throws does not reject setup", async () => {

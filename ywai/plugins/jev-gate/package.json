@@ -11,5 +11,9 @@
     "dist",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outfile dist/jev-gate.js --target node",
+    "test": "bun test"
+  }
 }
