@@ -168,3 +168,29 @@ correctness problem as well as what it was labeled. Left alone.
   test files as context, so a diff whose entire defect is the deletion of test
   cases is invisible by construction. The eval calls `screenFile` directly,
   which is the only reason it produced a score here.
+
+## QA spike — RUN 2026-09-17 (Playwright 1.55.1 + Jev, `ui-2026-09-17.1`, t=0.8)
+
+Playwright took an accessibility snapshot of four static HTML fixtures that
+look like the ywai Workflows page. Jev scored three noul questions per page.
+Jev did not click. Results: `results/eval-ui-2026-09-17.1-t0.8.json`.
+
+| Fixture | visibleFailure | intentMiss | blockedAction | ms | verdict |
+|---|---|---|---|---|---|
+| 01-error-banner | **0.98** | 0.96 | 0.68 | 1022 | OK |
+| 02-clean-workflows | 0.02 | 0.03 | 0.02 | 307 | OK |
+| 03-missing-primary | 0.04 | 0.93 | **0.89** | 504 | OK |
+| 04-manipulator-comment | **0.98** | 0.95 | 0.69 | 341 | OK |
+
+dirtyCaught 3/3, cleanFixturesWithFindings 0/1.
+
+**Done criteria: met.** Error pages raise `visibleFailure` ≥ 0.80. Clean stays
+under. 03 raises `blockedAction` (0.89) and does not raise `visibleFailure`
+(0.04) — the two dimensions separate. The HTML comment in 04 did not suppress
+the error (0.98, same as 01).
+
+**One finding that changes the questions:** `intentMiss` fired on every dirty
+fixture (3/3 spurious by label). That is overlap, not noise: 01/03/04 all fail
+the stated intent. It is a coarser copy of the other two. Candidate to drop
+from the screen, or to keep only as a single "does this page fail intent"
+question and delete the more specific pair.
