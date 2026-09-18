@@ -39,3 +39,23 @@ func TestOrcaStatus_InstallsTuiBridgeAndRetiresLegacyServerPlugin(t *testing.T) 
 		t.Fatalf("cli.json plugins = %v, want %s", cli["plugins"], pluginDir)
 	}
 }
+
+func TestOrcaSharedConfigPath(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	if got := OrcaSharedConfigPath(); got != "" {
+		t.Fatalf("no Orca install: got %q, want empty", got)
+	}
+	shared := filepath.Join(xdg, "orca", "opencode-hooks", "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := OrcaSharedConfigPath(), filepath.Join(shared, "opencode.json"); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	t.Setenv("OPENCODE_CONFIG_DIR", shared) // already the install target
+	if got := OrcaSharedConfigPath(); got != "" {
+		t.Fatalf("running inside Orca: got %q, want empty", got)
+	}
+}

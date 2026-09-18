@@ -726,6 +726,18 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
+		// Orca runs OpenCode from its own config dir and redeploys the legacy
+		// status plugin there, so retire it and install the bridge there too.
+		if a.Name == "opencode" {
+			if orcaCfg := plugins.OrcaSharedConfigPath(); orcaCfg != "" {
+				for _, r := range plugins.RunManifest(plugins.Manifest{Install: []plugins.ManifestEntry{{ID: "orca-status"}}}, a.Name, orcaCfg, flags) {
+					if r.Err != nil {
+						fmt.Printf("  [%s] Warning: Orca status bridge: %v\n", a.Name, r.Err)
+					}
+				}
+			}
+		}
+
 		// Remove leftover Azure DevOps plugin entries from older installs. ywai
 		// now drives Azure DevOps through the `ado` skill (Bash CLI) instead of
 		// the in-process plugin, so its tools must not stay registered.

@@ -393,3 +393,15 @@ func RunManifest(mf Manifest, agentName, configPath string, flags map[string]boo
 	}
 	return results
 }
+
+// OrcaSharedConfigPath returns the opencode config of Orca's isolated shared
+// config dir, or "" when Orca is absent or already the install target. A plain
+// install only writes the user config, so without this the Orca panes kept
+// loading the legacy status plugin.
+func OrcaSharedConfigPath() string {
+	dir := filepath.Join(filepath.Dir(config.OpenCodeUserConfigDir()), "orca", "opencode-hooks", "shared")
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() || filepath.Clean(config.OpenCodeConfigDir()) == dir {
+		return ""
+	}
+	return config.FindJSONCPath(dir, "opencode")
+}
