@@ -633,9 +633,9 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	flags["meta-mcp"] = installMetaMCP
 	flags["ponytail"] = installPonytail
 
-	// jev-gate reads its key from a file because the OpenCode server does not
+	// jev-gate and jev-compaction read the key from a file because the OpenCode server does not
 	// inherit this process's environment; copy the env key in once, here.
-	if flags["jev-gate"] {
+	if flags["jev-gate"] || flags["jev-compaction"] {
 		keyPath, wrote, err := plugins.EnsureJevKey(os.Getenv("TYPESAFE_API_KEY"))
 		if err != nil {
 			fmt.Printf("  Warning: jev-gate key: %v\n", err)
