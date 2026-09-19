@@ -454,6 +454,7 @@ var installCmd = &cobra.Command{
 			installPonytail = ponytailFlag
 			optionalFlags["jev-gate"] = getBoolFlag(cmd, "jev-gate")
 			optionalFlags["jev-compaction"] = getBoolFlag(cmd, "jev-compaction")
+			optionalFlags["graft-build"] = getBoolFlag(cmd, "graft-build")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -1364,6 +1365,7 @@ func init() {
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
 	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin: Jev-backed review, find and routing tools, plus a permission gate that asks before writing after a blocking review. Needs a TypeSafe API key.")
+	installCmd.Flags().Bool("graft-build", false, "Install the graft-build opencode plugin: builds the graft graph once for a repo that has never had one. Graft keeps an existing graph fresh on its own; this only covers the first build.")
 	installCmd.Flags().Bool("jev-compaction", false, "Install the experimental jev-compaction opencode plugin: drops stale tool calls and results before each request using Jev decisions, plus the jev_compact tool. Reuses the jev-gate API key file.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")

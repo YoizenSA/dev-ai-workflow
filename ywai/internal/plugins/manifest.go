@@ -106,6 +106,7 @@ var vendorBundles = map[string]vendorBundle{
 	"tui-logo":                 {config.TuiLogoBundlePath, config.TuiLogoBundleName},
 	"background-agents-notify": {config.BackgroundAgentsNotifyBundlePath, config.BackgroundAgentsNotifyBundleName},
 	"orca-status":              {config.OrcaStatusBundlePath, config.OrcaStatusBundleName},
+	"graft-build":              {config.GraftBuildBundlePath, config.GraftBuildBundleName},
 }
 
 // slashCommands maps an installed command file to the source it is copied

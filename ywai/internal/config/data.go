@@ -30,6 +30,10 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // that auto-routes images through TokenBank vision for text-only models.
 const VisionBridgeBundleName = "vision-bridge.js"
 
+// GraftBuildBundleName is the filename of the graft-build opencode plugin
+// bundle.
+const GraftBuildBundleName = "graft-build.js"
+
 // JevGateBundleName is the filename of the jev-gate opencode plugin bundle.
 const JevGateBundleName = "jev-gate.js"
 
@@ -652,6 +656,28 @@ func VisionBridgeBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// GraftBuildBundlePath resolves the path to the bundled graft-build plugin JS.
+// Same resolution order as VisionBridgeBundlePath.
+func GraftBuildBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "graft-build", "dist", GraftBuildBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), GraftBuildBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("graft-build plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 // JevGateSkillPath resolves the SKILL.md that ships with the jev-gate plugin.

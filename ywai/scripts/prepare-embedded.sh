@@ -14,6 +14,8 @@ JC_DIR="$REPO_ROOT/plugins/jev-compaction"
 JC_BUNDLE="$JC_DIR/dist/jev-compaction.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
 AD_BUNDLE="$AD_DIR/dist/advisor.js"
+GB_DIR="$REPO_ROOT/plugins/graft-build"
+GB_BUNDLE="$GB_DIR/dist/graft-build.js"
 
 # Rebuild the React UI so the embedded binary always carries the current
 # frontend. Without this, `ywai install` / `dev.sh install` would ship a stale
@@ -69,6 +71,10 @@ if command -v bun >/dev/null 2>&1; then
     # plugins/advisor/test/bundle.test.ts pins that the dist is self-contained.
     bun build "$AD_DIR/src/index.ts" \
         --outfile "$AD_BUNDLE" --target node
+    echo "Building graft-build plugin (bun bundle)…"
+    # Node builtins only — no @opencode-ai/plugin import, so no bun install.
+    bun build "$GB_DIR/src/index.ts" \
+        --outfile "$GB_BUNDLE" --target node
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then
@@ -138,6 +144,9 @@ if [ -f "$AD_DIR/command/advisor.md" ]; then
 fi
 if [ -f "$VB_BUNDLE" ]; then
     cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"
+fi
+if [ -f "$GB_BUNDLE" ]; then
+    cp -a "$GB_BUNDLE" "$EMBED_DIR/plugins/graft-build.js"
 fi
 if [ -f "$JG_BUNDLE" ]; then
     cp -a "$JG_BUNDLE" "$EMBED_DIR/plugins/jev-gate.js"
