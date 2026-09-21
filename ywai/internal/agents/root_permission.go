@@ -7,32 +7,84 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
-// headlessShellAllows are the shell patterns the primary (unnamed) agent must
-// be able to run without a prompt.
+// rootShellRules are the shell permissions for the primary (unnamed) agent.
 //
-// opencode's default for an action with no rule is "ask". In a TUI session a
-// human answers it; in a headless session (orca, `ywai serve`, background
-// delegations) nobody does and the request is auto-denied. Every ywai agent
+// opencode resolves a request with findLast over the rule list and falls back
+// to "ask" when nothing matches. A TUI session shows that prompt to a human; a
+// headless one (orca, `ywai serve`, background delegations) has nobody to
+// answer, so an unmatched action is effectively denied. Every ywai agent
 // carries its own `- action: shell` rule in its markdown frontmatter, but the
-// primary agent has no markdown file: its only permission source is the root
-// `permission` block of opencode.json, which ywai never wrote. The result was a
-// headless session that could commit but never push.
+// primary agent has no markdown file: its only source is the root `permission`
+// block of opencode.json. With no rule there, every command it ran was denied
+// — including read-only ones like grep.
 //
-// ponytail: only the delivery commands observed to be auto-denied. If another
-// command starts failing headless the same way, add its pattern here rather
-// than widening the key to a blanket "allow" — that would also become the
-// fallback for any agent whose markdown rule is missing.
-var headlessShellAllows = map[string]any{
-	"git push*": "allow",
+// So the baseline is "*": "allow", matching what opencode itself ships as the
+// default primary agent, and the destructive commands are walked back to "ask".
+//
+// Ordering is load-bearing. opencode turns this object into rules with
+// Object.entries and then picks the LAST match, not the most specific one, so
+// the broad "*" has to be serialized before the narrow patterns. Go marshals
+// map keys sorted, and "*" (0x2A) sorts below every character a command starts
+// with, which puts it first. TestRootShellRulesSerializeWildcardFirst pins
+// that down.
+//
+// ponytail: "ask" is the strongest gate the config format has — the effect enum
+// is exactly allow/deny/ask, with no repeat-confirmation step. It means one
+// prompt in the TUI and a refusal in headless. If a command must never run even
+// with a human watching, change its effect to "deny" rather than looking for a
+// second confirmation that does not exist.
+var rootShellRules = map[string]any{
+	"*": "allow",
+
+	// Rewriting or discarding history that is already pushed.
+	"git push*--force*":     "ask",
+	"git push*-f*":          "ask",
+	"git reset*--hard*":     "ask",
+	"git clean*-*f*":        "ask",
+	"git rebase*":           "ask",
+	"git filter-branch*":    "ask",
+	"git branch*-D*":        "ask",
+	"git tag*-d*":           "ask",
+	"git push*--delete*":    "ask",
+	"git push*--mirror*":    "ask",
+	"git checkout*--force*": "ask",
+
+	// Destroying files or infrastructure outside git's reach.
+	"rm -rf*":              "ask",
+	"rm -fr*":              "ask",
+	"sudo*":                "ask",
+	"chmod -R*":            "ask",
+	"chown -R*":            "ask",
+	"mkfs*":                "ask",
+	"dd if=*":              "ask",
+	"docker system prune*": "ask",
+	"docker volume rm*":    "ask",
+	"kubectl delete*":      "ask",
+	"terraform destroy*":   "ask",
+	"terraform apply*":     "ask",
+
+	// Publishing: irreversible once it leaves the machine.
+	"npm publish*":       "ask",
+	"pnpm publish*":      "ask",
+	"yarn publish*":      "ask",
+	"gh release create*": "ask",
+	"dotnet nuget push*": "ask",
+
+	// Piping a remote script straight into a shell.
+	"curl*|*sh*":   "ask",
+	"curl*|*bash*": "ask",
+	"wget*|*sh*":   "ask",
+	"wget*|*bash*": "ask",
 }
 
-// EnsureRootShellPermission adds the missing shell rules to the root
-// `permission` block of opencode.json. Existing keys are never overwritten, so
-// a user who denied or narrowed a pattern by hand keeps their decision.
+// EnsureRootShellPermission fills in the root `permission.shell` block of
+// opencode.json. Existing patterns are never overwritten, so a rule the user
+// narrowed or denied by hand survives a re-install, and a blanket scalar
+// ("shell": "allow") is left alone entirely.
 //
-// "shell" is opencode v2's action name for running commands (ywai's internal
-// vocabulary calls the same bucket "bash"; see permissions_v2.go). Writing
-// "bash" here does nothing — v2 does not know that key.
+// The key is "shell", opencode v2's action name. ywai's internal vocabulary
+// calls the same bucket "bash" (see permissions_v2.go); writing that key here
+// would do nothing, because v2 does not know it.
 func EnsureRootShellPermission(configPath string) error {
 	if _, err := os.Stat(configPath); err != nil {
 		return nil // no config yet: install writes it later
@@ -46,17 +98,16 @@ func EnsureRootShellPermission(configPath string) error {
 	if perm == nil {
 		perm = map[string]any{}
 	}
-	// A scalar ("allow"/"deny"/"ask") is a deliberate blanket decision: leave it.
-	shell, isMap := perm["shell"].(map[string]any)
 	if _, isScalar := perm["shell"].(string); isScalar {
-		return nil
+		return nil // a blanket decision, made deliberately: leave it
 	}
-	if !isMap {
+	shell, ok := perm["shell"].(map[string]any)
+	if !ok {
 		shell = map[string]any{}
 	}
 
 	added := 0
-	for pattern, effect := range headlessShellAllows {
+	for pattern, effect := range rootShellRules {
 		if _, exists := shell[pattern]; exists {
 			continue
 		}
@@ -72,6 +123,6 @@ func EnsureRootShellPermission(configPath string) error {
 	if err := config.WriteJSONC(configPath, root); err != nil {
 		return fmt.Errorf("write %s: %w", configPath, err)
 	}
-	fmt.Printf("  Granted %d shell pattern(s) to the primary agent\n", added)
+	fmt.Printf("  Granted %d shell rule(s) to the primary agent\n", added)
 	return nil
 }
