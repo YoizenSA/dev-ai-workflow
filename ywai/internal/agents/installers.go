@@ -550,9 +550,11 @@ var ywaiBucketPatterns = map[string][]string{
 // Formatters and linters that rewrite code are deliberately NOT here: fixing
 // style is not faking a result.
 var falseGreenBashPatterns = []string{
-	// Snapshot rewriting, across the runners in use here.
-	"* -u",
-	"* -u *",
+	// Snapshot rewriting, across the runners in use here. The short flag is
+	// anchored to the runners that define it: a bare "* -u *" also denies
+	// "sort -u", "id -u" and every other innocent flag bearer.
+	"*jest*-u*",
+	"*vitest*-u*",
 	"*--update-snapshot*",
 	"*--updateSnapshot*",
 	"*vitest*--update*",

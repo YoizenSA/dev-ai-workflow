@@ -1703,9 +1703,16 @@ func TestBashRendersAsAllowlistWithFalseGreenDenied(t *testing.T) {
 	if !strings.Contains(md, "- action: shell\n    resource: \"*\"\n    effect: allow") {
 		t.Error("the general allow must survive — the agent still has to run its tests")
 	}
-	for _, denied := range []string{`resource: "* -u"`, `resource: "*--update-snapshot*"`, `resource: "*tsc*--noEmitOnError*"`} {
+	for _, denied := range []string{`resource: "*jest*-u*"`, `resource: "*vitest*-u*"`, `resource: "*--update-snapshot*"`, `resource: "*tsc*--noEmitOnError*"`} {
 		if !strings.Contains(md, denied+"\n    effect: deny") {
 			t.Errorf("missing denial %s", denied)
+		}
+	}
+	// The bare short-flag globs also deny "sort -u" and "id -u"; they caused
+	// 90% of the false permission denials on record. Keep them gone.
+	for _, gone := range []string{`resource: "* -u"`, `resource: "* -u *"`} {
+		if strings.Contains(md, gone) {
+			t.Errorf("bare %s denies innocent flags like sort -u; anchor it to the runner", gone)
 		}
 	}
 }

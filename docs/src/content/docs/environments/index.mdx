@@ -56,7 +56,7 @@ ywai dev <workflow> "task"                 # corre un workflow exportado
 ywai dev -c                                # continuar la última sesión
 ```
 
-Otros flags de opencode2 (`--file`, `--session`, `--title`…) pasan directo. El preset `qa` niega snapshots (`* -u`, `*--update-snapshot*`) por defecto. `git commit`/`git push` no van por nombre de agente: los define el `bash` de cada uno (`allow` / `verify` / `deny`). El preset `code-review` sí niega commit, push y rewrites en todos.
+Otros flags de opencode2 (`--file`, `--session`, `--title`…) pasan directo. El preset `qa` niega snapshots (`*jest*-u*`, `*vitest*-u*`, `*--update-snapshot*`) por defecto. `git commit`/`git push` no van por nombre de agente: los define el `bash` de cada uno (`allow` / `verify` / `deny`). El preset `code-review` sí niega commit, push y rewrites en todos.
 
 ## Gestionar
 

@@ -6,7 +6,7 @@
   "mcp": ["graft", "grafana", "chrome-devtools"],
   "default_agent": "qa-orchestrator",
   "default_model": "opencode-admin/glm-5.3-flash",
-  "deny_bash": ["* -u", "*--update-snapshot*"],
+  "deny_bash": ["*jest*-u*", "*vitest*-u*", "*--update-snapshot*"],
   "cli_theme": "gruvbox",
   "copy_global_providers": true,
   "copy_ado_config": true
