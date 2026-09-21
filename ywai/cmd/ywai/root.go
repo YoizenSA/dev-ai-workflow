@@ -449,6 +449,13 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// the delegation filter sees only valid installed agents.
 			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
 
+			// The primary (unnamed) agent has no markdown file, so the root
+			// permission block is its only permission source. Without a shell
+			// rule it falls back to "ask", which auto-denies headless.
+			if err := agentprofiles.EnsureRootShellPermission(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to grant primary shell permission: %v\n", a.Name, err)
+			}
+
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json + agent markdown as v2 subagent
 			// triggers are rendered into each agent's markdown prompt body.
