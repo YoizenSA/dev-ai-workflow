@@ -578,6 +578,7 @@ var verifyBashAllowPatterns = []string{
 	"git status*",
 	"git log*",
 	"git show*",
+	"git grep*",
 	// Go
 	"go test*",
 	// JS / TS
@@ -586,6 +587,10 @@ var verifyBashAllowPatterns = []string{
 	"npm run build*",
 	"npm run typecheck*",
 	"npx tsc --noEmit*",
+	// Runners invoked without npm-script indirection.
+	"npx jest*",
+	"npx vitest*",
+	"npx biome check*",
 	"pnpm test*",
 	"pnpm run lint*",
 	"pnpm run build*",
@@ -603,6 +608,15 @@ var verifyBashAllowPatterns = []string{
 	"ruff check*",
 	"mypy *",
 	"mypy*",
+	// Environment status: confirm the app under test is actually up.
+	"docker ps*",
+	"docker logs*",
+	// Azure DevOps read-only inspection; board writes stay with qa-feedback.
+	"ado wi get*",
+	"ado pr get*",
+	"ado pr diff*",
+	"ado pr threads*",
+	"ado pipeline runs*",
 }
 
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission

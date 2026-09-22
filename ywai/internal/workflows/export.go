@@ -316,10 +316,21 @@ func sanitizeSlug(s string) string {
 // orchestrator's model.
 func (e *Exporter) renderOrchestratorMarkdown(wf *Workflow, orchestratorID string, taskTargets []string, body string) string {
 	orchTools := ""
+	startRef := ""
 	if s := wf.findNode(NodeTypeStart); s != nil {
 		orchTools = s.Data.Tools
+		startRef = s.Data.AgentRef
 	}
 	perm := toolsToPermissions(orchTools, defaultOrchestratorTools)
+	// An explicit tools CSV on the START node wins. Without one, an agentRef
+	// inherits the linked agent's real permission profile: seeding from the
+	// coordinator default dropped profiles like verification-orchestrator
+	// (bash: verify) down to a bare shell deny.
+	if orchTools == "" && startRef != "" {
+		if refPerm := agentRefPermissions(startRef); refPerm != nil {
+			perm = refPerm
+		}
+	}
 	if e.target == TargetClaudeCode || e.target == TargetPi || e.target == TargetOMP {
 		toolsCSV := csvFromPermissions(perm)
 		if e.target == TargetPi || e.target == TargetOMP {
@@ -460,6 +471,30 @@ func resolveAgentDefinition(n *Node) string {
 		}
 	}
 	return ""
+}
+
+// agentRefPermissions returns the permission map of the agents/ profile an
+// agentRef points at (e.g. "qa-exploratory/verification-orchestrator"), nil
+// when the ref is empty or unresolvable. Same bare-name tolerance as
+// resolveAgentDefinition.
+func agentRefPermissions(ref string) map[string]string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil
+	}
+	profiles, err := agents.LoadProfiles(config.AgentsSourceDir())
+	if err != nil {
+		return nil
+	}
+	if p, ok := profiles[ref]; ok {
+		return p.Permission
+	}
+	for key, p := range profiles {
+		if key[strings.LastIndex(key, "/")+1:] == ref {
+			return p.Permission
+		}
+	}
+	return nil
 }
 
 // subAgentSectionList parses a node's comma-separated Sections field into the

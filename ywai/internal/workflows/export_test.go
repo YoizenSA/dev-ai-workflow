@@ -134,6 +134,64 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 	}
 }
 
+// TestOrchestratorInheritsAgentRefPermissions verifies a START node linked to a
+// real agent profile (no explicit tools CSV) seeds the linked profile's
+// permissions. Seeding from the coordinator default turned profiles like
+// verification-orchestrator (bash: verify) into a bare shell deny.
+func TestOrchestratorInheritsAgentRefPermissions(t *testing.T) {
+	wf := exportFixture()
+	wf.findNode(NodeTypeStart).Data.AgentRef = "qa-exploratory/verification-orchestrator"
+
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	orch, ok := files[filepath.Join(agentsDir, "daily-task-orchestrator.md")]
+	if !ok {
+		t.Fatalf("orchestrator markdown not found")
+	}
+	for _, want := range []string{
+		`resource: "git diff*"`,
+		`resource: "npx jest*"`,
+		`resource: "ado wi get*"`,
+	} {
+		if !strings.Contains(orch, "- action: shell\n    "+want+"\n    effect: allow") {
+			t.Errorf("agentRef orchestrator missing verify allow %s:\n%s", want, orch)
+		}
+	}
+}
+
+// TestOrchestratorExplicitToolsBeatAgentRef: an explicit tools CSV on the START
+// node keeps winning over the linked profile's permissions.
+func TestOrchestratorExplicitToolsBeatAgentRef(t *testing.T) {
+	wf := exportFixture()
+	start := wf.findNode(NodeTypeStart)
+	start.Data.AgentRef = "qa-exploratory/verification-orchestrator"
+	start.Data.Tools = "read,glob,grep"
+
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	orch, ok := files[filepath.Join(agentsDir, "daily-task-orchestrator.md")]
+	if !ok {
+		t.Fatalf("orchestrator markdown not found")
+	}
+	if strings.Contains(orch, `resource: "git diff*"`) {
+		t.Errorf("explicit tools CSV must beat the agentRef profile:\n%s", orch)
+	}
+}
+
 func TestApplyWritesFilesToDisk(t *testing.T) {
 	commandsDir := t.TempDir()
 	agentsDir := t.TempDir()
