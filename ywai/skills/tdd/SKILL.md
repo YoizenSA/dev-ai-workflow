@@ -34,5 +34,6 @@ When the shape of that interface is itself in question (how deep the module is, 
 ## Rules of the loop
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
+- **Red applies to changes on existing code.** Extending or changing an existing feature is a new cycle: write the failing test for the new behavior before editing the implementation. Tests written alongside the change, or a single green run after edits, do not satisfy Red.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
 - **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
