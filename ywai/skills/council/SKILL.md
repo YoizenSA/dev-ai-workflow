@@ -1,6 +1,6 @@
 ---
 name: council
-description: Run a model-diverse subagent council to investigate the same problem from multiple perspectives, compare findings, and produce a final recommendation. Use this skill whenever the user asks for a council, second opinions, multiple agents/models to evaluate one question, parallel investigation, red-team/blue-team comparison, or help deciding between competing technical approaches.
+description: Run a subagent council that investigates one question from several angles and returns a recommendation. Trigger: council.
 ---
 
 # Council

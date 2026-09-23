@@ -1,6 +1,6 @@
 ---
 name: reproduce-bug-report
-description: Launch Oz cloud agents with computer use to reproduce UI-focused bug reports, capture visual evidence (a screen recording by default), and report reproduction findings. Use when investigating a specific interactive or visual bug from an issue, ticket, support report, or prompt.
+description: Reproduce a UI bug report before coding and capture visual evidence. Trigger: reproduce this bug, bug report.
 ---
 
 # Reproduce bug report

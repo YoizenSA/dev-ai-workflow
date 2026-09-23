@@ -1,6 +1,6 @@
 ---
 name: "skill-doctor"
-description: "Grades agent skills by scoring agent conversations for efficiency, code quality, procedure compliance, and verbosity, then drafts concrete skill edits and a shareable report. Use when the user wants their agent setup graded from real conversation history, or asks which of their installed skills are actually working."
+description: "Score past agent conversations to grade your installed skills and draft edits. Trigger: run skill-doctor, grade my skills."
 ---
 # skill-doctor
 

@@ -1,6 +1,6 @@
 ---
 name: cross-critique
-description: Run a second round on a contested question by circulating each subagent's independent proposal to the other authors and asking for structured pros and cons, then synthesize. Use this skill whenever you have multiple independent proposals or opinions on a contested decision — architecture tradeoffs, code review disagreements, design choices, competing root-cause theories — and want sharper analysis than you'd produce by synthesizing alone. Pairs naturally with the council and research skills; reach for it liberally whenever proposals diverge.
+description: Circulate independent proposals between authors for pros and cons, then synthesize. Trigger: cross-critique, critique this.
 ---
 
 # Cross-Critique
