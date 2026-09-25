@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
@@ -144,7 +145,24 @@ func FindOpenCode() (string, string) {
 	if p := FindBinary("opencode2"); p != "" {
 		return p, "opencode2"
 	}
+	// OpenCode 2 now also ships as plain `opencode`; accept it when it
+	// reports a 2.x (or later) version.
+	if p := FindBinary("opencode"); p != "" && isOpenCodeV2(p) {
+		return p, "opencode"
+	}
 	return "", ""
+}
+
+// isOpenCodeV2 reports whether the binary's --version is 2.x or later.
+func isOpenCodeV2(path string) bool {
+	out, err := exec.Command(path, "--version").Output()
+	if err != nil {
+		return false
+	}
+	v := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(string(out)), "opencode "), "v")
+	major, _, _ := strings.Cut(v, ".")
+	n, err := strconv.Atoi(major)
+	return err == nil && n >= 2
 }
 
 // OpenCodeBinaryName is the binary name of the active OpenCode host. It falls
@@ -164,7 +182,7 @@ func OpenCodeBinaryName() string {
 // user's config. A machine with neither binary passes — callers report their
 // own not-found error.
 func GateOpenCodeV2() error {
-	if FindBinary("opencode2") != "" {
+	if p, _ := FindOpenCode(); p != "" {
 		return nil
 	}
 	if FindBinary("opencode") != "" {
