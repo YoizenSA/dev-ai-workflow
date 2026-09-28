@@ -435,7 +435,7 @@ export interface OrchestratorProfile {
   display_name?: string;
   description?: string;
   is_seed?: boolean;
-  // Keyed by agent name (dev, qa, architect, qa-analyst, qa-dev, …).
+  // Keyed by agent name (dev, qa, architect, finder, …).
   agents?: Record<string, OrchestratorModelMapping>;
   /** Explicit omp modelRoles overrides for this profile (verbatim values). */
   omp_model_roles?: Record<string, string>;
@@ -452,7 +452,7 @@ export interface OrchestratorProfilesResponse {
   omp_model_roles?: Record<string, string>;
   /** Effective omp thinking level written to config.yml. */
   omp_thinking_level?: string;
-  /** Bare agent name → the folder it lives under (core, qa-automation, …). */
+  /** Bare agent name → the folder it lives under (core, planning, qa-exploratory, …). */
   agent_groups?: Record<string, string>;
 }
 
@@ -503,7 +503,7 @@ export interface WorkflowNodeData {
 	name?: string;
 	description?: string;
 	agentDefinition?: string;
-	/** Link to a real agent under agents/ ("core/architect"). When set and
+	/** Link to a real agent under agents/ ("core/dev"). When set and
 	 *  agentDefinition is empty, the exporter resolves the prompt from that
 	 *  AGENT.md, so the node tracks the agent instead of freezing a copy. */
 	agentRef?: string;

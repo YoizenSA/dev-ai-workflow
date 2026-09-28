@@ -804,3 +804,32 @@ export interface GitStatus {
 export const gitApi = {
 	getStatus: () => request<GitStatus>("/api/git/status"),
 };
+
+// ─── Evidence API ─────────────────────────────────────────────────────────
+
+// One QA evidence run: a .evidence/<run-id>/ folder in the user's project.
+export interface EvidenceRunSummary {
+	runId: string;
+	files: number;
+	modified: string;
+}
+
+export interface EvidenceFile {
+	name: string;
+	size: number;
+}
+
+export interface EvidenceRunDetail {
+	runId: string;
+	report: string;
+	files: EvidenceFile[];
+}
+
+export const evidenceApi = {
+	list: (projectDir?: string) =>
+		request<EvidenceRunSummary[]>(`/api/evidence${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	get: (runId: string, projectDir?: string) =>
+		request<EvidenceRunDetail>(
+			`/api/evidence/${encodeURIComponent(runId)}${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`
+		),
+};

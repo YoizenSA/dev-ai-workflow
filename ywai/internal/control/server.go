@@ -155,6 +155,9 @@ func (s *Server) buildRoutes() {
 	// ─── Isolated env profiles API (ywai env) ───────────────────
 	s.registerEnvProfileRoutes()
 
+	// ─── Evidence API (qa-evidence run folders) ─────────────────
+	s.registerEvidenceRoutes()
+
 	// ─── Team API ─────────────────────────────────────────────
 	s.RegisterTeamRoutes(s.teamAPI)
 
