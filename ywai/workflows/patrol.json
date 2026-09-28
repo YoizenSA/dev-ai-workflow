@@ -1,0 +1,78 @@
+{
+  "id": "patrol",
+  "name": "patrol",
+  "description": "Patrol loop: run the BDD scenario suite against the latest main commit, then file bugs and evidence only when something failed.",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "position": { "x": 60, "y": 300 },
+      "data": {
+        "label": "Main changed",
+        "description": "Patrols main: runs the scenario suite and files bugs with evidence when a scenario fails.",
+        "agentRef": "qa-exploratory/verification-orchestrator"
+      }
+    },
+    {
+      "id": "runner",
+      "type": "subAgent",
+      "name": "scenario-runner",
+      "position": { "x": 340, "y": 300 },
+      "data": {
+        "name": "scenario-runner",
+        "description": "Runs the BDD scenario suite against the latest main commit.",
+        "agentRef": "core/scenario-runner",
+        "prompt": "Run the BDD scenario suite against the latest main commit. Report PASS / FAIL / BLOCKED per scenario, and file any evidence under .evidence/<run-id>/.",
+        "tools": "read, write, bash, glob, grep, question, skill, chrome-devtools_*, jev_*, grafana_*, graft_*",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
+      }
+    },
+    {
+      "id": "gate",
+      "type": "ifElse",
+      "name": "any-scenario-failed",
+      "position": { "x": 620, "y": 300 },
+      "data": {
+        "condition": "any scenario failed"
+      }
+    },
+    {
+      "id": "feedback",
+      "type": "subAgent",
+      "name": "qa-feedback",
+      "position": { "x": 880, "y": 300 },
+      "data": {
+        "name": "qa-feedback",
+        "description": "Files bugs and evidence on the work item.",
+        "agentRef": "qa-exploratory/qa-feedback",
+        "prompt": "File bugs and evidence on the work item: one Bug per failing scenario, carrying the scenario as written, expected versus actual, and the evidence paths under .evidence/<run-id>/.",
+        "tools": "read, write, bash, glob, grep, question, skill",
+        "model": "inherit",
+        "mode": "subagent",
+        "sections": "handoff-qa,context-gathering"
+      }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": "end",
+      "position": { "x": 1140, "y": 300 },
+      "data": {
+        "label": "Patrol done"
+      }
+    }
+  ],
+  "connections": [
+    { "from": "start", "to": "runner" },
+    { "from": "runner", "to": "gate" },
+    { "from": "gate", "to": "feedback", "fromPort": "true" },
+    { "from": "gate", "to": "end", "fromPort": "false" },
+    { "from": "feedback", "to": "end" }
+  ],
+  "createdAt": "2026-09-27T00:00:00Z",
+  "updatedAt": "2026-09-27T00:00:00Z"
+}
