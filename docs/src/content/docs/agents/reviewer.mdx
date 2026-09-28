@@ -15,7 +15,7 @@ El reviewer revisa código por correctitud, seguridad, performance y mantenibili
 2. **Devuelve un veredicto** — Termina con un bloque fenced `review` para que el orchestrator pueda gatear ship/close: `verdict: ship | ship-with-nits | block`.
 3. **Tipa severidades** — **P0** ship-blocker · **P1** must-fix antes de release · **P2** should fix soon · **P3** nit.
 4. **Cierra con handoff** — También termina con el bloque fenced `handoff` estándar (`next: orchestrator|dev|qa|close`, hallazgos espejados desde issues). Si el texto y el fence discrepan, **gana el fence**.
-5. **Escala bien** — Escala un hallazgo a `@architect` en vez de `@dev` cuando el fix es un cambio de patrón o diseño de API, no de código — el `fix_hint` debe decirlo.
+5. **Escala bien** — Escala un hallazgo a `@orchestrator` en vez de `@dev` cuando el fix es un cambio de patrón o diseño de API, no de código — el `fix_hint` debe decirlo.
 
 ```mermaid
 flowchart TD
@@ -25,7 +25,7 @@ flowchart TD
     D -->|no| E[Preferencia o nit, no defecto]
     D -->|sí| F[Rankear por costo de ship]
     F --> G{¿Fix de patrón o API}
-    G -->|sí| H[Escalar a @architect]
+    G -->|sí| H[Escalar a @orchestrator]
     G -->|no| I[Emparejar con fix_hint]
     E --> J[Escribir bloque review con veredicto]
     H --> J
@@ -50,8 +50,8 @@ flowchart TD
 | Explorar el código a revisar | `@finder` |
 | Arreglar issues críticos/bugs | `@dev` |
 | Agregar tests faltantes | `@qa` |
-| Preocupación de arquitectura | `@architect` |
-| Preocupación visual o de accesibilidad | `@designer` |
+| Preocupación de arquitectura | `@orchestrator` (trabajo del hub) |
+| Preocupación visual o de accesibilidad | `@orchestrator` (trabajo del hub) |
 
 ## Límites
 
@@ -59,7 +59,7 @@ flowchart TD
 |---|---|
 | Encontrar bugs y tipar severidad | Modificar código (`@dev`) |
 | Revisar seguridad y performance | Escribir tests (`@qa`) |
-| Emitir veredicto `ship` / `block` | Decisiones de arquitectura (`@architect`) |
+| Emitir veredicto `ship` / `block` | Decisiones de diseño (`@orchestrator`, trabajo del hub) |
 
 <Aside type="tip">
 El reviewer es la última línea de defensa antes de merge. Usalo después de `@dev` y `@qa`; su veredicto `block` o un P0 frena el cierre.

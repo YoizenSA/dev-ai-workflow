@@ -47,11 +47,11 @@ flowchart TD
 
 | Tarea | Handler |
 |---|---|
-| Volver control / reportar | `@orchestrator` o `@qa-orchestrator` |
-| Editar los archivos encontrados | `@dev` / `@qa-dev` |
-| Arquitectura | `@architect` |
-| Revisar | `@reviewer` / `@qa-reviewer` |
-| Escribir tests | `@qa` / `@qa-dev` |
+| Volver control / reportar | `@orchestrator` |
+| Editar los archivos encontrados | `@dev` |
+| Arquitectura | `@orchestrator` (trabajo del hub) |
+| Revisar | `@reviewer` |
+| Escribir tests | `@qa` |
 
 ## Límites
 
@@ -64,5 +64,5 @@ flowchart TD
 | | Delegar (`task` denegado) |
 
 <Aside type="tip">
-`@finder` es ideal como primer paso antes de delegar a `@dev` o `@architect`: da rutas exactas con líneas para que el siguiente agente no re-busque.
+`@finder` es ideal como primer paso antes de delegar a `@dev`: da rutas exactas con líneas para que el siguiente agente no re-busque.
 </Aside>

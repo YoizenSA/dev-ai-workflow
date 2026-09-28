@@ -1369,7 +1369,7 @@ func init() {
 	installCmd.Flags().Bool("jev-compaction", false, "Install the experimental jev-compaction opencode plugin: drops stale tool calls and results before each request using Jev decisions, plus the jev_compact tool. Reuses the jev-gate API key file.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
-	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
+	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 	installCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 

@@ -46,7 +46,7 @@ func TestPresetGetters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if groups := PresetGroups(spec); len(groups) != 2 || groups[0] != "core" {
+	if groups := PresetGroups(spec); len(groups) != 1 || groups[0] != "core" {
 		t.Errorf("PresetGroups(dev) = %v", groups)
 	}
 	// dev/qa install ALL skills like a global install: empty skills allowlist
@@ -63,9 +63,6 @@ func TestPresetGetters(t *testing.T) {
 	}
 	if !ShouldStripCommitDenies("orchestrator") {
 		t.Error("daily-dev must strip stale git commit/push denials")
-	}
-	if !ShouldStripCommitDenies("qa-orchestrator") {
-		t.Error("QA lane must strip stale git commit/push denials")
 	}
 	if ShouldStripCommitDenies("reviewer") {
 		t.Error("code-review must keep the commit/push lane pack")

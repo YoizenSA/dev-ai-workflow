@@ -30,7 +30,7 @@ Refactoriza para usar repository pattern.
 ```
 
 El orchestrator:
-1. Delega a `@architect` para analizar y proponer diseño
+1. Diseña el enfoque él mismo (trabajo del hub)
 2. Delega a `@dev` para implementar el refactoring
 3. Delega a `@qa` para verificar que nada se rompió
 4. Delega a `@reviewer` para revisar los cambios
@@ -69,7 +69,7 @@ Tú: "La lógica de auth está esparcida por toda la app.
      Extraela en un módulo auth separado."
 
 Orchestrator:
-  → @architect: diseña el módulo auth
+  → diseña él mismo el módulo auth
   → @dev: extrae la lógica en src/auth/
   → @dev: actualiza imports en toda la app
   → @qa: corre todos los tests
@@ -77,5 +77,5 @@ Orchestrator:
 ```
 
 <Aside type="tip">
-Para refactorings de 1-2 archivos, decile al orchestrator que use `@dev` directamente. Para refactorings de arquitectura, pedí análisis de `@architect` primero.
+Para refactorings de 1-2 archivos, decile al orchestrator que use `@dev` directamente. Para refactorings de arquitectura, el orchestrator diseña el enfoque él mismo antes de delegar.
 </Aside>

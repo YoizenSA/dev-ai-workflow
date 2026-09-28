@@ -23,8 +23,8 @@ You are **read-only**. For broad locate-only work, prefer `@finder`. For multi-s
 |---|---|
 | Multi-step goal / ship a feature | `@orchestrator` |
 | Write/edit/fix code | `@dev` |
-| Architecture | `@architect` |
-| UI/UX | `@designer` |
+| Architecture | `@orchestrator` (hub work) |
+| UI/UX | `@orchestrator` (hub work) |
 | Deep explore / scout | `@finder` |
 | Tests | `@qa` |
 | Review | `@reviewer` |

@@ -10,7 +10,6 @@ import {
 	TOOL_OPTIONS,
 	DEFAULT_ORCHESTRATOR_TOOLS,
 	DEFAULT_DEV_TOOLS,
-	EXTERNAL_AGENTS,
 	csvToSet,
 	setToCsv,
 } from './toolCatalog'
@@ -66,7 +65,7 @@ export function useWorkflowList(): { name: string }[] {
 	return wfs
 }
 
-// Sections from the library (e.g. handoff, context-gathering, handoff-qa).
+// Sections from the library (e.g. handoff, context-gathering).
 let sectionsCache: { name: string; content: string }[] | null = null
 export function useSections(): { name: string; content: string }[] {
 	const [sections, setSections] = useState(sectionsCache ?? [])
@@ -497,8 +496,18 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 	const descMissing = !(node.data.description ?? '').trim()
 	const availableSections = useSections()
 
+	// Live installed-agent roster (same source as the agent link picker). A
+	// static copy here has rotted before — it still listed memory/architect.
+	const [installed, setInstalled] = useState<AgentInfo[]>([])
+	useEffect(() => {
+		configApi
+			.listAgents()
+			.then(setInstalled)
+			.catch(() => setInstalled([]))
+	}, [])
+
 	// Build the delegate options: other subAgents in this workflow (by name) +
-	// known external agents. Exclude self.
+	// the installed agents. Exclude self.
 	const delegateOptions = useMemo(() => {
 		const opts: { value: string; label: string }[] = []
 		const seen = new Set<string>([node.id])
@@ -509,13 +518,13 @@ function SubAgentFields({ node, models, current }: { node: WorkflowNode; models:
 				seen.add(n.id)
 			}
 		}
-		for (const a of EXTERNAL_AGENTS) {
-			if (!seen.has(a)) {
-				opts.push({ value: a, label: `${a} (external)` })
+		for (const a of installed) {
+			if (!seen.has(a.name)) {
+				opts.push({ value: a.name, label: `${a.name} (external)` })
 			}
 		}
 		return opts
-	}, [current.nodes, node.id])
+	}, [current.nodes, node.id, installed])
 	return (
 		<>
 			<div className="field">
@@ -639,10 +648,12 @@ function AskUserFields({ node }: { node: WorkflowNode }) {
 
 // HandoffContractSection — informational callout + collapsible handoff.md viewer.
 // Section names are an internal mechanism; the canvas speaks in behaviors.
-// Reporting mirrors the core agent roles: implementers report with `handoff`,
-// QA agents with `handoff-qa`, and coordinators (planners) don't report at all.
+// Reporting mirrors the core agent roles: implementers and QA agents report
+// with `handoff`, and coordinators (planners) don't report at all. The
+// `handoff-qa` section was retired; old seeds carrying it read back as QA.
 type Reporting = 'standard' | 'qa' | 'none'
 const SECTION_HANDOFF = 'handoff'
+// Legacy seed marker only; no longer emitted.
 const SECTION_HANDOFF_QA = 'handoff-qa'
 const SECTION_CONTEXT = 'context-gathering'
 
@@ -664,7 +675,7 @@ function reportingFromCsv(csv: string | undefined): Reporting {
 function effectiveSections(reporting: Reporting, context: boolean): string[] {
 	const list: string[] = []
 	if (reporting === 'standard') list.push(SECTION_HANDOFF)
-	else if (reporting === 'qa') list.push(SECTION_HANDOFF_QA)
+	else if (reporting === 'qa') list.push(SECTION_HANDOFF)
 	if (context) list.push(SECTION_CONTEXT)
 	return list
 }

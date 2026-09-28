@@ -120,9 +120,8 @@ it; this list is the record.
    Skills, plugins and the `opencode.json` agent keys are removed, but these
    stay behind: `.config/opencode/agents/.ywai-groups.json`,
    `delegations.json`, the `planning-*.md` delegation profiles, and the
-   `.claude/agents/core` and `.claude/agents/qa-automation` group
-   directories. Deciding whether these are user data to preserve or debris
-   to remove is a product call (needs-decision).
+   `.claude/agents/core` group directory. Deciding whether these are user
+   data to preserve or debris to remove is a product call (needs-decision).
 
 ## Fault injection example
 

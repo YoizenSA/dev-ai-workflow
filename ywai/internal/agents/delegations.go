@@ -113,8 +113,8 @@ func (d *DelegationsDoc) TriggersFor(agent string) []DelegationTrigger {
 //
 // Only agents whose markdown is already installed (<agentsDir>/<name>.md exists)
 // are touched. This matters because a default `ywai install` ships just the core
-// group, but delegations.json lists agents from other groups (qa-automation,
-// qa-*, qa-automation). Writing a delegation task map for an agent with
+// group, but delegations.json lists agents from other groups (workflow
+// personas). Writing a delegation task map for an agent with
 // no installed .md would create a stub entry in opencode.json with no
 // description/prompt, which opencode rejects ("Expected string | undefined, got
 // null description"). The markdown application paths already skip missing files;

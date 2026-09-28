@@ -36,7 +36,7 @@ flowchart LR
 
 ## Instalación
 
-Estos agentes **no** tienen grupo propio en `groups.json`: el install por defecto (`core + qa-automation`) no los copia. Llegan con:
+Estos agentes **no** tienen grupo propio en `groups.json`: el install por defecto (`core`) no los copia. Llegan con:
 
 ```bash
 ywai install --all-groups
@@ -53,5 +53,5 @@ El workflow semilla `/qa-exploratory` (ya viene con ywai, ver [Commands](/dev-ai
 | Verificar escenarios post-review | `/scenario-verification` |
 
 <Aside type="tip">
-Para testing automatizado con estrategia, el grupo es [QA Automation](/dev-ai-workflow/agents/qa-orchestrator). Lo exploratorio es post-implementación y termina en ADO.
+Para testing con estrategia dentro del ciclo de desarrollo, el equipo core es `@qa` + `@finder` + `@reviewer`. Lo exploratorio es post-implementación y termina en ADO.
 </Aside>

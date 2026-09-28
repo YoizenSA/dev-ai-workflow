@@ -98,7 +98,7 @@ func TestAppendDenyBashToAgentsHealsFiles(t *testing.T) {
 func TestAppendDenyBashStripsCommitFromEveryone(t *testing.T) {
 	dir := t.TempDir()
 	locked := "---\nmode: all\npermissions:\n  - action: shell\n    resource: \"*\"\n    effect: allow\n  - action: shell\n    resource: \"git commit*\"\n    effect: deny\n  - action: shell\n    resource: \"git push*\"\n    effect: deny\n---\nPrompt.\n"
-	for _, name := range []string{"orchestrator.md", "dev.md", "qa-dev.md", "qa-orchestrator.md", "ask.md"} {
+	for _, name := range []string{"orchestrator.md", "dev.md", "qa.md", "planning.md", "ask.md"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(locked), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func TestAppendDenyBashStripsCommitFromEveryone(t *testing.T) {
 	if n != 5 {
 		t.Fatalf("changed = %d, want 5", n)
 	}
-	for _, name := range []string{"orchestrator.md", "dev.md", "qa-dev.md", "qa-orchestrator.md", "ask.md"} {
+	for _, name := range []string{"orchestrator.md", "dev.md", "qa.md", "planning.md", "ask.md"} {
 		got, _ := os.ReadFile(filepath.Join(dir, name))
 		if strings.Contains(string(got), `resource: "git commit*"`) || strings.Contains(string(got), `resource: "git push*"`) {
 			t.Fatalf("%s still denied commit/push:\n%s", name, got)

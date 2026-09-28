@@ -182,31 +182,31 @@ func TestApplyDelegations_EmptyInputNoop(t *testing.T) {
 
 // TestApplyDelegations_SkipsUninstalledAgents guards the regression where a
 // default core-only install still applied delegations.json entries for agents
-// from other groups (qa-reviewer, migration-*, ...). That created stub entries
+// from other groups (migration-*, ...). That created stub entries
 // in opencode.json with no description/prompt, which opencode rejects with
 // "Expected string | undefined, got null description". Only the installed agent
-// (qa is seeded as the .md) must be touched; qa-reviewer must be ignored.
+// (qa is seeded as the .md) must be touched; migration-orchestrator must be ignored.
 func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 	agentsDir := filepath.Join(dir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
-	// Only "qa" is installed; "qa-reviewer" (a different group) is NOT.
+	// Only "qa" is installed; "migration-orchestrator" (a different group) is NOT.
 	os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("---\nmode: primary\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n---\n\nbody."), 0o644)
 
 	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
-		"qa":          {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
-		"qa-reviewer": {Task: map[string]string{"*": "deny"}},
+		"qa":                     {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
+		"migration-orchestrator": {Task: map[string]string{"*": "deny"}},
 	}}
 	if err := ApplyDelegations(configPath, agentsDir, doc); err != nil {
 		t.Fatal(err)
 	}
 
-	// qa-reviewer must NOT be created in opencode.json.
+	// migration-orchestrator must NOT be created in opencode.json.
 	root, _ := loadJSON(t, configPath)
 	if agents, ok := root["agents"].(map[string]any); ok {
-		if _, exists := agents["qa-reviewer"]; exists {
-			t.Errorf("uninstalled agent qa-reviewer was written to opencode.json: %+v", agents["qa-reviewer"])
+		if _, exists := agents["migration-orchestrator"]; exists {
+			t.Errorf("uninstalled agent migration-orchestrator was written to opencode.json: %+v", agents["migration-orchestrator"])
 		}
 	}
 
@@ -215,8 +215,8 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sidecar not written: %v", err)
 	}
-	if strings.Contains(string(sidecar), "qa-reviewer") {
-		t.Errorf("sidecar must not list uninstalled agent qa-reviewer: %s", sidecar)
+	if strings.Contains(string(sidecar), "migration-orchestrator") {
+		t.Errorf("sidecar must not list uninstalled agent migration-orchestrator: %s", sidecar)
 	}
 	if !strings.Contains(string(sidecar), "qa") {
 		t.Errorf("sidecar missing installed agent qa: %s", sidecar)

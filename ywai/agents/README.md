@@ -6,20 +6,23 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 
 | Agent | Role | Best For |
 |-------|------|----------|
-| `orchestrator` | Technical Lead | Goals: **solo** (act alone), **thin** (0–1 hop), or **full** multi-agent delivery |
+| `orchestrator` | Technical Lead | Goals: **solo** (act alone), **thin** (0–1 hop), or **full** multi-agent delivery; plans architecture and UI specs itself |
 | `ask` | Research & Q&A | Primary for questions, explanations, analysis (read-only) |
 | `finder` | Codebase Explorer | Only scout: locate code, delivery scout, QA scout (read-only) |
 | `dev` | Developer | Implementation, coding, debugging, refactoring |
 | `qa` | QA Engineer | Testing, test strategy, quality assurance |
-| `architect` | Architect | Design decisions, patterns, system design |
+| `advisor` | Second Reviewer | Reviews each turn of the main agent (not invoked directly) |
 | `reviewer` | Code Reviewer | PR reviews, code quality, security audits |
 | `devops` | DevOps Engineer | CI/CD, deployments, infrastructure, monitoring |
-| `memory` | Memory Specialist | Memory consolidation, deduplication, structured plans |
 | `planning` | Planning | Plan mode: research → clarify → draft plan → approval gate (read-only until approved) |
 
 **One scout:** use `@finder` for all exploration (including QA). There is no separate `qa-finder`.  
 **Models:** `fast` / `balanced` / `deep` profiles set per-agent models (Settings → Profiles in the web UI).  
-**Install default groups:** `core` + `qa-automation`. TokenBank + active model profile are applied on install when credentials exist.
+**Install default group:** `core` only. TokenBank + active model profile are applied on install when credentials exist.
+
+**Workflow personas are not default-installed.** `scenario-runner`, `qa-feedback`, `verification-orchestrator`, `exploratory-orchestrator`, `feature-summary`, `test-author`, and `planner-*` live under `agents/core/`, `agents/planning/` and `agents/qa-exploratory/` but are not in the `core` group. They become installed agents when their seed workflow exports (`ywai install` runs the seed walkers), or with `ywai install --all-groups`.
+
+> **Taxonomy note:** the canonical role `planning` in `role_defaults.json` resolves to the agent `orchestrator`. The profile named `planning` is a different thing — the planning-workflow coordinator. Do not rename the canonical role: that would break user overrides in `~/.ywai/role-defaults.json` (`userconfig.go`).
 
 ## Execution modes (`orchestrator`)
 
@@ -43,8 +46,8 @@ In **solo** / **thin** it may implement directly.
 graph TD
     U[User] -->|goal| O[orchestrator]
 
-    O -->|PLAN| A[architect]
-    A -->|handoff| O
+    O -->|PLAN + DESIGN in-hub| O2[architecture + UI spec\nskills: codebase-design, adr-skill, yz-ui]
+    O2 -->|brief| O
 
     O -->|¿TDD?| Q{TDD?}
     Q -->|yes| QA1[qa: write failing tests]
@@ -77,7 +80,6 @@ graph TD
     %% Statusline plugin
     SL[sub-agent-statusline plugin]
     SL -.->|visibility: running/completed/failed| O
-    SL -.->|visibility: running/completed/failed| A
     SL -.->|visibility: running/completed/failed| D1
     SL -.->|visibility: running/completed/failed| D2
     SL -.->|visibility: running/completed/failed| D3
@@ -119,7 +121,6 @@ agents/
 │   └── ...
 ├── sections/
 │   ├── handoff.md          # Standard handoff format (core subagents → @orchestrator)
-│   ├── handoff-qa.md       # Handoff format for qa-automation subagents (@qa-*)
 │   ├── context-gathering.md # Context gathering protocol
 │   ├── orchestrator-contracts.md      # Short pointer (auto-appended to orchestrators)
 │   └── orchestrator-contracts-full.md # Full handoff/review schema (read on demand / workflow export)

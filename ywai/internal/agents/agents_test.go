@@ -474,18 +474,18 @@ func TestBuildOpenCodeMarkdown_LeavesUnlistedMCPsEnabled(t *testing.T) {
 func TestBuildOpenCodeMarkdown_EmptyDescriptionFallsBackToName(t *testing.T) {
 	for _, desc := range []string{"", "   ", "\n\t"} {
 		profile := AgentProfile{
-			Name:        "qa-reviewer",
+			Name:        "reviewer",
 			Description: desc,
 			Prompt:      "body",
 			Permission:  map[string]string{"read": "allow"},
 			Mode:        "all",
 		}
-		markdown := BuildOpenCodeMarkdown("qa-reviewer", profile)
+		markdown := BuildOpenCodeMarkdown("reviewer", profile)
 		// Must never emit a bare "description:" with nothing after the colon.
 		if strings.Contains(markdown, "description:\n") || strings.Contains(markdown, "description: \n") {
 			t.Errorf("description rendered as null for input %q:\n%s", desc, markdown)
 		}
-		if !strings.Contains(markdown, "description: qa-reviewer") {
+		if !strings.Contains(markdown, "description: reviewer") {
 			t.Errorf("expected fallback to agent name, got:\n%s", markdown)
 		}
 	}
@@ -1310,21 +1310,21 @@ func TestListGroups_MissingFile(t *testing.T) {
 }
 
 func TestLoadProfilesByGroup_NestedAgents(t *testing.T) {
-	// Reproduce bug: agents in subdirectories (like qa-automation/qa-orchestrator)
-	// must match the names referenced in groups.json (e.g. "qa-automation/qa-orchestrator").
+	// Reproduce bug: agents in subdirectories (like qa-exploratory/verification-orchestrator)
+	// must match the names referenced in groups.json (e.g. "qa-exploratory/verification-orchestrator").
 	dir := t.TempDir()
 
 	// Create core agents (flat structure)
 	writeAgentDir(t, dir, "orchestrator")
 	writeAgentDir(t, dir, "dev")
 
-	// Create nested agents (like qa-automation/)
-	nestedDir := filepath.Join(dir, "qa-automation")
+	// Create nested agents (like qa-exploratory/)
+	nestedDir := filepath.Join(dir, "qa-exploratory")
 	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeAgentDir(t, nestedDir, "qa-orchestrator")
-	writeAgentDir(t, nestedDir, "qa-analyst")
+	writeAgentDir(t, nestedDir, "verification-orchestrator")
+	writeAgentDir(t, nestedDir, "qa-feedback")
 
 	writeGroupsJSON(t, dir, `{
 		"groups": {
@@ -1332,9 +1332,9 @@ func TestLoadProfilesByGroup_NestedAgents(t *testing.T) {
 				"description": "Core agents",
 				"agents": ["orchestrator", "dev"]
 			},
-			"qa-automation": {
-				"description": "QA automation agents",
-				"agents": ["qa-automation/qa-orchestrator", "qa-automation/qa-analyst"]
+			"qa-exploratory": {
+				"description": "QA exploratory agents",
+				"agents": ["qa-exploratory/verification-orchestrator", "qa-exploratory/qa-feedback"]
 			}
 		}
 	}`)
@@ -1353,18 +1353,18 @@ func TestLoadProfilesByGroup_NestedAgents(t *testing.T) {
 		}
 	}
 
-	// Test 2: core + qa-automation — nested agents MUST be included
-	qaProfiles, err := LoadProfilesByGroup(dir, GroupFilter{Groups: []string{"qa-automation"}})
+	// Test 2: core + qa-exploratory — nested agents MUST be included
+	nestedProfiles, err := LoadProfilesByGroup(dir, GroupFilter{Groups: []string{"qa-exploratory"}})
 	if err != nil {
-		t.Fatalf("with qa-automation: unexpected error: %v", err)
+		t.Fatalf("with qa-exploratory: unexpected error: %v", err)
 	}
-	if len(qaProfiles) != 4 {
-		t.Errorf("with qa-automation: expected 4 profiles, got %d: %v", len(qaProfiles), keys(qaProfiles))
+	if len(nestedProfiles) != 4 {
+		t.Errorf("with qa-exploratory: expected 4 profiles, got %d: %v", len(nestedProfiles), keys(nestedProfiles))
 	}
-	expected := []string{"orchestrator", "dev", "qa-automation/qa-orchestrator", "qa-automation/qa-analyst"}
+	expected := []string{"orchestrator", "dev", "qa-exploratory/verification-orchestrator", "qa-exploratory/qa-feedback"}
 	for _, name := range expected {
-		if _, ok := qaProfiles[name]; !ok {
-			t.Errorf("with qa-automation: expected %q in profiles", name)
+		if _, ok := nestedProfiles[name]; !ok {
+			t.Errorf("with qa-exploratory: expected %q in profiles", name)
 		}
 	}
 }
@@ -1423,7 +1423,7 @@ func TestPiToolsString(t *testing.T) {
 	}
 }
 
-func TestInstallOmpCoreAndQA(t *testing.T) {
+func TestInstallOmpCoreOnly(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "omp", "agent", "agents")
 
@@ -1432,8 +1432,8 @@ func TestInstallOmpCoreAndQA(t *testing.T) {
 			Name: "core/dev", Group: "core", Description: "Developer agent",
 			Prompt: "# Dev\n\nBody.", Permission: map[string]string{"read": "allow", "edit": "allow", "task": "allow"},
 		},
-		"qa-automation/qa-dev": {
-			Name: "qa-automation/qa-dev", Group: "qa-automation", Description: "QA dev",
+		"qa-exploratory/test-author": {
+			Name: "qa-exploratory/test-author", Group: "qa-exploratory", Description: "Test author",
 			Prompt: "# QA\n", Permission: map[string]string{"read": "allow"},
 		},
 		"social-refactor/migration-orchestrator": {
@@ -1447,11 +1447,10 @@ func TestInstallOmpCoreAndQA(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(agentsDir, "dev.md")); err != nil {
 		t.Fatalf("dev.md missing: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(agentsDir, "qa-dev.md")); err != nil {
-		t.Fatalf("qa-dev.md should install for OMP: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(agentsDir, "migration-orchestrator.md")); err == nil {
-		t.Fatal("migration-orchestrator must not install on OMP")
+	for _, gone := range []string{"test-author.md", "migration-orchestrator.md"} {
+		if _, err := os.Stat(filepath.Join(agentsDir, gone)); err == nil {
+			t.Fatalf("%s must not install on OMP (core-only)", gone)
+		}
 	}
 	data, _ := os.ReadFile(filepath.Join(agentsDir, "dev.md"))
 	content := string(data)
@@ -1610,7 +1609,7 @@ func TestRemoveAgentsWithoutDescription(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "qa.md"),
 		[]byte("---\ndescription: >\n  QA agent\nmode: primary\n---\n\nbody."), 0o644)
 	// Orphan 1: bare empty description (YAML null) — the exact bug shape.
-	os.WriteFile(filepath.Join(dir, "qa-reviewer.md"),
+	os.WriteFile(filepath.Join(dir, "planner-draft.md"),
 		[]byte("---\ndescription:\nmode: primary\n---\n\nbody."), 0o644)
 	// Orphan 2: no description field at all.
 	os.WriteFile(filepath.Join(dir, "ghost.md"),
@@ -1632,7 +1631,7 @@ func TestRemoveAgentsWithoutDescription(t *testing.T) {
 			t.Errorf("valid agent %s was removed", kept)
 		}
 	}
-	for _, gone := range []string{"qa-reviewer.md", "ghost.md"} {
+	for _, gone := range []string{"planner-draft.md", "ghost.md"} {
 		if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
 			t.Errorf("orphan %s should have been removed", gone)
 		}
@@ -1703,7 +1702,9 @@ func TestBashRendersAsAllowlistWithFalseGreenDenied(t *testing.T) {
 	if !strings.Contains(md, "- action: shell\n    resource: \"*\"\n    effect: allow") {
 		t.Error("the general allow must survive — the agent still has to run its tests")
 	}
-	for _, denied := range []string{`resource: "*jest*-u*"`, `resource: "*vitest*-u*"`, `resource: "*--update-snapshot*"`, `resource: "*tsc*--noEmitOnError*"`} {
+	for _, denied := range []string{`resource: "*jest*-u*"`, `resource: "*vitest*-u*"`, `resource: "*--update-snapshot*"`, `resource: "*tsc*--noEmitOnError*"`,
+		`resource: "git push*--force*"`, `resource: "git push* -f *"`, `resource: "git push* -f"`, `resource: "*--no-verify*"`,
+	} {
 		if !strings.Contains(md, denied+"\n    effect: deny") {
 			t.Errorf("missing denial %s", denied)
 		}
@@ -1775,7 +1776,7 @@ func TestBashVerifyRendersAllowlist(t *testing.T) {
 // Commit/push is not a per-agent name pack. bash:allow is a full shell;
 // bash:verify stays inspect-only. Lane deny_bash may still lock a review env.
 func TestBuildOpenCodeMarkdownHasNoCommitNamePack(t *testing.T) {
-	for _, name := range []string{"dev", "qa-dev", "qa-orchestrator", "reviewer", "ask"} {
+	for _, name := range []string{"dev", "qa", "planning", "reviewer", "ask"} {
 		md := BuildOpenCodeMarkdown(name, AgentProfile{
 			Description: name, Prompt: "# x", Mode: "all",
 			Permission: map[string]string{"bash": "allow", "edit": "allow"},
@@ -1833,7 +1834,6 @@ func TestCoordinatorsCannotSearch(t *testing.T) {
 	}
 	for _, name := range []string{
 		"core/planning",
-		"qa-automation/qa-orchestrator",
 	} {
 		p, ok := profiles[name]
 		if !ok {
@@ -1849,37 +1849,6 @@ func TestCoordinatorsCannotSearch(t *testing.T) {
 		if p.Permission["read"] != "allow" {
 			t.Errorf("%s: read must stay allowed — it reads handoffs and plan files", name)
 		}
-	}
-}
-
-// The experiment group must expose its experimental agents through the group
-// loader so `ywai agents --group experiment` can install them.
-func TestLoadProfilesByGroup_ExperimentGroup(t *testing.T) {
-	profiles, err := LoadProfilesByGroup("../../agents", GroupFilter{Groups: []string{"experiment"}})
-	if err != nil {
-		t.Fatalf("LoadProfilesByGroup() unexpected error: %v", err)
-	}
-	p, ok := profiles["experiment/infra-docs"]
-	if !ok {
-		t.Fatalf("experiment/infra-docs not found in experiment group: %v", keys(profiles))
-	}
-	// v1 shipped with no frontmatter at all, so it had no description and no
-	// trigger — the model could never tell when to reach for it. Guard that.
-	if p.Description == "" {
-		t.Error("infra-docs must carry a description; without one it has no trigger")
-	}
-	if p.Mode != "all" {
-		t.Errorf("infra-docs mode = %q, want all", p.Mode)
-	}
-	if p.Permission["read"] != "allow" || p.Permission["edit"] != "allow" {
-		t.Errorf("infra-docs must read/write notes: read=%q edit=%q", p.Permission["read"], p.Permission["edit"])
-	}
-	if p.Permission["bash"] != "allow" {
-		t.Errorf("infra-docs must support its git flow: bash=%q", p.Permission["bash"])
-	}
-	// It is the primary agent for its repo and does the work itself.
-	if p.Permission["task"] != "deny" || p.Permission["delegate"] != "deny" {
-		t.Errorf("infra-docs must not delegate: task=%q delegate=%q", p.Permission["task"], p.Permission["delegate"])
 	}
 }
 

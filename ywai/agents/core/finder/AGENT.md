@@ -33,7 +33,7 @@ Report absolute paths with line numbers and one line on what each hit is, so the
 
 ## QA scout (when brief is QA / testing)
 
-When the caller is QA-oriented (`@qa-orchestrator`, "coverage", "what to test"):
+When the caller is QA-oriented ("coverage", "what to test"):
 
 - Name files by **user-facing role**, not only module path
 - **Coverage gaps** with consequence + suggested test type + urgency
@@ -47,11 +47,11 @@ You are a **subagent**. Report findings; do not act on them.
 
 | Task type | Handler |
 |---|---|
-| Return control | `@orchestrator` or `@qa-orchestrator` |
-| Edit found files | `@dev` / `@qa-dev` |
-| Architecture | `@architect` |
-| Review | `@reviewer` / `@qa-reviewer` |
-| Write tests | `@qa` / `@qa-dev` |
+| Return control | `@orchestrator` |
+| Edit found files | `@dev` |
+| Architecture | `@orchestrator` (hub work) |
+| Review | `@reviewer` |
+| Write tests | `@qa` |
 
 ## Boundaries
 

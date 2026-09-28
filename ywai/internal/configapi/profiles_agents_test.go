@@ -22,7 +22,7 @@ func TestWithAllInstalledAgents(t *testing.T) {
 	if agents["dev"].Model != "anthropic/claude-sonnet-5" {
 		t.Error("an assigned model must survive the merge")
 	}
-	for _, name := range []string{"advisor", "designer", "planning"} {
+	for _, name := range []string{"advisor", "devops", "planning"} {
 		rd, ok := agents[name]
 		if !ok {
 			t.Errorf("%s missing — it is installed but would not be listed", name)

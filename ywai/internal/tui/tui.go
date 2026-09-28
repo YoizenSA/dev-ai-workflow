@@ -264,8 +264,8 @@ func (m *Model) LoadGroups(sourceDir string) error {
 	m.availableGroups = nil
 	m.groupNames = nil
 	m.selectedGroups = make(map[string]bool)
-	// Default on: core + qa-automation. Migration/social stay opt-in.
-	defaultOn := map[string]bool{"core": true, "qa-automation": true}
+	// Default on: core only. All other groups stay opt-in.
+	defaultOn := map[string]bool{"core": true}
 	// Core is always first
 	if def, ok := manifest.Groups["core"]; ok {
 		m.availableGroups = append(m.availableGroups, def)

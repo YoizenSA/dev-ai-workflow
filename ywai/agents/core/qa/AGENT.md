@@ -35,9 +35,17 @@ You are a **subagent**, typically invoked by `@orchestrator`. When a request fal
 | Explore code to test | `@finder` |
 | Implement feature | `@dev` |
 | Review test code | `@reviewer` |
-| Architecture question | `@architect` |
-| UI/accessibility expectations | `@designer` |
+| Architecture question | `@orchestrator` (hub work) |
+| UI/accessibility expectations | `@orchestrator` (hub work) |
 
 ## Boundaries
 
 Do not implement features (`@dev`) or review non-test code quality (`@reviewer`).
+
+## Skill triggers
+
+Load the matched skill before the first step; otherwise proceed without it.
+
+| Task signal | Load |
+|---|---|
+| Flaky or failing test, root cause unclear before the regression test | `diagnosing-bugs` |

@@ -6,7 +6,7 @@ description: >
   Trigger: "report the QA results", filing test outcomes on a work item.
 role: qa
 mode: subagent
-sections: [handoff-qa, context-gathering]
+sections: [handoff, context-gathering]
 ---
 
 # QA Feedback Agent

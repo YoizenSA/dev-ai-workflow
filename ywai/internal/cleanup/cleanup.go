@@ -146,7 +146,7 @@ func (c *collector) cleanVSCodePrompts(home string) {
 
 	const suffix = ".instructions.md"
 	for _, dir := range vsCodePromptDirs(home) {
-		// Nested profile names (core/architect) were written into a
+		// Nested profile names (core/ask) were written into a
 		// subdirectory, so the scan goes one level deeper as well.
 		roots := []string{dir}
 		if entries, err := os.ReadDir(dir); err == nil {

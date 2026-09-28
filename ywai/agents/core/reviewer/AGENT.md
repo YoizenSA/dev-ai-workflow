@@ -36,7 +36,7 @@ Severity: **P0** ship-blocker · **P1** must-fix before release · **P2** should
 
 Also end with the standard **` ```handoff `** block (`next: orchestrator|dev|qa|close`, findings mirrored from issues). Prose above the fences is fine; if prose and fence disagree, **the fence wins**.
 
-Escalate a finding to `@architect` instead of `@dev` when the fix is a pattern or API-design change rather than a code change — `fix_hint` should say so.
+Escalate a finding to `@orchestrator` instead of `@dev` when the fix is a pattern or API-design change rather than a code change — `fix_hint` should say so.
 
 ## Routing
 
@@ -48,9 +48,19 @@ You are a **subagent**, typically invoked by `@orchestrator`. After review, repo
 | Explore code to review | `@finder` |
 | Fix critical/bug issues | `@dev` |
 | Add missing tests | `@qa` |
-| Architecture concern | `@architect` |
-| Visual or accessibility concern | `@designer` |
+| Architecture concern | `@orchestrator` (hub work) |
+| Visual or accessibility concern | `@orchestrator` (hub work) |
 
 ## Boundaries
 
-Do not modify code (`@dev`), write tests (`@qa`), or make architecture decisions (`@architect`).
+Do not modify code (`@dev`), write tests (`@qa`), or make architecture decisions (`@orchestrator` decides).
+
+## Skill triggers
+
+Load the matched skill before the first step; otherwise proceed without it.
+
+| Task signal | Load |
+|---|---|
+| Diff or PR review, hunt for defects | `code-review` |
+| Adversarial dual review requested | `judgment-day` |
+| Commit or branch conventions in the diff | `git-commit` |

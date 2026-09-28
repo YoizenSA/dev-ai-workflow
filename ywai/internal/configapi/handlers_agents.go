@@ -54,7 +54,7 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 		entries, _ := os.ReadDir(agentsDirPath)
 		for _, e := range entries {
 			if e.IsDir() {
-				// Scan subdirectory for .md files (e.g., core/architect.md, qa-automation/qa-analyst.md)
+				// Scan subdirectory for .md files (e.g., core/dev.md, qa-exploratory/qa-feedback.md)
 				subEntries, _ := os.ReadDir(filepath.Join(agentsDirPath, e.Name()))
 				for _, se := range subEntries {
 					if !se.IsDir() && strings.HasSuffix(se.Name(), ".md") {
@@ -761,8 +761,7 @@ var ompModelRoleSources = []struct {
 }{
 	{"default", []string{"orchestrator", "dev"}},
 	{"smol", []string{"qa", "ask", "finder"}},
-	{"plan", []string{"architect", "planning"}},
-	{"designer", []string{"designer"}},
+	{"plan", []string{"planning"}},
 	{"advisor", []string{"advisor"}},
 	{"commit", []string{"dev", "orchestrator"}},
 }

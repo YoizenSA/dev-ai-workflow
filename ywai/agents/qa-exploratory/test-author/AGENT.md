@@ -6,7 +6,7 @@ description: >
   Trigger: "write the exploratory scenarios", ADO test work item creation.
 role: qa
 mode: subagent
-sections: [handoff-qa, context-gathering]
+sections: [handoff, context-gathering]
 ---
 
 # Test Author Agent

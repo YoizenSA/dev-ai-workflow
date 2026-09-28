@@ -42,7 +42,7 @@ func TestNodeModelFallsBackToLinkedAgentProfile(t *testing.T) {
 		},
 		{
 			name: "agent absent from the profile stays on inherit",
-			node: Node{Data: NodeData{AgentRef: "core/designer"}},
+			node: Node{Data: NodeData{AgentRef: "core/qa"}},
 			want: "",
 		},
 	}

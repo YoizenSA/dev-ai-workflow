@@ -19,7 +19,7 @@ func TestGroupAgentBasenamesUnknown(t *testing.T) {
 
 func TestGroupAgentBasenamesFlattens(t *testing.T) {
 	dir := t.TempDir()
-	manifest := `{"groups":{"social-refactor":{"agents":["migration-planner","experiment/infra-docs"]}}}`
+	manifest := `{"groups":{"social-refactor":{"agents":["migration-planner","qa-exploratory/qa-feedback"]}}}`
 	if err := os.WriteFile(filepath.Join(dir, "groups.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestGroupAgentBasenamesFlattens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"migration-planner": true, "infra-docs": true}
+	want := map[string]bool{"migration-planner": true, "qa-feedback": true}
 	if len(got) != 2 {
 		t.Fatalf("got %v", got)
 	}

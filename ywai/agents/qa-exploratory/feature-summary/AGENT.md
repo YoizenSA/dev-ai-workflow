@@ -6,7 +6,7 @@ description: >
   Trigger: "summarize the feature for QA", pre-test-authoring analysis.
 role: analyst
 mode: subagent
-sections: [handoff-qa, context-gathering]
+sections: [handoff, context-gathering]
 ---
 
 # Feature Summary Agent

@@ -10,7 +10,7 @@
       "skills": ["planner"]
     },
     "architect": {
-      "agent": "architect",
+      "agent": "dev",
       "model": "opencode-go/glm-5.1",
       "fallbacks": ["opencode-go/mimo-v2.5-pro"],
       "skills": ["architect-worker"]

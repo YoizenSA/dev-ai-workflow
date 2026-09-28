@@ -1,7 +1,7 @@
 {
   "name": "dev",
-  "description": "Daily development: everything except QA automation.",
-  "groups": ["core", "experiment"],
+  "description": "Daily development: core agents installed.",
+  "groups": ["core"],
   "skills": [],
   "mcp": ["graft", "grafana", "chrome-devtools"],
   "default_agent": "orchestrator",

@@ -298,7 +298,6 @@ func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 
 	agentWant := map[string]string{
 		"advisor":       "opencode-admin/deepseek-v4.1-flash",
-		"architect":     "opencode-admin/deepseek-v4.1-flash",
 		"orchestrator":  "opencode-admin/deepseek-v4.1-flash",
 		"planner-draft": "opencode-admin/deepseek-v4.1-flash",
 		"planning":      "opencode-admin/deepseek-v4.1-flash",
@@ -310,6 +309,13 @@ func TestDefaultOrchestratorModelProfiles_BalancedUsesDeepSeek(t *testing.T) {
 	for agent, want := range agentWant {
 		if got := balanced.Agents[agent].Model; got != want {
 			t.Errorf("balanced agent %q model = %q, want %q", agent, got, want)
+		}
+	}
+
+	// Ghost agents removed from the roster must not reappear in the seed.
+	for _, ghost := range []string{"architect", "designer"} {
+		if _, ok := balanced.Agents[ghost]; ok {
+			t.Errorf("balanced profile still pins removed agent %q", ghost)
 		}
 	}
 

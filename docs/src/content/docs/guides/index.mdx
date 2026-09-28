@@ -18,7 +18,7 @@ import { Card, Aside } from '@astrojs/starlight/components';
 | [**Implementar Feature**](/dev-ai-workflow/guides/feature) | "Implementa auth con JWT" | architect → dev → qa → reviewer |
 | [**Arreglar Bug**](/dev-ai-workflow/guides/bugfix) | "El login falla con +" | dev investiga → arregla → qa testea |
 | [**Code Review**](/dev-ai-workflow/guides/review) | "Revisa src/auth/" | reviewer revisa → reporta findings |
-| [**Testing**](/dev-ai-workflow/guides/testing) | "Testea el checkout" | qa-analyst → finder → dev → reviewer |
+| [**Testing**](/dev-ai-workflow/guides/testing) | "Testea el checkout" | orchestrator → qa → finder → dev → reviewer |
 | [**Retro de workflow**](/dev-ai-workflow/guides/retro) | "Qué fricción se repitió" | datos → cluster → 1 cambio |
 | [**CI/CD**](/dev-ai-workflow/guides/cicd) | "Configura GitHub Actions" | devops configura pipeline |
 | [**Refactoring**](/dev-ai-workflow/guides/refactoring) | "Usá repository pattern" | architect analiza → dev refactoriza → qa verifica |
@@ -37,7 +37,7 @@ import { Card, Aside } from '@astrojs/starlight/components';
 Vos: "Implementa un sistema de pagos con Stripe"
 
 Orchestrator:
-  → @architect: diseña PaymentService
+  → diseña él mismo: PaymentService
   → @dev: implementa
   → @qa: tests
   → @reviewer: revisa por seguridad

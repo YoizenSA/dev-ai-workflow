@@ -4,7 +4,7 @@
  * The plan's catalog named OpenCode's stock `plan` / `build` agents. In a
  * ywai install those are not the agents that exist: a live session runs as
  * `orchestrator`, alongside `dev`, `planning`, `reviewer`, `finder`, `ask`,
- * `architect`, `qa`, `devops`. Routing to `build` in that config would name an
+ * `qa`, `devops`. Routing to `build` in that config would name an
  * agent that is not there, so the catalog is built from the agents the host
  * actually reports, and the table below is the fallback when it reports none.
  *
@@ -80,12 +80,6 @@ export const KNOWN_AGENTS: Record<string, Omit<RouteOption, "agent">> = {
 		examples: ["How should we approach the migration?", "Plan this refactor"],
 		writes: false,
 	},
-	architect: {
-		what: "Make design and architecture decisions, weigh trade-offs",
-		not_for: ["Implementation", "Locating code"],
-		examples: ["How should we structure the retry logic?", "Compare two approaches"],
-		writes: false,
-	},
 	reviewer: {
 		what: "Review code, audit quality, find bugs and security issues",
 		not_for: ["Writing the fix", "Designing something new"],
@@ -116,38 +110,13 @@ export const KNOWN_AGENTS: Record<string, Omit<RouteOption, "agent">> = {
 		examples: ["Fix this pipeline", "Harden this Dockerfile"],
 		writes: true,
 	},
-	designer: {
-		what: "Audit interfaces, define visual specs, review screens against the design system and accessibility",
-		not_for: ["Backend logic", "Implementing the whole feature", "Reviewing a diff"],
-		examples: ["This screen looks bad", "Audit the spacing and contrast here"],
-		writes: true,
-	},
-	memory: {
-		what: "Analyze stored memories and produce a consolidation plan for human review",
-		not_for: ["Changing code", "Answering a question about the codebase"],
-		examples: ["Consolidate what we learned this week"],
-		writes: false,
-	},
 	"scenario-runner": {
 		what: "Run BDD scenarios against the running app and file the evidence",
 		not_for: ["Writing the scenarios", "Fixing what the run exposes"],
 		examples: ["Run the scenarios", "Verify it actually works end to end"],
 		writes: true,
 	},
-	"qa-orchestrator": {
-		what: "Coordinate QA automation work and teach manual testers how automation works",
-		not_for: ["Application code outside the tests", "Reviewing an unrelated diff"],
-		examples: ["Guide me through automating this", "Plan the test strategy"],
-		writes: true,
-	},
-	"qa-dev": {
-		what: "Write automated tests",
-		not_for: ["Implementing the feature under test", "Deciding the test strategy"],
-		examples: ["Create a Playwright test for this flow"],
-		writes: true,
-	},
 }
-
 export interface AgentLike {
 	name?: string
 	description?: string
@@ -193,10 +162,10 @@ export function buildCatalog(agents: AgentLike[] = []): Record<string, RouteOpti
 /**
  * The fallback roster when the host reports nothing.
  *
- * `scenario-runner` and `qa-dev` are in KNOWN_AGENTS so that a host that DOES
- * report them gets a curated entry, but they are subagents in a stock ywai
- * install, so they stay out of the fallback: routing to an agent the user
- * cannot switch to is worse than routing to `human`.
+ * `scenario-runner` is in KNOWN_AGENTS so that a host that DOES report it gets
+ * a curated entry, but it is a subagent in a stock ywai install, so it stays
+ * out of the fallback: routing to an agent the user cannot switch to is worse
+ * than routing to `human`.
  */
 const SUBAGENT_ONLY = new Set(["scenario-runner", "advisor"])
 

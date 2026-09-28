@@ -37,11 +37,6 @@ export const DEFAULT_ORCHESTRATOR_TOOLS = ['read', 'glob', 'grep', 'delegate', '
 // Tools a developer/implementer gets by default. Full dev access.
 export const DEFAULT_DEV_TOOLS = ['read', 'edit', 'write', 'bash', 'glob', 'grep', 'graft', 'skill', 'mcp']
 
-// Known external agents that sub-agents commonly delegate to (from
-// delegations.json). These are agents that exist in the opencode ecosystem
-// but aren't part of this workflow — the user can still delegate to them.
-export const EXTERNAL_AGENTS = ['finder', 'memory', 'ask', 'architect', 'dev', 'qa', 'reviewer', 'devops']
-
 // Parse a CSV string into a Set of selected values.
 export function csvToSet(csv: string | undefined): Set<string> {
 	if (!csv) return new Set()

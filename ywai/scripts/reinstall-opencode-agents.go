@@ -13,9 +13,7 @@ import (
 
 func main() {
 	src := config.AgentsSourceDir()
-	profiles, err := agentprofiles.LoadProfilesByGroup(src, agentprofiles.GroupFilter{
-		Groups: []string{"qa-automation"},
-	})
+	profiles, err := agentprofiles.LoadProfilesByGroup(src, agentprofiles.GroupFilter{})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

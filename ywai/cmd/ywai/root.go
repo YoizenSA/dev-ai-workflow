@@ -378,10 +378,8 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		// --all-groups flag: install everything
 		profiles, err = agentprofiles.LoadProfiles(sourceDir)
 	} else if len(filter.Groups) == 0 {
-		// Default: core + qa-automation (orchestrator stack + QA agents)
-		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{
-			Groups: []string{"qa-automation"},
-		})
+		// Default: core agents only
+		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{})
 	} else {
 		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, filter)
 	}
@@ -396,7 +394,7 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 	}
 
 	if dryRun {
-		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
+		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, reviewer, devops)\n", len(profiles))
 		return
 	}
 

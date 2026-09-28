@@ -19,7 +19,6 @@ ywai trae 5 workflows semilla que se instalan como slash commands (más `/learn-
 |---|---|---|
 | `/ship` | scout → plan → design → implement → test → review → deploy | Entrega completa end-to-end |
 | `/planning` | scout → plan | Investigar y planificar antes de implementar |
-| `/qa-automation` | analyst → finder → dev → reviewer | Testing completo |
 | `/qa-exploratory` | summary → scenarios → verify → feedback | Testing exploratorio post-implementación |
 | `/scenario-verification` | run scenarios → file evidence | Verificar BDD contra la app corriendo |
 | `/learn-ywai` | Lee los docs oficiales (una página por turno) | Aprender ywai |
@@ -33,12 +32,11 @@ ywai trae 5 workflows semilla que se instalan como slash commands (más `/learn-
 Esto lanza automáticamente:
 1. `@finder` scoutea el alcance
 2. `@planning` investiga y planifica
-3. `@architect` diseña la solución
-4. `@designer` define el spec si hay UI
-5. `@dev` implementa
-6. `@qa` testea
-7. `@reviewer` revisa
-8. `@devops` despliega si aplica
+3. El orchestrator diseña la arquitectura él mismo y define el spec si hay UI (trabajo del hub)
+4. `@dev` implementa
+5. `@qa` testea
+6. `@reviewer` revisa
+7. `@devops` despliega si aplica
 
 ## Qué genera el export
 
@@ -86,7 +84,7 @@ El diseño editable (JSON) vive en `~/.ywai/workflows/<nombre>.json`; lo generad
 |---|---|---|
 | Entrega completa | `/ship` | |
 | Plan antes de implementar | `/planning` | |
-| Testing completo | `/qa-automation` | |
+| Testing con el equipo core | | `@qa` + `@finder` + `@reviewer` |
 | Testing exploratorio | `/qa-exploratory` | |
 | Verificar escenarios BDD | `/scenario-verification` | |
 | Bug simple | | `@dev` |

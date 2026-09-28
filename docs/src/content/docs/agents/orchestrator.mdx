@@ -89,7 +89,7 @@ flowchart LR
 ### full
 
 - **No edita código de producto.** Delega todas las escrituras.
-- `todowrite` → SCOUT `@finder` → PLAN `@architect` → DESIGN `@designer` si UI → IMPLEMENT `@dev` → TEST `@qa` → SCENARIOS (child Task BDD) → REVIEW `@reviewer` si risk lo requiere → VERIFY `@scenario-runner` → FILE `@qa-feedback` → DEPLOY `@devops` si aplica.
+- `todowrite` → SCOUT `@finder` → PLAN + DESIGN en el hub (arquitectura y, si hay UI, la spec visual/accessibility él mismo; skills `codebase-design`, `adr-skill`, `yz-ui`) → IMPLEMENT `@dev` → TEST `@qa` → SCENARIOS (child Task BDD) → REVIEW `@reviewer` si risk lo requiere → VERIFY `@scenario-runner` → FILE `@qa-feedback` → DEPLOY `@devops` si aplica.
 - TDD solo si risk/usuario lo pide.
 
 ```mermaid
@@ -111,7 +111,7 @@ flowchart TD
 | **medium** | comportamiento, refactors | tests en caminos cambiados; review al ship |
 | **high** | auth, perms, migraciones, crypto, pagos, API pública | tests + review obligatorios |
 
-solo/thin + risk alto todavía necesita verify + review (o ack del usuario). full + risk low puede saltar teatro de designer/TDD.
+solo/thin + risk alto todavía necesita verify + review (o ack del usuario). full + risk low puede saltar teatro de diseño/TDD.
 
 ## Delegación
 
@@ -119,7 +119,7 @@ solo/thin + risk alto todavía necesita verify + review (o ack del usuario). ful
 flowchart TD
     D[Orquestador] -->|Necesito| E{¿Qué}
     E -->|scout| F["@finder"]
-    E -->|diseño| G["@architect / @designer"]
+    E -->|diseño| G["en el hub: plan + spec UI\nskills: codebase-design, adr-skill, yz-ui"]
     E -->|implementar| H["@dev"]
     E -->|tests| I["@qa"]
     E -->|revisar| J["@reviewer"]
@@ -231,7 +231,7 @@ resultado que solo vive en el transcript es un resultado que nadie acciona.
 |---|---|
 | Elegir modo y aplicar risk | Escribir código en modo full (`@dev`) |
 | Coordinar y ensamblar | Escribir tests en modo full (`@qa`) |
-| Revisar riesgo y gates | Decisiones de diseño (`@architect`) |
+| Revisar riesgo y gates | Delegar decisiones de diseño en otro agente (son trabajo del hub) |
 
 <Aside type="tip">
 No necesitás invocar al orchestrator directamente. ywai lo usa automáticamente cuando la tarea es compleja; también es el agente primario cuando empezás una sesión con un objetivo.

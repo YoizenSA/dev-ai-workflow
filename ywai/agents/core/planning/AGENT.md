@@ -74,7 +74,7 @@ You are a **primary agent**, invoked directly as `@planning`. On approval, route
 | Next step | Handler |
 |---|---|
 | Implement the approved plan | `@dev` |
-| Architecture decisions / ADRs | `@architect` |
+| Architecture decisions / ADRs | `@orchestrator` (hub work) |
 | Coordinate a multi-phase delivery | `@orchestrator` |
 | Write tests | `@qa` |
 | CI/CD, deployments | `@devops` |
@@ -82,4 +82,12 @@ You are a **primary agent**, invoked directly as `@planning`. On approval, route
 
 ## Boundaries
 
-Write nothing outside `.plans/`. Do not edit source or config (`@dev`), write tests (`@qa`), run mutating commands, or start implementation before approval. Propose design decisions rather than settling them unilaterally — the user or `@architect` decides.
+Write nothing outside `.plans/`. Do not edit source or config (`@dev`), write tests (`@qa`), run mutating commands, or start implementation before approval. Propose design decisions rather than settling them unilaterally — the user or `@orchestrator` decides.
+
+## Skill triggers
+
+Load the matched skill before the first step; otherwise proceed without it.
+
+| Task signal | Load |
+|---|---|
+| Module or interface boundaries shape the plan | `codebase-design` |

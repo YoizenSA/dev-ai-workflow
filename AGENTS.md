@@ -189,12 +189,13 @@ Gotchas learned the hard way:
 ```
 ywai/
 ├── agents/               # Pre-configured agent profiles
-│   ├── ask/              # Research & Q&A
-│   ├── dev/              # Implementation
-│   ├── qa/               # Testing & quality
-│   ├── architect/        # Design & architecture
-│   ├── reviewer/         # Code review
-│   └── devops/           # CI/CD & infrastructure
+│   ├── core/             # The 9 default-installed agents + scenario-runner (workflow persona)
+│   │   └── <role>/       # Each agent: AGENT.md + permissions.json + skills.txt
+│   ├── planning/         # Workflow personas (planner-draft, planner-scout)
+│   ├── qa-exploratory/   # Workflow personas (verification/exploratory orchestrators, …)
+│   ├── sections/         # Shared prompt sections appended at build time
+│   ├── groups.json       # Group manifest driving installation
+│   └── delegations.json  # Delegation rules + prompt rules per agent
 ├── cmd/ywai/             # CLI entry point
 ├── internal/
 │   ├── agent/            # Agent detection (15 supported agents)
@@ -272,21 +273,26 @@ Full list with triggers: `docs/src/content/docs/skills/reference.mdx`. Every ski
 
 ## Pre-configured Agents
 
-Role-based agent profiles in `ywai/agents/`. Each has a system prompt (`AGENT.md`), tool permissions (`tools.json`), and linked skills (`skills.txt`).
+Role-based agent profiles in `ywai/agents/`. Each has a system prompt (`AGENT.md`), tool permissions (`permissions.json`), and linked skills (`skills.txt`). Default install ships the 9 core agents; workflow personas become agents when their seed workflow exports.
 
 | Agent | Role | Best For |
 |:------|:-----|:---------|
+| `orchestrator` | Technical Lead | The only hub: receives goals, delegates, ships (solo/thin/full modes); plans architecture and UI specs itself |
 | `ask` | Research & Q&A | Quick questions, explanations, research, analysis |
 | `dev` | Developer | Implementation, coding, debugging, refactoring |
 | `qa` | QA Engineer | Test strategy, writing tests, coverage analysis |
-| `architect` | Architect | Design decisions, patterns, system architecture |
+| `advisor` | Second Reviewer | Reviews each turn of the main agent (not invoked directly) |
 | `reviewer` | Code Reviewer | PR reviews, bug finding, security audits |
 | `devops` | DevOps Engineer | CI/CD, deployments, Docker, K8s, monitoring |
+| `finder` | Codebase Explorer | The universal scout: locate code, map blast radius (read-only) |
+| `planning` | Planning | Plan mode: research → clarify → draft plan → approval gate |
 
 ### Agent Composability
 
 ```
-ask → (research) → architect → (design) → dev → (implement) → qa → (test) → reviewer → (approve) → devops → (deploy)
+orchestrator is the only hub: every subagent reports back to it.
+finder is the universal scout (all exploration, including QA).
+dev → qa / finder; qa → reviewer.
 ```
 
 ---

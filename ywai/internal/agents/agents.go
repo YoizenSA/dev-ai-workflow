@@ -17,7 +17,7 @@ type AgentProfile struct {
 	Permission  map[string]string
 	Skills      []string
 	Mode        string
-	Group       string // group name from groups.json (e.g. "core", "qa-automation")
+	Group       string // group name from groups.json (e.g. "core")
 }
 
 // GroupManifest represents the groups.json file.
@@ -38,7 +38,7 @@ type GroupFilter struct {
 }
 
 // LoadProfiles reads all agent directories from the given source dir.
-// It walks subdirectories recursively (e.g. core/, qa-automation/) and
+// It walks subdirectories recursively (e.g. core/, qa-exploratory/) and
 // loads any directory containing AGENT.md.
 func LoadProfiles(sourceDir string) (map[string]AgentProfile, error) {
 	profiles := map[string]AgentProfile{}
@@ -105,7 +105,7 @@ func assignGroups(sourceDir string, profiles map[string]AgentProfile) {
 
 func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 	// Use the relative path from sourceDir as the agent name.
-	// This ensures agents in subdirectories (e.g. qa-automation/qa-orchestrator)
+	// This ensures agents in subdirectories (e.g. qa-exploratory/verification-orchestrator)
 	// match the names referenced in groups.json.
 	rel, err := filepath.Rel(sourceDir, dir)
 	if err != nil {

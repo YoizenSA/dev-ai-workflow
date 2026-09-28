@@ -47,7 +47,7 @@ flowchart LR
 |---|---|
 | Explorar el codebase de infra | `@finder` |
 | Feature de aplicación | `@dev` |
-| Arquitectura para el deploy | `@architect` |
+| Arquitectura para el deploy | `@orchestrator` (trabajo del hub) |
 | Revisar código de infra | `@reviewer` |
 | Testear configs de infra | `@qa` |
 
@@ -57,7 +57,7 @@ flowchart LR
 |---|---|
 | Configurar CI/CD y pipelines | Implementar features de aplicación (`@dev`) |
 | Crear Dockerfiles y Helm charts | Revisar calidad de código de app (`@reviewer`) |
-| Escribir K8s manifests | Diseñar arquitectura de la app (`@architect`) |
+| Escribir K8s manifests | Diseñar arquitectura de la app (trabajo del hub, `@orchestrator`) |
 | Gestionar deploys y secretos | Escribir tests (`@qa`) |
 
 <Aside type="tip">

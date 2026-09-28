@@ -21,6 +21,10 @@ linters:
     paths:
       - internal/control/web/node_modules
       - node_modules
+      # scripts/reinstall-opencode-agents.go carries //go:build ignore, so the
+      # dir has no buildable Go files and golangci-lint fails to load context
+      # whenever it is staged. Helper script, not library code: skip it.
+      - scripts
 
 formatters:
   enable:

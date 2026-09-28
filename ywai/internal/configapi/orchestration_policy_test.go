@@ -223,8 +223,7 @@ defaultThinkingLevel: auto
 		Agents: userconfig.RoleDefaults{
 			"orchestrator": {Model: "opencode-admin/grok-4.5"},
 			"qa":           {Model: "opencode-admin/minimax-m3"},
-			"architect":    {Model: "opencode-admin/grok-4.5"},
-			"designer":     {Model: "opencode-admin/kimi-k3"},
+			"planning":     {Model: "opencode-admin/grok-4.5"},
 			"advisor":      {Model: "opencode-admin/grok-4.5"},
 			"dev":          {Model: "opencode-admin/deepseek-v4-flash"},
 		},
@@ -239,12 +238,11 @@ defaultThinkingLevel: auto
 	}
 	content := string(data)
 	for role, want := range map[string]string{
-		"default":  "grok-4.5",   // ← orchestrator
-		"smol":     "minimax-m3", // ← qa
-		"plan":     "grok-4.5",   // ← architect
-		"designer": "kimi-k3",
-		"advisor":  "grok-4.5",
-		"commit":   "deepseek-v4-flash", // ← dev
+		"default": "grok-4.5",   // ← orchestrator
+		"smol":    "minimax-m3", // ← qa
+		"plan":    "grok-4.5",   // ← planning
+		"advisor": "grok-4.5",
+		"commit":  "deepseek-v4-flash", // ← dev
 	} {
 		if !strings.Contains(content, role+": "+want) {
 			t.Errorf("modelRoles.%s = want %q, got:\n%s", role, want, content)
@@ -277,8 +275,9 @@ defaultThinkingLevel: auto
 	}
 	overridden := profile.Clone()
 	overridden.OmpModelRoles = map[string]string{
-		"default": "opencode-go/deepseek-v4-flash", // verbatim, provider included
-		"vision":  "opencode-go/gpt-5.6-luna",      // not in the mapping table
+		"default":  "opencode-go/deepseek-v4-flash", // verbatim, provider included
+		"designer": "opencode-admin/kimi-k3",        // unsourced since designer was dropped — override only
+		"vision":   "opencode-go/gpt-5.6-luna",      // not in the mapping table
 	}
 	if !applyOmpModelRoles(overridden) {
 		t.Fatal("expected override apply to update config.yml")
@@ -293,6 +292,9 @@ defaultThinkingLevel: auto
 	}
 	if !strings.Contains(content3, "vision: opencode-go/gpt-5.6-luna") {
 		t.Errorf("unsourced role override must be written, got:\n%s", content3)
+	}
+	if !strings.Contains(content3, "designer: opencode-admin/kimi-k3") {
+		t.Errorf("designer role must come from the explicit override only, got:\n%s", content3)
 	}
 	// Derived roles still appear alongside the overrides.
 	if !strings.Contains(content3, "smol: minimax-m3") {

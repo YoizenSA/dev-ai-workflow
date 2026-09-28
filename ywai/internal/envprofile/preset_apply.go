@@ -162,7 +162,7 @@ func PresetDenyBash(spec map[string]any) []string { return stringList(spec, "den
 // code-review keeps the lane pack so the shell cannot rewrite history.
 func ShouldStripCommitDenies(defaultAgent string) bool {
 	switch strings.TrimSpace(defaultAgent) {
-	case "orchestrator", "qa-orchestrator":
+	case "orchestrator":
 		return true
 	}
 	return false

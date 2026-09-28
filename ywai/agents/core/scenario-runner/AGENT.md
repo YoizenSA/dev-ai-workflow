@@ -8,7 +8,7 @@ description: >
   post-review validation.
 role: qa
 mode: subagent
-sections: [handoff-qa, context-gathering]
+sections: [handoff, context-gathering]
 ---
 
 # Scenario Runner

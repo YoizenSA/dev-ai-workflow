@@ -123,10 +123,10 @@ describe("route catalog", () => {
 	})
 
 	test("an unknown agent is described by itself and assumed to write", () => {
-		const catalog = buildCatalog([{ name: "infra-docs", description: "Maintains the infra wiki" }])
-		expect(catalog["infra-docs"].what).toBe("Maintains the infra wiki")
+		const catalog = buildCatalog([{ name: "custom-agent", description: "Maintains the infra wiki" }])
+		expect(catalog["custom-agent"].what).toBe("Maintains the infra wiki")
 		// Assuming it cannot write is the mistake that lets a write past the gate.
-		expect(catalog["infra-docs"].writes).toBe(true)
+		expect(catalog["custom-agent"].writes).toBe(true)
 	})
 
 	test("subagents are not routable destinations", () => {
@@ -143,7 +143,7 @@ describe("route catalog", () => {
 	})
 
 	test("the known roster covers the core agents a ywai install ships", () => {
-		for (const name of ["orchestrator", "dev", "planning", "architect", "reviewer", "finder", "ask", "qa", "devops", "designer", "memory"]) {
+		for (const name of ["orchestrator", "dev", "planning", "reviewer", "finder", "ask", "qa", "devops"]) {
 			expect(KNOWN_AGENTS[name], `${name} missing from KNOWN_AGENTS`).toBeDefined()
 		}
 	})

@@ -111,24 +111,17 @@ Fuente: `skills.txt` de cada perfil (`ywai/agents/...`). Los ids base (`typescri
 
 | Agente | Skills |
 |---|---|
-| `dev` | typescript (base), git-commit, diagnosing-bugs, codebase-design |
+| `dev` | typescript (base), git-commit, diagnosing-bugs, codebase-design, adr-skill, improve-codebase-architecture, yz-ui |
 | `qa` | typescript, playwright (base), diagnosing-bugs |
-| `architect` | adr-skill, codebase-design, improve-codebase-architecture, visual-thinking |
-| `reviewer` | git-commit, code-review |
+| `reviewer` | git-commit, code-review, judgment-day, ponytail |
 | `devops` | devops, git-commit, docker |
-| `designer` | yz-ui, angular |
+| `orchestrator` | ponytail, codebase-design, adr-skill, improve-codebase-architecture, yz-ui |
 | `planning` | codebase-design, decision-mapping (base) |
-| `ask`, `finder`, `orchestrator`, `memory`, `advisor` | Sin allowlist (usan lo general del sistema) |
-| `qa-orchestrator` | Sin allowlist (coordina, no ejecuta) |
-| `qa-analyst` | playwright-e2e-testing |
-| `qa-dev` | typescript (base), playwright-e2e-testing, condition-based-waiting, diagnosing-bugs |
-| `qa-reviewer` | typescript (base), playwright-e2e-testing, condition-based-waiting |
-| `qa-ask` | typescript (base), playwright-e2e-testing |
+| `ask`, `finder`, `advisor` | Sin allowlist (usan lo general del sistema) |
 | `scenario-runner` | qa-evidence, gherkin-bdd, condition-based-waiting, playwright-e2e-testing, diagnosing-bugs, jev-gate |
 | `test-author` | ado, gherkin-bdd, playwright-e2e-testing |
 | `qa-feedback` | qa-evidence, ado, gherkin-bdd |
 | `planner-draft` | adr-skill, codebase-design |
-| `infra-docs` | diks |
 
 <Aside type="tip">
 El modelo carga un skill **por id**. Si no está en el `skills.txt` del agente, no se anuncia.

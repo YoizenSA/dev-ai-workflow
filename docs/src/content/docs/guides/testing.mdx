@@ -7,7 +7,7 @@ import { Steps, Card, Aside } from '@astrojs/starlight/components';
 
 # Testing Completo
 
-El **orchestrator** coordina testing completo. Le decís qué testear y él distribuye el trabajo al equipo qa-automation.
+El **orchestrator** coordina testing completo. Le decís qué testear y él distribuye el trabajo al equipo core.
 
 ## Testing simple
 
@@ -28,19 +28,18 @@ Necesito: estrategia de testing, tests unitarios, de integración, y e2e.
 ```
 
 El orchestrator:
-1. Delega a `@qa-analyst` para diseñar la estrategia
+1. Delega a `@qa` para diseñar la estrategia y escribir los tests
 2. Delega a `@finder` para buscar código relacionado
-3. Delega a `@qa-dev` para escribir los tests
-4. Delega a `@qa-reviewer` para revisar la calidad
-5. Te reporta: "25 tests escritos, 92% cobertura, 0 tests frágiles"
+3. Delega a `@reviewer` para revisar la calidad
+4. Te reporta: "25 tests escritos, 92% cobertura, 0 tests frágiles"
 
 ## Con command
 
 ```
-/qa-automation Testear completamente el flujo de checkout
+/qa-exploratory Testear completamente el flujo de checkout
 ```
 
-El command lanza el orchestrator de qa-automation automáticamente.
+El command lanza el ciclo exploratorio de QA automáticamente.
 
 ## Ejemplo real: Flujo de checkout
 
@@ -50,10 +49,10 @@ Tú: "Testea completamente el flujo de checkout.
      seleccionar envío, pagar, y confirmar orden."
 
 Orchestrator:
-  → @qa-analyst: estrategia → unit para lógica, integration para API, e2e para UI
+  → @qa: estrategia → unit para lógica, integration para API, e2e para UI
   → @finder: encuentra 15 archivos relacionados con checkout
-  → @qa-dev: escribe 25 tests cubriendo todos los flujos
-  → @qa-reviewer: encuentra 3 tests frágiles, sugiere fixes
+  → @qa: escribe 25 tests cubriendo todos los flujos
+  → @reviewer: encuentra 3 tests frágiles, sugiere fixes
   → Reporta: "25 tests, 92% cobertura, 0 tests frágiles."
 ```
 
@@ -64,9 +63,8 @@ Tú: "Testea toda la API de usuarios.
      Endpoints: CRUD de usuarios, búsqueda, y autenticación."
 
 Orchestrator:
-  → @qa-analyst: priorizar autenticación > CRUD > búsqueda
-  → @qa-dev: tests para cada endpoint
-  → @qa-reviewer: revisa cobertura y calidad
+  → @qa: priorizar autenticación > CRUD > búsqueda, tests para cada endpoint
+  → @reviewer: revisa cobertura y calidad
   → Reporta: "40 tests, 88% cobertura."
 ```
 
@@ -79,5 +77,5 @@ Orchestrator:
 | E2E | Flujos completos | Playwright |
 
 <Aside type="tip">
-Para tests de 1-2 funciones, decile al orchestrator que use `@qa` directamente. Usa el equipo qa-automation cuando necesites una estrategia completa.
+Para tests de 1-2 funciones, decile al orchestrator que use `@qa` directamente. Usa `/qa-exploratory` cuando necesites una estrategia completa post-implementación.
 </Aside>

@@ -86,6 +86,21 @@ if [[ "${1:-}" == "--staged" ]]; then
         fi
     done
 
+    # scripts/ holds only //go:build ignore helpers: no buildable Go files, so
+    # an explicit ./scripts argument makes golangci-lint fail to load context.
+    filtered=()
+    for d in "${dirs[@]}"; do
+        if [[ "$d" == "./scripts" ]]; then
+            continue
+        fi
+        filtered+=("$d")
+    done
+    dirs=("${filtered[@]:-}")
+    if [[ ${#dirs[@]} -eq 0 ]]; then
+        echo "lint: only build-excluded Go files staged"
+        exit 0
+    fi
+
     bin="$(find_golangci)" || die_missing
     echo "lint (staged): ${dirs[*]}"
     "$bin" run --timeout="$TIMEOUT" "${dirs[@]}"

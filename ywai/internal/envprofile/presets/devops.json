@@ -1,7 +1,7 @@
 {
   "name": "devops",
   "description": "Infra & CI/CD: Azure Pipelines, Helm/AKS, Docker and Azure DevOps work items. DevOps agent by default; destructive cluster and cloud commands are blocked.",
-  "groups": ["core", "experiment"],
+  "groups": ["core"],
   "skills": ["devops", "docker", "ado", "diks", "git-commit", "diagnosing-bugs", "bulk-read"],
   "mcp": ["grafana", "microsoft-learn", "graft"],
   "default_agent": "devops",

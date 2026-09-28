@@ -440,7 +440,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 // resolveAgentDefinition returns the identity prompt for a sub-agent node.
 //
 // A node either carries its own prompt (AgentDefinition) or links to a real
-// agent under agents/ (AgentRef, e.g. "core/architect"). The link is resolved
+// agent under agents/ (AgentRef, e.g. "core/dev"). The link is resolved
 // here, at export time, so a workflow tracks the agent instead of holding a
 // copy that silently rots when the agent is edited.
 //
@@ -463,8 +463,8 @@ func resolveAgentDefinition(n *Node) string {
 	if p, ok := profiles[ref]; ok {
 		return p.Prompt
 	}
-	// Tolerate a bare name ("architect") for a profile stored under a group
-	// ("core/architect") — the UI shows the short name.
+	// Tolerate a bare name ("finder") for a profile stored under a group
+	// ("core/finder") — the UI shows the short name.
 	for key, p := range profiles {
 		if key[strings.LastIndex(key, "/")+1:] == ref {
 			return p.Prompt

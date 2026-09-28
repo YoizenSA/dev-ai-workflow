@@ -24,7 +24,7 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
 
-		// Ensure parent directory exists for nested agent names (e.g. qa-automation/qa-orchestrator)
+		// Ensure parent directory exists for nested agent names (e.g. qa-exploratory/test-author)
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
 			continue
@@ -142,25 +142,25 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 	return installPiStyleAgents(agentsDir, profiles, overwrite, piToolsString, false)
 }
 
-// InstallOmp writes core + qa-automation agent .md files to ~/.omp/agent/agents/
+// InstallOmp writes core agent .md files to ~/.omp/agent/agents/
 // for oh-my-pi. Same markdown shape as Pi (name/description/tools), flat basenames.
-// Migration/social groups are skipped — use OpenCode for those catalogs.
+// Other groups are skipped — use OpenCode for those catalogs.
 func InstallOmp(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
 	return installPiStyleAgents(agentsDir, FilterOmpInstallProfiles(profiles), overwrite, ompToolsString, true)
 }
 
-// FilterOmpInstallProfiles keeps core + qa-automation groups for OMP installs.
+// FilterOmpInstallProfiles keeps the core group for OMP installs.
 func FilterOmpInstallProfiles(profiles map[string]AgentProfile) map[string]AgentProfile {
 	return filterProfilesByGroups(profiles, map[string]bool{
-		"core": true, "qa-automation": true,
+		"core": true,
 	}, coreAgentBases())
 }
 
 func coreAgentBases() map[string]bool {
 	return map[string]bool{
 		"orchestrator": true, "ask": true, "dev": true, "qa": true,
-		"architect": true, "designer": true, "advisor": true, "reviewer": true,
-		"devops": true, "finder": true, "memory": true, "planning": true,
+		"advisor": true, "reviewer": true,
+		"devops": true, "finder": true, "planning": true,
 	}
 }
 
@@ -171,10 +171,6 @@ func filterProfilesByGroups(profiles map[string]AgentProfile, groups map[string]
 		keep := groups[p.Group]
 		if p.Group == "" && emptyGroupBases[base] {
 			keep = true
-		}
-		// qa-* basenames when group is empty but name looks like qa-automation
-		if !keep && p.Group == "" && strings.HasPrefix(base, "qa-") {
-			keep = groups["qa-automation"]
 		}
 		if !keep {
 			continue
@@ -566,6 +562,13 @@ var falseGreenBashPatterns = []string{
 	// Silencing the type checker instead of satisfying it.
 	"*tsc*--noEmitOnError*",
 	"*tsc*--skipLibCheck*--noEmit*",
+	// Rewriting pushed history or bypassing the hooks that gate a commit.
+	// Same patterns as the root agent's "ask" gates (root_permission.go),
+	// hardened to deny: subagents run headless and cannot answer an ask.
+	"git push*--force*",
+	"git push* -f *",
+	"git push* -f",
+	"*--no-verify*",
 }
 
 // verifyBashAllowPatterns is the small shell surface for bash: verify agents
@@ -725,7 +728,7 @@ var dedicatedBucketPrefixes = map[string]bool{
 // other MCP server configured in opencode.json.
 //
 // MCP tools are meant to be available to every kind of agent — a reviewer that
-// cannot reach the docs server, or a designer that cannot drive the browser, is
+// cannot reach the docs server, or a dev that cannot drive the browser, is
 // crippled for no security gain, since the tools are the user's own. Deriving
 // the list from the live config means adding an MCP server makes it usable
 // everywhere without a code change here.
@@ -832,13 +835,6 @@ func agentDefaults(name string) (description string, tools []string, model strin
 	case "qa":
 		return "Writes and runs tests, ensures quality",
 			[]string{"Read", "Write", "Edit", "Bash", "Grep"}, ""
-	case "architect":
-		return "Designs architecture and makes technical decisions",
-			[]string{"Read", "Write", "Edit", "Grep", "Glob", "Bash"}, ""
-	case "designer":
-		// Read-only like architect: specs and design findings, never the diff.
-		return "Designs and audits UI/UX against the design system and accessibility standards",
-			[]string{"Read", "Grep", "Glob"}, ""
 	case "reviewer":
 		return "Reviews code for correctness and quality",
 			[]string{"Read", "Grep", "Glob", "Bash"}, ""

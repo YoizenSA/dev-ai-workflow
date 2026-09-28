@@ -31,14 +31,8 @@
         "advisor": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "architect": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
         "ask": {
           "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "designer": {
-          "model": "opencode-admin/kimi-k3"
         },
         "dev": {
           "model": "opencode-admin/deepseek-v4.1-flash"
@@ -55,9 +49,6 @@
         "finder": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "memory": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
         "orchestrator": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
@@ -72,21 +63,6 @@
         },
         "qa": {
           "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-analyst": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-ask": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-dev": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-orchestrator": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-reviewer": {
-          "model": "opencode-admin/glm-5.3-flash"
         },
         "reviewer": {
           "model": "opencode-admin/glm-5.3-flash"
@@ -121,13 +97,7 @@
         "advisor": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "architect": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
         "ask": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "designer": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
         "dev": {
@@ -145,9 +115,6 @@
         "finder": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "memory": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
         "orchestrator": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
@@ -161,21 +128,6 @@
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
         "qa": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-analyst": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-ask": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-dev": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-orchestrator": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-reviewer": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
         "reviewer": {
@@ -211,14 +163,8 @@
         "advisor": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "architect": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
         "ask": {
           "model": "opencode-admin/glm-5.3-flash"
-        },
-        "designer": {
-          "model": "opencode-admin/kimi-k3"
         },
         "dev": {
           "model": "opencode-admin/glm-5.3-flash"
@@ -233,9 +179,6 @@
           "model": "opencode-admin/glm-5.3-flash"
         },
         "finder": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "memory": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
         "orchestrator": {
@@ -253,21 +196,6 @@
         "qa": {
           "model": "opencode-admin/glm-5.3-flash"
         },
-        "qa-analyst": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-ask": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-dev": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-orchestrator": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-reviewer": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
         "reviewer": {
           "model": "opencode-admin/glm-5.3-flash"
         },
@@ -278,7 +206,7 @@
     },
     "standard": {
       "display_name": "Standard",
-      "description": "Cheap-first - glm-5.3-flash everywhere; kimi-k3 for architect/designer, deepseek-v4.1-flash for finder and review",
+      "description": "Cheap-first - glm-5.3-flash everywhere; deepseek-v4.1-flash for finder and review",
       "orchestration": {
         "default_mode": "thin",
         "allow_solo_write": true,
@@ -307,14 +235,8 @@
         "advisor": {
           "model": "opencode-admin/glm-5.3-flash"
         },
-        "architect": {
-          "model": "opencode-admin/kimi-k3"
-        },
         "ask": {
           "model": "opencode-admin/glm-5.3-flash"
-        },
-        "designer": {
-          "model": "opencode-admin/kimi-k3"
         },
         "dev": {
           "model": "opencode-admin/glm-5.3-flash"
@@ -331,9 +253,6 @@
         "finder": {
           "model": "opencode-admin/deepseek-v4.1-flash"
         },
-        "memory": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
         "orchestrator": {
           "model": "opencode-admin/glm-5.3-flash"
         },
@@ -348,21 +267,6 @@
         },
         "qa": {
           "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-analyst": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-ask": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-dev": {
-          "model": "opencode-admin/glm-5.3-flash"
-        },
-        "qa-orchestrator": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
-        },
-        "qa-reviewer": {
-          "model": "opencode-admin/deepseek-v4.1-flash"
         },
         "reviewer": {
           "model": "opencode-admin/deepseek-v4.1-flash"
@@ -390,25 +294,17 @@
       "omp_thinking_level": "auto",
       "agents": {
         "advisor": {},
-        "architect": {},
         "ask": {},
-        "designer": {},
         "dev": {},
         "devops": {},
         "exploratory-orchestrator": {},
         "feature-summary": {},
         "finder": {},
-        "memory": {},
         "orchestrator": {},
         "planner-draft": {},
         "planner-scout": {},
         "planning": {},
         "qa": {},
-        "qa-analyst": {},
-        "qa-ask": {},
-        "qa-dev": {},
-        "qa-orchestrator": {},
-        "qa-reviewer": {},
         "reviewer": {},
         "test-author": {}
       }

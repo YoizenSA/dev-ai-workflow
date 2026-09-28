@@ -27,7 +27,6 @@ Si OpenCode no arranca (`ConfigInvalidError` en `mcp.graft`): el update reescrib
 | `learn-ywai` | Slash command + skill. Enseña ywai con la docs oficial embebida |
 | `diks` | Notas de infra en `Infra/wiki` (Obsidian/Zettelkasten) |
 | `i-have-adhd` | Estilo de salida: acción primero, pasos numerados, sin recap |
-| `experiment/infra-docs` + `infra-docsv2` | Agentes primarios para docs DIKS de infra |
 
 ## Skills actualizados
 

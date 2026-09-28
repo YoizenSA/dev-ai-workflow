@@ -51,8 +51,8 @@ flowchart LR
 | Tarea | Handler |
 |---|---|
 | Explorar/buscar en el codebase | `@finder` |
-| Arquitectura/diseño antes de codear | `@architect` |
-| Cómo debe verse/comportarse la UI | `@designer` |
+| Arquitectura/diseño antes de codear | `@orchestrator` (trabajo del hub; el brief nombra el skill de diseño) |
+| Cómo debe verse/comportarse la UI | `@orchestrator` (trabajo del hub) |
 | Revisar código | `@reviewer` |
 | Escribir tests | `@qa` |
 | CI/CD, Docker, K8s | `@devops` |
@@ -61,7 +61,7 @@ flowchart LR
 
 | ✅ Puede | ❌ No puede |
 |---|---|
-| Leer, escribir y editar código | Decisiones de arquitectura (`@architect`) |
+| Leer, escribir y editar código | Decisiones de arquitectura (las toma `@orchestrator`) |
 | Correr tests y build | Revisar su propio código (`@reviewer`) |
 | Debuggear y arreglar | Diseñar estrategia de testing (`@qa`) |
 | Verificar, reportar, y `git commit` / `git push` si se lo pedís | |
