@@ -21,6 +21,8 @@ the `ado` CLI — do NOT load the OpenCode plugin tools for these operations.
 - `[repo]` is optional; omit it to auto-discover a PR by ID. `--profile <name>` overrides the active profile.
 - When writing any ADO text (PR comments, vote comments, work item comments/descriptions/titles): reference a pull request as `PR-id:1234`. Never `#1234` — Azure DevOps treats `#N` as a work item mention.
 - After creating a PR or work item (`pr create`, `pr chain`, `wi create`, `wi create-child`): always give the user the Azure DevOps URL. Copy it from CLI output; if missing, fetch with `ado pr get` / `ado wi get`.
+- Evidence screenshots ride as work item attachments (`ado wi attach`). Never inline an image into a PR description or a diff.
+- Two hard invariants for any git operation this skill drives (branch, commit, push while preparing a PR): never force-push, never use `--no-verify`.
 
 ## Decision Gates
 
