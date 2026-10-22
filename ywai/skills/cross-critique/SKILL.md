@@ -1,6 +1,6 @@
 ---
 name: cross-critique
-description: Circulate independent proposals between authors for pros and cons, then synthesize. Trigger: cross-critique, critique this.
+description: "Circulate independent proposals between authors for pros and cons, then synthesize. Trigger: cross-critique, critique this."
 ---
 
 # Cross-Critique

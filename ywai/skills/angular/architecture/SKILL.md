@@ -1,6 +1,6 @@
 ---
 name: angular-architecture
-description: Angular architecture and project structure. Trigger: structuring Angular projects, file placement.
+description: "Angular architecture and project structure. Trigger: structuring Angular projects, file placement."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: council
-description: Run a subagent council that investigates one question from several angles and returns a recommendation. Trigger: council.
+description: "Run a subagent council that investigates one question from several angles and returns a recommendation. Trigger: council."
 ---
 
 # Council

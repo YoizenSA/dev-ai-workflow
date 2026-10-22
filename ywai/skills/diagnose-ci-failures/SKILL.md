@@ -1,6 +1,6 @@
 ---
 name: diagnose-ci-failures
-description: Diagnose a failed CI run: pull logs, isolate the failing step, plan the fix. Trigger: CI red, check the pipeline.
+description: "Diagnose a failed CI run: pull logs, isolate the failing step, plan the fix. Trigger: CI red, check the pipeline."
 ---
 
 # diagnose-ci-failures

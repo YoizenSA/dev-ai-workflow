@@ -1,6 +1,6 @@
 ---
 name: angular-forms
-description: Angular forms. Trigger: forms, validation, form state in Angular.
+description: "Angular forms. Trigger: forms, validation, form state in Angular."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

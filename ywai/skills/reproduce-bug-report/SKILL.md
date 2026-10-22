@@ -1,6 +1,6 @@
 ---
 name: reproduce-bug-report
-description: Reproduce a UI bug report before coding and capture visual evidence. Trigger: reproduce this bug, bug report.
+description: "Reproduce a UI bug report before coding and capture visual evidence. Trigger: reproduce this bug, bug report."
 ---
 
 # Reproduce bug report

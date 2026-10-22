@@ -1,6 +1,6 @@
 ---
 name: jev-gate
-description: Review a diff with Jev, score a UI Then, or give Jev a browser goal. Trigger: "review this", "open this page", "click through with Jev", UI scenario Then.
+description: "Review a diff with Jev, score a UI Then, or give Jev a browser goal. Trigger: \"review this\", \"open this page\", \"click through with Jev\", UI scenario Then."
 ---
 
 # Jev review
