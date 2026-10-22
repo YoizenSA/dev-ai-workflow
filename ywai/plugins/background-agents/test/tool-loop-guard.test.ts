@@ -81,7 +81,7 @@ describe("tool loop guard", () => {
 	test("exempts delegation tools from tracking", async () => {
 		const hooks = makeHooks()
 		for (let i = 0; i < 6; i++) {
-			const out = await call(hooks, "delegation_status", {}, "same", `c${i}`)
+			const out = await call(hooks, "subagent_status", {}, "same", `c${i}`)
 			expect(out).toBe("same")
 		}
 	})

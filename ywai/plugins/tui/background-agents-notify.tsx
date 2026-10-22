@@ -1,10 +1,10 @@
 // @ts-nocheck
 /**
- * background-agents-notify — the human half of delegation notifications.
+ * background-agents-notify — the human half of background-subagent notifications.
  *
- * The server plugin tells the MODEL (synthetic session input); this sidecar
- * tells the HUMAN: it subscribes to the delegation terminal event the server
- * half emits and raises an OS notification (only when the terminal is
+ * OpenCode's native subagent tool tells the MODEL (a <subagent> synthetic in
+ * the parent); this sidecar tells the HUMAN: it subscribes to the terminal
+ * event the background-agents server plugin emits and raises an OS notification (only when the terminal is
  * unfocused) plus a native in-TUI toast.
  *
  * Why not just use the built-in notifications plugin: it reacts to
@@ -35,19 +35,16 @@ const oneLine = (value, limit) => String(value ?? "").replace(/\s+/g, " ").trim(
 
 function noteFor(data) {
   if (!data || typeof data !== "object") return undefined
-  if (data.kind === "all-complete") {
-    return { title: "Background agents", message: "All delegations complete.", variant: "success" }
-  }
   if (data.kind !== "terminal") return undefined
   const ok = data.status === "complete"
   const label = data.title ? oneLine(data.title, 60) : data.delegationID
   const remaining =
     typeof data.remaining === "number" && data.remaining > 0 ? ` (${data.remaining} more running)` : ""
   // The error text is what makes a dead key or a bad model name visible
-  // instead of the delegation just never coming back.
+  // instead of the subagent just never coming back.
   const detail = ok ? "" : data.error ? ` — ${oneLine(data.error, 120)}` : ""
   return {
-    title: oneLine(`Delegation ${data.status}: ${data.delegationID}`, 80),
+    title: oneLine(`Subagent ${data.status}: ${data.delegationID}`, 80),
     message: oneLine(`${data.agent} — ${label}${remaining}${detail}`, 240),
     variant: ok ? "success" : "error",
   }

@@ -29,7 +29,7 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 | Mode | When | Behavior |
 |------|------|----------|
 | `solo` | One file / clear small fix / Q&A | Orchestrator acts alone (search + edit + verify). Zero subagents. |
-| `thin` | Clear "do X", limited scope | Prefer act alone; at most one sync `delegate` hop. |
+| `thin` | Clear "do X", limited scope | Prefer act alone; at most one foreground `subagent` hop. |
 | `full` | Multi-phase, ordered deps, ship | Classic SCOUT → PLAN → implement/test → review. No product edits by orchestrator. |
 
 - **Risk** (auth, migrations, public API, …) decides TDD/review — not mode size alone.
@@ -100,9 +100,11 @@ graph TD
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
 The orchestrator uses a **capability model** with per-platform adapters. On OpenCode
-v2 it delegates via `delegate` (returns an ID immediately) and supervises
-with `delegation_*`. There is no `mode` argument; wait for `<task-notification>` then `delegation_read` when the next step needs the result. `delegate` is the runtime delegation tool
-(permission action `subagent` still gates who may be launched). It asks decisions
+v2 it delegates via the native `subagent` tool: foreground returns the result,
+`background: true` returns a sessionID and a `<subagent>` notification arrives on
+completion. Background work is supervised with `subagent_status` / `subagent_steer` /
+`subagent_stop` / `subagent_read` (background-agents plugin). Permission action
+`subagent` gates who may be launched. It asks decisions
 with `question` and tracks plans with `todowrite`. On Claude Code it uses
 `Agent`/`Task` and `TaskCreate`/`Update`. On PI.dev it uses host subagent tools.
 All hosts fall back to `@mention` routing when the native tool is unavailable.

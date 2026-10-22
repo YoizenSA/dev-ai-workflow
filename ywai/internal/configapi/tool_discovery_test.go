@@ -22,7 +22,7 @@ func TestDiscoverConfigPluginTools_KnownBundle(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected background-agents plugin in result, got keys: %v", keysOf(got))
 	}
-	for _, want := range []string{"delegate", "delegation_read", "delegation_stop"} {
+	for _, want := range []string{"subagent_status", "subagent_read", "subagent_steer", "subagent_stop"} {
 		if !slices.Contains(tools, want) {
 			t.Errorf("background-agents tools missing %q; got %v", want, tools)
 		}

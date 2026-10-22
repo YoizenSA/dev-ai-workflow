@@ -126,13 +126,10 @@ func discoverPluginTools(pluginDir string) []string {
 // never sees them.
 var knownBundleTools = map[string][]string{
 	"background-agents.js": {
-		"delegate",
-		"delegation_read",
-		"delegation_list",
-		"delegation_status",
-		"delegation_peek",
-		"delegation_steer",
-		"delegation_stop",
+		"subagent_status",
+		"subagent_read",
+		"subagent_steer",
+		"subagent_stop",
 	},
 }
 

@@ -526,12 +526,12 @@ var ywaiBucketPatterns = map[string][]string{
 	"intercom": {"intercom_*"},
 	"graft":    {"graft_*"},
 	"mcp":      {"graft_*", "context7_*"},
-	// "delegate" launches an async sub-agent (background-agents plugin); the
-	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
-	// status, peek, steer, stop). Without the glob, an agent whitelisted for
-	// "delegate" under the "*: deny" pattern could start a delegation but never
-	// read or control it.
-	"delegate": {"delegate", "delegation_*"},
+	// "delegate" is the UI bucket for background delegation. Launching is the
+	// native `subagent` tool (gated per agent by the `subagent` action); the
+	// "subagent_*" glob covers the background-agents supervision tools
+	// (status, read, steer, stop). Without it, an agent whitelisted for
+	// "delegate" could launch a background subagent but never read or control it.
+	"delegate": {"delegate", "subagent_*"},
 }
 
 // falseGreenBashPatterns are commands that make a check pass without making the

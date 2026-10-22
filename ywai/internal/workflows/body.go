@@ -34,8 +34,8 @@ func orchestratorBody(wf *Workflow, subAgentIDs map[string]string) string {
 
 	// Step-by-step instructions.
 	b.WriteString("## Execution steps\n\n")
-	b.WriteString("Follow these steps in order. Launch sub-agents with the OpenCode v2 `delegate` tool (`agent`, `prompt`) — it returns an ID immediately. There is no `mode` argument. ")
-	b.WriteString("When a later step needs that result, wait for `<task-notification>` then call `delegation_read(id)`. Do not poll `delegation_list`. ")
+	b.WriteString("Follow these steps in order. Launch sub-agents with the native `subagent` tool (`agent`, `description`, `prompt`); it returns the result when the step blocks the next. ")
+	b.WriteString("Pass `background: true` only for independent work: it returns a sessionID immediately and a `<subagent>` notification arrives when it finishes. Do not poll `subagent_status`. ")
 	b.WriteString("Use the `skill` tool to load referenced skills, and the `question` tool to ask ")
 	b.WriteString("the user when a choice is required. Do not skip steps.\n\n")
 
@@ -300,7 +300,7 @@ func stepForNode(n *Node, subAgentIDs map[string]string, outs map[string][]strin
 		if task == "" {
 			task = "Perform the agent's role."
 		}
-		return fmt.Sprintf("**Delegate to sub-agent `%s`** using `delegate` (`agent: %s`, prompt below). It returns an ID immediately. If this step blocks the next, wait for `<task-notification>` then `delegation_read`: %s", id, id, quoteInline(task))
+		return fmt.Sprintf("**Delegate to sub-agent `%s`** using the native `subagent` tool (`agent: %s`, prompt below). Run it in the foreground when this step blocks the next; otherwise `background: true` and wait for its `<subagent>` notification: %s", id, id, quoteInline(task))
 	case NodeTypePrompt:
 		p := strings.TrimSpace(n.Data.Prompt)
 		if p == "" {

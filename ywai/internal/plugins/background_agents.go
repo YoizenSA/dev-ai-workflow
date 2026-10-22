@@ -15,8 +15,8 @@ const ywaiPluginsSubdir = "ywai-plugins"
 
 // InstallBackgroundAgents vendors the background-agents plugin bundle into
 // the location OpenCode scans by itself: the supervision layer on top of the
-// built-in `subagent` tool (notifications, steer/stop, watchdog, crash
-// recovery, artifacts).
+// built-in background `subagent` (stop, watchdog timeout, steer, live status,
+// post-compaction read). Launch and completion notification stay native.
 func InstallBackgroundAgents(configPath string) error {
 	// Agent-agnostic: the manifest drives the opencode-only gating, and this
 	// entry names no slash command, so no agent name is needed.
