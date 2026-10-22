@@ -1,383 +1,153 @@
 /**
- * OpenCode v2 plugin surface for background-agents.
+ * OpenCode v2 wiring for background-agents.
  *
- * v2 loads only plugins whose default export is an object carrying an id and a
- * setup() (or effect()); the v1 hooks object is rejected at load with
- * "Plugin must export a default definition with an id and an effect or setup
- * function". This module is the v2 half of the dual export recommended by the
- * v2 plugins guide ("Support V1"): setup() rebuilds the delegation surface on
- * the v2 context —
+ * Launching is native: the built-in `subagent` tool with `background: true`
+ * creates the child, resolves agent/model, runs it and notifies the parent.
+ * This plugin only hooks that tool to TRACK background children and exposes
+ * four supervision tools over them.
  *
- *   v1 hook                     v2 equivalent
- *   --------------------------  -------------------------------------------
- *   tool map                    ctx.tool.transform(editor.add(...))
- *   "tool.execute.before"       not ported: v2's built-in subagent tool is
- *                               replaced wholesale, so there is no task
- *                               tool left to guard
- *   system transform            ctx.session.hook("context")
- *   "chat.message"              ctx.session.hook("prompt") admission
- *   compacting hook             the same "context" hook — v2 runs it for
- *                               compaction calls too
- *   event hook                  ctx.event.subscribe() loop
- *
- * The DelegationManager is reused untouched: it is constructed against a
- * v1-client-shaped facade that maps the calls it makes onto the v2 context
- * (promptAsync → prompt(delivery "steer"), abort → interrupt, messages →
- * context, app.agents → agent.list; session.status and session.delete have no
- * v2 equivalent and degrade to "unknown" and a no-op respectively).
+ *   timeout   `timeout_minutes` is advertised on the native schema through
+ *             the context hook and stripped in execute.before, so native
+ *             input decoding never sees it; default from
+ *             BACKGROUND_AGENTS_TIMEOUT_MINUTES (15, 0 = none)
+ *   tracking  execute.after on `subagent` whose result status is "running"
  */
 
-import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import { formatDelegationContext } from "./context"
 import { createJsonErrorRecoveryHook } from "./json-error-recovery"
+import { Supervisor } from "./supervisor"
+import { TERMINAL_EVENT_NAME, tryRegisterTerminalRpc } from "./terminal-events"
 import { createToolLoopGuardHook } from "./tool-loop-guard"
-import { DelegationManager, describeUnknownError } from "./delegation-manager"
-import { createLogger } from "./logger"
-import { getProjectId } from "./primitives/get-project-id"
-import { DELEGATION_RULES } from "./rules"
-import { TERMINAL_EVENT_NAME, TERMINAL_RPC_ID, tryRegisterTerminalRpc } from "./terminal-events"
-import {
-	createSubagent,
-	createSubagentStatus,
-	createDelegationRead,
-	createDelegationSteer,
-	createDelegationStop,
-	runDelegation,
-	runDelegationNative,
-} from "./tools"
-import { DEFAULT_MAX_RUN_TIME_MS } from "./types"
-import {
-	createV1ShapedClient,
-	mapV2EventToV1,
-	type V2PluginContext,
-} from "../../../shared/v2"
+import type { V2PluginContext } from "../../../shared/v2"
 
-export { createV1ShapedClient }
+const DEFAULT_TIMEOUT_MINUTES = (() => {
+	const minutes = Number(process.env.BACKGROUND_AGENTS_TIMEOUT_MINUTES)
+	return Number.isFinite(minutes) && minutes >= 0 ? minutes : 15
+})()
 
-/** v1 tool defs return plain strings or {title, output}; v2 wants content. */
-function toV2Result(result: any): { content: string; metadata?: Record<string, string> } {
-	if (typeof result === "string") return { content: result }
-	if (result && typeof result === "object" && typeof result.output === "string") {
-		return result.title
-			? { content: result.output, metadata: { title: result.title } }
-			: { content: result.output }
-	}
-	return { content: String(result ?? "") }
+const TIMEOUT_SCHEMA = {
+	type: "number",
+	minimum: 0,
+	description: `Background runs only: abort the subagent after this many minutes (default ${DEFAULT_TIMEOUT_MINUTES}, 0 = no timeout). A subagent_steer restarts the window.`,
 }
 
-/**
- * Plain JSON Schema mirrors of the v1 `args` builders. The v1 defs build
- * schemas through the v1-only `tool.schema` helper, which the v2 editor does
- * not accept; the descriptions here are kept in sync with tools.ts by hand.
- */
-const V2_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
-	subagent: {
-		type: "object",
-		properties: {
-			agent: { type: "string", description: "The specialized agent to run the task in." },
-			prompt: {
-				type: "string",
-				description: "The full detailed task instructions. Must be in English.",
-			},
-			description: {
-				type: "string",
-				description: "Optional 3-5 word task label, as accepted by the built-in subagent tool.",
-			},
-			timeout_minutes: {
-				type: "integer",
-				minimum: 0,
-				description: `Optional max runtime in minutes for THIS run (default ${Math.round(
-					DEFAULT_MAX_RUN_TIME_MS / 60_000,
-				)}). Use 0 for NO timeout — you stay in control via subagent_steer/subagent_stop.`,
-			},
-			model: {
-				type: "string",
-				description:
-					'Optional model override for THIS run as "provider/model-id" (e.g. "anthropic/claude-haiku-4-5"). Omitted = the agent\'s configured model.',
-			},
-			effort: {
-				type: "string",
-				description:
-					'Optional reasoning effort for THIS run: "high", "medium" or "low". Applied as the model\'s variant, so it needs a model that publishes one.',
-			},
-			background: {
-				type: "boolean",
-				description:
-					"Accepted for compatibility with the built-in tool and ignored: every run here is asynchronous already.",
-			},
-		},
-		required: ["agent", "prompt"],
-		additionalProperties: false,
+const ID = { type: "string", description: "The subagent's sessionID (from the launch result or its <subagent> notification)." }
+
+const TOOLS: Array<{
+	name: string
+	description: string
+	input: Record<string, any>
+	run: (sup: Supervisor, caller: string, input: any) => Promise<string>
+}> = [
+	{
+		name: "subagent_status",
+		description: `Show background subagents of this session.
+Without an id: every one — running and finished — with status, elapsed time and timeout.
+With an id: that subagent's live transcript digest, to decide whether to steer, stop, or let it run.
+Read-only. Do NOT poll: completion arrives as a <subagent> notification.`,
+		input: { type: "object", properties: { id: { ...ID, description: "Optional sessionID. Omit for the session-wide list." } }, additionalProperties: false },
+		run: (sup, caller, input) => sup.status(caller, input?.id),
 	},
-	subagent_status: {
-		type: "object",
-		properties: {
-			id: {
-				type: "string",
-				description:
-					"Optional delegation ID (e.g. 'elegant-blue-tiger'). Omit for the session-wide report; supply it for that delegation's live transcript digest.",
-			},
-		},
-		additionalProperties: false,
+	{
+		name: "subagent_read",
+		description: "Read a background subagent's final (or partial) output by sessionID — use after compaction when the <subagent> notification is gone.",
+		input: { type: "object", properties: { id: ID }, required: ["id"], additionalProperties: false },
+		run: (sup, caller, input) => sup.read(caller, input.id),
 	},
-	subagent_read: {
-		type: "object",
-		properties: {
-			id: { type: "string", description: "The delegation ID (e.g., 'elegant-blue-tiger')" },
+	{
+		name: "subagent_steer",
+		description: "Send an extra instruction into a RUNNING background subagent's current run (native steer). Resets its timeout window.",
+		input: {
+			type: "object",
+			properties: { id: ID, message: { type: "string", description: "The instruction to inject. Must be in English." } },
+			required: ["id", "message"],
+			additionalProperties: false,
 		},
-		required: ["id"],
-		additionalProperties: false,
+		run: (sup, caller, input) => sup.steer(caller, input.id, input.message),
 	},
-	subagent_steer: {
-		type: "object",
-		properties: {
-			id: { type: "string", description: "The delegation ID to steer." },
-			message: {
-				type: "string",
-				description: "The extra instruction to deliver to the running delegation.",
-			},
-		},
-		required: ["id", "message"],
-		additionalProperties: false,
+	{
+		name: "subagent_stop",
+		description: "Abort a RUNNING background subagent and return its partial output.",
+		input: { type: "object", properties: { id: ID }, required: ["id"], additionalProperties: false },
+		run: (sup, caller, input) => sup.stop(caller, input.id),
 	},
-	subagent_stop: {
-		type: "object",
-		properties: {
-			id: { type: "string", description: "The delegation ID to stop." },
-		},
-		required: ["id"],
-		additionalProperties: false,
-	},
-}
+]
 
-/**
- * Registers the five-tool v2 surface. The v1 defs are reused for description
- * and execute so the two surfaces cannot drift; only the schema shape is
- * v2-native.
- *
- * `subagent` is the ywai layer ON TOP of v2's built-in tool of the same name,
- * not a replacement of its machinery: the built-in's execute is captured
- * before our same-name registration and used as the launch transport, so
- * session creation, agent/model resolution, permissions, parent linking and
- * the child run loop stay native. Supervision, notifications and artifacts
- * are ours. When the built-in is absent (not expected on v2), the tool falls
- * back to the legacy hand-rolled launch so delegation keeps working.
- */
-async function registerV2Tools(ctx: V2PluginContext, manager: DelegationManager): Promise<void> {
-	const supervisionDefs: Record<
-		string,
-		{ description: string; execute: (args: any, toolCtx: any) => Promise<any> }
-	> = {
-		subagent_status: createSubagentStatus(manager) as any,
-		subagent_read: createDelegationRead(manager) as any,
-		subagent_steer: createDelegationSteer(manager) as any,
-		subagent_stop: createDelegationStop(manager) as any,
-	}
-
-	await ctx.tool?.transform?.((editor: any) => {
-		// Capture the built-in BEFORE our same-name registration replaces it.
-		const native = typeof editor?.get === "function" ? editor.get("subagent") : undefined
-		const nativeExecute =
-			native && typeof native.execute === "function" ? native.execute.bind(native) : undefined
-
-		const subagentDef = createSubagent(manager) as any
-		editor.add({
-			name: "subagent",
-			description: subagentDef.description,
-			input: V2_INPUT_SCHEMAS.subagent,
-			execute: async (input: any, toolCtx: any) => {
-				if (nativeExecute) {
-					return toV2Result(
-						await runDelegationNative(manager, input, toolCtx, (launchInput) =>
-							nativeExecute(launchInput, toolCtx),
-						),
-					)
-				}
-				// No built-in to ride: launch through the legacy path instead.
-				return toV2Result(await runDelegation(manager, input, toolCtx, "subagent"))
-			},
-		})
-
-		for (const [name, def] of Object.entries(supervisionDefs)) {
-			editor.add({
-				name,
-				description: def.description,
-				input: V2_INPUT_SCHEMAS[name],
-				execute: async (input: any, toolCtx: any) => toV2Result(await def.execute(input, toolCtx)),
-			})
-		}
-	})
-}
-
-/** v2 setup: the whole delegation surface on the v2 context. */
-export async function setupV2(ctx: V2PluginContext): Promise<(() => void) | undefined> {
-	const directory = ctx.location?.directory ?? process.cwd()
-	const client = createV1ShapedClient(ctx)
-
-	const log = createLogger(client)
-	const projectId = await getProjectId(directory, client)
-	const baseDir = path.join(os.homedir(), ".local", "share", "opencode", "delegations", projectId)
-	await fs.mkdir(baseDir, { recursive: true })
-
-	// No nativeSteer on v2: steering rides the facade's prompt(delivery:"steer").
-	const manager = new DelegationManager(client, baseDir, log, {})
-
-	// Human channel: tui.showToast is a no-op on v2, so terminal delegations
-	// are silent for the human. When the host supports plugin RPC, terminal
-	// events flow to the notify sidecar (OS notification + toast). The
-	// model-facing <task-notification> path below is untouched.
+export async function setupV2(ctx: V2PluginContext): Promise<() => void> {
+	const project = ctx.location?.project?.id ?? "global"
 	const terminalRpc = await tryRegisterTerminalRpc(ctx)
-	if (terminalRpc) {
-		manager.setTerminalEventSink((event) => {
-			// Never throws into the model-facing path, but a rejected emit is a
-			// real failure (schema rejection, closed registration) — log it
-			// instead of swallowing it, or the human channel dies silently.
-			terminalRpc.events.emit(TERMINAL_EVENT_NAME, event).catch((error) => {
-				void manager.debugLog(`terminal RPC emit failed: ${error instanceof Error ? error.message : String(error)}`)
+	const supervisor = new Supervisor({
+		session: ctx.session as any,
+		indexFile: path.join(os.homedir(), ".local", "share", "opencode", "delegations", project, "subagents.json"),
+		defaultTimeoutMs: DEFAULT_TIMEOUT_MINUTES * 60_000,
+		onTerminal: terminalRpc
+			? (event) => void terminalRpc.events.emit(TERMINAL_EVENT_NAME, event).catch(() => {})
+			: undefined,
+	})
+	supervisor.restore()
+
+	await ctx.tool?.transform?.((editor) => {
+		for (const def of TOOLS) {
+			editor.add({
+				name: def.name,
+				description: def.description,
+				input: def.input,
+				execute: async (input: any, toolCtx: any) => {
+					if (!toolCtx?.sessionID) return { content: `❌ ${def.name} requires sessionID. This is a system error.` }
+					return { content: await def.run(supervisor, toolCtx.sessionID, input) }
+				},
 			})
-		})
-		await manager.debugLog(
-			`terminal RPC registered: human notifications emit '${TERMINAL_EVENT_NAME}' on '${TERMINAL_RPC_ID}'`,
-		)
-	} else {
-		await manager.debugLog(
-			"terminal RPC unavailable on this host; human notifications fall back to native attention sounds",
-		)
-	}
-
-	await manager.debugLog("background-agents v2 setup initialized")
-
-	// Re-adopt delegations orphaned by a previous process exit (fire-and-forget).
-	void manager.restoreActiveDelegations()
-
-	await registerV2Tools(ctx, manager)
-
-	// Guard hooks: loop guard + JSON recovery on the v2 tool stream. Each
-	// hook degrades to a no-op when the host lacks tool.hook; log a line via
-	// the manager so the gap is visible in debug.
-	if (typeof ctx.tool?.hook === "function") {
-		const loopGuard = createToolLoopGuardHook()
-		const jsonRecovery = createJsonErrorRecoveryHook()
-		const guardAfter = async (event: { tool: string; sessionID?: string; callID?: string; result?: any }) => {
-			const output = { output: typeof event.result?.content === "string" ? event.result.content : undefined }
-			await jsonRecovery["tool.execute.after"](event as never, output as never)
-			await loopGuard["tool.execute.after"](event as never, output as never)
-			if (typeof output.output === "string" && event.result) {
-				event.result.content = output.output
-			}
-		}
-		await ctx.tool.hook("execute.after", guardAfter)
-		await ctx.tool.hook("execute.before", async (event: { tool: string; sessionID?: string; callID?: string; input?: unknown }) => {
-			const output = { args: event.input }
-			await loopGuard["tool.execute.before"](event as never, output as never)
-			event.input = output.args
-		})
-	}
-
-	// System injection + delegation context. v2 runs the context hook for
-	// compaction calls too, so this also carries delegation state across
-	// compaction — the role the v1 compacting hook played.
-	await ctx.session.hook?.("context", async (event: any) => {
-		// Anti-recursion: a delegation child must not dispatch or control
-		// delegations. The legacy launch could disable tools per prompt; the
-		// native launch cannot, so strip them from the model request instead.
-		try {
-			if (event.tools && manager.isDelegationChild(event.sessionID)) {
-				for (const toolName of Object.keys(event.tools)) {
-					if (
-						toolName === "subagent" ||
-						toolName === "delegate" ||
-						toolName === "task" ||
-						toolName.startsWith("subagent_") ||
-						toolName.startsWith("delegation_")
-					) {
-						delete event.tools[toolName]
-					}
-				}
-			}
-		} catch {
-			// Stripping must never break the model call.
-		}
-		try {
-			event.system.push({ type: "text", text: DELEGATION_RULES })
-			const rootSessionID = await manager.getRootSessionID(event.sessionID)
-			const running = manager.getRunningDelegations(rootSessionID).map((d) => ({
-				id: d.id,
-				agent: d.agent,
-				title: d.title,
-				description: d.description,
-				status: d.status,
-				startedAt: d.startedAt,
-				lastHeartbeatAt: d.progress.lastHeartbeatAt,
-				prompt: d.prompt,
-			}))
-			const unreadCompleted = manager.getUnreadCompletedDelegations(rootSessionID, 10).map((d) => ({
-				id: d.id,
-				agent: d.agent,
-				title: d.title,
-				description: d.description,
-				status: d.status,
-				completedAt: d.completedAt,
-			}))
-			if (running.length > 0 || unreadCompleted.length > 0) {
-				event.system.push({ type: "text", text: formatDelegationContext(running, unreadCompleted) })
-			}
-		} catch {
-			// Context injection must never break the model call.
 		}
 	})
 
-	// Deliver queued parent notifications on the next user turn (the v2
-	// spelling of the v1 chat.message hook).
-	await ctx.session.hook?.("prompt", (event: any) => {
-		try {
-			const pending = manager.drainPendingNotificationText(event.sessionID)
-			if (pending) {
-				event.prompt.text = event.prompt.text ? `${event.prompt.text}\n\n${pending}` : pending
-			}
-		} catch {
-			// Admission must proceed even if notification draining fails.
+	// Per-call timeout overrides, keyed by tool call id, from before → after.
+	const timeouts = new Map<string, number>()
+	const loopGuard = createToolLoopGuardHook()
+	const jsonRecovery = createJsonErrorRecoveryHook()
+
+	await ctx.tool?.hook?.("execute.before", async (event: any) => {
+		if (event.tool === "subagent" && event.input && typeof event.input === "object" && "timeout_minutes" in event.input) {
+			const { timeout_minutes, ...rest } = event.input
+			const minutes = Number(timeout_minutes)
+			if (Number.isFinite(minutes) && minutes >= 0) timeouts.set(event.id, minutes * 60_000)
+			event.input = rest
 		}
+		const output = { args: event.input }
+		await loopGuard["tool.execute.before"](event, output as never)
+		event.input = output.args
 	})
 
-	// Event loop: same handlers as the v1 event hook. mapV2EventToV1 turns
-	// v2 event shapes into the v1 shapes the manager reads; the raw v2 event
-	// always passes through first, so v2-native shapes still reach the
-	// handlers that understand them.
-	const controller = new AbortController()
-	void (async () => {
-		try {
-			for await (const raw of ctx.event.subscribe({ signal: controller.signal })) {
-				for (const evt of mapV2EventToV1(raw ?? {})) {
-					const type: string = evt.type ?? ""
-					const props: any = evt.properties ?? evt.data ?? {}
-					if (type === "session.idle" && props.sessionID) {
-						await manager.handleSessionIdle(props.sessionID)
-					}
-					if (type === "message.updated") {
-						const sessionID = props.info?.sessionID ?? props.sessionID
-						if (sessionID) manager.handleMessageEvent(sessionID)
-					}
-					if (type === "message.part.updated") {
-						const part = props.part
-						if (part) manager.handlePartEvent(part)
-					}
-				}
+	await ctx.tool?.hook?.("execute.after", async (event: any) => {
+		if (event.tool === "subagent") {
+			const timeoutMs = timeouts.get(event.id)
+			timeouts.delete(event.id)
+			const meta = event.result?.metadata
+			if (event.status === "completed" && meta?.status === "running" && typeof meta.sessionID === "string") {
+				supervisor.track({
+					sessionID: meta.sessionID,
+					parentSessionID: event.sessionID,
+					agent: String(event.input?.agent ?? ""),
+					description: String(event.input?.description ?? ""),
+					timeoutMs,
+				})
 			}
-		} catch (error) {
-			// Logged rather than swallowed: a bare catch here made a dead
-			// subscription indistinguishable from a quiet one. Note this stream
-			// carries config events only (catalog/agent/command/plugin updates),
-			// never session lifecycle — completion is detected by session.wait
-			// in the manager, not here.
-			await manager.debugLog(`event loop ended: ${describeUnknownError(error)}`)
 		}
-	})()
+		const output = { output: typeof event.result?.content === "string" ? event.result.content : undefined }
+		await jsonRecovery["tool.execute.after"](event, output as never)
+		await loopGuard["tool.execute.after"](event, output as never)
+		if (typeof output.output === "string" && event.result) event.result.content = output.output
+	})
+
+	await ctx.session.hook?.("context", (event: any) => {
+		const input = event.tools?.subagent?.input
+		if (input && typeof input === "object") {
+			input.properties = { ...(input.properties ?? {}), timeout_minutes: TIMEOUT_SCHEMA }
+		}
+	})
 
 	return () => {
-		controller.abort()
+		supervisor.dispose()
 		void Promise.resolve(terminalRpc?.dispose?.()).catch(() => {})
 	}
 }

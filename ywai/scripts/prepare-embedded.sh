@@ -8,8 +8,14 @@ BA_DIR="$REPO_ROOT/plugins/background-agents"
 BA_BUNDLE="$BA_DIR/dist/background-agents.js"
 VB_DIR="$REPO_ROOT/plugins/vision-bridge"
 VB_BUNDLE="$VB_DIR/dist/vision-bridge.js"
+JG_DIR="$REPO_ROOT/plugins/jev-gate"
+JG_BUNDLE="$JG_DIR/dist/jev-gate.js"
+JC_DIR="$REPO_ROOT/plugins/jev-compaction"
+JC_BUNDLE="$JC_DIR/dist/jev-compaction.js"
 AD_DIR="$REPO_ROOT/plugins/advisor"
 AD_BUNDLE="$AD_DIR/dist/advisor.js"
+GB_DIR="$REPO_ROOT/plugins/graft-build"
+GB_BUNDLE="$GB_DIR/dist/graft-build.js"
 
 # Rebuild the React UI so the embedded binary always carries the current
 # frontend. Without this, `ywai install` / `dev.sh install` would ship a stale
@@ -44,6 +50,16 @@ if command -v bun >/dev/null 2>&1; then
     echo "Building vision-bridge plugin (bun bundle)…"
     bun build "$VB_DIR/src/index.ts" \
         --outfile "$VB_BUNDLE" --target node
+    echo "Building jev-gate plugin (bun bundle)…"
+    # Type-only shared imports: bundles without node_modules (like vision-bridge).
+    bun build "$JG_DIR/src/index.ts" \
+        --outfile "$JG_BUNDLE" --target node
+    echo "Building jev-compaction plugin (bun bundle)…"
+    # Like jev-gate: every import is relative (shared/v2 is type-only, the key
+    # adapter comes from jev-gate/src, the library is vendored), so it bundles
+    # without node_modules and without bun install.
+    bun build "$JC_DIR/src/index.ts" \
+        --outfile "$JC_BUNDLE" --target node
     echo "Building advisor plugin (bun bundle)…"
     # Advisor imports `tool` as a value from @opencode-ai/plugin. A type-only
     # import (vision-bridge) can bundle without node_modules; this cannot.
@@ -55,6 +71,10 @@ if command -v bun >/dev/null 2>&1; then
     # plugins/advisor/test/bundle.test.ts pins that the dist is self-contained.
     bun build "$AD_DIR/src/index.ts" \
         --outfile "$AD_BUNDLE" --target node
+    echo "Building graft-build plugin (bun bundle)…"
+    # Node builtins only — no @opencode-ai/plugin import, so no bun install.
+    bun build "$GB_DIR/src/index.ts" \
+        --outfile "$GB_BUNDLE" --target node
 elif [ -f "$BA_BUNDLE" ]; then
     echo "bun not found — using existing background-agents bundle as-is"
     if [ -f "$VB_BUNDLE" ]; then
@@ -66,6 +86,16 @@ elif [ -f "$BA_BUNDLE" ]; then
         echo "using existing advisor bundle as-is"
     else
         echo "WARNING: advisor bundle missing (optional when bun unavailable)"
+    fi
+    if [ -f "$JG_BUNDLE" ]; then
+        echo "using existing jev-gate bundle as-is"
+    else
+        echo "WARNING: jev-gate bundle missing (optional when bun unavailable)"
+    fi
+    if [ -f "$JC_BUNDLE" ]; then
+        echo "using existing jev-compaction bundle as-is"
+    else
+        echo "WARNING: jev-compaction bundle missing (optional when bun unavailable)"
     fi
 else
     echo "ERROR: bun not found and no prebuilt background-agents bundle." >&2
@@ -114,6 +144,20 @@ if [ -f "$AD_DIR/command/advisor.md" ]; then
 fi
 if [ -f "$VB_BUNDLE" ]; then
     cp -a "$VB_BUNDLE" "$EMBED_DIR/plugins/vision-bridge.js"
+fi
+if [ -f "$GB_BUNDLE" ]; then
+    cp -a "$GB_BUNDLE" "$EMBED_DIR/plugins/graft-build.js"
+fi
+if [ -f "$JG_BUNDLE" ]; then
+    cp -a "$JG_BUNDLE" "$EMBED_DIR/plugins/jev-gate.js"
+fi
+if [ -f "$JC_BUNDLE" ]; then
+    cp -a "$JC_BUNDLE" "$EMBED_DIR/plugins/jev-compaction.js"
+fi
+# The jev-gate SKILL.md installs with the plugin, so it has to ship with it.
+if [ -f "$JG_DIR/skills/jev-gate/SKILL.md" ]; then
+    mkdir -p "$EMBED_DIR/plugins/jev-gate-skill"
+    cp -a "$JG_DIR/skills/jev-gate/SKILL.md" "$EMBED_DIR/plugins/jev-gate-skill/SKILL.md"
 fi
 
 # ywai TUI logo (home_logo slot). Plain .tsx source — no build step.

@@ -16,8 +16,8 @@ En los flujos de QA no hay un agente `qa-finder` separado: la exploración la ha
 | Patrones | `@finder How do we write tests here?` |
 | Qué necesita testing | `@finder ¿Qué archivos no tienen cobertura?` |
 
-En el pipeline de QA Automation el orden es `@qa-analyst` → `@finder` → `@qa-dev` → `@qa-reviewer`.
+En el flujo de testing el orden es `@qa` → `@finder` → `@reviewer`.
 
 <Aside type="tip">
-`@finder` es read-only: ubica y resume código con rutas exactas para que `@qa-dev` no re-busque.
+`@finder` es read-only: ubica y resume código con rutas exactas para que `@qa` no re-busque.
 </Aside>

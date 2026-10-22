@@ -1,0 +1,13 @@
+--- a/src/reports/schedule.ts
++++ b/src/reports/schedule.ts
+@@ -4,10 +4,14 @@ import { addDays } from "./dates"
+ 
++function nextRunAt(from: Date, everyDays: number): Date {
++  return addDays(from, everyDays)
++}
++
+ export function schedule(report: Report, from: Date): Scheduled {
+-  const next = addDays(from, report.everyDays)
+-  return { id: report.id, next }
++  return { id: report.id, next: nextRunAt(from, report.everyDays) }
+ }

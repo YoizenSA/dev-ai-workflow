@@ -40,7 +40,7 @@ func TestInstallVisionBridge_V2UsesAutoDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range openCodePlugins(root) {
+	for _, raw := range pluginArray(root) {
 		if s, ok := raw.(string); ok && strings.Contains(s, config.VisionBridgeBundleName) {
 			t.Errorf("config still references %s explicitly: %v", config.VisionBridgeBundleName, raw)
 		}
@@ -76,7 +76,7 @@ func TestInstallAdvisor_V2UsesAutoDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range openCodePlugins(root) {
+	for _, raw := range pluginArray(root) {
 		if s, ok := raw.(string); ok && strings.Contains(s, config.AdvisorBundleName) {
 			t.Errorf("config still references %s explicitly: %v", config.AdvisorBundleName, raw)
 		}

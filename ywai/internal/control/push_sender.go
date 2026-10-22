@@ -128,8 +128,8 @@ func (ps *PushSender) sendToSubscription(sub PushSubscription, payload []byte) (
 	cek := hkdfExpand(prk2, []byte("Content-Encoding: aes128gcm\x00"), 16)
 	nonce := hkdfExpand(prk2, []byte("Content-Encoding: nonce\x00"), 12)
 
-	// Encrypt padded payload with AES-128-GCM
-	padded := append([]byte{0x00}, payload...) // minimal padding byte per spec
+	// Encrypt the padded record with AES-128-GCM
+	padded := padWebPushRecord(payload)
 
 	block, err := aes.NewCipher(cek)
 	if err != nil {
@@ -272,6 +272,14 @@ func loadOrGenerateVAPID() (*VAPIDKeys, error) {
 		return nil, err
 	}
 	return keys, nil
+}
+
+// padWebPushRecord appends the RFC 8188 aes128gcm padding delimiter: the last
+// plaintext byte is 0x02, so the browser decrypts exactly the payload before it.
+func padWebPushRecord(payload []byte) []byte {
+	record := make([]byte, 0, len(payload)+1)
+	record = append(record, payload...)
+	return append(record, 0x02)
 }
 
 // --- HKDF helpers (RFC 5869 subset) ---

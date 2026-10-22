@@ -6,12 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	agentprofiles "github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/envprofile"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -91,9 +93,10 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// Keep ~/.ywai/version.json's installed version current for the TUI logo.
-		// No network here (see versionfile.Touch); cheap enough for every command.
-		_ = versionfile.Touch(version)
+		// Keep ~/.ywai/version.json current for the TUI logo. Refresh is
+		// throttled (24h) and, for beta installs, backfills the prerelease
+		// head even when a legacy file only cached GitHub's stable.
+		_ = versionfile.Refresh(version, 24*time.Hour)
 	},
 }
 
@@ -234,32 +237,82 @@ func copySkillsForAgents(agents []agent.Agent, dryRun bool) {
 	if len(skillAllow) > 0 {
 		fmt.Printf("  Preset skills filter: %s\n", strings.Join(skillAllow, ", "))
 	}
-	for _, a := range agents {
-		if skip, reason := skipSkillCopy(a, agents); skip {
-			if !dryRun {
-				if removed := skills.PruneYwaiSkills(a.SkillsDir); len(removed) > 0 {
-					fmt.Printf("  [%s] removed %d duplicate skill(s): %s\n", a.Name, len(removed), reason)
-				}
-			}
-			continue
+	copyOne := func(dir string) error {
+		if len(skillAllow) > 0 {
+			return skills.CopyFiltered(dir, skillAllow)
 		}
+		return skills.CopyTo(dir)
+	}
+	// opencode and claude-code share one canonical dir: OpenCode reads
+	// ~/.agents/skills natively, Claude Code through per-skill compat links.
+	// Every other host keeps its own per-host copy, untouched.
+	var canonical []string
+	var others []agent.Agent
+	for _, a := range agents {
+		switch a.Name {
+		case "opencode", "claude-code":
+			canonical = append(canonical, a.Name)
+		default:
+			others = append(others, a)
+		}
+	}
+	if len(canonical) > 0 {
+		dir := config.AgentsSkillsDir()
+		if dryRun {
+			fmt.Printf("  Would install ywai extra skills → %s (for %s)\n", dir, strings.Join(canonical, ", "))
+			done = append(done, canonical...)
+		} else {
+			if err := copyOne(dir); err != nil {
+				fmt.Printf("  Warning: failed to copy extra skills to %s: %v\n", dir, err)
+			} else {
+				done = append(done, canonical...)
+			}
+			// The canonical dir inside a profile sandbox is profile-local,
+			// so global cleanup must never run from a scoped apply: it
+			// would touch state the profile does not own.
+			if !envprofile.InProfileScope() {
+				cleanLegacySkillDuplicates(dir)
+				ensureClaudeCompatLinks(dir)
+			}
+		}
+	}
+	for _, a := range others {
 		if dryRun {
 			done = append(done, a.Name)
 			continue
 		}
-		var copyErr error
-		if len(skillAllow) > 0 {
-			copyErr = skills.CopyFiltered(a.SkillsDir, skillAllow)
-		} else {
-			copyErr = skills.CopyTo(a.SkillsDir)
-		}
-		if copyErr != nil {
-			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, copyErr)
+		if err := copyOne(a.SkillsDir); err != nil {
+			fmt.Printf("  Warning: [%s] failed to copy extra skills: %v\n", a.Name, err)
 			continue
 		}
 		done = append(done, a.Name)
 	}
 	summarizeAgents(dryRun, "ywai extra skills", done)
+}
+
+// cleanLegacySkillDuplicates drops the pre-canonical per-host copies ywai
+// used to write: one physical copy in ~/.agents/skills replaced them.
+func cleanLegacySkillDuplicates(canonical string) {
+	legacy := []string{
+		filepath.Join(config.OpenCodeUserConfigDir(), "skills"),
+		config.ClaudeSkillsDir(),
+	}
+	if removed := skills.RemoveLegacyDuplicates(canonical, legacy); len(removed) > 0 {
+		fmt.Printf("  Removed %d legacy duplicate skill(s); canonical is %s\n", len(removed), canonical)
+	}
+}
+
+// ensureClaudeCompatLinks keeps one link per canonical skill in
+// ~/.claude/skills, the only location Claude Code guarantees.
+func ensureClaudeCompatLinks(canonical string) {
+	created, err := skills.EnsureClaudeCompatLinks(canonical, config.ClaudeSkillsDir())
+	if err != nil {
+		fmt.Printf("  Warning: Claude compat links: %v\n", err)
+		return
+	}
+	if created > 0 {
+		fmt.Printf("  Linked %d skill(s) for Claude Code\n", created)
+	}
 }
 
 // scopedPresetSpec returns the active profile's preset spec, or nil when
@@ -276,27 +329,6 @@ func scopedPresetSpec() map[string]any {
 	return spec
 }
 
-// skipSkillCopy reports whether a host already sees the skills through another
-// host's directory, so copying them again only duplicates the catalog it loads.
-//
-// opencode reads ~/.agents/skills, ~/.claude/skills and its own dir (verified
-// in the 1.18.29 binary), so with Claude Code installed its copy adds a second
-// entry for every skill and nothing else.
-//
-// ponytail: one rule for the one overlap that exists today; generalize into a
-// table if another host starts reading a sibling's directory.
-func skipSkillCopy(a agent.Agent, all []agent.Agent) (bool, string) {
-	if a.Name != "opencode" {
-		return false, ""
-	}
-	for _, other := range all {
-		if other.Name == "claude-code" {
-			return true, "opencode reads ~/.claude/skills"
-		}
-	}
-	return false, ""
-}
-
 func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 	tuiAgents := make([]agent.Agent, len(agents))
 	copy(tuiAgents, agents)
@@ -305,7 +337,7 @@ func runTUI(agents []agent.Agent) (tui.TUIResult, error) {
 }
 
 // executeInstall is kept as a thin wrapper for the shared applyManaged pipeline.
-func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
+func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, installPonytail bool, optionalFlags map[string]bool, groupFilter agentprofiles.GroupFilter, overwriteAgents bool, autostart bool, profile string) applyResult {
 	return applyManagedScoped(applyOpts{
 		Mode:            applyInstall,
 		Profile:         profile,
@@ -313,6 +345,7 @@ func executeInstall(opts gentlai.InstallOptions, installMCP, installMetaMCP, ins
 		InstallMCP:      installMCP,
 		InstallMetaMCP:  installMetaMCP,
 		InstallPonytail: installPonytail,
+		OptionalFlags:   optionalFlags,
 		GroupFilter:     groupFilter,
 		OverwriteAgents: overwriteAgents,
 		Autostart:       autostart,
@@ -345,10 +378,8 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		// --all-groups flag: install everything
 		profiles, err = agentprofiles.LoadProfiles(sourceDir)
 	} else if len(filter.Groups) == 0 {
-		// Default: core + qa-automation (orchestrator stack + QA agents)
-		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{
-			Groups: []string{"qa-automation"},
-		})
+		// Default: core agents only
+		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, agentprofiles.GroupFilter{})
 	} else {
 		profiles, err = agentprofiles.LoadProfilesByGroup(sourceDir, filter)
 	}
@@ -363,7 +394,7 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 	}
 
 	if dryRun {
-		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, architect, reviewer, devops)\n", len(profiles))
+		fmt.Printf("  Would install %d agent profiles (orchestrator, ask, dev, qa, reviewer, devops)\n", len(profiles))
 		return
 	}
 
@@ -416,6 +447,13 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 			// the delegation filter sees only valid installed agents.
 			agentprofiles.RemoveAgentsWithoutDescription(agentsDir)
 
+			// The primary (unnamed) agent has no markdown file, so the root
+			// permission block is its only permission source. Without a shell
+			// rule it falls back to "ask", which auto-denies headless.
+			if err := agentprofiles.EnsureRootShellPermission(configPath); err != nil {
+				fmt.Printf("  [%s] Warning: failed to grant primary shell permission: %v\n", a.Name, err)
+			}
+
 			// Apply the default delegation graph (agents/delegations.json): the
 			// task map goes to opencode.json + agent markdown as v2 subagent
 			// triggers are rendered into each agent's markdown prompt body.
@@ -431,12 +469,6 @@ func installAgentProfiles(agents []agent.Agent, dryRun bool, filter agentprofile
 		case "claude-code":
 			agentsDir := filepath.Join(home, ".claude", "agents")
 			_ = agentprofiles.InstallClaude(agentsDir, profiles)
-
-		case "vscode-copilot":
-			promptsDir := agentprofiles.VSCodePromptsDir()
-			if promptsDir != "" {
-				_ = agentprofiles.InstallVSCode(promptsDir, profiles)
-			}
 
 		case "pi":
 			agentsDir := filepath.Join(home, ".pi", "agent", "agents")
@@ -580,7 +612,7 @@ func reseedData() {
 	}
 }
 
-func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool) {
+func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, installMetaMCP, installPonytail bool, optionalFlags map[string]bool) {
 	agentSettingsPaths := agent.SettingsPaths()
 	var done []string
 
@@ -596,7 +628,26 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 	for _, w := range manifestWarnings {
 		fmt.Printf("  Warning: %v\n", w)
 	}
-	flags := map[string]bool{"mcp": installMCP, "meta-mcp": installMetaMCP, "ponytail": installPonytail}
+	// Flags with a dedicated toggle first; optionalFlags carries the rest
+	// (experimental manifest entries) and never overrides the named ones.
+	flags := map[string]bool{}
+	for k, v := range optionalFlags {
+		flags[k] = v
+	}
+	flags["mcp"] = installMCP
+	flags["meta-mcp"] = installMetaMCP
+	flags["ponytail"] = installPonytail
+
+	// jev-gate and jev-compaction read the key from a file because the OpenCode server does not
+	// inherit this process's environment; copy the env key in once, here.
+	if flags["jev-gate"] || flags["jev-compaction"] {
+		keyPath, wrote, err := plugins.EnsureJevKey(os.Getenv("TYPESAFE_API_KEY"))
+		if err != nil {
+			fmt.Printf("  Warning: jev-gate key: %v\n", err)
+		} else {
+			fmt.Println(plugins.JevKeyStatus(keyPath, wrote))
+		}
+	}
 
 	// Preset enforcement (profile scope only): install only preset mcp[]
 	// servers. Empty = keep current. Never uninstalls extra servers, only
@@ -625,6 +676,15 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 		if !ok || configPath == "" {
 			fmt.Printf("  [%s] No config path found, skipping plugins\n", a.Name)
 			continue
+		}
+		if a.Name == "omp" {
+
+			ompPath, err := mcp.EntryTargetPath("omp")
+			if err != nil {
+				fmt.Printf("  [%s] Warning: cannot resolve MCP config path: %v\n", a.Name, err)
+				continue
+			}
+			configPath = ompPath
 		}
 
 		if dryRun {
@@ -671,13 +731,16 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
-		// Orca deploys a status plugin into the config dir ywai manages, and on
-		// v2 it fails to load. Repair it here so the status bar is not dead
-		// until Orca ships its own fix; re-applied because Orca redeploys it.
-		if patched, err := plugins.RepairOrcaStatusPluginV2(configPath); err != nil {
-			fmt.Printf("  [%s] Warning: %v\n", a.Name, err)
-		} else if patched {
-			fmt.Printf("  [%s] Repaired Orca status plugin for OpenCode v2\n", a.Name)
+		// Orca runs OpenCode from its own config dir and redeploys the legacy
+		// status plugin there, so retire it and install the bridge there too.
+		if a.Name == "opencode" {
+			if orcaCfg := plugins.OrcaSharedConfigPath(); orcaCfg != "" {
+				for _, r := range plugins.RunManifest(plugins.Manifest{Install: []plugins.ManifestEntry{{ID: "orca-status"}}}, a.Name, orcaCfg, flags) {
+					if r.Err != nil {
+						fmt.Printf("  [%s] Warning: Orca status bridge: %v\n", a.Name, r.Err)
+					}
+				}
+			}
 		}
 
 		// Remove leftover Azure DevOps plugin entries from older installs. ywai

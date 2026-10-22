@@ -182,31 +182,31 @@ func TestApplyDelegations_EmptyInputNoop(t *testing.T) {
 
 // TestApplyDelegations_SkipsUninstalledAgents guards the regression where a
 // default core-only install still applied delegations.json entries for agents
-// from other groups (qa-reviewer, migration-*, ...). That created stub entries
+// from other groups (migration-*, ...). That created stub entries
 // in opencode.json with no description/prompt, which opencode rejects with
 // "Expected string | undefined, got null description". Only the installed agent
-// (qa is seeded as the .md) must be touched; qa-reviewer must be ignored.
+// (qa is seeded as the .md) must be touched; migration-orchestrator must be ignored.
 func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 	agentsDir := filepath.Join(dir, "agents")
 	os.MkdirAll(agentsDir, 0o755)
-	// Only "qa" is installed; "qa-reviewer" (a different group) is NOT.
+	// Only "qa" is installed; "migration-orchestrator" (a different group) is NOT.
 	os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("---\nmode: primary\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: deny\n---\n\nbody."), 0o644)
 
 	doc := &DelegationsDoc{Agents: map[string]AgentDelegation{
-		"qa":          {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
-		"qa-reviewer": {Task: map[string]string{"*": "deny"}},
+		"qa":                     {Task: map[string]string{"*": "deny", "reviewer": "allow"}},
+		"migration-orchestrator": {Task: map[string]string{"*": "deny"}},
 	}}
 	if err := ApplyDelegations(configPath, agentsDir, doc); err != nil {
 		t.Fatal(err)
 	}
 
-	// qa-reviewer must NOT be created in opencode.json.
+	// migration-orchestrator must NOT be created in opencode.json.
 	root, _ := loadJSON(t, configPath)
 	if agents, ok := root["agents"].(map[string]any); ok {
-		if _, exists := agents["qa-reviewer"]; exists {
-			t.Errorf("uninstalled agent qa-reviewer was written to opencode.json: %+v", agents["qa-reviewer"])
+		if _, exists := agents["migration-orchestrator"]; exists {
+			t.Errorf("uninstalled agent migration-orchestrator was written to opencode.json: %+v", agents["migration-orchestrator"])
 		}
 	}
 
@@ -215,8 +215,8 @@ func TestApplyDelegations_SkipsUninstalledAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sidecar not written: %v", err)
 	}
-	if strings.Contains(string(sidecar), "qa-reviewer") {
-		t.Errorf("sidecar must not list uninstalled agent qa-reviewer: %s", sidecar)
+	if strings.Contains(string(sidecar), "migration-orchestrator") {
+		t.Errorf("sidecar must not list uninstalled agent migration-orchestrator: %s", sidecar)
 	}
 	if !strings.Contains(string(sidecar), "qa") {
 		t.Errorf("sidecar missing installed agent qa: %s", sidecar)
@@ -428,14 +428,16 @@ func TestRenderRulesSection_UsesOpenCodeV2Delegate(t *testing.T) {
 		[]DelegationRule{{Action: "Write", Inline: "Yes", Delegate: "No"}},
 		[]DelegationTrigger{{Name: "4-file rule", Description: "map first"}},
 	)
-	if !strings.Contains(out, "native `delegate`") {
-		t.Fatalf("rules must name OpenCode v2 delegate tool:\n%s", out)
+	if !strings.Contains(out, "native `subagent`") {
+		t.Fatalf("rules must name the OpenCode v2 native subagent tool:\n%s", out)
 	}
-	if strings.Contains(out, "native `subagent`") || strings.Contains(out, "native `task`") {
-		t.Fatalf("rules must not name dead v1 tools:\n%s", out)
+	for _, dead := range []string{"native `task`", "`delegate`", "delegation_", "<task-notification>"} {
+		if strings.Contains(out, dead) {
+			t.Fatalf("rules must not name removed tool %q:\n%s", dead, out)
+		}
 	}
-	if !strings.Contains(out, "delegation_read") {
-		t.Fatalf("rules must mention delegation_* supervision:\n%s", out)
+	if !strings.Contains(out, "subagent_read") {
+		t.Fatalf("rules must mention subagent_* supervision:\n%s", out)
 	}
 	if strings.Contains(out, `mode: "sync"`) || strings.Contains(out, `mode="sync"`) {
 		t.Fatalf("rules must not invent a delegate mode argument:\n%s", out)
@@ -446,8 +448,8 @@ func TestOpenCodeDelegateToolHint_HasNoModeArg(t *testing.T) {
 	if strings.Contains(OpenCodeDelegateToolHint, `mode: "sync"`) || strings.Contains(OpenCodeDelegateToolHint, `mode="sync"`) {
 		t.Fatalf("hint must not invent a delegate mode argument:\n%s", OpenCodeDelegateToolHint)
 	}
-	if !strings.Contains(OpenCodeDelegateToolHint, "delegation_read") {
-		t.Fatalf("hint must mention delegation_read:\n%s", OpenCodeDelegateToolHint)
+	if !strings.Contains(OpenCodeDelegateToolHint, "subagent_read") {
+		t.Fatalf("hint must mention subagent_read:\n%s", OpenCodeDelegateToolHint)
 	}
 }
 

@@ -1,3 +1,2 @@
-typescript
-playwright
+playwright-e2e-testing
 diagnosing-bugs

@@ -20,7 +20,7 @@ Usa PostgreSQL para sesiones.
 ```
 
 El orchestrator:
-1. Delega el diseño a `@architect`
+1. Diseña la arquitectura él mismo (trabajo del hub)
 2. Delega la implementación a `@dev`
 3. Delega los tests a `@qa`
 4. Delega la revisión a `@reviewer`
@@ -34,7 +34,7 @@ Tú: "Necesito agregar pagos con Stripe.
      Valida que todo esté testado y revisado por seguridad."
 
 Orchestrator:
-  → @architect: diseña PaymentService, webhook handler, retry logic
+  → diseña él mismo: PaymentService, webhook handler, retry logic
   → @dev: implementa según el diseño
   → @qa: tests: pago exitoso, fallido, webhook retry, refund
   → @reviewer: revisa por seguridad (webhook signature, idempotency)
@@ -65,7 +65,7 @@ El command lanza el orchestrator automáticamente con el flujo completo.
 
 | Necesidad | Agente que usa |
 |---|---|
-| Diseñar arquitectura | `@architect` |
+| Diseñar arquitectura | él mismo (trabajo del hub) |
 | Escribir código | `@dev` |
 | Escribir tests | `@qa` |
 | Revisar código | `@reviewer` |

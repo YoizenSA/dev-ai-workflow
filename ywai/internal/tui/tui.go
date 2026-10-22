@@ -3,12 +3,14 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agent"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/agents"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -128,10 +130,14 @@ type agentOption struct {
 
 // TUIResult holds all configuration choices made in the TUI.
 type TUIResult struct {
-	Agent           string
-	MCP             bool
-	MetaMCP         bool
-	Ponytail        bool
+	Agent    string
+	MCP      bool
+	MetaMCP  bool
+	Ponytail bool
+	// OptionalFlags carries every other manifest flag toggled on the optional
+	// plugins step, keyed by ManifestEntry.Flag. Entries that need no
+	// dedicated field (experimental ones) ride here.
+	OptionalFlags   map[string]bool
 	OverwriteAgents bool
 	Autostart       bool
 	GroupFilter     agents.GroupFilter
@@ -170,6 +176,9 @@ type Model struct {
 	installMicrosoftLearnMCP bool
 	installMetaDevToolsMCP   bool
 	installPonytail          bool
+	// optionalFlags holds the toggles for flagged manifest entries that have
+	// no dedicated field above, so a new flagged entry needs no TUI change.
+	optionalFlags map[string]bool
 
 	// Overwrite existing profiles
 	overwriteAgents bool
@@ -228,6 +237,7 @@ func NewModel(detectedAgents []agent.Agent) Model {
 		installMicrosoftLearnMCP: defaults.MCP,
 		installMetaDevToolsMCP:   defaults.MetaMCP,
 		installPonytail:          defaults.Ponytail,
+		optionalFlags:            map[string]bool{},
 		overwriteAgents:          true,
 		selectedGroups:           make(map[string]bool),
 		installSteps: []InstallStep{
@@ -235,7 +245,6 @@ func NewModel(detectedAgents []agent.Agent) Model {
 			{Name: "Install ecosystem", Status: "pending"},
 			{Name: "Copy extra skills", Status: "pending"},
 			{Name: "Install agent profiles", Status: "pending"},
-			{Name: "Apply overrides", Status: "pending"},
 			{Name: "Install plugins", Status: "pending"},
 		},
 	}
@@ -255,8 +264,8 @@ func (m *Model) LoadGroups(sourceDir string) error {
 	m.availableGroups = nil
 	m.groupNames = nil
 	m.selectedGroups = make(map[string]bool)
-	// Default on: core + qa-automation. Migration/social stay opt-in.
-	defaultOn := map[string]bool{"core": true, "qa-automation": true}
+	// Default on: core only. All other groups stay opt-in.
+	defaultOn := map[string]bool{"core": true}
 	// Core is always first
 	if def, ok := manifest.Groups["core"]; ok {
 		m.availableGroups = append(m.availableGroups, def)
@@ -516,21 +525,82 @@ func (m *Model) toggleCurrentMCP() {
 	if !m.shouldShowMCPStep() {
 		return
 	}
-	// Rows must stay in the same order as renderMCPStep's list.
-	switch m.optionalPluginCursor {
-	case 0:
-		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
-	case 1:
-		m.installMetaDevToolsMCP = !m.installMetaDevToolsMCP
-	case 2:
-		m.installPonytail = !m.installPonytail
+	// Rows come from the manifest, so the toggle follows the same order the
+	// step renders; the flag decides which install toggle flips.
+	rows := m.optionalPluginRows()
+	if m.optionalPluginCursor < 0 || m.optionalPluginCursor >= len(rows) {
+		return
 	}
+	m.toggleOptionalFlag(rows[m.optionalPluginCursor].Flag)
+}
+
+// toggleOptionalFlag flips the install toggle behind a manifest flag.
+func (m *Model) toggleOptionalFlag(flag string) {
+	switch flag {
+	case "mcp":
+		m.installMicrosoftLearnMCP = !m.installMicrosoftLearnMCP
+	case "meta-mcp":
+		m.installMetaDevToolsMCP = !m.installMetaDevToolsMCP
+	case "ponytail":
+		m.installPonytail = !m.installPonytail
+	default:
+		if m.optionalFlags == nil {
+			m.optionalFlags = map[string]bool{}
+		}
+		m.optionalFlags[flag] = !m.optionalFlags[flag]
+	}
+}
+
+// optionalFlagChecked reports the install toggle behind a manifest flag.
+func (m *Model) optionalFlagChecked(flag string) bool {
+	switch flag {
+	case "mcp":
+		return m.installMicrosoftLearnMCP
+	case "meta-mcp":
+		return m.installMetaDevToolsMCP
+	case "ponytail":
+		return m.installPonytail
+	default:
+		return m.optionalFlags[flag]
+	}
+}
+
+// optionalPluginRows returns the manifest entries behind a CLI flag — the
+// optional plugins step — in manifest order, keeping only entries that apply
+// to the selected agent.
+func (m *Model) optionalPluginRows() []plugins.ManifestEntry {
+	mf, _ := plugins.LoadManifest()
+	applies := func(e plugins.ManifestEntry, agent string) bool {
+		return len(e.Agents) == 0 || slices.Contains(e.Agents, agent)
+	}
+	var rows []plugins.ManifestEntry
+	for _, e := range mf.Install {
+		if e.Flag == "" {
+			continue
+		}
+		if m.selectedAgent == "" || m.selectedAgent == "all" {
+			for _, a := range m.agents {
+				if a.Name == "all" {
+					continue
+				}
+				if applies(e, a.Name) {
+					rows = append(rows, e)
+					break
+				}
+			}
+			continue
+		}
+		if applies(e, m.selectedAgent) {
+			rows = append(rows, e)
+		}
+	}
+	return rows
 }
 
 // optionalPluginCount is the number of toggles on the Optional plugins step.
 func (m *Model) optionalPluginCount() int {
 	if m.shouldShowMCPStep() {
-		return 3 // Microsoft Learn MCP + Meta Developer Tools + Ponytail
+		return len(m.optionalPluginRows())
 	}
 	return 0
 }
@@ -1007,22 +1077,17 @@ func (m *Model) viewMCP() string {
 		desc    string
 		checked bool
 	}
-	rows := []pluginRow{
-		{
-			name:    "Microsoft Learn MCP",
-			desc:    "Access to official Microsoft documentation",
-			checked: m.installMicrosoftLearnMCP,
-		},
-		{
-			name:    "Meta Developer Tools MCP",
-			desc:    "Meta apps, webhooks, compliance and developer docs (sign in from your agent)",
-			checked: m.installMetaDevToolsMCP,
-		},
-		{
-			name:    "Ponytail",
-			desc:    "Lazy-senior mode: YAGNI / stdlib (OpenCode plugin or Claude marketplace)",
-			checked: m.installPonytail,
-		},
+	var rows []pluginRow
+	for _, e := range m.optionalPluginRows() {
+		name := e.Label
+		if name == "" {
+			name = e.Flag
+		}
+		rows = append(rows, pluginRow{
+			name:    name,
+			desc:    e.Desc,
+			checked: m.optionalFlagChecked(e.Flag),
+		})
 	}
 
 	for i, row := range rows {
@@ -1109,21 +1174,17 @@ func (m *Model) viewConfirm() string {
 	}
 
 	if m.shouldShowMCPStep() {
-		mcpLabel := "no"
-		if m.installMicrosoftLearnMCP {
-			mcpLabel = "yes"
+		for _, e := range m.optionalPluginRows() {
+			label := "no"
+			if m.optionalFlagChecked(e.Flag) {
+				label = "yes"
+			}
+			name := e.Label
+			if name == "" {
+				name = e.Flag
+			}
+			rows = append(rows, [2]string{name, label})
 		}
-		rows = append(rows, [2]string{"Microsoft Learn MCP", mcpLabel})
-		metaLabel := "no"
-		if m.installMetaDevToolsMCP {
-			metaLabel = "yes"
-		}
-		rows = append(rows, [2]string{"Meta Developer Tools MCP", metaLabel})
-		ponytailLabel := "no"
-		if m.installPonytail {
-			ponytailLabel = "yes"
-		}
-		rows = append(rows, [2]string{"Ponytail", ponytailLabel})
 	}
 
 	// Find max label width for alignment
@@ -1237,11 +1298,6 @@ func (m *Model) viewProgress() string {
 // Public accessors
 // ──────────────────────────────────────────────────────────────────────────────
 
-// SelectedAgent returns the selected agent name.
-func (m *Model) SelectedAgent() string {
-	return m.selectedAgent
-}
-
 // InstallMetaDevToolsMCP returns whether the Meta Developer Tools MCP should
 // be installed.
 func (m *Model) InstallMetaDevToolsMCP() bool {
@@ -1264,6 +1320,7 @@ func (m *Model) Result() TUIResult {
 		MCP:             m.installMicrosoftLearnMCP,
 		MetaMCP:         m.installMetaDevToolsMCP,
 		Ponytail:        m.installPonytail,
+		OptionalFlags:   m.optionalFlags,
 		OverwriteAgents: m.overwriteAgents,
 		Autostart:       m.autostart,
 		GroupFilter:     m.GroupFilter(),

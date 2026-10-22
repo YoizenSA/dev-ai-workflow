@@ -1,0 +1,47 @@
+/* Evidence page — tokens only (see styles/theme/palette.css). */
+.evidence { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.evidence-hint { color: var(--text-muted); font-size: var(--text-sm); }
+.evidence-muted { color: var(--text-muted); font-size: var(--text-sm); }
+.evidence-empty { color: var(--text-muted); font-size: var(--text-md); }
+.evidence-error {
+  padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--danger-soft); border: 1px solid var(--danger-border); color: var(--tint-danger);
+  font-size: var(--text-sm);
+}
+
+.evidence-layout { display: grid; grid-template-columns: 280px 1fr; gap: var(--space-4); align-items: start; }
+
+.evidence-runs {
+  list-style: none; margin: 0; padding: var(--space-1);
+  display: flex; flex-direction: column; gap: var(--space-1);
+  background: var(--surface-soft); border: 1px solid var(--panel-border); border-radius: var(--radius-md);
+}
+
+.evidence-run {
+  display: flex; flex-direction: column; gap: var(--space-1); text-align: left; width: 100%;
+  padding: var(--space-1) var(--space-4); border-radius: var(--radius-md);
+  background: none; border: 1px solid transparent; color: var(--text);
+  font-size: var(--text-sm); cursor: pointer;
+}
+.evidence-run:hover { background: var(--surface-hover); }
+.evidence-run.is-active { border-color: var(--panel-border-strong); background: var(--surface-hover); }
+.evidence-run-id { font-family: var(--font-mono); font-weight: 600; }
+.evidence-run-meta { color: var(--text-muted); font-size: var(--text-xs); }
+
+.evidence-detail {
+  display: flex; flex-direction: column; gap: var(--space-4); min-width: 0;
+  background: var(--surface-soft); border: 1px solid var(--panel-border); border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.evidence-detail-title { font-size: var(--text-lg); font-family: var(--font-mono); }
+
+.evidence-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); }
+.evidence-size { color: var(--text-muted); }
+
+.evidence-report {
+  margin: 0; padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--surface); border: 1px solid var(--panel-border);
+  color: var(--text); font-family: var(--font-mono); font-size: var(--text-xs);
+  white-space: pre-wrap; overflow-wrap: break-word; max-height: 60vh; overflow: auto;
+}

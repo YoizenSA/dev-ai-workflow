@@ -1,6 +1,6 @@
 ---
 name: angular-performance
-description: Angular performance. Trigger: optimizing Angular apps, images, lazy loading.
+description: "Angular performance. Trigger: optimizing Angular apps, images, lazy loading."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

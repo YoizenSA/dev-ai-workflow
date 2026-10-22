@@ -1,0 +1,9 @@
+--- a/src/client/api.ts
++++ b/src/client/api.ts
+@@ -8,8 +8,8 @@ export interface FetchOptions {
+ 
+-export function fetchUser(id: string) {
+-  return request(`/users/${id}`)
++export function fetchUser(id: string, tenant: string) {
++  return request(`/tenants/${tenant}/users/${id}`)
+ }

@@ -7,6 +7,8 @@ description: "Run BDD scenarios and file the proof. Trigger: executing scenarios
 
 A scenario run that leaves nothing behind is a claim, not a result. This is how to run one so the outcome survives the session: what to capture, where to put it, and how to file it against the work item.
 
+Before the run, read `.ywai/app-guide.md` in the project (skill: `app-guide`) for the launch command, sign-in, and never-do list.
+
 ## Pick the instrument per scenario
 
 Read the `Then`. Whatever it asserts is what you must observe — that decides the tool, not habit.
@@ -14,8 +16,12 @@ Read the `Then`. Whatever it asserts is what you must observe — that decides t
 | The `Then` asserts | Run it as | Why |
 |---|---|---|
 | A status code, payload, or persisted record | HTTP call | A browser adds a rendering layer between you and the assertion, and every flake it brings is yours to debug |
-| Something the user sees, reaches, or is told | Browser | The rendering *is* the behaviour |
+| Something the user sees, reaches, or is told | Browser + Jev | Drive Given/When in the browser; `jev_check_page` scores the Then. You do not invent that PASS |
 | A log line, metric, or emitted event | Trigger it any way, assert on the log/metric | The UI may look fine while the side effect never fired |
+
+### UI Then is Jev's
+
+For a visible Then: take the accessibility snapshot, call `jev_check_page` with that snapshot and the Then verbatim, and file Jev's line (`PASS`/`FAIL` + probability) next to the screenshot. A UI PASS without that line is a claim. A missing key or a failed Jev call is not PASS — it is BLOCKED. Load the `jev-gate` skill. Do not override Jev's number.
 
 Never assert on a fixed sleep. Wait for the condition — see `condition-based-waiting`.
 
@@ -27,6 +33,8 @@ One directory per run, referenced by path in every report:
 .evidence/<run-id>/
   report.md                       verdict per scenario + failure detail
   <scenario-slug>.png             the screenshot at the assertion
+  <scenario-slug>.before.png / .after.png  re-run proof pair (Findings section)
+  <scenario-slug>.jev.md          Jev Then line (UI scenarios only)
   <scenario-slug>.http            request and response for API scenarios
   <scenario-slug>.log             the log excerpt around a failure
 ```
@@ -78,6 +86,16 @@ One Bug per scenario, never one Bug listing five failures — they get fixed by 
 Do not file a Bug for a scenario that is **blocked** (the environment was down, a dependency was missing). That is not a defect in the change; report it as blocked and say what stopped it.
 
 If work item creation is disabled for the project, put the same content in the report and say the Bugs were not filed.
+
+## Findings: fingerprints, repeats, reopens
+
+**Before/after pairs.** When a fix re-runs a previously red scenario, keep the earlier screenshot and add the new one: `<scenario-slug>.before.png` and `<scenario-slug>.after.png`. `report.md` links both and states what changed. The pair is the proof; one green screenshot alone is a claim.
+
+**Finding fingerprint.** Every filed failure carries a stable fingerprint of the form `rule|screen|cause` — lowercase, hyphen-free, pipe-separated (`stock|pdp|price shows zero`). It goes into `report.md` and into every Bug built from it. Titles drift between runs; the fingerprint is what stays comparable.
+
+**Occurrence counting.** A repeat finding whose fingerprint matches an already-filed Bug adds one occurrence to that Bug, with the new evidence path. It does not open a new Bug. Five runs, one fingerprint, one Bug with five occurrences.
+
+**Regression reopen.** A closed Bug whose fingerprint fails again in a later run is reopened as a regression, with the new run-id referenced. It is never filed as a new Bug — the reopen is the regression signal.
 
 ## What not to do
 

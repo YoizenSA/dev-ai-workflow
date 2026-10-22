@@ -217,8 +217,20 @@ export const toolsApi = {
 
 export const configApi = {
 	// Version check
-	getVersion: () => request<{ current: string; latest: string | null; updateAvailable: boolean; error?: string }>("/api/version"),
-	// Trigger a detached `ywai update`. The server relaunches itself, so the
+	getVersion: () =>
+		request<{
+			current: string;
+			latest: string | null;
+			latestStable?: string;
+			latestBeta?: string;
+			channel?: string;
+			updateCommand?: string;
+			updateAvailable: boolean;
+			stableNewer?: boolean;
+			error?: string;
+		}>("/api/version"),
+	// Trigger a detached `ywai update` (or `ywai update --beta` when the
+	// running binary is a prerelease). The server relaunches itself, so the
 	// caller should poll health and reload once it comes back.
 	triggerUpdate: () => request<{ started: boolean; pid?: number; error?: string }>("/api/update", { method: "POST" }),
 
@@ -791,4 +803,33 @@ export interface GitStatus {
 
 export const gitApi = {
 	getStatus: () => request<GitStatus>("/api/git/status"),
+};
+
+// ─── Evidence API ─────────────────────────────────────────────────────────
+
+// One QA evidence run: a .evidence/<run-id>/ folder in the user's project.
+export interface EvidenceRunSummary {
+	runId: string;
+	files: number;
+	modified: string;
+}
+
+export interface EvidenceFile {
+	name: string;
+	size: number;
+}
+
+export interface EvidenceRunDetail {
+	runId: string;
+	report: string;
+	files: EvidenceFile[];
+}
+
+export const evidenceApi = {
+	list: (projectDir?: string) =>
+		request<EvidenceRunSummary[]>(`/api/evidence${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`),
+	get: (runId: string, projectDir?: string) =>
+		request<EvidenceRunDetail>(
+			`/api/evidence/${encodeURIComponent(runId)}${projectDir ? `?project_dir=${encodeURIComponent(projectDir)}` : ""}`
+		),
 };

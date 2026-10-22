@@ -1,0 +1,12 @@
+--- a/src/reports/build.ts
++++ b/src/reports/build.ts
+@@ -18,8 +18,14 @@ export function build(rows: Row[]): Report {
+   const grouped = groupByDay(rows)
++  console.log("grouped", grouped.length)
++  debugger
++
++  // const sorted = grouped.sort(byDate)
++  // return { rows: sorted, builtAt: Date.now() }
++
+   return { rows: grouped, builtAt: Date.now() }
+ }

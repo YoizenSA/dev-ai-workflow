@@ -15,7 +15,7 @@ El ciclo exploratorio cubre lo que pasa **después** de implementar: resumir qu�
 |---|---|---|
 | **exploratory-orchestrator** | Coordinador | Coordina el ciclo: resume lo entregado, después crea el work item y sus escenarios. Si la feature está rota, frena en vez de escribir escenarios sobre el defecto |
 | **feature-summary** | Analista | Resume desde el código: inputs, flujos, side effects, edge cases. Si ticket y diff discrepan, el diff manda |
-| **test-author** | QA | Work item Task hijo del user story + escenarios Gherkin (skills: `ado`, `playwright-e2e-testing`). Sin parent id en el brief, devuelve en vez de adivinar |
+| **test-author** | QA | Work item Task hijo del user story + escenarios Gherkin (skills: `ado`, `gherkin-bdd`, `playwright-e2e-testing`). Sin parent id en el brief, devuelve en vez de adivinar |
 | **verification-orchestrator** | Coordinador | Delega el run a `@scenario-runner` y el archivado a `@qa-feedback`. Rojo bloquea aunque el review esté limpio |
 | **qa-feedback** | QA | Resumen en el padre + un Bug hijo por escenario fallido, cada uno con evidencia (skills: `qa-evidence`, `ado`). Blocked se reporta como blocked: no es Bug |
 
@@ -36,7 +36,7 @@ flowchart LR
 
 ## Instalación
 
-Estos agentes **no** tienen grupo propio en `groups.json`: el install por defecto (`core + qa-automation`) no los copia. Llegan con:
+Estos agentes **no** tienen grupo propio en `groups.json`: el install por defecto (`core`) no los copia. Llegan con:
 
 ```bash
 ywai install --all-groups
@@ -53,5 +53,5 @@ El workflow semilla `/qa-exploratory` (ya viene con ywai, ver [Commands](/dev-ai
 | Verificar escenarios post-review | `/scenario-verification` |
 
 <Aside type="tip">
-Para testing automatizado con estrategia, el grupo es [QA Automation](/dev-ai-workflow/agents/qa-orchestrator). Lo exploratorio es post-implementación y termina en ADO.
+Para testing con estrategia dentro del ciclo de desarrollo, el equipo core es `@qa` + `@finder` + `@reviewer`. Lo exploratorio es post-implementación y termina en ADO.
 </Aside>

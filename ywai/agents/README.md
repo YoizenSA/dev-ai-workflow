@@ -6,27 +6,30 @@ Pre-configured agent profiles for different roles. Each agent has a focused syst
 
 | Agent | Role | Best For |
 |-------|------|----------|
-| `orchestrator` | Technical Lead | Goals: **solo** (act alone), **thin** (0–1 hop), or **full** multi-agent delivery |
+| `orchestrator` | Technical Lead | Goals: **solo** (act alone), **thin** (0–1 hop), or **full** multi-agent delivery; plans architecture and UI specs itself |
 | `ask` | Research & Q&A | Primary for questions, explanations, analysis (read-only) |
 | `finder` | Codebase Explorer | Only scout: locate code, delivery scout, QA scout (read-only) |
 | `dev` | Developer | Implementation, coding, debugging, refactoring |
 | `qa` | QA Engineer | Testing, test strategy, quality assurance |
-| `architect` | Architect | Design decisions, patterns, system design |
+| `advisor` | Second Reviewer | Reviews each turn of the main agent (not invoked directly) |
 | `reviewer` | Code Reviewer | PR reviews, code quality, security audits |
 | `devops` | DevOps Engineer | CI/CD, deployments, infrastructure, monitoring |
-| `memory` | Memory Specialist | Memory consolidation, deduplication, structured plans |
 | `planning` | Planning | Plan mode: research → clarify → draft plan → approval gate (read-only until approved) |
 
 **One scout:** use `@finder` for all exploration (including QA). There is no separate `qa-finder`.  
 **Models:** `fast` / `balanced` / `deep` profiles set per-agent models (Settings → Profiles in the web UI).  
-**Install default groups:** `core` + `qa-automation`. TokenBank + active model profile are applied on install when credentials exist.
+**Install default group:** `core` only. TokenBank + active model profile are applied on install when credentials exist.
+
+**Workflow personas are not default-installed.** `scenario-runner`, `qa-feedback`, `verification-orchestrator`, `exploratory-orchestrator`, `feature-summary`, `test-author`, and `planner-*` live under `agents/core/`, `agents/planning/` and `agents/qa-exploratory/` but are not in the `core` group. They become installed agents when their seed workflow exports (`ywai install` runs the seed walkers), or with `ywai install --all-groups`.
+
+> **Taxonomy note:** the canonical role `planning` in `role_defaults.json` resolves to the agent `orchestrator`. The profile named `planning` is a different thing — the planning-workflow coordinator. Do not rename the canonical role: that would break user overrides in `~/.ywai/role-defaults.json` (`userconfig.go`).
 
 ## Execution modes (`orchestrator`)
 
 | Mode | When | Behavior |
 |------|------|----------|
 | `solo` | One file / clear small fix / Q&A | Orchestrator acts alone (search + edit + verify). Zero subagents. |
-| `thin` | Clear "do X", limited scope | Prefer act alone; at most one sync `delegate` hop. |
+| `thin` | Clear "do X", limited scope | Prefer act alone; at most one foreground `subagent` hop. |
 | `full` | Multi-phase, ordered deps, ship | Classic SCOUT → PLAN → implement/test → review. No product edits by orchestrator. |
 
 - **Risk** (auth, migrations, public API, …) decides TDD/review — not mode size alone.
@@ -43,8 +46,8 @@ In **solo** / **thin** it may implement directly.
 graph TD
     U[User] -->|goal| O[orchestrator]
 
-    O -->|PLAN| A[architect]
-    A -->|handoff| O
+    O -->|PLAN + DESIGN in-hub| O2[architecture + UI spec\nskills: codebase-design, adr-skill, yz-ui]
+    O2 -->|brief| O
 
     O -->|¿TDD?| Q{TDD?}
     Q -->|yes| QA1[qa: write failing tests]
@@ -77,7 +80,6 @@ graph TD
     %% Statusline plugin
     SL[sub-agent-statusline plugin]
     SL -.->|visibility: running/completed/failed| O
-    SL -.->|visibility: running/completed/failed| A
     SL -.->|visibility: running/completed/failed| D1
     SL -.->|visibility: running/completed/failed| D2
     SL -.->|visibility: running/completed/failed| D3
@@ -98,9 +100,11 @@ graph TD
 - The `sub-agent-statusline` plugin gives visibility into running/completed/failed subagents.
 
 The orchestrator uses a **capability model** with per-platform adapters. On OpenCode
-v2 it delegates via `delegate` (returns an ID immediately) and supervises
-with `delegation_*`. There is no `mode` argument; wait for `<task-notification>` then `delegation_read` when the next step needs the result. `delegate` is the runtime delegation tool
-(permission action `subagent` still gates who may be launched). It asks decisions
+v2 it delegates via the native `subagent` tool: foreground returns the result,
+`background: true` returns a sessionID and a `<subagent>` notification arrives on
+completion. Background work is supervised with `subagent_status` / `subagent_steer` /
+`subagent_stop` / `subagent_read` (background-agents plugin). Permission action
+`subagent` gates who may be launched. It asks decisions
 with `question` and tracks plans with `todowrite`. On Claude Code it uses
 `Agent`/`Task` and `TaskCreate`/`Update`. On PI.dev it uses host subagent tools.
 All hosts fall back to `@mention` routing when the native tool is unavailable.
@@ -119,7 +123,6 @@ agents/
 │   └── ...
 ├── sections/
 │   ├── handoff.md          # Standard handoff format (core subagents → @orchestrator)
-│   ├── handoff-qa.md       # Handoff format for qa-automation subagents (@qa-*)
 │   ├── context-gathering.md # Context gathering protocol
 │   ├── orchestrator-contracts.md      # Short pointer (auto-appended to orchestrators)
 │   └── orchestrator-contracts-full.md # Full handoff/review schema (read on demand / workflow export)
@@ -196,7 +199,6 @@ cat ywai/agents/dev/AGENT.md
 | PI.dev | `~/.pi/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) | ✅ Full support |
 | OMP (oh-my-pi) | `~/.omp/agent/agents/*.md` | `name`, `description`, `tools:` (lowercase) — **core group only** | ✅ Core agents |
 | Cursor | `~/.cursor/agents/*.md` | (same as Claude) | ✅ Full support |
-| VS Code Copilot | `~/.config/Code/User/prompts/*.instructions.md` | `name`, `description`, `applyTo` | ✅ Full support |
 
 TokenBank models for OMP: `ywai tokenbank configure --agent omp` → `~/.omp/agent/models.yml`.
 
@@ -205,4 +207,4 @@ TokenBank models for OMP: `ywai tokenbank configure --agent omp` → `~/.omp/age
 - **Focused**: Each agent has a clear, narrow role
 - **Opinionated**: Strong defaults that work out of the box
 - **Composable**: Agents can reference skills for domain-specific knowledge
-- **Portable**: Works across opencode, claude-code, cursor, windsurf, PI.dev, etc.
+- **Portable**: Works across opencode, claude-code, cursor, codex, PI.dev, etc.

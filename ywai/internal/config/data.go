@@ -30,6 +30,17 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // that auto-routes images through TokenBank vision for text-only models.
 const VisionBridgeBundleName = "vision-bridge.js"
 
+// GraftBuildBundleName is the filename of the graft-build opencode plugin
+// bundle.
+const GraftBuildBundleName = "graft-build.js"
+
+// JevGateBundleName is the filename of the jev-gate opencode plugin bundle.
+const JevGateBundleName = "jev-gate.js"
+
+// JevCompactionBundleName is the filename of the jev-compaction opencode
+// plugin bundle.
+const JevCompactionBundleName = "jev-compaction.js"
+
 // AdvisorBundleName is the filename of the advisor opencode plugin: a second
 // model that reviews each turn and injects notes the agent can weigh.
 const AdvisorBundleName = "advisor.js"
@@ -41,6 +52,10 @@ const TuiLogoBundleName = "ywai-logo.tsx"
 // BackgroundAgentsNotifyBundleName is the filename of the background-agents
 // notification TUI sidecar (plain .tsx source, no build step), like the logo.
 const BackgroundAgentsNotifyBundleName = "background-agents-notify.tsx"
+
+// OrcaStatusBundleName is the Orca pane-status bridge TUI plugin (plain .tsx).
+// It replaces the server plugin Orca deploys, which cannot tell panes apart.
+const OrcaStatusBundleName = "orca-status.tsx"
 
 func EnsureDataDir() error {
 	fsMutex.Lock()
@@ -643,6 +658,95 @@ func VisionBridgeBundlePath() (string, error) {
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
+// GraftBuildBundlePath resolves the path to the bundled graft-build plugin JS.
+// Same resolution order as VisionBridgeBundlePath.
+func GraftBuildBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "graft-build", "dist", GraftBuildBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), GraftBuildBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("graft-build plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// JevGateSkillPath resolves the SKILL.md that ships with the jev-gate plugin.
+// A source checkout reads it from the plugin; a released binary reads the copy
+// prepare-embedded.sh seeds next to the bundles.
+func JevGateSkillPath() (string, error) {
+	srcSkill := filepath.Join(PluginsSourceDir(), "jev-gate", "skills", "jev-gate", "SKILL.md")
+	if _, err := os.Stat(srcSkill); err == nil {
+		return srcSkill, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), "jev-gate-skill", "SKILL.md")
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("jev-gate SKILL.md not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// JevGateBundlePath resolves the path to the bundled jev-gate plugin JS.
+// Same resolution order as VisionBridgeBundlePath.
+func JevGateBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "jev-gate", "dist", JevGateBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), JevGateBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("jev-gate plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// JevCompactionBundlePath resolves the path to the bundled jev-compaction
+// plugin JS. Same resolution order as JevGateBundlePath.
+func JevCompactionBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "jev-compaction", "dist", JevCompactionBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+
+	seeded := filepath.Join(DataPluginsDir(), JevCompactionBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+
+	return "", fmt.Errorf("jev-compaction plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
 // AdvisorCommandPath resolves the /advisor slash command markdown that ships
 // with the advisor plugin.
 func AdvisorCommandPath() (string, error) {
@@ -735,6 +839,25 @@ func BackgroundAgentsNotifyBundlePath() (string, error) {
 	}
 
 	return "", fmt.Errorf("background-agents notify sidecar not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
+}
+
+// OrcaStatusBundlePath resolves the Orca status bridge source, same order as
+// TuiLogoBundlePath: source checkout, seeded copy, embedded FS on demand.
+func OrcaStatusBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "tui", OrcaStatusBundleName)
+	if _, err := os.Stat(srcBundle); err == nil {
+		return srcBundle, nil
+	}
+	seeded := filepath.Join(DataPluginsDir(), "tui", OrcaStatusBundleName)
+	if _, err := os.Stat(seeded); err == nil {
+		return seeded, nil
+	}
+	if err := SeedPluginsFromEmbedded(); err == nil {
+		if _, err := os.Stat(seeded); err == nil {
+			return seeded, nil
+		}
+	}
+	return "", fmt.Errorf("orca status plugin not found; rebuild embedded data (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 func extractFS(fsys fs.FS, srcDir, dstDir string) error {

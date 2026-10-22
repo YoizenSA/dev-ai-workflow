@@ -22,7 +22,7 @@ File-level hotspots (`--name-only`, top 10) outrank all three: the same 3 files 
 
 ## Cost is noise; overhead is signal
 
-Ignore dollar shares under ~$5/window. Instead: `tools/session`, polling loops (`delegation_status` count vs delegations), `tokens_in` concentration in one agent. Name the mechanism, not the bill.
+Ignore dollar shares under ~$5/window. Instead: `tools/session`, polling loops (`subagent_status` count vs background subagents), `tokens_in` concentration in one agent. Name the mechanism, not the bill.
 
 ## Join across sources
 

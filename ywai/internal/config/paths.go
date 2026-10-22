@@ -99,6 +99,40 @@ func OpenCodeSkillsDir() string {
 	return filepath.Join(OpenCodeConfigDir(), "skills")
 }
 
+// AgentsSkillsDir is the single canonical home for ywai extra skills. One
+// physical copy lives here and every host that reads the dir shares it:
+// OpenCode loads it natively as its global agent-compatible skills dir, and
+// Claude Code reaches it through per-skill compat links (see
+// EnsureClaudeCompatLinks in internal/skills).
+//
+// Sandbox-aware like OpenCodeConfigDir: inside a profile sandbox
+// (YWAI_PROFILE) it resolves to the profile's own opencode skills dir, which
+// the sandboxed OpenCode reads natively. HOME itself is never redirected by
+// the sandbox, so a fixed ~/.agents/skills here would leak profile installs
+// into the global dir.
+func AgentsSkillsDir() string {
+	if strings.TrimSpace(os.Getenv("YWAI_PROFILE")) != "" {
+		return filepath.Join(OpenCodeConfigDir(), "skills")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".agents", "skills")
+}
+
+// ClaudeSkillsDir is where Claude Code loads personal skills from. ywai
+// writes no physical copies here, only per-skill compat links into
+// AgentsSkillsDir — Claude Code documents this location alone, but loads a
+// symlinked skill folder once.
+func ClaudeSkillsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".claude", "skills")
+}
+
 // ClaudeConfigDir returns the Claude Code config directory (~/.claude), where
 // Claude Code loads agents (~/.claude/agents) and slash commands
 // (~/.claude/commands), one flat .md per item.

@@ -354,7 +354,7 @@ export default function SkillSurfacePanel() {
           <span>
             <strong>Also remove identical duplicate copies</strong>
             <span className="field-help">
-              Keeps the copy the most tools can read: project → ~/.claude/skills → ~/.agents/skills → ~/.config/opencode/skills.
+              Keeps the copy the most tools can read: project → ~/.agents/skills → ~/.claude/skills → ~/.config/opencode/skills.
             </span>
           </span>
         </label>

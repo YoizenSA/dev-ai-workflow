@@ -7,6 +7,7 @@ import {
 	LineChart,
 	PanelLeftClose,
 	PanelLeftOpen,
+	FolderSearch,
 	Settings,
 	Store,
 	Workflow,
@@ -37,6 +38,11 @@ const NAV_ITEMS = [
 		path: "/evals",
 		label: "Evals",
 		icon: <LineChart size={20} />,
+	},
+	{
+		path: "/evidence",
+		label: "Evidence",
+		icon: <FolderSearch size={20} />,
 	},
 	{
 		path: "/envs",

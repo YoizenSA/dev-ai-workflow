@@ -3,7 +3,7 @@
  *
  * On v2 the facade's `tui.showToast` is a no-op and the built-in
  * `opencode.notifications` plugin suppresses the OS notification for
- * subagents, so terminal delegations are silent for the human. When the host
+ * subagents, so finished background subagents are silent for the human. When the host
  * supports plugin RPC, setup registers the `delegation_terminal` event; the
  * TUI sidecar (ywai/plugins/tui/background-agents-notify.tsx) subscribes and
  * raises an OS notification (only when unfocused) plus a native toast.
@@ -16,7 +16,7 @@
 export const TERMINAL_RPC_ID = "ywai-background-agents"
 export const TERMINAL_EVENT_NAME = "delegation_terminal"
 
-/** One delegation reached a terminal status (complete/error/cancelled/timeout). */
+/** One background subagent reached a terminal status (complete/error/stopped/timeout). delegationID = its sessionID. */
 export interface DelegationTerminalEventData {
 	kind: "terminal"
 	delegationID: string
@@ -30,17 +30,8 @@ export interface DelegationTerminalEventData {
 	error?: string
 }
 
-/** A parent's whole batch settled (the all-complete notification fired). */
-export interface DelegationsAllCompleteEventData {
-	kind: "all-complete"
-	parentSessionID: string
-	cycle: number
-}
+export type BackgroundAgentsTerminalEvent = DelegationTerminalEventData
 
-export type BackgroundAgentsTerminalEvent = DelegationTerminalEventData | DelegationsAllCompleteEventData
-
-/** Fire-and-forget sink for terminal events; must not throw or block the model-facing path. */
-export type TerminalEventSink = (event: BackgroundAgentsTerminalEvent) => void
 
 export const BackgroundAgentsTerminalRpc = {
 	id: TERMINAL_RPC_ID,
@@ -57,7 +48,6 @@ export const BackgroundAgentsTerminalRpc = {
 					sessionID: { type: "string" },
 					parentSessionID: { type: "string" },
 					remaining: { type: "integer" },
-					cycle: { type: "integer" },
 					title: { type: "string" },
 					error: { type: "string" },
 				},

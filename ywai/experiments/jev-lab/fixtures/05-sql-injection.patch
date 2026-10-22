@@ -1,0 +1,8 @@
+--- a/src/db/users.ts
++++ b/src/db/users.ts
+@@ -12,7 +12,7 @@ import { pool } from "./pool"
+ 
+ export async function findUser(name: string) {
+-  return pool.query("SELECT * FROM users WHERE name = $1", [name])
++  return pool.query(`SELECT * FROM users WHERE name = '${name}'`)
+ }

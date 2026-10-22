@@ -1,2 +1,0 @@
-diks
-convert-documents-to-markdown

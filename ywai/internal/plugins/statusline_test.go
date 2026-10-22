@@ -20,33 +20,6 @@ func TestTuiConfigPathIsCliJSON(t *testing.T) {
 	}
 }
 
-func TestInstallTuiLogoMigratesPluginsFromTuiJSON(t *testing.T) {
-	bundle := writeBundle(t, "// logo")
-	configPath := writeAgentConfig(t, "opencode.json", map[string]any{})
-	legacyPath := filepath.Join(filepath.Dir(configPath), "tui.json")
-	if err := os.WriteFile(legacyPath, []byte(`{"plugins":["from-tui"],"mouse":false}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := installTuiLogoWithBundle(configPath, bundle); err != nil {
-		t.Fatalf("installTuiLogoWithBundle() error = %v", err)
-	}
-
-	cliPath := filepath.Join(filepath.Dir(configPath), "cli.json")
-	root := readConfigRoot(t, cliPath)
-	arr, _ := root["plugins"].([]any)
-	if !containsString(arr, "from-tui") {
-		t.Errorf("cli.json plugins %v missing leftover tui.json entry", arr)
-	}
-	if root["mouse"] != false {
-		t.Errorf("cli.json mouse = %v, want false from leftover tui.json", root["mouse"])
-	}
-}
-
-// sub-agent-statusline works on opencode v1 and shows delegation activity in
-// the sidebar and footer. The install used to strip it on every run — a v2-era
-// decision — which quietly undid the entry Engram's installer had just written,
-// so the plugin was never there after an install.
 func TestInstallPublishedSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -59,7 +32,7 @@ func TestInstallPublishedSubAgentStatuslineAddsItToCliJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "cli.json")
-	if err := os.WriteFile(path, []byte(`{"plugin":["other"]}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"plugins":["other"]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

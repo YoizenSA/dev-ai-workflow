@@ -2,7 +2,7 @@
 set -e
 
 # Script para probar la instalación de ywai con cada agente
-# Prueba: vscode-copilot, opencode, pi
+# Prueba: opencode, pi
 # Verifica que los tools/permisos se adapten por agente
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -80,13 +80,6 @@ test_agent_install() {
                     echo "⚠ $agent_id: opencode.json config not explicitly mentioned (may be in gentle-ai)"
                 fi
                 ;;
-            "vscode-copilot")
-                if echo "$output" | grep -qi "prompts"; then
-                    echo "✓ $agent_id: VS Code prompts directory mentioned"
-                else
-                    echo "⚠ $agent_id: VS Code prompts not explicitly mentioned"
-                fi
-                ;;
             "pi")
                 if echo "$output" | grep -qi "pi"; then
                     echo "✓ $agent_id: pi agent mentioned"
@@ -119,8 +112,6 @@ for profile in ask dev qa architect reviewer devops; do
     fi
 done
 
-# Prueba para vscode-copilot
-test_agent_install "vscode-copilot" "code"
 
 # Prueba para opencode
 test_agent_install "opencode" "opencode"

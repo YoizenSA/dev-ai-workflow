@@ -44,7 +44,7 @@ Examples rows that assert different behaviours do not belong in one Outline — 
 ## Rules
 
 1. **Declarative, not imperative.** Describe intent, not keystrokes. `When the customer submits the order` — never `When I click "#submit-btn"`. Imperative steps break on every UI change and hide what is actually being tested.
-2. **Every `Then` is observable.** A tester or an assertion must be able to see it. `Then it works correctly` is a hope, not an outcome.
+2. **Every `Then` is observable.** A tester or an assertion must be able to see it. `Then it works correctly` is a hope, not an outcome. A UI Then is scored by Jev against the accessibility tree, so name the thing that must appear — not the click that might reveal it.
 3. **One behaviour per scenario.** A scenario asserting three things reports one failure and hides two.
 4. **Scenarios are independent.** No scenario may depend on another having run. Shared setup goes in `Background`; shared *state* is a bug.
 5. **`Given` is state, not action.** `Given the customer has an active subscription` — not `Given the customer signs up and pays`. If the setup reads like a scenario, it is one.

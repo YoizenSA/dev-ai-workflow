@@ -7,6 +7,7 @@ import Settings from './components/settings/Settings'
 import McpStore from './components/mcp-store/McpStore'
 import AdoConfig from './components/ado-config/AdoConfig'
 import WorkflowEditor from './components/workflows/WorkflowEditor'
+import Evidence from './components/evidence/Evidence'
 import { HealthDashboard } from './components/health/HealthDashboard'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/memories" element={<Memories />} />
           <Route path="/envs" element={<Envs />} />
           <Route path="/evals" element={<Evals />} />
+          <Route path="/evidence" element={<Evidence />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/mcp-store" element={<McpStore />} />
           <Route path="/ado" element={<AdoConfig />} />

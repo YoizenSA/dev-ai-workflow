@@ -26,18 +26,14 @@ const LOOP_GUARD_BLOCK_AT = 5
 
 /**
  * Tools exempt from the entire guard: task management tools whose repeated
- * invocation is legitimate. ywai's delegation tools are exempt too — polling
- * delegation_status is how the supervisor watches background work.
+ * invocation is legitimate. ywai's subagent tools are exempt too — checking
+ * subagent_status is how the supervisor watches background work.
  */
 const LOOP_GUARD_EXEMPT: Record<string, true> = {
 	task: true,
 	task_cancel: true,
 	task_message: true,
 	task_revive: true,
-	delegate: true,
-	delegation_list: true,
-	delegation_status: true,
-	delegation_read: true,
 	subagent: true,
 	subagent_status: true,
 	subagent_read: true,

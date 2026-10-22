@@ -15,6 +15,7 @@
   "question": "allow",
   "skill": "allow",
   "chrome-devtools_*": "allow",
+  "jev_*": "allow",
   "grafana_*": "allow",
   "graft_*": "allow",
   "memory": "allow",

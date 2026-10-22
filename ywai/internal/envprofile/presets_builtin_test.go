@@ -8,7 +8,7 @@ import (
 
 // coreAgents mirrors agents/groups.json "core": a preset default_agent must
 // be one of them, since every non-bare preset installs core.
-var coreAgents = []string{"orchestrator", "ask", "dev", "qa", "architect", "designer", "advisor", "reviewer", "devops", "finder", "memory", "planning"}
+var coreAgents = []string{"orchestrator", "ask", "dev", "qa", "advisor", "reviewer", "devops", "finder", "planning"}
 
 // Builtin presets are data shipped to every user: a typo in an MCP id, agent
 // or model only shows up as a silently skipped install, so pin their shape.

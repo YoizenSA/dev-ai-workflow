@@ -44,8 +44,9 @@ func TestLoadManifest_EmbeddedDefault(t *testing.T) {
 		ids = append(ids, e.ID)
 	}
 	want := []string{
-		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo",
-		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail",
+		"background-agents", "background-agents-notify", "vision-bridge", "advisor", "tui-logo", "orca-status",
+		"chrome-devtools", "grafana", "microsoft-learn", "meta-devtools", "ponytail", "jev-gate",
+		"graft-build", "jev-compaction",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("embedded manifest ids = %v, want %v", ids, want)
@@ -114,7 +115,6 @@ func TestParseManifest_Rejects(t *testing.T) {
 		"unknown id":   `{"install":[{"id":"nope"}]}`,
 		"duplicate id": `{"install":[{"id":"grafana"},{"id":"grafana"}]}`,
 		"missing id":   `{"install":[{"agents":["opencode"]}]}`,
-		"bad flavor":   `{"install":[{"id":"grafana","flavor":"v3"}]}`,
 		"not json":     `{"install":`,
 	}
 	for name, doc := range cases {

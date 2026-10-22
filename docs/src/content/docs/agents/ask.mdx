@@ -43,10 +43,10 @@ flowchart LR
 | Maneja directo | Delega |
 |---|---|
 | Pregunta con una respuesta | Requiere código → `@dev` |
-| Comparación / recomendación | Decisión de diseño → `@architect` |
+| Comparación / recomendación | Decisión de diseño → `@orchestrator` (trabajo del hub) |
 | Explicar código existente | Trabajo multi-agente → `@orchestrator` |
 | Búsqueda amplia de ubicación | `@finder` |
-| Duda de UI/UX | `@designer` |
+| Duda de UI/UX | `@orchestrator` (trabajo del hub) |
 | Tests o review | `@qa` / `@reviewer` |
 
 ## Límites
@@ -55,7 +55,7 @@ flowchart LR
 |---|---|
 | Responder preguntas con `file:line` | Modificar archivos (`@dev`) |
 | Explicar código y conceptos | Escribir tests (`@qa`) |
-| Investigar y recomendar | Inventar arquitectura (`@architect`) |
+| Investigar y recomendar | Inventar arquitectura (trabajo del hub, `@orchestrator`) |
 | | Correr un pipeline de entrega |
 
 <Aside type="tip">

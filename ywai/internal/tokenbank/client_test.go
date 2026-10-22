@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/config"
 )
 
 func TestFetchModels_ReadsV1Catalog(t *testing.T) {
@@ -65,5 +68,20 @@ func TestFetchModels_ReadsV1Catalog(t *testing.T) {
 	}
 	if got.DefaultModel != "deepseek-v4-flash" {
 		t.Fatalf("DefaultModel = %q, want deepseek-v4-flash", got.DefaultModel)
+	}
+}
+
+func TestDefaultV1Model_FollowsTheDefaultProfile(t *testing.T) {
+	seed := config.DefaultOrchestratorModelProfiles()[config.DefaultOrchestratorModelProfileName].OmpModelRoles["default"]
+	want := seed[strings.LastIndex(seed, "/")+1:]
+	if want == "" {
+		t.Fatal("default profile has no omp_model_roles.default")
+	}
+	models := []ModelInfo{{ID: "kimi-k3"}, {ID: want}}
+	if got := defaultV1Model(models); got != want {
+		t.Fatalf("defaultV1Model = %q, want %q from orchestrator_profiles.json", got, want)
+	}
+	if got := defaultV1Model(models[:1]); got != "kimi-k3" {
+		t.Fatalf("without the profile model, defaultV1Model = %q, want the first model", got)
 	}
 }

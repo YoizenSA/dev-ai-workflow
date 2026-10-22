@@ -209,19 +209,15 @@ func adoPluginConfigFilePath() string {
 	return filepath.Join(home, ".config", "opencode", "ado-plugin.json")
 }
 
-// removeFromPluginArray strips any ADO entry from the v2 "plugins" array
-// (migrating a leftover "plugin" key first). Entries may be a bare spec,
-// {package, options}, or ["<spec>", {opts}].
+// removeFromPluginArray strips any ADO entry from the "plugins" array.
+// Entries may be a bare spec, {package, options}, or ["<spec>", {opts}].
+// A stale v1 "plugin" key counts as a change so it is dropped on the write.
 // Reports whether the root was modified.
 func removeFromPluginArray(root map[string]any, packages []string) bool {
-	_, hadLegacy := root["plugin"]
-	raw := openCodePlugins(root)
-	if len(raw) == 0 && !hadLegacy {
-		return hadLegacy
-	}
+	raw := pluginArray(root)
 
 	filtered := make([]any, 0, len(raw))
-	changed := hadLegacy
+	changed := false
 	for _, entry := range raw {
 		if isAdoPluginEntry(entry, packages) {
 			changed = true
@@ -229,8 +225,11 @@ func removeFromPluginArray(root map[string]any, packages []string) bool {
 		}
 		filtered = append(filtered, entry)
 	}
+	if _, stale := root["plugin"]; stale {
+		changed = true
+	}
 	if changed {
-		writePlugins(root, filtered)
+		writePluginArray(root, filtered)
 	}
 	return changed
 }

@@ -410,6 +410,8 @@ var installCmd = &cobra.Command{
 		var installMCP bool
 		var installMetaMCP bool
 		var installPonytail bool
+		// Flagged manifest entries with no dedicated toggle (experimental).
+		optionalFlags := map[string]bool{}
 		var groupFilter agentprofiles.GroupFilter
 		overwriteAgents := true
 		ranTUI := false
@@ -439,6 +441,9 @@ var installCmd = &cobra.Command{
 			installMCP = result.MCP
 			installMetaMCP = result.MetaMCP
 			installPonytail = result.Ponytail
+			for k, v := range result.OptionalFlags {
+				optionalFlags[k] = v
+			}
 			overwriteAgents = result.OverwriteAgents
 			groupFilter = result.GroupFilter
 			autostartFlag = result.Autostart
@@ -447,6 +452,9 @@ var installCmd = &cobra.Command{
 			installMCP = mcpFlag
 			installMetaMCP = getBoolFlag(cmd, "meta-mcp")
 			installPonytail = ponytailFlag
+			optionalFlags["jev-gate"] = getBoolFlag(cmd, "jev-gate")
+			optionalFlags["jev-compaction"] = getBoolFlag(cmd, "jev-compaction")
+			optionalFlags["graft-build"] = getBoolFlag(cmd, "graft-build")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -468,7 +476,7 @@ var installCmd = &cobra.Command{
 			overwriteAgents = response != "n" && response != "N"
 		}
 
-		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, groupFilter, overwriteAgents, autostartFlag, profileFlag)
+		result := executeInstall(installOpts, installMCP, installMetaMCP, installPonytail, optionalFlags, groupFilter, overwriteAgents, autostartFlag, profileFlag)
 		result.printFooter(applyInstall)
 		if code := result.exitCode(); code != 0 {
 			os.Exit(code)
@@ -1303,12 +1311,8 @@ var tokenbankConfigureCmd = &cobra.Command{
 				if err := tokenbank.ConfigureOmp(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
 					return fmt.Errorf("error configuring omp: %w", err)
 				}
-			case "copilot":
-				if err := tokenbank.ConfigureCopilot(cfg.TokenBankURL, cfg.TokenBankAPIKey); err != nil {
-					return fmt.Errorf("error configuring copilot: %w", err)
-				}
 			default:
-				return fmt.Errorf("unknown agent %q. Use: opencode, pi, omp, copilot", agentFlag)
+				return fmt.Errorf("unknown agent %q. Use: opencode, pi, omp", agentFlag)
 			}
 		} else {
 			// Configure all agents
@@ -1360,9 +1364,12 @@ func init() {
 	installCmd.Flags().Bool("tui", false, "Force TUI mode")
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
+	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin: Jev-backed review, find and routing tools, plus a permission gate that asks before writing after a blocking review. Needs a TypeSafe API key.")
+	installCmd.Flags().Bool("graft-build", false, "Install the graft-build opencode plugin: builds the graft graph once for a repo that has never had one. Graft keeps an existing graph fresh on its own; this only covers the first build.")
+	installCmd.Flags().Bool("jev-compaction", false, "Install the experimental jev-compaction opencode plugin: drops stale tool calls and results before each request using Jev decisions, plus the jev_compact tool. Reuses the jev-gate API key file.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")
-	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable, e.g., --group qa-automation)")
+	installCmd.Flags().StringSlice("group", []string{}, "Agent groups to install (repeatable)")
 	installCmd.Flags().Bool("all-groups", false, "Install all agent groups")
 	installCmd.Flags().String("profile", "", "Apply only inside an isolated environment (see `ywai env list`)")
 
@@ -1393,7 +1400,7 @@ func init() {
 	tokenbankSetupCmd.Flags().String("key", "", "TokenBank proxy API key")
 	tokenbankCmd.AddCommand(tokenbankSetupCmd)
 
-	tokenbankConfigureCmd.Flags().String("agent", "", "Agent to configure: opencode, copilot, pi, omp (default: all)")
+	tokenbankConfigureCmd.Flags().String("agent", "", "Agent to configure: opencode, pi, omp (default: all)")
 	tokenbankCmd.AddCommand(tokenbankConfigureCmd)
 
 	rootCmd.AddCommand(tokenbankCmd)

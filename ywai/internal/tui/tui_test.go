@@ -9,7 +9,7 @@ import (
 )
 
 func testAgents() []agent.Agent {
-	// Both must be profile-install hosts (windsurf is detected but not installable).
+	// Both must be profile-install hosts (cursor is detected but not installable).
 	return []agent.Agent{
 		{Name: "opencode", BinaryName: "opencode"},
 		{Name: "pi", BinaryName: "pi"},
@@ -71,11 +71,11 @@ func TestNewModel_SingleAgentNoAll(t *testing.T) {
 }
 
 func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
-	// windsurf/gemini may be on PATH but ywai has no profile install for them.
+	// cursor/codex may be on PATH but ywai has no profile install for them.
 	m := NewModel([]agent.Agent{
 		{Name: "opencode", BinaryName: "opencode"},
-		{Name: "windsurf", BinaryName: "windsurf"},
-		{Name: "gemini-cli", BinaryName: "gemini"},
+		{Name: "cursor", BinaryName: "cursor"},
+		{Name: "codex", BinaryName: "codex"},
 		{Name: "omp", BinaryName: "omp"},
 	})
 	names := make([]string, 0, len(m.agents))
@@ -87,7 +87,7 @@ func TestNewModel_FiltersUnsupportedHosts(t *testing.T) {
 		t.Fatalf("expected 3 options (2 supported + all), got %d: %v", len(m.agents), names)
 	}
 	for _, n := range names {
-		if n == "windsurf" || n == "gemini-cli" {
+		if n == "cursor" || n == "codex" {
 			t.Fatalf("unsupported host %q must not appear in install list: %v", n, names)
 		}
 	}
@@ -170,9 +170,9 @@ func TestStepFlow_OptionsToMCP_WhenClaudeCode(t *testing.T) {
 	}
 }
 
-// vscode-copilot has no MCP surface, so Options goes straight to Confirm.
+// pi has no MCP surface, so Options goes straight to Confirm.
 func TestStepFlow_OptionsToConfirm_WhenNoMCPHost(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // select cursor -> options
 	sendKey(&m, "enter") // options -> confirm (skip MCP)
@@ -198,7 +198,7 @@ func TestShouldShowMCPStep_All_WithOpencode(t *testing.T) {
 
 func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 	agents := []agent.Agent{
-		{Name: "vscode-copilot", BinaryName: "code"},
+		{Name: "pi", BinaryName: "pi"},
 		{Name: "pi", BinaryName: "pi"},
 	}
 	m := NewModel(agents)
@@ -209,7 +209,7 @@ func TestShouldShowMCPStep_All_NoOpencode(t *testing.T) {
 }
 
 func TestOptionsStep_NavigationBounds(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	// Try going up from 0
@@ -228,7 +228,7 @@ func TestOptionsStep_NavigationBounds(t *testing.T) {
 }
 
 func TestEscNavigation(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	sendKey(&m, "enter") // options -> confirm (cursor skips MCP)
@@ -276,7 +276,7 @@ func TestEscNavigation_WithMCP(t *testing.T) {
 }
 
 func TestEscNavigation_QuickInstall(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	goToQuickInstall(&m)
 	sendKey(&m, "enter") // agent -> confirm (quick)
 	if m.step != stepConfirm {
@@ -289,15 +289,15 @@ func TestEscNavigation_QuickInstall(t *testing.T) {
 }
 
 func TestResult_AllFields(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
-	m.selectedAgent = "vscode-copilot"
+	m := NewModel(singleAgent("pi"))
+	m.selectedAgent = "pi"
 	m.installMicrosoftLearnMCP = true
 	m.installPonytail = true
 	m.confirmed = true
 
 	r := m.Result()
-	if r.Agent != "vscode-copilot" {
-		t.Fatalf("Agent=%q, want vscode-copilot", r.Agent)
+	if r.Agent != "pi" {
+		t.Fatalf("Agent=%q, want pi", r.Agent)
 	}
 	if !r.MCP {
 		t.Fatal("MCP should be true")
@@ -308,8 +308,8 @@ func TestResult_AllFields(t *testing.T) {
 }
 
 func TestResult_PonytailOnByDefault(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
-	m.selectedAgent = "vscode-copilot"
+	m := NewModel(singleAgent("pi"))
+	m.selectedAgent = "pi"
 	m.confirmed = true
 	r := m.Result()
 	if !r.Ponytail {
@@ -322,7 +322,7 @@ func TestResult_PonytailOnByDefault(t *testing.T) {
 
 // The Options step ends on Autostart: SDD is gone, so is the preset.
 func TestOptionsStep_LastRowIsAutostart(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	goToCustomInstall(&m)
 	sendKey(&m, "enter") // agent -> options
 	for i := 0; i < optionsRowCount; i++ {
@@ -366,7 +366,7 @@ func TestViewConfirm_ShowsQuickInstallMode(t *testing.T) {
 }
 
 func TestViewOptions_Renders(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	m.step = stepOptions
 	view := m.viewOptions()
 
@@ -387,7 +387,7 @@ func TestViewOptions_Renders(t *testing.T) {
 }
 
 func TestBreadcrumbs_IncludesOptions(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	m.step = stepOptions
 	bc := m.renderBreadcrumbs()
 	if !strings.Contains(bc, "Options") {
@@ -396,7 +396,7 @@ func TestBreadcrumbs_IncludesOptions(t *testing.T) {
 }
 
 func TestBreadcrumbs_HidesOptionsInQuickMode(t *testing.T) {
-	m := NewModel(singleAgent("vscode-copilot"))
+	m := NewModel(singleAgent("pi"))
 	m.quickInstall = true
 	m.step = stepConfirm
 	bc := m.renderBreadcrumbs()
@@ -504,8 +504,10 @@ func TestMetaDevToolsMCPToggle(t *testing.T) {
 	if m.step != stepMCP {
 		t.Fatalf("expected stepMCP, got %d", m.step)
 	}
-	if m.optionalPluginCount() != 3 {
-		t.Fatalf("optionalPluginCount()=%d, want 3", m.optionalPluginCount())
+	// Rows 0..2 are the named toggles; flagged experimental entries are
+	// appended after them, so only the first three indices are pinned here.
+	if m.optionalPluginCount() < 3 {
+		t.Fatalf("optionalPluginCount()=%d, want at least 3", m.optionalPluginCount())
 	}
 
 	sendKey(&m, "down") // focus Meta Developer Tools MCP

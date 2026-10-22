@@ -612,3 +612,138 @@ func CountSddAssets(agentSkillsDir string) int {
 func PruneYwaiSkills(agentSkillsDir string) []string {
 	return pruneRetiredSkills(agentSkillsDir, nil)
 }
+
+// RemoveLegacyDuplicates deletes ywai-owned skills from legacy host dirs
+// (the pre-canonical per-host copies under ~/.config/opencode/skills and
+// ~/.claude/skills) once the same skill lives in the canonical dir. Legacy
+// dirs keep zero ywai-owned entries: a shipped skill is a duplicate, an
+// unshipped one is retired — both go.
+//
+// Ownership is proven, never guessed: a real directory with the .ywai-extra
+// marker, or a link whose target points into ywai's skill source. A skill the
+// user wrote is untouched even when it shares a name. A shipped skill whose
+// canonical copy is missing (a failed copy) is kept as a safety net.
+// Returns the sorted removed paths.
+func RemoveLegacyDuplicates(canonicalDir string, legacyDirs []string) []string {
+	srcDir := skillsSourceDir()
+	shipped := ywaiExtraSkillNames(srcDir)
+	canonical := dirNames(canonicalDir)
+	var removed []string
+	for _, legacy := range legacyDirs {
+		entries, err := os.ReadDir(legacy)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			path := filepath.Join(legacy, name)
+			switch {
+			case entry.IsDir() && hasYwaiExtraMarker(path):
+				// Marker dir: ywai's physical copy, duplicate or retired.
+			case IsLinkOrJunction(path) && linkTargetsYwaiSkills(path, srcDir):
+				// ywai's link into the skill source.
+			default:
+				continue
+			}
+			if !canonical[name] && shipped[name] {
+				continue // canonical copy missing; keep the only one left
+			}
+			if err := removeExistingSkillPath(path); err != nil {
+				fmt.Printf("  Warning: failed to remove legacy skill %s: %v\n", path, err)
+				continue
+			}
+			removed = append(removed, path)
+		}
+	}
+	sort.Strings(removed)
+	return removed
+}
+
+// EnsureClaudeCompatLinks links every canonical skill into the Claude
+// personal skills dir. Claude Code only guarantees that location, but loads
+// a symlinked skill folder once — so one physical copy serves both hosts.
+// Entries ywai owns (marker dir or link into ywai skills) are replaced by
+// links; a skill the user wrote keeps its directory untouched. A link that
+// cannot be created (Windows without symlink privilege and no junction
+// fallback) is skipped with a warning: bytes are never duplicated.
+// Returns how many links it created.
+func EnsureClaudeCompatLinks(canonicalDir, claudeDir string) (int, error) {
+	entries, err := os.ReadDir(canonicalDir)
+	if err != nil {
+		return 0, fmt.Errorf("read canonical skills dir %s: %w", canonicalDir, err)
+	}
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return 0, fmt.Errorf("create Claude skills dir %s: %w", claudeDir, err)
+	}
+	srcDir := skillsSourceDir()
+	created := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		target := filepath.Join(canonicalDir, name)
+		link := filepath.Join(claudeDir, name)
+		if st, err := os.Lstat(link); err == nil {
+			if IsLinkOrJunction(link) {
+				// EvalSymlinks resolves symlinks and Windows junctions alike.
+				if current, err := filepath.EvalSymlinks(link); err == nil {
+					if want, err := filepath.EvalSymlinks(target); err == nil && current == want {
+						continue // compat link already points here
+					}
+				}
+				if !linkTargetsYwaiSkills(link, srcDir) && !linkTargetsDir(link, canonicalDir) {
+					continue // foreign link; not ours to replace
+				}
+			} else if !st.IsDir() || !hasYwaiExtraMarker(link) {
+				continue // user skill; never touched
+			}
+			if err := removeExistingSkillPath(link); err != nil {
+				fmt.Printf("  Warning: failed to replace %s with a compat link: %v\n", name, err)
+				continue
+			}
+		}
+		if err := linkSkill(target, link); err != nil {
+			fmt.Printf("  Warning: no Claude compat link for %s (%v); Claude Code will not see it\n", name, err)
+			continue
+		}
+		created++
+	}
+	return created, nil
+}
+
+// linkSkill links link at target, falling back to a directory junction on
+// Windows where plain symlinks need privilege or Developer Mode.
+func linkSkill(target, link string) error {
+	if err := os.Symlink(target, link); err == nil {
+		return nil
+	} else if !config.IsWindows() {
+		return err
+	} else if out, jerr := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); jerr == nil {
+		return nil
+	} else {
+		return fmt.Errorf("symlink failed and mklink /J failed: %s", strings.TrimSpace(string(out)))
+	}
+}
+
+// linkTargetsDir reports whether a link resolves inside dir.
+func linkTargetsDir(path, dir string) bool {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return isPathWithin(target, dir)
+}
+
+// dirNames lists the immediate child names of dir (a missing dir reads empty).
+func dirNames(dir string) map[string]bool {
+	out := map[string]bool{}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		out[e.Name()] = true
+	}
+	return out
+}

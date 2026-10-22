@@ -38,7 +38,7 @@ func TestAgentErrorHandling(t *testing.T) {
 
 	// With the fallback to detect by config dir, agents may be detected
 	// even if their binary is not in PATH
-	if strings.Contains(out, "claude-code") || strings.Contains(out, "antigravity") {
+	if strings.Contains(out, "claude-code") {
 		// Agent detected by config dir - this is expected behavior now
 		if err != nil {
 			t.Errorf("expected no error when agent detected by config dir, got: %v", err)

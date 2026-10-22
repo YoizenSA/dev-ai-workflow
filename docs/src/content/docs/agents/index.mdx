@@ -14,7 +14,6 @@ Usá `@nombre-del-agente` en opencode:
 ```
 @dev Implementa el endpoint de login
 @qa Escribe tests para UserService
-@architect ¿Qué patrón usamos para auth?
 @reviewer Revisa el PR de pagos
 @devops Crea un Dockerfile
 @ask ¿Cómo funciona el middleware actual?
@@ -22,39 +21,24 @@ Usá `@nombre-del-agente` en opencode:
 
 ## El equipo
 
-El default de `ywai install` es **core + qa-automation**. El install **borra** de `~/.config/opencode/agents/` lo que no esté en el grupo activo.
+El default de `ywai install` es **core**. El install **borra** de `~/.config/opencode/agents/` lo que no esté en el grupo activo.
 
 ### Core (siempre)
 
 | Agente | Rol | Para qué |
 |---|---|---|
-| [**orchestrator**](/dev-ai-workflow/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas |
+| [**orchestrator**](/dev-ai-workflow/agents/orchestrator) | Coordinador | Coordina múltiples agentes para tareas complejas; planifica arquitectura y specs de UI él mismo |
 | [**dev**](/dev-ai-workflow/agents/dev) | Desarrollador | Escribir código, arreglar bugs, refactorizar |
-| [**designer**](/dev-ai-workflow/agents/designer) | Diseñador UX/UI | Specs visuales, auditoría UI, accesibilidad |
 | [**qa**](/dev-ai-workflow/agents/qa) | QA Engineer | Tests, cobertura, validación |
-| [**architect**](/dev-ai-workflow/agents/architect) | Arquitecto | Decisiones de diseño, patrones, tradeoffs |
 | [**reviewer**](/dev-ai-workflow/agents/reviewer) | Revisor | Code review, bugs, seguridad |
 | [**devops**](/dev-ai-workflow/agents/devops) | DevOps | CI/CD, Docker, K8s, despliegues |
 | [**ask**](/dev-ai-workflow/agents/ask) | Investigador | Preguntas, análisis, explicaciones |
 | [**finder**](/dev-ai-workflow/agents/finder) | Explorador | Buscar archivos, entender estructura (también para QA) |
 | [**planning**](/dev-ai-workflow/agents/planning) | Planificador | Investigar y planificar antes de implementar |
-| [**memory**](/dev-ai-workflow/agents/memory) | Archivista | Memoria persistente entre sesiones |
 | [**advisor**](/dev-ai-workflow/agents/advisor) | Segundo revisor | Revisa cada turno del agente principal (no se invoca directo) |
 
 Subagent-only (los invoca el orchestrator, llegan con `--all-groups`): [**scenario-runner**](/dev-ai-workflow/agents/scenario-runner) (verificación BDD post-review), `planner-scout` + `planner-draft` (exploración y redacción dentro de `@planning`).
 |---|---|---|
-
-### QA Automation (default, 5 agentes)
-
-| Agente | Rol | Para qué |
-|---|---|---|
-| [**qa-orchestrator**](/dev-ai-workflow/agents/qa-orchestrator) | Coordinador | Coordina el equipo de testing |
-| [**qa-analyst**](/dev-ai-workflow/agents/qa-analyst) | Analista | Diseña estrategia de testing |
-| [**qa-dev**](/dev-ai-workflow/agents/qa-dev) | Desarrollador | Escribe tests automatizados |
-| [**qa-reviewer**](/dev-ai-workflow/agents/qa-reviewer) | Revisor | Revisa calidad de tests |
-| [**qa-ask**](/dev-ai-workflow/agents/qa-ask) | Investigador | Responde preguntas de testing |
-
-La exploración dentro de estos flujos la hace `@finder` ([QA Finder](/dev-ai-workflow/agents/qa-finder)).
 
 ### QA Exploratory (viene con ywai, sin grupo propio)
 
@@ -68,30 +52,19 @@ La exploración dentro de estos flujos la hace `@finder` ([QA Finder](/dev-ai-wo
 
 Detalle: [QA Exploratory](/dev-ai-workflow/agents/qa-exploratory). No están en `groups.json`: el install por defecto no los copia, llegan con `ywai install --all-groups`, y el workflow `/qa-exploratory` los usa end-to-end.
 
-### Experiment (opt-in)
-
-| Agente | Rol | Para qué |
-|---|---|---|
-| `experiment/infra-docs` | Escritor | Mantiene la wiki de Infra como notas DIKS |
-
-```bash
-ywai groups enable experiment
-```
-
 ## Cuándo usar cada agente
 
 | Necesidad | Agente |
 |---|---|
 | Sola pregunta | `@ask` |
 | Necesitás código | `@dev` |
-| Pantalla o spec visual | `@designer` |
+| Pantalla o spec visual | Orchestrator (planifica la spec; `@dev` la implementa) |
 | Necesitás tests | `@qa` |
-| Decisión de diseño | `@architect` |
+| Decisión de diseño | Orchestrator (trabajo del hub) |
 | Revisar código | `@reviewer` |
 | Infraestructura | `@devops` |
 | Buscar código | `@finder` |
 | Planificar | `@planning` |
-| Recordar decisiones | `@memory` |
 | Tarea compleja | Orchestrator (automático) |
 
 <Aside type="tip">

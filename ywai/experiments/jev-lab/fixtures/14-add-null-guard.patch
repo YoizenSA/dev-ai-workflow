@@ -1,0 +1,8 @@
+--- a/src/reports/render.ts
++++ b/src/reports/render.ts
+@@ -8,6 +8,9 @@ export function render(report: Report | null): string {
++  if (!report) {
++    return ""
++  }
+   return report.rows.map(formatRow).join("\n")
+ }

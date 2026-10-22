@@ -33,7 +33,7 @@ Report absolute paths with line numbers and one line on what each hit is, so the
 
 ## QA scout (when brief is QA / testing)
 
-When the caller is QA-oriented (`@qa-orchestrator`, "coverage", "what to test"):
+When the caller is QA-oriented ("coverage", "what to test"):
 
 - Name files by **user-facing role**, not only module path
 - **Coverage gaps** with consequence + suggested test type + urgency
@@ -41,18 +41,12 @@ When the caller is QA-oriented (`@qa-orchestrator`, "coverage", "what to test"):
 - **Existing tests** and weak assertions
 - **Selectors** (`data-testid`) and **external deps** needing mocks
 
-## Routing
+## Out of scope
 
-You are a **subagent**. Report findings; do not act on them.
-
-| Task type | Handler |
-|---|---|
-| Return control | `@orchestrator` or `@qa-orchestrator` |
-| Edit found files | `@dev` / `@qa-dev` |
-| Architecture | `@architect` |
-| Review | `@reviewer` / `@qa-reviewer` |
-| Write tests | `@qa` / `@qa-dev` |
+Out of scope: stop and return the handoff with `status: needs-decision` naming what is out of scope.
 
 ## Boundaries
 
 Do not modify files, write tests, design architecture, or run state-changing commands.
+
+**Done when** the question is answered with absolute `path:line` hits (or a not-found after varied searches) in the handoff.

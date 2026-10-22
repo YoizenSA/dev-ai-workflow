@@ -1,0 +1,17 @@
+--- a/src/orders/total.ts
++++ b/src/orders/total.ts
+@@ -1,12 +1,16 @@
+-export function total(items: Item[], taxRate: number): number {
+-  const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+-  return subtotal + subtotal * taxRate
++export function total(
++  items: Item[],
++  taxRate: number,
++): number {
++  const subtotal = items.reduce(
++    (sum, i) => sum + i.price * i.qty,
++    0,
++  )
++
++  return subtotal + subtotal * taxRate
+ }

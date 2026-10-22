@@ -59,17 +59,19 @@ func exportFixture() *Workflow {
 func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 	wf := exportFixture()
 	body := orchestratorBody(wf, map[string]string{"news": "daily-task-news-briefing"})
-	if !strings.Contains(body, "`delegate`") {
-		t.Fatalf("orchestrator body must tell the model to use OpenCode v2 delegate:\n%s", body)
+	if !strings.Contains(body, "native `subagent` tool") {
+		t.Fatalf("orchestrator body must tell the model to use the native subagent tool:\n%s", body)
 	}
-	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
-		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
+	for _, dead := range []string{"`task` tool", "`delegate`", "delegation_", "<task-notification>"} {
+		if strings.Contains(body, dead) {
+			t.Fatalf("orchestrator body must not mention removed tool %q:\n%s", dead, body)
+		}
 	}
 	if strings.Contains(body, `mode: "sync"`) || strings.Contains(body, `mode="sync"`) {
 		t.Fatalf("orchestrator body must not invent a delegate mode argument:\n%s", body)
 	}
-	if !strings.Contains(body, "delegation_read") {
-		t.Fatalf("orchestrator body must tell the model to read the result after notification:\n%s", body)
+	if !strings.Contains(body, "<subagent>") {
+		t.Fatalf("orchestrator body must name the native completion notification:\n%s", body)
 	}
 }
 
@@ -131,6 +133,64 @@ func TestOrchestratorHasTaskPermission(t *testing.T) {
 	}
 	if !strings.Contains(orch, "- action: subagent\n    resource: daily-task-news-briefing\n    effect: allow") {
 		t.Errorf("orchestrator missing subagent allow rule for the workflow sub-agent:\n%s", orch)
+	}
+}
+
+// TestOrchestratorInheritsAgentRefPermissions verifies a START node linked to a
+// real agent profile (no explicit tools CSV) seeds the linked profile's
+// permissions. Seeding from the coordinator default turned profiles like
+// verification-orchestrator (bash: verify) into a bare shell deny.
+func TestOrchestratorInheritsAgentRefPermissions(t *testing.T) {
+	wf := exportFixture()
+	wf.findNode(NodeTypeStart).Data.AgentRef = "qa-exploratory/verification-orchestrator"
+
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	orch, ok := files[filepath.Join(agentsDir, "daily-task-orchestrator.md")]
+	if !ok {
+		t.Fatalf("orchestrator markdown not found")
+	}
+	for _, want := range []string{
+		`resource: "git diff*"`,
+		`resource: "npx jest*"`,
+		`resource: "ado wi get*"`,
+	} {
+		if !strings.Contains(orch, "- action: shell\n    "+want+"\n    effect: allow") {
+			t.Errorf("agentRef orchestrator missing verify allow %s:\n%s", want, orch)
+		}
+	}
+}
+
+// TestOrchestratorExplicitToolsBeatAgentRef: an explicit tools CSV on the START
+// node keeps winning over the linked profile's permissions.
+func TestOrchestratorExplicitToolsBeatAgentRef(t *testing.T) {
+	wf := exportFixture()
+	start := wf.findNode(NodeTypeStart)
+	start.Data.AgentRef = "qa-exploratory/verification-orchestrator"
+	start.Data.Tools = "read,glob,grep"
+
+	commandsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	e := newExporterWithDirs(commandsDir, agentsDir)
+
+	_, files, err := e.Plan(wf)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	orch, ok := files[filepath.Join(agentsDir, "daily-task-orchestrator.md")]
+	if !ok {
+		t.Fatalf("orchestrator markdown not found")
+	}
+	if strings.Contains(orch, `resource: "git diff*"`) {
+		t.Errorf("explicit tools CSV must beat the agentRef profile:\n%s", orch)
 	}
 }
 
@@ -419,7 +479,7 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		wf := exportFixture()
 		for i := range wf.Nodes {
 			if wf.Nodes[i].ID == "news" {
-				wf.Nodes[i].Data.Sections = "handoff-qa"
+				wf.Nodes[i].Data.Sections = "handoff"
 			}
 		}
 		cmdDir := t.TempDir()
@@ -436,8 +496,8 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 		if !ok {
 			t.Fatalf("sub-agent markdown not found at %s", subPath)
 		}
-		if !strings.Contains(sub, "@qa-orchestrator") {
-			t.Errorf("custom-sections sub-agent should contain handoff-qa section (@qa-orchestrator), got:\n%s", sub)
+		if !strings.Contains(sub, "## Handoff") {
+			t.Errorf("custom-sections sub-agent should contain the handoff section, got:\n%s", sub)
 		}
 	})
 
@@ -447,11 +507,11 @@ func TestExportSubAgentHandoffInjection(t *testing.T) {
 	// CSV the UI sends, breaking save/load for any node with sections set.
 	t.Run("csv-from-frontend-json", func(t *testing.T) {
 		var nd NodeData
-		if err := json.Unmarshal([]byte(`{"sections":"handoff-qa, context-gathering"}`), &nd); err != nil {
+		if err := json.Unmarshal([]byte(`{"sections":"handoff, context-gathering"}`), &nd); err != nil {
 			t.Fatalf("NodeData must decode CSV sections from the frontend: %v", err)
 		}
-		if got := subAgentSectionList(nd.Sections); len(got) != 2 || got[0] != "handoff-qa" || got[1] != "context-gathering" {
-			t.Errorf("subAgentSectionList(%q) = %v, want [handoff-qa context-gathering]", nd.Sections, got)
+		if got := subAgentSectionList(nd.Sections); len(got) != 2 || got[0] != "handoff" || got[1] != "context-gathering" {
+			t.Errorf("subAgentSectionList(%q) = %v, want [handoff context-gathering]", nd.Sections, got)
 		}
 		if got := subAgentSectionList(""); len(got) != 1 || got[0] != "handoff" {
 			t.Errorf("empty sections must default to [handoff], got %v", got)
@@ -472,24 +532,24 @@ func keys(m map[string]string) []string {
 // prompt again (ref ignored) or silently discards a deliberate override.
 
 func TestResolveAgentDefinition_RefResolvesFromAgentsDir(t *testing.T) {
-	n := &Node{Data: NodeData{AgentRef: "core/architect"}}
+	n := &Node{Data: NodeData{AgentRef: "core/finder"}}
 	got := resolveAgentDefinition(n)
 	if got == "" {
 		t.Fatal("agentRef did not resolve — the workflow would fall back to its task prompt")
 	}
-	if !strings.Contains(got, "Architect Agent") {
+	if !strings.Contains(got, "Finder Agent") {
 		t.Errorf("resolved the wrong agent: %.80q", got)
 	}
 }
 
 func TestResolveAgentDefinition_BareNameResolves(t *testing.T) {
-	if got := resolveAgentDefinition(&Node{Data: NodeData{AgentRef: "designer"}}); !strings.Contains(got, "Designer Agent") {
-		t.Errorf("bare name should resolve to core/designer, got %.80q", got)
+	if got := resolveAgentDefinition(&Node{Data: NodeData{AgentRef: "dev"}}); !strings.Contains(got, "Dev Agent") {
+		t.Errorf("bare name should resolve to core/dev, got %.80q", got)
 	}
 }
 
 func TestResolveAgentDefinition_InlineDefinitionOverridesRef(t *testing.T) {
-	n := &Node{Data: NodeData{AgentRef: "core/architect", AgentDefinition: "One-off node prompt."}}
+	n := &Node{Data: NodeData{AgentRef: "core/finder", AgentDefinition: "One-off node prompt."}}
 	if got := resolveAgentDefinition(n); got != "One-off node prompt." {
 		t.Errorf("an explicit agentDefinition must win over the ref, got %q", got)
 	}
@@ -507,8 +567,8 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 		Name: "linked",
 		Nodes: []Node{
 			{ID: "s", Type: NodeTypeStart},
-			{ID: "a", Type: NodeTypeSubAgent, Name: "designer",
-				Data: NodeData{Name: "designer", AgentRef: "core/designer", Prompt: "Spec the screen."}},
+			{ID: "a", Type: NodeTypeSubAgent, Name: "finder",
+				Data: NodeData{Name: "finder", AgentRef: "core/finder", Prompt: "Map the code."}},
 		},
 		Connections: []Connection{{From: "s", To: "a"}},
 	}
@@ -519,14 +579,14 @@ func TestExport_LinkedNodeTracksTheAgent(t *testing.T) {
 	}
 	var agentMD string
 	for path, content := range files {
-		if strings.Contains(path, "designer") {
+		if strings.Contains(path, "finder") {
 			agentMD = content
 		}
 	}
 	if agentMD == "" {
 		t.Fatal("no agent file rendered for the linked node")
 	}
-	for _, want := range []string{"Designer Agent", "## Task", "Spec the screen."} {
+	for _, want := range []string{"Finder Agent", "## Task", "Map the code."} {
 		if !strings.Contains(agentMD, want) {
 			t.Errorf("exported linked agent missing %q", want)
 		}

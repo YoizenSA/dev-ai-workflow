@@ -66,6 +66,36 @@ func TestOpenCodeConfigDirHonorsEnvironmentOverride(t *testing.T) {
 	}
 }
 
+func TestAgentsSkillsDirIsCanonicalGlobally(t *testing.T) {
+	t.Setenv("YWAI_PROFILE", "")
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	got := AgentsSkillsDir()
+	if filepath.Base(filepath.Dir(got)) != ".agents" || filepath.Base(got) != "skills" {
+		t.Fatalf("AgentsSkillsDir() = %q, want ~/.agents/skills", got)
+	}
+}
+
+func TestAgentsSkillsDirStaysInsideProfileSandbox(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("YWAI_PROFILE", "dev")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("OPENCODE_CONFIG_DIR", "")
+
+	want := filepath.Join(xdg, "opencode", "skills")
+	if got := AgentsSkillsDir(); got != want {
+		t.Fatalf("AgentsSkillsDir() = %q, want %q", got, want)
+	}
+}
+
+func TestClaudeSkillsDirIsPersonalSkillsDir(t *testing.T) {
+	got := ClaudeSkillsDir()
+	if filepath.Base(got) != "skills" || filepath.Base(filepath.Dir(got)) != ".claude" {
+		t.Fatalf("ClaudeSkillsDir() = %q, want ~/.claude/skills", got)
+	}
+}
+
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

@@ -19,7 +19,7 @@ Distinct topics must never overwrite each other. A memory returned as `needs_rev
 
 ### Session close
 
-Before saying you are done, call `mem_session_summary` covering: goal, user preferences or constraints discovered, discoveries, what was accomplished, what remains, and the relevant files with what changed in each. Skipping this starts the next session blind.
+Primary sessions only: before saying you are done, call `mem_session_summary` covering goal, constraints discovered, discoveries, what was done, what remains, and the files changed. Subagents return their handoff instead; the primary session summarizes.
 
 ### After compaction
 
@@ -33,10 +33,9 @@ Keep a session-scoped list of the `(phase, task-fingerprint)` pairs you have lau
 
 ### Skills: match by description, load by id
 
-At each step OpenCode advertises permitted skills as ID + name + description only, not the full body. Call the `skill` tool with the exact, case-sensitive ID (`{"id": "<skill-id>"}`). The frontmatter `name` is display only — the file path decides the ID. A skill without `description` is never advertised; `metadata.opencode/autoinvoke: false` hides it from the list but you can still load it when the user names it explicitly. Loading enforces the agent's `skill` permission (last match wins): `deny` hides the skill and rejects the load. `ask` advertises the skill but asks before loading it. A load adds the body without frontmatter plus the base directory and up to ten supporting paths. Supporting files stay unloaded until you read them. You may load an unadvertised ID only when the user names it explicitly.
+Load a skill with the `skill` tool by its exact id (the path, not the display `name`); when delegating, name the skill ids the child must load in the brief.
 
-When delegating, name the skill ids the child must load and ensure the child agent allows them — the child sees its own advertised list from its own permissions, not yours.
-Always load the `ponytail` skill on coding tasks (default **full**) unless the user set it `off`; levels switch with `lite`, `ultra`, or `off`.
+On coding tasks, write the smallest change that works: reuse what the codebase, stdlib, or platform already has before adding code or dependencies. No speculative abstractions or scaffolding. Fix the root cause in the shared path, not the one caller a report names.
 
 ### Context protocol
 

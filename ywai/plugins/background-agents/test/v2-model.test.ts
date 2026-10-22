@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createV1ShapedClient } from "../src/plugin/v2"
+import { createV1ShapedClient } from "../../shared/v2"
 
 function fakeCtx() {
 	const calls: Record<string, any[]> = { prompt: [], switchModel: [], switchAgent: [], wait: [] }

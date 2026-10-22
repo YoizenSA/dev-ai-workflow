@@ -1,0 +1,13 @@
+--- a/src/utils/date.ts
++++ b/src/utils/date.ts
+@@ -1,7 +1,7 @@
+-export function formatDate(d: Date): string {
++export function formatDateISO(d: Date): string {
+   return d.toISOString().slice(0, 10)
+ }
+ 
+-export function parseDate(s: string): Date {
+-  return new Date(formatDate(new Date(s)))
++export function parseDate(s: string): Date {
++  return new Date(formatDateISO(new Date(s)))
+ }

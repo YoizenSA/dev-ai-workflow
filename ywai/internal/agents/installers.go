@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -25,7 +24,7 @@ func InstallClaude(agentsDir string, profiles map[string]AgentProfile) error {
 	for name, profile := range profiles {
 		targetPath := filepath.Join(agentsDir, name+".md")
 
-		// Ensure parent directory exists for nested agent names (e.g. qa-automation/qa-orchestrator)
+		// Ensure parent directory exists for nested agent names (e.g. qa-exploratory/test-author)
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
 			continue
@@ -143,25 +142,25 @@ func InstallPi(agentsDir string, profiles map[string]AgentProfile, overwrite boo
 	return installPiStyleAgents(agentsDir, profiles, overwrite, piToolsString, false)
 }
 
-// InstallOmp writes core + qa-automation agent .md files to ~/.omp/agent/agents/
+// InstallOmp writes core agent .md files to ~/.omp/agent/agents/
 // for oh-my-pi. Same markdown shape as Pi (name/description/tools), flat basenames.
-// Migration/social groups are skipped — use OpenCode for those catalogs.
+// Other groups are skipped — use OpenCode for those catalogs.
 func InstallOmp(agentsDir string, profiles map[string]AgentProfile, overwrite bool) error {
 	return installPiStyleAgents(agentsDir, FilterOmpInstallProfiles(profiles), overwrite, ompToolsString, true)
 }
 
-// FilterOmpInstallProfiles keeps core + qa-automation groups for OMP installs.
+// FilterOmpInstallProfiles keeps the core group for OMP installs.
 func FilterOmpInstallProfiles(profiles map[string]AgentProfile) map[string]AgentProfile {
 	return filterProfilesByGroups(profiles, map[string]bool{
-		"core": true, "qa-automation": true,
+		"core": true,
 	}, coreAgentBases())
 }
 
 func coreAgentBases() map[string]bool {
 	return map[string]bool{
 		"orchestrator": true, "ask": true, "dev": true, "qa": true,
-		"architect": true, "designer": true, "advisor": true, "reviewer": true,
-		"devops": true, "finder": true, "memory": true, "planning": true,
+		"advisor": true, "reviewer": true,
+		"devops": true, "finder": true, "planning": true,
 	}
 }
 
@@ -172,10 +171,6 @@ func filterProfilesByGroups(profiles map[string]AgentProfile, groups map[string]
 		keep := groups[p.Group]
 		if p.Group == "" && emptyGroupBases[base] {
 			keep = true
-		}
-		// qa-* basenames when group is empty but name looks like qa-automation
-		if !keep && p.Group == "" && strings.HasPrefix(base, "qa-") {
-			keep = groups["qa-automation"]
 		}
 		if !keep {
 			continue
@@ -241,49 +236,6 @@ func installPiStyleAgents(
 	return nil
 }
 
-// InstallVSCode writes agent profiles as .instructions.md files to VS Code Copilot prompts dir.
-// VS Code Copilot reads *.instructions.md files from the User/prompts/ directory.
-// Users activate them from Copilot Chat with @workspace or participant selection.
-func InstallVSCode(promptsDir string, profiles map[string]AgentProfile) error {
-	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
-		return fmt.Errorf("create dir %s: %w", promptsDir, err)
-	}
-
-	installed := 0
-	for name, profile := range profiles {
-		targetPath := filepath.Join(promptsDir, name+".instructions.md")
-
-		// Ensure parent directory exists for nested agent names
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			fmt.Printf("  Warning: failed to create dir for %s: %v\n", targetPath, err)
-			continue
-		}
-
-		// Skip if already exists
-		if _, err := os.Stat(targetPath); err == nil {
-			continue
-		}
-
-		// Build VS Code Copilot instructions file
-		// Strip YAML frontmatter from prompt — VS Code doesn't use it
-		prompt := stripFrontmatter(profile.Prompt)
-
-		content := fmt.Sprintf("---\nname: %s\ndescription: %s\napplyTo: '**'\n---\n\n%s",
-			name, yamlScalar(profile.Description), prompt)
-
-		if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
-			fmt.Printf("  Warning: failed to write %s: %v\n", targetPath, err)
-			continue
-		}
-		installed++
-	}
-
-	if installed > 0 {
-		fmt.Printf("  Installed %d agent profiles to %s\n", installed, promptsDir)
-	}
-	return nil
-}
-
 // toolStringEnabled reports whether a flat host tool string (Claude/PI) should
 // include this opencode permission. bash: verify is OpenCode-only nested
 // enforcement — other hosts get no shell rather than a full shell.
@@ -302,37 +254,6 @@ func stripFrontmatter(content string) string {
 	}
 	return strings.TrimSpace(content[end+6:])
 }
-
-// VSCodePromptsDir returns the VS Code User prompts directory for the current platform.
-func VSCodePromptsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return vsCodeUserDir(home)
-}
-
-func vsCodeUserDir(home string) string {
-	switch {
-	case isDarwin():
-		return filepath.Join(home, "Library", "Application Support", "Code", "User", "prompts")
-	case isWindows():
-		appData := os.Getenv("APPDATA")
-		if appData == "" {
-			appData = filepath.Join(home, "AppData", "Roaming")
-		}
-		return filepath.Join(appData, "Code", "User", "prompts")
-	default: // linux
-		xdg := os.Getenv("XDG_CONFIG_HOME")
-		if xdg == "" {
-			xdg = filepath.Join(home, ".config")
-		}
-		return filepath.Join(xdg, "Code", "User", "prompts")
-	}
-}
-
-func isDarwin() bool  { return runtime.GOOS == "darwin" }
-func isWindows() bool { return runtime.GOOS == "windows" }
 
 // InstallOpenCodeMarkdown writes agent profiles as flat .md files to
 // ~/.config/opencode/agents/. opencode derives the agent id from the file's
@@ -605,12 +526,12 @@ var ywaiBucketPatterns = map[string][]string{
 	"intercom": {"intercom_*"},
 	"graft":    {"graft_*"},
 	"mcp":      {"graft_*", "context7_*"},
-	// "delegate" launches an async sub-agent (background-agents plugin); the
-	// "delegation_*" glob covers the supervisor/retrieval tools (read, list,
-	// status, peek, steer, stop). Without the glob, an agent whitelisted for
-	// "delegate" under the "*: deny" pattern could start a delegation but never
-	// read or control it.
-	"delegate": {"delegate", "delegation_*"},
+	// "delegate" is the UI bucket for background delegation. Launching is the
+	// native `subagent` tool (gated per agent by the `subagent` action); the
+	// "subagent_*" glob covers the background-agents supervision tools
+	// (status, read, steer, stop). Without it, an agent whitelisted for
+	// "delegate" could launch a background subagent but never read or control it.
+	"delegate": {"delegate", "subagent_*"},
 }
 
 // falseGreenBashPatterns are commands that make a check pass without making the
@@ -625,9 +546,11 @@ var ywaiBucketPatterns = map[string][]string{
 // Formatters and linters that rewrite code are deliberately NOT here: fixing
 // style is not faking a result.
 var falseGreenBashPatterns = []string{
-	// Snapshot rewriting, across the runners in use here.
-	"* -u",
-	"* -u *",
+	// Snapshot rewriting, across the runners in use here. The short flag is
+	// anchored to the runners that define it: a bare "* -u *" also denies
+	// "sort -u", "id -u" and every other innocent flag bearer.
+	"*jest*-u*",
+	"*vitest*-u*",
 	"*--update-snapshot*",
 	"*--updateSnapshot*",
 	"*vitest*--update*",
@@ -639,6 +562,13 @@ var falseGreenBashPatterns = []string{
 	// Silencing the type checker instead of satisfying it.
 	"*tsc*--noEmitOnError*",
 	"*tsc*--skipLibCheck*--noEmit*",
+	// Rewriting pushed history or bypassing the hooks that gate a commit.
+	// Same patterns as the root agent's "ask" gates (root_permission.go),
+	// hardened to deny: subagents run headless and cannot answer an ask.
+	"git push*--force*",
+	"git push* -f *",
+	"git push* -f",
+	"*--no-verify*",
 }
 
 // verifyBashAllowPatterns is the small shell surface for bash: verify agents
@@ -651,6 +581,7 @@ var verifyBashAllowPatterns = []string{
 	"git status*",
 	"git log*",
 	"git show*",
+	"git grep*",
 	// Go
 	"go test*",
 	// JS / TS
@@ -659,6 +590,10 @@ var verifyBashAllowPatterns = []string{
 	"npm run build*",
 	"npm run typecheck*",
 	"npx tsc --noEmit*",
+	// Runners invoked without npm-script indirection.
+	"npx jest*",
+	"npx vitest*",
+	"npx biome check*",
 	"pnpm test*",
 	"pnpm run lint*",
 	"pnpm run build*",
@@ -676,6 +611,15 @@ var verifyBashAllowPatterns = []string{
 	"ruff check*",
 	"mypy *",
 	"mypy*",
+	// Environment status: confirm the app under test is actually up.
+	"docker ps*",
+	"docker logs*",
+	// Azure DevOps read-only inspection; board writes stay with qa-feedback.
+	"ado wi get*",
+	"ado pr get*",
+	"ado pr diff*",
+	"ado pr threads*",
+	"ado pipeline runs*",
 }
 
 // ExpandPermissionBuckets returns a copy of perms with ywai's coarse permission
@@ -784,7 +728,7 @@ var dedicatedBucketPrefixes = map[string]bool{
 // other MCP server configured in opencode.json.
 //
 // MCP tools are meant to be available to every kind of agent — a reviewer that
-// cannot reach the docs server, or a designer that cannot drive the browser, is
+// cannot reach the docs server, or a dev that cannot drive the browser, is
 // crippled for no security gain, since the tools are the user's own. Deriving
 // the list from the live config means adding an MCP server makes it usable
 // everywhere without a code change here.
@@ -891,13 +835,6 @@ func agentDefaults(name string) (description string, tools []string, model strin
 	case "qa":
 		return "Writes and runs tests, ensures quality",
 			[]string{"Read", "Write", "Edit", "Bash", "Grep"}, ""
-	case "architect":
-		return "Designs architecture and makes technical decisions",
-			[]string{"Read", "Write", "Edit", "Grep", "Glob", "Bash"}, ""
-	case "designer":
-		// Read-only like architect: specs and design findings, never the diff.
-		return "Designs and audits UI/UX against the design system and accessibility standards",
-			[]string{"Read", "Grep", "Glob"}, ""
 	case "reviewer":
 		return "Reviews code for correctness and quality",
 			[]string{"Read", "Grep", "Glob", "Bash"}, ""

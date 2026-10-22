@@ -206,3 +206,66 @@ func TestCleanSkipsUnparsableJSON(t *testing.T) {
 		t.Errorf("unparsable config was modified; want it left alone (still containing %s)", want)
 	}
 }
+
+// TestCleanVSCodePrompts_RemovesOnlyShippedProfiles pins the safety property of
+// the sweep: the prompts directory is shared with files the user wrote by hand,
+// so only names ywai actually ships may be removed.
+func TestCleanVSCodePrompts_RemovesOnlyShippedProfiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+
+	prompts := filepath.Join(home, ".config", "Code", "User", "prompts")
+	if err := os.MkdirAll(filepath.Join(prompts, "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(rel string) string {
+		p := filepath.Join(prompts, rel)
+		if err := os.WriteFile(p, []byte("---\nname: x\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	ours := write("ask.instructions.md")
+	nested := write(filepath.Join("core", "qa.instructions.md"))
+	theirs := write("my-own-prompt.instructions.md")
+	plain := write("notes.md")
+
+	c := &collector{opts: Options{Home: home, Apply: true}}
+	c.cleanVSCodePrompts(home)
+
+	for _, p := range []string{ours, nested} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("%s should have been removed", filepath.Base(p))
+		}
+	}
+	for _, p := range []string{theirs, plain} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s is not ywai's and must be left alone", filepath.Base(p))
+		}
+	}
+}
+
+// TestCleanVSCodePrompts_DryRunTouchesNothing keeps Apply=false honest.
+func TestCleanVSCodePrompts_DryRunTouchesNothing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+
+	prompts := filepath.Join(home, ".config", "Code", "User", "prompts")
+	if err := os.MkdirAll(prompts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(prompts, "ask.instructions.md")
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &collector{opts: Options{Home: home, Apply: false}}
+	c.cleanVSCodePrompts(home)
+
+	if _, err := os.Stat(p); err != nil {
+		t.Fatal("dry run must not remove anything")
+	}
+	if len(c.actions) != 1 || !strings.Contains(c.actions[0], "would remove") {
+		t.Fatalf("dry run should report the file, got %v", c.actions)
+	}
+}

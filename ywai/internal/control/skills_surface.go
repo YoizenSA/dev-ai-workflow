@@ -291,29 +291,31 @@ type standardizeAction struct {
 }
 
 // locationRank orders where the canonical copy of a shadowed skill lives:
-// project intent beats global defaults, native beats compat.
+// project intent beats global defaults, and the canonical ~/.agents/skills
+// beats per-host copies (OpenCode reads it natively; ~/.claude/skills holds
+// ywai compat links, ~/.config/opencode/skills only legacy duplicates).
 func locationRank(location string) int {
 	switch location {
 	case "project-opencode":
 		return 0
-	case "global-opencode":
-		return 1
 	case "project-claude":
-		return 2
-	case "global-claude":
-		return 3
+		return 1
 	case "project-agents":
-		return 4
+		return 2
 	case "global-agents":
+		return 3
+	case "global-opencode":
+		return 4
+	case "global-claude":
 		return 5
 	}
 	return 6
 }
 
 // dedupeRank orders which byte-identical copy to keep: project intent first,
-// then the global dir the most tools read. opencode loads ~/.claude/skills
-// and ~/.agents/skills too, so a copy there serves opencode *and* Claude
-// Code / other agents, while ~/.config/opencode/skills serves opencode only.
+// then the canonical ~/.agents/skills — one physical copy there serves every
+// host, while ~/.claude/skills compat links and ~/.config/opencode/skills
+// legacy copies go first.
 func dedupeRank(location string) int {
 	switch location {
 	case "project-opencode":
@@ -322,9 +324,9 @@ func dedupeRank(location string) int {
 		return 1
 	case "project-agents":
 		return 2
-	case "global-claude":
-		return 3
 	case "global-agents":
+		return 3
+	case "global-claude":
 		return 4
 	case "global-opencode":
 		return 5

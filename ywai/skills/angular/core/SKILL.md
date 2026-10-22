@@ -1,6 +1,6 @@
 ---
 name: angular-core
-description: Angular core patterns. Trigger: Angular components, signals, inject, zoneless.
+description: "Angular core patterns. Trigger: Angular components, signals, inject, zoneless."
 allowed-tools: [Read, Edit, Write, Glob, Grep, Bash]
 ---
 

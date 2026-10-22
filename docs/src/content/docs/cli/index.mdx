@@ -19,8 +19,8 @@ ywai instala y gestiona **su propio** entorno: ecosistema gentle-ai, Engram, ski
 | `ywai status` | Estado de la instalación y agentes detectados | Verificación rápida |
 | `ywai skills` | Lista skills extra | Ver qué hay instalado |
 | `ywai agents` | Lista agentes detectados | Verificar configuración |
-| `ywai groups` | Lista grupos de agentes | Ver core / qa-automation / experiment |
-| `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar `experiment` |
+| `ywai groups` | Lista grupos de agentes | Ver qué grupos hay |
+| `ywai groups enable <name>` | Instala los perfiles de ese grupo | Sumar un grupo de `groups.local.json` |
 | `ywai groups disable <name>` | Quita esos perfiles (no core) | Apagar un grupo |
 | `ywai ui` | Abre la UI en el navegador | Usar Workflows, Evals, Settings |
 | `ywai serve` | Inicia el servidor de control | Servidor always-on |
@@ -52,10 +52,10 @@ ywai install                    # Instalación completa
 ywai install --dry-run          # Ver qué cambiaría
 ywai install --agent opencode   # Solo para un agente
 ywai install --all-groups       # Todos los perfiles en disco
-ywai install --group experiment # Sumar un grupo
+ywai install --group <name>     # Sumar un grupo
 ```
 
-**Default:** `core + qa-automation`. Engram se instala siempre. Los skills, perfiles de agente y plugins también.
+**Default:** `core`. Engram se instala siempre. Los skills, perfiles de agente y plugins también.
 
 **Flags útiles:** `--mcp` (Microsoft Learn MCP), `--meta-mcp` (Meta Developer Tools MCP), `--ponytail` (plugin YAGNI, activado por defecto; `--ponytail=false` para omitir), `--group` (repetible) / `--all-groups`.
 

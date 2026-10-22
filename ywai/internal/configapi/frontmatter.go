@@ -14,8 +14,8 @@ import (
 // resolveAgentFile finds the .md file for an agent name within dir.
 //
 // Agents may live either directly under dir (e.g. dir/gentle-orchestrator.md)
-// or inside a group subdirectory (e.g. dir/core/architect.md,
-// dir/qa-automation/qa-analyst.md). ListAgents already scans
+// or inside a group subdirectory (e.g. dir/core/dev.md,
+// dir/qa-exploratory/qa-feedback.md). ListAgents already scans
 // both layouts when listing; this helper mirrors that so the single-agent
 // handlers (GetAgent, PutAgent, DeleteAgent, permissions) resolve the same
 // file the list presented — otherwise selecting a nested agent returns 404.

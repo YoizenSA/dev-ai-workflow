@@ -24,26 +24,25 @@ Review output contract:
 - Report only what this diff introduces or worsens. Pre-existing problems are at most one suggestion.
 - Budget: 12 findings max. Over budget, keep the most severe and close with `(+N minor findings omitted)`.
 - Close with the QA angle: what a tester should exercise, one line each. Post it to the
-  ticket with `ado wi comment <wiId> --comment "<pre>qa block</pre>"` when the user asks
-  (work item comments are HTML — bare Markdown collapses).
+  ticket with `ado wi comment <wiId> --comment-file <qa.md>` when the user asks
+  (work item comments render Markdown).
 
 Guidelines:
 - Comment BEFORE voting — a vote with unexplained rejection is useless to the author.
 - `suggestions` = approved with non-blocking notes; `wait` = author must respond; `reject` = blocking defect.
-- PR comments are Markdown (the PR UI renders it). Work item comments are HTML:
-  bare Markdown collapses — wrap Markdown content in `<pre>` (see `templates.md`).
+- PR comments and work item comments are both Markdown.
 
 ## Answer / follow up on PR threads
 
-1. `ado pr threads <prId>` — read existing discussion.
-2. Reply with `ado pr comment <prId> --comment "<reply>"` (anchor with `--file`/`--line` when it targets code).
+1. `ado pr threads <prId>` — full discussion; each thread starts with `#<threadId>`.
+2. Reply in the thread: `ado pr reply <prId> <threadId> --comment "<reply>"`; add `--status fixed` (or `wontFix`, `closed`, `byDesign`) to resolve it, or pass `--status` alone.
+3. New feedback goes in a new thread: `ado pr comment <prId> --comment "<text>" [--file <path> --line <n>]`.
 
 ## Create a work item
 
 1. Check the project rules first: read `[work_item.create]` in `.adoconfig.toml` (enabled? allowed types? required fields?).
 2. Unsure about valid types: `ado wi types` — names differ per process (`User Story` vs `Product Backlog Item` vs `Requirement`).
-3. Draft the body with `templates.md` — fields are HTML, and work item comments
-   render as HTML too (Markdown only inside `<pre>`).
+3. Draft the body with `templates.md` — fields are HTML; work item comments are Markdown.
 4. Resolve the assignee: `ado wi list` → read the `@<name>` column (that is the authenticated user). Never hardcode a name.
 5. Ask and lock the kanban: **Social Kanban** or **Infra Kanban**? (Always ask.)
    - Social Kanban → `--profile ysocial` + `--area "ySocial\Kanban"`
@@ -52,7 +51,7 @@ Guidelines:
 7. Create (defaults from the create contract unless the user says otherwise):
    `ado wi create --title "<t>" --type "User Story" --assigned "<username>" --area "<area>" --field "Custom.USProducto=<producto>" --field "Custom.Sponsors=<sponsor>" [--description "<d>"] [--priority <n>] [--parent <id>]`
 8. For a child of an existing item: `ado wi create-child --parent <id> --title "<t>"`.
-9. Verify: `ado wi get <id>`; report ID, URL, type, title, state.
+9. Verify: `ado wi get <id>`; give the user the URL, then ID, type, title, state.
 
 Confirm with the user before creating when the request is ambiguous, the item is
 high-impact (Feature/Epic), or no type was specified.
@@ -62,7 +61,7 @@ If creation is rejected, the error names the violated rule — fix the flag, don
 ## Update a work item after finishing work
 
 1. `ado wi get <id>` — confirm current state and that it's the right item.
-2. `ado wi update <id> --state "<state>" --comment "<what was done, PR link>"` — one command updates state and comments.
+2. `ado wi update <id> --state "<state>" --comment "<what was done, PR-id:1234>"` — one command updates state and comments.
 
 ## Create a PR for finished work
 
@@ -70,12 +69,14 @@ If creation is rejected, the error names the violated rule — fix the flag, don
 2. `ado wi get <id>` if linking a work item — verify the ID.
 3. `ado pr create --repo <r> --source <branch> --target <branch> --title "<t>" --wi <id> [--draft]`.
 4. Respect `.adoconfig.toml` `[pr]` rules: `require_work_item`, `default_draft`.
+5. Give the user the PR URL (from CLI output, or `ado pr get` if missing).
 
 ## Create a chain of PRs from work items
 
 1. `ado wi get <id>` for each item — confirm order and scope.
 2. `ado pr chain --repo <r> --wi 1,2,3 [--strategy feature-chain|stacked]` — order of `--wi` is the chain order.
 3. Strategy/base/prefix default from `.adoconfig.toml` `[chain]`; only pass flags to override.
+4. Give the user each PR URL.
 
 ## Find my pending work
 

@@ -326,9 +326,9 @@ func TestToolsToPermissions(t *testing.T) {
 			csv:      "read,delegate",
 			defaults: "read",
 			want: map[string]string{
-				"read":         "allow",
-				"delegate":     "allow",
-				"delegation_*": "allow",
+				"read":       "allow",
+				"delegate":   "allow",
+				"subagent_*": "allow",
 			},
 		},
 	}

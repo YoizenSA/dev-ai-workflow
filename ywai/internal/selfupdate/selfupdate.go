@@ -119,17 +119,17 @@ func pickLatestPrerelease(releases []releaseInfo) (tag string, ok bool) {
 		if r.TagName == "" || !(r.Prerelease || IsPrerelease(r.TagName)) {
 			continue
 		}
-		if !ok || compareVersions(r.TagName, tag) > 0 {
+		if !ok || CompareVersions(r.TagName, tag) > 0 {
 			tag, ok = r.TagName, true
 		}
 	}
 	return tag, ok
 }
 
-// compareVersions orders semver tags (leading v optional) by semver
+// CompareVersions orders semver tags (leading v optional) by semver
 // precedence: numeric identifiers compare as numbers, a release outranks its
 // prereleases, and a longer prerelease wins a tie on its shared prefix.
-func compareVersions(a, b string) int {
+func CompareVersions(a, b string) int {
 	coreA, preA, _ := strings.Cut(strings.TrimPrefix(a, "v"), "-")
 	coreB, preB, _ := strings.Cut(strings.TrimPrefix(b, "v"), "-")
 	if c := compareIdents(strings.Split(coreA, "."), strings.Split(coreB, ".")); c != 0 {
@@ -187,6 +187,50 @@ func IsPrerelease(version string) bool {
 		strings.HasPrefix(pre, "rc") ||
 		strings.HasPrefix(pre, "pre") ||
 		strings.HasPrefix(pre, "alpha")
+}
+
+// UpdateOffer is the channel-aware update to show for an installed version.
+// A beta install tracks the beta channel (`ywai update --beta`); a stable
+// install tracks GitHub's latest release (`ywai update`). StableNewer is
+// true when the latest stable is strictly newer than installed — used to
+// mention both channels without offering a downgrade.
+type UpdateOffer struct {
+	Channel      string // "beta" or "stable"
+	Latest       string // actionable target on the install's channel
+	LatestStable string
+	LatestBeta   string
+	Command      string // "ywai update" or "ywai update --beta"
+	Available    bool
+	StableNewer  bool
+}
+
+// Offer decides what update (if any) to advertise for installed, given the
+// two GitHub heads. Dev builds never flag an update. An older stable is not
+// an update for a newer beta (e.g. 8.26.0-beta.17 vs 8.24.8).
+func Offer(installed, latestStable, latestBeta string) UpdateOffer {
+	o := UpdateOffer{
+		Channel:      "stable",
+		Command:      "ywai update",
+		Latest:       latestStable,
+		LatestStable: latestStable,
+		LatestBeta:   latestBeta,
+	}
+	if IsPrerelease(installed) {
+		o.Channel = "beta"
+		o.Command = "ywai update --beta"
+		o.Latest = latestBeta
+	}
+	norm := strings.TrimPrefix(installed, "v")
+	if strings.HasPrefix(norm, "dev") {
+		return o
+	}
+	if o.Latest != "" {
+		o.Available = CompareVersions(o.Latest, installed) > 0
+	}
+	if latestStable != "" {
+		o.StableNewer = CompareVersions(latestStable, installed) > 0
+	}
+	return o
 }
 
 // githubToken returns a GitHub token from the environment if present.

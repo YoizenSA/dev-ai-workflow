@@ -33,7 +33,7 @@
         "model": "inherit",
         "mode": "subagent",
         "tools": "read, grep, glob, graft_*",
-        "sections": "handoff-qa,context-gathering"
+        "sections": "handoff,context-gathering"
       }
     },
     {
@@ -52,7 +52,7 @@
         "model": "inherit",
         "mode": "subagent",
         "tools": "read, write, bash, skill",
-        "sections": "handoff-qa,context-gathering"
+        "sections": "handoff,context-gathering"
       }
     },
     {

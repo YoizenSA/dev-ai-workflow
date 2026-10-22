@@ -23,7 +23,7 @@ func TestResolveAgentFile_Flat(t *testing.T) {
 
 // TestResolveAgentFile_Nested reproduces the bug where agents installed into
 // group subdirectories (agents/social-refactor/migration-orchestrator.md,
-// agents/core/architect.md, agents/qa-automation/qa-analyst.md) return 404 in
+// agents/core/ask.md, agents/qa-exploratory/qa-feedback.md) return 404 in
 // GetAgent/GetAgentPermissions because the handler only looked for the flat
 // {dir}/{name}.md path. ListAgents already scans subdirs, so the list showed
 // them but selecting one failed.
@@ -35,8 +35,8 @@ func TestResolveAgentFile_Nested(t *testing.T) {
 		name  string
 	}{
 		{"social-refactor", "migration-orchestrator"},
-		{"core", "architect"},
-		{"qa-automation", "qa-analyst"},
+		{"core", "ask"},
+		{"qa-exploratory", "qa-feedback"},
 	}
 	for _, c := range cases {
 		nested := filepath.Join(dir, c.group, c.name+".md")

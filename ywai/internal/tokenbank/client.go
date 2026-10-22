@@ -1,5 +1,5 @@
 // Package tokenbank provides a client for the TokenBank setup API
-// and config writers for opencode, copilot, pi, and omp (oh-my-pi) agents.
+// and config writers for opencode, pi, and omp (oh-my-pi) agents.
 package tokenbank
 
 import (
@@ -146,8 +146,12 @@ func FetchModels(baseURL, apiKey string) (*ModelsResponse, error) {
 }
 
 func defaultV1Model(models []ModelInfo) string {
+	// Single source of truth: the default profile's omp default role in
+	// orchestrator_profiles.json, without its provider prefix.
+	seed := config.DefaultOrchestratorModelProfiles()[config.DefaultOrchestratorModelProfileName].OmpModelRoles["default"]
+	want := seed[strings.LastIndex(seed, "/")+1:]
 	for _, m := range models {
-		if m.ID == "deepseek-v4-flash" {
+		if want != "" && m.ID == want {
 			return m.ID
 		}
 	}
@@ -221,7 +225,6 @@ func ReadJSONFile(path string) (map[string]interface{}, error) {
 	return result, nil
 }
 
-// ReadJSONArrayFile reads and parses a JSON array file.
 func ReadJSONArrayFile(path string) ([]interface{}, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

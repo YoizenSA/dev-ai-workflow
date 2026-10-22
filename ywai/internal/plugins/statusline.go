@@ -56,24 +56,8 @@ func InstallPublishedSubAgentStatusline() error {
 		return fmt.Errorf("parsing %s: %w", tuiConfigName, err)
 	}
 
-	pluginsRaw, ok := root["plugins"]
-	if !ok {
-		// Migrate the v1-era "plugin" spelling on contact instead of leaving
-		// a stale array the TUI no longer reads.
-		pluginsRaw, ok = root["plugin"]
-		if ok {
-			delete(root, "plugin")
-		} else {
-			pluginsRaw = []any{}
-		}
-		root["plugins"] = pluginsRaw
-	}
-
-	plugins, ok := pluginsRaw.([]any)
-	if !ok {
-		plugins = []any{}
-		root["plugins"] = plugins
-	}
+	plugins, _ := root["plugins"].([]any)
+	delete(root, "plugin")
 
 	for _, p := range plugins {
 		if s, ok := p.(string); ok && s == subAgentStatuslinePlugin {

@@ -8,11 +8,7 @@ import (
 // in the config's "plugins" array. The plugin auto-analyzes attached images via
 // TokenBank vision models when the active chat model does not support image input.
 func InstallVisionBridge(configPath string) error {
-	bundle, err := config.VisionBridgeBundlePath()
-	if err != nil {
-		return err
-	}
-	return installVisionBridgeWithBundle(configPath, bundle)
+	return installVendorJS("", configPath, ManifestEntry{Bundle: "vision-bridge"})
 }
 
 func installVisionBridgeWithBundle(configPath, bundleSrc string) error {

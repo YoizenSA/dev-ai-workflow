@@ -1,0 +1,17 @@
+--- a/src/util/legacy.ts
++++ b/src/util/legacy.ts
+@@ -1,14 +1,4 @@
+ import { parse } from "./parse"
+ 
+-// Module-private, superseded by parseStrict in 2024, no caller left.
+-function parseLoose(raw: string): Parsed | null {
+-  try {
+-    return parse(raw)
+-  } catch {
+-    return null
+-  }
+-}
+-
+ export function parseStrict(raw: string): Parsed {
+   return parse(raw)
+ }

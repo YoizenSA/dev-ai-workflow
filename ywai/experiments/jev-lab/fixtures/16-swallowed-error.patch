@@ -1,0 +1,12 @@
+--- a/src/transfer/upload.ts
++++ b/src/transfer/upload.ts
+@@ -10,9 +10,11 @@ export async function uploadAll(files: File[], dest: Destination) {
+   for (const file of files) {
+-    await dest.put(file)
+-    markSent(file)
++    try {
++      await dest.put(file)
++    } catch {}
++    markSent(file)
+   }
+ }
