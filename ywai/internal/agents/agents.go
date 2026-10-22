@@ -154,30 +154,19 @@ func loadProfile(dir string, sourceDir string) (*AgentProfile, error) {
 		}
 	}
 
+	prompt, err = AppendSections(prompt, sections, sourceDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &AgentProfile{
 		Name:        name,
 		Description: description,
-		Prompt:      AppendSections(promptWithSkills(prompt, skills), sections, sourceDir),
+		Prompt:      prompt,
 		Permission:  perms,
 		Skills:      skills,
 		Mode:        mode,
 	}, nil
-}
-
-// promptWithSkills appends a section listing the ywai skills this agent should
-// prefer, so the model knows which domain skills to invoke. No-op when empty.
-func promptWithSkills(prompt string, skills []string) string {
-	if len(skills) == 0 {
-		return prompt
-	}
-	var b strings.Builder
-	b.WriteString(strings.TrimRight(prompt, "\n"))
-	b.WriteString("\n\n## Preferred ywai Skills\n\n")
-	b.WriteString("When relevant, invoke these ywai skills for domain-specific guidance:\n\n")
-	for _, s := range skills {
-		b.WriteString("- `" + s + "`\n")
-	}
-	return b.String()
 }
 
 // extractSections parses the `sections:` field from YAML frontmatter.
@@ -226,10 +215,13 @@ func ensureSection(sections []string, name string) []string {
 
 // AppendSections resolves and appends shared section files from the
 // agents/sections/ directory. Each section is a .md file named after
-// the section (e.g. "handoff" -> sections/handoff.md).
-func AppendSections(prompt string, sections []string, sourceDir string) string {
+// the section (e.g. "handoff" -> sections/handoff.md). A section already in
+// the prompt is not appended again: a workflow node linked to an agent gets
+// that agent's sections from its prompt and may list them again. A missing
+// section is an error, so a typo cannot ship a prompt without its contract.
+func AppendSections(prompt string, sections []string, sourceDir string) (string, error) {
 	if len(sections) == 0 {
-		return prompt
+		return prompt, nil
 	}
 	sectionsDir := filepath.Join(sourceDir, "sections")
 	var b strings.Builder
@@ -238,12 +230,16 @@ func AppendSections(prompt string, sections []string, sourceDir string) string {
 		path := filepath.Join(sectionsDir, s+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
-			continue // section not found, skip silently
+			return "", fmt.Errorf("section %q: %w", s, err)
+		}
+		body := strings.TrimSpace(string(data))
+		if strings.Contains(b.String(), body) {
+			continue
 		}
 		b.WriteString("\n\n")
-		b.WriteString(strings.TrimSpace(string(data)))
+		b.WriteString(body)
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // extractDescription returns the agent description. It prefers the YAML

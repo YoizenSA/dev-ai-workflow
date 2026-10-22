@@ -15,10 +15,11 @@ import (
 const DelegationsFile = "delegations.json"
 
 // OpenCode v2 model-facing delegation tools (Code Mode / opencode2).
-// Permission action remains `subagent`; the callable tool is `delegate`.
+// Launching is the native `subagent` tool (permission action `subagent`);
+// the background-agents plugin adds the subagent_* supervision tools.
 const (
-	OpenCodeDelegateToolHint      = "Delegate with OpenCode v2 `delegate` (`prompt`, `agent`, optional `timeout_minutes`, optional `model`). It returns an ID immediately — there is no `mode` argument. When the next step needs the result, wait for `<task-notification>` then `delegation_read`. Supervise running work with `delegation_peek` / `delegation_steer` / `delegation_stop`.\n"
-	OpenCodeDelegateSemanticGuard = "Semantic guard: **delegate** means the native `delegate` tool launching a configured sub-agent. Permission action `subagent` gates who may be launched. Delegation is that tool call; scripts, Python, and Bash are execution.\n\n"
+	OpenCodeDelegateToolHint      = "Delegate with the OpenCode v2 native `subagent` tool (`agent`, `description`, `prompt`, optional `model`). Foreground (default) returns the result. `background: true` returns the child sessionID immediately and you are notified with a `<subagent>` message when it finishes; optional `timeout_minutes` bounds it. Supervise background work with `subagent_status` / `subagent_steer` / `subagent_stop`; `subagent_read(id)` re-reads a result after compaction.\n"
+	OpenCodeDelegateSemanticGuard = "Semantic guard: **delegate** means the native `subagent` tool launching a configured sub-agent. Permission action `subagent` gates who may be launched. Delegation is that tool call; scripts, Python, and Bash are execution.\n\n"
 )
 
 // DelegationRule is one row of the "Delegation Rules" table.

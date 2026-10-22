@@ -31,10 +31,8 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 		// rule applies while writing anything, so a skill would never load in
 		// time, and a section of its own would break the two-concern scope.
 		"ASD-STE100",
-		"case-sensitive ID",
-		"autoinvoke",
-		"`skill` permission",
-		"Supporting files stay unloaded",
+		"exact id",
+		"name the skill ids",
 		"### Context protocol",
 		"mem_save",
 		"mem_session_summary",
@@ -42,6 +40,17 @@ func TestWriteAgentsMd_OnlyTwoConcerns(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("AGENTS.md missing %q", want)
 		}
+	}
+
+	// Session summary is a primary-session duty; a subagent returns its
+	// handoff instead. The ponytail rules ride inline, not as a forced skill load.
+	for _, want := range []string{"Primary sessions only", "Subagents return their handoff", "smallest change that works"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("AGENTS.md missing %q", want)
+		}
+	}
+	if strings.Contains(content, "Always load the `ponytail` skill") {
+		t.Error("AGENTS.md must not force-load the ponytail skill")
 	}
 }
 

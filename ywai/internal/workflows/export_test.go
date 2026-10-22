@@ -59,17 +59,19 @@ func exportFixture() *Workflow {
 func TestOrchestratorBodyUsesSubagentTool(t *testing.T) {
 	wf := exportFixture()
 	body := orchestratorBody(wf, map[string]string{"news": "daily-task-news-briefing"})
-	if !strings.Contains(body, "`delegate`") {
-		t.Fatalf("orchestrator body must tell the model to use OpenCode v2 delegate:\n%s", body)
+	if !strings.Contains(body, "native `subagent` tool") {
+		t.Fatalf("orchestrator body must tell the model to use the native subagent tool:\n%s", body)
 	}
-	if strings.Contains(body, "`task` tool") || strings.Contains(body, "`subagent` tool") {
-		t.Fatalf("orchestrator body must not mention dead v1 tool names:\n%s", body)
+	for _, dead := range []string{"`task` tool", "`delegate`", "delegation_", "<task-notification>"} {
+		if strings.Contains(body, dead) {
+			t.Fatalf("orchestrator body must not mention removed tool %q:\n%s", dead, body)
+		}
 	}
 	if strings.Contains(body, `mode: "sync"`) || strings.Contains(body, `mode="sync"`) {
 		t.Fatalf("orchestrator body must not invent a delegate mode argument:\n%s", body)
 	}
-	if !strings.Contains(body, "delegation_read") {
-		t.Fatalf("orchestrator body must tell the model to read the result after notification:\n%s", body)
+	if !strings.Contains(body, "<subagent>") {
+		t.Fatalf("orchestrator body must name the native completion notification:\n%s", body)
 	}
 }
 

@@ -428,14 +428,16 @@ func TestRenderRulesSection_UsesOpenCodeV2Delegate(t *testing.T) {
 		[]DelegationRule{{Action: "Write", Inline: "Yes", Delegate: "No"}},
 		[]DelegationTrigger{{Name: "4-file rule", Description: "map first"}},
 	)
-	if !strings.Contains(out, "native `delegate`") {
-		t.Fatalf("rules must name OpenCode v2 delegate tool:\n%s", out)
+	if !strings.Contains(out, "native `subagent`") {
+		t.Fatalf("rules must name the OpenCode v2 native subagent tool:\n%s", out)
 	}
-	if strings.Contains(out, "native `subagent`") || strings.Contains(out, "native `task`") {
-		t.Fatalf("rules must not name dead v1 tools:\n%s", out)
+	for _, dead := range []string{"native `task`", "`delegate`", "delegation_", "<task-notification>"} {
+		if strings.Contains(out, dead) {
+			t.Fatalf("rules must not name removed tool %q:\n%s", dead, out)
+		}
 	}
-	if !strings.Contains(out, "delegation_read") {
-		t.Fatalf("rules must mention delegation_* supervision:\n%s", out)
+	if !strings.Contains(out, "subagent_read") {
+		t.Fatalf("rules must mention subagent_* supervision:\n%s", out)
 	}
 	if strings.Contains(out, `mode: "sync"`) || strings.Contains(out, `mode="sync"`) {
 		t.Fatalf("rules must not invent a delegate mode argument:\n%s", out)
@@ -446,8 +448,8 @@ func TestOpenCodeDelegateToolHint_HasNoModeArg(t *testing.T) {
 	if strings.Contains(OpenCodeDelegateToolHint, `mode: "sync"`) || strings.Contains(OpenCodeDelegateToolHint, `mode="sync"`) {
 		t.Fatalf("hint must not invent a delegate mode argument:\n%s", OpenCodeDelegateToolHint)
 	}
-	if !strings.Contains(OpenCodeDelegateToolHint, "delegation_read") {
-		t.Fatalf("hint must mention delegation_read:\n%s", OpenCodeDelegateToolHint)
+	if !strings.Contains(OpenCodeDelegateToolHint, "subagent_read") {
+		t.Fatalf("hint must mention subagent_read:\n%s", OpenCodeDelegateToolHint)
 	}
 }
 

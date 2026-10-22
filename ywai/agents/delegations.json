@@ -30,12 +30,14 @@
         "reviewer": "allow",
         "devops": "allow",
         "finder": "allow",
-        "planning": "allow"
-      }
+        "planning": "allow",
+        "scenario-verification-orchestrator": "allow"
+      },
+      "skip_rules": true
     },
     "ask": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
-    "dev": { "task": { "*": "deny", "qa": "allow", "finder": "allow" }, "skip_rules": true },
-    "qa": { "task": { "*": "deny", "reviewer": "allow" }, "skip_rules": true },
+    "dev": { "task": { "*": "deny" }, "skip_rules": true },
+    "qa": { "task": { "*": "deny" }, "skip_rules": true },
     "reviewer": { "task": { "*": "deny", "finder": "allow" }, "skip_rules": true },
     "devops": { "task": { "*": "deny" }, "skip_rules": true },
     "finder": { "task": { "*": "deny" }, "skip_rules": true }

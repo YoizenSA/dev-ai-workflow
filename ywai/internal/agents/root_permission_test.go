@@ -107,7 +107,7 @@ func serializedShellPatterns(t *testing.T, data []byte) []string {
 // The reported failure: with no shell rule the primary agent falls back to
 // "ask", so even a read-only grep is denied in a headless session.
 func TestEnsureRootShellPermissionAllowsOrdinaryCommands(t *testing.T) {
-	p := writeConfig(t, `{"permission":{"delegate":"allow","delegation_*":"allow"}}`)
+	p := writeConfig(t, `{"permission":{"delegate":"allow","subagent_*":"allow"}}`)
 	if err := EnsureRootShellPermission(p); err != nil {
 		t.Fatal(err)
 	}

@@ -7,49 +7,49 @@
       "agent": "orchestrator",
       "model": "opencode-go/mimo-v2.5-pro",
       "fallbacks": ["opencode-go/glm-5.1"],
-      "skills": ["planner"]
+      "skills": ["codebase-design"]
     },
     "architect": {
       "agent": "dev",
       "model": "opencode-go/glm-5.1",
       "fallbacks": ["opencode-go/mimo-v2.5-pro"],
-      "skills": ["architect-worker"]
+      "skills": ["codebase-design", "adr-skill", "improve-codebase-architecture"]
     },
     "dev": {
       "agent": "dev",
       "model": "opencode-go/kimi-k2.7-code",
       "fallbacks": ["opencode-go/deepseek-v4-pro"],
-      "skills": ["implementation", "git-commit"]
+      "skills": ["git-commit", "diagnosing-bugs"]
     },
     "frontend": {
       "agent": "dev",
       "model": "opencode-go/kimi-k2.7-code",
       "fallbacks": ["opencode-go/mimo-v2.5-pro"],
-      "skills": ["frontend-worker", "angular/core", "angular/architecture", "angular/forms", "yz-ui"]
+      "skills": ["angular", "yz-ui"]
     },
     "backend": {
       "agent": "dev",
       "model": "opencode-go/deepseek-v4-flash",
       "fallbacks": ["opencode-go/kimi-k2.7-code"],
-      "skills": ["backend-worker", "docker"]
+      "skills": ["docker"]
     },
     "qa": {
       "agent": "qa",
       "model": "opencode-go/qwen3.7-plus",
       "fallbacks": ["opencode-go/minimax-m2.7"],
-      "skills": ["qa-worker"]
+      "skills": ["testing-expert", "playwright-e2e-testing"]
     },
     "reviewer": {
       "agent": "reviewer",
       "model": "opencode-go/kimi-k2.7-code",
       "fallbacks": ["opencode-go/glm-5.1"],
-      "skills": ["reviewer-worker"]
+      "skills": ["code-review"]
     },
     "devops": {
       "agent": "devops",
       "model": "opencode-go/deepseek-v4-flash",
       "fallbacks": ["opencode-go/mimo-v2.5"],
-      "skills": ["devops-worker", "docker", "devops"]
+      "skills": ["docker", "devops"]
     }
   }
 }

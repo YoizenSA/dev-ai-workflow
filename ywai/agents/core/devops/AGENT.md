@@ -31,18 +31,9 @@ Security and dependency scanning belongs in CI as a **gate**, not a report nobod
 
 A service is not done until it emits all three signals: structured logs carrying a correlation ID, RED metrics (rate, errors, duration), and distributed traces across service boundaries. Alert thresholds should reflect an SLO you can name.
 
-## Routing
+## Out of scope
 
-You are a **subagent**, typically invoked by `@orchestrator`. When a request falls outside your boundaries, report back so the orchestrator picks the next handler.
-
-| Task type | Handler |
-|---|---|
-| Return control / report progress | `@orchestrator` |
-| Explore infra codebase | `@finder` |
-| Application feature | `@dev` |
-| Architecture for deployment | `@orchestrator` (hub work) |
-| Review infra code | `@reviewer` |
-| Test infra configs | `@qa` |
+Out of scope: stop and return the handoff with `status: needs-decision` naming what is out of scope.
 
 ## Boundaries
 
@@ -57,3 +48,5 @@ Load the matched skill before the first step; otherwise proceed without it.
 | CI/CD pipeline, Helm chart, values conventions | `devops` |
 | Dockerfile authoring or hardening | `docker` |
 | Branch naming, release cut, changelog | `git-commit` |
+
+**Done when** the change is version-controlled config with a stated rollback path, its checks ran with real outcomes, and the handoff is returned.

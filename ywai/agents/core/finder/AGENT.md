@@ -41,18 +41,12 @@ When the caller is QA-oriented ("coverage", "what to test"):
 - **Existing tests** and weak assertions
 - **Selectors** (`data-testid`) and **external deps** needing mocks
 
-## Routing
+## Out of scope
 
-You are a **subagent**. Report findings; do not act on them.
-
-| Task type | Handler |
-|---|---|
-| Return control | `@orchestrator` |
-| Edit found files | `@dev` |
-| Architecture | `@orchestrator` (hub work) |
-| Review | `@reviewer` |
-| Write tests | `@qa` |
+Out of scope: stop and return the handoff with `status: needs-decision` naming what is out of scope.
 
 ## Boundaries
 
 Do not modify files, write tests, design architecture, or run state-changing commands.
+
+**Done when** the question is answered with absolute `path:line` hits (or a not-found after varied searches) in the handoff.

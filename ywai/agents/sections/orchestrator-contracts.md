@@ -1,4 +1,4 @@
-## Typed Contracts (pointer)
+## Typed Contracts
 
 Fences win over prose. After write/test/review, a missing fence is an incomplete handoff — re-delegate once.
 
@@ -9,4 +9,6 @@ Required fences (JSON or YAML):
 
 `status=done` only when acceptance is met. Any P0 or `verdict=block` stops close. `verified` is real commands + outcomes (or `not-requested` / `n/a`).
 
-Read the full schema + retry ladder on demand: `agents/sections/orchestrator-contracts-full.md`.
+Severity: P0 ship-blocker · P1 fix before release · P2 fix soon · P3 nit.
+
+Retry: at most two re-delegations per subagent per task — (1) name the failure, (2) dictate the patch — then escalate to the user.

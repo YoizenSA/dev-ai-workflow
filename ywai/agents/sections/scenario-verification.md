@@ -21,24 +21,17 @@ who drives, not whether the change is verified.
 
 ### How
 
-Delegate to `@scenario-runner`, which establishes the environment (Docker logs
-locally, Grafana for a shared one), drives Given/When in the browser or hits
-the API depending on what each `Then` actually observes, and files the
-evidence — a screenshot at the assertion, the Jev Then line for every UI
-scenario, the failing request, the log excerpt around each failure — under
-`.evidence/<run-id>/`. A UI Then is scored by `jev_check_page`; the runner
-does not invent that PASS.
+Delegate to `@scenario-verification-orchestrator` (the `scenario-verification`
+workflow) with the work item id and the environment. It runs every scenario
+against the running app, files the evidence under `.evidence/<run-id>/`
+(screenshot at each assertion, the Jev Then line for each UI scenario, the
+failing request, the log excerpt), and posts the result on the work item: a
+summary comment on the parent and one Bug child per failing scenario. If that
+agent is not installed, ask the user to run `/scenario-verification <id>`.
 
 **A red scenario blocks**, even with a clean review. Send it back for a fix and
-run it again, at most twice; after that stop and report what is still failing
-with its evidence, rather than looping. Never resolve a red by editing the
-scenario.
-
-Then get the outcome onto the ticket, via `@qa-feedback`: the run summary as a
-comment on the parent work item, and one Bug child per failing scenario carrying
-its evidence. Blocked scenarios are reported as blocked on the parent, never
-filed as Bugs. A result that lives only in this transcript is a result nobody
-acts on — the person fixing it next week reads the board.
+run it again, at most twice; then stop and report what still fails with its
+evidence. Never resolve a red by editing the scenario.
 
 Report the verdict with the evidence paths. "Verified" without them is an
 opinion.

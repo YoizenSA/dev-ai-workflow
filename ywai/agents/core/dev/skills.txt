@@ -1,4 +1,3 @@
-typescript
 git-commit
 diagnosing-bugs
 codebase-design

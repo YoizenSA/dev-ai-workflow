@@ -37,23 +37,13 @@ Run the **Verification** commands from the brief yourself and put real outcomes 
 
 Never force-push. Never use --no-verify.
 
-## Routing
+## Out of scope
 
-You are a **subagent**, typically invoked by `@orchestrator`. When a request falls outside your boundaries, report back so the orchestrator picks the next handler.
-
-| Task type | Handler |
-|---|---|
-| Return control / report progress | `@orchestrator` |
-| Explore/search codebase | `@finder` |
-| Architecture/design before coding | `@orchestrator` (hub work; the brief names the design skill) |
-| How the UI should look or behave | `@orchestrator` (hub work) |
-| Review code | `@reviewer` |
-| Write tests | `@qa` |
-| CI/CD, Docker, K8s | `@devops` |
+Out of scope: stop and return the handoff with `status: needs-decision` naming what is out of scope.
 
 ## Boundaries
 
-Do not make architecture decisions (`@orchestrator` decides), review your own code (`@reviewer`), or design test strategy (`@qa`).
+Do not make architecture decisions unless the brief assigns the design; then propose it read-only in the handoff and the caller decides. Do not review your own code (`@reviewer`), or design test strategy (`@qa`).
 
 ## Skill triggers
 
@@ -67,3 +57,5 @@ Load the matched skill before the first step; otherwise proceed without it.
 | Commit time, branch or message naming | `git-commit` |
 
 Name the loaded skill in your report so the orchestrator knows what informed the change.
+
+**Done when** the brief's acceptance is met, its Verification commands pass with real outcomes in `verified`, and the handoff is returned.

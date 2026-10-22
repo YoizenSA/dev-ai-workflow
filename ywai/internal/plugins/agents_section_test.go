@@ -72,12 +72,25 @@ func TestRemoveAgentsSection(t *testing.T) {
 	}
 }
 
-// The shipped section is the thing that stops an agent from presenting a
-// review it never ran, so its load-bearing rules are pinned here.
-func TestJevGateSection_CarriesTheAttributionRules(t *testing.T) {
+// The always-on section is a pointer; the jev-gate skill carries the rules
+// that stop an agent from presenting a review it never ran, so they are
+// pinned on the skill.
+func TestJevGateSection_PointsAtTheSkill(t *testing.T) {
 	body, ok := agentsSections["jev-gate"]
 	if !ok {
 		t.Fatal("manifest names agentsSection jev-gate but no body is registered")
+	}
+	if n := len(strings.Split(strings.TrimSpace(body), "\n")); n > 3 {
+		t.Errorf("jev-gate section is %d lines, want a short pointer", n)
+	}
+	for _, want := range []string{"`jev-gate`", "jev_"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("jev-gate section missing %q", want)
+		}
+	}
+	skill, err := os.ReadFile("../../plugins/jev-gate/skills/jev-gate/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
 	}
 	for _, want := range []string{
 		"clean` is not `approved",
@@ -86,8 +99,8 @@ func TestJevGateSection_CarriesTheAttributionRules(t *testing.T) {
 		"jev_review_diff",
 		"jev_check_page",
 	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("jev-gate section missing %q", want)
+		if !strings.Contains(string(skill), want) {
+			t.Errorf("jev-gate skill missing %q", want)
 		}
 	}
 }

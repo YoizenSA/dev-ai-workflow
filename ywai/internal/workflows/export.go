@@ -185,7 +185,10 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 	orchBody := orchestratorBody(wf, subAgentIDs)
 	// Exported workflows are offline from ywai sections, so embed the full
 	// contract (not the always-on pointer used by live orchestrators).
-	orchBody = agents.AppendSections(orchBody, []string{"orchestrator-contracts-full"}, config.AgentsSourceDir())
+	orchBody, err := agents.AppendSections(orchBody, []string{"orchestrator-contracts-full"}, config.AgentsSourceDir())
+	if err != nil {
+		return nil, nil, err
+	}
 	files[orchPath] = e.renderOrchestratorMarkdown(wf, orchestratorID, orchTaskTargets, orchBody)
 	artifacts = append(artifacts, ExportArtifact{Path: orchPath, Kind: "agent", Name: orchestratorID})
 
@@ -197,7 +200,11 @@ func (e *Exporter) Plan(wf *Workflow) (*ExportPlan, map[string]string, error) {
 		}
 		id := subAgentIDs[n.ID]
 		path := filepath.Join(e.agentsDir, id+".md")
-		files[path] = e.renderSubAgentMarkdown(wf, n, id, subAgentIDs)
+		md, err := e.renderSubAgentMarkdown(wf, n, id, subAgentIDs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("node %s: %w", n.ID, err)
+		}
+		files[path] = md
 		artifacts = append(artifacts, ExportArtifact{Path: path, Kind: "agent", Name: id})
 	}
 
@@ -383,7 +390,7 @@ func (e *Exporter) orchestratorModel(wf *Workflow) string {
 // node's `tools` field; when empty, dev defaults apply (read/edit/write/bash/
 // glob/grep/skill). Delegation is derived from outgoing edges: a subAgent may
 // delegate to any subAgent node it has a direct connection to.
-func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subAgentIDs map[string]string) string {
+func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subAgentIDs map[string]string) (string, error) {
 	perm := toolsToPermissions(n.Data.Tools, defaultSubAgentTools)
 	// Sub-agents default to "subagent" mode: they don't appear in the agent
 	// selector (only invocable via `subagent` by the orchestrator). The user can
@@ -400,9 +407,11 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 	if strings.TrimSpace(prompt) == "" {
 		prompt = n.Data.Prompt
 	}
-	sections := subAgentSectionList(n.Data.Sections)
+	prompt, err := agents.AppendSections(prompt, subAgentSectionList(n.Data.Sections), config.AgentsSourceDir())
+	if err != nil {
+		return "", err
+	}
 	if e.target == TargetClaudeCode || e.target == TargetPi || e.target == TargetOMP {
-		prompt = agents.AppendSections(prompt, sections, config.AgentsSourceDir())
 		toolsCSV := csvFromPermissions(perm)
 		if e.target == TargetPi || e.target == TargetOMP {
 			toolsCSV = strings.ToLower(toolsCSV)
@@ -411,7 +420,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(prompt) != "" {
 			md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 		}
-		return md
+		return md, nil
 	}
 	profile := agents.AgentProfile{
 		Name:        id,
@@ -421,7 +430,6 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 		Mode:        mode,
 		Group:       wf.Name,
 	}
-	profile.Prompt = agents.AppendSections(profile.Prompt, sections, config.AgentsSourceDir())
 	md := agents.BuildOpenCodeMarkdown(id, profile)
 	md = injectModel(md, e.nodeModel(n))
 
@@ -434,7 +442,7 @@ func (e *Exporter) renderSubAgentMarkdown(wf *Workflow, n *Node, id string, subA
 	if strings.TrimSpace(n.Data.Prompt) != "" && strings.TrimSpace(prompt) != "" {
 		md += "\n\n---\n\n## Task\n\n" + strings.TrimSpace(n.Data.Prompt) + "\n"
 	}
-	return md
+	return md, nil
 }
 
 // resolveAgentDefinition returns the identity prompt for a sub-agent node.
@@ -508,6 +516,9 @@ func subAgentSectionList(csv string) []string {
 	var out []string
 	for _, s := range strings.Split(csv, ",") {
 		if s = strings.TrimSpace(s); s != "" {
+			if s == "handoff-qa" { // retired; saved user workflows still carry it
+				s = "handoff"
+			}
 			out = append(out, s)
 		}
 	}
@@ -521,7 +532,7 @@ func subAgentSectionList(csv string) []string {
 
 // defaultOrchestratorTools is applied when the START node has no tools set.
 // Coordinator-only: read + ask + skill + context (mcp bucket). No edit/write/
-// bash — the orchestrator never touches code directly. (delegate/delegation_*
+// bash — the orchestrator never touches code directly. (delegate/subagent_*
 // are added by BuildOpenCodeMarkdown's AlwaysAllowed path when needed.)
 const defaultOrchestratorTools = "read,glob,grep,task,delegate,skill,question,mcp"
 

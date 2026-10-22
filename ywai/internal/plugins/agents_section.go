@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// jevGateSection is the AGENTS.md block that teaches the agent how to use the
-// jev-gate tools. It ships with the plugin because the rules are not optional:
+// jevGateSection is the AGENTS.md pointer to the jev-gate skill, which holds
+// the rules for the jev-gate tools. They are not optional:
 // without them an agent can present a review it never ran, or restate a 0.8
 // probability as a certainty.
 //
