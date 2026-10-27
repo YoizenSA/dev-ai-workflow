@@ -2,13 +2,13 @@ package agents
 
 // graft_permissions_test.go — RED tests for slice 2: replace the
 // `codegraph_*` permission grant in every agent profile with
-// `graft_*` (acceptance item 4).
+// `trail_*` (acceptance item 4).
 //
 // Contract under test:
 //   - Every agents/**/permissions.json file that grants `codegraph_*`
-//     must instead grant `graft_*` (or both, when not exact-exclusion).
+//     must instead grant `trail_*` (or both, when not exact-exclusion).
 //     The slice contract is "codegraph_* must not survive".
-//   - Profiles currently carrying `codegraph_*` MUST carry `graft_*`.
+//   - Profiles currently carrying `codegraph_*` MUST carry `trail_*`.
 //   - No JSON in the agents tree mentions `codegraph_*`.
 //
 // We use stdlib filepath/json so the test is deterministic over the
@@ -78,7 +78,7 @@ func TestPermissions_NoCodegraphWildcard(t *testing.T) {
 		perms := readPermMap(t, path)
 		for key := range perms {
 			if strings.HasPrefix(key, "codegraph") {
-				t.Errorf("%s still grants legacy permission %q — slice 2 must replace with graft_*",
+				t.Errorf("%s still grants legacy permission %q — slice 2 must replace with trail_*",
 					path, key)
 			}
 		}
@@ -86,9 +86,9 @@ func TestPermissions_NoCodegraphWildcard(t *testing.T) {
 }
 
 // TestPermissions_GraftWildcardPresent asserts that the slice-2
-// migration left at least one shipped profile granting `graft_*`.
+// migration left at least one shipped profile granting `trail_*`.
 // The legacy `codegraph_*` set is empty after a full migration, so a
-// direct graft_* count is the post-migration regression signal.
+// direct trail_* count is the post-migration regression signal.
 func TestPermissions_GraftWildcardPresent(t *testing.T) {
 	root := filepath.Join("..", "..", "agents")
 	profiles := walkPermissions(t, root)
@@ -97,14 +97,14 @@ func TestPermissions_GraftWildcardPresent(t *testing.T) {
 	}
 
 	// Post-migration every legacy codegraph_* grant is gone, so the
-	// migration signal is a direct graft_* grant. Counting those keeps
-	// the regression guard: if a profile ever drops graft_* (or someone
+	// migration signal is a direct trail_* grant. Counting those keeps
+	// the regression guard: if a profile ever drops trail_* (or someone
 	// reverts to codegraph_*), this test and the NoCodegraph tests fail.
 	migrated := 0
 	for _, path := range profiles {
 		perms := readPermMap(t, path)
 		for key := range perms {
-			if strings.HasPrefix(key, "graft_") {
+			if strings.HasPrefix(key, "trail_") {
 				migrated++
 				break
 			}
@@ -112,7 +112,7 @@ func TestPermissions_GraftWildcardPresent(t *testing.T) {
 	}
 
 	if migrated == 0 {
-		t.Errorf("expected at least one profile to grant graft_* after migration, found none")
+		t.Errorf("expected at least one profile to grant trail_* after migration, found none")
 	}
 }
 

@@ -33,7 +33,7 @@ Unsure → default to **plan**, but say "treating this as a plan because <reason
 
 If you did not research, you did not plan — you guessed. Delegate to `@finder` for codebase scouting and to `explore` subagents for conceptual or external research, fanning out in parallel when the request spans independent areas. One bounded scout is the default; re-scout only when a handoff is explicitly incomplete.
 
-Read 1–3 known files and grep/glob inline to decide or verify. Anything broader (4+ unknown paths) goes to `@finder`. Use `graft` / `code_search` for structure checks when they are available.
+Read 1–3 known files and grep/glob inline to decide or verify. Anything broader (4+ unknown paths) goes to `@finder`. Use `trail ask "<q>" --source` / `code_search` for structure checks when they are available.
 
 Skipping the scout because the goal "looks simple" is how a plan ships a wrong assumption — a bad assumption costs far more than a thirty-second scout.
 

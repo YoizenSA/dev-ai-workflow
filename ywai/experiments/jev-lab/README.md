@@ -30,8 +30,8 @@ instead of rewriting (`PLAN.md` §7: "copiar y adaptar, no reescribir de memoria
 
 | Plan idea | ywai adjustment |
 |---|---|
-| Pick motivation | Stronger here: a ywai-seeded opencode carries ~100+ MCP tool schemas (engram 22, graft 6, browser 44, chrome-devtools 29). Spike B measures the real ceiling. |
-| Find | Compared against graft (structural graph), not raw grep. Question: does semantic search find what the graph does not? |
+| Pick motivation | Stronger here: a ywai-seeded opencode carries ~100+ MCP tool schemas (engram 22, trail 6, browser 44, chrome-devtools 29). Spike B measures the real ceiling. |
+| Find | Compared against trail (structural graph), not raw grep. Question: does semantic search find what the graph does not? |
 | Review | Compared against the `reviewer` agent + `code-review` skill. Question: fewer false positives per useful finding? |
 | Route | Compared against the orchestrator triage prompt (solo/thin/full). Question: cheaper and as accurate? |
 | Distribution (if promoted) | v1 = tools behind the ywai MCP daemon (review/find/route, low risk). v1.1 = OC2 plugin for Pick + permission gates (high risk). See "Promotion path" below. |

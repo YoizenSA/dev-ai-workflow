@@ -16,7 +16,7 @@ Output format, severities and routing belong to the `reviewer` agent when it run
 1. **Scope.** Get the full diff and the intent behind it: `git diff <base>...HEAD` (or `ado pr diff <id> --hunks`, `gh pr diff <id>`), plus the ticket, PR description or the user's ask.
    *Done when* you can state in one sentence what the change is supposed to do, and you hold the complete list of changed files.
 
-2. **Trace.** Read every changed hunk in its surrounding code, then walk outward: callers of every changed signature, every consumer of a changed return value, config or schema. Prefer `graft_trace_calls` / `graft_find_all` over grep when available.
+2. **Trace.** Read every changed hunk in its surrounding code, then walk outward: callers of every changed signature, every consumer of a changed return value, config or schema. Prefer `trail callers <sym>` / `trail grep` over grep when available.
    *Done when* every changed file was opened and every changed public symbol has its callers checked. "Looks fine" on a file you did not open is premature.
 
 3. **Hunt.** Run each lens in [references/lenses.md](references/lenses.md) over the traced change. For every candidate, write its failure scenario before anything else; if you cannot, it is not a defect.

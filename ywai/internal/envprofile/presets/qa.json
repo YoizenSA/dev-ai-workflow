@@ -3,7 +3,7 @@
   "description": "Strict testing: everything installed; snapshot updates denied.",
   "groups": ["core"],
   "skills": [],
-  "mcp": ["graft", "grafana", "chrome-devtools"],
+  "mcp": ["trail", "grafana", "chrome-devtools"],
   "default_agent": "orchestrator",
   "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["*jest*-u*", "*vitest*-u*", "*--update-snapshot*"],

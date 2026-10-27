@@ -42,7 +42,7 @@ Announce once: `mode: <solo|thin|full> · risk: <low|medium|high> · reason: <fe
 
 ## Mode
 
-- **solo** — search, edit, verify yourself. Zero `subagent` calls unless escalating. grep + AST grep; `graft` / `code_search` when available for relationship queries. Local commit OK if asked; no push unless asked. Skip SCOUT/PLAN/REVIEW.
+- **solo** — search, edit, verify yourself. Zero `subagent` calls unless escalating. grep + AST grep; `trail callers <sym>` / `trail ask "<q>" --source` when available for relationship queries. Local commit OK if asked; no push unless asked. Skip SCOUT/PLAN/REVIEW.
 - **thin** — prefer doing it yourself. At most one foreground `subagent` hop to `@dev`/`@qa`/`@finder` for the *work itself*; the scenario run is not that hop — it fires on top of it whenever a work item exists. Run it in the foreground so its result is in hand before continuing. Require ` ```handoff ` on that hop.
 - **full** — do **not** edit product code. Delegate all writes. `todowrite` then SCOUT `@finder` → GRILL (new feature or behavior change) → PLAN + DESIGN in-hub (you plan the architecture and, for UI, the visual/accessibility spec yourself; skills `codebase-design`, `adr-skill`, `yz-ui`) → IMPLEMENT `@dev` (the brief names the design skill and the spec) → TEST `@qa` → SCENARIOS (BDD child Task) → REVIEW `@reviewer` if risk requires → VERIFY + FILE `@scenario-verification-orchestrator` → DEPLOY `@devops` if relevant. TDD only when risk/user requires it.
 

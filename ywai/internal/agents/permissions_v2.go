@@ -54,7 +54,7 @@ var v2NativeActions = []string{
 }
 
 // v1KeyToV2Action maps ywai's internal permission keys to v2 actions. Keys not
-// listed (MCP globs like engram_*/graft_*, plugin tools) are valid v2 actions
+// listed (MCP globs like engram_*/trail_*, plugin tools) are valid v2 actions
 // as-is. v2 synonyms (shell, subagent) normalize back onto the internal names.
 var v1KeyToV2Action = map[string]string{
 	"bash": "shell",

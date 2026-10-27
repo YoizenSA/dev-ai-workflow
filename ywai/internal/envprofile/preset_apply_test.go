@@ -51,12 +51,12 @@ func TestPresetGetters(t *testing.T) {
 	}
 	// dev/qa install ALL skills like a global install: empty skills allowlist
 	// means no filter (keep current behavior). MCPs are an explicit
-	// allowlist per user request (graft + grafana + chrome-devtools).
+	// allowlist per user request (trail + grafana + chrome-devtools).
 	if skills := PresetSkills(spec); skills != nil {
 		t.Errorf("PresetSkills(dev) = %v, want nil (all)", skills)
 	}
-	if mcp := PresetMCPIDs(spec); len(mcp) != 3 || mcp[0] != "graft" || mcp[1] != "grafana" || mcp[2] != "chrome-devtools" {
-		t.Errorf("PresetMCPIDs(dev) = %v, want [graft grafana chrome-devtools]", mcp)
+	if mcp := PresetMCPIDs(spec); len(mcp) != 3 || mcp[0] != "trail" || mcp[1] != "grafana" || mcp[2] != "chrome-devtools" {
+		t.Errorf("PresetMCPIDs(dev) = %v, want [trail grafana chrome-devtools]", mcp)
 	}
 	if deny := PresetDenyBash(spec); deny != nil {
 		t.Errorf("PresetDenyBash(dev) = %v, want nil (commit/push is each agent's bash permission)", deny)
@@ -126,12 +126,16 @@ func TestDevopsDenyBashNormalized(t *testing.T) {
 }
 
 func TestShouldInstallMCP(t *testing.T) {
-	if !ShouldInstallMCP("graft", nil) {
+	if !ShouldInstallMCP("trail", nil) {
 		t.Errorf("empty allowlist must allow")
 	}
-	allow := []string{"graft", "context7"}
-	if !ShouldInstallMCP("graft", allow) {
-		t.Errorf("graft should install")
+	allow := []string{"trail", "context7"}
+	if !ShouldInstallMCP("trail", allow) {
+		t.Errorf("trail should install")
+	}
+	// Presets saved before the Graft → Trail rename still list "graft".
+	if !ShouldInstallMCP("trail", []string{"graft"}) {
+		t.Errorf("legacy graft allowlist entry must allow trail")
 	}
 	if ShouldInstallMCP("chrome-devtools", allow) {
 		t.Errorf("chrome-devtools should skip")

@@ -96,3 +96,23 @@ func TestInstallPipeline_NoGentleAIUserCopy(t *testing.T) {
 		}
 	}
 }
+
+// Graft was renamed Trail. install/update must install trail, migrate a
+// pre-rename `graft` MCP entry and never call the retired graft entry points.
+func TestInstallPipeline_MigratesGraftToTrail(t *testing.T) {
+	data, err := os.ReadFile("root.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	for _, want := range []string{"plugins.InstallTrailCLI()", "plugins.MigrateGraftMCP()", "plugins.WireTrailMCP()", `skipMCP("trail")`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("root.go must call %s", want)
+		}
+	}
+	for _, gone := range []string{"plugins.InstallGraftCLI", "plugins.WireGraftMCP", "plugins.GraftInfo", `skipMCP("graft")`} {
+		if strings.Contains(body, gone) {
+			t.Errorf("root.go still references retired %s", gone)
+		}
+	}
+}

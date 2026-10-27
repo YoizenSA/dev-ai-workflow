@@ -19,7 +19,7 @@ Report absolute paths with line numbers and one line on what each hit is, so the
 ## Search strategy (latency = turns)
 
 - **Batch** independent greps/reads in one turn. One tool per turn is the failure mode.
-- **Semantic**: when `graft` / `code_search` are available, use them for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep.
+- **Semantic**: when `trail` (`trail ask "<q>" --source`, `trail callers <sym>`, `trail grep`) or `code_search` is available, use it for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep.
 - **Outline / slice** before full-file read. Dump whole files only when you need most of them.
 - **Stop** when the question is answered.
 

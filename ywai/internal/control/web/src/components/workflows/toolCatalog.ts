@@ -27,7 +27,7 @@ export const TOOL_OPTIONS: ToolOption[] = [
 	{ value: 'skill', label: 'Skill', group: 'meta' },
 	// MCP buckets (expand to wildcards at export)
 	{ value: 'mcp', label: 'MCP (every configured server)', group: 'mcp' },
-	{ value: 'graft', label: 'Graft (repo graph)', group: 'mcp' },
+	{ value: 'trail', label: 'Trail (repo graph)', group: 'mcp' },
 	{ value: 'memory', label: 'Memory (engram)', group: 'mcp' },
 ]
 
@@ -35,7 +35,7 @@ export const TOOL_OPTIONS: ToolOption[] = [
 export const DEFAULT_ORCHESTRATOR_TOOLS = ['read', 'glob', 'grep', 'delegate', 'question', 'skill', 'mcp']
 
 // Tools a developer/implementer gets by default. Full dev access.
-export const DEFAULT_DEV_TOOLS = ['read', 'edit', 'write', 'bash', 'glob', 'grep', 'graft', 'skill', 'mcp']
+export const DEFAULT_DEV_TOOLS = ['read', 'edit', 'write', 'bash', 'glob', 'grep', 'trail', 'skill', 'mcp']
 
 // Parse a CSV string into a Set of selected values.
 export function csvToSet(csv: string | undefined): Set<string> {

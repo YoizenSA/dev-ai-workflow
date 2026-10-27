@@ -17,7 +17,7 @@
   "chrome-devtools_*": "allow",
   "jev_*": "allow",
   "grafana_*": "allow",
-  "graft_*": "allow",
+  "trail_*": "allow",
   "memory": "allow",
   "intercom": "allow"
 }

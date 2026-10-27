@@ -73,10 +73,10 @@ func PresetNone(spec map[string]any, key string) bool {
 }
 
 // FilterableMCPIDs lists the MCP server ids the preset mcp[] allowlist can
-// filter (manifest MCP entries plus graft), sorted. Other MCP wiring
+// filter (manifest MCP entries plus trail), sorted. Other MCP wiring
 // (engram, plugins) always installs.
 func FilterableMCPIDs() []string {
-	ids := []string{"graft"}
+	ids := []string{"trail"}
 	for _, id := range mcpServerManifestIDs() {
 		ids = append(ids, id)
 	}
@@ -237,7 +237,11 @@ func ShouldInstallMCP(serverID string, allow []string) bool {
 	}
 	serverID = strings.TrimSpace(serverID)
 	for _, a := range allow {
-		if strings.TrimSpace(a) == serverID {
+		a = strings.TrimSpace(a)
+		if a == "graft" { // presets saved before Graft was renamed Trail
+			a = "trail"
+		}
+		if a == serverID {
 			return true
 		}
 	}

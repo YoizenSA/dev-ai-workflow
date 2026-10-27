@@ -6,7 +6,7 @@ import * as path from "node:path"
 import { needsInitialBuild, wiringPath } from "../src/decide.js"
 
 function tmpRepo(): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graft-build-test-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trail-build-test-"))
 	fs.mkdirSync(path.join(dir, ".git"))
 	return dir
 }
@@ -30,7 +30,7 @@ describe("needsInitialBuild", () => {
 	})
 
 	test("skips a non-repo: graft indexes repositories, and cwd may be anywhere", () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "graft-build-test-"))
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trail-build-test-"))
 		expect(needsInitialBuild(dir)).toBe(false)
 	})
 

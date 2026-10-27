@@ -35,7 +35,7 @@ Single-source clusters are suspects; joined ones are findings:
 
 ## Navigation
 
-Reads concentrate on one file while the fix lives elsewhere. The fix is a pointer plus `graft_file_api` first, never more docs.
+Reads concentrate on one file while the fix lives elsewhere. The fix is a pointer plus `trail skeleton <file>` first, never more docs.
 
 ## Steering no-ops
 

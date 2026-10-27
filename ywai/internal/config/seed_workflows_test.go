@@ -136,7 +136,7 @@ func TestReconcileSeedWorkflowAgentLinks_ReappliesPromptAndTools(t *testing.T) {
 		},
 	}
 	writeJSON(t, dst, user)
-	seed := []byte(`{"nodes":[{"id":"finder","type":"subAgent","data":{"agentRef":"core/finder","prompt":"Explore with Graft first.","tools":"read, grep, glob, graft_*, context7_*"}}]}`)
+	seed := []byte(`{"nodes":[{"id":"finder","type":"subAgent","data":{"agentRef":"core/finder","prompt":"Explore with Graft first.","tools":"read, grep, glob, trail_*, context7_*"}}]}`)
 	if err := reconcileSeedWorkflowAgentLinks(dst, seed); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestReconcileSeedWorkflowAgentLinks_ReappliesPromptAndTools(t *testing.T) {
 	if data["prompt"] != "Explore with Graft first." {
 		t.Fatalf("prompt=%v, want seed prompt", data["prompt"])
 	}
-	if data["tools"] != "read, grep, glob, graft_*, context7_*" {
+	if data["tools"] != "read, grep, glob, trail_*, context7_*" {
 		t.Fatalf("tools=%v, want seed tools", data["tools"])
 	}
 }
@@ -182,8 +182,8 @@ func TestMigrateRetiredWorkflowVocab_RewritesCodegraph(t *testing.T) {
 	if strings.Contains(s, `"lsp"`) || strings.Contains(s, "ast_grep") || strings.Contains(s, "code_search") {
 		t.Fatalf("dropped v2 tools survived:\n%s", s)
 	}
-	if !strings.Contains(s, "graft_*") {
-		t.Fatalf("graft_* missing:\n%s", s)
+	if !strings.Contains(s, "trail_*") {
+		t.Fatalf("trail_* missing:\n%s", s)
 	}
 }
 
@@ -237,5 +237,17 @@ func TestSeedWorkflowsFrom_RepairsDetachedGoalStart(t *testing.T) {
 	}
 	if _, ok := start["agentDefinition"]; ok {
 		t.Fatal("agentDefinition should be cleared")
+	}
+}
+
+// Installed workflows saved before Graft became Trail keep graft_* globs that
+// match nothing once the MCP server key is trail (ids are trail_trail_*).
+func TestRewriteRetiredToolsCSV_GraftBecomesTrail(t *testing.T) {
+	got, changed := rewriteRetiredToolsCSV("read, graft_*, graft, trail_*")
+	if !changed || got != "read, trail_*" {
+		t.Fatalf("rewrite = %q, %v; want %q, true", got, changed, "read, trail_*")
+	}
+	if _, changed := rewriteRetiredToolsCSV(got); changed {
+		t.Error("second pass must be a no-op")
 	}
 }

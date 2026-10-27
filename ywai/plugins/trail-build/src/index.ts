@@ -1,5 +1,5 @@
 /**
- * graft-build — build the graft graph once, for a repo that has never had one.
+ * trail-build — build the trail graph once, for a repo that has never had one.
  *
  * See ./decide.ts for why this exists and why it does nothing else.
  */
@@ -13,7 +13,7 @@ import { failureMarkerPath, needsInitialBuild } from "./decide.js"
 /**
  * Process-lifetime guard. A host may load the plugin once per session while
  * several sessions share one process; the build takes minutes on a large repo
- * and `graft build` takes its own lock, so a second spawn would only sit
+ * and `trail build` takes its own lock, so a second spawn would only sit
  * there. Keyed by repo because one process does serve several directories.
  */
 const started = new Set<string>()
@@ -33,19 +33,19 @@ function markFailed(repo: string): void {
  * session, and a first build on a large repo is minutes long — blocking setup
  * on it would hold the session open behind indexing.
  *
- * Tier-1 only. No `--deep`, which is the LLM pass: the same money guard graft
+ * Tier-1 only. No `--deep`, which is the LLM pass: the same money guard trail
  * puts on its own automatic path. Nothing automatic gets to spend.
  */
 export function startInitialBuild(repo: string): boolean {
 	if (!needsInitialBuild(repo) || started.has(repo)) return false
 	started.add(repo)
 	try {
-		const child = spawn("graft", ["build", repo], {
+		const child = spawn("trail", ["build", repo], {
 			cwd: repo,
 			stdio: "ignore",
 			detached: true,
 		})
-		// ENOENT (graft not installed) arrives as an event, not a throw.
+		// ENOENT (trail not installed) arrives as an event, not a throw.
 		child.on("error", () => markFailed(repo))
 		child.on("exit", (code) => {
 			if (code !== 0) markFailed(repo)
@@ -68,7 +68,7 @@ async function setup(ctx: { location?: { directory?: string } }): Promise<void> 
  * serves both flavors: v2 reads id/setup, v1 calls server().
  */
 export default {
-	id: "ywai-graft-build",
+	id: "ywai-trail-build",
 	setup,
 	async server(ctx: { directory?: string }) {
 		startInitialBuild(ctx?.directory ?? process.cwd())

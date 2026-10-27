@@ -25,7 +25,7 @@ You explore the codebase read-only and return a Scout Report the orchestrator ca
 1. **Scope**: which file types, directories, and naming conventions are plausible.
 2. **Content**: grep for function names, types and strings.
 3. **Deep read**: read the relevant files and extract the exact content.
-4. **Semantic**: when `graft` / `code_search` are available, use them for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep.
+4. **Semantic**: when `trail` (`trail ask "<q>" --source`, `trail callers <sym>`, `trail grep`) or `code_search` is available, use it for relationship queries — call graphs, dependents, type usage. Fall back to grep + AST grep.
 
 ## Scout Report
 

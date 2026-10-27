@@ -774,42 +774,48 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 			}
 		}
 
-		// Install the `graft` CLI (Graft from nanonets/graft).
-		// Non-fatal: if npm is missing or the install fails, the user
-		// can run `npm i -g @nanonets/graft` manually later.
-		fmt.Println("\n  Installing Graft CLI (`graft`)...")
-		if err := plugins.InstallGraftCLI(); err != nil {
+		// Install the `trail` CLI (Trail, formerly Graft). Also uninstalls the
+		// legacy @nanonets/graft package. Non-fatal: the user can run
+		// `npm i -g @trailhq/trail-code` manually later.
+		fmt.Println("\n  Installing Trail CLI (`trail`)...")
+		if err := plugins.InstallTrailCLI(); err != nil {
 			fmt.Printf("  Warning: %v\n", err)
-		} else if v, ok := plugins.GraftInfo(); ok {
+		} else if v, ok := plugins.TrailInfo(); ok {
 			if v == "" {
-				fmt.Println("  ✓ graft CLI installed (version unknown)")
+				fmt.Println("  ✓ trail CLI installed (version unknown)")
 			} else {
-				fmt.Printf("  ✓ graft CLI installed (v%s)\n", v)
+				fmt.Printf("  ✓ trail CLI installed (v%s)\n", v)
 			}
 		}
 
-		// Wire the graft MCP server into the agent config natively
-		// (`graft mcp` entry written by ywai, not `graft init`), so no
+		// Rewrite a pre-rename `graft` MCP entry into `trail`. Runs regardless
+		// of the preset filter: it only renames what the user already had.
+		if migrated := plugins.MigrateGraftMCP(); len(migrated) > 0 {
+			fmt.Printf("  ✓ graft MCP entry migrated to trail (%s)\n", strings.Join(migrated, ", "))
+		}
+
+		// Wire the trail MCP server into the agent config natively
+		// (`trail mcp` entry written by ywai, not `trail init`), so no
 		// instruction files are rewritten unexpectedly. Preset enforcement:
-		// skip when graft is outside the preset mcp[] allowlist; an existing
+		// skip when trail is outside the preset mcp[] allowlist; an existing
 		// entry is left alone, never removed.
-		if skipMCP("graft") {
-			fmt.Println("  Skipped graft MCP wiring: not in preset mcp list")
+		if skipMCP("trail") {
+			fmt.Println("  Skipped trail MCP wiring: not in preset mcp list")
 		} else {
-			fmt.Println("  Wiring Graft MCP into agent configs...")
-			if err := plugins.WireGraftMCP(); err != nil {
+			fmt.Println("  Wiring Trail MCP into agent configs...")
+			if err := plugins.WireTrailMCP(); err != nil {
 				fmt.Printf("  Warning: %v\n", err)
 			} else {
-				fmt.Println("  ✓ graft MCP wired")
+				fmt.Println("  ✓ trail MCP wired")
 			}
 		}
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
-		fmt.Println("  Would install Graft CLI (`graft`)")
-		if skipMCP("graft") {
-			fmt.Println("  Would skip graft MCP wiring: not in preset mcp list")
+		fmt.Println("  Would install Trail CLI (`trail`) and remove legacy @nanonets/graft")
+		if skipMCP("trail") {
+			fmt.Println("  Would skip trail MCP wiring: not in preset mcp list")
 		} else {
-			fmt.Println("  Would wire Graft MCP into opencode")
+			fmt.Println("  Would wire Trail MCP into opencode")
 		}
 	}
 }

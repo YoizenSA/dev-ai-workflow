@@ -74,7 +74,7 @@ func Doctor() error {
 		fmt.Printf("  [warn] ywai:data-dir          %s missing (run `ywai install`)\n", config.DataDir())
 	}
 
-	for _, bin := range []string{"git", "go", "graft", "node", "npm", engramBin} {
+	for _, bin := range []string{"git", "go", "trail", "node", "npm", engramBin} {
 		if _, err := exec.LookPath(bin); err == nil {
 			fmt.Printf("  [ok]  %-22s found\n", bin)
 		} else {

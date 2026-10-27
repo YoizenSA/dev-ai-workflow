@@ -6,7 +6,7 @@ Classify mechanical vs judgement before picking a lever. Default to the check.
 
 | Signal | Rule | Likely lever |
 |---|---|---|
-| Re-reads | `worstFileReads >= 5` or `reads >= 15` in one attempt | agent: `graft_file_api` first + pointer in SKILL/AGENTS |
+| Re-reads | `worstFileReads >= 5` or `reads >= 15` in one attempt | agent: `trail skeleton <file>` first + pointer in SKILL/AGENTS |
 | Denied tools | `invalid >= 1` | agent `permissions.json` / prompt |
 | Long trace, flat score | `turns >= p90` with `weighted` unchanged vs baseline | split workflow, delegate, change model |
 | Memory miss | `hit_rate < 0.3` or same symptom in `misses` >=3x | `topic_key` hygiene, consolidation, prefs save |

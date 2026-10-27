@@ -31,11 +31,11 @@ func v2MCPSection(t *testing.T, home string) map[string]any {
 func TestWriteAgentConfig_V2NestsUnderServers(t *testing.T) {
 	home := v2Home(t)
 
-	entry, ok := CatalogByID("graft")
+	entry, ok := CatalogByID("trail")
 	if !ok {
-		t.Fatal(`CatalogByID("graft") ok=false, want true`)
+		t.Fatal(`CatalogByID("trail") ok=false, want true`)
 	}
-	if _, err := WriteAgentConfig("opencode", "graft", BuildEntryShape("opencode", entry, nil)); err != nil {
+	if _, err := WriteAgentConfig("opencode", "trail", BuildEntryShape("opencode", entry, nil)); err != nil {
 		t.Fatalf("WriteAgentConfig: %v", err)
 	}
 
@@ -44,12 +44,12 @@ func TestWriteAgentConfig_V2NestsUnderServers(t *testing.T) {
 	if !nested {
 		t.Fatalf("v2 must nest servers under mcp.servers, got %v", section)
 	}
-	if _, flat := section["graft"]; flat {
-		t.Errorf("server also written flat at mcp.graft: %v", section)
+	if _, flat := section["trail"]; flat {
+		t.Errorf("server also written flat at mcp.trail: %v", section)
 	}
-	got, ok := servers["graft"].(map[string]any)
+	got, ok := servers["trail"].(map[string]any)
 	if !ok {
-		t.Fatalf("mcp.servers[graft] = %v, want map", servers["graft"])
+		t.Fatalf("mcp.servers[trail] = %v, want map", servers["trail"])
 	}
 	if got["type"] != "local" {
 		t.Errorf(`type = %v, want "local"`, got["type"])
@@ -116,8 +116,8 @@ func TestWriteAgentConfig_V2MigratesFlatEntries(t *testing.T) {
 	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	writeJSONFile(t, cfgPath, `{"mcp":{"legacy":{"type":"local","command":["echo"],"enabled":true}}}`)
 
-	entry, _ := CatalogByID("graft")
-	if _, err := WriteAgentConfig("opencode", "graft", BuildEntryShape("opencode", entry, nil)); err != nil {
+	entry, _ := CatalogByID("trail")
+	if _, err := WriteAgentConfig("opencode", "trail", BuildEntryShape("opencode", entry, nil)); err != nil {
 		t.Fatalf("WriteAgentConfig: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestWriteAgentConfig_V2MigratesFlatEntries(t *testing.T) {
 		t.Errorf("flat v1 entry left beside mcp.servers: %v", section)
 	}
 	servers, _ := section["servers"].(map[string]any)
-	for _, id := range []string{"legacy", "graft"} {
+	for _, id := range []string{"legacy", "trail"} {
 		if _, ok := servers[id]; !ok {
 			t.Errorf("mcp.servers[%s] missing after migration: %v", id, servers)
 		}

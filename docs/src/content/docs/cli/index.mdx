@@ -7,13 +7,13 @@ import { Card, Aside } from '@astrojs/starlight/components';
 
 # Comandos CLI
 
-ywai instala y gestiona **su propio** entorno: ecosistema gentle-ai, Engram, skills, perfiles, plugins y Graft. Ver [`ywai install --help`](https://github.com/Yoizen/dev-ai-workflow) para los flags completos.
+ywai instala y gestiona **su propio** entorno: ecosistema gentle-ai, Engram, skills, perfiles, plugins y Trail. Ver [`ywai install --help`](https://github.com/Yoizen/dev-ai-workflow) para los flags completos.
 
 ## Quick reference
 
 | Comando | Qué hace | Cuándo usarlo |
 |---|---|---|
-| `ywai install` | Ecosistema, Engram, skills, perfiles, plugins/Graft | Primera vez |
+| `ywai install` | Ecosistema, Engram, skills, perfiles, plugins/Trail | Primera vez |
 | `ywai update` | Binario + re-aplica todo lo que ywai gestiona | Después de una release |
 | `ywai doctor` | Diagnóstico de solo lectura | Si algo no funciona |
 | `ywai status` | Estado de la instalación y agentes detectados | Verificación rápida |
@@ -45,7 +45,7 @@ ywai instala y gestiona **su propio** entorno: ecosistema gentle-ai, Engram, ski
 
 ### `ywai install`
 
-Setup de ywai: ecosistema, Engram, skills extra, perfiles de agentes, plugins (incluye Graft) e init de proyecto. En OpenCode deja **solo** los agentes del grupo activo (borra leftovers en `~/.config/opencode/agents/`). El host es `opencode2`.
+Setup de ywai: ecosistema, Engram, skills extra, perfiles de agentes, plugins (incluye Trail) e init de proyecto. En OpenCode deja **solo** los agentes del grupo activo (borra leftovers en `~/.config/opencode/agents/`). El host es `opencode2`.
 
 ```bash
 ywai install                    # Instalación completa
@@ -76,7 +76,7 @@ ywai update --agent opencode
 3. Copia skills extra a los agentes detectados
 4. Reinstala perfiles + `AGENTS.md` curado
 5. Re-enlaza Engram
-6. Re-cablea plugins de OpenCode y CLIs compañeras (ado, graft)
+6. Re-cablea plugins de OpenCode y CLIs compañeras (ado, trail)
 7. Re-exporta los workflows instalados al host activo
 8. Reinicia el control server **solo** si ya estaba corriendo
 
@@ -95,7 +95,7 @@ ywai doctor
 - `state.json`
 - Engram
 - Espacio en disco
-- Graft en PATH
+- Trail en PATH
 
 ### `ywai serve` / `ywai stop` / `ywai ui`
 
