@@ -1,11 +1,11 @@
 {
-  "name": "ywai-graft-build",
+  "name": "ywai-trail-build",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "bun build src/index.ts --outfile dist/graft-build.js --target node",
+    "build": "bun build src/index.ts --outfile dist/trail-build.js --target node",
     "test": "bun test"
   }
 }

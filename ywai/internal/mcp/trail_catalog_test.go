@@ -1,14 +1,14 @@
 package mcp
 
-// graft_catalog_test.go — RED tests for slice 2: replace the runtime
-// CodeGraph MCP catalog entry with the Graft MCP catalog entry.
+// trail_catalog_test.go — RED tests for slice 2: replace the runtime
+// CodeGraph MCP catalog entry with the Trail MCP catalog entry.
 //
 // Contracts under test (acceptance items 1 & 2):
-//   1. Catalog has ID "graft" with Name "Graft", Command exactly
-//      ["graft","mcp"], InstallCmd "npm i -g @nanonets/graft",
-//      Docs "https://github.com/nanonets/graft", and Tools exactly
-//      covering graft_find_code, graft_trace_calls, graft_find_all,
-//      graft_file_api, graft_repo_map, graft_check_freshness.
+//   1. Catalog has ID "trail" with Name "Trail", Command exactly
+//      ["trail","mcp"], InstallCmd "npm i -g @trailhq/trail-code",
+//      Docs "https://github.com/trailhq/Trail-Code", and Tools exactly
+//      covering trail_find_code, trail_trace_calls, trail_find_all,
+//      trail_file_api, trail_repo_map, trail_check_freshness.
 //   2. Catalog no longer exposes ID "codegraph".
 //
 // These tests assert against the public Catalog() / CatalogByID()
@@ -22,45 +22,45 @@ import (
 	"testing"
 )
 
-// TestCatalogByID_Graft_PinnedContract pins every observable field of
-// the graft catalog entry. Drift in any field (name, command, install,
+// TestCatalogByID_Trail_PinnedContract pins every observable field of
+// the trail catalog entry. Drift in any field (name, command, install,
 // docs, tools) is a regression: agents and the install UI render from
 // this struct directly.
-func TestCatalogByID_Graft_PinnedContract(t *testing.T) {
-	entry, ok := CatalogByID("graft")
+func TestCatalogByID_Trail_PinnedContract(t *testing.T) {
+	entry, ok := CatalogByID("trail")
 	if !ok {
-		t.Fatal("CatalogByID(graft) ok=false, want true (slice 2 contract)")
+		t.Fatal("CatalogByID(trail) ok=false, want true (slice 2 contract)")
 	}
 
-	if entry.ID != "graft" {
-		t.Errorf("graft.ID = %q, want %q", entry.ID, "graft")
+	if entry.ID != "trail" {
+		t.Errorf("trail.ID = %q, want %q", entry.ID, "trail")
 	}
-	if entry.Name != "Graft" {
-		t.Errorf("graft.Name = %q, want %q", entry.Name, "Graft")
+	if entry.Name != "Trail" {
+		t.Errorf("trail.Name = %q, want %q", entry.Name, "Trail")
 	}
 
-	wantCmd := []string{"graft", "mcp"}
+	wantCmd := []string{"trail", "mcp"}
 	if !reflect.DeepEqual(entry.Command, wantCmd) {
-		t.Errorf("graft.Command = %#v, want %#v", entry.Command, wantCmd)
+		t.Errorf("trail.Command = %#v, want %#v", entry.Command, wantCmd)
 	}
 
-	const wantInstall = "npm i -g @nanonets/graft"
+	const wantInstall = "npm i -g @trailhq/trail-code"
 	if entry.InstallCmd != wantInstall {
-		t.Errorf("graft.InstallCmd = %q, want %q", entry.InstallCmd, wantInstall)
+		t.Errorf("trail.InstallCmd = %q, want %q", entry.InstallCmd, wantInstall)
 	}
 
-	const wantDocs = "https://github.com/nanonets/graft"
+	const wantDocs = "https://github.com/trailhq/Trail-Code"
 	if entry.Docs != wantDocs {
-		t.Errorf("graft.Docs = %q, want %q", entry.Docs, wantDocs)
+		t.Errorf("trail.Docs = %q, want %q", entry.Docs, wantDocs)
 	}
 
 	wantTools := []string{
-		"graft_check_freshness",
-		"graft_file_api",
-		"graft_find_all",
-		"graft_find_code",
-		"graft_repo_map",
-		"graft_trace_calls",
+		"trail_check_freshness",
+		"trail_file_api",
+		"trail_find_all",
+		"trail_find_code",
+		"trail_repo_map",
+		"trail_trace_calls",
 	}
 	gotTools := append([]string(nil), entry.Tools...)
 	sort.Strings(gotTools)
@@ -68,19 +68,19 @@ func TestCatalogByID_Graft_PinnedContract(t *testing.T) {
 	sort.Strings(wantSorted)
 
 	if !reflect.DeepEqual(gotTools, wantSorted) {
-		t.Errorf("graft.Tools = %#v (sorted), want %#v (sorted)", gotTools, wantSorted)
+		t.Errorf("trail.Tools = %#v (sorted), want %#v (sorted)", gotTools, wantSorted)
 	}
 }
 
-// TestCatalogByID_Graft_ToolsCoverContract pins the tool-list shape
+// TestCatalogByID_Trail_ToolsCoverContract pins the tool-list shape
 // without ordering. It checks every tool listed in the contract is
 // present and no extras sneak in. Extras would expand the install UI
 // beyond what the documentation promises; misses would break agents
 // that rely on a documented tool.
-func TestCatalogByID_Graft_ToolsCoverContract(t *testing.T) {
-	entry, ok := CatalogByID("graft")
+func TestCatalogByID_Trail_ToolsCoverContract(t *testing.T) {
+	entry, ok := CatalogByID("trail")
 	if !ok {
-		t.Fatal("CatalogByID(graft) ok=false, want true")
+		t.Fatal("CatalogByID(trail) ok=false, want true")
 	}
 	tools := make(map[string]bool, len(entry.Tools))
 	for _, name := range entry.Tools {
@@ -88,32 +88,32 @@ func TestCatalogByID_Graft_ToolsCoverContract(t *testing.T) {
 	}
 
 	required := []string{
-		"graft_find_code",
-		"graft_trace_calls",
-		"graft_find_all",
-		"graft_file_api",
-		"graft_repo_map",
-		"graft_check_freshness",
+		"trail_find_code",
+		"trail_trace_calls",
+		"trail_find_all",
+		"trail_file_api",
+		"trail_repo_map",
+		"trail_check_freshness",
 	}
 	for _, want := range required {
 		if !tools[want] {
-			t.Errorf("graft.Tools missing %q (got %#v)", want, entry.Tools)
+			t.Errorf("trail.Tools missing %q (got %#v)", want, entry.Tools)
 		}
 	}
 }
 
-// TestCatalogByID_Graft_NoCodegraphTools pins that the graft entry
+// TestCatalogByID_Trail_NoCodegraphTools pins that the trail entry
 // does NOT carry the legacy codegraph_* tool names. A stale
 // migration that copies old tools into the new entry would render the
-// install UI against tools the graft binary does not expose.
-func TestCatalogByID_Graft_NoCodegraphTools(t *testing.T) {
-	entry, ok := CatalogByID("graft")
+// install UI against tools the trail binary does not expose.
+func TestCatalogByID_Trail_NoCodegraphTools(t *testing.T) {
+	entry, ok := CatalogByID("trail")
 	if !ok {
-		t.Fatal("CatalogByID(graft) ok=false, want true")
+		t.Fatal("CatalogByID(trail) ok=false, want true")
 	}
 	for _, name := range entry.Tools {
 		if strings.HasPrefix(name, "codegraph_") {
-			t.Errorf("graft.Tools contains legacy %q (slice 2 must not ship codegraph tools)", name)
+			t.Errorf("trail.Tools contains legacy %q (slice 2 must not ship codegraph tools)", name)
 		}
 	}
 }

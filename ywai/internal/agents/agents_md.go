@@ -11,15 +11,15 @@ import (
 //   - Engram memory protocol
 //   - Sub-agent launch strategy
 //
-// Persona, SDD, skill catalogs, review hooks, and Graft are NOT written
-// here. Graft in particular owns its own AGENTS.md marker section, written
-// by its installer (see plugins.WireGraftMCP).
+// Persona, SDD, skill catalogs, review hooks, and Trail are NOT written
+// here. Trail in particular owns its own AGENTS.md marker section, written
+// by its installer (see plugins.WireTrailMCP).
 //
 //go:embed agents_md_template.md
 var agentsMdTemplate string
 
 // WriteAgentsMd writes the curated AGENTS.md to the given path. ywai owns this
-// file. Run it before plugin/MCP wiring so graft's installer can append its
+// file. Run it before plugin/MCP wiring so trail's installer can append its
 // own marker section afterwards.
 func WriteAgentsMd(path string) error {
 	return os.WriteFile(path, []byte(agentsMdTemplate), 0o644)

@@ -106,7 +106,7 @@ var vendorBundles = map[string]vendorBundle{
 	"tui-logo":                 {config.TuiLogoBundlePath, config.TuiLogoBundleName},
 	"background-agents-notify": {config.BackgroundAgentsNotifyBundlePath, config.BackgroundAgentsNotifyBundleName},
 	"orca-status":              {config.OrcaStatusBundlePath, config.OrcaStatusBundleName},
-	"graft-build":              {config.GraftBuildBundlePath, config.GraftBuildBundleName},
+	"trail-build":              {config.TrailBuildBundlePath, config.TrailBuildBundleName},
 }
 
 // slashCommands maps an installed command file to the source it is copied
@@ -129,6 +129,9 @@ func installVendorJS(agentName, configPath string, e ManifestEntry) error {
 		return err
 	}
 	if err := installVendorPluginV2(configPath, src, b.name); err != nil {
+		return err
+	}
+	if err := retirePlugins(configPath, e.Retire); err != nil {
 		return err
 	}
 	if e.Skill != "" && agentName == "opencode" {

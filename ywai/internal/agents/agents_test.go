@@ -528,7 +528,7 @@ func TestBuildOpenCodeMarkdown_ExpandsBucketsToWildcards(t *testing.T) {
 	// Allow bucket expansions should be present.
 	allowExpansions := map[string]string{
 		`"engram_*"`:   "memory",
-		`"graft_*"`:    "mcp",
+		`"trail_*"`:    "mcp",
 		`"context7_*"`: "mcp",
 	}
 	for pattern, bucket := range allowExpansions {
@@ -557,7 +557,7 @@ func TestAdoIsNotAPermissionBucket(t *testing.T) {
 // MCP server means editing Go before any agent can use it.
 func TestMCPBucketCoversConfiguredServers(t *testing.T) {
 	patterns := mcpBucketPatterns()
-	for _, want := range []string{"graft_*", "context7_*"} {
+	for _, want := range []string{"trail_*", "context7_*"} {
 		found := false
 		for _, p := range patterns {
 			if p == want {
@@ -1876,7 +1876,7 @@ func TestRealDelegationsPolicy(t *testing.T) {
 
 // An explicit pattern must beat the bucket that also covers it. YAML keeps the last
 // duplicate key, so emitting both silently handed the tool back: an orchestrator that
-// denied "graft_*" while allowing the "mcp" bucket ended up with it allowed.
+// denied "trail_*" while allowing the "mcp" bucket ended up with it allowed.
 func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 	profile := AgentProfile{
 		Name:        "orchestrator",
@@ -1886,21 +1886,21 @@ func TestExplicitPatternOverridesItsBucket(t *testing.T) {
 		Permission: map[string]string{
 			"read":    "deny",
 			"mcp":     "allow",
-			"graft_*": "deny",
+			"trail_*": "deny",
 		},
 	}
 
 	md := BuildOpenCodeMarkdown("orchestrator", profile)
 
-	if strings.Contains(md, `- action: "graft_*"`+"\n    resource: \"*\"\n    effect: allow") {
+	if strings.Contains(md, `- action: "trail_*"`+"\n    resource: \"*\"\n    effect: allow") {
 		t.Errorf("explicit deny must not be re-granted by the mcp bucket:\n%s", md)
 	}
-	if !strings.Contains(md, `- action: "graft_*"`+"\n    resource: \"*\"\n    effect: deny") {
+	if !strings.Contains(md, `- action: "trail_*"`+"\n    resource: \"*\"\n    effect: deny") {
 		t.Errorf("explicit deny must survive:\n%s", md)
 	}
-	if strings.Count(md, `"graft_*"`) != 1 {
-		t.Errorf("graft_* must be written exactly once, got %d:\n%s",
-			strings.Count(md, `"graft_*"`), md)
+	if strings.Count(md, `"trail_*"`) != 1 {
+		t.Errorf("trail_* must be written exactly once, got %d:\n%s",
+			strings.Count(md, `"trail_*"`), md)
 	}
 	// The rest of the bucket is untouched by the override.
 	if !strings.Contains(md, `- action: "context7_*"`) {

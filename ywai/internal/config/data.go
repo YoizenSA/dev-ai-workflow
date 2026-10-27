@@ -30,9 +30,9 @@ const BackgroundAgentsBundleName = "background-agents.js"
 // that auto-routes images through TokenBank vision for text-only models.
 const VisionBridgeBundleName = "vision-bridge.js"
 
-// GraftBuildBundleName is the filename of the graft-build opencode plugin
+// TrailBuildBundleName is the filename of the trail-build opencode plugin
 // bundle.
-const GraftBuildBundleName = "graft-build.js"
+const TrailBuildBundleName = "trail-build.js"
 
 // JevGateBundleName is the filename of the jev-gate opencode plugin bundle.
 const JevGateBundleName = "jev-gate.js"
@@ -229,7 +229,7 @@ func SeedAgentsFrom(repoRoot string) error {
 // into the user's data dir. Existing workflows are not fully replaced (layout
 // and custom nodes survive), but agentRef, prompt, and tools from the seed are
 // re-applied on matching node ids so install/update refreshes retired tool
-// names (codegraph → graft) and task prompts. A final pass rewrites leftover
+// names (codegraph/graft → trail) and task prompts. A final pass rewrites leftover
 // CodeGraph / dropped-v2 tokens in every installed workflow JSON.
 func SeedWorkflowsFrom(repoRoot string) error {
 	if err := EnsureDataDir(); err != nil {
@@ -425,8 +425,8 @@ func migrateInstalledWorkflows(dir string) error {
 }
 
 // migrateRetiredWorkflowVocab rewrites leftover CodeGraph / dropped-v2 tool
-// names in a workflow JSON so installed copies keep working after the Graft
-// migration. Layout and custom nodes stay; only tools/prompt strings change.
+// names in a workflow JSON so installed copies keep working after the Graft and Trail
+// migrations. Layout and custom nodes stay; only tools/prompt strings change.
 func migrateRetiredWorkflowVocab(raw []byte) ([]byte, bool, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
@@ -485,8 +485,10 @@ func rewriteRetiredToolsCSV(csv string) (string, bool) {
 		switch {
 		case lower == "lsp" || lower == "ast_grep" || lower == "code_search":
 			continue
-		case lower == "codegraph" || strings.HasPrefix(lower, "codegraph_"):
-			tok = "graft_*"
+		case lower == "codegraph" || strings.HasPrefix(lower, "codegraph_"),
+			lower == "graft" || strings.HasPrefix(lower, "graft_"):
+			// Trail renamed Graft; OpenCode ids its tools trail_trail_*.
+			tok = "trail_*"
 		}
 		if seen[tok] {
 			continue
@@ -503,16 +505,16 @@ func rewriteRetiredProse(s string) (string, bool) {
 		lower := strings.ToLower(m)
 		switch lower {
 		case "codegraph_explore", "codegraph_search":
-			return "graft_find_code"
+			return "trail_find_code"
 		case "codegraph_context":
-			return "graft_file_api"
+			return "trail_file_api"
 		case "codegraph_trace":
-			return "graft_trace_calls"
+			return "trail_trace_calls"
 		}
 		if strings.Contains(lower, "_") {
-			return "graft_*"
+			return "trail_*"
 		}
-		return "graft"
+		return "trail"
 	})
 	return next, next != s
 }
@@ -658,15 +660,15 @@ func VisionBridgeBundlePath() (string, error) {
 	return "", fmt.Errorf("vision-bridge plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
-// GraftBuildBundlePath resolves the path to the bundled graft-build plugin JS.
+// TrailBuildBundlePath resolves the path to the bundled trail-build plugin JS.
 // Same resolution order as VisionBridgeBundlePath.
-func GraftBuildBundlePath() (string, error) {
-	srcBundle := filepath.Join(PluginsSourceDir(), "graft-build", "dist", GraftBuildBundleName)
+func TrailBuildBundlePath() (string, error) {
+	srcBundle := filepath.Join(PluginsSourceDir(), "trail-build", "dist", TrailBuildBundleName)
 	if _, err := os.Stat(srcBundle); err == nil {
 		return srcBundle, nil
 	}
 
-	seeded := filepath.Join(DataPluginsDir(), GraftBuildBundleName)
+	seeded := filepath.Join(DataPluginsDir(), TrailBuildBundleName)
 	if _, err := os.Stat(seeded); err == nil {
 		return seeded, nil
 	}
@@ -677,7 +679,7 @@ func GraftBuildBundlePath() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("graft-build plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
+	return "", fmt.Errorf("trail-build plugin bundle not found; rebuild embedded data with `bun` available (cd ywai && bash scripts/prepare-embedded.sh)")
 }
 
 // JevGateSkillPath resolves the SKILL.md that ships with the jev-gate plugin.

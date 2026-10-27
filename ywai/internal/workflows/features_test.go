@@ -317,7 +317,7 @@ func TestToolsToPermissions(t *testing.T) {
 			defaults: "read",
 			want: map[string]string{
 				"read":       "allow",
-				"graft_*":    "allow",
+				"trail_*":    "allow",
 				"context7_*": "allow",
 			},
 		},

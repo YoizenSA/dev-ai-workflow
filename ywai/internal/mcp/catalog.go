@@ -162,13 +162,13 @@ var catalog = []CatalogEntry{
 		Docs:       "https://github.com/Gentleman-Programming/engram",
 	},
 	{
-		ID: "graft", Name: "Graft",
+		ID: "trail", Name: "Trail",
 		Description: "Repo context graph: symbol lookup, call tracing, and file API over the indexed codebase",
 		Category:    "memory", Icon: "🕸️",
-		Type: "local", Command: []string{"graft", "mcp"},
-		InstallCmd: "npm i -g @nanonets/graft",
-		Tools:      []string{"graft_find_code", "graft_trace_calls", "graft_find_all", "graft_file_api", "graft_repo_map", "graft_check_freshness"},
-		Docs:       "https://github.com/nanonets/graft",
+		Type: "local", Command: []string{"trail", "mcp"},
+		InstallCmd: "npm i -g @trailhq/trail-code",
+		Tools:      []string{"trail_find_code", "trail_trace_calls", "trail_find_all", "trail_file_api", "trail_repo_map", "trail_check_freshness"},
+		Docs:       "https://github.com/trailhq/Trail-Code",
 	},
 	{
 		ID: "brave-search", Name: "Brave Search",

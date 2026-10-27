@@ -3,7 +3,7 @@
   "description": "Review-only: reviewer agent with review, testing and architecture skills plus Azure DevOps PRs; the shell cannot commit, push or rewrite history.",
   "groups": ["core"],
   "skills": ["code-review", "testing-expert", "improve-codebase-architecture", "codebase-design", "domain-modeling", "ado", "bulk-read"],
-  "mcp": ["graft"],
+  "mcp": ["trail"],
   "default_agent": "reviewer",
   "default_model": "opencode-admin/glm-5.3-flash",
   "deny_bash": ["git commit*", "git push*", "git reset*", "git rebase*", "git checkout*", "git merge*", "rm *"],

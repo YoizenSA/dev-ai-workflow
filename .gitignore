@@ -68,7 +68,7 @@ ywai/ywai
 ywai/docs/loop-architecture-gap-analysis.md
 .codegraph/daemon.pid
 
-# graft's local graph cache — regenerable, not committed (run `graft build`).
+# trail's local graph cache (default dir is still graft/) — regenerable, not committed (run `trail build`).
 graft/
 .commandcode/
 __pycache__/

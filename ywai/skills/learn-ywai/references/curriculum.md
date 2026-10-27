@@ -26,7 +26,7 @@ Read `references/docs/<path>` next to this file. If it is missing, say so and st
 |---|---|
 | install, update, doctor, CLI | `cli/index.mdx` |
 | agentes, @dev, orchestrator | `agents/index.mdx` then the named agent MDX |
-| graft, finder | `agents/finder.mdx` |
+| trail, finder | `agents/finder.mdx` |
 | engram, memory | `memories/index.mdx` |
 | skill | `skills/index.mdx` |
 | feature, bug, review | matching `guides/*.mdx` |

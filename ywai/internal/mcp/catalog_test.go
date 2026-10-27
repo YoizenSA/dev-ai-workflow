@@ -93,7 +93,7 @@ func TestCatalog_ContainsAllExpectedIDs(t *testing.T) {
 		"github",
 		"postgres",
 		"engram",
-		"graft",
+		"trail",
 		"brave-search",
 		"mysql",
 		"codemod",

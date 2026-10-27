@@ -537,13 +537,13 @@ func subAgentSectionList(csv string) []string {
 const defaultOrchestratorTools = "read,glob,grep,task,delegate,skill,question,mcp"
 
 // defaultSubAgentTools is applied when a subAgent node has no tools set.
-// Full implementer: read + write + edit + bash + skill + graft + context (mcp bucket).
-const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,graft_*,mcp"
+// Full implementer: read + write + edit + bash + skill + trail + context (mcp bucket).
+const defaultSubAgentTools = "read,edit,write,bash,glob,grep,skill,task,trail_*,mcp"
 
 // toolsToPermissions converts a comma-separated tools string into a permission
 // map suitable for BuildOpenCodeMarkdown. If csv is empty, defaults are used.
 // Each entry may carry a ":deny" suffix to block a tool (e.g. "bash:deny").
-// Coarse buckets (mcp, memory, delegate, graft, context7) are
+// Coarse buckets (mcp, memory, delegate, trail, context7) are
 // expanded to opencode-native wildcards via ExpandPermissionBuckets so they
 // actually gate the underlying tools.
 func toolsToPermissions(csv, defaults string) map[string]string {

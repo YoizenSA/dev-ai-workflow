@@ -23,7 +23,7 @@ import (
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/gentlai"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/mcp"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/opencode"
-	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // GraftInfo, install helpers
+	"github.com/Yoizen/dev-ai-workflow/ywai/internal/plugins" // TrailInfo, install helpers
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/selfupdate"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/serverutil"
 	"github.com/Yoizen/dev-ai-workflow/ywai/internal/skills"
@@ -392,7 +392,7 @@ func newOpenCodeServerPassword() (string, error) {
 var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Set up the ywai environment: Engram, skills, profiles, plugins, optional SDD",
-	Long:  "ywai-owned setup: direct Engram, extra skills, agent profiles, plugins/Graft, optional SDD, and project init.",
+	Long:  "ywai-owned setup: direct Engram, extra skills, agent profiles, plugins/Trail, optional SDD, and project init.",
 	Run: func(cmd *cobra.Command, args []string) {
 		agentFlag, _ := cmd.Flags().GetString("agent")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -454,7 +454,7 @@ var installCmd = &cobra.Command{
 			installPonytail = ponytailFlag
 			optionalFlags["jev-gate"] = getBoolFlag(cmd, "jev-gate")
 			optionalFlags["jev-compaction"] = getBoolFlag(cmd, "jev-compaction")
-			optionalFlags["graft-build"] = getBoolFlag(cmd, "graft-build")
+			optionalFlags["trail-build"] = getBoolFlag(cmd, "trail-build")
 			groups := getStringSliceFlag(cmd, "group")
 			allGroups := getBoolFlag(cmd, "all-groups")
 			groupFilter = agentprofiles.GroupFilter{
@@ -499,7 +499,7 @@ need a separate install after updating:
   - clear cached OpenCode npm plugins so they re-resolve to the latest
     published version on next start (e.g. subagent-statusline)
   - re-apply TokenBank (refresh models) when it is configured
-  - upgrade companion CLIs (ado, graft) via the plugins step
+  - upgrade companion CLIs (ado, trail) via the plugins step
   - restart the control server only if it was already running
 
 Channels:
@@ -630,27 +630,27 @@ var skillsCmd = &cobra.Command{
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Read-only ecosystem health diagnostics",
-	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, Graft.",
+	Long:  "Read-only ecosystem health diagnostics — tool binaries, state.json, Engram, disk space, Trail.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := gentlai.Doctor(); err != nil {
 			return err
 		}
-		printGraftDoctor()
+		printTrailDoctor()
 		return nil
 	},
 }
 
-// printGraftDoctor reports Graft readiness.
-func printGraftDoctor() {
+// printTrailDoctor reports Trail readiness.
+func printTrailDoctor() {
 	fmt.Println("\n── ywai fast path ──")
-	if v, ok := plugins.GraftInfo(); ok {
+	if v, ok := plugins.TrailInfo(); ok {
 		if v != "" {
-			fmt.Printf("  graft: installed (%s)\n", v)
+			fmt.Printf("  trail: installed (%s)\n", v)
 		} else {
-			fmt.Println("  graft: installed (version unknown)")
+			fmt.Println("  trail: installed (version unknown)")
 		}
 	} else {
-		fmt.Println("  graft: NOT on PATH (run ywai install / install graft)")
+		fmt.Println("  trail: NOT on PATH (run ywai install / npm i -g @trailhq/trail-code)")
 	}
 }
 
@@ -1365,7 +1365,7 @@ func init() {
 	installCmd.Flags().Bool("mcp", false, "Install Microsoft Learn MCP (for opencode)")
 	installCmd.Flags().Bool("meta-mcp", false, "Install Meta Developer Tools MCP (remote; sign in from your agent)")
 	installCmd.Flags().Bool("jev-gate", false, "Install the experimental jev-gate opencode plugin: Jev-backed review, find and routing tools, plus a permission gate that asks before writing after a blocking review. Needs a TypeSafe API key.")
-	installCmd.Flags().Bool("graft-build", false, "Install the graft-build opencode plugin: builds the graft graph once for a repo that has never had one. Graft keeps an existing graph fresh on its own; this only covers the first build.")
+	installCmd.Flags().Bool("trail-build", false, "Install the trail-build opencode plugin: builds the trail graph once for a repo that has never had one. Trail keeps an existing graph fresh on its own; this only covers the first build.")
 	installCmd.Flags().Bool("jev-compaction", false, "Install the experimental jev-compaction opencode plugin: drops stale tool calls and results before each request using Jev decisions, plus the jev_compact tool. Reuses the jev-gate API key file.")
 	installCmd.Flags().Bool("ponytail", true, "Install ponytail (YAGNI / minimal-code): OpenCode plugin + Claude Code marketplace (default on; --ponytail=false to skip)")
 	installCmd.Flags().Bool("autostart", true, "Configure control server to start automatically on system boot")

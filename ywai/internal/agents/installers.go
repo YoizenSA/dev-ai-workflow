@@ -524,8 +524,12 @@ func RemoveAgentsWithoutDescription(agentsDir string) int {
 var ywaiBucketPatterns = map[string][]string{
 	"memory":   {"engram_*"},
 	"intercom": {"intercom_*"},
-	"graft":    {"graft_*"},
-	"mcp":      {"graft_*", "context7_*"},
+	// OpenCode ids MCP tools "<server>_<tool>"; `trail mcp` advertises
+	// trail_find_code, so the id is trail_trail_find_code. "graft" is an alias
+	// for workflows saved before the Graft -> Trail rename.
+	"trail": {"trail_*"},
+	"graft": {"trail_*"},
+	"mcp":   {"trail_*", "context7_*"},
 	// "delegate" is the UI bucket for background delegation. Launching is the
 	// native `subagent` tool (gated per agent by the `subagent` action); the
 	// "subagent_*" glob covers the background-agents supervision tools

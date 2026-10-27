@@ -78,7 +78,7 @@ func TestWorkflows_NoCodegraphInNodeTools(t *testing.T) {
 		}
 		for i, n := range wf.Nodes {
 			if csvHasCodegraph(n.Data.Tools) {
-				t.Errorf("%s node[%d].data.tools = %q contains codegraph — slice 2 must replace with graft_*",
+				t.Errorf("%s node[%d].data.tools = %q contains codegraph — slice 2 must replace with trail_*",
 					path, i, n.Data.Tools)
 			}
 			if textHasCodegraph(n.Data.Prompt) || textHasCodegraph(n.Data.AgentDefinition) {

@@ -451,18 +451,18 @@ func applyManaged(o applyOpts) applyResult {
 	}
 
 	// ── AGENTS.md ─────────────────────────────────────────────────────────
-	// MUST run before plugins so Graft can append its marker section.
+	// MUST run before plugins so Trail can append its marker section.
 	// Also runs BEFORE optional SDD so it can re-inject marker blocks.
 	if plan.WriteAgentsMd {
 		steps.next("Writing curated AGENTS.md")
 		if o.Opts.DryRun {
-			fmt.Println("  Would write curated AGENTS.md (engram + sub-agents + graft)")
+			fmt.Println("  Would write curated AGENTS.md (engram + sub-agents + trail)")
 		} else {
 			agentsMdPath := filepath.Join(config.OpenCodeConfigDir(), "AGENTS.md")
 			if err := agentprofiles.WriteAgentsMd(agentsMdPath); err != nil {
 				r.warnf("failed to write AGENTS.md: %v", err)
 			} else {
-				fmt.Println("  ✓ AGENTS.md written (engram + sub-agents + graft)")
+				fmt.Println("  ✓ AGENTS.md written (engram + sub-agents + trail)")
 			}
 		}
 	}
