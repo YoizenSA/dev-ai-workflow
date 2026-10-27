@@ -6,6 +6,8 @@
 
 **Graft ahora es Trail.** `ywai install`/`update` instala `@trailhq/trail-code` (CLI `trail`), desinstala `@nanonets/graft` y reescribe el MCP `graft` como `trail` (`trail mcp`) en OpenCode, Claude Code y pi. Los permisos pasan de `graft_*` a `trail_*`. El grafo sigue en `<repo>/graft`; `.trail/learnings/` se commitea.
 
+**Los learnings van a Engram, no a Trail.** `ywai install`/`update` saca el hook `Stop` de trail de `~/.claude/settings.json` (el que bloquea el turno pidiendo `trail note`; el resto de los hooks de trail quedan) y escribe la sección gestionada `Trail learnings → Engram` en `~/.config/opencode/AGENTS.md` y `~/.claude/CLAUDE.md`. Corre en cada update porque `trail init`/upgrade vuelve a agregar el hook; si ya tenías la sección a mano, se reemplaza por la gestionada.
+
 Si OpenCode no arranca (`ConfigInvalidError` en `mcp.trail`): el update reescribe el entry al formato de OpenCode (`type: local`, `command` array).
 
 ---
