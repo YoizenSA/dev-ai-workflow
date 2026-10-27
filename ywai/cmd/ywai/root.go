@@ -809,6 +809,10 @@ func installPluginsForAgents(agents []agent.Agent, dryRun bool, installMCP, inst
 				fmt.Println("  ✓ trail MCP wired")
 			}
 		}
+
+		// Learnings go to Engram: drop trail's Stop nudge (re-added by
+		// trail init/upgrade, so this runs every time) and write the rule.
+		plugins.EnforceTrailLearningsEngram()
 	} else {
 		fmt.Println("  Would install Azure DevOps CLI (`ado`)")
 		fmt.Println("  Would install Trail CLI (`trail`) and remove legacy @nanonets/graft")
